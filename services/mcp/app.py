@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Union
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ app = FastAPI(title="Physics MCP Server", version="0.1.0")
 
 class JsonRpcRequest(BaseModel):
     jsonrpc: str
-    id: str | int | None
+    id: Optional[Union[str, int]]
     method: str
     params: Dict[str, Any] = {}
 
@@ -37,7 +37,7 @@ async def health():
     return {"status": "ok"}
 
 
-def auth(x_api_key: str | None):
+def auth(x_api_key: Optional[str]):
     if API_KEY and x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -50,7 +50,7 @@ def run_script(args: list[str]) -> str:
 
 
 @app.post("/mcp")
-async def mcp_rpc(req: JsonRpcRequest, x_api_key: str | None = Header(default=None)):
+async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default=None)):
     auth(x_api_key)
 
     if req.method == "tools/list":

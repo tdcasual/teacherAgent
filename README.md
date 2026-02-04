@@ -53,6 +53,13 @@ data/
   assignments/
   student_profiles/
   student_submissions/
+
+frontend/
+  apps/
+    teacher/
+    student/
+  vite.teacher.config.ts
+  vite.student.config.ts
 ```
 
 ## 常见工作流
@@ -135,7 +142,8 @@ docker compose --profile qdrant up -d
 ### 2) 端口
 - API: `8000`
 - MCP: `9000`
-- Frontend: `3000`
+- 学生端 Frontend: `3001`
+- 老师端 Frontend: `3002`
 
 ### 3) 持久化目录
 - `data/` 教学与诊断数据
@@ -155,6 +163,47 @@ docker compose --profile qdrant up -d
 可通过构建变量设置 API 地址：
 - `VITE_API_URL`
 - `VITE_MCP_URL`
+
+---
+
+## 本地开发（推荐）
+### 1) 启动 API（FastAPI）
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r services/api/requirements.txt
+uvicorn services.api.app:app --reload --port 8000
+```
+
+### 2) 启动 MCP（可选）
+```bash
+pip install -r services/mcp/requirements.txt
+uvicorn services.mcp.app:app --reload --port 9000
+```
+
+### 3) 启动前端（学生端/老师端分离）
+```bash
+cd frontend
+npm install
+npm run dev:teacher
+npm run dev:student
+```
+
+默认访问：
+- 学生端：`http://localhost:3001`
+- 老师端：`http://localhost:3002`
+
+---
+
+## 前端使用说明（师生分端）
+- **老师端**：支持 `@技能` 提示与快捷插入，技能栏可折叠与滚动，支持富文本与 LaTeX。  
+- **学生端**：仅支持提问学科问题与提交作业，支持富文本与 LaTeX。  
+
+---
+
+## 接口文档
+- HTTP API：`docs/http_api.md`
+- MCP 协议：`docs/mcp_api.md`
 
 ---
 如需扩展或调整流程，请在各技能的 `SKILL.md` 中查看详细说明。

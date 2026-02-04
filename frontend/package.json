@@ -4,13 +4,26 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev:student": "vite --config vite.student.config.ts",
+    "dev:teacher": "vite --config vite.teacher.config.ts",
+    "build:student": "vite build --config vite.student.config.ts",
+    "build:teacher": "vite build --config vite.teacher.config.ts",
+    "preview:student": "vite preview --config vite.student.config.ts",
+    "preview:teacher": "vite preview --config vite.teacher.config.ts"
   },
   "dependencies": {
+    "katex": "^0.16.11",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "rehype-katex": "^7.0.1",
+    "rehype-sanitize": "^6.0.0",
+    "rehype-stringify": "^10.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.0",
+    "unified": "^11.0.4",
+    "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.4",

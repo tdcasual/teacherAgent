@@ -45,15 +45,25 @@ services:
       timeout: 5s
       retries: 3
 
-  frontend:
+  frontend_student:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: frontend/Dockerfile.student
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-        VITE_MCP_URL: ${VITE_MCP_URL:-http://localhost:9000}
     ports:
-      - "3000:80"
+      - "3001:80"
+    depends_on:
+      - api
+
+  frontend_teacher:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.teacher
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "3002:80"
     depends_on:
       - api
 
