@@ -1,0 +1,3 @@
+interface:
+  display_name: "Physics Student Coach"
+  short_description: "Student-facing coaching for physics diagnostics and practice"

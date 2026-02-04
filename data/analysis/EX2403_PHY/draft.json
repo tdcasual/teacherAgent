@@ -1,0 +1,219 @@
+{
+  "exam_id": "EX2403_PHY",
+  "generated_at": "2026-02-04T08:48:30",
+  "totals": {
+    "student_count": 29,
+    "max_total": 100.0,
+    "avg_total": 22.379,
+    "median_total": 24.0
+  },
+  "knowledge_points": [
+    {
+      "kp_id": "KP-M01",
+      "avg_score": 0.0,
+      "loss_rate": 1.0,
+      "coverage_count": 1,
+      "coverage_score": 15.0
+    },
+    {
+      "kp_id": "KP-E03",
+      "avg_score": 0.517,
+      "loss_rate": 0.9138,
+      "coverage_count": 1,
+      "coverage_score": 6.0
+    },
+    {
+      "kp_id": "KP-E01",
+      "avg_score": 0.552,
+      "loss_rate": 0.862,
+      "coverage_count": 1,
+      "coverage_score": 4.0
+    },
+    {
+      "kp_id": "KP-E02",
+      "avg_score": 0.552,
+      "loss_rate": 0.862,
+      "coverage_count": 1,
+      "coverage_score": 4.0
+    },
+    {
+      "kp_id": "KP-E04",
+      "avg_score": 2.038,
+      "loss_rate": 0.8432,
+      "coverage_count": 1,
+      "coverage_score": 13.0
+    },
+    {
+      "kp_id": "uncategorized",
+      "avg_score": 1.975,
+      "loss_rate": 0.6594,
+      "coverage_count": 10,
+      "coverage_score": 58.0
+    }
+  ],
+  "high_loss_questions": [
+    {
+      "question_id": "Q15",
+      "question_no": "15",
+      "max_score": 15.0,
+      "avg_score": 0.0,
+      "loss_rate": 1.0,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q9",
+      "question_no": "9",
+      "max_score": 6.0,
+      "avg_score": 0.517,
+      "loss_rate": 0.9138,
+      "correct_rate": 0.0
+    },
+    {
+      "question_id": "Q3",
+      "question_no": "3",
+      "max_score": 4.0,
+      "avg_score": 0.552,
+      "loss_rate": 0.8621,
+      "correct_rate": 0.1379
+    },
+    {
+      "question_id": "Q7",
+      "question_no": "7",
+      "max_score": 4.0,
+      "avg_score": 0.552,
+      "loss_rate": 0.8621,
+      "correct_rate": 0.1379
+    },
+    {
+      "question_id": "Q14",
+      "question_no": "14",
+      "max_score": 13.0,
+      "avg_score": 2.038,
+      "loss_rate": 0.8432,
+      "correct_rate": null
+    }
+  ],
+  "question_metrics": [
+    {
+      "question_id": "Q15",
+      "question_no": "15",
+      "max_score": 15.0,
+      "avg_score": 0.0,
+      "loss_rate": 1.0,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q9",
+      "question_no": "9",
+      "max_score": 6.0,
+      "avg_score": 0.517,
+      "loss_rate": 0.9138,
+      "correct_rate": 0.0
+    },
+    {
+      "question_id": "Q3",
+      "question_no": "3",
+      "max_score": 4.0,
+      "avg_score": 0.552,
+      "loss_rate": 0.8621,
+      "correct_rate": 0.1379
+    },
+    {
+      "question_id": "Q7",
+      "question_no": "7",
+      "max_score": 4.0,
+      "avg_score": 0.552,
+      "loss_rate": 0.8621,
+      "correct_rate": 0.1379
+    },
+    {
+      "question_id": "Q14",
+      "question_no": "14",
+      "max_score": 13.0,
+      "avg_score": 2.038,
+      "loss_rate": 0.8432,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q8",
+      "question_no": "8",
+      "max_score": 6.0,
+      "avg_score": 1.034,
+      "loss_rate": 0.8276,
+      "correct_rate": 0.0
+    },
+    {
+      "question_id": "Q13",
+      "question_no": "13",
+      "max_score": 10.0,
+      "avg_score": 2.538,
+      "loss_rate": 0.7462,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q10",
+      "question_no": "10",
+      "max_score": 6.0,
+      "avg_score": 1.655,
+      "loss_rate": 0.7241,
+      "correct_rate": 0.0345
+    },
+    {
+      "question_id": "Q4",
+      "question_no": "4",
+      "max_score": 4.0,
+      "avg_score": 1.241,
+      "loss_rate": 0.6897,
+      "correct_rate": 0.3103
+    },
+    {
+      "question_id": "Q12",
+      "question_no": "12",
+      "max_score": 10.0,
+      "avg_score": 3.231,
+      "loss_rate": 0.6769,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q11",
+      "question_no": "11",
+      "max_score": 6.0,
+      "avg_score": 2.192,
+      "loss_rate": 0.6346,
+      "correct_rate": null
+    },
+    {
+      "question_id": "Q2",
+      "question_no": "2",
+      "max_score": 4.0,
+      "avg_score": 1.655,
+      "loss_rate": 0.5862,
+      "correct_rate": 0.4138
+    },
+    {
+      "question_id": "Q6",
+      "question_no": "6",
+      "max_score": 4.0,
+      "avg_score": 1.931,
+      "loss_rate": 0.5172,
+      "correct_rate": 0.4828
+    },
+    {
+      "question_id": "Q1",
+      "question_no": "1",
+      "max_score": 4.0,
+      "avg_score": 2.069,
+      "loss_rate": 0.4828,
+      "correct_rate": 0.5172
+    },
+    {
+      "question_id": "Q5",
+      "question_no": "5",
+      "max_score": 4.0,
+      "avg_score": 2.207,
+      "loss_rate": 0.4483,
+      "correct_rate": 0.5517
+    }
+  ],
+  "notes": ""
+}
