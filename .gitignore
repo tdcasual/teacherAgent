@@ -2,3 +2,29 @@
 .env
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local vector stores / embeddings
+.mem0/
+.qdrant/
+
+# Generated outputs
+output/
+tmp/
+
+# Generated analysis & exports
+data/analysis/
+data/exams/
+
+# Lesson capture (raw materials, OCR, previews)
+data/lessons/
+
+# Student submissions and profiles
+data/student_submissions/
+data/student_profiles/
+data/teacher_focus/
+
+# Assignments generated from question bank / core examples
+data/assignments/

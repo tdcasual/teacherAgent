@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+import argparse
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import List
+
+
+def parse_list(value: str) -> List[str]:
+    if not value:
+        return []
+    parts = [p.strip() for p in value.replace("，", ",").replace(";", ",").split(",")]
+    return [p for p in parts if p]
+
+
+def load_profile(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_profile(path: Path, profile: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def dedupe_list(items: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Update student profile (derived fields only)")
+    parser.add_argument("--student-id", required=True)
+    parser.add_argument("--weak-kp", default="")
+    parser.add_argument("--strong-kp", default="")
+    parser.add_argument("--medium-kp", default="")
+    parser.add_argument("--next-focus", default="")
+    parser.add_argument("--interaction-note", default="")
+    parser.add_argument("--assignment-id", default="")
+    parser.add_argument("--matched", type=int, default=None)
+    parser.add_argument("--graded", type=int, default=None)
+    parser.add_argument("--ungraded", type=int, default=None)
+    parser.add_argument("--history-file", help="csv with assignment_id, matched, graded, ungraded, note (optional)")
+    parser.add_argument("--profile-dir", default="data/student_profiles")
+    args = parser.parse_args()
+
+    profile_path = Path(args.profile_dir) / f"{args.student_id}.json"
+    profile = load_profile(profile_path)
+
+    profile["student_id"] = args.student_id
+    profile["last_updated"] = datetime.now().isoformat(timespec="seconds")
+
+    weak_kp = parse_list(args.weak_kp)
+    strong_kp = parse_list(args.strong_kp)
+    medium_kp = parse_list(args.medium_kp)
+
+    if weak_kp:
+        profile["recent_weak_kp"] = weak_kp
+    if strong_kp:
+        profile["recent_strong_kp"] = strong_kp
+    if medium_kp:
+        profile["recent_medium_kp"] = medium_kp
+
+    if args.next_focus:
+        profile["next_focus"] = args.next_focus
+    elif weak_kp:
+        profile["next_focus"] = weak_kp[0]
+
+    # interaction notes
+    if args.interaction_note:
+        notes = profile.get("interaction_notes", [])
+        notes.append({
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "note": args.interaction_note,
+        })
+        profile["interaction_notes"] = notes[-20:]
+
+    # practice history update (single)
+    if args.assignment_id:
+        history = profile.get("practice_history", [])
+        history.append({
+            "assignment_id": args.assignment_id,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "matched": args.matched,
+            "graded": args.graded,
+            "ungraded": args.ungraded,
+        })
+        profile["practice_history"] = history[-20:]
+
+    # practice history update (batch from csv)
+    if args.history_file:
+        history = profile.get("practice_history", [])
+        import csv
+        with Path(args.history_file).open(encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                assignment_id = row.get("assignment_id") or row.get("assignment") or ""
+                if not assignment_id:
+                    continue
+                def to_int(val):
+                    try:
+                        return int(val)
+                    except Exception:
+                        return None
+                history.append({
+                    "assignment_id": assignment_id,
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "matched": to_int(row.get("matched")),
+                    "graded": to_int(row.get("graded")),
+                    "ungraded": to_int(row.get("ungraded")),
+                    "note": row.get("note") or "",
+                })
+        profile["practice_history"] = history[-20:]
+
+    # summary
+    summary_parts = []
+    if weak_kp:
+        summary_parts.append(f"weak: {','.join(weak_kp)}")
+    if strong_kp:
+        summary_parts.append(f"strong: {','.join(strong_kp)}")
+    if args.next_focus:
+        summary_parts.append(f"next: {args.next_focus}")
+    if args.assignment_id:
+        summary_parts.append(f"last_assignment: {args.assignment_id}")
+    if summary_parts:
+        profile["summary"] = " | ".join(summary_parts)
+
+    save_profile(profile_path, profile)
+    print(f"[OK] Updated profile: {profile_path}")
+
+
+if __name__ == "__main__":
+    main()

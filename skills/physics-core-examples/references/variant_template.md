@@ -1,0 +1,16 @@
+# Variant Template
+
+Describe a parameterized template for generating new problems.
+
+```
+Variables:
+- m = ...
+- q = ...
+- E = ...
+Constraints:
+- ...
+Steps (invariant):
+- ...
+Expected output:
+- final expression / numeric answer
+```
