@@ -6,6 +6,11 @@ __pycache__/
 *.pyd
 .pytest_cache/
 
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
 # Local vector stores / embeddings
 .mem0/
 .qdrant/
@@ -21,6 +26,9 @@ data/exams/
 # Lesson capture (raw materials, OCR, previews)
 data/lessons/
 
+# Local test files
+data/local_test/
+
 # Student submissions and profiles
 data/student_submissions/
 data/student_profiles/
@@ -28,3 +36,6 @@ data/teacher_focus/
 
 # Assignments generated from question bank / core examples
 data/assignments/
+
+# Uploads
+uploads/
