@@ -23,6 +23,21 @@ type ChatResponse = {
   reply: string
 }
 
+type UploadJobStatus = {
+  job_id: string
+  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed'
+  progress?: number
+  step?: string
+  message?: string
+  error?: string
+  assignment_id?: string
+  question_count?: number
+  requirements_missing?: string[]
+  warnings?: string[]
+  delivery_mode?: string
+  questions_preview?: Array<{ id: number; stem: string }>
+}
+
 type Skill = {
   id: string
   title: string
@@ -265,6 +280,9 @@ export default function App() {
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const [uploadJobId, setUploadJobId] = useState('')
+  const [uploadJobInfo, setUploadJobInfo] = useState<UploadJobStatus | null>(null)
+  const [uploadConfirming, setUploadConfirming] = useState(false)
 
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -307,6 +325,89 @@ export default function App() {
     }
     fetchSkills()
   }, [apiBase])
+
+  const formatUploadJobStatus = (job: UploadJobStatus) => {
+    const lines: string[] = []
+    const statusMap: Record<string, string> = {
+      queued: '排队中',
+      processing: '解析中',
+      done: '解析完成（待确认）',
+      failed: '解析失败',
+      confirmed: '已创建作业',
+    }
+    lines.push(`解析状态：${statusMap[job.status] || job.status}`)
+    if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
+    if (job.assignment_id) lines.push(`作业ID：${job.assignment_id}`)
+    if (job.question_count !== undefined) lines.push(`题目数量：${job.question_count}`)
+    if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? 'PDF' : '图片'}`)
+    if (job.error) lines.push(`错误：${job.error}`)
+    if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
+    if (job.requirements_missing && job.requirements_missing.length) {
+      lines.push(`作业要求缺失项：${job.requirements_missing.join('、')}`)
+    }
+    if (job.questions_preview && job.questions_preview.length) {
+      const previews = job.questions_preview.map((q) => `Q${q.id}：${q.stem}`).join('\n')
+      lines.push(`题目预览：\n${previews}`)
+    }
+    return lines.join('\n')
+  }
+
+  useEffect(() => {
+    if (!uploadJobId) return
+    let active = true
+    const interval = window.setInterval(async () => {
+      if (!active) return
+      try {
+        const res = await fetch(`${apiBase}/assignment/upload/status?job_id=${encodeURIComponent(uploadJobId)}`)
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        const data = (await res.json()) as UploadJobStatus
+        if (!active) return
+        setUploadJobInfo(data)
+        setUploadStatus(formatUploadJobStatus(data))
+        if (['done', 'failed', 'confirmed'].includes(data.status)) {
+          window.clearInterval(interval)
+          active = false
+        }
+      } catch (err: any) {
+        if (!active) return
+        setUploadError(err.message || String(err))
+        window.clearInterval(interval)
+        active = false
+      }
+    }, 2000)
+
+    const pollOnce = async () => {
+      try {
+        const res = await fetch(`${apiBase}/assignment/upload/status?job_id=${encodeURIComponent(uploadJobId)}`)
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `HTTP ${res.status}`)
+        }
+        const data = (await res.json()) as UploadJobStatus
+        if (!active) return
+        setUploadJobInfo(data)
+        setUploadStatus(formatUploadJobStatus(data))
+        if (['done', 'failed', 'confirmed'].includes(data.status)) {
+          window.clearInterval(interval)
+          active = false
+        }
+      } catch (err: any) {
+        if (!active) return
+        setUploadError(err.message || String(err))
+        window.clearInterval(interval)
+        active = false
+      }
+    }
+    pollOnce()
+
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [uploadJobId, apiBase])
 
   const appendMessage = (roleType: 'user' | 'assistant', content: string) => {
     setMessages((prev) => [...prev, { id: makeId(), role: roleType, content, time: nowTime() }])
@@ -422,6 +523,8 @@ export default function App() {
     event.preventDefault()
     setUploadError('')
     setUploadStatus('')
+    setUploadJobId('')
+    setUploadJobInfo(null)
     if (!uploadAssignmentId.trim()) {
       setUploadError('请填写作业ID')
       return
@@ -449,19 +552,91 @@ export default function App() {
       uploadFiles.forEach((file) => fd.append('files', file))
       uploadAnswerFiles.forEach((file) => fd.append('answer_files', file))
 
-      const res = await fetch(`${apiBase}/assignment/upload`, { method: 'POST', body: fd })
+      const res = await fetch(`${apiBase}/assignment/upload/start`, { method: 'POST', body: fd })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
+        let message = text || `HTTP ${res.status}`
+        try {
+          const parsed = JSON.parse(text)
+          const detail = parsed?.detail || parsed
+          if (typeof detail === 'string') {
+            message = detail
+          } else if (detail?.message) {
+            const hints = Array.isArray(detail.hints) ? detail.hints.join('；') : ''
+            message = `${detail.message}${hints ? `（${hints}）` : ''}`
+          }
+        } catch (err) {
+          // ignore JSON parse errors
+        }
+        throw new Error(message)
       }
       const data = await res.json()
-      setUploadStatus(typeof data === 'string' ? data : JSON.stringify(data, null, 2))
+      if (data && typeof data === 'object') {
+        if (data.job_id) {
+          setUploadJobId(String(data.job_id))
+        }
+        const message = data.message || '解析任务已创建，后台处理中。'
+        setUploadStatus(message)
+      } else {
+        setUploadStatus(typeof data === 'string' ? data : JSON.stringify(data, null, 2))
+      }
       setUploadFiles([])
       setUploadAnswerFiles([])
     } catch (err: any) {
       setUploadError(err.message || String(err))
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleConfirmUpload = async () => {
+    if (!uploadJobId) return
+    setUploadError('')
+    setUploadConfirming(true)
+    try {
+      const res = await fetch(`${apiBase}/assignment/upload/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: uploadJobId }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let message = text || `HTTP ${res.status}`
+        try {
+          const parsed = JSON.parse(text)
+          const detail = parsed?.detail || parsed
+          if (typeof detail === 'string') message = detail
+        } catch {
+          // ignore
+        }
+        throw new Error(message)
+      }
+      const data = await res.json()
+      if (data && typeof data === 'object') {
+        const lines: string[] = []
+        lines.push(data.message || '作业已确认创建。')
+        if (data.assignment_id) lines.push(`作业ID：${data.assignment_id}`)
+        if (data.question_count !== undefined) lines.push(`题目数量：${data.question_count}`)
+        if (Array.isArray(data.requirements_missing) && data.requirements_missing.length) {
+          lines.push(`作业要求缺失项：${data.requirements_missing.join('、')}`)
+        }
+        if (Array.isArray(data.warnings) && data.warnings.length) {
+          lines.push(`解析提示：${data.warnings.join('；')}`)
+        }
+        setUploadStatus(lines.join('\n'))
+        setUploadJobInfo((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'confirmed',
+              }
+            : prev
+        )
+      }
+    } catch (err: any) {
+      setUploadError(err.message || String(err))
+    } finally {
+      setUploadConfirming(false)
     }
   }
 
@@ -564,7 +739,7 @@ export default function App() {
 
           <section className="upload-card">
             <h3>上传作业文件（PDF / 图片）</h3>
-            <p>上传后将自动解析题目与答案，并生成作业 8 点描述。学生端将以文件形式下发作业。</p>
+            <p>上传后将在后台解析题目与答案，并生成作业 8 点描述。解析完成后需确认创建作业。</p>
             <form className="upload-form" onSubmit={handleUploadAssignment}>
               <div className="upload-grid">
                 <div className="upload-field">
@@ -627,9 +802,16 @@ export default function App() {
                 </div>
               </div>
               <button type="submit" disabled={uploading}>
-                {uploading ? '上传解析中…' : '上传并解析'}
+                {uploading ? '上传中…' : '上传并开始解析'}
               </button>
             </form>
+            {uploadJobInfo && uploadJobInfo.status === 'done' && (
+              <div className="status-actions">
+                <button type="button" className="confirm-btn" onClick={handleConfirmUpload} disabled={uploadConfirming}>
+                  {uploadConfirming ? '创建中…' : '确认创建作业'}
+                </button>
+              </div>
+            )}
             {uploadError && <div className="status err">{uploadError}</div>}
             {uploadStatus && <pre className="status ok">{uploadStatus}</pre>}
           </section>

@@ -21,7 +21,13 @@ def load_env_from_dotenv(dotenv_path: Optional[Path] = None):
             os.environ[key] = val
 
 
-def ocr_with_sdk(file_path: Path, mode: str = "FREE_OCR", language: str = "zh", prompt: str = "") -> str:
+def ocr_with_sdk(
+    file_path: Path,
+    mode: str = "FREE_OCR",
+    language: str = "zh",
+    prompt: str = "",
+    timeout: Optional[float] = None,
+) -> str:
     # Try deepseek-ocr or multi-ocr-sdk
     client = None
     try:
@@ -50,6 +56,18 @@ def ocr_with_sdk(file_path: Path, mode: str = "FREE_OCR", language: str = "zh", 
             ) from exc
 
     # Most SDKs expose parse(path, mode=..., language=..., prompt=...)
+    if timeout is not None:
+        if hasattr(client, "timeout"):
+            try:
+                setattr(client, "timeout", timeout)
+            except Exception:
+                pass
+        if hasattr(client, "request_timeout"):
+            try:
+                setattr(client, "request_timeout", timeout)
+            except Exception:
+                pass
+
     kwargs = {}
     if mode:
         kwargs["mode"] = mode
@@ -57,6 +75,8 @@ def ocr_with_sdk(file_path: Path, mode: str = "FREE_OCR", language: str = "zh", 
         kwargs["language"] = language
     if prompt:
         kwargs["prompt"] = prompt
+    if timeout is not None:
+        kwargs["timeout"] = timeout
 
     try:
         return client.parse(str(file_path), **kwargs)

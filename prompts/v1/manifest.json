@@ -1,0 +1,22 @@
+{
+  "teacher": [
+    "common/00_guardrails.md",
+    "teacher/10_role.md",
+    "teacher/20_tool_policy.md",
+    "teacher/30_assignment_workflow.md",
+    "teacher/40_output_style.md",
+    "common/90_self_check.md"
+  ],
+  "student": [
+    "common/00_guardrails.md",
+    "student/10_role.md",
+    "student/20_math_rules.md",
+    "student/30_tutoring_style.md",
+    "common/90_self_check.md"
+  ],
+  "unknown": [
+    "common/00_guardrails.md",
+    "common/10_role_detect.md"
+  ]
+}
+

@@ -56,7 +56,7 @@ class Target:
     base_url: str
     endpoint: str
     headers: Dict[str, str]
-    timeout_sec: int
+    timeout_sec: Optional[float]
     retry: int
 
 
@@ -363,9 +363,18 @@ class LLMGateway:
 
         headers = self._build_headers(prov_cfg, api_key)
 
-        timeout_sec = int(os.getenv("LLM_TIMEOUT_SEC", "")) if os.getenv("LLM_TIMEOUT_SEC") else int(
-            defaults.get("timeout_sec", 120)
-        )
+        timeout_env = os.getenv("LLM_TIMEOUT_SEC")
+        if timeout_env is None or not timeout_env.strip():
+            timeout_sec: Optional[float] = float(defaults.get("timeout_sec", 120))
+        else:
+            val = timeout_env.strip().lower()
+            if val in {"0", "none", "inf", "infinite", "null"}:
+                timeout_sec = None
+            else:
+                try:
+                    timeout_sec = float(val)
+                except Exception:
+                    timeout_sec = float(defaults.get("timeout_sec", 120))
         retry = int(os.getenv("LLM_RETRY", "")) if os.getenv("LLM_RETRY") else int(defaults.get("retry", 1))
 
         return Target(

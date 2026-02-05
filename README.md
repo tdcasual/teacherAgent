@@ -218,6 +218,16 @@ npm run dev:student
 - `LLM_TIMEOUT_SEC`：超时时间（秒）
 - `LLM_RETRY`：失败重试次数
 
+---
+
+## 提示词版本与配置
+System Prompt 采用“分层、模块化、可版本化”组织方式，位于 `prompts/<version>/`。
+
+### 环境变量
+- `PROMPT_VERSION`：提示词版本（默认 `v1`）
+- `PROMPTS_DIR`：提示词目录（默认 `./prompts`）
+- `PROMPT_DEBUG`：设为 `1` 时在编译后的 prompt 中加入模块标记（仅调试用）
+
 ### OpenAI（含 Responses / Chat / Completions）
 - `OPENAI_API_KEY`
 - `OPENAI_RESPONSE_MODEL`
