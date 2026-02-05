@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
@@ -18,6 +18,8 @@ type Message = {
   content: string
   time: string
 }
+
+type RenderedMessage = Message & { html: string }
 
 type ChatResponse = {
   reply: string
@@ -59,7 +61,7 @@ const todayDate = () => new Date().toLocaleDateString('sv-SE')
 
 const removeEmptyParagraphs = () => {
   return (tree: any) => {
-    visit(tree, 'paragraph', (node: any, index: number, parent: any) => {
+    visit(tree, 'paragraph', (node: any, index: number | null | undefined, parent: any) => {
       if (!parent || typeof index !== 'number') return
       if (!node.children || node.children.length === 0) {
         parent.children.splice(index, 1)
@@ -70,7 +72,7 @@ const removeEmptyParagraphs = () => {
 
 const remarkLatexBrackets = () => {
   return (tree: any) => {
-    visit(tree, 'text', (node: any, index: number, parent: any) => {
+    visit(tree, 'text', (node: any, index: number | null | undefined, parent: any) => {
       if (!parent || typeof index !== 'number') return
       if (parent.type === 'inlineMath' || parent.type === 'math') return
 
@@ -197,6 +199,7 @@ export default function App() {
   const [todayAssignment, setTodayAssignment] = useState<AssignmentDetail | null>(null)
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   const [assignmentError, setAssignmentError] = useState('')
+  const markdownCacheRef = useRef(new Map<string, { content: string; html: string }>())
 
   useEffect(() => {
     localStorage.setItem('apiBaseStudent', apiBase)
@@ -215,6 +218,17 @@ export default function App() {
       setVerifyOpen(false)
     }
   }, [verifiedStudent])
+
+  const renderedMessages = useMemo(() => {
+    const cache = markdownCacheRef.current
+    return messages.map((msg): RenderedMessage => {
+      const cached = cache.get(msg.id)
+      if (cached && cached.content === msg.content) return { ...msg, html: cached.html }
+      const html = renderMarkdown(msg.content)
+      cache.set(msg.id, { content: msg.content, html })
+      return { ...msg, html }
+    })
+  }, [messages])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -368,13 +382,13 @@ export default function App() {
 
       <main className="chat-shell">
         <div className="messages">
-          {messages.map((msg) => (
+          {renderedMessages.map((msg) => (
             <div key={msg.id} className={`message ${msg.role}`}>
               <div className="bubble">
                 <div className="meta">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}

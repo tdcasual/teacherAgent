@@ -1,0 +1,34 @@
+# Keep Docker build context small and deterministic.
+.git
+.github
+.worktrees
+
+# Local env and secrets
+.env
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node
+**/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/dist-student/
+frontend/dist-teacher/
+
+# Data/outputs (mounted at runtime, should not be baked into images)
+data/
+uploads/
+output/
+tmp/
+.mem0/
+.qdrant/
+
+# Tests and local tooling (not needed in runtime images)
+tests/
+docs/
+prompts/dev/

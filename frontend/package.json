@@ -8,6 +8,7 @@
     "dev:teacher": "vite --config vite.teacher.config.ts",
     "build:student": "vite build --config vite.student.config.ts",
     "build:teacher": "vite build --config vite.teacher.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "preview:student": "vite preview --config vite.student.config.ts",
     "preview:teacher": "vite preview --config vite.teacher.config.ts"
   },

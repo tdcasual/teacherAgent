@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import os
+from functools import lru_cache
+import time
+import random
 
 try:
     import yaml  # type: ignore
@@ -67,6 +70,12 @@ def _load_registry(path: Path) -> Dict[str, Any]:
         raise RuntimeError("PyYAML is required to load model_registry.yaml. Install pyyaml.")
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+@lru_cache(maxsize=8)
+def _load_registry_cached(path_str: str) -> Dict[str, Any]:
+    # Cached for performance; changes require process restart (reasonable for server runtime).
+    return _load_registry(Path(path_str))
 
 
 def _messages_to_response_input(messages: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
@@ -141,8 +150,9 @@ def _response_text_from_output(output: List[Dict[str, Any]]) -> str:
 
 
 class OpenAIResponsesAdapter:
-    def __init__(self, target: Target):
+    def __init__(self, target: Target, session: requests.Session):
         self.target = target
+        self.session = session
 
     def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
         payload: Dict[str, Any] = {
@@ -167,7 +177,7 @@ class OpenAIResponsesAdapter:
         if req.json_schema:
             payload["text"] = {"format": _build_json_schema_payload(req.json_schema)}
 
-        resp = requests.post(
+        resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
             headers=self.target.headers,
             json=payload,
@@ -187,8 +197,9 @@ class OpenAIResponsesAdapter:
 
 
 class OpenAIChatAdapter:
-    def __init__(self, target: Target):
+    def __init__(self, target: Target, session: requests.Session):
         self.target = target
+        self.session = session
 
     def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
         payload: Dict[str, Any] = {
@@ -206,7 +217,7 @@ class OpenAIChatAdapter:
         if req.json_schema:
             payload["response_format"] = _build_json_schema_payload(req.json_schema)
 
-        resp = requests.post(
+        resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
             headers=self.target.headers,
             json=payload,
@@ -228,8 +239,9 @@ class OpenAIChatAdapter:
 
 
 class OpenAICompletionsAdapter:
-    def __init__(self, target: Target):
+    def __init__(self, target: Target, session: requests.Session):
         self.target = target
+        self.session = session
 
     def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
         payload: Dict[str, Any] = {
@@ -241,7 +253,7 @@ class OpenAICompletionsAdapter:
         if req.max_tokens is not None:
             payload["max_tokens"] = req.max_tokens
 
-        resp = requests.post(
+        resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
             headers=self.target.headers,
             json=payload,
@@ -260,8 +272,9 @@ class OpenAICompletionsAdapter:
 
 
 class GeminiNativeAdapter:
-    def __init__(self, target: Target):
+    def __init__(self, target: Target, session: requests.Session):
         self.target = target
+        self.session = session
 
     def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
         payload: Dict[str, Any] = {}
@@ -276,7 +289,7 @@ class GeminiNativeAdapter:
         else:
             payload["contents"] = [{"role": "user", "parts": [{"text": req.input_text or ""}]}]
 
-        resp = requests.post(
+        resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
             headers=self.target.headers,
             json=payload,
@@ -296,7 +309,8 @@ class GeminiNativeAdapter:
 class LLMGateway:
     def __init__(self, registry_path: Optional[Path] = None):
         path = Path(os.getenv("MODEL_REGISTRY_PATH") or registry_path or DEFAULT_REGISTRY_PATH)
-        self.registry = _load_registry(path)
+        self.registry = _load_registry_cached(str(path))
+        self._session = requests.Session()
 
     def resolve_alias(self, name: str) -> Tuple[str, str]:
         alias_map = {
@@ -404,12 +418,33 @@ class LLMGateway:
 
     def _build_adapter(self, target: Target):
         if target.mode == "openai-response":
-            return OpenAIResponsesAdapter(target)
+            return OpenAIResponsesAdapter(target, self._session)
         if target.mode == "openai-complete":
-            return OpenAICompletionsAdapter(target)
+            return OpenAICompletionsAdapter(target, self._session)
         if target.mode == "gemini-native":
-            return GeminiNativeAdapter(target)
-        return OpenAIChatAdapter(target)
+            return GeminiNativeAdapter(target, self._session)
+        return OpenAIChatAdapter(target, self._session)
+
+    def _is_retryable(self, exc: Exception) -> bool:
+        # Conservative retry policy: only retry obvious transient failures.
+        try:
+            import requests as _rq  # local name to avoid shadowing
+        except Exception:
+            _rq = None
+
+        if _rq is not None:
+            if isinstance(exc, (_rq.Timeout, _rq.ConnectionError)):
+                return True
+            if isinstance(exc, _rq.HTTPError):
+                resp = getattr(exc, "response", None)
+                code = getattr(resp, "status_code", None)
+                if code in {408, 409, 425, 429}:
+                    return True
+                if isinstance(code, int) and code >= 500:
+                    return True
+        # Fallback for non-requests errors
+        msg = str(exc).lower()
+        return any(token in msg for token in ["timeout", "timed out", "temporarily", "rate limit", "429", "503"])
 
     def generate(
         self,
@@ -445,12 +480,21 @@ class LLMGateway:
             ordered.append(t)
 
         for target in ordered:
-            try:
-                adapter = self._build_adapter(target)
-                return adapter.generate(req)
-            except Exception as exc:
-                errors.append(exc)
-                continue
+            adapter = self._build_adapter(target)
+            attempts = max(1, int(target.retry or 1))
+            for attempt in range(attempts):
+                try:
+                    return adapter.generate(req)
+                except Exception as exc:
+                    # Retry transient failures on the same target; otherwise fall back to next target.
+                    if attempt < attempts - 1 and self._is_retryable(exc):
+                        # bounded exponential backoff with jitter
+                        base = 0.25 * (2**attempt)
+                        delay = min(4.0, base + random.random() * 0.25)
+                        time.sleep(delay)
+                        continue
+                    errors.append(exc)
+                    break
         if errors:
             raise errors[-1]
         raise RuntimeError("No target resolved for LLM request")

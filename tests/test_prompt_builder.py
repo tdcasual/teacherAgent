@@ -34,8 +34,21 @@ class TestPromptBuilder(unittest.TestCase):
 
         prompt, _ = compile_system_prompt("teacher", version="v1", debug=True)
         self.assertIn("【MODULE:", prompt)
+        prompt2, _ = compile_system_prompt("teacher", version="v1", debug=False)
+        self.assertNotIn("【MODULE:", prompt2)
+
+    def test_role_resolution_unknown(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        prompt, _ = compile_system_prompt("nonsense", version="v1", debug=False)
+        self.assertIn("当前身份未知", prompt)
+
+    def test_compiled_prompt_has_trailing_newline(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        prompt, _ = compile_system_prompt("teacher", version="v1", debug=False)
+        self.assertTrue(prompt.endswith("\n"))
 
 
 if __name__ == "__main__":
     unittest.main()
-

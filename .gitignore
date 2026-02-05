@@ -11,6 +11,8 @@ node_modules/
 frontend/dist/
 frontend/.vite/
 frontend/node_modules/
+frontend/dist-student/
+frontend/dist-teacher/
 
 # Local vector stores / embeddings
 .mem0/

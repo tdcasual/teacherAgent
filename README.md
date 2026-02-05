@@ -63,9 +63,22 @@ frontend/
 ```
 
 ## 常见工作流
-### A. 考试分析
-1. 解析成绩 → 生成草案 → 讨论确认 → 写入分析版本
-2. 生成课前检测与课后诊断
+### A. 考试上传与分析（老师端）
+1. 打开老师端：`http://localhost:3002`
+2. 在「上传文件」卡片切换到「考试」
+3. 上传 **试卷**（PDF/图片）+ **成绩表**（推荐 xlsx；也支持 xls/PDF/图片）
+4. 等待后台解析完成 → 打开草稿 →（可选）修改题目满分/日期/班级 → 保存草稿
+5. 点击「创建考试」确认写入：
+   - `data/exams/<exam_id>/manifest.json`
+   - `data/exams/<exam_id>/derived/*.csv`
+   - `data/analysis/<exam_id>/draft.json`（分析草稿）
+6. 在对话框可直接输入：
+   - `列出考试`
+   - `查看考试 EX_... 概览`
+   - `分析考试 EX_...`
+   - `查看 EX_... 学生列表`
+   - `查看 EX_... 学生 高二2403班_武熙语`
+   - `查看 EX_... 第3题`（或 `question_id=Q3`）
 
 ### B. 课堂采集 → 课后诊断
 1. `physics-lesson-capture` 进行 OCR + 例题抽取
@@ -217,6 +230,9 @@ npm run dev:student
 - `LLM_API_KEY`：统一 API Key（若设置，会覆盖厂商专用 key）
 - `LLM_TIMEOUT_SEC`：超时时间（秒）
 - `LLM_RETRY`：失败重试次数
+- `LLM_MAX_CONCURRENCY`：单个 API 进程内允许的最大 LLM 并发（默认 `8`）
+- `OCR_MAX_CONCURRENCY`：单个 API 进程内允许的最大 OCR 并发（默认 `4`）
+- `OCR_TIMEOUT_SEC`：OCR 超时时间（秒；`0/none` 表示不限制）
 
 ---
 

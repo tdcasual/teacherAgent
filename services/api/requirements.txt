@@ -5,3 +5,6 @@ requests==2.32.3
 reportlab==4.2.2
 PyYAML==6.0.2
 pdfplumber==0.11.4
+xlrd==2.0.1
+deepseek-ocr>=0.1.1; python_version>="3.10"
+multi-ocr-sdk>=0.4.0; python_version>="3.10"

@@ -2,10 +2,11 @@
 import argparse
 import csv
 import math
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any, Optional
 
 # Ensure mem0_config path for env
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,109 @@ from llm_gateway import LLMGateway, UnifiedLLMRequest
 
 load_dotenv()
 LLM_GATEWAY = LLMGateway()
+
+FORBIDDEN_FIGURE_PATTERNS = [
+    r"如图",
+    r"见图",
+    r"下图",
+    r"如下图",
+    r"图中",
+    r"图示",
+    r"如右图",
+    r"如左图",
+    r"上图",
+    r"图\d+",
+]
+
+
+def contains_figure_reference(text: str) -> bool:
+    if not text:
+        return False
+    t = str(text)
+    for pat in FORBIDDEN_FIGURE_PATTERNS:
+        if re.search(pat, t):
+            return True
+    return False
+
+
+def strip_figure_references(text: str) -> str:
+    """Best-effort cleanup when model accidentally references a figure.
+
+    This is only a fallback; preferred fix is an LLM rewrite.
+    """
+    if not text:
+        return ""
+    out = str(text)
+    # Remove common phrases first.
+    out = re.sub(r"(如图所示|如下图所示|见图所示|如图|见图|下图|图中|图示|如右图|如左图|上图)", "", out)
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
+
+
+def rewrite_stems_without_figures(items: List[dict]) -> Optional[List[dict]]:
+    """Ask the LLM to rewrite stems to be self-contained without any figure references."""
+    import json
+
+    payload = json.dumps(items, ensure_ascii=False)
+    system = "你是高中物理出题助手，擅长把题目改写为无需配图也能完整理解的题干。"
+    user = (
+        "下面是一个JSON数组，每个元素是一道题。请只改写每题的 stem 字段，使其：\n"
+        "1) 绝对不要出现任何图引用词（如：如图/见图/下图/图中/图示/上图/图1等）\n"
+        "2) 用文字把场景描述完整：对象、连接关系、方向、初始条件、符号约定等\n"
+        "3) 保持题意与数值条件不变，其他字段（options/answer/solution/type）保持原样\n"
+        "4) 输出仍为严格JSON数组\n"
+        f"输入：\n{payload}"
+    )
+    try:
+        req = UnifiedLLMRequest(
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.2,
+        )
+        result = LLM_GATEWAY.generate(req, allow_fallback=True)
+        content = result.text
+        data = json.loads(content)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        return None
+    return None
+
+
+def enforce_no_figure_references(questions: List[dict], allow_llm_rewrite: bool = True) -> List[dict]:
+    bad = []
+    for idx, q in enumerate(questions):
+        stem = str((q or {}).get("stem") or "")
+        if contains_figure_reference(stem):
+            bad.append(idx)
+
+    if not bad:
+        return questions
+
+    # One LLM rewrite attempt for better quality.
+    if allow_llm_rewrite:
+        rewritten = rewrite_stems_without_figures(questions)
+        if rewritten and isinstance(rewritten, list) and len(rewritten) == len(questions):
+            # Verify rewrite actually fixed the issue; otherwise fall back to stripping.
+            ok = True
+            for q in rewritten:
+                if contains_figure_reference(str((q or {}).get("stem") or "")):
+                    ok = False
+                    break
+            if ok:
+                return rewritten
+
+    # Fallback: strip forbidden phrases.
+    fixed = []
+    for q in questions:
+        if not isinstance(q, dict):
+            continue
+        stem = strip_figure_references(str(q.get("stem") or ""))
+        fixed.append({**q, "stem": stem})
+    return fixed
 
 
 def read_question_bank(path: Path) -> List[dict]:
@@ -182,7 +286,10 @@ def generate_with_llm(kp_id: str, difficulty: str, count: int) -> List[dict]:
 
     prompt = (
         f"请生成{count}道高中物理题，知识点{kp_id}，难度{difficulty}。\n"
-        "每道题输出：题干、选项(若是选择题)、答案、解析。使用简洁中文。"
+        "要求：题干必须自包含，不依赖配图。\n"
+        "禁止出现任何图引用词：如图、见图、下图、如下图、图中、图示、上图、图1/图2 等。\n"
+        "如果需要描述场景，请用文字说明清楚：对象、连接关系、方向、初始条件、符号约定。\n"
+        "每道题输出：题干、选项(若是选择题)、答案、解析。使用简洁中文。\n"
         "用JSON数组输出，每个元素包含 stem, options(可选), answer, solution, type。"
     )
     req = UnifiedLLMRequest(
@@ -205,7 +312,10 @@ def generate_with_llm(kp_id: str, difficulty: str, count: int) -> List[dict]:
             data = json.loads(match.group(0))
         else:
             raise ValueError("LLM output not JSON")
-    return data
+    if not isinstance(data, list):
+        raise ValueError("LLM output not a JSON array")
+    data = [q for q in data if isinstance(q, dict)]
+    return enforce_no_figure_references(data, allow_llm_rewrite=True)
 
 
 def main():
