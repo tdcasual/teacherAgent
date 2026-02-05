@@ -25,6 +25,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set image repository
+        run: echo "IMAGE_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -45,7 +48,7 @@ jobs:
           file: ${{ matrix.image.dockerfile }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:latest
-            ghcr.io/${{ github.repository }}/${{ matrix.image.name }}:${{ github.sha }}
+            ${{ env.IMAGE_REPO }}/${{ matrix.image.name }}:latest
+            ${{ env.IMAGE_REPO }}/${{ matrix.image.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

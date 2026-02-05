@@ -914,18 +914,20 @@ def find_assignment_for_date(
         spec = assignment_specificity(meta, student_id, class_name)
         if spec <= 0:
             continue
+        source = str(meta.get("source") or "").lower()
+        teacher_flag = 0 if source == "auto" else 1
         updated_at = meta.get("generated_at")
         if not updated_at:
             questions_path = folder / "questions.csv"
             if questions_path.exists():
                 updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(timespec="seconds")
-        candidates.append((spec, parse_iso_timestamp(updated_at), folder, meta))
+        candidates.append((teacher_flag, spec, parse_iso_timestamp(updated_at), folder, meta))
 
     if not candidates:
         return None
-    candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    candidates.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
     best = candidates[0]
-    return {"folder": best[2], "meta": best[3]}
+    return {"folder": best[3], "meta": best[4]}
 
 
 def read_text_safe(path: Path, limit: int = 4000) -> str:
