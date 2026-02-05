@@ -1,0 +1,85 @@
+version: 1
+
+defaults:
+  provider: siliconflow
+  mode: openai-chat
+  timeout_sec: 120
+  retry: 1
+
+providers:
+  openai:
+    api_key_envs: [OPENAI_API_KEY]
+    base_url: https://api.openai.com/v1
+    auth:
+      type: bearer
+    modes:
+      openai-response:
+        endpoint: /responses
+        model_env: OPENAI_RESPONSE_MODEL
+      openai-chat:
+        endpoint: /chat/completions
+        model_env: OPENAI_CHAT_MODEL
+      openai-complete:
+        endpoint: /completions
+        model_env: OPENAI_COMPLETION_MODEL
+
+  siliconflow:
+    api_key_envs: [OPENAI_API_KEY, SILICONFLOW_API_KEY]
+    base_url_env: SILICONFLOW_BASE_URL
+    base_url: https://api.siliconflow.cn/v1
+    auth:
+      type: bearer
+    modes:
+      openai-chat:
+        endpoint: /chat/completions
+        model_env: SILICONFLOW_LLM_MODEL
+        default_model: deepseek-ai/DeepSeek-V3.2
+
+  deepseek:
+    api_key_envs: [DEEPSEEK_API_KEY]
+    base_url_env: DEEPSEEK_BASE_URL
+    base_url: https://api.deepseek.com/v1
+    auth:
+      type: bearer
+    modes:
+      openai-chat:
+        endpoint: /chat/completions
+        model_env: DEEPSEEK_MODEL
+        default_model: deepseek-chat
+
+  kimi:
+    api_key_envs: [MOONSHOT_API_KEY]
+    base_url_env: KIMI_BASE_URL
+    base_url: https://api.moonshot.ai/v1
+    auth:
+      type: bearer
+    modes:
+      openai-chat:
+        endpoint: /chat/completions
+        model_env: KIMI_MODEL
+        default_model: moonshot-v1-8k
+
+  gemini:
+    api_key_envs: [GEMINI_API_KEY]
+    auth:
+      type: x-goog-api-key
+    modes:
+      gemini-native:
+        base_url_env: GEMINI_BASE_URL
+        base_url: https://generativelanguage.googleapis.com/v1beta
+        endpoint: /models/{model}:generateContent
+        model_env: GEMINI_MODEL
+        default_model: gemini-1.5-flash
+      gemini-openai:
+        base_url_env: GEMINI_OPENAI_BASE_URL
+        base_url: https://generativelanguage.googleapis.com/v1beta/openai
+        endpoint: /chat/completions
+        model_env: GEMINI_MODEL
+        default_model: gemini-1.5-flash
+
+routing:
+  fallback_chain:
+    - openai-response
+    - openai-chat
+    - deepseek-openai
+    - gemini-openai

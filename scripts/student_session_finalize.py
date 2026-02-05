@@ -14,8 +14,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from mem0_config import load_dotenv
+from llm_gateway import LLMGateway, UnifiedLLMRequest
 
 load_dotenv()
+LLM_GATEWAY = LLMGateway()
 
 
 def load_summary_json(path: Path) -> dict:
@@ -31,13 +33,6 @@ def load_transcript(path: Path) -> str:
 
 
 def call_llm_extract(transcript: str) -> dict:
-    import requests
-
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("SILICONFLOW_API_KEY")
-    base_url = os.getenv("SILICONFLOW_BASE_URL", "https://api.siliconflow.cn/v1")
-    model = os.getenv("SILICONFLOW_LLM_MODEL", "deepseek-ai/DeepSeek-V3.2")
-    url = base_url.rstrip("/") + "/chat/completions"
-
     system = "你是学习诊断信息抽取器，只输出JSON。"
     user = (
         "从以下学生对话中抽取结构化信息，输出JSON对象，字段："
@@ -46,18 +41,15 @@ def call_llm_extract(transcript: str) -> dict:
         "如果无法确定某字段，留空或空数组。\n"
         f"对话：\n{transcript}\n"
     )
-    payload = {
-        "model": model,
-        "messages": [
+    req = UnifiedLLMRequest(
+        messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "temperature": 0.2,
-    }
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    resp = requests.post(url, headers=headers, json=payload, timeout=60)
-    resp.raise_for_status()
-    content = resp.json()["choices"][0]["message"]["content"]
+        temperature=0.2,
+    )
+    result = LLM_GATEWAY.generate(req, allow_fallback=True)
+    content = result.text
 
     try:
         return json.loads(content)

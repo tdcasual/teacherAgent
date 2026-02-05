@@ -1,0 +1,455 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+import os
+
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None
+
+import requests
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_REGISTRY_PATH = PROJECT_ROOT / "config" / "model_registry.yaml"
+
+
+@dataclass
+class UnifiedLLMRequest:
+    messages: Optional[List[Dict[str, Any]]] = None
+    input_text: Optional[str] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Any] = None
+    json_schema: Optional[Dict[str, Any]] = None
+    temperature: Optional[float] = 0.2
+    max_tokens: Optional[int] = None
+    stream: bool = False
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UnifiedLLMResponse:
+    text: str
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    usage: Dict[str, Any] = field(default_factory=dict)
+    finish_reason: Optional[str] = None
+    raw: Dict[str, Any] = field(default_factory=dict)
+
+    def as_chat_completion(self) -> Dict[str, Any]:
+        message: Dict[str, Any] = {"content": self.text}
+        if self.tool_calls:
+            message["tool_calls"] = self.tool_calls
+        return {
+            "choices": [{"message": message}],
+            "usage": self.usage,
+        }
+
+
+@dataclass
+class Target:
+    provider: str
+    mode: str
+    model: str
+    base_url: str
+    endpoint: str
+    headers: Dict[str, str]
+    timeout_sec: int
+    retry: int
+
+
+def _load_registry(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(f"Model registry not found: {path}")
+    if yaml is None:
+        raise RuntimeError("PyYAML is required to load model_registry.yaml. Install pyyaml.")
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _messages_to_response_input(messages: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
+    instructions: List[str] = []
+    items: List[Dict[str, Any]] = []
+    for msg in messages:
+        role = (msg.get("role") or "user").strip()
+        content = msg.get("content", "")
+        if role in {"system", "developer"}:
+            if content:
+                instructions.append(str(content))
+            continue
+        items.append(
+            {
+                "role": role,
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": str(content),
+                    }
+                ],
+            }
+        )
+    return "\n".join(instructions).strip(), items
+
+
+def _build_json_schema_payload(schema: Dict[str, Any]) -> Dict[str, Any]:
+    if not schema:
+        return {}
+    if "schema" in schema or "name" in schema:
+        return {"type": "json_schema", "json_schema": schema}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "response",
+            "schema": schema,
+            "strict": True,
+        },
+    }
+
+
+def _collect_tool_calls_from_responses(output: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    tool_calls: List[Dict[str, Any]] = []
+    for item in output or []:
+        item_type = item.get("type", "")
+        if "call" not in item_type:
+            continue
+        name = item.get("name") or item.get("tool_name") or item.get("function", {}).get("name")
+        arguments = item.get("arguments") or item.get("args") or item.get("function", {}).get("arguments")
+        if name:
+            tool_calls.append(
+                {
+                    "id": item.get("id") or item.get("call_id") or item.get("tool_call_id") or "",
+                    "type": "function",
+                    "function": {"name": name, "arguments": arguments or ""},
+                }
+            )
+    return tool_calls
+
+
+def _response_text_from_output(output: List[Dict[str, Any]]) -> str:
+    texts: List[str] = []
+    for item in output or []:
+        if item.get("type") != "message":
+            continue
+        for block in item.get("content") or []:
+            if block.get("type") == "output_text":
+                text = block.get("text")
+                if text:
+                    texts.append(text)
+    return "\n".join(texts).strip()
+
+
+class OpenAIResponsesAdapter:
+    def __init__(self, target: Target):
+        self.target = target
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload: Dict[str, Any] = {
+            "model": self.target.model,
+            "temperature": req.temperature,
+            "stream": req.stream,
+        }
+        if req.max_tokens is not None:
+            payload["max_output_tokens"] = req.max_tokens
+        if req.messages:
+            instructions, items = _messages_to_response_input(req.messages)
+            if instructions:
+                payload["instructions"] = instructions
+            payload["input"] = items
+        else:
+            payload["input"] = req.input_text or ""
+
+        if req.tools:
+            payload["tools"] = req.tools
+        if req.tool_choice is not None:
+            payload["tool_choice"] = req.tool_choice
+        if req.json_schema:
+            payload["text"] = {"format": _build_json_schema_payload(req.json_schema)}
+
+        resp = requests.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data.get("output_text") or _response_text_from_output(data.get("output") or [])
+        tool_calls = _collect_tool_calls_from_responses(data.get("output") or [])
+        return UnifiedLLMResponse(
+            text=text or "",
+            tool_calls=tool_calls,
+            usage=data.get("usage", {}),
+            finish_reason=data.get("status"),
+            raw=data,
+        )
+
+
+class OpenAIChatAdapter:
+    def __init__(self, target: Target):
+        self.target = target
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload: Dict[str, Any] = {
+            "model": self.target.model,
+            "messages": req.messages or [{"role": "user", "content": req.input_text or ""}],
+            "temperature": req.temperature,
+            "stream": req.stream,
+        }
+        if req.max_tokens is not None:
+            payload["max_tokens"] = req.max_tokens
+        if req.tools:
+            payload["tools"] = req.tools
+        if req.tool_choice is not None:
+            payload["tool_choice"] = req.tool_choice
+        if req.json_schema:
+            payload["response_format"] = _build_json_schema_payload(req.json_schema)
+
+        resp = requests.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        msg = data.get("choices", [{}])[0].get("message", {})
+        text = msg.get("content") or ""
+        tool_calls = msg.get("tool_calls") or []
+        finish_reason = data.get("choices", [{}])[0].get("finish_reason")
+        return UnifiedLLMResponse(
+            text=text,
+            tool_calls=tool_calls,
+            usage=data.get("usage", {}),
+            finish_reason=finish_reason,
+            raw=data,
+        )
+
+
+class OpenAICompletionsAdapter:
+    def __init__(self, target: Target):
+        self.target = target
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload: Dict[str, Any] = {
+            "model": self.target.model,
+            "prompt": req.input_text or "",
+            "temperature": req.temperature,
+            "stream": req.stream,
+        }
+        if req.max_tokens is not None:
+            payload["max_tokens"] = req.max_tokens
+
+        resp = requests.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = data.get("choices", [{}])[0].get("text", "")
+        finish_reason = data.get("choices", [{}])[0].get("finish_reason")
+        return UnifiedLLMResponse(
+            text=text,
+            usage=data.get("usage", {}),
+            finish_reason=finish_reason,
+            raw=data,
+        )
+
+
+class GeminiNativeAdapter:
+    def __init__(self, target: Target):
+        self.target = target
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload: Dict[str, Any] = {}
+        if req.messages:
+            # Minimal conversion: merge user/assistant into a single text block
+            texts = []
+            for msg in req.messages:
+                role = msg.get("role") or "user"
+                content = msg.get("content") or ""
+                texts.append(f"{role}: {content}")
+            payload["contents"] = [{"role": "user", "parts": [{"text": "\n".join(texts)}]}]
+        else:
+            payload["contents"] = [{"role": "user", "parts": [{"text": req.input_text or ""}]}]
+
+        resp = requests.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        text = ""
+        candidates = data.get("candidates") or []
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            if parts:
+                text = parts[0].get("text", "") or ""
+        return UnifiedLLMResponse(text=text, raw=data)
+
+
+class LLMGateway:
+    def __init__(self, registry_path: Optional[Path] = None):
+        path = Path(os.getenv("MODEL_REGISTRY_PATH") or registry_path or DEFAULT_REGISTRY_PATH)
+        self.registry = _load_registry(path)
+
+    def resolve_alias(self, name: str) -> Tuple[str, str]:
+        alias_map = {
+            "openai-response": ("openai", "openai-response"),
+            "openai-chat": ("openai", "openai-chat"),
+            "openai-complete": ("openai", "openai-complete"),
+            "deepseek-openai": ("deepseek", "openai-chat"),
+            "kimi-openai": ("kimi", "openai-chat"),
+            "gemini-openai": ("gemini", "gemini-openai"),
+            "gemini-native": ("gemini", "gemini-native"),
+            "siliconflow-openai": ("siliconflow", "openai-chat"),
+        }
+        if name in alias_map:
+            return alias_map[name]
+        if ":" in name:
+            parts = name.split(":", 1)
+            return parts[0], parts[1]
+        defaults = self.registry.get("defaults", {})
+        return defaults.get("provider", "openai"), defaults.get("mode", "openai-chat")
+
+    def resolve_target(
+        self,
+        provider: Optional[str] = None,
+        mode: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> Target:
+        defaults = self.registry.get("defaults", {})
+
+        provider = provider or os.getenv("LLM_PROVIDER") or defaults.get("provider")
+        mode = mode or os.getenv("LLM_MODE") or defaults.get("mode")
+
+        if provider and mode and provider in self.registry.get("providers", {}):
+            prov_cfg = self.registry["providers"][provider]
+        else:
+            prov_cfg = self.registry["providers"].get(provider, {})
+
+        mode_cfg = prov_cfg.get("modes", {}).get(mode, {})
+
+        model = model or os.getenv("LLM_MODEL") or os.getenv(mode_cfg.get("model_env", ""))
+        if not model:
+            model = mode_cfg.get("default_model") or ""
+        if not model:
+            raise ValueError(f"Model not configured for provider={provider} mode={mode}. Set LLM_MODEL or model_env.")
+
+        base_url = os.getenv(mode_cfg.get("base_url_env", "")) or os.getenv(prov_cfg.get("base_url_env", ""))
+        if not base_url:
+            base_url = mode_cfg.get("base_url") or prov_cfg.get("base_url") or ""
+        if not base_url:
+            raise ValueError(f"Base URL not configured for provider={provider} mode={mode}.")
+
+        endpoint = mode_cfg.get("endpoint") or ""
+        if not endpoint:
+            raise ValueError(f"Endpoint not configured for provider={provider} mode={mode}.")
+
+        api_key = os.getenv("LLM_API_KEY")
+        if not api_key:
+            for env_name in prov_cfg.get("api_key_envs", []):
+                val = os.getenv(env_name)
+                if val:
+                    api_key = val
+                    break
+        if not api_key:
+            raise ValueError(f"API key missing for provider={provider}. Set LLM_API_KEY or {prov_cfg.get('api_key_envs')}")
+
+        headers = self._build_headers(prov_cfg, api_key)
+
+        timeout_sec = int(os.getenv("LLM_TIMEOUT_SEC", "")) if os.getenv("LLM_TIMEOUT_SEC") else int(
+            defaults.get("timeout_sec", 120)
+        )
+        retry = int(os.getenv("LLM_RETRY", "")) if os.getenv("LLM_RETRY") else int(defaults.get("retry", 1))
+
+        return Target(
+            provider=provider,
+            mode=mode,
+            model=model,
+            base_url=base_url.rstrip("/"),
+            endpoint=endpoint,
+            headers=headers,
+            timeout_sec=timeout_sec,
+            retry=retry,
+        )
+
+    def _build_headers(self, prov_cfg: Dict[str, Any], api_key: str) -> Dict[str, str]:
+        auth = prov_cfg.get("auth", {})
+        auth_type = auth.get("type", "bearer")
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if auth_type == "bearer":
+            header = auth.get("header", "Authorization")
+            prefix = auth.get("prefix", "Bearer ")
+            headers[header] = f"{prefix}{api_key}"
+        elif auth_type == "x-goog-api-key":
+            headers["x-goog-api-key"] = api_key
+        else:
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
+
+    def _build_adapter(self, target: Target):
+        if target.mode == "openai-response":
+            return OpenAIResponsesAdapter(target)
+        if target.mode == "openai-complete":
+            return OpenAICompletionsAdapter(target)
+        if target.mode == "gemini-native":
+            return GeminiNativeAdapter(target)
+        return OpenAIChatAdapter(target)
+
+    def generate(
+        self,
+        req: UnifiedLLMRequest,
+        provider: Optional[str] = None,
+        mode: Optional[str] = None,
+        model: Optional[str] = None,
+        allow_fallback: bool = True,
+    ) -> UnifiedLLMResponse:
+        errors: List[Exception] = []
+        targets: List[Target] = []
+
+        if provider or mode or model or os.getenv("LLM_PROVIDER") or os.getenv("LLM_MODE") or os.getenv("LLM_MODEL"):
+            targets.append(self.resolve_target(provider, mode, model))
+        else:
+            targets.append(self.resolve_target())
+
+        if allow_fallback:
+            for alias in self.registry.get("routing", {}).get("fallback_chain", []):
+                prov, mod = self.resolve_alias(alias)
+                try:
+                    targets.append(self.resolve_target(prov, mod, model))
+                except Exception:
+                    continue
+
+        seen = set()
+        ordered = []
+        for t in targets:
+            key = (t.provider, t.mode, t.model)
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(t)
+
+        for target in ordered:
+            try:
+                adapter = self._build_adapter(target)
+                return adapter.generate(req)
+            except Exception as exc:
+                errors.append(exc)
+                continue
+        if errors:
+            raise errors[-1]
+        raise RuntimeError("No target resolved for LLM request")
+
+
+__all__ = [
+    "UnifiedLLMRequest",
+    "UnifiedLLMResponse",
+    "LLMGateway",
+    "_messages_to_response_input",
+]
