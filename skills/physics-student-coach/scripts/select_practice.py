@@ -345,6 +345,12 @@ def main():
     assignment_md = out_dir / "assignment.md"
     date_str = safe_date(args.date)
     student_ids = parse_ids(args.student_ids)
+    if student_ids:
+        scope = "student"
+    elif args.class_name:
+        scope = "class"
+    else:
+        scope = "public"
     lines = [
         f"Assignment ID: {args.assignment_id}",
         f"Date: {date_str}",
@@ -367,6 +373,7 @@ def main():
         "question_ids": [row.get("question_id") for row in selected if row.get("question_id")],
         "class_name": args.class_name,
         "student_ids": student_ids,
+        "scope": scope,
         "source": args.source,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }

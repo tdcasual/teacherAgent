@@ -867,14 +867,23 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
 
 
 def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
+    scope = meta.get("scope")
     student_ids = meta.get("student_ids") or []
-    if student_id and student_id in student_ids:
-        return 3
-    if class_name and meta.get("class_name") and class_name == meta.get("class_name"):
-        return 2
-    if not student_ids and not meta.get("class_name"):
+    class_meta = meta.get("class_name")
+
+    if scope == "student":
+        return 3 if student_id and student_id in student_ids else 0
+    if scope == "class":
+        return 2 if class_name and class_meta and class_name == class_meta else 0
+    if scope == "public":
         return 1
-    return 0
+
+    # legacy behavior: if student_ids exist, treat as personal-only (no class fallback)
+    if student_ids:
+        return 3 if student_id and student_id in student_ids else 0
+    if class_name and class_meta and class_name == class_meta:
+        return 2
+    return 1
 
 
 def parse_iso_timestamp(value: Optional[str]) -> float:

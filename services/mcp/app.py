@@ -107,7 +107,23 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
 
         if name == "assignment.generate":
             script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "select_practice.py"
-            cmd = ["python3", str(script), "--assignment-id", args.get("assignment_id", ""), "--kp", args.get("kp", "")]
+            cmd = ["python3", str(script), "--assignment-id", args.get("assignment_id", "")]
+            if args.get("kp"):
+                cmd += ["--kp", args.get("kp", "")]
+            if args.get("question_ids"):
+                cmd += ["--question-ids", args.get("question_ids")]
+            if args.get("mode"):
+                cmd += ["--mode", args.get("mode")]
+            if args.get("date"):
+                cmd += ["--date", args.get("date")]
+            if args.get("class_name"):
+                cmd += ["--class-name", args.get("class_name")]
+            if args.get("student_ids"):
+                cmd += ["--student-ids", args.get("student_ids")]
+            if args.get("source"):
+                cmd += ["--source", args.get("source")]
+            if args.get("per_kp") is not None:
+                cmd += ["--per-kp", str(args.get("per_kp"))]
             if args.get("core_examples"):
                 cmd += ["--core-examples", args.get("core_examples")]
             if args.get("generate"):
