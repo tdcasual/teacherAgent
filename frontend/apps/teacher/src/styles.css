@@ -89,7 +89,8 @@ body {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
@@ -100,7 +101,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(47, 109, 107, 0.12);
 }
@@ -283,6 +285,71 @@ textarea:focus {
 .send-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.upload-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.upload-card h3 {
+  margin: 0 0 6px;
+}
+
+.upload-card p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.upload-form {
+  display: grid;
+  gap: 10px;
+}
+
+.upload-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.upload-field {
+  display: grid;
+  gap: 6px;
+}
+
+.upload-form button {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.upload-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.status.ok {
+  background: #e8f3f1;
+  color: #2f6d6b;
+}
+
+.status.err {
+  background: #ffe8e6;
+  color: #8a1f1f;
 }
 
 .mention-panel {

@@ -255,6 +255,16 @@ export default function App() {
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsError, setSkillsError] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [uploadAssignmentId, setUploadAssignmentId] = useState('')
+  const [uploadDate, setUploadDate] = useState('')
+  const [uploadScope, setUploadScope] = useState<'public' | 'class' | 'student'>('public')
+  const [uploadClassName, setUploadClassName] = useState('')
+  const [uploadStudentIds, setUploadStudentIds] = useState('')
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [uploadAnswerFiles, setUploadAnswerFiles] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  const [uploadError, setUploadError] = useState('')
 
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -408,6 +418,53 @@ export default function App() {
     await submitMessage()
   }
 
+  const handleUploadAssignment = async (event: FormEvent) => {
+    event.preventDefault()
+    setUploadError('')
+    setUploadStatus('')
+    if (!uploadAssignmentId.trim()) {
+      setUploadError('请填写作业ID')
+      return
+    }
+    if (!uploadFiles.length) {
+      setUploadError('请至少上传一份作业文件（PDF 或图片）')
+      return
+    }
+    if (uploadScope === 'student' && !uploadStudentIds.trim()) {
+      setUploadError('私人作业请填写学生ID')
+      return
+    }
+    if (uploadScope === 'class' && !uploadClassName.trim()) {
+      setUploadError('班级作业请填写班级')
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('assignment_id', uploadAssignmentId.trim())
+      if (uploadDate.trim()) fd.append('date', uploadDate.trim())
+      fd.append('scope', uploadScope)
+      if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim())
+      if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim())
+      uploadFiles.forEach((file) => fd.append('files', file))
+      uploadAnswerFiles.forEach((file) => fd.append('answer_files', file))
+
+      const res = await fetch(`${apiBase}/assignment/upload`, { method: 'POST', body: fd })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setUploadStatus(typeof data === 'string' ? data : JSON.stringify(data, null, 2))
+      setUploadFiles([])
+      setUploadAnswerFiles([])
+    } catch (err: any) {
+      setUploadError(err.message || String(err))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (mention && mention.items.length) {
       if (event.key === 'ArrowDown') {
@@ -504,6 +561,78 @@ export default function App() {
               </button>
             </div>
           </form>
+
+          <section className="upload-card">
+            <h3>上传作业文件（PDF / 图片）</h3>
+            <p>上传后将自动解析题目与答案，并生成作业 8 点描述。学生端将以文件形式下发作业。</p>
+            <form className="upload-form" onSubmit={handleUploadAssignment}>
+              <div className="upload-grid">
+                <div className="upload-field">
+                  <label>作业ID</label>
+                  <input
+                    value={uploadAssignmentId}
+                    onChange={(e) => setUploadAssignmentId(e.target.value)}
+                    placeholder="例如：HW-2026-02-05"
+                  />
+                </div>
+                <div className="upload-field">
+                  <label>日期（可选）</label>
+                  <input
+                    value={uploadDate}
+                    onChange={(e) => setUploadDate(e.target.value)}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </div>
+                <div className="upload-field">
+                  <label>范围</label>
+                  <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value as any)}>
+                    <option value="public">公共作业</option>
+                    <option value="class">班级作业</option>
+                    <option value="student">私人作业</option>
+                  </select>
+                </div>
+                <div className="upload-field">
+                  <label>班级（班级作业必填）</label>
+                  <input
+                    value={uploadClassName}
+                    onChange={(e) => setUploadClassName(e.target.value)}
+                    placeholder="例如：高二2403班"
+                  />
+                </div>
+                <div className="upload-field">
+                  <label>学生ID（私人作业必填）</label>
+                  <input
+                    value={uploadStudentIds}
+                    onChange={(e) => setUploadStudentIds(e.target.value)}
+                    placeholder="例如：高二2403班_刘昊然"
+                  />
+                </div>
+                <div className="upload-field">
+                  <label>作业文件（PDF/图片）</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="application/pdf,image/*"
+                    onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
+                  />
+                </div>
+                <div className="upload-field">
+                  <label>答案文件（可选）</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="application/pdf,image/*"
+                    onChange={(e) => setUploadAnswerFiles(Array.from(e.target.files || []))}
+                  />
+                </div>
+              </div>
+              <button type="submit" disabled={uploading}>
+                {uploading ? '上传解析中…' : '上传并解析'}
+              </button>
+            </form>
+            {uploadError && <div className="status err">{uploadError}</div>}
+            {uploadStatus && <pre className="status ok">{uploadStatus}</pre>}
+          </section>
 
           {mention && mention.items.length > 0 && (
             <div className="mention-panel">

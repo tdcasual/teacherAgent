@@ -36,6 +36,7 @@ type AssignmentDetail = {
   question_count?: number
   meta?: { target_kp?: string[] }
   questions?: AssignmentQuestion[]
+  delivery?: { mode?: string; files?: Array<{ name: string; url: string }> }
 }
 
 type VerifiedStudent = {
@@ -469,7 +470,26 @@ export default function App() {
               {todayAssignment.meta?.target_kp?.length ? (
                 <div className="assignment-meta">知识点：{todayAssignment.meta.target_kp.join('，')}</div>
               ) : null}
-              <div className="assignment-note">作业题目不会在此处展示，请在聊天中输入“开始今天作业”进入讨论。</div>
+              {todayAssignment.delivery?.files?.length ? (
+                <div className="assignment-downloads">
+                  <div className="assignment-note">本次作业以文件形式下发，请下载后完成。</div>
+                  <div className="download-list">
+                    {todayAssignment.delivery.files.map((file) => (
+                      <a
+                        key={file.url}
+                        className="download-link"
+                        href={`${apiBase}${file.url}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        下载：{file.name}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="assignment-note">作业题目不会在此处展示，请在聊天中输入“开始今天作业”进入讨论。</div>
+              )}
             </>
           )}
         </section>

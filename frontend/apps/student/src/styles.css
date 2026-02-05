@@ -394,6 +394,30 @@ textarea:focus {
   color: var(--muted);
 }
 
+.assignment-downloads {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.download-list {
+  display: grid;
+  gap: 6px;
+}
+
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #eef6f4;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13px;
+  border: 1px solid #cfe3e0;
+}
+
 .assignment-item {
   padding: 10px 12px;
   border-radius: 12px;

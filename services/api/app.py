@@ -7,15 +7,17 @@ from logging.handlers import RotatingFileHandler
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 from llm_gateway import LLMGateway, UnifiedLLMRequest
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 
 try:
@@ -28,6 +30,9 @@ except Exception:
 APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
+OCR_UTILS_DIR = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts"
+if OCR_UTILS_DIR.exists() and str(OCR_UTILS_DIR) not in sys.path:
+    sys.path.insert(0, str(OCR_UTILS_DIR))
 
 DIAG_LOG_ENABLED = os.getenv("DIAG_LOG", "").lower() in {"1", "true", "yes", "on"}
 DIAG_LOG_PATH = Path(os.getenv("DIAG_LOG_PATH", APP_ROOT / "tmp" / "diagnostics.log"))
@@ -132,6 +137,192 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", "", text or "").lower()
 
 
+def parse_ids_value(value: Any) -> List[str]:
+    parts = parse_list_value(value)
+    return [p for p in parts if p]
+
+
+def sanitize_filename(name: str) -> str:
+    return Path(name or "").name
+
+
+def safe_slug(value: str) -> str:
+    return re.sub(r"[^\w-]+", "_", value or "").strip("_") or "assignment"
+
+
+def resolve_scope(scope: str, student_ids: List[str], class_name: str) -> str:
+    scope_norm = (scope or "").strip().lower()
+    if scope_norm in {"public", "class", "student"}:
+        return scope_norm
+    if student_ids:
+        return "student"
+    if class_name:
+        return "class"
+    return "public"
+
+
+def load_ocr_utils():
+    try:
+        from ocr_utils import load_env_from_dotenv, ocr_with_sdk  # type: ignore
+
+        load_env_from_dotenv(Path(".env"))
+        return load_env_from_dotenv, ocr_with_sdk
+    except Exception:
+        return None, None
+
+
+def clean_ocr_text(text: str) -> str:
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return "\n".join(lines)
+
+
+def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR") -> str:
+    text = ""
+    try:
+        import pdfplumber  # type: ignore
+
+        with pdfplumber.open(str(path)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as exc:
+        diag_log("pdf.extract.error", {"file": str(path), "error": str(exc)[:200]})
+
+    if len(text.strip()) >= 200:
+        return clean_ocr_text(text)
+
+    _, ocr_with_sdk = load_ocr_utils()
+    if not ocr_with_sdk:
+        return clean_ocr_text(text)
+    try:
+        ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode)
+        return clean_ocr_text(ocr_text)
+    except Exception as exc:
+        diag_log("pdf.ocr.error", {"file": str(path), "error": str(exc)[:200]})
+        return clean_ocr_text(text)
+
+
+def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR") -> str:
+    _, ocr_with_sdk = load_ocr_utils()
+    if not ocr_with_sdk:
+        return ""
+    try:
+        ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode)
+        return clean_ocr_text(ocr_text)
+    except Exception as exc:
+        diag_log("image.ocr.error", {"file": str(path), "error": str(exc)[:200]})
+        return ""
+
+
+def truncate_text(text: str, limit: int = 12000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "…"
+
+
+def parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
+    if not content:
+        return None
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```\w*\\n|```$", "", text, flags=re.S).strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        match = re.search(r"\{.*\}", text, re.S)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            return None
+
+
+def llm_parse_assignment_payload(source_text: str, answer_text: str) -> Dict[str, Any]:
+    system = (
+        "你是作业解析助手。请从试卷文本与答案文本中提取结构化题目信息，并生成作业8点描述。"
+        "仅输出严格JSON，字段如下："
+        "{"
+        "\"questions\":[{\"stem\":\"题干\",\"answer\":\"答案(若无留空)\",\"kp\":\"知识点(可为空)\","
+        "\"difficulty\":\"basic|medium|advanced\",\"score\":分值(可为0),\"tags\":[\"...\"],\"type\":\"\"}],"
+        "\"requirements\":{"
+        "\"subject\":\"\",\"topic\":\"\",\"grade_level\":\"\",\"class_level\":\"\","
+        "\"core_concepts\":[\"\"],\"typical_problem\":\"\","
+        "\"misconceptions\":[\"\"],\"duration_minutes\":20|40|60|0,"
+        "\"preferences\":[\"A基础|B提升|C生活应用|D探究|E小测验|F错题反思\"],"
+        "\"extra_constraints\":\"\"},"
+        "\"missing\":[\"缺失字段名\"]"
+        "}"
+        "若答案文本提供，优先使用答案文本；若无法确定字段，请留空并写入missing。"
+    )
+    user = f"【试卷文本】\\n{truncate_text(source_text)}\\n\\n【答案文本】\\n{truncate_text(answer_text) if answer_text else '无'}"
+    resp = call_llm(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+    )
+    content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")
+    parsed = parse_llm_json(content)
+    if not isinstance(parsed, dict):
+        return {"error": "llm_parse_failed", "raw": content[:500]}
+    return parsed
+
+
+def write_uploaded_questions(out_dir: Path, assignment_id: str, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    stem_dir = out_dir / "uploaded_stems"
+    answer_dir = out_dir / "uploaded_answers"
+    stem_dir.mkdir(parents=True, exist_ok=True)
+    answer_dir.mkdir(parents=True, exist_ok=True)
+
+    rows: List[Dict[str, Any]] = []
+    slug = safe_slug(assignment_id)
+    for idx, q in enumerate(questions, start=1):
+        qid = f"UP-{slug}-{idx:03d}"
+        stem = str(q.get("stem") or "").strip()
+        answer = str(q.get("answer") or "").strip()
+        kp = str(q.get("kp") or "uncategorized").strip() or "uncategorized"
+        difficulty = str(q.get("difficulty") or "basic").strip() or "basic"
+        qtype = str(q.get("type") or "upload").strip() or "upload"
+        tags = q.get("tags") or []
+        if isinstance(tags, list):
+            tags_str = ",".join([str(t) for t in tags if t])
+        else:
+            tags_str = str(tags)
+
+        stem_ref = stem_dir / f"{qid}.md"
+        stem_ref.write_text(stem or "【空题干】请补充题干。", encoding="utf-8")
+
+        answer_ref = ""
+        answer_text = ""
+        if answer:
+            answer_ref = str(answer_dir / f"{qid}.md")
+            Path(answer_ref).write_text(answer, encoding="utf-8")
+            answer_text = answer
+
+        rows.append(
+            {
+                "question_id": qid,
+                "kp_id": kp,
+                "difficulty": difficulty,
+                "type": qtype,
+                "stem_ref": str(stem_ref),
+                "answer_ref": answer_ref,
+                "answer_text": answer_text,
+                "source": "teacher_upload",
+                "tags": tags_str,
+            }
+        )
+
+    questions_path = out_dir / "questions.csv"
+    if rows:
+        with questions_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+    return rows
 def detect_role(text: str) -> Optional[str]:
     normalized = normalize(text)
     if "老师" in normalized or "教师" in normalized:
@@ -958,13 +1149,30 @@ def build_assignment_detail(folder: Path, include_text: bool = True) -> Dict[str
                         stem_path = APP_ROOT / stem_path
                     item["stem_text"] = read_text_safe(stem_path)
                 questions.append(item)
+    delivery = None
+    source_files = meta.get("source_files") or []
+    if meta.get("delivery_mode") and source_files:
+        delivery_files = []
+        for fname in source_files:
+            safe_name = sanitize_filename(str(fname))
+            if not safe_name:
+                continue
+            delivery_files.append(
+                {
+                    "name": safe_name,
+                    "url": f"/assignment/{assignment_id}/download?file={quote(safe_name)}",
+                }
+            )
+        delivery = {"mode": meta.get("delivery_mode"), "files": delivery_files}
+
     return {
         "assignment_id": assignment_id,
         "date": assignment_date,
         "meta": meta,
         "requirements": requirements,
         "question_count": len(questions),
-        "questions": questions,
+        "questions": questions if include_text else None,
+        "delivery": delivery,
     }
 
 
@@ -1941,6 +2149,147 @@ async def assignment_requirements_get(assignment_id: str):
     if not requirements:
         return {"assignment_id": assignment_id, "requirements": None}
     return {"assignment_id": assignment_id, "requirements": requirements}
+
+
+@app.post("/assignment/upload")
+async def assignment_upload(
+    assignment_id: str = Form(...),
+    date: Optional[str] = Form(""),
+    scope: Optional[str] = Form(""),
+    class_name: Optional[str] = Form(""),
+    student_ids: Optional[str] = Form(""),
+    files: list[UploadFile] = File(...),
+    answer_files: Optional[list[UploadFile]] = File(None),
+    ocr_mode: Optional[str] = Form("FREE_OCR"),
+    language: Optional[str] = Form("zh"),
+):
+    date_str = parse_date_str(date)
+    out_dir = DATA_DIR / "assignments" / assignment_id
+    source_dir = out_dir / "source"
+    answers_dir = out_dir / "answer_source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    answers_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_sources = []
+    delivery_mode = "image"
+    for f in files:
+        fname = sanitize_filename(f.filename)
+        if not fname:
+            continue
+        dest = source_dir / fname
+        dest.write_bytes(await f.read())
+        saved_sources.append(fname)
+        if dest.suffix.lower() == ".pdf":
+            delivery_mode = "pdf"
+
+    saved_answers = []
+    if answer_files:
+        for f in answer_files:
+            fname = sanitize_filename(f.filename)
+            if not fname:
+                continue
+            dest = answers_dir / fname
+            dest.write_bytes(await f.read())
+            saved_answers.append(fname)
+
+    if not saved_sources:
+        raise HTTPException(status_code=400, detail="No source files uploaded")
+
+    # Extract source text
+    source_text_parts = []
+    for fname in saved_sources:
+        path = source_dir / fname
+        if path.suffix.lower() == ".pdf":
+            source_text_parts.append(extract_text_from_pdf(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
+        else:
+            source_text_parts.append(extract_text_from_image(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
+    source_text = "\n\n".join([t for t in source_text_parts if t])
+    (out_dir / "source_text.txt").write_text(source_text or "", encoding="utf-8")
+
+    # Extract answer text (optional)
+    answer_text_parts = []
+    for fname in saved_answers:
+        path = answers_dir / fname
+        if path.suffix.lower() == ".pdf":
+            answer_text_parts.append(extract_text_from_pdf(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
+        else:
+            answer_text_parts.append(extract_text_from_image(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
+    answer_text = "\n\n".join([t for t in answer_text_parts if t])
+    if answer_text:
+        (out_dir / "answer_text.txt").write_text(answer_text, encoding="utf-8")
+
+    parsed = llm_parse_assignment_payload(source_text, answer_text)
+    if parsed.get("error"):
+        raise HTTPException(status_code=400, detail=parsed)
+
+    questions = parsed.get("questions") or []
+    if not isinstance(questions, list) or not questions:
+        raise HTTPException(status_code=400, detail="No questions parsed from source")
+
+    rows = write_uploaded_questions(out_dir, assignment_id, questions)
+
+    requirements = parsed.get("requirements") or {}
+    missing = parsed.get("missing") or []
+    # store requirements (do not block on missing)
+    save_assignment_requirements(
+        assignment_id,
+        requirements,
+        date_str,
+        created_by="teacher_upload",
+        validate=False,
+    )
+
+    student_ids_list = parse_ids_value(student_ids)
+    scope_val = resolve_scope(scope or "", student_ids_list, class_name or "")
+    if scope_val == "student" and not student_ids_list:
+        raise HTTPException(status_code=400, detail="student scope requires student_ids")
+
+    meta_path = out_dir / "meta.json"
+    meta = load_assignment_meta(out_dir) if meta_path.exists() else {}
+    meta.update(
+        {
+            "assignment_id": assignment_id,
+            "date": date_str,
+            "mode": "upload",
+            "target_kp": requirements.get("core_concepts") or [],
+            "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
+            "class_name": class_name or "",
+            "student_ids": student_ids_list,
+            "scope": scope_val,
+            "source": "teacher",
+            "delivery_mode": delivery_mode,
+            "source_files": saved_sources,
+            "answer_files": saved_answers,
+            "requirements_missing": missing,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "assignment_id": assignment_id,
+        "date": date_str,
+        "delivery_mode": delivery_mode,
+        "question_count": len(rows),
+        "requirements_missing": missing,
+    }
+
+
+@app.get("/assignment/{assignment_id}/download")
+async def assignment_download(assignment_id: str, file: str):
+    folder = DATA_DIR / "assignments" / assignment_id / "source"
+    if not folder.exists():
+        raise HTTPException(status_code=404, detail="assignment source not found")
+    safe_name = sanitize_filename(file)
+    if not safe_name:
+        raise HTTPException(status_code=400, detail="invalid file")
+    path = (folder / safe_name).resolve()
+    if folder not in path.parents:
+        raise HTTPException(status_code=400, detail="invalid file path")
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(path)
 
 
 @app.get("/assignment/today")
