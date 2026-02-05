@@ -201,9 +201,85 @@ npm run dev:student
 
 ---
 
+## 模型切换与 .env 配置
+项目已内置统一的模型切换网关，配置文件位于 `config/model_registry.yaml`，默认会读取 `.env` 环境变量。
+
+### 配置优先级
+1) `LLM_*` 显式配置  
+2) 各厂商的专用环境变量（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`）  
+3) `config/model_registry.yaml` 的默认值
+
+### 通用变量（模型网关）
+- `MODEL_REGISTRY_PATH`：自定义 registry 路径（默认 `config/model_registry.yaml`）
+- `LLM_PROVIDER`：目标厂商（如 `openai` / `deepseek` / `kimi` / `gemini` / `siliconflow`）
+- `LLM_MODE`：调用模式（`openai-response` / `openai-chat` / `openai-complete` / `gemini-native` / `gemini-openai`）
+- `LLM_MODEL`：目标模型名称
+- `LLM_API_KEY`：统一 API Key（若设置，会覆盖厂商专用 key）
+- `LLM_TIMEOUT_SEC`：超时时间（秒）
+- `LLM_RETRY`：失败重试次数
+
+### OpenAI（含 Responses / Chat / Completions）
+- `OPENAI_API_KEY`
+- `OPENAI_RESPONSE_MODEL`
+- `OPENAI_CHAT_MODEL`
+- `OPENAI_COMPLETION_MODEL`
+
+### SiliconFlow（默认兼容入口）
+- `SILICONFLOW_API_KEY`
+- `SILICONFLOW_BASE_URL`
+- `SILICONFLOW_LLM_MODEL`
+
+### DeepSeek（OpenAI 兼容）
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_BASE_URL`
+- `DEEPSEEK_MODEL`
+
+### Kimi（Moonshot，OpenAI 兼容）
+- `MOONSHOT_API_KEY`
+- `KIMI_BASE_URL`
+- `KIMI_MODEL`
+
+### Gemini（原生 / OpenAI 兼容）
+- `GEMINI_API_KEY`
+- `GEMINI_BASE_URL`
+- `GEMINI_OPENAI_BASE_URL`
+- `GEMINI_MODEL`
+
+### 示例：OpenAI Responses
+```bash
+LLM_PROVIDER=openai
+LLM_MODE=openai-response
+OPENAI_API_KEY=sk-xxx
+OPENAI_RESPONSE_MODEL=gpt-4.1-mini
+```
+
+### 示例：DeepSeek（OpenAI 兼容）
+```bash
+LLM_PROVIDER=deepseek
+LLM_MODE=openai-chat
+DEEPSEEK_API_KEY=xxx
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+### 示例：Gemini 原生
+```bash
+LLM_PROVIDER=gemini
+LLM_MODE=gemini-native
+GEMINI_API_KEY=xxx
+GEMINI_MODEL=gemini-1.5-flash
+```
+
+---
+
 ## 接口文档
 - HTTP API：`docs/http_api.md`
 - MCP 协议：`docs/mcp_api.md`
+
+---
+
+## 安全与提示词测试
+- 提示词注入测试样例：`tests/prompt_injection_cases.jsonl`
+- 说明文档：`tests/prompt_injection_README.md`
 
 ---
 如需扩展或调整流程，请在各技能的 `SKILL.md` 中查看详细说明。
