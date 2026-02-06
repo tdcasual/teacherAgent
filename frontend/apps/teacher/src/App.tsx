@@ -150,7 +150,7 @@ type TeacherMemoryInsightsResponse = {
 
 type UploadJobStatus = {
   job_id: string
-  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed'
+  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming' | 'cancelled'
   progress?: number
   step?: string
   message?: string
@@ -209,7 +209,7 @@ type AssignmentProgress = {
 
 type ExamUploadJobStatus = {
   job_id: string
-  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming'
+  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming' | 'cancelled'
   progress?: number
   step?: string
   error?: string
@@ -589,6 +589,13 @@ const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?
   }
 }
 
+type WorkbenchTab = 'skills' | 'memory' | 'workflow'
+
+type WorkflowStepState = 'todo' | 'active' | 'done' | 'error'
+type WorkflowIndicatorTone = 'neutral' | 'active' | 'success' | 'error'
+type WorkflowStepItem = { key: string; label: string; state: WorkflowStepState }
+type WorkflowIndicator = { label: string; tone: WorkflowIndicatorTone; steps: WorkflowStepItem[] }
+
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const [apiBase, setApiBase] = useState(() => localStorage.getItem('apiBaseTeacher') || DEFAULT_API_URL)
@@ -609,9 +616,10 @@ export default function App() {
   })
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => localStorage.getItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => localStorage.getItem('teacherSkillsOpen') !== 'false')
-  const [workbenchTab, setWorkbenchTab] = useState<'skills' | 'memory'>(() =>
-    localStorage.getItem('teacherWorkbenchTab') === 'memory' ? 'memory' : 'skills'
-  )
+  const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>(() => {
+    const raw = localStorage.getItem('teacherWorkbenchTab')
+    return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
+  })
   const [activeSkillId, setActiveSkillId] = useState(() => localStorage.getItem('teacherActiveSkillId') || 'physics-teacher-ops')
   const [cursorPos, setCursorPos] = useState(0)
   const [skillQuery, setSkillQuery] = useState('')
@@ -1290,6 +1298,8 @@ export default function App() {
       done: '解析完成（待确认）',
       failed: '解析失败',
       confirmed: '已创建作业',
+      confirming: '确认中',
+      cancelled: '已取消',
     }
     lines.push(`解析状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
@@ -1344,6 +1354,7 @@ export default function App() {
       failed: '解析失败',
       confirmed: '已创建考试',
       confirming: '确认中',
+      cancelled: '已取消',
     }
     lines.push(`解析状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
@@ -1378,6 +1389,7 @@ export default function App() {
       failed: '解析失败',
       confirmed: '已创建',
       confirming: '确认中',
+      cancelled: '已取消',
     }
     const parts: string[] = []
     parts.push(`状态：${statusMap[job.status] || job.status}`)
@@ -1414,6 +1426,8 @@ export default function App() {
       done: '解析完成（待确认）',
       failed: '解析失败',
       confirmed: '已创建',
+      confirming: '确认中',
+      cancelled: '已取消',
     }
     const parts: string[] = []
     parts.push(`状态：${statusMap[job.status] || job.status}`)
@@ -1453,6 +1467,208 @@ export default function App() {
     if (overdue) parts.push(`逾期：${overdue}`)
     return parts.join(' · ')
   }
+
+  const assignmentWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
+    const steps: WorkflowStepItem[] = [
+      { key: 'upload', label: '上传文件', state: 'todo' },
+      { key: 'parse', label: '解析', state: 'todo' },
+      { key: 'review', label: '审核草稿', state: 'todo' },
+      { key: 'confirm', label: '创建作业', state: 'todo' },
+    ]
+    const setState = (key: WorkflowStepItem['key'], state: WorkflowStepState) => {
+      const step = steps.find((item) => item.key === key)
+      if (step) step.state = state
+    }
+    const markDone = (...keys: WorkflowStepItem['key'][]) => {
+      keys.forEach((key) => setState(key, 'done'))
+    }
+
+    const status = uploadJobInfo?.status
+    const hasError = Boolean(uploadError || draftError || draftActionError || status === 'failed' || status === 'cancelled')
+
+    let label = '未开始'
+    let tone: WorkflowIndicatorTone = 'neutral'
+    let stage: 'idle' | 'uploading' | 'parsing' | 'review' | 'confirming' | 'completed' | 'failed-parse' | 'failed-review' | 'failed-confirm' = 'idle'
+
+    if (status === 'confirmed') {
+      stage = 'completed'
+      label = '已创建作业'
+      tone = 'success'
+    } else if (uploadConfirming || status === 'confirming') {
+      stage = 'confirming'
+      label = '创建中'
+      tone = 'active'
+    } else if (status === 'done' || uploadDraft) {
+      stage = 'review'
+      label = '待审核'
+      tone = 'active'
+    } else if (uploading) {
+      stage = 'uploading'
+      label = '上传中'
+      tone = 'active'
+    } else if (status === 'queued' || status === 'processing' || uploadJobId) {
+      stage = 'parsing'
+      label = '解析中'
+      tone = 'active'
+    }
+
+    if (hasError) {
+      tone = 'error'
+      if (status === 'failed' || status === 'cancelled' || uploadError) {
+        stage = 'failed-parse'
+        label = status === 'cancelled' ? '流程取消' : '解析失败'
+      } else if (uploadConfirming || status === 'confirming') {
+        stage = 'failed-confirm'
+        label = '创建失败'
+      } else {
+        stage = 'failed-review'
+        label = '审核异常'
+      }
+    }
+
+    switch (stage) {
+      case 'uploading':
+        setState('upload', 'active')
+        break
+      case 'parsing':
+        markDone('upload')
+        setState('parse', 'active')
+        break
+      case 'review':
+        markDone('upload', 'parse')
+        setState('review', 'active')
+        break
+      case 'confirming':
+        markDone('upload', 'parse', 'review')
+        setState('confirm', 'active')
+        break
+      case 'completed':
+        markDone('upload', 'parse', 'review', 'confirm')
+        break
+      case 'failed-parse':
+        if (uploading) {
+          setState('upload', 'error')
+        } else {
+          markDone('upload')
+          setState('parse', 'error')
+        }
+        break
+      case 'failed-review':
+        markDone('upload', 'parse')
+        setState('review', 'error')
+        break
+      case 'failed-confirm':
+        markDone('upload', 'parse', 'review')
+        setState('confirm', 'error')
+        break
+      default:
+        break
+    }
+
+    return { label, tone, steps }
+  }, [draftActionError, draftError, uploadConfirming, uploadDraft, uploadError, uploadJobId, uploadJobInfo?.status, uploading])
+
+  const examWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
+    const steps: WorkflowStepItem[] = [
+      { key: 'upload', label: '上传文件', state: 'todo' },
+      { key: 'parse', label: '解析', state: 'todo' },
+      { key: 'review', label: '审核草稿', state: 'todo' },
+      { key: 'confirm', label: '创建考试', state: 'todo' },
+    ]
+    const setState = (key: WorkflowStepItem['key'], state: WorkflowStepState) => {
+      const step = steps.find((item) => item.key === key)
+      if (step) step.state = state
+    }
+    const markDone = (...keys: WorkflowStepItem['key'][]) => {
+      keys.forEach((key) => setState(key, 'done'))
+    }
+
+    const status = examJobInfo?.status
+    const hasError = Boolean(examUploadError || examDraftError || examDraftActionError || status === 'failed' || status === 'cancelled')
+
+    let label = '未开始'
+    let tone: WorkflowIndicatorTone = 'neutral'
+    let stage: 'idle' | 'uploading' | 'parsing' | 'review' | 'confirming' | 'completed' | 'failed-parse' | 'failed-review' | 'failed-confirm' = 'idle'
+
+    if (status === 'confirmed') {
+      stage = 'completed'
+      label = '已创建考试'
+      tone = 'success'
+    } else if (examConfirming || status === 'confirming') {
+      stage = 'confirming'
+      label = '创建中'
+      tone = 'active'
+    } else if (status === 'done' || examDraft) {
+      stage = 'review'
+      label = '待审核'
+      tone = 'active'
+    } else if (examUploading) {
+      stage = 'uploading'
+      label = '上传中'
+      tone = 'active'
+    } else if (status === 'queued' || status === 'processing' || examJobId) {
+      stage = 'parsing'
+      label = '解析中'
+      tone = 'active'
+    }
+
+    if (hasError) {
+      tone = 'error'
+      if (status === 'failed' || status === 'cancelled' || examUploadError) {
+        stage = 'failed-parse'
+        label = status === 'cancelled' ? '流程取消' : '解析失败'
+      } else if (examConfirming || status === 'confirming') {
+        stage = 'failed-confirm'
+        label = '创建失败'
+      } else {
+        stage = 'failed-review'
+        label = '审核异常'
+      }
+    }
+
+    switch (stage) {
+      case 'uploading':
+        setState('upload', 'active')
+        break
+      case 'parsing':
+        markDone('upload')
+        setState('parse', 'active')
+        break
+      case 'review':
+        markDone('upload', 'parse')
+        setState('review', 'active')
+        break
+      case 'confirming':
+        markDone('upload', 'parse', 'review')
+        setState('confirm', 'active')
+        break
+      case 'completed':
+        markDone('upload', 'parse', 'review', 'confirm')
+        break
+      case 'failed-parse':
+        if (examUploading) {
+          setState('upload', 'error')
+        } else {
+          markDone('upload')
+          setState('parse', 'error')
+        }
+        break
+      case 'failed-review':
+        markDone('upload', 'parse')
+        setState('review', 'error')
+        break
+      case 'failed-confirm':
+        markDone('upload', 'parse', 'review')
+        setState('confirm', 'error')
+        break
+      default:
+        break
+    }
+
+    return { label, tone, steps }
+  }, [examConfirming, examDraft, examDraftActionError, examDraftError, examJobId, examJobInfo?.status, examUploadError, examUploading])
+
+  const activeWorkflowIndicator = uploadMode === 'assignment' ? assignmentWorkflowIndicator : examWorkflowIndicator
 
   useEffect(() => {
     if (!uploadJobId) return
@@ -1985,12 +2201,43 @@ export default function App() {
     [sessionTitleMap],
   )
 
+  const isMobileViewport = useCallback(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 900px)').matches
+  }, [])
+
   const closeSessionSidebarOnMobile = useCallback(() => {
-    if (typeof window === 'undefined') return
-    if (window.matchMedia('(max-width: 900px)').matches) {
+    if (isMobileViewport()) {
       setSessionSidebarOpen(false)
     }
-  }, [])
+  }, [isMobileViewport])
+
+  const toggleSessionSidebar = useCallback(() => {
+    setSessionSidebarOpen((prev) => {
+      const next = !prev
+      if (next && isMobileViewport()) setSkillsOpen(false)
+      return next
+    })
+  }, [isMobileViewport])
+
+  const openWorkbenchTab = useCallback(
+    (tab: WorkbenchTab) => {
+      setWorkbenchTab(tab)
+      setSkillsOpen(true)
+      if (isMobileViewport()) setSessionSidebarOpen(false)
+    },
+    [isMobileViewport],
+  )
+
+  const toggleSkillsWorkbench = useCallback(() => {
+    if (skillsOpen && workbenchTab === 'skills') {
+      setSkillsOpen(false)
+      return
+    }
+    setWorkbenchTab('skills')
+    setSkillsOpen(true)
+    if (isMobileViewport()) setSessionSidebarOpen(false)
+  }, [isMobileViewport, skillsOpen, workbenchTab])
 
   const startNewTeacherSession = useCallback(() => {
     const next = `session_${new Date().toISOString().slice(0, 10)}_${Math.random().toString(16).slice(2, 6)}`
@@ -2582,6 +2829,22 @@ export default function App() {
     }
   }
 
+  const refreshWorkflowWorkbench = () => {
+    setUploadStatusPollNonce((n) => n + 1)
+    setExamStatusPollNonce((n) => n + 1)
+    const assignmentId = (progressAssignmentId || uploadAssignmentId || uploadDraft?.assignment_id || '').trim()
+    if (assignmentId) {
+      void fetchAssignmentProgress(assignmentId)
+    }
+  }
+
+  const scrollToWorkflowSection = useCallback((sectionId: string) => {
+    if (typeof document === 'undefined') return
+    const node = document.getElementById(sectionId)
+    if (!node) return
+    node.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   const handleConfirmUpload = async () => {
     if (!uploadJobId) return
     setUploadError('')
@@ -2602,7 +2865,7 @@ export default function App() {
         prev
           ? {
               ...prev,
-              status: prev.status === 'confirmed' ? 'confirmed' : ('confirming' as any),
+              status: prev.status === 'confirmed' ? 'confirmed' : 'confirming',
               step: 'confirming',
               progress: prev.progress ?? 0,
             }
@@ -2733,7 +2996,7 @@ export default function App() {
         prev
           ? {
               ...prev,
-              status: prev.status === 'confirmed' ? 'confirmed' : ('confirming' as any),
+              status: prev.status === 'confirmed' ? 'confirmed' : 'confirming',
               step: 'confirming',
               progress: prev.progress ?? 0,
             }
@@ -2829,13 +3092,8 @@ export default function App() {
         <div className="top-left">
           <div className="brand">物理教学助手 · 老师端</div>
           {mainView === 'chat' ? (
-            <button className="ghost" type="button" onClick={() => setSessionSidebarOpen((prev) => !prev)}>
+            <button className="ghost" type="button" onClick={toggleSessionSidebar}>
               {sessionSidebarOpen ? '收起会话' : '展开会话'}
-            </button>
-          ) : null}
-          {mainView === 'chat' ? (
-            <button className="ghost" onClick={startNewTeacherSession}>
-              新会话
             </button>
           ) : null}
         </div>
@@ -2853,28 +3111,14 @@ export default function App() {
             <button
               className="ghost"
               type="button"
-              onClick={() => {
-                if (skillsOpen && workbenchTab === 'skills') {
-                  setSkillsOpen(false)
-                  return
-                }
-                setWorkbenchTab('skills')
-                setSkillsOpen(true)
-              }}
+              onClick={toggleSkillsWorkbench}
             >
-              {skillsOpen ? '收起工作台' : 'GPTs'}
+              {skillsOpen && workbenchTab === 'skills' ? '收起工作台' : 'GPTs'}
             </button>
           ) : null}
           {mainView === 'chat' ? (
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => {
-                setWorkbenchTab('memory')
-                setSkillsOpen(true)
-              }}
-            >
-              记忆
+            <button className="ghost" type="button" onClick={() => openWorkbenchTab('workflow')}>
+              工作流
             </button>
           ) : null}
           <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
@@ -3077,7 +3321,205 @@ export default function App() {
             </div>
           </form>
 
-	          <section className={`upload-card ${uploadCardCollapsed ? 'collapsed' : ''}`}>
+	          {/* workflow panels moved to right workbench */}
+
+          {mention && mention.items.length > 0 && (
+            <div className="mention-panel">
+              <div className="mention-title">技能建议（↑↓ 选择 / 回车插入）</div>
+              <div className="mention-list">
+                {mention.items.map((skill, index) => (
+                  <button
+                    key={skill.id}
+                    type="button"
+                    className={index === mentionIndex ? 'active' : ''}
+                    onClick={() => insertSkillMention(skill)}
+                  >
+                    <strong>{skill.title}</strong>
+                    {skill.desc ? <span className="muted">{skill.desc}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+            </>
+          )}
+        </main>
+
+        {mainView === 'chat' && (
+          <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
+            <div className="skills-header">
+              <h3>工作台</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    if (workbenchTab === 'skills') {
+                      void fetchSkills()
+                    } else if (workbenchTab === 'memory') {
+                      void refreshMemoryProposals()
+                      void refreshMemoryInsights()
+                    } else {
+                      refreshWorkflowWorkbench()
+                    }
+                  }}
+                  disabled={
+                    workbenchTab === 'skills'
+                      ? skillsLoading
+                      : workbenchTab === 'memory'
+                        ? proposalLoading
+                        : progressLoading || uploading || examUploading
+                  }
+                >
+                  刷新
+                </button>
+                <button className="ghost" onClick={() => setSkillsOpen(false)}>
+                  收起
+                </button>
+              </div>
+            </div>
+            <div className="view-switch workbench-switch">
+              <button type="button" className={workbenchTab === 'skills' ? 'active' : ''} onClick={() => setWorkbenchTab('skills')}>
+                GPTs
+              </button>
+              <button type="button" className={workbenchTab === 'memory' ? 'active' : ''} onClick={() => setWorkbenchTab('memory')}>
+                自动记忆
+              </button>
+              <button type="button" className={workbenchTab === 'workflow' ? 'active' : ''} onClick={() => setWorkbenchTab('workflow')}>
+                工作流
+              </button>
+            </div>
+            {workbenchTab === 'skills' ? (
+              <>
+                <div className="skills-tools">
+                  <input
+                    value={skillQuery}
+                    onChange={(e) => setSkillQuery(e.target.value)}
+                    placeholder="搜索技能"
+                  />
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={showFavoritesOnly}
+                      onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+                    />
+                    只看收藏
+                  </label>
+                </div>
+                {skillsLoading && <div className="skills-status">正在加载技能...</div>}
+                {skillsError && <div className="skills-status err">{skillsError}</div>}
+                <div className="skills-body">
+                  {filteredSkills.map((skill) => (
+                    <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
+                      <div className="skill-title">
+                        <div>
+                          <strong>{skill.title}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          className={`fav ${favorites.includes(skill.id) ? 'active' : ''}`}
+                          onClick={() => toggleFavorite(skill.id)}
+                          aria-label="收藏技能"
+                        >
+                          {favorites.includes(skill.id) ? '★' : '☆'}
+                        </button>
+                      </div>
+                      <p>{skill.desc}</p>
+                      <div className="skill-prompts">
+                        {skill.prompts.map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
+                            onClick={() => {
+                              setActiveSkillId(skill.id)
+                              insertPrompt(prompt)
+                            }}
+                          >
+                            使用模板
+                          </button>
+                        ))}
+                      </div>
+                      <div className="skill-examples">
+                        {skill.examples.map((ex) => (
+                          <button
+                            key={ex}
+                            type="button"
+                            onClick={() => {
+                              setActiveSkillId(skill.id)
+                              insertPrompt(ex)
+                            }}
+                          >
+                            {ex}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : workbenchTab === 'workflow' ? (
+              <section className="memory-panel workbench-memory workbench-workflow">
+                <div className="history-header">
+                  <strong>作业流程控制</strong>
+                </div>
+                <div className="workflow-summary-card">
+                  <div className="segmented">
+                    <button type="button" className={uploadMode === 'assignment' ? 'active' : ''} onClick={() => setUploadMode('assignment')}>
+                      作业
+                    </button>
+                    <button type="button" className={uploadMode === 'exam' ? 'active' : ''} onClick={() => setUploadMode('exam')}>
+                      考试
+                    </button>
+                  </div>
+                  <div className="workflow-headline">
+                    <div className="muted">当前流程状态</div>
+                    <span className={`workflow-chip ${activeWorkflowIndicator.tone}`}>{activeWorkflowIndicator.label}</span>
+                  </div>
+                  <div className="workflow-steps">
+                    {activeWorkflowIndicator.steps.map((step) => (
+                      <div key={step.key} className={`workflow-step ${step.state}`}>
+                        <span className="workflow-step-dot" />
+                        <span className="workflow-step-label">{step.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="workflow-status">
+                    {uploadMode === 'assignment'
+                      ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId.trim())
+                      : formatExamJobSummary(examJobInfo, examId.trim())}
+                  </div>
+                  <div className="workflow-actions">
+                    <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-upload-section')}>
+                      定位上传区
+                    </button>
+                    {uploadMode === 'assignment' ? (
+                      <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-assignment-draft-section')}>
+                        定位作业草稿
+                      </button>
+                    ) : (
+                      <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-exam-draft-section')}>
+                        定位考试草稿
+                      </button>
+                    )}
+                    <button type="button" className="ghost" onClick={refreshWorkflowWorkbench}>
+                      刷新状态
+                    </button>
+                  </div>
+                </div>
+                {uploadMode === 'assignment' ? (
+                  <div className="workflow-summary-card">
+                    <div className="muted">作业完成情况</div>
+                    <div className="workflow-status">{formatProgressSummary(progressData, progressAssignmentId)}</div>
+                    <div className="workflow-actions">
+                      <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-progress-section')}>
+                        定位完成情况
+                      </button>
+                      <button type="button" className="ghost" disabled={progressLoading} onClick={() => void fetchAssignmentProgress()}>
+                        {progressLoading ? '加载中…' : '刷新完成率'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+          <section id="workflow-upload-section" className={`upload-card ${uploadCardCollapsed ? 'collapsed' : ''}`}>
 	            <div className="panel-header">
 	              <div className="panel-title">
 	                <h3>{uploadMode === 'assignment' ? '上传作业文件（文档 / 图片）' : '上传考试文件（试卷 + 成绩表）'}</h3>
@@ -3243,7 +3685,7 @@ export default function App() {
 	          </section>
 
 	          {uploadMode === 'assignment' && (
-	            <section className={`draft-panel ${progressPanelCollapsed ? 'collapsed' : ''}`}>
+	            <section id="workflow-progress-section" className={`draft-panel ${progressPanelCollapsed ? 'collapsed' : ''}`}>
 	              <div className="panel-header">
 	                <h3>作业完成情况</h3>
 	                {progressPanelCollapsed ? (
@@ -3356,7 +3798,7 @@ export default function App() {
 	          )}
 
 	          {uploadMode === 'exam' && examDraft && (
-	            <section className={`draft-panel ${examDraftPanelCollapsed ? 'collapsed' : ''}`}>
+	            <section id="workflow-exam-draft-section" className={`draft-panel ${examDraftPanelCollapsed ? 'collapsed' : ''}`}>
 	              <div className="panel-header">
 	                <h3>考试解析结果（审核/修改）</h3>
 	                {examDraftPanelCollapsed ? (
@@ -3534,7 +3976,7 @@ export default function App() {
           )}
 
           {uploadMode === 'assignment' && uploadDraft && (
-            <section className={`draft-panel ${draftPanelCollapsed ? 'collapsed' : ''}`}>
+            <section id="workflow-assignment-draft-section" className={`draft-panel ${draftPanelCollapsed ? 'collapsed' : ''}`}>
               <div className="panel-header">
                 <h3>解析结果（审核/修改）</h3>
                 {draftPanelCollapsed ? (
@@ -3771,128 +4213,8 @@ export default function App() {
             </section>
           )}
 
-          {mention && mention.items.length > 0 && (
-            <div className="mention-panel">
-              <div className="mention-title">技能建议（↑↓ 选择 / 回车插入）</div>
-              <div className="mention-list">
-                {mention.items.map((skill, index) => (
-                  <button
-                    key={skill.id}
-                    type="button"
-                    className={index === mentionIndex ? 'active' : ''}
-                    onClick={() => insertSkillMention(skill)}
-                  >
-                    <strong>{skill.title}</strong>
-                    {skill.desc ? <span className="muted">{skill.desc}</span> : null}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-            </>
-          )}
-        </main>
 
-        {mainView === 'chat' && (
-          <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
-            <div className="skills-header">
-              <h3>工作台</h3>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="ghost"
-                  onClick={() => {
-                    if (workbenchTab === 'skills') {
-                      void fetchSkills()
-                    } else {
-                      void refreshMemoryProposals()
-                      void refreshMemoryInsights()
-                    }
-                  }}
-                  disabled={workbenchTab === 'skills' ? skillsLoading : proposalLoading}
-                >
-                  刷新
-                </button>
-                <button className="ghost" onClick={() => setSkillsOpen(false)}>
-                  收起
-                </button>
-              </div>
-            </div>
-            <div className="view-switch workbench-switch">
-              <button type="button" className={workbenchTab === 'skills' ? 'active' : ''} onClick={() => setWorkbenchTab('skills')}>
-                GPTs
-              </button>
-              <button type="button" className={workbenchTab === 'memory' ? 'active' : ''} onClick={() => setWorkbenchTab('memory')}>
-                自动记忆
-              </button>
-            </div>
-            {workbenchTab === 'skills' ? (
-              <>
-                <div className="skills-tools">
-                  <input
-                    value={skillQuery}
-                    onChange={(e) => setSkillQuery(e.target.value)}
-                    placeholder="搜索技能"
-                  />
-                  <label className="toggle">
-                    <input
-                      type="checkbox"
-                      checked={showFavoritesOnly}
-                      onChange={(e) => setShowFavoritesOnly(e.target.checked)}
-                    />
-                    只看收藏
-                  </label>
-                </div>
-                {skillsLoading && <div className="skills-status">正在加载技能...</div>}
-                {skillsError && <div className="skills-status err">{skillsError}</div>}
-                <div className="skills-body">
-                  {filteredSkills.map((skill) => (
-                    <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
-                      <div className="skill-title">
-                        <div>
-                          <strong>{skill.title}</strong>
-                        </div>
-                        <button
-                          type="button"
-                          className={`fav ${favorites.includes(skill.id) ? 'active' : ''}`}
-                          onClick={() => toggleFavorite(skill.id)}
-                          aria-label="收藏技能"
-                        >
-                          {favorites.includes(skill.id) ? '★' : '☆'}
-                        </button>
-                      </div>
-                      <p>{skill.desc}</p>
-                      <div className="skill-prompts">
-                        {skill.prompts.map((prompt) => (
-                          <button
-                            key={prompt}
-                            type="button"
-                            onClick={() => {
-                              setActiveSkillId(skill.id)
-                              insertPrompt(prompt)
-                            }}
-                          >
-                            使用模板
-                          </button>
-                        ))}
-                      </div>
-                      <div className="skill-examples">
-                        {skill.examples.map((ex) => (
-                          <button
-                            key={ex}
-                            type="button"
-                            onClick={() => {
-                              setActiveSkillId(skill.id)
-                              insertPrompt(ex)
-                            }}
-                          >
-                            {ex}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
+              </section>
             ) : (
               <section className="memory-panel workbench-memory">
                 <div className="history-header">
