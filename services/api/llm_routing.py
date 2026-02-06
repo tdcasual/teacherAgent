@@ -4,6 +4,7 @@ import json
 import re
 import threading
 import uuid
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 _KIND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,120}$")
 _CACHE_LOCK = threading.Lock()
-_CACHE: Dict[str, Tuple[Tuple[int, int, Tuple[Tuple[str, str], ...]], "CompiledRouting"]] = {}
+_CACHE: Dict[str, Tuple[Tuple[int, int, int, str, Tuple[Tuple[str, str], ...]], "CompiledRouting"]] = {}
+_CONFIG_LOCKS_LOCK = threading.Lock()
+_CONFIG_LOCKS: Dict[str, threading.RLock] = {}
 
 
 def _now_iso() -> str:
@@ -126,6 +129,16 @@ def _model_registry_signature(model_registry: Dict[str, Any]) -> Tuple[Tuple[str
         for mode in modes.keys():
             pairs.append((str(provider), str(mode)))
     return tuple(sorted(pairs))
+
+
+def _config_lock(config_path: Path) -> threading.RLock:
+    key = str(config_path.resolve())
+    with _CONFIG_LOCKS_LOCK:
+        lock = _CONFIG_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _CONFIG_LOCKS[key] = lock
+        return lock
 
 
 def _allowed_provider_modes(model_registry: Dict[str, Any]) -> set[Tuple[str, str]]:
@@ -388,15 +401,19 @@ class CompiledRouting:
     rules: List[Dict[str, Any]]
 
 
-def _config_signature(config_path: Path, model_registry: Dict[str, Any]) -> Tuple[int, int, Tuple[Tuple[str, str], ...]]:
+def _config_signature(config_path: Path, model_registry: Dict[str, Any]) -> Tuple[int, int, int, str, Tuple[Tuple[str, str], ...]]:
     try:
         stat = config_path.stat()
         mtime_ns = int(stat.st_mtime_ns)
         size = int(stat.st_size)
+        ctime_ns = int(stat.st_ctime_ns)
+        digest = hashlib.sha1(config_path.read_bytes()).hexdigest()
     except Exception:
         mtime_ns = 0
         size = 0
-    return (mtime_ns, size, _model_registry_signature(model_registry))
+        ctime_ns = 0
+        digest = ""
+    return (mtime_ns, size, ctime_ns, digest, _model_registry_signature(model_registry))
 
 
 def _compile_raw_config(config_path: Path, model_registry: Dict[str, Any]) -> CompiledRouting:
@@ -617,16 +634,18 @@ def apply_routing_config(
     if not result.get("ok"):
         return {"ok": False, "errors": result.get("errors") or [], "warnings": result.get("warnings") or []}
 
-    existing = _read_json(config_path)
-    current_version = _as_int(existing.get("version"), 0, min_value=0)
-    normalized = dict(result.get("normalized") or {})
-    normalized["version"] = current_version + 1
-    normalized["updated_at"] = _now_iso()
-    normalized["updated_by"] = actor or "unknown"
+    lock = _config_lock(config_path)
+    with lock:
+        existing = _read_json(config_path)
+        current_version = _as_int(existing.get("version"), 0, min_value=0)
+        normalized = dict(result.get("normalized") or {})
+        normalized["version"] = current_version + 1
+        normalized["updated_at"] = _now_iso()
+        normalized["updated_by"] = actor or "unknown"
 
-    _atomic_write_json(config_path, normalized)
-    history_path = _write_history(config_path, normalized, actor=actor, source=source, note=note)
-    invalidate_routing_cache(config_path)
+        _atomic_write_json(config_path, normalized)
+        history_path = _write_history(config_path, normalized, actor=actor, source=source, note=note)
+        invalidate_routing_cache(config_path)
     return {
         "ok": True,
         "version": normalized["version"],
@@ -685,46 +704,48 @@ def apply_routing_proposal(
     proposal_id = _as_str(proposal_id)
     if not proposal_id:
         return {"ok": False, "error": "proposal_id_required"}
-    path = _proposal_path(config_path, proposal_id)
-    proposal = _read_json(path)
-    if not proposal:
-        return {"ok": False, "error": "proposal_not_found", "proposal_id": proposal_id}
-    if _as_str(proposal.get("status")) in {"applied", "rejected"}:
-        return {"ok": False, "error": "proposal_already_reviewed", "proposal_id": proposal_id}
+    lock = _config_lock(config_path)
+    with lock:
+        path = _proposal_path(config_path, proposal_id)
+        proposal = _read_json(path)
+        if not proposal:
+            return {"ok": False, "error": "proposal_not_found", "proposal_id": proposal_id}
+        if _as_str(proposal.get("status")) in {"applied", "rejected"}:
+            return {"ok": False, "error": "proposal_already_reviewed", "proposal_id": proposal_id}
 
-    proposal["reviewed_at"] = _now_iso()
-    proposal["reviewed_by"] = actor or "unknown"
-    if not approve:
-        proposal["status"] = "rejected"
+        proposal["reviewed_at"] = _now_iso()
+        proposal["reviewed_by"] = actor or "unknown"
+        if not approve:
+            proposal["status"] = "rejected"
+            _atomic_write_json(path, proposal)
+            return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
+
+        candidate = proposal.get("candidate") if isinstance(proposal.get("candidate"), dict) else {}
+        apply_res = apply_routing_config(
+            config_path=config_path,
+            model_registry=model_registry,
+            config_payload=candidate,
+            actor=actor,
+            source=f"proposal:{proposal_id}",
+            note=_as_str(proposal.get("note")),
+        )
+        if not apply_res.get("ok"):
+            proposal["status"] = "failed"
+            proposal["apply_error"] = apply_res
+            _atomic_write_json(path, proposal)
+            return {"ok": False, "proposal_id": proposal_id, "status": "failed", "error": apply_res}
+
+        proposal["status"] = "applied"
+        proposal["applied_version"] = apply_res.get("version")
+        proposal["history_path"] = apply_res.get("history_path")
         _atomic_write_json(path, proposal)
-        return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
-
-    candidate = proposal.get("candidate") if isinstance(proposal.get("candidate"), dict) else {}
-    apply_res = apply_routing_config(
-        config_path=config_path,
-        model_registry=model_registry,
-        config_payload=candidate,
-        actor=actor,
-        source=f"proposal:{proposal_id}",
-        note=_as_str(proposal.get("note")),
-    )
-    if not apply_res.get("ok"):
-        proposal["status"] = "failed"
-        proposal["apply_error"] = apply_res
-        _atomic_write_json(path, proposal)
-        return {"ok": False, "proposal_id": proposal_id, "status": "failed", "error": apply_res}
-
-    proposal["status"] = "applied"
-    proposal["applied_version"] = apply_res.get("version")
-    proposal["history_path"] = apply_res.get("history_path")
-    _atomic_write_json(path, proposal)
-    return {
-        "ok": True,
-        "proposal_id": proposal_id,
-        "status": "applied",
-        "version": apply_res.get("version"),
-        "history_path": apply_res.get("history_path"),
-    }
+        return {
+            "ok": True,
+            "proposal_id": proposal_id,
+            "status": "applied",
+            "version": apply_res.get("version"),
+            "history_path": apply_res.get("history_path"),
+        }
 
 
 def rollback_routing_config(
@@ -741,38 +762,40 @@ def rollback_routing_config(
     if target <= 0:
         return {"ok": False, "error": "invalid_target_version"}
 
-    history_dir = _history_dir(config_path)
-    if not history_dir.exists():
-        return {"ok": False, "error": "history_not_found"}
+    lock = _config_lock(config_path)
+    with lock:
+        history_dir = _history_dir(config_path)
+        if not history_dir.exists():
+            return {"ok": False, "error": "history_not_found"}
 
-    chosen: Optional[Dict[str, Any]] = None
-    for path in history_dir.glob("*.json"):
-        data = _read_json(path)
-        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
-        ver = _as_int(cfg.get("version"), 0, min_value=0)
-        if ver == target:
-            if chosen is None:
-                chosen = {"path": path, "data": data}
-                continue
-            prev_time = _as_str((chosen.get("data") or {}).get("saved_at"))
-            cur_time = _as_str(data.get("saved_at"))
-            if cur_time > prev_time:
-                chosen = {"path": path, "data": data}
-    if not chosen:
-        return {"ok": False, "error": "target_version_not_found", "target_version": target}
+        chosen: Optional[Dict[str, Any]] = None
+        for path in history_dir.glob("*.json"):
+            data = _read_json(path)
+            cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+            ver = _as_int(cfg.get("version"), 0, min_value=0)
+            if ver == target:
+                if chosen is None:
+                    chosen = {"path": path, "data": data}
+                    continue
+                prev_time = _as_str((chosen.get("data") or {}).get("saved_at"))
+                cur_time = _as_str(data.get("saved_at"))
+                if cur_time > prev_time:
+                    chosen = {"path": path, "data": data}
+        if not chosen:
+            return {"ok": False, "error": "target_version_not_found", "target_version": target}
 
-    cfg = chosen["data"].get("config") if isinstance(chosen["data"].get("config"), dict) else {}
-    restored = dict(cfg)
-    restored["restored_from_version"] = target
-    restore_note = note or f"rollback to version {target}"
-    return apply_routing_config(
-        config_path=config_path,
-        model_registry=model_registry,
-        config_payload=restored,
-        actor=actor,
-        source=f"rollback:{target}",
-        note=restore_note,
-    )
+        cfg = chosen["data"].get("config") if isinstance(chosen["data"].get("config"), dict) else {}
+        restored = dict(cfg)
+        restored["restored_from_version"] = target
+        restore_note = note or f"rollback to version {target}"
+        return apply_routing_config(
+            config_path=config_path,
+            model_registry=model_registry,
+            config_payload=restored,
+            actor=actor,
+            source=f"rollback:{target}",
+            note=restore_note,
+        )
 
 
 def ensure_routing_file(config_path: Path, actor: str = "system") -> Dict[str, Any]:
