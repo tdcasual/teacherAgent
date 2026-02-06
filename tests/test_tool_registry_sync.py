@@ -72,7 +72,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
             self.assertEqual(result.get("reply"), "ok")
             self.assertEqual(
                 set(captured.get("tool_names") or []),
-                {"core_example.search", "core_example.register", "core_example.render"},
+                {"core_example.search", "core_example.register", "core_example.render", "chart.agent.run", "chart.exec"},
             )
 
     def test_run_agent_default_skill_keeps_teacher_tools(self):
