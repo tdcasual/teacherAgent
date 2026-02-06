@@ -118,7 +118,45 @@ class ExamEndpointsTest(unittest.TestCase):
             self.assertTrue(q["ok"])
             self.assertEqual(q["question"]["question_id"], "Q1")
 
+            range_rank = app_mod.tool_dispatch(
+                "exam.range.top_students",
+                {"exam_id": exam_id, "start_question_no": 1, "end_question_no": 2, "top_n": 2},
+                role="teacher",
+            )
+            self.assertTrue(range_rank["ok"])
+            self.assertEqual(range_rank["summary"]["max_score"], 7.0)
+            self.assertEqual(range_rank["summary"]["min_score"], 3.0)
+            self.assertEqual(range_rank["top_students"][0]["student_id"], "C1_A")
+            self.assertEqual(range_rank["bottom_students"][0]["student_id"], "C1_B")
+
+            range_batch = app_mod.tool_dispatch(
+                "exam.range.summary.batch",
+                {
+                    "exam_id": exam_id,
+                    "ranges": [
+                        {"label": "Q1 only", "start_question_no": 1, "end_question_no": 1},
+                        {"label": "Q1-Q2", "start_question_no": 1, "end_question_no": 2},
+                    ],
+                    "top_n": 2,
+                },
+                role="teacher",
+            )
+            self.assertTrue(range_batch["ok"])
+            self.assertEqual(range_batch["range_count_requested"], 2)
+            self.assertEqual(range_batch["range_count_succeeded"], 2)
+            self.assertEqual(range_batch["ranges"][0]["summary"]["max_score"], 4.0)
+            self.assertEqual(range_batch["ranges"][1]["summary"]["max_score"], 7.0)
+
+            question_batch = app_mod.tool_dispatch(
+                "exam.question.batch.get",
+                {"exam_id": exam_id, "question_nos": [1, 2], "top_n": 1},
+                role="teacher",
+            )
+            self.assertTrue(question_batch["ok"])
+            self.assertEqual(question_batch["question_count_succeeded"], 2)
+            self.assertEqual(question_batch["question_count_failed"], 0)
+            self.assertEqual(len(question_batch["questions"][0]["sample_top_students"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-
