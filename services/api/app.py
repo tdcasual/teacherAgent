@@ -6483,7 +6483,7 @@ def process_chat_job(job_id: str) -> None:
 
         write_chat_job(job_id, {"status": "processing", "step": "agent", "error": ""})
         t0 = time.monotonic()
-        reply_text, role_hint, last_user_text = _compute_chat_reply_sync(req)
+        reply_text, role_hint, last_user_text = _compute_chat_reply_sync(req, session_id=str(job.get("session_id") or "main"))
         duration_ms = int((time.monotonic() - t0) * 1000)
         write_chat_job(
             job_id,
