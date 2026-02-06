@@ -60,6 +60,27 @@ class ToolDispatchSecurityTest(unittest.TestCase):
             self.assertTrue(allowed.get("ok"))
             self.assertIn("routing", allowed)
 
+    def test_chart_exec_requires_teacher(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            denied = app_mod.tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="student")
+            self.assertIn("error", denied)
+            self.assertEqual(denied["error"], "permission denied")
+
+    def test_chart_agent_run_requires_teacher(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            denied = app_mod.tool_dispatch("chart.agent.run", {"task": "plot"}, role="student")
+            self.assertIn("error", denied)
+            self.assertEqual(denied["error"], "permission denied")
+
+    def test_exam_analysis_charts_generate_requires_teacher(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            denied = app_mod.tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX001"}, role="student")
+            self.assertIn("error", denied)
+            self.assertEqual(denied["error"], "permission denied")
+
 
 if __name__ == "__main__":
     unittest.main()
