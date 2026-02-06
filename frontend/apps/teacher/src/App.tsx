@@ -1670,6 +1670,104 @@ export default function App() {
 
   const activeWorkflowIndicator = uploadMode === 'assignment' ? assignmentWorkflowIndicator : examWorkflowIndicator
 
+  const readWorkflowStepState = useCallback((indicator: WorkflowIndicator, stepKey: string): WorkflowStepState => {
+    return indicator.steps.find((step) => step.key === stepKey)?.state || 'todo'
+  }, [])
+
+  const assignmentWorkflowAutoState = useMemo(() => {
+    const uploadStep = readWorkflowStepState(assignmentWorkflowIndicator, 'upload')
+    const parseStep = readWorkflowStepState(assignmentWorkflowIndicator, 'parse')
+    const reviewStep = readWorkflowStepState(assignmentWorkflowIndicator, 'review')
+    const confirmStep = readWorkflowStepState(assignmentWorkflowIndicator, 'confirm')
+    if (parseStep === 'error') return 'parse-error'
+    if (reviewStep === 'error') return 'review-error'
+    if (confirmStep === 'error') return 'confirm-error'
+    if (confirmStep === 'done') return 'confirmed'
+    if (confirmStep === 'active') return 'confirming'
+    if (reviewStep === 'active') return 'review'
+    if (parseStep === 'active') return 'parsing'
+    if (uploadStep === 'active') return 'uploading'
+    return 'idle'
+  }, [assignmentWorkflowIndicator, readWorkflowStepState])
+
+  const examWorkflowAutoState = useMemo(() => {
+    const uploadStep = readWorkflowStepState(examWorkflowIndicator, 'upload')
+    const parseStep = readWorkflowStepState(examWorkflowIndicator, 'parse')
+    const reviewStep = readWorkflowStepState(examWorkflowIndicator, 'review')
+    const confirmStep = readWorkflowStepState(examWorkflowIndicator, 'confirm')
+    if (parseStep === 'error') return 'parse-error'
+    if (reviewStep === 'error') return 'review-error'
+    if (confirmStep === 'error') return 'confirm-error'
+    if (confirmStep === 'done') return 'confirmed'
+    if (confirmStep === 'active') return 'confirming'
+    if (reviewStep === 'active') return 'review'
+    if (parseStep === 'active') return 'parsing'
+    if (uploadStep === 'active') return 'uploading'
+    return 'idle'
+  }, [examWorkflowIndicator, readWorkflowStepState])
+
+  const assignmentAutoStateRef = useRef('')
+  const examAutoStateRef = useRef('')
+
+  useEffect(() => {
+    if (uploadMode !== 'assignment') return
+    if (assignmentAutoStateRef.current === assignmentWorkflowAutoState) return
+    assignmentAutoStateRef.current = assignmentWorkflowAutoState
+    switch (assignmentWorkflowAutoState) {
+      case 'uploading':
+      case 'parsing':
+      case 'parse-error':
+        setUploadCardCollapsed(false)
+        break
+      case 'review':
+      case 'confirming':
+        setUploadCardCollapsed(true)
+        setDraftPanelCollapsed(false)
+        break
+      case 'review-error':
+      case 'confirm-error':
+        setDraftPanelCollapsed(false)
+        break
+      case 'confirmed':
+        setUploadCardCollapsed(true)
+        setDraftPanelCollapsed(true)
+        if ((progressAssignmentId || uploadAssignmentId || uploadDraft?.assignment_id || '').trim()) {
+          setProgressPanelCollapsed(false)
+        }
+        break
+      default:
+        break
+    }
+  }, [assignmentWorkflowAutoState, progressAssignmentId, uploadAssignmentId, uploadDraft?.assignment_id, uploadMode])
+
+  useEffect(() => {
+    if (uploadMode !== 'exam') return
+    if (examAutoStateRef.current === examWorkflowAutoState) return
+    examAutoStateRef.current = examWorkflowAutoState
+    switch (examWorkflowAutoState) {
+      case 'uploading':
+      case 'parsing':
+      case 'parse-error':
+        setUploadCardCollapsed(false)
+        break
+      case 'review':
+      case 'confirming':
+        setUploadCardCollapsed(true)
+        setExamDraftPanelCollapsed(false)
+        break
+      case 'review-error':
+      case 'confirm-error':
+        setExamDraftPanelCollapsed(false)
+        break
+      case 'confirmed':
+        setUploadCardCollapsed(true)
+        setExamDraftPanelCollapsed(true)
+        break
+      default:
+        break
+    }
+  }, [examWorkflowAutoState, uploadMode])
+
   useEffect(() => {
     if (!uploadJobId) return
     const BASE_DELAY_MS = 4000
