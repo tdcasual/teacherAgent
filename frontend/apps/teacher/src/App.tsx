@@ -8,9 +8,11 @@ import rehypeKatex from 'rehype-katex'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { visit } from 'unist-util-visit'
+import RoutingPage from './features/routing/RoutingPage'
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const TEACHER_SESSION_VIEW_STATE_KEY = 'teacherSessionViewState'
 
 type Message = {
   id: string
@@ -33,12 +35,117 @@ type ChatJobStatus = {
   error?: string
   error_detail?: string
   updated_at?: string
+  lane_id?: string
+  lane_queue_position?: number
+  lane_queue_size?: number
+  lane_active?: boolean
 }
 
 type ChatStartResult = {
   ok: boolean
   job_id: string
   status: string
+  lane_id?: string
+  lane_queue_position?: number
+  lane_queue_size?: number
+  lane_active?: boolean
+  debounced?: boolean
+}
+
+type TeacherHistorySession = {
+  session_id: string
+  updated_at?: string
+  preview?: string
+  message_count?: number
+  compaction_runs?: number
+}
+
+type SessionGroup<T> = {
+  key: string
+  label: string
+  items: T[]
+}
+
+type TeacherHistorySessionsResponse = {
+  ok: boolean
+  teacher_id: string
+  sessions: TeacherHistorySession[]
+  next_cursor?: number | null
+  total?: number
+}
+
+type SessionViewStatePayload = {
+  title_map: Record<string, string>
+  hidden_ids: string[]
+  active_session_id: string
+  updated_at: string
+}
+
+type TeacherHistoryMessage = {
+  ts?: string
+  role?: string
+  content?: string
+  kind?: string
+}
+
+type TeacherHistorySessionResponse = {
+  ok: boolean
+  teacher_id: string
+  session_id: string
+  messages: TeacherHistoryMessage[]
+  next_cursor: number
+}
+
+type TeacherMemoryProposal = {
+  proposal_id: string
+  teacher_id?: string
+  target?: string
+  title?: string
+  content?: string
+  source?: string
+  status?: string
+  created_at?: string
+  applied_at?: string
+  rejected_at?: string
+  reject_reason?: string
+  supersedes?: string[]
+  superseded_by?: string
+}
+
+type TeacherMemoryProposalListResponse = {
+  ok: boolean
+  teacher_id: string
+  proposals: TeacherMemoryProposal[]
+}
+
+type TeacherMemoryInsightsResponse = {
+  ok: boolean
+  teacher_id: string
+  window_days: number
+  summary?: {
+    applied_total?: number
+    rejected_total?: number
+    active_total?: number
+    expired_total?: number
+    superseded_total?: number
+    avg_priority_active?: number
+    by_source?: Record<string, number>
+    by_target?: Record<string, number>
+    rejected_reasons?: Record<string, number>
+  }
+  retrieval?: {
+    search_calls?: number
+    search_hit_calls?: number
+    search_hit_rate?: number
+    search_mode_breakdown?: Record<string, number>
+    context_injected?: number
+  }
+  top_queries?: Array<{
+    query: string
+    calls: number
+    hit_calls: number
+    hit_rate: number
+  }>
 }
 
 type UploadJobStatus = {
@@ -109,7 +216,17 @@ type ExamUploadJobStatus = {
   error_detail?: string
   exam_id?: string
   counts?: { students?: number; responses?: number; questions?: number }
+  counts_scored?: { students?: number; responses?: number }
   totals_summary?: Record<string, any>
+  scoring?: {
+    status?: string
+    responses_total?: number
+    responses_scored?: number
+    students_total?: number
+    students_scored?: number
+    default_max_score_qids?: string[]
+  }
+  answer_key?: { count?: number; source?: string; warnings?: string[] }
   warnings?: string[]
 }
 
@@ -122,11 +239,15 @@ type ExamUploadDraft = {
   score_files?: string[]
   answer_files?: string[]
   counts?: Record<string, any>
+  counts_scored?: Record<string, any>
   totals_summary?: Record<string, any>
+  scoring?: Record<string, any>
   meta: Record<string, any>
   questions: Array<Record<string, any>>
   score_schema?: Record<string, any>
   answer_key?: Record<string, any>
+  answer_key_text?: string
+  answer_text_excerpt?: string
   warnings?: string[]
   draft_version?: string | number
   draft_saved?: boolean
@@ -149,6 +270,27 @@ type SkillResponse = {
     examples?: string[]
     allowed_roles?: string[]
   }>
+}
+
+const sessionGroupFromIso = (updatedAt?: string) => {
+  if (!updatedAt) return { key: 'older', label: '更早' }
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) return { key: 'older', label: '更早' }
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const diffDays = Math.floor((today - target) / (24 * 60 * 60 * 1000))
+  if (diffDays <= 0) return { key: 'today', label: '今天' }
+  if (diffDays === 1) return { key: 'yesterday', label: '昨天' }
+  if (diffDays <= 7) return { key: 'week', label: '近 7 天' }
+  return { key: 'older', label: '更早' }
+}
+
+const sessionGroupOrder: Record<string, number> = {
+  today: 0,
+  yesterday: 1,
+  week: 2,
+  older: 3,
 }
 
 const fallbackSkills: Skill[] = [
@@ -203,9 +345,104 @@ const fallbackSkills: Skill[] = [
   },
 ]
 
+const TEACHER_GREETING =
+  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n在输入框中输入 `@` 可以看到技能提示。'
+
+const parseOptionalIso = (value?: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const ms = Date.parse(raw)
+  return Number.isNaN(ms) ? null : ms
+}
+
+const compareSessionViewStateUpdatedAt = (a?: string, b?: string) => {
+  const ma = parseOptionalIso(a)
+  const mb = parseOptionalIso(b)
+  if (ma !== null && mb !== null) {
+    if (ma > mb) return 1
+    if (ma < mb) return -1
+    return 0
+  }
+  if (ma !== null) return 1
+  if (mb !== null) return -1
+  return 0
+}
+
+const normalizeSessionViewStatePayload = (raw: any): SessionViewStatePayload => {
+  const titleRaw = raw && typeof raw === 'object' && raw.title_map && typeof raw.title_map === 'object' ? raw.title_map : {}
+  const titleMap: Record<string, string> = {}
+  for (const [key, value] of Object.entries(titleRaw)) {
+    const sid = String(key || '').trim()
+    const title = String(value || '').trim()
+    if (!sid || !title) continue
+    titleMap[sid] = title
+  }
+  const hiddenRaw: unknown[] = Array.isArray(raw?.hidden_ids) ? raw.hidden_ids : []
+  const hiddenIds = Array.from(new Set(hiddenRaw.map((item: unknown) => String(item || '').trim()).filter(Boolean)))
+  const activeSessionId = String(raw?.active_session_id || '').trim()
+  const updatedAt = parseOptionalIso(raw?.updated_at) !== null ? String(raw?.updated_at) : ''
+  return {
+    title_map: titleMap,
+    hidden_ids: hiddenIds,
+    active_session_id: activeSessionId,
+    updated_at: updatedAt,
+  }
+}
+
+const buildSessionViewStateSignature = (state: SessionViewStatePayload) => {
+  const titleEntries = Object.entries(state.title_map).sort((a, b) => a[0].localeCompare(b[0]))
+  const normalized = {
+    title_map: Object.fromEntries(titleEntries),
+    hidden_ids: [...state.hidden_ids],
+    active_session_id: state.active_session_id || '',
+    updated_at: state.updated_at || '',
+  }
+  return JSON.stringify(normalized)
+}
+
+const readTeacherLocalViewState = (): SessionViewStatePayload => {
+  try {
+    const raw = localStorage.getItem(TEACHER_SESSION_VIEW_STATE_KEY)
+    if (raw) {
+      const parsed = normalizeSessionViewStatePayload(JSON.parse(raw))
+      if (parsed.updated_at) return parsed
+    }
+  } catch {
+    // ignore
+  }
+  let titleMap: Record<string, string> = {}
+  let hiddenIds: string[] = []
+  const activeSessionId = String(localStorage.getItem('teacherActiveSessionId') || '').trim()
+  try {
+    const parsed = JSON.parse(localStorage.getItem('teacherSessionTitles') || '{}')
+    if (parsed && typeof parsed === 'object') titleMap = parsed
+  } catch {
+    titleMap = {}
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem('teacherDeletedSessions') || '[]')
+    if (Array.isArray(parsed)) hiddenIds = parsed.map((item) => String(item || '').trim()).filter(Boolean)
+  } catch {
+    hiddenIds = []
+  }
+  return normalizeSessionViewStatePayload({
+    title_map: titleMap,
+    hidden_ids: hiddenIds,
+    active_session_id: activeSessionId || 'main',
+    updated_at: new Date().toISOString(),
+  })
+}
+
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 const nowTime = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+
+const timeFromIso = (iso?: string) => {
+  if (!iso) return nowTime()
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return nowTime()
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
 
 const removeEmptyParagraphs = () => {
   return (tree: any) => {
@@ -315,6 +552,12 @@ const renderMarkdown = (content: string) => {
   return String(result)
 }
 
+const absolutizeChartImageUrls = (html: string, apiBase: string) => {
+  const base = (apiBase || '').trim().replace(/\/+$/, '')
+  if (!base) return html
+  return html.replace(/(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
+}
+
 const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?: string[]; examples?: string[] }): Skill => {
   const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : []
   const examples = Array.isArray(skill.examples) ? skill.examples.filter(Boolean) : []
@@ -328,19 +571,23 @@ const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?
 }
 
 export default function App() {
+  const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const [apiBase, setApiBase] = useState(() => localStorage.getItem('apiBaseTeacher') || DEFAULT_API_URL)
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: makeId(),
       role: 'assistant',
-      content:
-        '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n在输入框中输入 `@` 可以看到技能提示。',
+      content: TEACHER_GREETING,
       time: nowTime(),
     },
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mainView, setMainView] = useState<'chat' | 'routing'>(() => {
+    const raw = localStorage.getItem('teacherMainView')
+    return raw === 'routing' ? 'routing' : 'chat'
+  })
   const [skillsOpen, setSkillsOpen] = useState(() => localStorage.getItem('teacherSkillsOpen') !== 'false')
   const [activeSkillId, setActiveSkillId] = useState(() => localStorage.getItem('teacherActiveSkillId') || 'physics-teacher-ops')
   const [cursorPos, setCursorPos] = useState(0)
@@ -392,12 +639,39 @@ export default function App() {
   const [progressError, setProgressError] = useState('')
   const [progressData, setProgressData] = useState<AssignmentProgress | null>(null)
   const [progressOnlyIncomplete, setProgressOnlyIncomplete] = useState(true)
+  const [historySessions, setHistorySessions] = useState<TeacherHistorySession[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+  const [historyCursor, setHistoryCursor] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [sessionTitleMap, setSessionTitleMap] = useState<Record<string, string>>(() => initialViewStateRef.current.title_map)
+  const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>(() => initialViewStateRef.current.hidden_ids)
+  const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
+  const [renamingSessionId, setRenamingSessionId] = useState('')
+  const [renamingTitle, setRenamingTitle] = useState('')
+  const [sessionLoading, setSessionLoading] = useState(false)
+  const [sessionError, setSessionError] = useState('')
+  const [sessionCursor, setSessionCursor] = useState(-1)
+  const [sessionHasMore, setSessionHasMore] = useState(false)
+  const [activeSessionId, setActiveSessionId] = useState(() => initialViewStateRef.current.active_session_id || 'main')
+  const [viewStateUpdatedAt, setViewStateUpdatedAt] = useState(() => initialViewStateRef.current.updated_at || new Date().toISOString())
+  const [viewStateSyncReady, setViewStateSyncReady] = useState(false)
+  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false)
+  const [proposalLoading, setProposalLoading] = useState(false)
+  const [proposalError, setProposalError] = useState('')
+  const [proposals, setProposals] = useState<TeacherMemoryProposal[]>([])
+  const [memoryStatusFilter, setMemoryStatusFilter] = useState<'applied' | 'rejected' | 'all'>('applied')
+  const [memoryInsights, setMemoryInsights] = useState<TeacherMemoryInsightsResponse | null>(null)
+  const [chatQueueHint, setChatQueueHint] = useState('')
   const PENDING_CHAT_KEY = 'teacherPendingChatJob'
   const [pendingChatJob, setPendingChatJob] = useState<{
     job_id: string
     request_id: string
     placeholder_id: string
     user_text: string
+    session_id: string
+    lane_id?: string
     created_at: number
   } | null>(() => {
     try {
@@ -431,10 +705,30 @@ export default function App() {
 
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const markdownCacheRef = useRef(new Map<string, { content: string; html: string }>())
+  const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
+  const activeSessionRef = useRef(activeSessionId)
+  const historyRequestRef = useRef(0)
+  const sessionRequestRef = useRef(0)
+  const historyCursorRef = useRef(0)
+  const historyHasMoreRef = useRef(false)
+  const localDraftSessionIdsRef = useRef<string[]>([])
+  const applyingViewStateRef = useRef(false)
+  const currentViewStateRef = useRef<SessionViewStatePayload>(initialViewStateRef.current)
+  const lastSyncedViewStateSignatureRef = useRef(buildSessionViewStateSignature(initialViewStateRef.current))
+  const currentViewState = useMemo(
+    () =>
+      normalizeSessionViewStatePayload({
+        title_map: sessionTitleMap,
+        hidden_ids: deletedSessionIds,
+        active_session_id: activeSessionId,
+        updated_at: viewStateUpdatedAt,
+      }),
+    [activeSessionId, deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
+  )
 
   useEffect(() => {
     localStorage.setItem('apiBaseTeacher', apiBase)
+    markdownCacheRef.current.clear()
   }, [apiBase])
 
   useEffect(() => {
@@ -446,9 +740,129 @@ export default function App() {
   }, [skillsOpen])
 
   useEffect(() => {
+    localStorage.setItem('teacherMainView', mainView)
+  }, [mainView])
+
+  useEffect(() => {
     if (activeSkillId) localStorage.setItem('teacherActiveSkillId', activeSkillId)
     else localStorage.removeItem('teacherActiveSkillId')
   }, [activeSkillId])
+
+  useEffect(() => {
+    activeSessionRef.current = activeSessionId
+  }, [activeSessionId])
+
+  useEffect(() => {
+    historyCursorRef.current = historyCursor
+  }, [historyCursor])
+
+  useEffect(() => {
+    historyHasMoreRef.current = historyHasMore
+  }, [historyHasMore])
+
+  useEffect(() => {
+    localDraftSessionIdsRef.current = localDraftSessionIds
+  }, [localDraftSessionIds])
+
+  useEffect(() => {
+    currentViewStateRef.current = currentViewState
+    localStorage.setItem(TEACHER_SESSION_VIEW_STATE_KEY, JSON.stringify(currentViewState))
+    localStorage.setItem('teacherSessionTitles', JSON.stringify(currentViewState.title_map))
+    localStorage.setItem('teacherDeletedSessions', JSON.stringify(currentViewState.hidden_ids))
+    if (currentViewState.active_session_id) localStorage.setItem('teacherActiveSessionId', currentViewState.active_session_id)
+    else localStorage.removeItem('teacherActiveSessionId')
+  }, [currentViewState])
+
+  const pushTeacherViewState = useCallback(
+    async (state: SessionViewStatePayload) => {
+      const payload = normalizeSessionViewStatePayload(state)
+      const res = await fetch(`${apiBase}/teacher/session/view-state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: payload }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = await res.json()
+      return normalizeSessionViewStatePayload(data?.state || payload)
+    },
+    [apiBase],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    const bootstrap = async () => {
+      setViewStateSyncReady(false)
+      const localState = currentViewStateRef.current
+      try {
+        const res = await fetch(`${apiBase}/teacher/session/view-state`)
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        const data = await res.json()
+        const remoteState = normalizeSessionViewStatePayload(data?.state || {})
+        const cmp = compareSessionViewStateUpdatedAt(remoteState.updated_at, localState.updated_at)
+        if (cmp > 0) {
+          if (cancelled) return
+          applyingViewStateRef.current = true
+          setSessionTitleMap(remoteState.title_map)
+          setDeletedSessionIds(remoteState.hidden_ids)
+          if (remoteState.active_session_id) setActiveSessionId(remoteState.active_session_id)
+          setViewStateUpdatedAt(remoteState.updated_at || new Date().toISOString())
+          lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(remoteState)
+          return
+        }
+        const saved = await pushTeacherViewState(localState)
+        if (cancelled) return
+        const sig = buildSessionViewStateSignature(saved)
+        lastSyncedViewStateSignatureRef.current = sig
+        if (saved.updated_at && saved.updated_at !== localState.updated_at) {
+          applyingViewStateRef.current = true
+          setViewStateUpdatedAt(saved.updated_at)
+        }
+      } catch {
+        lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(localState)
+      } finally {
+        if (!cancelled) setViewStateSyncReady(true)
+      }
+    }
+    void bootstrap()
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase, pushTeacherViewState])
+
+  useEffect(() => {
+    if (!viewStateSyncReady) return
+    if (applyingViewStateRef.current) {
+      applyingViewStateRef.current = false
+      return
+    }
+    setViewStateUpdatedAt(new Date().toISOString())
+  }, [activeSessionId, deletedSessionIds, sessionTitleMap, viewStateSyncReady])
+
+  useEffect(() => {
+    if (!viewStateSyncReady) return
+    const signature = buildSessionViewStateSignature(currentViewState)
+    if (signature === lastSyncedViewStateSignatureRef.current) return
+    const timer = window.setTimeout(async () => {
+      try {
+        const saved = await pushTeacherViewState(currentViewState)
+        const savedSig = buildSessionViewStateSignature(saved)
+        lastSyncedViewStateSignatureRef.current = savedSig
+        if (saved.updated_at && saved.updated_at !== currentViewState.updated_at) {
+          applyingViewStateRef.current = true
+          setViewStateUpdatedAt(saved.updated_at)
+        }
+      } catch {
+        // keep local state and retry on next mutation
+      }
+    }, 260)
+    return () => window.clearTimeout(timer)
+  }, [currentViewState, pushTeacherViewState, viewStateSyncReady])
 
   useEffect(() => {
     localStorage.setItem('teacherUploadMode', uploadMode)
@@ -479,6 +893,9 @@ export default function App() {
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
+    if (pendingChatJob.session_id && pendingChatJob.session_id !== activeSessionId) {
+      setActiveSessionId(pendingChatJob.session_id)
+    }
     const alreadyHasPlaceholder = messages.some((m) => m.id === pendingChatJob.placeholder_id)
     if (alreadyHasPlaceholder) return
     // Minimal restore so the pending reply can render somewhere.
@@ -500,14 +917,14 @@ export default function App() {
     const cache = markdownCacheRef.current
     return messages.map((msg): RenderedMessage => {
       const cached = cache.get(msg.id)
-      if (cached && cached.content === msg.content) {
+      if (cached && cached.content === msg.content && cached.apiBase === apiBase) {
         return { ...msg, html: cached.html }
       }
-      const html = renderMarkdown(msg.content)
-      cache.set(msg.id, { content: msg.content, html })
+      const html = absolutizeChartImageUrls(renderMarkdown(msg.content), apiBase)
+      cache.set(msg.id, { content: msg.content, html, apiBase })
       return { ...msg, html }
     })
-  }, [messages])
+  }, [messages, apiBase])
 
   useEffect(() => {
     if (uploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
@@ -566,6 +983,196 @@ export default function App() {
     }, 30000)
     return () => window.clearInterval(timer)
   }, [skillsOpen, fetchSkills])
+
+  const refreshTeacherSessions = useCallback(
+    async (mode: 'reset' | 'more' = 'reset') => {
+      if (mode === 'more' && !historyHasMoreRef.current) return
+      const cursor = mode === 'more' ? historyCursorRef.current : 0
+      const requestNo = ++historyRequestRef.current
+      setHistoryLoading(true)
+      if (mode === 'reset') setHistoryError('')
+      try {
+        const url = new URL(`${apiBase}/teacher/history/sessions`)
+        url.searchParams.set('limit', '40')
+        url.searchParams.set('cursor', String(cursor))
+        const res = await fetch(url.toString())
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        const data = (await res.json()) as TeacherHistorySessionsResponse
+        if (requestNo !== historyRequestRef.current) return
+        const serverSessions = Array.isArray(data.sessions) ? data.sessions : []
+        const serverIds = new Set(serverSessions.map((item) => String(item.session_id || '').trim()).filter(Boolean))
+        setLocalDraftSessionIds((prev) => prev.filter((id) => !serverIds.has(id)))
+        const nextCursor = typeof data.next_cursor === 'number' ? data.next_cursor : null
+        setHistoryCursor(nextCursor ?? 0)
+        setHistoryHasMore(nextCursor !== null)
+        if (mode === 'more') {
+          setHistorySessions((prev) => {
+            const merged = [...prev]
+            const existingIds = new Set(prev.map((item) => item.session_id))
+            for (const item of serverSessions) {
+              if (existingIds.has(item.session_id)) continue
+              merged.push(item)
+            }
+            return merged
+          })
+        } else {
+          setHistorySessions((prev) => {
+            const draftItems = localDraftSessionIdsRef.current
+              .filter((id) => !serverIds.has(id))
+              .map((id) => prev.find((item) => item.session_id === id) || { session_id: id, updated_at: new Date().toISOString(), message_count: 0, preview: '' })
+            const seeded = [...draftItems, ...serverSessions]
+            const seen = new Set(seeded.map((item) => item.session_id))
+            for (const item of prev) {
+              if (seen.has(item.session_id)) continue
+              seeded.push(item)
+            }
+            return seeded
+          })
+        }
+      } catch (err: any) {
+        if (requestNo !== historyRequestRef.current) return
+        setHistoryError(err.message || String(err))
+      } finally {
+        if (requestNo !== historyRequestRef.current) return
+        setHistoryLoading(false)
+      }
+    },
+    [apiBase]
+  )
+
+  const loadTeacherSessionMessages = useCallback(
+    async (sessionId: string, cursor: number, append: boolean) => {
+      const targetSessionId = (sessionId || '').trim()
+      if (!targetSessionId) return
+      const requestNo = ++sessionRequestRef.current
+      setSessionLoading(true)
+      setSessionError('')
+      try {
+        const LIMIT = 80
+        const url = new URL(`${apiBase}/teacher/history/session`)
+        url.searchParams.set('session_id', targetSessionId)
+        url.searchParams.set('cursor', String(cursor))
+        url.searchParams.set('limit', String(LIMIT))
+        url.searchParams.set('direction', 'backward')
+        const res = await fetch(url.toString())
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        const data = (await res.json()) as TeacherHistorySessionResponse
+        if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+        const raw = Array.isArray(data.messages) ? data.messages : []
+        const mapped: Message[] = raw
+          .map((m, idx) => {
+            const roleRaw = String(m.role || '').toLowerCase()
+            const role = roleRaw === 'user' ? 'user' : roleRaw === 'assistant' ? 'assistant' : null
+            const content = typeof m.content === 'string' ? m.content : ''
+            if (!role || !content) return null
+            return {
+              id: `thist_${targetSessionId}_${cursor}_${idx}_${m.ts || ''}`,
+              role,
+              content,
+              time: timeFromIso(m.ts),
+            } as Message
+          })
+          .filter(Boolean) as Message[]
+        const next = typeof data.next_cursor === 'number' ? data.next_cursor : 0
+        setSessionCursor(next)
+        setSessionHasMore(mapped.length >= 1 && next > 0)
+        if (append) {
+          setMessages((prev) => [...mapped, ...prev])
+        } else {
+          setMessages(
+            mapped.length
+              ? mapped
+              : [
+                  {
+                    id: makeId(),
+                    role: 'assistant',
+                    content: TEACHER_GREETING,
+                    time: nowTime(),
+                  },
+                ]
+          )
+        }
+      } catch (err: any) {
+        if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+        setSessionError(err.message || String(err))
+      } finally {
+        if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+        setSessionLoading(false)
+      }
+    },
+    [apiBase]
+  )
+
+  useEffect(() => {
+    if (mainView !== 'chat') return
+    void refreshTeacherSessions()
+  }, [mainView, refreshTeacherSessions])
+
+  useEffect(() => {
+    if (mainView !== 'chat') return
+    if (!activeSessionId) return
+    void loadTeacherSessionMessages(activeSessionId, -1, false)
+  }, [activeSessionId, mainView, loadTeacherSessionMessages])
+
+  useEffect(() => {
+    if (mainView !== 'chat') return
+    const timer = window.setInterval(() => {
+      void refreshTeacherSessions()
+    }, 30000)
+    return () => window.clearInterval(timer)
+  }, [mainView, refreshTeacherSessions])
+
+  const refreshMemoryProposals = useCallback(async () => {
+    setProposalLoading(true)
+    setProposalError('')
+    try {
+      const url = new URL(`${apiBase}/teacher/memory/proposals`)
+      if (memoryStatusFilter !== 'all') {
+        url.searchParams.set('status', memoryStatusFilter)
+      }
+      url.searchParams.set('limit', '30')
+      const res = await fetch(url.toString())
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as TeacherMemoryProposalListResponse
+      setProposals(Array.isArray(data.proposals) ? data.proposals : [])
+    } catch (err: any) {
+      setProposalError(err.message || String(err))
+    } finally {
+      setProposalLoading(false)
+    }
+  }, [apiBase, memoryStatusFilter])
+
+  const refreshMemoryInsights = useCallback(async () => {
+    try {
+      const url = new URL(`${apiBase}/teacher/memory/insights`)
+      url.searchParams.set('days', '14')
+      const res = await fetch(url.toString())
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as TeacherMemoryInsightsResponse
+      setMemoryInsights(data)
+    } catch (err) {
+      // Keep panel usable even if insights endpoint is temporarily unavailable.
+      setMemoryInsights(null)
+    }
+  }, [apiBase])
+
+  useEffect(() => {
+    if (!memoryPanelOpen) return
+    void refreshMemoryProposals()
+    void refreshMemoryInsights()
+  }, [memoryPanelOpen, refreshMemoryInsights, refreshMemoryProposals])
 
   const formatUploadJobStatus = (job: UploadJobStatus) => {
     const lines: string[] = []
@@ -635,6 +1242,16 @@ export default function App() {
     if (job.exam_id) lines.push(`考试编号：${job.exam_id}`)
     if (job.counts?.students !== undefined) lines.push(`学生数：${job.counts.students}`)
     if (job.counts?.questions !== undefined) lines.push(`题目数：${job.counts.questions}`)
+    if (job.scoring?.status) {
+      const scoreMap: Record<string, string> = { scored: '已评分', partial: '部分已评分', unscored: '未评分' }
+      const label = scoreMap[job.scoring.status] || job.scoring.status
+      const sTotal = job.scoring.students_total ?? job.counts?.students
+      const sScored = job.scoring.students_scored ?? job.counts_scored?.students
+      if (sTotal !== undefined && sScored !== undefined) lines.push(`评分：${label}（已评分学生 ${sScored}/${sTotal}）`)
+      else lines.push(`评分：${label}`)
+      const defaults = Array.isArray(job.scoring.default_max_score_qids) ? job.scoring.default_max_score_qids.length : 0
+      if (defaults) lines.push(`提示：有 ${defaults} 题缺少满分，系统已默认按 1 分/题 评分（建议在草稿里核对满分）。`)
+    }
     if (job.error) lines.push(`错误：${job.error}`)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extra = job as any
@@ -660,6 +1277,10 @@ export default function App() {
     parts.push(`考试编号：${job.exam_id || fallbackExamId || job.job_id}`)
     if (job.counts?.students !== undefined) parts.push(`学生：${job.counts.students}`)
     if (job.counts?.questions !== undefined) parts.push(`题目：${job.counts.questions}`)
+    if (job.scoring?.status) {
+      const scoreMap: Record<string, string> = { scored: '已评分', partial: '部分已评分', unscored: '未评分' }
+      parts.push(`评分：${scoreMap[job.scoring.status] || job.scoring.status}`)
+    }
     if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
     return parts.join(' · ')
   }
@@ -1119,15 +1740,27 @@ export default function App() {
         if (data.status === 'done') {
           updateMessage(pendingChatJob.placeholder_id, { content: data.reply || '已收到。', time: nowTime() })
           setPendingChatJob(null)
+          setChatQueueHint('')
           setSending(false)
+          void refreshTeacherSessions()
           return
         }
         if (data.status === 'failed' || data.status === 'cancelled') {
           const msg = data.error_detail || data.error || '请求失败'
           updateMessage(pendingChatJob.placeholder_id, { content: `抱歉，请求失败：${msg}`, time: nowTime() })
           setPendingChatJob(null)
+          setChatQueueHint('')
           setSending(false)
           return
+        }
+        const lanePos = Number(data.lane_queue_position || 0)
+        const laneSize = Number(data.lane_queue_size || 0)
+        if (data.status === 'queued') {
+          setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
+        } else if (data.status === 'processing') {
+          setChatQueueHint('处理中...')
+        } else {
+          setChatQueueHint('')
         }
         delayMs = Math.min(8000, Math.round(delayMs * 1.4))
         timeoutId = window.setTimeout(poll, jitter(delayMs))
@@ -1155,10 +1788,11 @@ export default function App() {
 
     return () => {
       cancelled = true
+      setChatQueueHint('')
       document.removeEventListener('visibilitychange', onVisibilityChange)
       clearTimer()
     }
-  }, [pendingChatJob?.job_id, apiBase])
+  }, [pendingChatJob?.job_id, apiBase, refreshTeacherSessions])
 
   const mention = useMemo(() => {
     const uptoCursor = input.slice(0, cursorPos)
@@ -1200,6 +1834,124 @@ export default function App() {
       return aFav ? -1 : 1
     })
   }, [skillQuery, showFavoritesOnly, favorites, skillList])
+
+  const visibleHistorySessions = useMemo(() => {
+    const deleted = new Set(deletedSessionIds)
+    const q = historyQuery.trim().toLowerCase()
+    return historySessions.filter((item) => {
+      const sid = String(item.session_id || '').trim()
+      if (!sid || deleted.has(sid)) return false
+      if (!q) return true
+      const title = (sessionTitleMap[sid] || '').toLowerCase()
+      const preview = (item.preview || '').toLowerCase()
+      return sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
+    })
+  }, [historySessions, deletedSessionIds, historyQuery, sessionTitleMap])
+
+  const groupedHistorySessions = useMemo(() => {
+    const buckets = new Map<string, SessionGroup<TeacherHistorySession>>()
+    for (const item of visibleHistorySessions) {
+      const info = sessionGroupFromIso(item.updated_at)
+      const existing = buckets.get(info.key)
+      if (existing) {
+        existing.items.push(item)
+      } else {
+        buckets.set(info.key, { key: info.key, label: info.label, items: [item] })
+      }
+    }
+    return Array.from(buckets.values()).sort((a, b) => {
+      const oa = sessionGroupOrder[a.key] ?? 99
+      const ob = sessionGroupOrder[b.key] ?? 99
+      if (oa !== ob) return oa - ob
+      return a.label.localeCompare(b.label)
+    })
+  }, [visibleHistorySessions])
+
+  const getSessionTitle = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return '未命名会话'
+      return sessionTitleMap[sid] || sid
+    },
+    [sessionTitleMap],
+  )
+
+  const startNewTeacherSession = useCallback(() => {
+    const next = `session_${new Date().toISOString().slice(0, 10)}_${Math.random().toString(16).slice(2, 6)}`
+    sessionRequestRef.current += 1
+    setLocalDraftSessionIds((prev) => (prev.includes(next) ? prev : [next, ...prev]))
+    setActiveSessionId(next)
+    setSessionCursor(-1)
+    setSessionHasMore(false)
+    setSessionError('')
+    setRenamingSessionId('')
+    setPendingChatJob(null)
+    setSending(false)
+    setInput('')
+    setChatQueueHint('')
+    setHistorySessions((prev) => {
+      if (prev.some((item) => item.session_id === next)) return prev
+      const nowIso = new Date().toISOString()
+      return [{ session_id: next, updated_at: nowIso, message_count: 0, preview: '' }, ...prev]
+    })
+    setMessages([
+      {
+        id: makeId(),
+        role: 'assistant',
+        content: TEACHER_GREETING,
+        time: nowTime(),
+      },
+    ])
+  }, [])
+
+  const beginRenameSession = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      setRenamingSessionId(sid)
+      setRenamingTitle(getSessionTitle(sid))
+    },
+    [getSessionTitle],
+  )
+
+  const submitRenameSession = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      const title = renamingTitle.trim()
+      setSessionTitleMap((prev) => {
+        const next = { ...prev }
+        if (title) next[sid] = title
+        else delete next[sid]
+        return next
+      })
+      setRenamingSessionId('')
+      setRenamingTitle('')
+    },
+    [renamingTitle],
+  )
+
+  const deleteSession = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      if (!window.confirm(`确认删除会话 ${getSessionTitle(sid)}？`)) return
+      setDeletedSessionIds((prev) => (prev.includes(sid) ? prev : [...prev, sid]))
+      setLocalDraftSessionIds((prev) => prev.filter((id) => id !== sid))
+      if (activeSessionId === sid) {
+        const next = visibleHistorySessions.find((item) => item.session_id !== sid)?.session_id
+        if (next) {
+          setActiveSessionId(next)
+          setSessionCursor(-1)
+          setSessionHasMore(false)
+          setSessionError('')
+        } else {
+          startNewTeacherSession()
+        }
+      }
+    },
+    [activeSessionId, getSessionTitle, startNewTeacherSession, visibleHistorySessions],
+  )
 
   const activeSkill = useMemo(() => {
     if (!activeSkillId) return null
@@ -1282,6 +2034,13 @@ export default function App() {
       const cur = next[index] || {}
       next[index] = { ...cur, ...patch }
       return { ...prev, questions: next }
+    })
+  }
+
+  const updateExamAnswerKeyText = (value: string) => {
+    setExamDraft((prev) => {
+      if (!prev) return prev
+      return { ...prev, answer_key_text: value }
     })
   }
 
@@ -1404,6 +2163,8 @@ export default function App() {
     const trimmed = input.trim()
     if (!trimmed) return
 
+    const sessionId = activeSessionId || 'main'
+    if (!activeSessionId) setActiveSessionId(sessionId)
     const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
@@ -1423,7 +2184,13 @@ export default function App() {
       const res = await fetch(`${apiBase}/chat/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_id: requestId, messages: contextMessages, role: 'teacher', skill_id: activeSkillId || undefined }),
+        body: JSON.stringify({
+          request_id: requestId,
+          session_id: sessionId,
+          messages: contextMessages,
+          role: 'teacher',
+          skill_id: activeSkillId || undefined,
+        }),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -1431,16 +2198,22 @@ export default function App() {
       }
       const data = (await res.json()) as ChatStartResult
       if (!data?.job_id) throw new Error('任务编号缺失')
+      const lanePos = Number(data.lane_queue_position || 0)
+      const laneSize = Number(data.lane_queue_size || 0)
+      setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '处理中...')
       setPendingChatJob({
         job_id: data.job_id,
         request_id: requestId,
         placeholder_id: placeholderId,
         user_text: trimmed,
+        session_id: sessionId,
+        lane_id: data.lane_id,
         created_at: Date.now(),
       })
     } catch (err: any) {
       updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
       setSending(false)
+      setChatQueueHint('')
       setPendingChatJob(null)
     }
   }
@@ -1785,6 +2558,7 @@ export default function App() {
           meta: draft.meta,
           questions: draft.questions,
           score_schema: draft.score_schema || {},
+          answer_key_text: draft.answer_key_text ?? '',
         }),
       })
       if (!res.ok) {
@@ -1922,13 +2696,35 @@ export default function App() {
   return (
     <div className="app teacher">
       <header className="topbar">
-        <div className="brand">物理教学助手 · 老师端</div>
+        <div className="top-left">
+          <div className="brand">物理教学助手 · 老师端</div>
+          {mainView === 'chat' ? (
+            <button className="ghost" onClick={startNewTeacherSession}>
+              新会话
+            </button>
+          ) : null}
+        </div>
         <div className="top-actions">
+          <div className="view-switch">
+            <button type="button" className={mainView === 'chat' ? 'active' : ''} onClick={() => setMainView('chat')}>
+              首页工作台
+            </button>
+            <button type="button" className={mainView === 'routing' ? 'active' : ''} onClick={() => setMainView('routing')}>
+              模型路由
+            </button>
+          </div>
           <div className="role-badge teacher">身份：老师</div>
-          {activeSkill ? <div className="role-badge">当前技能：{activeSkill.title}</div> : null}
-          <button className="ghost" onClick={() => setSkillsOpen((prev) => !prev)}>
-            技能
-          </button>
+          {mainView === 'chat' && activeSkill ? <div className="role-badge">当前技能：{activeSkill.title}</div> : null}
+          {mainView === 'chat' ? (
+            <button className="ghost" onClick={() => setSkillsOpen((prev) => !prev)}>
+              技能
+            </button>
+          ) : null}
+          {mainView === 'chat' ? (
+            <button className="ghost" onClick={() => setMemoryPanelOpen((prev) => !prev)}>
+              记忆记录
+            </button>
+          ) : null}
           <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
             设置
           </button>
@@ -1945,8 +2741,226 @@ export default function App() {
         </section>
       )}
 
-      <div className="teacher-layout">
-        <main className="chat-shell">
+      <div className={`teacher-layout ${mainView === 'chat' ? 'chat-view' : ''} ${skillsOpen ? 'skills-open' : ''}`}>
+        {mainView === 'chat' ? (
+          <aside className="session-sidebar">
+            <div className="session-sidebar-header">
+              <strong>历史会话</strong>
+              <button type="button" className="ghost" disabled={historyLoading} onClick={() => void refreshTeacherSessions()}>
+                {historyLoading ? '刷新中…' : '刷新'}
+              </button>
+            </div>
+            <div className="session-search">
+              <input
+                value={historyQuery}
+                onChange={(e) => setHistoryQuery(e.target.value)}
+                placeholder="搜索会话"
+              />
+            </div>
+            {historyError ? <div className="status err">{historyError}</div> : null}
+            {!historyLoading && visibleHistorySessions.length === 0 ? <div className="history-hint">暂无历史会话。</div> : null}
+            <div className="session-groups">
+              {groupedHistorySessions.map((group) => (
+                <div key={group.key} className="session-group">
+                  <div className="session-group-title">{group.label}</div>
+                  <div className="session-list">
+                    {group.items.map((item) => {
+                      const sid = item.session_id || 'main'
+                      const isActive = sid === activeSessionId
+                      const isRenaming = sid === renamingSessionId
+                      return (
+                        <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
+                          <button
+                            type="button"
+                            className="session-select"
+                            onClick={() => {
+                              setActiveSessionId(sid)
+                              setSessionCursor(-1)
+                              setSessionHasMore(false)
+                              setSessionError('')
+                              setRenamingSessionId('')
+                            }}
+                          >
+                            <div className="session-main">
+                              <div className="session-id">{getSessionTitle(sid)}</div>
+                              <div className="session-meta">
+                                <span>{item.updated_at || '-'}</span>
+                                <span>{item.message_count || 0} 条</span>
+                              </div>
+                            </div>
+                            {item.preview ? <div className="session-preview">{item.preview}</div> : null}
+                          </button>
+                          <div className="session-item-actions">
+                            <button type="button" className="ghost" onClick={() => beginRenameSession(sid)}>
+                              重命名
+                            </button>
+                            <button type="button" className="ghost" onClick={() => deleteSession(sid)}>
+                              删除
+                            </button>
+                          </div>
+                          {isRenaming ? (
+                            <form
+                              className="session-rename-form"
+                              onSubmit={(e) => {
+                                e.preventDefault()
+                                submitRenameSession(sid)
+                              }}
+                            >
+                              <input value={renamingTitle} onChange={(e) => setRenamingTitle(e.target.value)} placeholder="输入会话名称" />
+                              <button type="submit" className="ghost">
+                                保存
+                              </button>
+                            </form>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="history-footer">
+              <button type="button" className="ghost" disabled={!historyHasMore || historyLoading} onClick={() => void refreshTeacherSessions('more')}>
+                {historyLoading ? '加载中…' : historyHasMore ? '加载更多会话' : '已显示全部会话'}
+              </button>
+            </div>
+            <div className="history-footer">
+              <button
+                type="button"
+                className="ghost"
+                disabled={!sessionHasMore || sessionLoading}
+                onClick={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
+              >
+                {sessionLoading ? '加载中…' : sessionHasMore ? '加载更早消息' : '没有更早消息'}
+              </button>
+              {sessionError ? <div className="status err">{sessionError}</div> : null}
+            </div>
+          </aside>
+        ) : null}
+
+        <main className={`chat-shell ${mainView === 'routing' ? 'routing-shell' : ''}`}>
+          {mainView === 'routing' ? (
+            <RoutingPage apiBase={apiBase} />
+          ) : (
+            <>
+
+          {memoryPanelOpen && (
+            <section className="memory-panel">
+              <div className="history-header">
+                <strong>自动记忆记录</strong>
+                <div className="history-actions">
+                  <div className="view-switch">
+                    <button
+                      type="button"
+                      className={memoryStatusFilter === 'applied' ? 'active' : ''}
+                      onClick={() => setMemoryStatusFilter('applied')}
+                    >
+                      已写入
+                    </button>
+                    <button
+                      type="button"
+                      className={memoryStatusFilter === 'rejected' ? 'active' : ''}
+                      onClick={() => setMemoryStatusFilter('rejected')}
+                    >
+                      已拦截
+                    </button>
+                    <button
+                      type="button"
+                      className={memoryStatusFilter === 'all' ? 'active' : ''}
+                      onClick={() => setMemoryStatusFilter('all')}
+                    >
+                      全部
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={proposalLoading}
+                    onClick={() => {
+                      void refreshMemoryProposals()
+                      void refreshMemoryInsights()
+                    }}
+                  >
+                    {proposalLoading ? '刷新中…' : '刷新'}
+                  </button>
+                </div>
+              </div>
+              {memoryInsights?.summary && (
+                <div className="memory-metrics-grid">
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">{memoryInsights.summary.active_total ?? 0}</div>
+                    <div className="memory-metric-label">活跃记忆</div>
+                  </div>
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">{memoryInsights.summary.expired_total ?? 0}</div>
+                    <div className="memory-metric-label">已过期</div>
+                  </div>
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">{memoryInsights.summary.superseded_total ?? 0}</div>
+                    <div className="memory-metric-label">已替代</div>
+                  </div>
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">{memoryInsights.summary.avg_priority_active ?? 0}</div>
+                    <div className="memory-metric-label">平均优先级</div>
+                  </div>
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">
+                      {`${Math.round((memoryInsights.retrieval?.search_hit_rate ?? 0) * 100)}%`}
+                    </div>
+                    <div className="memory-metric-label">检索命中率(14d)</div>
+                  </div>
+                  <div className="memory-metric-card">
+                    <div className="memory-metric-value">{memoryInsights.retrieval?.search_calls ?? 0}</div>
+                    <div className="memory-metric-label">检索次数(14d)</div>
+                  </div>
+                </div>
+              )}
+              {Array.isArray(memoryInsights?.top_queries) && (memoryInsights?.top_queries || []).length > 0 && (
+                <div className="memory-query-list">
+                  <div className="muted">高频命中查询（14天）</div>
+                  {(memoryInsights?.top_queries || []).slice(0, 5).map((q) => (
+                    <div key={q.query} className="proposal-meta">
+                      <span>{q.query}</span>
+                      <span>
+                        {q.hit_calls}/{q.calls}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {proposalError ? <div className="status err">{proposalError}</div> : null}
+              {!proposalLoading && proposals.length === 0 ? <div className="history-hint">暂无记录。</div> : null}
+              {proposals.length > 0 && (
+                <div className="proposal-list">
+                  {proposals.map((p) => (
+                    <div key={p.proposal_id} className="proposal-item">
+                      <div className="proposal-title">
+                        {p.title || 'Memory Update'} <span className="muted">[{p.target || 'MEMORY'}]</span>
+                      </div>
+                      <div className="proposal-meta">
+                        <span>{p.created_at || '-'}</span>
+                        <span>{p.source || 'manual'}</span>
+                        <span className={`memory-status-chip ${String(p.status || '').toLowerCase() || 'unknown'}`}>
+                          {String(p.status || '').toLowerCase() === 'applied'
+                            ? '已写入'
+                            : String(p.status || '').toLowerCase() === 'rejected'
+                              ? '已拦截'
+                              : '待处理'}
+                        </span>
+                      </div>
+                      <div className="proposal-content">{p.content || ''}</div>
+                      <div className="proposal-meta">
+                        <span>{p.proposal_id}</span>
+                        <span>{p.applied_at || p.rejected_at || '-'}</span>
+                      </div>
+                      {p.reject_reason ? <div className="muted">原因：{p.reject_reason}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
           <div className="messages">
             {renderedMessages.map((msg) => (
               <div key={msg.id} className={`message ${msg.role}`}>
@@ -1985,7 +2999,7 @@ export default function App() {
               disabled={Boolean(pendingChatJob?.job_id)}
             />
             <div className="composer-actions">
-              <span className="composer-hint">@ 技能 | 回车发送</span>
+              <span className="composer-hint">{chatQueueHint || '@ 技能 | 回车发送'}</span>
               <button type="submit" className="send-btn" disabled={sending || Boolean(pendingChatJob?.job_id)}>
                 发送
               </button>
@@ -2294,6 +3308,24 @@ export default function App() {
 	                      <div>解析到答案：{String(examDraft.answer_key.count)} 条</div>
 	                    ) : null}
 	                    {examDraft.counts?.students !== undefined ? <div>学生数：{examDraft.counts.students}</div> : null}
+	                    {examDraft.scoring?.status ? (
+	                      <div>
+	                        评分状态：
+	                        {{
+	                          scored: '已评分',
+	                          partial: '部分已评分',
+	                          unscored: '未评分',
+	                        }[String(examDraft.scoring.status)] || String(examDraft.scoring.status)}
+	                        {examDraft.scoring?.students_scored !== undefined && examDraft.scoring?.students_total !== undefined
+	                          ? `（已评分学生 ${examDraft.scoring.students_scored}/${examDraft.scoring.students_total}）`
+	                          : ''}
+	                      </div>
+	                    ) : null}
+	                    {Array.isArray(examDraft.scoring?.default_max_score_qids) && examDraft.scoring.default_max_score_qids.length ? (
+	                      <div className="muted">
+	                        提示：有 {examDraft.scoring.default_max_score_qids.length} 题缺少满分，系统已默认按 1 分/题 评分（建议核对题目满分）。
+	                      </div>
+	                    ) : null}
 	                    {examDraft.counts?.questions !== undefined ? <div>题目数：{examDraft.counts.questions}</div> : null}
 	                    {examDraft.totals_summary?.avg_total !== undefined ? <div>平均分：{examDraft.totals_summary.avg_total}</div> : null}
 	                    {examDraft.totals_summary?.median_total !== undefined ? <div>中位数：{examDraft.totals_summary.median_total}</div> : null}
@@ -2369,6 +3401,45 @@ export default function App() {
 	                            />
 	                          </div>
 	                        ))}
+	                      </div>
+	                    </div>
+	                    <div className="draft-card">
+	                      <h4>标准答案（可编辑）</h4>
+	                      <div className="draft-form">
+	                        <label>答案文本（每行一个，示例：1 A）</label>
+	                        <textarea
+	                          value={String(examDraft.answer_key_text || '')}
+	                          onChange={(e) => updateExamAnswerKeyText(e.target.value)}
+	                          onKeyDown={stopKeyPropagation}
+	                          rows={8}
+	                          placeholder={`示例：\n1 A\n2 C\n12(1) B`}
+	                        />
+	                      </div>
+	                      {examDraft.answer_text_excerpt ? (
+	                        <details style={{ marginTop: 8 }}>
+	                          <summary className="muted">查看识别到的答案文本（可用作填充参考）</summary>
+	                          <pre className="status ok" style={{ whiteSpace: 'pre-wrap' }}>
+	                            {String(examDraft.answer_text_excerpt)}
+	                          </pre>
+	                          <div className="draft-actions" style={{ marginTop: 8 }}>
+	                            <button
+	                              type="button"
+	                              className="secondary-btn"
+	                              onClick={() => {
+	                                if (!examDraft.answer_text_excerpt) return
+	                                updateExamAnswerKeyText(String(examDraft.answer_text_excerpt))
+	                              }}
+	                              disabled={!examDraft.answer_text_excerpt}
+	                            >
+	                              用识别文本填充
+	                            </button>
+	                          </div>
+	                        </details>
+	                      ) : (
+	                        <div className="muted">未检测到答案文件识别文本。你也可以直接粘贴答案文本。</div>
+	                      )}
+	                      <div className="muted" style={{ marginTop: 8 }}>
+	                        提示：保存草稿后，创建考试时会使用该答案对“作答字母但无分数”的客观题自动评分。
 	                      </div>
 	                    </div>
 	                  </div>
@@ -2647,9 +3718,12 @@ export default function App() {
               </div>
             </div>
           )}
+            </>
+          )}
         </main>
 
-        <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
+        {mainView === 'chat' && (
+          <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
           <div className="skills-header">
             <h3>技能提示</h3>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -2726,7 +3800,8 @@ export default function App() {
               </div>
             ))}
           </div>
-        </aside>
+          </aside>
+        )}
       </div>
     </div>
   )
