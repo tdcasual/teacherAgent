@@ -22,6 +22,10 @@ class ChartAgentRunToolTest(unittest.TestCase):
             app_mod = load_app(Path(td))
             captured = {}
 
+            # Ensure tests do not depend on a local opencode binary or repo config.
+            def fake_status(app_root, overrides=None):  # type: ignore[no-untyped-def]
+                return {"enabled": True, "available": False, "reason": "binary_not_found", "config": {}}
+
             def fake_call_llm(messages, tools=None, role_hint=None, max_tokens=None, **kwargs):  # type: ignore[no-untyped-def]
                 payload = {
                     "python_code": "import matplotlib.pyplot as plt\nplt.figure(figsize=(4,3))\nplt.plot([1,2,3],[2,1,3])\nsave_chart('main.png')",
@@ -44,6 +48,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
 
             app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
             app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
 
             res = app_mod.tool_dispatch(
                 "chart.agent.run",
@@ -63,6 +68,10 @@ class ChartAgentRunToolTest(unittest.TestCase):
             app_mod = load_app(Path(td))
             llm_calls = {"count": 0}
             exec_calls = {"count": 0}
+
+            # Ensure tests do not depend on a local opencode binary or repo config.
+            def fake_status(app_root, overrides=None):  # type: ignore[no-untyped-def]
+                return {"enabled": True, "available": False, "reason": "binary_not_found", "config": {}}
 
             def fake_call_llm(messages, tools=None, role_hint=None, max_tokens=None, **kwargs):  # type: ignore[no-untyped-def]
                 llm_calls["count"] += 1
@@ -94,6 +103,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
 
             app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
             app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
 
             res = app_mod.tool_dispatch(
                 "chart.agent.run",
@@ -222,6 +232,51 @@ class ChartAgentRunToolTest(unittest.TestCase):
             )
             self.assertTrue(res.get("ok"))
             self.assertEqual(res.get("engine_used"), "llm")
+
+    def test_chart_agent_run_default_engine_prefers_opencode(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+
+            def fake_status(app_root, overrides=None):  # type: ignore[no-untyped-def]
+                return {
+                    "enabled": True,
+                    "available": True,
+                    "reason": "ok",
+                    "binary": "/usr/local/bin/opencode",
+                    "config": {"max_retries": 2},
+                }
+
+            def fake_opencode(**kwargs):  # type: ignore[no-untyped-def]
+                return {
+                    "ok": True,
+                    "python_code": "import matplotlib.pyplot as plt\nplt.plot([1,2,3],[2,3,4])\nsave_chart('main.png')",
+                    "packages": ["pandas"],
+                    "summary": "ok",
+                }
+
+            def fake_execute(args, app_root, uploads_dir):  # type: ignore[no-untyped-def]
+                return {
+                    "ok": True,
+                    "run_id": "chr_default",
+                    "image_url": "/charts/chr_default/main.png",
+                    "meta_url": "/chart-runs/chr_default/meta",
+                    "artifacts": [{"name": "main.png", "url": "/charts/chr_default/main.png", "size": 88}],
+                    "installed_packages": args.get("packages") or [],
+                    "python_executable": "python3",
+                }
+
+            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
+            app_mod.run_opencode_codegen = fake_opencode  # type: ignore[attr-defined]
+            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+
+            res = app_mod.tool_dispatch(
+                "chart.agent.run",
+                {"task": "画图", "input_data": {"a": 1}},
+                role="teacher",
+            )
+            self.assertTrue(res.get("ok"))
+            self.assertEqual(res.get("engine_requested"), "opencode")
+            self.assertEqual(res.get("engine_used"), "opencode")
 
 
 if __name__ == "__main__":
