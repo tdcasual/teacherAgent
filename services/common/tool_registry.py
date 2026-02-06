@@ -65,12 +65,93 @@ class ToolRegistry:
             out.append(tool.to_mcp())
         return out
 
+    def validate_arguments(self, name: str, args: Any) -> List[str]:
+        tool = self.get(name)
+        if tool is None:
+            return [f"unknown tool: {name}"]
+        if args is None:
+            args = {}
+        issues: List[str] = []
+        _validate_schema(tool.parameters, args, path="arguments", issues=issues)
+        return issues
 
-def _schema_object(properties: Dict[str, Any], required: Optional[List[str]] = None) -> JsonSchema:
-    schema: JsonSchema = {"type": "object", "properties": properties}
+
+def _schema_object(
+    properties: Dict[str, Any],
+    required: Optional[List[str]] = None,
+    *,
+    additional_properties: bool = False,
+) -> JsonSchema:
+    schema: JsonSchema = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": bool(additional_properties),
+    }
     if required:
         schema["required"] = list(required)
     return schema
+
+
+def _validate_schema(schema: Dict[str, Any], value: Any, path: str, issues: List[str]) -> None:
+    schema_type = schema.get("type")
+
+    if schema_type == "object":
+        if not isinstance(value, dict):
+            issues.append(f"{path}: expected object")
+            return
+        properties = schema.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        required = schema.get("required")
+        if isinstance(required, list):
+            for key in required:
+                key_text = str(key).strip()
+                if key_text and key_text not in value:
+                    issues.append(f"{path}.{key_text}: required")
+        additional_allowed = schema.get("additionalProperties", True)
+        if additional_allowed is False:
+            allowed_keys = set(properties.keys())
+            for key in value.keys():
+                if key not in allowed_keys:
+                    issues.append(f"{path}.{key}: unexpected")
+        for key, subschema in properties.items():
+            if key not in value:
+                continue
+            if not isinstance(subschema, dict):
+                continue
+            _validate_schema(subschema, value[key], f"{path}.{key}", issues)
+        return
+
+    if schema_type == "array":
+        if not isinstance(value, list):
+            issues.append(f"{path}: expected array")
+            return
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for idx, item in enumerate(value):
+                _validate_schema(item_schema, item, f"{path}[{idx}]", issues)
+        return
+
+    if schema_type == "string":
+        if not isinstance(value, str):
+            issues.append(f"{path}: expected string")
+            return
+    elif schema_type == "integer":
+        if not (isinstance(value, int) and not isinstance(value, bool)):
+            issues.append(f"{path}: expected integer")
+            return
+    elif schema_type == "number":
+        if not ((isinstance(value, int) and not isinstance(value, bool)) or isinstance(value, float)):
+            issues.append(f"{path}: expected number")
+            return
+    elif schema_type == "boolean":
+        if not isinstance(value, bool):
+            issues.append(f"{path}: expected boolean")
+            return
+
+    enum = schema.get("enum")
+    if isinstance(enum, list) and enum and value not in enum:
+        issues.append(f"{path}: expected one of {enum}")
 
 
 def build_default_registry() -> ToolRegistry:
@@ -91,6 +172,23 @@ def build_default_registry() -> ToolRegistry:
         name="exam.analysis.get",
         description="Get exam draft analysis (or compute minimal summary if missing)",
         parameters=_schema_object({"exam_id": {"type": "string"}}, required=["exam_id"]),
+    )
+    tools["exam.analysis.charts.generate"] = ToolDef(
+        name="exam.analysis.charts.generate",
+        description="One-click generate exam analysis charts and Markdown image output",
+        parameters=_schema_object(
+            {
+                "exam_id": {"type": "string"},
+                "chart_types": {
+                    "type": "array",
+                    "description": "optional chart list: score_distribution/knowledge_radar/class_compare/question_discrimination",
+                    "items": {"type": "string"},
+                },
+                "top_n": {"type": "integer", "default": 12},
+                "timeout_sec": {"type": "integer", "default": 120},
+            },
+            required=["exam_id"],
+        ),
     )
     tools["exam.students.list"] = ToolDef(
         name="exam.students.list",
@@ -271,6 +369,53 @@ def build_default_registry() -> ToolRegistry:
         name="core_example.render",
         description="Render core example PDF",
         parameters=_schema_object({"example_id": {"type": "string"}, "out": {"type": "string"}}, required=["example_id"]),
+    )
+
+    # Charts (teacher-only in API role gate)
+    tools["chart.exec"] = ToolDef(
+        name="chart.exec",
+        description="Execute Python chart code and return generated image URL/artifacts",
+        parameters=_schema_object(
+            {
+                "python_code": {"type": "string", "description": "Python code to execute"},
+                "input_data": {"type": "object", "description": "optional JSON object passed to python as input_data"},
+                "chart_hint": {"type": "string", "description": "optional chart intent/notes"},
+                "timeout_sec": {"type": "integer", "default": 120},
+                "save_as": {"type": "string", "description": "optional PNG filename, e.g. main.png"},
+                "auto_install": {"type": "boolean", "default": False},
+                "packages": {"type": "array", "items": {"type": "string"}, "description": "optional pip packages to install"},
+                "max_retries": {"type": "integer", "default": 1},
+            },
+            required=["python_code"],
+        ),
+    )
+    tools["chart.agent.run"] = ToolDef(
+        name="chart.agent.run",
+        description="Generate chart code with LLM, auto-install dependencies, execute, and auto-repair on failures",
+        parameters=_schema_object(
+            {
+                "task": {"type": "string", "description": "chart requirement in natural language"},
+                "input_data": {"type": "object", "description": "optional structured input data"},
+                "title": {"type": "string", "description": "optional markdown title for rendered image"},
+                "engine": {"type": "string", "description": "auto|opencode|llm"},
+                "chart_hint": {"type": "string"},
+                "save_as": {"type": "string"},
+                "timeout_sec": {"type": "integer", "default": 180},
+                "max_retries": {"type": "integer", "default": 3},
+                "auto_install": {"type": "boolean", "default": True},
+                "packages": {"type": "array", "items": {"type": "string"}, "description": "optional pip package hints"},
+                "opencode_enabled": {"type": "boolean"},
+                "opencode_bin": {"type": "string"},
+                "opencode_mode": {"type": "string", "description": "run|attach"},
+                "opencode_attach_url": {"type": "string"},
+                "opencode_agent": {"type": "string"},
+                "opencode_model": {"type": "string"},
+                "opencode_config_path": {"type": "string"},
+                "opencode_timeout_sec": {"type": "integer"},
+                "opencode_max_retries": {"type": "integer"},
+            },
+            required=["task"],
+        ),
     )
 
     # Teacher workspace/memory (API-only for now, but defined here to keep one source of truth)
