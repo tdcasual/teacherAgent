@@ -5194,7 +5194,12 @@ def exam_student_detail(exam_id: str, student_id: Optional[str] = None, student_
     }
 
 
-def exam_question_detail(exam_id: str, question_id: Optional[str] = None, question_no: Optional[str] = None) -> Dict[str, Any]:
+def exam_question_detail(
+    exam_id: str,
+    question_id: Optional[str] = None,
+    question_no: Optional[str] = None,
+    top_n: int = 5,
+) -> Dict[str, Any]:
     manifest = load_exam_manifest(exam_id)
     if not manifest:
         return {"error": "exam_not_found", "exam_id": exam_id}
@@ -5254,9 +5259,10 @@ def exam_question_detail(exam_id: str, question_id: Optional[str] = None, questi
         key = str(int(s)) if float(s).is_integer() else str(s)
         dist[key] = dist.get(key, 0) + 1
 
+    sample_n = _safe_int_arg(top_n, default=5, minimum=1, maximum=100)
     by_student_sorted = sorted(by_student, key=lambda x: (x["score"] is None, -(x["score"] or 0)))
-    top_students = [x for x in by_student_sorted if x.get("student_id")][:5]
-    bottom_students = sorted(by_student, key=lambda x: (x["score"] is None, x["score"] or 0))[:5]
+    top_students = [x for x in by_student_sorted if x.get("student_id")][:sample_n]
+    bottom_students = sorted(by_student, key=lambda x: (x["score"] is None, x["score"] or 0))[:sample_n]
 
     return {
         "ok": True,
@@ -5469,6 +5475,114 @@ def exam_range_top_students(
         },
         "top_students": top_students,
         "bottom_students": bottom_students,
+    }
+
+
+def _normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
+    raw_items: List[Any] = []
+    if isinstance(value, list):
+        raw_items = list(value)
+    elif value is not None:
+        raw_items = [x for x in re.split(r"[,\s，;；]+", str(value)) if x]
+    normalized: List[int] = []
+    seen: set[int] = set()
+    for item in raw_items:
+        q_no = _parse_question_no_int(item)
+        if q_no is None or q_no in seen:
+            continue
+        seen.add(q_no)
+        normalized.append(q_no)
+        if len(normalized) >= maximum:
+            break
+    return normalized
+
+
+def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
+    manifest = load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+    if not isinstance(ranges, list) or not ranges:
+        return {"error": "invalid_ranges", "exam_id": exam_id, "message": "ranges 必须是非空数组。"}
+
+    sample_n = _safe_int_arg(top_n, default=5, minimum=1, maximum=50)
+    results: List[Dict[str, Any]] = []
+    invalid_ranges: List[Dict[str, Any]] = []
+    for idx, item in enumerate(ranges, start=1):
+        if not isinstance(item, dict):
+            invalid_ranges.append({"index": idx, "error": "range_item_not_object"})
+            continue
+        start_q = item.get("start_question_no")
+        end_q = item.get("end_question_no")
+        label = str(item.get("label") or "").strip()
+        result = exam_range_top_students(exam_id, start_q, end_q, top_n=sample_n)
+        if not result.get("ok"):
+            invalid_ranges.append(
+                {
+                    "index": idx,
+                    "label": label or f"range_{idx}",
+                    "error": result.get("error") or "range_compute_failed",
+                    "message": result.get("message") or "",
+                }
+            )
+            continue
+        results.append(
+            {
+                "index": idx,
+                "label": label or f"{result['range']['start_question_no']}-{result['range']['end_question_no']}",
+                "range": result.get("range"),
+                "summary": result.get("summary"),
+                "top_students": result.get("top_students"),
+                "bottom_students": result.get("bottom_students"),
+            }
+        )
+
+    return {
+        "ok": bool(results),
+        "exam_id": exam_id,
+        "range_count_requested": len(ranges),
+        "range_count_succeeded": len(results),
+        "range_count_failed": len(invalid_ranges),
+        "ranges": results,
+        "invalid_ranges": invalid_ranges,
+    }
+
+
+def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
+    manifest = load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+
+    normalized_nos = _normalize_question_no_list(question_nos, maximum=200)
+    if not normalized_nos:
+        return {"error": "invalid_question_nos", "exam_id": exam_id, "message": "question_nos 必须包含至少一个有效题号。"}
+
+    sample_n = _safe_int_arg(top_n, default=5, minimum=1, maximum=100)
+    items: List[Dict[str, Any]] = []
+    missing_question_nos: List[int] = []
+    for q_no in normalized_nos:
+        detail = exam_question_detail(exam_id, question_no=str(q_no), top_n=sample_n)
+        if detail.get("ok"):
+            items.append(
+                {
+                    "question_no": q_no,
+                    "question": detail.get("question"),
+                    "distribution": detail.get("distribution"),
+                    "sample_top_students": detail.get("sample_top_students"),
+                    "sample_bottom_students": detail.get("sample_bottom_students"),
+                    "response_count": detail.get("response_count"),
+                }
+            )
+            continue
+        missing_question_nos.append(q_no)
+
+    return {
+        "ok": bool(items),
+        "exam_id": exam_id,
+        "requested_question_nos": normalized_nos,
+        "question_count_succeeded": len(items),
+        "question_count_failed": len(missing_question_nos),
+        "questions": items,
+        "missing_question_nos": missing_question_nos,
     }
 
 
@@ -8305,6 +8419,7 @@ def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -
             args.get("exam_id", ""),
             question_id=args.get("question_id"),
             question_no=args.get("question_no"),
+            top_n=args.get("top_n", 5),
         )
     if name == "exam.range.top_students":
         return exam_range_top_students(
@@ -8312,6 +8427,18 @@ def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -
             start_question_no=args.get("start_question_no"),
             end_question_no=args.get("end_question_no"),
             top_n=args.get("top_n", 10),
+        )
+    if name == "exam.range.summary.batch":
+        return exam_range_summary_batch(
+            args.get("exam_id", ""),
+            ranges=args.get("ranges"),
+            top_n=args.get("top_n", 5),
+        )
+    if name == "exam.question.batch.get":
+        return exam_question_batch_detail(
+            args.get("exam_id", ""),
+            question_nos=args.get("question_nos"),
+            top_n=args.get("top_n", 5),
         )
     if name == "assignment.list":
         return list_assignments()
@@ -8664,6 +8791,8 @@ def allowed_tools(role_hint: Optional[str]) -> set:
             "exam.student.get",
             "exam.question.get",
             "exam.range.top_students",
+            "exam.range.summary.batch",
+            "exam.question.batch.get",
             "assignment.list",
             "lesson.list",
             "lesson.capture",
