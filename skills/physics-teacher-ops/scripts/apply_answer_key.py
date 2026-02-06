@@ -59,8 +59,9 @@ def score_objective(raw_answer: str, correct: str, max_score: float):
     if raw_set == correct_set:
         return max_score, 1
     if raw_set.issubset(correct_set):
-        # partial credit (no wrong option)
-        return 3.0, 0
+        # Multi-select partial credit: no wrong option but missed some correct options.
+        # Rule: 全对满分，漏选得一半分，错选 0 分。
+        return max_score * 0.5, 0
     return 0.0, 0
 
 
