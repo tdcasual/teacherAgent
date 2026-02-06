@@ -1184,6 +1184,154 @@ select:focus {
   overflow: auto;
 }
 
+.workbench-workflow {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-summary-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-status {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #3f4551;
+}
+
+.workflow-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workflow-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: #5b6473;
+  background: #f7f8fa;
+}
+
+.workflow-chip.active {
+  color: #0f766e;
+  border-color: #bfe7dc;
+  background: #eaf9f4;
+}
+
+.workflow-chip.success {
+  color: #166534;
+  border-color: #bae6c3;
+  background: #ecfdf0;
+}
+
+.workflow-chip.error {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.workflow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid #e8ebf0;
+  background: #f9fafb;
+  color: #7b8392;
+  font-size: 12px;
+}
+
+.workflow-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cfd6e0;
+  flex: 0 0 auto;
+}
+
+.workflow-step.done {
+  color: #0f766e;
+  border-color: #bfe7dc;
+  background: #eaf9f4;
+}
+
+.workflow-step.done .workflow-step-dot {
+  background: #10a37f;
+}
+
+.workflow-step.active {
+  color: #0f766e;
+  border-color: #8adac5;
+  background: #f1fbf8;
+}
+
+.workflow-step.active .workflow-step-dot {
+  background: #10a37f;
+  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.15);
+}
+
+.workflow-step.error {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.workflow-step.error .workflow-step-dot {
+  background: #dc2626;
+}
+
+.workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workbench-workflow .upload-card,
+.workbench-workflow .draft-panel {
+  box-shadow: none;
+  border-radius: 14px;
+  padding: 10px;
+  margin: 0;
+}
+
+.workbench-workflow .upload-grid,
+.workbench-workflow .draft-grid,
+.workbench-workflow .row2 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workbench-workflow .panel-header {
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workbench-workflow .draft-actions {
+  flex-wrap: wrap;
+}
+
+.workbench-workflow .status {
+  overflow-x: auto;
+}
+
 .skills-tools {
   display: grid;
   gap: 8px;
@@ -1518,12 +1666,27 @@ select:focus {
 
   .top-left {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
+    row-gap: 8px;
+  }
+
+  .top-left .brand {
+    min-width: 180px;
+    flex: 1 1 auto;
   }
 
   .top-actions {
-    justify-content: space-between;
+    justify-content: flex-start;
+    row-gap: 8px;
     width: 100%;
+  }
+
+  .top-actions .view-switch {
+    display: none;
+  }
+
+  .top-actions .role-badge {
+    display: none;
   }
 
   .teacher-layout.chat-view,
@@ -1556,7 +1719,7 @@ select:focus {
     left: 0;
     top: var(--teacher-topbar-height, 0px);
     bottom: 0;
-    width: min(90vw, 360px);
+    width: 100vw;
     max-width: 100vw;
     height: calc(100dvh - var(--teacher-topbar-height, 0px));
     transform: translateX(-105%);
@@ -1580,7 +1743,7 @@ select:focus {
     right: 0;
     top: var(--teacher-topbar-height, 0px);
     bottom: 0;
-    width: min(92vw, 380px);
+    width: 100vw;
     max-width: 100vw;
     height: calc(100dvh - var(--teacher-topbar-height, 0px));
     transform: translateX(105%);
