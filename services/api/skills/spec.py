@@ -32,6 +32,41 @@ def _as_int_opt(value: Any) -> Optional[int]:
     return iv
 
 
+def _as_float_opt(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(str(value).strip())
+    except Exception:
+        return None
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _as_bool_opt(value: Any) -> Optional[bool]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
 @dataclass(frozen=True)
 class SkillToolsPolicy:
     # None means: inherit role default tools (no allowlist restriction).
@@ -46,11 +81,44 @@ class SkillBudgets:
 
 
 @dataclass(frozen=True)
+class SkillModelTarget:
+    provider: str
+    mode: str
+    model: str
+    temperature: Optional[float]
+    max_tokens: Optional[int]
+
+
+@dataclass(frozen=True)
+class SkillModelMatch:
+    roles: List[str]
+    kinds: List[str]
+    needs_tools: Optional[bool]
+    needs_json: Optional[bool]
+
+
+@dataclass(frozen=True)
+class SkillModelRoute:
+    route_id: str
+    priority: int
+    match: SkillModelMatch
+    target: SkillModelTarget
+
+
+@dataclass(frozen=True)
+class SkillModelPolicy:
+    enabled: bool
+    default: Optional[SkillModelTarget]
+    routes: List[SkillModelRoute]
+
+
+@dataclass(frozen=True)
 class SkillAgentSpec:
     prompt_modules: List[str]
     context_providers: List[str]
     tools: SkillToolsPolicy
     budgets: SkillBudgets
+    model_policy: SkillModelPolicy
 
 
 @dataclass(frozen=True)
@@ -71,6 +139,36 @@ class SkillSpec:
     source_path: str
 
     def as_public_dict(self) -> Dict[str, Any]:
+        default_target = None
+        if self.agent.model_policy.default is not None:
+            default_target = {
+                "provider": self.agent.model_policy.default.provider,
+                "mode": self.agent.model_policy.default.mode,
+                "model": self.agent.model_policy.default.model,
+                "temperature": self.agent.model_policy.default.temperature,
+                "max_tokens": self.agent.model_policy.default.max_tokens,
+            }
+        routes = []
+        for route in self.agent.model_policy.routes:
+            routes.append(
+                {
+                    "id": route.route_id,
+                    "priority": route.priority,
+                    "match": {
+                        "roles": route.match.roles,
+                        "kinds": route.match.kinds,
+                        "needs_tools": route.match.needs_tools,
+                        "needs_json": route.match.needs_json,
+                    },
+                    "target": {
+                        "provider": route.target.provider,
+                        "mode": route.target.mode,
+                        "model": route.target.model,
+                        "temperature": route.target.temperature,
+                        "max_tokens": route.target.max_tokens,
+                    },
+                }
+            )
         return {
             "id": self.skill_id,
             "schema_version": self.schema_version,
@@ -87,8 +185,63 @@ class SkillSpec:
                     "max_tool_rounds": self.agent.budgets.max_tool_rounds,
                     "max_tool_calls": self.agent.budgets.max_tool_calls,
                 },
+                "model_policy": {
+                    "enabled": self.agent.model_policy.enabled,
+                    "default": default_target,
+                    "routes": routes,
+                },
             },
         }
+
+
+def _parse_model_target(raw: Any) -> Optional[SkillModelTarget]:
+    if not isinstance(raw, dict):
+        return None
+    provider = str(raw.get("provider") or "").strip()
+    mode = str(raw.get("mode") or "").strip()
+    model = str(raw.get("model") or "").strip()
+    if not provider or not mode or not model:
+        return None
+    return SkillModelTarget(
+        provider=provider,
+        mode=mode,
+        model=model,
+        temperature=_as_float_opt(raw.get("temperature")),
+        max_tokens=_as_int_opt(raw.get("max_tokens")),
+    )
+
+
+def _parse_model_policy(raw: Any) -> SkillModelPolicy:
+    policy_raw = raw if isinstance(raw, dict) else {}
+    default_target = _parse_model_target(policy_raw.get("default"))
+    routes_raw = policy_raw.get("routes") if isinstance(policy_raw.get("routes"), list) else []
+    routes: List[SkillModelRoute] = []
+    for idx, item in enumerate(routes_raw):
+        if not isinstance(item, dict):
+            continue
+        route_id = str(item.get("id") or "").strip() or f"route_{idx + 1}"
+        priority = _as_int_opt(item.get("priority"))
+        match_raw = item.get("match") if isinstance(item.get("match"), dict) else {}
+        target = _parse_model_target(item.get("target"))
+        if target is None:
+            continue
+        routes.append(
+            SkillModelRoute(
+                route_id=route_id,
+                priority=max(0, int(priority if priority is not None else 100)),
+                match=SkillModelMatch(
+                    roles=_as_str_list(match_raw.get("roles")),
+                    kinds=_as_str_list(match_raw.get("kinds")),
+                    needs_tools=_as_bool_opt(match_raw.get("needs_tools")),
+                    needs_json=_as_bool_opt(match_raw.get("needs_json")),
+                ),
+                target=target,
+            )
+        )
+    routes.sort(key=lambda item: (-item.priority, item.route_id))
+    has_any = bool(default_target) or bool(routes)
+    enabled = _as_bool(policy_raw.get("enabled"), has_any)
+    return SkillModelPolicy(enabled=enabled and has_any, default=default_target, routes=routes)
 
 
 def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> SkillSpec:
@@ -118,12 +271,14 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
         max_tool_rounds=_as_int_opt(budgets_raw.get("max_tool_rounds") if isinstance(budgets_raw, dict) else None),
         max_tool_calls=_as_int_opt(budgets_raw.get("max_tool_calls") if isinstance(budgets_raw, dict) else None),
     )
+    model_policy = _parse_model_policy(agent_raw.get("model_policy"))
 
     agent = SkillAgentSpec(
         prompt_modules=prompt_modules,
         context_providers=context_providers,
         tools=tools,
         budgets=budgets,
+        model_policy=model_policy,
     )
 
     return SkillSpec(
@@ -136,4 +291,3 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
         agent=agent,
         source_path=source_path,
     )
-
