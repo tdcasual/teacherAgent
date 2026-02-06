@@ -124,6 +124,12 @@ def _collect_text_from_json_lines(stdout: str) -> str:
                 chunks.append(raw)
                 continue
             if isinstance(payload, dict):
+                part = payload.get("part")
+                if isinstance(part, dict):
+                    for key in ("text", "content", "message", "response", "result", "output", "final"):
+                        value = part.get(key)
+                        if isinstance(value, str) and value.strip():
+                            chunks.append(value.strip())
                 for key in ("content", "text", "message", "response", "result", "output", "final"):
                     value = payload.get(key)
                     if isinstance(value, str) and value.strip():
@@ -138,6 +144,13 @@ def _extract_candidate(stdout: str, stderr: str) -> Dict[str, Any]:
     if not combined:
         combined = (stdout or "").strip()
     parsed = _parse_json_dict(combined) or {}
+    if not parsed:
+        for block in reversed([line.strip() for line in combined.splitlines() if line.strip()]):
+            candidate = _parse_json_dict(block)
+            if isinstance(candidate, dict) and candidate:
+                parsed = candidate
+                if candidate.get("python_code"):
+                    break
     python_code = str(parsed.get("python_code") or "").strip()
     if not python_code:
         python_code = _extract_python_code(combined)
