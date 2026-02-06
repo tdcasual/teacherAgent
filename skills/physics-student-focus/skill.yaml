@@ -1,0 +1,25 @@
+id: physics-student-focus
+schema_version: 2
+title: 学生重点分析
+desc: 针对某个学生进行重点诊断与画像更新
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/student_focus.md
+  tools:
+    allow:
+      - student.search
+      - student.profile.get
+      - student.profile.update
+      - exam.get
+      - exam.analysis.get
+      - exam.student.get
+      - assignment.list
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 10
+ui:
+  prompts:
+    - 请分析学生 高二2403班_武熙语 的最近作业表现。
+  examples:
+    - 分析学生 高二2403班_武熙语

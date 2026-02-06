@@ -36,6 +36,8 @@ data/local_test/
 data/student_submissions/
 data/student_profiles/
 data/teacher_focus/
+data/teacher_workspaces/
+data/teacher_chat_sessions/
 
 # Assignments generated from question bank / core examples
 data/assignments/

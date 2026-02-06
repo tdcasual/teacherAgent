@@ -12,9 +12,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Physics Learning Helper (Student)',
-        short_name: 'PhysicsStudent',
-        description: 'Student console for physics helper',
+        name: '物理学习助手（学生端）',
+        short_name: '物理学生端',
+        description: '物理学习助手学生端控制台',
         theme_color: '#2f6d6b',
         background_color: '#f6f2ea',
         display: 'standalone',

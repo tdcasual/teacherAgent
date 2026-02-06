@@ -1,0 +1,22 @@
+id: physics-core-examples
+schema_version: 2
+title: 核心例题库
+desc: 登记核心例题、标准解法与变式题
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/core_examples.md
+  tools:
+    allow:
+      - core_example.search
+      - core_example.register
+      - core_example.render
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 10
+ui:
+  prompts:
+    - 登记核心例题 CE001，知识点 KP-M01。
+  examples:
+    - 登记核心例题 CE001
+    - 生成变式题 3 道

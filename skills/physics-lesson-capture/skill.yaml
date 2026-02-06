@@ -1,0 +1,24 @@
+id: physics-lesson-capture
+schema_version: 2
+title: 课堂采集
+desc: 课堂材料文字识别并抽取例题与讨论结构
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/lesson_capture.md
+  tools:
+    allow:
+      - lesson.list
+      - lesson.capture
+      - core_example.search
+      - core_example.register
+      - core_example.render
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 10
+ui:
+  prompts:
+    - 采集课堂材料 L2403_2026-02-04，主题“静电场综合”。
+  examples:
+    - 采集课堂材料 L2403_2026-02-04
+    - 列出课程

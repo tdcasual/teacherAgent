@@ -595,6 +595,68 @@ select:focus {
   color: #8a1f1f;
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.progress-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.progress-toolbar .upload-field {
+  min-width: 240px;
+}
+
+.progress-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.progress-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.progress-row {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.progress-row.todo {
+  border-color: #e2b6b6;
+  background: #fff8f8;
+}
+
+.progress-row.ok {
+  border-color: #b8d8d6;
+  background: #f3fbfa;
+}
+
+.progress-main {
+  font-size: 13px;
+}
+
+.progress-sub {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .mention-panel {
   border: 1px dashed var(--border);
   border-radius: 14px;
@@ -701,6 +763,11 @@ select:focus {
   background: #fff;
 }
 
+.skill-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 10px 20px rgba(47, 109, 107, 0.14);
+}
+
 .skill-title {
   display: flex;
   justify-content: space-between;
@@ -716,7 +783,7 @@ select:focus {
 
 .skill-title strong {
   display: inline-block;
-  margin-left: 6px;
+  margin-left: 0;
 }
 
 .fav {

@@ -29,6 +29,9 @@
 ### 6) `physics-core-examples`
 核心例题库：登记核心例题、标准解法、核心模型、变式模板，支持图文题。
 
+### 7) `physics-llm-routing`
+老师侧模型路由管理：按任务类型配置多渠道模型，支持仿真、提案生效与回滚。
+
 ## 目录结构（核心）
 ```
 skills/
@@ -38,6 +41,7 @@ skills/
   physics-student-coach/
   physics-student-focus/
   physics-core-examples/
+  physics-llm-routing/
 
 scripts/
   grade_submission.py
@@ -231,8 +235,37 @@ npm run dev:student
 - `LLM_TIMEOUT_SEC`：超时时间（秒）
 - `LLM_RETRY`：失败重试次数
 - `LLM_MAX_CONCURRENCY`：单个 API 进程内允许的最大 LLM 并发（默认 `8`）
+- `LLM_MAX_CONCURRENCY_STUDENT`：学生端/学生请求的最大 LLM 并发（默认继承 `LLM_MAX_CONCURRENCY`）
+- `LLM_MAX_CONCURRENCY_TEACHER`：老师端/老师请求的最大 LLM 并发（默认继承 `LLM_MAX_CONCURRENCY`）
 - `OCR_MAX_CONCURRENCY`：单个 API 进程内允许的最大 OCR 并发（默认 `4`）
 - `OCR_TIMEOUT_SEC`：OCR 超时时间（秒；`0/none` 表示不限制）
+- `CHAT_MAX_MESSAGES`：聊天上下文保留的最大消息数（默认 `14`）
+- `CHAT_MAX_MESSAGES_STUDENT`：学生端聊天上下文保留的最大消息数（默认 `40`，若未设置则按 `CHAT_MAX_MESSAGES` 推导）
+- `CHAT_MAX_MESSAGES_TEACHER`：老师端聊天上下文保留的最大消息数（默认 `40`，若未设置则按 `CHAT_MAX_MESSAGES` 推导）
+- `CHAT_MAX_MESSAGE_CHARS`：单条消息最大长度（默认 `2000`）
+- `CHAT_EXTRA_SYSTEM_MAX_CHARS`：学生端追加系统信息最大长度（默认 `6000`）
+- `CHAT_STUDENT_INFLIGHT_LIMIT`：同一学生允许的并发生成请求数（默认 `1`）
+- `CHAT_WORKER_POOL_SIZE`：聊天异步 worker 数量（lane-aware 队列消费线程数，默认 `4`）
+- `CHAT_LANE_MAX_QUEUE`：单个会话 lane 允许的最大排队量（排队+执行中，默认 `6`）
+- `CHAT_LANE_DEBOUNCE_MS`：同一 lane 相同输入的去抖时间窗（毫秒，默认 `500`）
+- `PROFILE_CACHE_TTL_SEC`：学生画像读取缓存 TTL（秒，默认 `10`）
+- `ASSIGNMENT_DETAIL_CACHE_TTL_SEC`：作业详情读取缓存 TTL（秒，默认 `10`）
+- `PROFILE_UPDATE_ASYNC`：学生端聊天后画像更新是否走异步队列（默认 `1`）
+- `PROFILE_UPDATE_QUEUE_MAX`：画像更新队列最大长度（默认 `500`）
+- `DEFAULT_TEACHER_ID`：老师端工作区/记忆的默认标识（默认 `teacher`）
+- `TEACHER_SESSION_COMPACT_ENABLED`：老师会话是否启用自动压缩（默认 `1`）
+- `TEACHER_SESSION_COMPACT_MAIN_ONLY`：是否仅压缩老师 `main` 会话（默认 `1`）
+- `TEACHER_SESSION_COMPACT_MAX_MESSAGES`：触发压缩的消息阈值（默认 `160`）
+- `TEACHER_SESSION_COMPACT_KEEP_TAIL`：压缩后保留的最近消息数（默认 `40`）
+- `TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC`：同一会话两次压缩的最小间隔秒数（默认 `60`）
+- `TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS`：用于生成压缩摘要的最大文本长度（默认 `12000`）
+- `TEACHER_MEM0_ENABLED`：老师端是否启用 mem0 语义检索（默认 `0`）
+- `TEACHER_MEM0_WRITE_ENABLED`：老师端在 `teacher.memory.apply` 时是否写入 mem0（默认 `1`，但需先启用 `TEACHER_MEM0_ENABLED`）
+- `TEACHER_MEM0_INDEX_DAILY`：是否将 `target=DAILY` 的每日记录也写入 mem0（默认 `0`）
+- `TEACHER_MEM0_TOPK`：mem0 搜索返回条数（默认 `5`）
+- `TEACHER_MEM0_THRESHOLD`：mem0 最低相似度阈值（默认 `0.0`）
+- `TEACHER_MEM0_CHUNK_CHARS`：写入 mem0 的分块大小（字符；默认 `900`）
+- `TEACHER_MEM0_CHUNK_OVERLAP_CHARS`：写入 mem0 的分块重叠（字符；默认 `100`）
 
 ---
 

@@ -1,0 +1,26 @@
+id: physics-llm-routing
+schema_version: 2
+title: 模型路由管理
+desc: 配置多渠道多模型路由，并按任务类型分配模型
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/llm_routing.md
+  tools:
+    allow:
+      - teacher.llm_routing.get
+      - teacher.llm_routing.simulate
+      - teacher.llm_routing.propose
+      - teacher.llm_routing.apply
+      - teacher.llm_routing.rollback
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 8
+ui:
+  prompts:
+    - 先读取当前路由配置，再给我一个“教师对话/作业解析/考试分析”三类任务的分流方案。
+  examples:
+    - 查看当前模型路由
+    - 仿真 physics-homework-generator 的 chat.agent
+    - 提交新路由方案并等待我确认
+    - 回滚到路由版本 3

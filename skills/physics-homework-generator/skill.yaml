@@ -1,0 +1,27 @@
+id: physics-homework-generator
+schema_version: 2
+title: 作业生成
+desc: 基于课堂讨论生成课后诊断与作业
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/homework_generator.md
+  tools:
+    allow:
+      - assignment.list
+      - assignment.generate
+      - assignment.requirements.save
+      - assignment.render
+      - lesson.list
+      - student.search
+      - student.profile.get
+      - student.profile.update
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 10
+ui:
+  prompts:
+    - 生成作业 A2403_2026-02-04，知识点 KP-M01,KP-E04，每个 5 题。
+  examples:
+    - 生成作业 A2403_2026-02-04
+    - 渲染作业文档

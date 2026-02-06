@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
+    command: ["uvicorn", "services.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-2}"]
     ports:
       - "8000:8000"
     env_file: .env
@@ -13,6 +14,14 @@ services:
       - UPLOADS_DIR=/app/uploads
       - QDRANT_PATH=/app/.qdrant
       - MEM0_DIR=/app/.mem0
+      - LLM_MAX_CONCURRENCY_STUDENT=${LLM_MAX_CONCURRENCY_STUDENT:-12}
+      - LLM_MAX_CONCURRENCY_TEACHER=${LLM_MAX_CONCURRENCY_TEACHER:-2}
+      - CHAT_STUDENT_INFLIGHT_LIMIT=${CHAT_STUDENT_INFLIGHT_LIMIT:-1}
+      - CHAT_MAX_MESSAGES_STUDENT=${CHAT_MAX_MESSAGES_STUDENT:-40}
+      - PROFILE_UPDATE_ASYNC=${PROFILE_UPDATE_ASYNC:-1}
+      - PROFILE_CACHE_TTL_SEC=${PROFILE_CACHE_TTL_SEC:-10}
+      - ASSIGNMENT_DETAIL_CACHE_TTL_SEC=${ASSIGNMENT_DETAIL_CACHE_TTL_SEC:-10}
+      - DEFAULT_TEACHER_ID=${DEFAULT_TEACHER_ID:-teacher}
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant

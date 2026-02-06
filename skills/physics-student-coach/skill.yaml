@@ -1,0 +1,25 @@
+id: physics-student-coach
+schema_version: 2
+title: 学生教练
+desc: 学生侧讨论、作业批改与画像更新
+allowed_roles: [teacher, student]
+agent:
+  prompt_modules:
+    - student/skills/student_coach.md
+  tools:
+    allow:
+      - assignment.list
+      - assignment.generate
+      - assignment.render
+      - student.search
+      - student.profile.get
+      - student.profile.update
+  budgets:
+    max_tool_rounds: 4
+    max_tool_calls: 10
+ui:
+  prompts:
+    - 查看学生画像 高二2403班_武熙语。
+  examples:
+    - 查看学生画像 武熙语
+    - 开始今天作业

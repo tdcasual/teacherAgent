@@ -1,0 +1,25 @@
+id: physics-teacher-ops
+schema_version: 2
+title: 教师运营
+desc: 考试分析、课前检测、备课与课堂讨论
+allowed_roles: [teacher]
+agent:
+  prompt_modules:
+    - teacher/skills/teacher_ops.md
+  tools:
+    deny:
+      - teacher.llm_routing.get
+      - teacher.llm_routing.simulate
+      - teacher.llm_routing.propose
+      - teacher.llm_routing.apply
+      - teacher.llm_routing.rollback
+  budgets:
+    max_tool_rounds: 5
+    max_tool_calls: 12
+ui:
+  prompts:
+    - 列出所有考试，并给出最新考试概览。
+  examples:
+    - 列出考试
+    - 做一次考试分析
+    - 生成课前检测清单

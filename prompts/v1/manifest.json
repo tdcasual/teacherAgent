@@ -2,6 +2,7 @@
   "teacher": [
     "common/00_guardrails.md",
     "teacher/10_role.md",
+    "teacher/15_private_assistant_memory.md",
     "teacher/20_tool_policy.md",
     "teacher/25_exam_workflow.md",
     "teacher/30_assignment_workflow.md",

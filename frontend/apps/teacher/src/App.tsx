@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
@@ -25,6 +25,22 @@ type ChatResponse = {
   reply: string
 }
 
+type ChatJobStatus = {
+  job_id: string
+  status: 'queued' | 'processing' | 'done' | 'failed' | 'cancelled' | string
+  step?: string
+  reply?: string
+  error?: string
+  error_detail?: string
+  updated_at?: string
+}
+
+type ChatStartResult = {
+  ok: boolean
+  job_id: string
+  status: string
+}
+
 type UploadJobStatus = {
   job_id: string
   status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed'
@@ -45,6 +61,7 @@ type UploadDraft = {
   job_id: string
   assignment_id: string
   date: string
+  due_at?: string
   scope: 'public' | 'class' | 'student'
   class_name?: string
   student_ids?: string[]
@@ -58,6 +75,29 @@ type UploadDraft = {
   warnings?: string[]
   questions: Array<Record<string, any>>
   draft_saved?: boolean
+}
+
+type AssignmentProgressStudent = {
+  student_id: string
+  student_name?: string
+  class_name?: string
+  complete?: boolean
+  overdue?: boolean
+  discussion?: { status?: string; pass?: boolean; message_count?: number; last_ts?: string }
+  submission?: { attempts?: number; best?: any }
+}
+
+type AssignmentProgress = {
+  ok: boolean
+  assignment_id: string
+  date?: string
+  scope?: string
+  class_name?: string
+  due_at?: string
+  expected_count?: number
+  counts?: { expected?: number; discussion_pass?: number; submitted?: number; completed?: number; overdue?: number }
+  students?: AssignmentProgressStudent[]
+  updated_at?: string
 }
 
 type ExamUploadJobStatus = {
@@ -80,11 +120,13 @@ type ExamUploadDraft = {
   class_name?: string
   paper_files?: string[]
   score_files?: string[]
+  answer_files?: string[]
   counts?: Record<string, any>
   totals_summary?: Record<string, any>
   meta: Record<string, any>
   questions: Array<Record<string, any>>
   score_schema?: Record<string, any>
+  answer_key?: Record<string, any>
   warnings?: string[]
   draft_version?: string | number
   draft_saved?: boolean
@@ -99,34 +141,14 @@ type Skill = {
 }
 
 type SkillResponse = {
-  skills: Array<{ id: string; title?: string; desc?: string }>
-}
-
-const skillPresets: Record<string, Pick<Skill, 'prompts' | 'examples'>> = {
-  'physics-teacher-ops': {
-    prompts: ['@physics-teacher-ops 请列出所有考试，并给出最新考试概览。'],
-    examples: ['列出考试', '生成课前检测清单', '做一次考试分析'],
-  },
-  'physics-homework-generator': {
-    prompts: ['@physics-homework-generator 生成作业 A2403_2026-02-04，知识点 KP-M01,KP-E04，每个 5 题。'],
-    examples: ['生成作业 A2403_2026-02-04', '渲染作业 PDF'],
-  },
-  'physics-lesson-capture': {
-    prompts: ['@physics-lesson-capture 采集课堂材料 L2403_2026-02-04，主题“静电场综合”。'],
-    examples: ['采集课堂材料 L2403_2026-02-04', '列出课程'],
-  },
-  'physics-student-coach': {
-    prompts: ['@physics-student-coach 查看学生画像 高二2403班_武熙语。'],
-    examples: ['查看学生画像 武熙语', '导入学生名册'],
-  },
-  'physics-student-focus': {
-    prompts: ['@physics-student-focus 请分析学生 高二2403班_武熙语 的最近作业表现。'],
-    examples: ['分析学生 高二2403班_武熙语'],
-  },
-  'physics-core-examples': {
-    prompts: ['@physics-core-examples 登记核心例题 CE001，知识点 KP-M01。'],
-    examples: ['登记核心例题 CE001', '生成变式题 3 道'],
-  },
+  skills: Array<{
+    id: string
+    title?: string
+    desc?: string
+    prompts?: string[]
+    examples?: string[]
+    allowed_roles?: string[]
+  }>
 }
 
 const fallbackSkills: Skill[] = [
@@ -134,37 +156,50 @@ const fallbackSkills: Skill[] = [
     id: 'physics-teacher-ops',
     title: '教师运营',
     desc: '考试分析、课前检测、教学备课与课堂讨论。',
-    ...skillPresets['physics-teacher-ops'],
+    prompts: ['列出所有考试，并给出最新考试概览。'],
+    examples: ['列出考试', '生成课前检测清单', '做一次考试分析'],
   },
   {
     id: 'physics-homework-generator',
     title: '作业生成',
     desc: '基于课堂讨论生成课后诊断与作业。',
-    ...skillPresets['physics-homework-generator'],
+    prompts: ['生成作业 A2403_2026-02-04，知识点 KP-M01,KP-E04，每个 5 题。'],
+    examples: ['生成作业 A2403_2026-02-04', '渲染作业文档'],
   },
   {
     id: 'physics-lesson-capture',
     title: '课堂采集',
-    desc: 'OCR 课堂材料并抽取例题与讨论结构。',
-    ...skillPresets['physics-lesson-capture'],
+    desc: '课堂材料文字识别并抽取例题与讨论结构。',
+    prompts: ['采集课堂材料 L2403_2026-02-04，主题“静电场综合”。'],
+    examples: ['采集课堂材料 L2403_2026-02-04', '列出课程'],
   },
   {
     id: 'physics-student-coach',
     title: '学生教练',
-    desc: '学生侧讨论、作业、OCR 评分与画像更新。',
-    ...skillPresets['physics-student-coach'],
+    desc: '学生侧讨论、作业批改与画像更新。',
+    prompts: ['查看学生画像 高二2403班_武熙语。'],
+    examples: ['查看学生画像 武熙语', '开始今天作业'],
   },
   {
     id: 'physics-student-focus',
     title: '学生重点分析',
     desc: '针对某个学生进行重点诊断与画像更新。',
-    ...skillPresets['physics-student-focus'],
+    prompts: ['请分析学生 高二2403班_武熙语 的最近作业表现。'],
+    examples: ['分析学生 高二2403班_武熙语'],
   },
   {
     id: 'physics-core-examples',
     title: '核心例题库',
     desc: '登记核心例题、标准解法与变式题。',
-    ...skillPresets['physics-core-examples'],
+    prompts: ['登记核心例题 CE001，知识点 KP-M01。'],
+    examples: ['登记核心例题 CE001', '生成变式题 3 道'],
+  },
+  {
+    id: 'physics-llm-routing',
+    title: '模型路由管理',
+    desc: '按任务类型配置模型路由，支持仿真与回滚。',
+    prompts: ['先读取当前路由配置，再给我一个三类任务分流方案。'],
+    examples: ['查看当前模型路由', '仿真 physics-homework-generator 的 chat.agent', '回滚到路由版本 3'],
   },
 ]
 
@@ -280,15 +315,14 @@ const renderMarkdown = (content: string) => {
   return String(result)
 }
 
-const buildSkill = (skill: { id: string; title?: string; desc?: string }): Skill => {
-  const preset = skillPresets[skill.id]
-  const prompts = preset?.prompts ?? [`@${skill.id} 请描述你的需求。`]
-  const examples = preset?.examples ?? []
+const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?: string[]; examples?: string[] }): Skill => {
+  const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : []
+  const examples = Array.isArray(skill.examples) ? skill.examples.filter(Boolean) : []
   return {
     id: skill.id,
-    title: skill.title || skill.id,
-    desc: skill.desc || '暂无描述',
-    prompts,
+    title: (skill.title || '').trim() || '未命名技能',
+    desc: (skill.desc || '').trim(),
+    prompts: prompts.length ? prompts : ['请描述你的需求。'],
     examples,
   }
 }
@@ -308,6 +342,7 @@ export default function App() {
   const [sending, setSending] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(() => localStorage.getItem('teacherSkillsOpen') !== 'false')
+  const [activeSkillId, setActiveSkillId] = useState(() => localStorage.getItem('teacherActiveSkillId') || 'physics-teacher-ops')
   const [cursorPos, setCursorPos] = useState(0)
   const [skillQuery, setSkillQuery] = useState('')
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
@@ -351,12 +386,34 @@ export default function App() {
   const [draftActionError, setDraftActionError] = useState('')
   const [misconceptionsText, setMisconceptionsText] = useState('')
   const [misconceptionsDirty, setMisconceptionsDirty] = useState(false)
+  const [progressPanelCollapsed, setProgressPanelCollapsed] = useState(true)
+  const [progressAssignmentId, setProgressAssignmentId] = useState('')
+  const [progressLoading, setProgressLoading] = useState(false)
+  const [progressError, setProgressError] = useState('')
+  const [progressData, setProgressData] = useState<AssignmentProgress | null>(null)
+  const [progressOnlyIncomplete, setProgressOnlyIncomplete] = useState(true)
+  const PENDING_CHAT_KEY = 'teacherPendingChatJob'
+  const [pendingChatJob, setPendingChatJob] = useState<{
+    job_id: string
+    request_id: string
+    placeholder_id: string
+    user_text: string
+    created_at: number
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem(PENDING_CHAT_KEY)
+      return raw ? (JSON.parse(raw) as any) : null
+    } catch {
+      return null
+    }
+  })
 
   const [examId, setExamId] = useState('')
   const [examDate, setExamDate] = useState('')
   const [examClassName, setExamClassName] = useState('')
   const [examPaperFiles, setExamPaperFiles] = useState<File[]>([])
   const [examScoreFiles, setExamScoreFiles] = useState<File[]>([])
+  const [examAnswerFiles, setExamAnswerFiles] = useState<File[]>([])
   const [examUploading, setExamUploading] = useState(false)
   const [examUploadStatus, setExamUploadStatus] = useState('')
   const [examUploadError, setExamUploadError] = useState('')
@@ -389,6 +446,11 @@ export default function App() {
   }, [skillsOpen])
 
   useEffect(() => {
+    if (activeSkillId) localStorage.setItem('teacherActiveSkillId', activeSkillId)
+    else localStorage.removeItem('teacherActiveSkillId')
+  }, [activeSkillId])
+
+  useEffect(() => {
     localStorage.setItem('teacherUploadMode', uploadMode)
   }, [uploadMode])
 
@@ -408,6 +470,26 @@ export default function App() {
     } catch {
       // ignore
     }
+  }, [])
+
+  useEffect(() => {
+    if (pendingChatJob) localStorage.setItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
+    else localStorage.removeItem(PENDING_CHAT_KEY)
+  }, [pendingChatJob, PENDING_CHAT_KEY])
+
+  useEffect(() => {
+    if (!pendingChatJob?.job_id) return
+    const alreadyHasPlaceholder = messages.some((m) => m.id === pendingChatJob.placeholder_id)
+    if (alreadyHasPlaceholder) return
+    // Minimal restore so the pending reply can render somewhere.
+    setMessages((prev) => [
+      ...prev,
+      ...(pendingChatJob.user_text
+        ? [{ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() }]
+        : []),
+      { id: pendingChatJob.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() },
+    ])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -443,28 +525,47 @@ export default function App() {
     if ((examDraftError || examDraftActionError) && examDraftPanelCollapsed) setExamDraftPanelCollapsed(false)
   }, [examDraftError, examDraftActionError, examDraftPanelCollapsed])
 
-  useEffect(() => {
-    const fetchSkills = async () => {
-      setSkillsLoading(true)
+  const fetchSkills = useCallback(async () => {
+    setSkillsLoading(true)
       setSkillsError('')
       try {
         const res = await fetch(`${apiBase}/skills`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = (await res.json()) as SkillResponse
-        if (!data.skills || !Array.isArray(data.skills) || data.skills.length === 0) {
-          setSkillList(fallbackSkills)
-          return
-        }
-        setSkillList(data.skills.map((skill) => buildSkill(skill)))
-      } catch (err: any) {
-        setSkillsError(err.message || '无法加载技能列表')
+      if (!res.ok) throw new Error(`状态码 ${res.status}`)
+      const data = (await res.json()) as SkillResponse
+      const raw = Array.isArray(data.skills) ? data.skills : []
+      const teacherSkills = raw.filter((skill) => {
+        const roles = skill.allowed_roles
+        return !Array.isArray(roles) || roles.includes('teacher')
+      })
+      if (teacherSkills.length === 0) {
         setSkillList(fallbackSkills)
-      } finally {
-        setSkillsLoading(false)
+        return
       }
+      setSkillList(teacherSkills.map((skill) => buildSkill(skill)))
+    } catch (err: any) {
+      setSkillsError(err.message || '无法加载技能列表')
+      setSkillList(fallbackSkills)
+    } finally {
+      setSkillsLoading(false)
     }
-    fetchSkills()
   }, [apiBase])
+
+  useEffect(() => {
+    void fetchSkills()
+  }, [fetchSkills])
+
+  useEffect(() => {
+    if (!skillsOpen) return
+    void fetchSkills()
+  }, [skillsOpen, fetchSkills])
+
+  useEffect(() => {
+    if (!skillsOpen) return
+    const timer = window.setInterval(() => {
+      void fetchSkills()
+    }, 30000)
+    return () => window.clearInterval(timer)
+  }, [skillsOpen, fetchSkills])
 
   const formatUploadJobStatus = (job: UploadJobStatus) => {
     const lines: string[] = []
@@ -477,9 +578,9 @@ export default function App() {
     }
     lines.push(`解析状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
-    if (job.assignment_id) lines.push(`作业ID：${job.assignment_id}`)
+    if (job.assignment_id) lines.push(`作业编号：${job.assignment_id}`)
     if (job.question_count !== undefined) lines.push(`题目数量：${job.question_count}`)
-    if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? 'PDF' : '图片'}`)
+    if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? '文档' : '图片'}`)
     if (job.error) lines.push(`错误：${job.error}`)
     // Backend may include extra fields for better UX.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -531,7 +632,7 @@ export default function App() {
     }
     lines.push(`解析状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
-    if (job.exam_id) lines.push(`考试ID：${job.exam_id}`)
+    if (job.exam_id) lines.push(`考试编号：${job.exam_id}`)
     if (job.counts?.students !== undefined) lines.push(`学生数：${job.counts.students}`)
     if (job.counts?.questions !== undefined) lines.push(`题目数：${job.counts.questions}`)
     if (job.error) lines.push(`错误：${job.error}`)
@@ -544,7 +645,7 @@ export default function App() {
   }
 
   const formatExamJobSummary = (job: ExamUploadJobStatus | null, fallbackExamId?: string) => {
-    if (!job) return `未开始解析${fallbackExamId ? ` · 考试ID：${fallbackExamId}` : ''}`
+    if (!job) return `未开始解析${fallbackExamId ? ` · 考试编号：${fallbackExamId}` : ''}`
     const statusMap: Record<string, string> = {
       queued: '排队中',
       processing: '解析中',
@@ -556,7 +657,7 @@ export default function App() {
     const parts: string[] = []
     parts.push(`状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) parts.push(`${job.progress}%`)
-    parts.push(`考试ID：${job.exam_id || fallbackExamId || job.job_id}`)
+    parts.push(`考试编号：${job.exam_id || fallbackExamId || job.job_id}`)
     if (job.counts?.students !== undefined) parts.push(`学生：${job.counts.students}`)
     if (job.counts?.questions !== undefined) parts.push(`题目：${job.counts.questions}`)
     if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
@@ -566,7 +667,7 @@ export default function App() {
   const formatExamDraftSummary = (draft: ExamUploadDraft | null, jobInfo: ExamUploadJobStatus | null) => {
     if (!draft) return ''
     const parts: string[] = []
-    parts.push(`考试ID：${draft.exam_id}`)
+    parts.push(`考试编号：${draft.exam_id}`)
     if (draft.meta?.date) parts.push(String(draft.meta.date))
     if (draft.meta?.class_name) parts.push(String(draft.meta.class_name))
     if (draft.counts?.students !== undefined) parts.push(`学生：${draft.counts.students}`)
@@ -577,7 +678,7 @@ export default function App() {
   }
 
   const formatUploadJobSummary = (job: UploadJobStatus | null, fallbackAssignmentId?: string) => {
-    if (!job) return `未开始解析${fallbackAssignmentId ? ` · 作业ID：${fallbackAssignmentId}` : ''}`
+    if (!job) return `未开始解析${fallbackAssignmentId ? ` · 作业编号：${fallbackAssignmentId}` : ''}`
     const statusMap: Record<string, string> = {
       queued: '排队中',
       processing: '解析中',
@@ -588,7 +689,7 @@ export default function App() {
     const parts: string[] = []
     parts.push(`状态：${statusMap[job.status] || job.status}`)
     if (job.progress !== undefined) parts.push(`${job.progress}%`)
-    parts.push(`作业ID：${job.assignment_id || fallbackAssignmentId || job.job_id}`)
+    parts.push(`作业编号：${job.assignment_id || fallbackAssignmentId || job.job_id}`)
     if (job.question_count !== undefined) parts.push(`题目：${job.question_count}`)
     if (job.requirements_missing && job.requirements_missing.length) parts.push(`缺失：${job.requirements_missing.length}项`)
     if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
@@ -599,7 +700,7 @@ export default function App() {
     if (!draft) return ''
     const scopeLabel = draft.scope === 'public' ? '公共作业' : draft.scope === 'class' ? '班级作业' : '私人作业'
     const parts: string[] = []
-    parts.push(`作业ID：${draft.assignment_id}`)
+    parts.push(`作业编号：${draft.assignment_id}`)
     if (draft.date) parts.push(draft.date)
     parts.push(scopeLabel)
     parts.push(`题目：${draft.questions?.length || 0}`)
@@ -607,6 +708,20 @@ export default function App() {
     else parts.push('要求已补全')
     if (jobInfo?.status === 'confirmed') parts.push('已创建')
     else if (jobInfo?.status === 'done') parts.push('待创建')
+    return parts.join(' · ')
+  }
+
+  const formatProgressSummary = (p: AssignmentProgress | null, fallbackAssignmentId?: string) => {
+    const aid = (p?.assignment_id || fallbackAssignmentId || '').trim()
+    if (!aid) return '未加载作业完成情况'
+    const expected = p?.counts?.expected ?? p?.expected_count ?? 0
+    const completed = p?.counts?.completed ?? 0
+    const overdue = p?.counts?.overdue ?? 0
+    const parts: string[] = []
+    parts.push(`作业编号：${aid}`)
+    if (p?.date) parts.push(String(p.date))
+    parts.push(`完成：${completed}/${expected}`)
+    if (overdue) parts.push(`逾期：${overdue}`)
     return parts.join(' · ')
   }
 
@@ -686,7 +801,7 @@ export default function App() {
         })
         if (!res.ok) {
           const text = await res.text()
-          throw new Error(text || `HTTP ${res.status}`)
+          throw new Error(text || `状态码 ${res.status}`)
         }
         const data = (await res.json()) as UploadJobStatus
         if (cancelled) return
@@ -763,7 +878,7 @@ export default function App() {
         const res = await fetch(`${apiBase}/assignment/upload/draft?job_id=${encodeURIComponent(uploadJobId)}`)
         if (!res.ok) {
           const text = await res.text()
-          throw new Error(text || `HTTP ${res.status}`)
+          throw new Error(text || `状态码 ${res.status}`)
         }
         const data = await res.json()
         if (!active) return
@@ -857,7 +972,7 @@ export default function App() {
         })
         if (!res.ok) {
           const text = await res.text()
-          throw new Error(text || `HTTP ${res.status}`)
+          throw new Error(text || `状态码 ${res.status}`)
         }
         const data = (await res.json()) as ExamUploadJobStatus
         if (cancelled) return
@@ -942,7 +1057,7 @@ export default function App() {
         const res = await fetch(`${apiBase}/exam/upload/draft?job_id=${encodeURIComponent(examJobId)}`)
         if (!res.ok) {
           const text = await res.text()
-          throw new Error(text || `HTTP ${res.status}`)
+          throw new Error(text || `状态码 ${res.status}`)
         }
         const data = await res.json()
         if (!active) return
@@ -968,13 +1083,93 @@ export default function App() {
     setMessages((prev) => [...prev, { id: makeId(), role: roleType, content, time: nowTime() }])
   }
 
+  const updateMessage = (id: string, patch: Partial<Message>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+  }
+
+  useEffect(() => {
+    if (!pendingChatJob?.job_id) return
+    let cancelled = false
+    let timeoutId: number | null = null
+    let inFlight = false
+    let delayMs = 800
+
+    const clearTimer = () => {
+      if (timeoutId) window.clearTimeout(timeoutId)
+      timeoutId = null
+    }
+
+    const jitter = (ms: number) => Math.round(ms * (0.85 + Math.random() * 0.3))
+
+    const poll = async () => {
+      if (cancelled || inFlight) return
+      if (document.visibilityState === 'hidden') {
+        timeoutId = window.setTimeout(poll, jitter(Math.min(8000, delayMs)))
+        return
+      }
+      inFlight = true
+      try {
+        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        const data = (await res.json()) as ChatJobStatus
+        if (cancelled) return
+        if (data.status === 'done') {
+          updateMessage(pendingChatJob.placeholder_id, { content: data.reply || '已收到。', time: nowTime() })
+          setPendingChatJob(null)
+          setSending(false)
+          return
+        }
+        if (data.status === 'failed' || data.status === 'cancelled') {
+          const msg = data.error_detail || data.error || '请求失败'
+          updateMessage(pendingChatJob.placeholder_id, { content: `抱歉，请求失败：${msg}`, time: nowTime() })
+          setPendingChatJob(null)
+          setSending(false)
+          return
+        }
+        delayMs = Math.min(8000, Math.round(delayMs * 1.4))
+        timeoutId = window.setTimeout(poll, jitter(delayMs))
+      } catch (err: any) {
+        if (cancelled) return
+        const msg = err?.message || String(err)
+        updateMessage(pendingChatJob.placeholder_id, { content: `网络波动，正在重试…（${msg}）`, time: nowTime() })
+        delayMs = Math.min(8000, Math.round(delayMs * 1.6))
+        timeoutId = window.setTimeout(poll, jitter(delayMs))
+      } finally {
+        inFlight = false
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (cancelled) return
+      if (document.visibilityState === 'visible') {
+        delayMs = 800
+        clearTimer()
+        void poll()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    void poll()
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      clearTimer()
+    }
+  }, [pendingChatJob?.job_id, apiBase])
+
   const mention = useMemo(() => {
     const uptoCursor = input.slice(0, cursorPos)
-    const match = /@([\w-]*)$/.exec(uptoCursor)
+    const match = /@([^\s@]*)$/.exec(uptoCursor)
     if (!match) return null
     const query = match[1].toLowerCase()
     const items = skillList.filter(
-      (skill) => skill.id.toLowerCase().includes(query) || skill.title.toLowerCase().includes(query)
+      (skill) =>
+        skill.title.toLowerCase().includes(query) ||
+        skill.desc.toLowerCase().includes(query) ||
+        skill.id.toLowerCase().includes(query)
     )
     return { start: match.index, query, items }
   }, [input, cursorPos, skillList])
@@ -1005,6 +1200,16 @@ export default function App() {
       return aFav ? -1 : 1
     })
   }, [skillQuery, showFavoritesOnly, favorites, skillList])
+
+  const activeSkill = useMemo(() => {
+    if (!activeSkillId) return null
+    return skillList.find((s) => s.id === activeSkillId) || null
+  }, [activeSkillId, skillList])
+
+  useEffect(() => {
+    if (!activeSkillId) return
+    if (!activeSkill) setActiveSkillId('')
+  }, [activeSkillId, activeSkill])
 
   const computeLocalRequirementsMissing = (req: Record<string, any>) => {
     const missing: string[] = []
@@ -1175,7 +1380,8 @@ export default function App() {
 
   const insertSkillMention = (skill: Skill) => {
     if (!mention) return
-    const template = skill.prompts[0] || `@${skill.id} `
+    setActiveSkillId(skill.id)
+    const template = skill.prompts[0] || '请描述你的需求。'
     const before = input.slice(0, mention.start)
     const after = input.slice(cursorPos)
     const nextValue = `${before}${template} ${after}`.replace(/\s+$/, ' ')
@@ -1194,33 +1400,48 @@ export default function App() {
   }
 
   const submitMessage = async () => {
+    if (pendingChatJob?.job_id) return
     const trimmed = input.trim()
     if (!trimmed) return
 
-    appendMessage('user', trimmed)
+    const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+    setMessages((prev) => [
+      ...prev,
+      { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
+      { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
+    ])
     setInput('')
 
     const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
-      .slice(-20)
+      .slice(-40)
       .map((msg) => ({ role: msg.role, content: msg.content }))
 
     setSending(true)
     try {
-      const res = await fetch(`${apiBase}/chat`, {
+      const res = await fetch(`${apiBase}/chat/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: contextMessages, role: 'teacher' }),
+        body: JSON.stringify({ request_id: requestId, messages: contextMessages, role: 'teacher', skill_id: activeSkillId || undefined }),
       })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
+        throw new Error(text || `状态码 ${res.status}`)
       }
-      const data = (await res.json()) as ChatResponse
-      appendMessage('assistant', data.reply || '已收到。')
+      const data = (await res.json()) as ChatStartResult
+      if (!data?.job_id) throw new Error('任务编号缺失')
+      setPendingChatJob({
+        job_id: data.job_id,
+        request_id: requestId,
+        placeholder_id: placeholderId,
+        user_text: trimmed,
+        created_at: Date.now(),
+      })
     } catch (err: any) {
-      appendMessage('assistant', `抱歉，请求失败：${err.message || err}`)
-    } finally {
+      updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
       setSending(false)
+      setPendingChatJob(null)
     }
   }
 
@@ -1243,15 +1464,15 @@ export default function App() {
     setDraftActionError('')
     setUploadCardCollapsed(false)
     if (!uploadAssignmentId.trim()) {
-      setUploadError('请填写作业ID')
+      setUploadError('请填写作业编号')
       return
     }
     if (!uploadFiles.length) {
-      setUploadError('请至少上传一份作业文件（PDF 或图片）')
+      setUploadError('请至少上传一份作业文件（文档或图片）')
       return
     }
     if (uploadScope === 'student' && !uploadStudentIds.trim()) {
-      setUploadError('私人作业请填写学生ID')
+      setUploadError('私人作业请填写学生编号')
       return
     }
     if (uploadScope === 'class' && !uploadClassName.trim()) {
@@ -1272,7 +1493,7 @@ export default function App() {
       const res = await fetch(`${apiBase}/assignment/upload/start`, { method: 'POST', body: fd })
       if (!res.ok) {
         const text = await res.text()
-        let message = text || `HTTP ${res.status}`
+        let message = text || `状态码 ${res.status}`
         try {
           const parsed = JSON.parse(text)
           const detail = parsed?.detail || parsed
@@ -1325,11 +1546,11 @@ export default function App() {
     setExamDraftActionError('')
     setUploadCardCollapsed(false)
     if (!examPaperFiles.length) {
-      setExamUploadError('请至少上传一份试卷文件（PDF 或图片）')
+      setExamUploadError('请至少上传一份试卷文件（文档或图片）')
       return
     }
     if (!examScoreFiles.length) {
-      setExamUploadError('请至少上传一份成绩文件（xls/xlsx 或 PDF/图片）')
+      setExamUploadError('请至少上传一份成绩文件（表格文件或文档/图片）')
       return
     }
     setExamUploading(true)
@@ -1340,11 +1561,12 @@ export default function App() {
       if (examClassName.trim()) fd.append('class_name', examClassName.trim())
       examPaperFiles.forEach((file) => fd.append('paper_files', file))
       examScoreFiles.forEach((file) => fd.append('score_files', file))
+      examAnswerFiles.forEach((file) => fd.append('answer_files', file))
 
       const res = await fetch(`${apiBase}/exam/upload/start`, { method: 'POST', body: fd })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
+        throw new Error(text || `状态码 ${res.status}`)
       }
       const data = await res.json()
       if (data && typeof data === 'object') {
@@ -1364,6 +1586,7 @@ export default function App() {
       }
       setExamPaperFiles([])
       setExamScoreFiles([])
+      setExamAnswerFiles([])
     } catch (err: any) {
       setExamUploadError(err.message || String(err))
     } finally {
@@ -1392,7 +1615,7 @@ export default function App() {
       })
       if (!res.ok) {
         const text = await res.text()
-        let message = text || `HTTP ${res.status}`
+        let message = text || `状态码 ${res.status}`
         try {
           const parsed = JSON.parse(text)
           const detail = parsed?.detail || parsed
@@ -1427,6 +1650,35 @@ export default function App() {
       throw err
     } finally {
       setDraftSaving(false)
+    }
+  }
+
+  const fetchAssignmentProgress = async (assignmentId?: string) => {
+    const aid = (assignmentId || progressAssignmentId || '').trim()
+    if (!aid) {
+      setProgressError('请先填写作业编号')
+      return
+    }
+    setProgressLoading(true)
+    setProgressError('')
+    try {
+      const res = await fetch(
+        `${apiBase}/teacher/assignment/progress?assignment_id=${encodeURIComponent(aid)}&include_students=true`
+      )
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as AssignmentProgress
+      if (!data?.ok) {
+        throw new Error('获取作业完成情况失败')
+      }
+      setProgressData(data)
+      setProgressAssignmentId(data.assignment_id || aid)
+    } catch (err: any) {
+      setProgressError(err?.message || String(err))
+    } finally {
+      setProgressLoading(false)
     }
   }
 
@@ -1467,7 +1719,7 @@ export default function App() {
       })
       if (!res.ok) {
         const text = await res.text()
-        let message = text || `HTTP ${res.status}`
+        let message = text || `状态码 ${res.status}`
         try {
           const parsed = JSON.parse(text)
           const detail = parsed?.detail || parsed
@@ -1491,7 +1743,7 @@ export default function App() {
       if (data && typeof data === 'object') {
         const lines: string[] = []
         lines.push(data.message || '作业已确认创建。')
-        if (data.assignment_id) lines.push(`作业ID：${data.assignment_id}`)
+        if (data.assignment_id) lines.push(`作业编号：${data.assignment_id}`)
         if (data.question_count !== undefined) lines.push(`题目数量：${data.question_count}`)
         if (Array.isArray(data.requirements_missing) && data.requirements_missing.length) {
           lines.push(`作业要求缺失项：${formatMissingRequirements(data.requirements_missing)}`)
@@ -1504,6 +1756,11 @@ export default function App() {
         setUploadStatus(msg)
         setUploadJobInfo((prev) => (prev ? { ...prev, status: 'confirmed' } : prev))
         setDraftPanelCollapsed(true)
+        if (data.assignment_id) {
+          setProgressAssignmentId(data.assignment_id)
+          setProgressPanelCollapsed(false)
+          void fetchAssignmentProgress(data.assignment_id)
+        }
       }
     } catch (err: any) {
       const message = err?.message || String(err)
@@ -1532,7 +1789,7 @@ export default function App() {
       })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
+        throw new Error(text || `状态码 ${res.status}`)
       }
       const data = await res.json()
       const msg = data?.message || '考试草稿已保存。'
@@ -1591,7 +1848,7 @@ export default function App() {
       })
       if (!res.ok) {
         const text = await res.text()
-        let message = text || `HTTP ${res.status}`
+        let message = text || `状态码 ${res.status}`
         try {
           const parsed = JSON.parse(text)
           const detail = parsed?.detail || parsed
@@ -1611,7 +1868,7 @@ export default function App() {
       if (data && typeof data === 'object') {
         const lines: string[] = []
         lines.push(data.message || '考试已确认创建。')
-        if (data.exam_id) lines.push(`考试ID：${data.exam_id}`)
+        if (data.exam_id) lines.push(`考试编号：${data.exam_id}`)
         const msg = lines.join('\n')
         setExamDraftActionStatus(msg)
         setExamUploadStatus(msg)
@@ -1665,9 +1922,10 @@ export default function App() {
   return (
     <div className="app teacher">
       <header className="topbar">
-        <div className="brand">Physics Teaching Helper · 老师端</div>
+        <div className="brand">物理教学助手 · 老师端</div>
         <div className="top-actions">
           <div className="role-badge teacher">身份：老师</div>
+          {activeSkill ? <div className="role-badge">当前技能：{activeSkill.title}</div> : null}
           <button className="ghost" onClick={() => setSkillsOpen((prev) => !prev)}>
             技能
           </button>
@@ -1680,7 +1938,7 @@ export default function App() {
       {settingsOpen && (
         <section className="settings">
           <div className="settings-row">
-            <label>API 地址</label>
+            <label>接口地址</label>
             <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="http://localhost:8000" />
           </div>
           <div className="settings-hint">修改后立即生效。</div>
@@ -1700,7 +1958,7 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {sending && (
+            {sending && !pendingChatJob?.job_id && (
               <div className="message assistant">
                 <div className="bubble typing">
                   <div className="meta">助手 · {nowTime()}</div>
@@ -1722,12 +1980,13 @@ export default function App() {
               onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
               onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
               onKeyDown={handleKeyDown}
-              placeholder="输入指令或问题，使用 @ 查看技能。Enter 发送，Shift+Enter 换行"
+              placeholder="输入指令或问题，使用 @ 查看技能。回车发送，上档键+回车换行"
               rows={3}
+              disabled={Boolean(pendingChatJob?.job_id)}
             />
             <div className="composer-actions">
-              <span className="composer-hint">@ 技能 | Enter 发送</span>
-              <button type="submit" className="send-btn" disabled={sending}>
+              <span className="composer-hint">@ 技能 | 回车发送</span>
+              <button type="submit" className="send-btn" disabled={sending || Boolean(pendingChatJob?.job_id)}>
                 发送
               </button>
             </div>
@@ -1736,7 +1995,7 @@ export default function App() {
 	          <section className={`upload-card ${uploadCardCollapsed ? 'collapsed' : ''}`}>
 	            <div className="panel-header">
 	              <div className="panel-title">
-	                <h3>{uploadMode === 'assignment' ? '上传作业文件（PDF / 图片）' : '上传考试文件（试卷 + 成绩表）'}</h3>
+	                <h3>{uploadMode === 'assignment' ? '上传作业文件（文档 / 图片）' : '上传考试文件（试卷 + 成绩表）'}</h3>
 	                <div className="segmented">
 	                  <button
 	                    type="button"
@@ -1776,7 +2035,7 @@ export default function App() {
 	                    <form className="upload-form" onSubmit={handleUploadAssignment}>
 	                      <div className="upload-grid">
 	                        <div className="upload-field">
-	                          <label>作业ID</label>
+	                          <label>作业编号</label>
 	                          <input
 	                            value={uploadAssignmentId}
 	                            onChange={(e) => setUploadAssignmentId(e.target.value)}
@@ -1804,7 +2063,7 @@ export default function App() {
 	                          />
 	                        </div>
 	                        <div className="upload-field">
-	                          <label>学生ID（私人作业必填）</label>
+	                          <label>学生编号（私人作业必填）</label>
 	                          <input
 	                            value={uploadStudentIds}
 	                            onChange={(e) => setUploadStudentIds(e.target.value)}
@@ -1812,11 +2071,11 @@ export default function App() {
 	                          />
 	                        </div>
 	                        <div className="upload-field">
-	                          <label>作业文件（PDF/图片）</label>
+	                          <label>作业文件（文档/图片）</label>
 	                          <input
 	                            type="file"
 	                            multiple
-	                            accept="application/pdf,image/*"
+	                            accept="application/pdf,image/*,.md,.markdown,.tex"
 	                            onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
 	                          />
 	                        </div>
@@ -1825,7 +2084,7 @@ export default function App() {
 	                          <input
 	                            type="file"
 	                            multiple
-	                            accept="application/pdf,image/*"
+	                            accept="application/pdf,image/*,.md,.markdown,.tex"
 	                            onChange={(e) => setUploadAnswerFiles(Array.from(e.target.files || []))}
 	                          />
 	                        </div>
@@ -1839,11 +2098,11 @@ export default function App() {
 	                  </>
 	                ) : (
 	                  <>
-	                    <p>上传考试试卷与成绩表后，系统将生成考试数据与分析草稿。成绩表推荐 xlsx（最稳）。</p>
+	                    <p>上传考试试卷、标准答案（可选）与成绩表后，系统将生成考试数据与分析草稿。成绩表推荐电子表格（最稳）。</p>
 	                    <form className="upload-form" onSubmit={handleUploadExam}>
 	                      <div className="upload-grid">
 	                        <div className="upload-field">
-	                          <label>考试ID（可选）</label>
+	                          <label>考试编号（可选）</label>
 	                          <input value={examId} onChange={(e) => setExamId(e.target.value)} placeholder="例如：EX2403_PHY" />
 	                        </div>
 	                        <div className="upload-field">
@@ -1863,8 +2122,17 @@ export default function App() {
 	                          <input
 	                            type="file"
 	                            multiple
-	                            accept="application/pdf,image/*"
+	                            accept="application/pdf,image/*,.md,.markdown,.tex"
 	                            onChange={(e) => setExamPaperFiles(Array.from(e.target.files || []))}
+	                          />
+	                        </div>
+	                        <div className="upload-field">
+	                          <label>答案文件（可选）</label>
+	                          <input
+	                            type="file"
+	                            multiple
+	                            accept="application/pdf,image/*,.md,.markdown,.tex"
+	                            onChange={(e) => setExamAnswerFiles(Array.from(e.target.files || []))}
 	                          />
 	                        </div>
 	                        <div className="upload-field">
@@ -1888,6 +2156,105 @@ export default function App() {
 	              </>
 	            )}
 	          </section>
+
+	          {uploadMode === 'assignment' && (
+	            <section className={`draft-panel ${progressPanelCollapsed ? 'collapsed' : ''}`}>
+	              <div className="panel-header">
+	                <h3>作业完成情况</h3>
+	                {progressPanelCollapsed ? (
+	                  <div
+	                    className="panel-summary"
+	                    title={formatProgressSummary(progressData, progressAssignmentId)}
+	                  >
+	                    {formatProgressSummary(progressData, progressAssignmentId)}
+	                  </div>
+	                ) : null}
+	                <button type="button" className="ghost" onClick={() => setProgressPanelCollapsed((v) => !v)}>
+	                  {progressPanelCollapsed ? '展开' : '收起'}
+	                </button>
+	              </div>
+	              {progressPanelCollapsed ? null : (
+	                <>
+	                  <div className="progress-toolbar">
+	                    <div className="upload-field">
+	                      <label>作业编号</label>
+	                      <input
+	                        value={progressAssignmentId}
+	                        onChange={(e) => setProgressAssignmentId(e.target.value)}
+	                        placeholder="例如：A2403_2026-02-04"
+	                      />
+	                    </div>
+	                    <div className="progress-toolbar-actions">
+	                      <label className="toggle">
+	                        <input
+	                          type="checkbox"
+	                          checked={progressOnlyIncomplete}
+	                          onChange={(e) => setProgressOnlyIncomplete(e.target.checked)}
+	                        />
+	                        只看未完成
+	                      </label>
+	                      <button
+	                        type="button"
+	                        className="secondary-btn"
+	                        disabled={progressLoading}
+	                        onClick={() => void fetchAssignmentProgress()}
+	                      >
+	                        {progressLoading ? '加载中…' : '刷新'}
+	                      </button>
+	                    </div>
+	                  </div>
+
+	                  {progressError && <div className="status err">{progressError}</div>}
+	                  {progressData && (
+	                    <div className="draft-meta">
+	                      <div>作业编号：{progressData.assignment_id}</div>
+	                      <div>日期：{String(progressData.date || '') || '（未设置）'}</div>
+	                      <div>
+	                        应交：{progressData.counts?.expected ?? progressData.expected_count ?? 0} · 完成：
+	                        {progressData.counts?.completed ?? 0} · 讨论通过：
+	                        {progressData.counts?.discussion_pass ?? 0} · 已评分：
+	                        {progressData.counts?.submitted ?? 0}
+	                        {progressData.counts?.overdue ? ` · 逾期：${progressData.counts.overdue}` : ''}
+	                      </div>
+	                      <div>截止：{progressData.due_at ? progressData.due_at : '永不截止'}</div>
+	                    </div>
+	                  )}
+
+	                  {progressData?.students && progressData.students.length > 0 && (
+	                    <div className="progress-list">
+	                      {(progressOnlyIncomplete
+	                        ? progressData.students.filter((s) => !s.complete)
+	                        : progressData.students
+	                      ).map((s) => {
+	                        const attempts = s.submission?.attempts ?? 0
+	                        const best = s.submission?.best as any
+	                        const graded = best
+	                          ? `得分${best.score_earned ?? 0}`
+	                          : attempts
+	                            ? `已提交${attempts}次（未评分）`
+	                            : '未提交'
+	                        const discussion = s.discussion?.pass ? '讨论通过' : '讨论未完成'
+	                        const overdue = s.overdue ? ' · 逾期' : ''
+	                        const name = [s.class_name, s.student_name].filter(Boolean).join(' ')
+	                        return (
+	                          <div key={s.student_id} className={`progress-row ${s.complete ? 'ok' : 'todo'}`}>
+	                            <div className="progress-main">
+	                              <strong>{s.student_id}</strong>
+	                              {name ? <span className="muted"> {name}</span> : null}
+	                            </div>
+	                            <div className="progress-sub">
+	                              {discussion} · {graded}
+	                              {overdue}
+	                            </div>
+	                          </div>
+	                        )
+	                      })}
+	                    </div>
+	                  )}
+	                </>
+	              )}
+	            </section>
+	          )}
 
 	          {uploadMode === 'exam' && examDraftLoading && (
 	            <section className="draft-panel">
@@ -1919,9 +2286,13 @@ export default function App() {
 	              {examDraftPanelCollapsed ? null : (
 	                <>
 	                  <div className="draft-meta">
-	                    <div>考试ID：{examDraft.exam_id}</div>
+	                    <div>考试编号：{examDraft.exam_id}</div>
 	                    <div>日期：{String(examDraft.meta?.date || examDraft.date || '') || '（未设置）'}</div>
 	                    {examDraft.meta?.class_name ? <div>班级：{String(examDraft.meta.class_name)}</div> : null}
+	                    {examDraft.answer_files?.length ? <div>答案文件：{examDraft.answer_files.length} 份</div> : null}
+	                    {examDraft.answer_key?.count !== undefined && examDraft.answer_key?.count !== 0 ? (
+	                      <div>解析到答案：{String(examDraft.answer_key.count)} 条</div>
+	                    ) : null}
 	                    {examDraft.counts?.students !== undefined ? <div>学生数：{examDraft.counts.students}</div> : null}
 	                    {examDraft.counts?.questions !== undefined ? <div>题目数：{examDraft.counts.questions}</div> : null}
 	                    {examDraft.totals_summary?.avg_total !== undefined ? <div>平均分：{examDraft.totals_summary.avg_total}</div> : null}
@@ -2038,7 +2409,7 @@ export default function App() {
               ) : (
                 <>
                   <div className="draft-meta">
-                    <div>作业ID：{uploadDraft.assignment_id}</div>
+                    <div>作业编号：{uploadDraft.assignment_id}</div>
                     <div>日期：{uploadDraft.date}</div>
                     <div>
                       范围：
@@ -2053,7 +2424,7 @@ export default function App() {
                       <div>学生：{uploadDraft.student_ids.join('、')}</div>
                     ) : null}
                     <div>题目数量：{uploadDraft.questions?.length || 0}</div>
-                    <div>交付方式：{uploadDraft.delivery_mode === 'pdf' ? 'PDF' : '图片'}</div>
+                    <div>交付方式：{uploadDraft.delivery_mode === 'pdf' ? '文档' : '图片'}</div>
                     {uploadDraft.requirements_missing && uploadDraft.requirements_missing.length ? (
                       <div className="missing">
                         缺失项：{formatMissingRequirements(uploadDraft.requirements_missing)}（补全后才能创建）
@@ -2260,7 +2631,7 @@ export default function App() {
 
           {mention && mention.items.length > 0 && (
             <div className="mention-panel">
-              <div className="mention-title">技能建议（↑↓ 选择 / Enter 插入）</div>
+              <div className="mention-title">技能建议（↑↓ 选择 / 回车插入）</div>
               <div className="mention-list">
                 {mention.items.map((skill, index) => (
                   <button
@@ -2269,8 +2640,8 @@ export default function App() {
                     className={index === mentionIndex ? 'active' : ''}
                     onClick={() => insertSkillMention(skill)}
                   >
-                    <strong>@{skill.id}</strong>
-                    <span>{skill.title}</span>
+                    <strong>{skill.title}</strong>
+                    {skill.desc ? <span className="muted">{skill.desc}</span> : null}
                   </button>
                 ))}
               </div>
@@ -2281,9 +2652,14 @@ export default function App() {
         <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
           <div className="skills-header">
             <h3>技能提示</h3>
-            <button className="ghost" onClick={() => setSkillsOpen(false)}>
-              收起
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="ghost" onClick={() => void fetchSkills()} disabled={skillsLoading}>
+                刷新
+              </button>
+              <button className="ghost" onClick={() => setSkillsOpen(false)}>
+                收起
+              </button>
+            </div>
           </div>
           <div className="skills-tools">
             <input
@@ -2304,10 +2680,9 @@ export default function App() {
           {skillsError && <div className="skills-status err">{skillsError}</div>}
           <div className="skills-body">
             {filteredSkills.map((skill) => (
-              <div key={skill.id} className="skill-card">
+              <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
                 <div className="skill-title">
                   <div>
-                    <span>@{skill.id}</span>
                     <strong>{skill.title}</strong>
                   </div>
                   <button
@@ -2322,14 +2697,28 @@ export default function App() {
                 <p>{skill.desc}</p>
                 <div className="skill-prompts">
                   {skill.prompts.map((prompt) => (
-                    <button key={prompt} type="button" onClick={() => insertPrompt(prompt)}>
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => {
+                        setActiveSkillId(skill.id)
+                        insertPrompt(prompt)
+                      }}
+                    >
                       使用模板
                     </button>
                   ))}
                 </div>
                 <div className="skill-examples">
                   {skill.examples.map((ex) => (
-                    <button key={ex} type="button" onClick={() => insertPrompt(ex)}>
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => {
+                        setActiveSkillId(skill.id)
+                        insertPrompt(ex)
+                      }}
+                    >
                       {ex}
                     </button>
                   ))}
