@@ -219,8 +219,56 @@ def build_default_registry() -> ToolRegistry:
                 "exam_id": {"type": "string"},
                 "question_id": {"type": "string"},
                 "question_no": {"type": "string"},
+                "top_n": {"type": "integer", "default": 5},
             },
             required=["exam_id"],
+        ),
+    )
+    tools["exam.range.top_students"] = ToolDef(
+        name="exam.range.top_students",
+        description="Get top/bottom students by aggregated score within a question-no range",
+        parameters=_schema_object(
+            {
+                "exam_id": {"type": "string"},
+                "start_question_no": {"type": "integer"},
+                "end_question_no": {"type": "integer"},
+                "top_n": {"type": "integer", "default": 10},
+            },
+            required=["exam_id", "start_question_no", "end_question_no"],
+        ),
+    )
+    tools["exam.range.summary.batch"] = ToolDef(
+        name="exam.range.summary.batch",
+        description="Batch summary for multiple question-no ranges with top/bottom students",
+        parameters=_schema_object(
+            {
+                "exam_id": {"type": "string"},
+                "ranges": {
+                    "type": "array",
+                    "items": _schema_object(
+                        {
+                            "label": {"type": "string"},
+                            "start_question_no": {"type": "integer"},
+                            "end_question_no": {"type": "integer"},
+                        },
+                        required=["start_question_no", "end_question_no"],
+                    ),
+                },
+                "top_n": {"type": "integer", "default": 5},
+            },
+            required=["exam_id", "ranges"],
+        ),
+    )
+    tools["exam.question.batch.get"] = ToolDef(
+        name="exam.question.batch.get",
+        description="Batch get score distributions and sample students for multiple question_nos",
+        parameters=_schema_object(
+            {
+                "exam_id": {"type": "string"},
+                "question_nos": {"type": "array", "items": {"type": "integer"}},
+                "top_n": {"type": "integer", "default": 5},
+            },
+            required=["exam_id", "question_nos"],
         ),
     )
 
@@ -397,7 +445,7 @@ def build_default_registry() -> ToolRegistry:
                 "task": {"type": "string", "description": "chart requirement in natural language"},
                 "input_data": {"type": "object", "description": "optional structured input data"},
                 "title": {"type": "string", "description": "optional markdown title for rendered image"},
-                "engine": {"type": "string", "description": "auto|opencode|llm"},
+                "engine": {"type": "string", "description": "opencode(default)|auto|llm"},
                 "chart_hint": {"type": "string"},
                 "save_as": {"type": "string"},
                 "timeout_sec": {"type": "integer", "default": 180},
