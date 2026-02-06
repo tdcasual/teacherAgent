@@ -14,11 +14,11 @@ import time
 import uuid
 from contextlib import contextmanager
 from functools import partial
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import quote
 from collections import deque
 
@@ -28,7 +28,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
+from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
+from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
+from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 
 try:
@@ -81,6 +84,7 @@ STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
 STUDENT_SUBMISSIONS_DIR = DATA_DIR / "student_submissions"
+SESSION_INDEX_MAX_ITEMS = max(50, int(os.getenv("SESSION_INDEX_MAX_ITEMS", "500") or "500"))
 TEACHER_SESSION_COMPACT_ENABLED = os.getenv("TEACHER_SESSION_COMPACT_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
 TEACHER_SESSION_COMPACT_MAIN_ONLY = os.getenv("TEACHER_SESSION_COMPACT_MAIN_ONLY", "1").lower() in {"1", "true", "yes", "on"}
 TEACHER_SESSION_COMPACT_MAX_MESSAGES = max(4, int(os.getenv("TEACHER_SESSION_COMPACT_MAX_MESSAGES", "160") or "160"))
@@ -93,6 +97,38 @@ _TEACHER_SESSION_COMPACT_TS: Dict[str, float] = {}
 _TEACHER_SESSION_COMPACT_LOCK = threading.Lock()
 TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY = os.getenv("TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY", "1").lower() in {"1", "true", "yes", "on"}
 TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS = max(0, int(os.getenv("TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS", "1500") or "1500"))
+TEACHER_MEMORY_AUTO_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS = max(6, int(os.getenv("TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS", "12") or "12"))
+TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY = max(1, int(os.getenv("TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY", "8") or "8"))
+TEACHER_MEMORY_FLUSH_ENABLED = os.getenv("TEACHER_MEMORY_FLUSH_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES = max(1, int(os.getenv("TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES", "24") or "24"))
+TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS = max(500, int(os.getenv("TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS", "2400") or "2400"))
+TEACHER_MEMORY_AUTO_APPLY_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_APPLY_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+_TEACHER_MEMORY_AUTO_APPLY_TARGETS_RAW = str(os.getenv("TEACHER_MEMORY_AUTO_APPLY_TARGETS", "DAILY,MEMORY") or "DAILY,MEMORY")
+TEACHER_MEMORY_AUTO_APPLY_TARGETS = {
+    p.strip().upper()
+    for p in _TEACHER_MEMORY_AUTO_APPLY_TARGETS_RAW.split(",")
+    if str(p or "").strip()
+}
+if not TEACHER_MEMORY_AUTO_APPLY_TARGETS:
+    TEACHER_MEMORY_AUTO_APPLY_TARGETS = {"DAILY", "MEMORY"}
+TEACHER_MEMORY_AUTO_APPLY_STRICT = os.getenv("TEACHER_MEMORY_AUTO_APPLY_STRICT", "1").lower() in {"1", "true", "yes", "on"}
+TEACHER_MEMORY_AUTO_INFER_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_INFER_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS = max(2, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS", "2") or "2"))
+TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS = max(
+    4,
+    min(80, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS", "24") or "24")),
+)
+TEACHER_MEMORY_AUTO_INFER_MIN_CHARS = max(8, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_CHARS", "16") or "16"))
+TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY = max(
+    0,
+    min(100, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY", "58") or "58")),
+)
+TEACHER_MEMORY_DECAY_ENABLED = os.getenv("TEACHER_MEMORY_DECAY_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
+TEACHER_MEMORY_TTL_DAYS_MEMORY = max(0, int(os.getenv("TEACHER_MEMORY_TTL_DAYS_MEMORY", "180") or "180"))
+TEACHER_MEMORY_TTL_DAYS_DAILY = max(0, int(os.getenv("TEACHER_MEMORY_TTL_DAYS_DAILY", "14") or "14"))
+TEACHER_MEMORY_CONTEXT_MAX_ENTRIES = max(4, int(os.getenv("TEACHER_MEMORY_CONTEXT_MAX_ENTRIES", "18") or "18"))
+TEACHER_MEMORY_SEARCH_FILTER_EXPIRED = os.getenv("TEACHER_MEMORY_SEARCH_FILTER_EXPIRED", "1").lower() in {"1", "true", "yes", "on"}
 DISCUSSION_COMPLETE_MARKER = os.getenv("DISCUSSION_COMPLETE_MARKER", "【个性化作业】")
 GRADE_COUNT_CONF_THRESHOLD = float(os.getenv("GRADE_COUNT_CONF_THRESHOLD", "0.6") or "0.6")
 OCR_MAX_CONCURRENCY = max(1, int(os.getenv("OCR_MAX_CONCURRENCY", "4") or "4"))
@@ -128,6 +164,64 @@ _PROFILE_UPDATE_QUEUE: deque[Dict[str, Any]] = deque()
 _PROFILE_UPDATE_LOCK = threading.Lock()
 _PROFILE_UPDATE_EVENT = threading.Event()
 _PROFILE_UPDATE_WORKER_STARTED = False
+
+_TEACHER_MEMORY_DURABLE_INTENT_PATTERNS = [
+    re.compile(p, re.I)
+    for p in (
+        r"(?:请|帮我)?记住",
+        r"以后(?:都|默认|统一|请)",
+        r"默认(?:按|用|采用|是)",
+        r"长期(?:按|使用|采用)",
+        r"固定(?:格式|风格|模板|流程|做法)",
+        r"偏好(?:是|为|改为)",
+        r"今后(?:都|统一|默认)",
+    )
+]
+_TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS = [
+    re.compile(p, re.I)
+    for p in (
+        r"今天",
+        r"本周",
+        r"这次",
+        r"临时",
+        r"暂时",
+        r"先按",
+    )
+]
+_TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS = [
+    re.compile(p, re.I)
+    for p in (
+        r"(?:输出|回复|讲解|批改|反馈|总结)",
+        r"(?:格式|结构|风格|模板|语气)",
+        r"(?:结论|行动项|先.+再.+|条目|分点|markdown)",
+        r"(?:难度|题量|时长|作业要求)",
+    )
+]
+_TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS = [
+    re.compile(p, re.I)
+    for p in (
+        r"(?:这道题|这题|本题|这个题)",
+        r"(?:这次|本次|今天|临时|暂时)",
+        r"(?:帮我解|请解答|算一下)",
+    )
+]
+
+_TEACHER_MEMORY_SENSITIVE_PATTERNS = [
+    re.compile(p, re.I)
+    for p in (
+        r"sk-[A-Za-z0-9]{16,}",
+        r"AIza[0-9A-Za-z\\-_]{20,}",
+        r"AKIA[0-9A-Z]{12,}",
+        r"(?:api|access|secret|refresh)[-_ ]?(?:key|token)\s*[:=]\s*\S{6,}",
+        r"password\s*[:=]\s*\S{4,}",
+    )
+]
+_TEACHER_MEMORY_CONFLICT_GROUPS: List[Tuple[Tuple[str, ...], Tuple[str, ...]]] = [
+    (("简洁", "精简", "简短"), ("详细", "展开", "长文")),
+    (("中文", "汉语"), ("英文", "英语", "english")),
+    (("先结论", "先总结"), ("先过程", "先推导", "先分析")),
+    (("条目", "要点", "bullet"), ("段落", "叙述")),
+]
 
 
 @contextmanager
@@ -651,7 +745,7 @@ def chat_job_worker_loop() -> None:
         lane_id = ""
         with CHAT_JOB_LOCK:
             job_id, lane_id = _chat_pick_next_locked()
-            if not job_id and not _chat_has_pending_locked():
+            if not job_id:
                 CHAT_JOB_EVENT.clear()
         if not job_id:
             time.sleep(0.05)
@@ -799,6 +893,124 @@ def student_sessions_index_path(student_id: str) -> Path:
     return student_sessions_base_dir(student_id) / "index.json"
 
 
+def student_session_view_state_path(student_id: str) -> Path:
+    return student_sessions_base_dir(student_id) / "view_state.json"
+
+
+def teacher_session_view_state_path(teacher_id: str) -> Path:
+    return teacher_sessions_base_dir(teacher_id) / "view_state.json"
+
+
+def _parse_iso_ts(value: Any) -> Optional[datetime]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _compare_iso_ts(a: Any, b: Any) -> int:
+    da = _parse_iso_ts(a)
+    db = _parse_iso_ts(b)
+    if da and db:
+        if da > db:
+            return 1
+        if da < db:
+            return -1
+        return 0
+    if da and not db:
+        return 1
+    if db and not da:
+        return -1
+    return 0
+
+
+def _default_session_view_state() -> Dict[str, Any]:
+    return {
+        "title_map": {},
+        "hidden_ids": [],
+        "active_session_id": "",
+        "updated_at": "",
+    }
+
+
+def _normalize_session_view_state_payload(raw: Any) -> Dict[str, Any]:
+    data = raw if isinstance(raw, dict) else {}
+    title_map_raw = data.get("title_map") if isinstance(data.get("title_map"), dict) else {}
+    title_map: Dict[str, str] = {}
+    for key, value in title_map_raw.items():
+        sid = str(key or "").strip()
+        title = str(value or "").strip()
+        if not sid or not title:
+            continue
+        sid = sid[:200]
+        title_map[sid] = title[:120]
+
+    hidden_ids: List[str] = []
+    seen_hidden: set[str] = set()
+    hidden_raw = data.get("hidden_ids") if isinstance(data.get("hidden_ids"), list) else []
+    for item in hidden_raw:
+        sid = str(item or "").strip()
+        if not sid:
+            continue
+        sid = sid[:200]
+        if sid in seen_hidden:
+            continue
+        seen_hidden.add(sid)
+        hidden_ids.append(sid)
+
+    active_session_id = str(data.get("active_session_id") or "").strip()[:200]
+    updated_at_raw = str(data.get("updated_at") or "").strip()
+    updated_at = updated_at_raw if _parse_iso_ts(updated_at_raw) else ""
+
+    return {
+        "title_map": title_map,
+        "hidden_ids": hidden_ids,
+        "active_session_id": active_session_id,
+        "updated_at": updated_at,
+    }
+
+
+def load_student_session_view_state(student_id: str) -> Dict[str, Any]:
+    path = student_session_view_state_path(student_id)
+    if not path.exists():
+        return _default_session_view_state()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_session_view_state()
+    return _normalize_session_view_state_payload(data)
+
+
+def save_student_session_view_state(student_id: str, state: Dict[str, Any]) -> None:
+    path = student_session_view_state_path(student_id)
+    normalized = _normalize_session_view_state_payload(state)
+    if not normalized.get("updated_at"):
+        normalized["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
+    _atomic_write_json(path, normalized)
+
+
+def load_teacher_session_view_state(teacher_id: str) -> Dict[str, Any]:
+    path = teacher_session_view_state_path(teacher_id)
+    if not path.exists():
+        return _default_session_view_state()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return _default_session_view_state()
+    return _normalize_session_view_state_payload(data)
+
+
+def save_teacher_session_view_state(teacher_id: str, state: Dict[str, Any]) -> None:
+    path = teacher_session_view_state_path(teacher_id)
+    normalized = _normalize_session_view_state_payload(state)
+    if not normalized.get("updated_at"):
+        normalized["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
+    _atomic_write_json(path, normalized)
+
+
 def load_student_sessions_index(student_id: str) -> List[Dict[str, Any]]:
     path = student_sessions_index_path(student_id)
     if not path.exists():
@@ -856,7 +1068,7 @@ def update_student_session_index(
         found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
 
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_student_sessions_index(student_id, items[:50])
+    save_student_sessions_index(student_id, items[:SESSION_INDEX_MAX_ITEMS])
 
 
 def append_student_session_message(
@@ -895,6 +1107,17 @@ def teacher_workspace_file(teacher_id: str, name: str) -> Path:
     if name not in allowed:
         raise ValueError(f"invalid teacher workspace file: {name}")
     return teacher_workspace_dir(teacher_id) / name
+
+
+def teacher_llm_routing_path(teacher_id: Optional[str] = None) -> Path:
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    return teacher_workspace_dir(teacher_id_final) / "llm_routing.json"
+
+
+def routing_config_path_for_role(role_hint: Optional[str], teacher_id: Optional[str] = None) -> Path:
+    if role_hint == "teacher":
+        return teacher_llm_routing_path(teacher_id)
+    return LLM_ROUTING_PATH
 
 
 def teacher_daily_memory_dir(teacher_id: str) -> Path:
@@ -1033,7 +1256,7 @@ def update_teacher_session_index(
         found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
 
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_teacher_sessions_index(teacher_id, items[:50])
+    save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
 
 
 def append_teacher_session_message(
@@ -1126,7 +1349,12 @@ def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) ->
     tmp.replace(path)
 
 
-def _mark_teacher_session_compacted(teacher_id: str, session_id: str, compacted_messages: int) -> None:
+def _mark_teacher_session_compacted(
+    teacher_id: str,
+    session_id: str,
+    compacted_messages: int,
+    new_message_count: Optional[int] = None,
+) -> None:
     items = load_teacher_sessions_index(teacher_id)
     now = datetime.now().isoformat(timespec="seconds")
     found: Optional[Dict[str, Any]] = None
@@ -1147,8 +1375,13 @@ def _mark_teacher_session_compacted(teacher_id: str, session_id: str, compacted_
         found["compacted_messages"] = int(found.get("compacted_messages") or 0) + int(compacted_messages or 0)
     except Exception:
         found["compacted_messages"] = int(compacted_messages or 0)
+    if new_message_count is not None:
+        try:
+            found["message_count"] = max(0, int(new_message_count))
+        except Exception:
+            pass
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_teacher_sessions_index(teacher_id, items[:50])
+    save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
 
 
 def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
@@ -1208,7 +1441,12 @@ def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str,
     }
     new_records = [summary_record] + tail
     _write_teacher_session_records(path, new_records)
-    _mark_teacher_session_compacted(teacher_id, session_id, compacted_messages=len(head))
+    _mark_teacher_session_compacted(
+        teacher_id,
+        session_id,
+        compacted_messages=len(head),
+        new_message_count=len(new_records),
+    )
     diag_log(
         "teacher.session.compacted",
         {
@@ -1256,6 +1494,32 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
     return ""
 
 
+def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
+    active = _teacher_memory_active_applied_records(
+        teacher_id,
+        target="MEMORY",
+        limit=TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
+    )
+    if not active:
+        return teacher_read_text(teacher_workspace_file(teacher_id, "MEMORY.md"), max_chars=max_chars).strip()
+
+    lines: List[str] = []
+    used = 0
+    for rec in active:
+        text = str(rec.get("content") or "").strip()
+        if not text:
+            continue
+        brief = re.sub(r"\s+", " ", text).strip()[:240]
+        score = int(round(_teacher_memory_rank_score(rec)))
+        source = str(rec.get("source") or "manual")
+        line = f"- [{source}|{score}] {brief}"
+        if used + len(line) > max_chars:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(lines).strip()
+
+
 def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_chars: int = 6000, session_id: str = "main") -> str:
     """
     Build a compact teacher-specific context block from workspace files.
@@ -1264,7 +1528,7 @@ def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_char
     ensure_teacher_workspace(teacher_id)
     parts: List[str] = []
     user_text = teacher_read_text(teacher_workspace_file(teacher_id, "USER.md"), max_chars=2000).strip()
-    mem_text = teacher_read_text(teacher_workspace_file(teacher_id, "MEMORY.md"), max_chars=4000).strip()
+    mem_text = _teacher_memory_context_text(teacher_id, max_chars=4000).strip()
     if user_text:
         parts.append("【Teacher Profile】\n" + user_text)
     if mem_text:
@@ -1276,6 +1540,16 @@ def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_char
     out = "\n\n".join(parts).strip()
     if max_chars and len(out) > max_chars:
         out = out[:max_chars] + "…"
+    _teacher_memory_log_event(
+        teacher_id,
+        "context_injected",
+        {
+            "query_preview": str(query or "")[:80],
+            "context_chars": len(out),
+            "memory_chars": len(mem_text),
+            "session_id": str(session_id or "main"),
+        },
+    )
     return out
 
 
@@ -1284,18 +1558,47 @@ def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[s
     q = (query or "").strip()
     if not q:
         return {"matches": []}
+    topk = max(1, int(limit or 5))
 
     # Prefer semantic retrieval (mem0) when enabled; fall back to keyword scan.
     try:
         from .mem0_adapter import teacher_mem0_search
 
-        mem0_res = teacher_mem0_search(teacher_id, q, limit=limit)
+        mem0_res = teacher_mem0_search(teacher_id, q, limit=topk)
         if mem0_res.get("ok") and mem0_res.get("matches"):
+            raw_matches = list(mem0_res.get("matches") or [])
+            matches: List[Dict[str, Any]] = []
+            dropped_expired = 0
+            for item in raw_matches:
+                if not isinstance(item, dict):
+                    continue
+                if TEACHER_MEMORY_SEARCH_FILTER_EXPIRED:
+                    pid = str(item.get("proposal_id") or "").strip()
+                    if pid:
+                        rec = _teacher_memory_load_record(teacher_id, pid)
+                        if isinstance(rec, dict) and _teacher_memory_is_expired_record(rec):
+                            dropped_expired += 1
+                            continue
+                matches.append(item)
+                if len(matches) >= topk:
+                    break
             diag_log(
                 "teacher.mem0.search.hit",
-                {"teacher_id": teacher_id, "query_len": len(q), "matches": len(mem0_res.get("matches") or [])},
+                {"teacher_id": teacher_id, "query_len": len(q), "matches": len(matches), "dropped_expired": dropped_expired},
             )
-            return {"matches": mem0_res.get("matches") or [], "mode": "mem0"}
+            _teacher_memory_log_event(
+                teacher_id,
+                "search",
+                {
+                    "mode": "mem0",
+                    "query": q[:120],
+                    "hits": len(matches),
+                    "raw_hits": len(raw_matches),
+                    "dropped_expired": dropped_expired,
+                },
+            )
+            if matches:
+                return {"matches": matches, "mode": "mem0"}
         if mem0_res.get("error"):
             diag_log(
                 "teacher.mem0.search.error",
@@ -1338,8 +1641,18 @@ def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[s
                     "snippet": snippet[:400],
                 }
             )
-            if len(matches) >= max(1, int(limit)):
+            if len(matches) >= topk:
+                _teacher_memory_log_event(
+                    teacher_id,
+                    "search",
+                    {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
+                )
                 return {"matches": matches, "mode": "keyword"}
+    _teacher_memory_log_event(
+        teacher_id,
+        "search",
+        {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
+    )
     return {"matches": matches, "mode": "keyword"}
 
 
@@ -1349,26 +1662,716 @@ def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
     return base / f"{safe_fs_id(proposal_id, prefix='proposal')}.json"
 
 
+def teacher_memory_list_proposals(
+    teacher_id: str,
+    status: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    ensure_teacher_workspace(teacher_id)
+    proposals_dir = teacher_workspace_dir(teacher_id) / "proposals"
+    proposals_dir.mkdir(parents=True, exist_ok=True)
+    status_norm = (status or "").strip().lower() or None
+    if status_norm and status_norm not in {"proposed", "applied", "rejected"}:
+        return {"ok": False, "error": "invalid_status", "teacher_id": teacher_id}
+
+    take = max(1, min(int(limit or 20), 200))
+    files = sorted(
+        proposals_dir.glob("*.json"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    items: List[Dict[str, Any]] = []
+    for path in files:
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        rec_status = str(rec.get("status") or "").strip().lower()
+        if status_norm and rec_status != status_norm:
+            continue
+        if "proposal_id" not in rec:
+            rec["proposal_id"] = path.stem
+        items.append(rec)
+        if len(items) >= take:
+            break
+    return {"ok": True, "teacher_id": teacher_id, "proposals": items}
+
+
+def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
+    path = _teacher_memory_event_log_path(teacher_id)
+    if not path.exists():
+        return []
+    out: List[Dict[str, Any]] = []
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    for raw in reversed(lines):
+        line = str(raw or "").strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        out.append(rec)
+        if len(out) >= max(100, int(limit or 5000)):
+            break
+    out.reverse()
+    return out
+
+
+def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
+    ensure_teacher_workspace(teacher_id)
+    window_days = max(1, min(int(days or 14), 90))
+    now = datetime.now()
+    window_start = now - timedelta(days=window_days)
+    proposals = _teacher_memory_recent_proposals(teacher_id, limit=1500)
+
+    applied_total = 0
+    rejected_total = 0
+    active_total = 0
+    expired_total = 0
+    superseded_total = 0
+    by_source: Dict[str, int] = {}
+    by_target: Dict[str, int] = {}
+    rejected_reasons: Dict[str, int] = {}
+    active_priority_sum = 0.0
+    active_priority_count = 0
+    active_items: List[Dict[str, Any]] = []
+
+    for rec in proposals:
+        status = str(rec.get("status") or "").strip().lower()
+        source = str(rec.get("source") or "manual").strip().lower() or "manual"
+        target = str(rec.get("target") or "MEMORY").strip().upper() or "MEMORY"
+        by_source[source] = by_source.get(source, 0) + 1
+        by_target[target] = by_target.get(target, 0) + 1
+
+        if status == "applied":
+            applied_total += 1
+            if rec.get("superseded_by"):
+                superseded_total += 1
+                continue
+            if _teacher_memory_is_expired_record(rec, now=now):
+                expired_total += 1
+                continue
+            active_total += 1
+            pr = rec.get("priority_score")
+            try:
+                p = float(pr)
+            except Exception:
+                p = float(
+                    _teacher_memory_priority_score(
+                        target=target,
+                        title=str(rec.get("title") or ""),
+                        content=str(rec.get("content") or ""),
+                        source=source,
+                        meta=rec.get("meta") if isinstance(rec.get("meta"), dict) else None,
+                    )
+                )
+            active_priority_sum += p
+            active_priority_count += 1
+            active_items.append(
+                {
+                    "proposal_id": str(rec.get("proposal_id") or ""),
+                    "target": target,
+                    "source": source,
+                    "title": str(rec.get("title") or "")[:60],
+                    "content": str(rec.get("content") or "")[:180],
+                    "priority_score": int(round(p)),
+                    "rank_score": round(_teacher_memory_rank_score(rec), 2),
+                    "age_days": _teacher_memory_age_days(rec, now=now),
+                    "expires_at": str(rec.get("expires_at") or ""),
+                }
+            )
+        elif status == "rejected":
+            rejected_total += 1
+            reason = str(rec.get("reject_reason") or "unknown").strip() or "unknown"
+            rejected_reasons[reason] = rejected_reasons.get(reason, 0) + 1
+
+    active_items.sort(key=lambda x: (float(x.get("rank_score") or 0), int(x.get("priority_score") or 0)), reverse=True)
+
+    events = _teacher_memory_load_events(teacher_id, limit=5000)
+    search_calls = 0
+    search_hit_calls = 0
+    context_injected = 0
+    search_mode_breakdown: Dict[str, int] = {}
+    query_stats: Dict[str, Dict[str, Any]] = {}
+    for ev in events:
+        ts = _teacher_memory_parse_dt(ev.get("ts"))
+        if ts is None:
+            continue
+        if ts.tzinfo:
+            now_tz = datetime.now(ts.tzinfo)
+            if ts < now_tz - timedelta(days=window_days):
+                continue
+        else:
+            if ts < window_start:
+                continue
+        et = str(ev.get("event") or "").strip()
+        if et == "context_injected":
+            context_injected += 1
+            continue
+        if et != "search":
+            continue
+        search_calls += 1
+        mode = str(ev.get("mode") or "unknown").strip().lower() or "unknown"
+        search_mode_breakdown[mode] = search_mode_breakdown.get(mode, 0) + 1
+        try:
+            hits = int(ev.get("hits") or 0)
+        except Exception:
+            hits = 0
+        if hits > 0:
+            search_hit_calls += 1
+        query = str(ev.get("query") or "").strip()
+        if not query:
+            continue
+        q = query[:120]
+        st = query_stats.get(q) or {"query": q, "calls": 0, "hit_calls": 0}
+        st["calls"] = int(st.get("calls") or 0) + 1
+        if hits > 0:
+            st["hit_calls"] = int(st.get("hit_calls") or 0) + 1
+        query_stats[q] = st
+
+    top_queries: List[Dict[str, Any]] = []
+    for q in query_stats.values():
+        calls = max(1, int(q.get("calls") or 1))
+        hit_calls = int(q.get("hit_calls") or 0)
+        top_queries.append(
+            {
+                "query": str(q.get("query") or ""),
+                "calls": calls,
+                "hit_calls": hit_calls,
+                "hit_rate": round(hit_calls / calls, 4),
+            }
+        )
+    top_queries.sort(key=lambda x: (int(x.get("hit_calls") or 0), int(x.get("calls") or 0)), reverse=True)
+
+    return {
+        "ok": True,
+        "teacher_id": teacher_id,
+        "window_days": window_days,
+        "summary": {
+            "applied_total": applied_total,
+            "rejected_total": rejected_total,
+            "active_total": active_total,
+            "expired_total": expired_total,
+            "superseded_total": superseded_total,
+            "avg_priority_active": round(active_priority_sum / active_priority_count, 2) if active_priority_count else 0.0,
+            "by_source": by_source,
+            "by_target": by_target,
+            "rejected_reasons": rejected_reasons,
+        },
+        "retrieval": {
+            "search_calls": search_calls,
+            "search_hit_calls": search_hit_calls,
+            "search_hit_rate": round(search_hit_calls / search_calls, 4) if search_calls else 0.0,
+            "search_mode_breakdown": search_mode_breakdown,
+            "context_injected": context_injected,
+        },
+        "top_queries": top_queries[:10],
+        "top_active": active_items[:8],
+    }
+
+
+def _teacher_memory_is_sensitive(content: str) -> bool:
+    text = str(content or "")
+    if not text.strip():
+        return False
+    return any(p.search(text) for p in _TEACHER_MEMORY_SENSITIVE_PATTERNS)
+
+
+def _teacher_memory_event_log_path(teacher_id: str) -> Path:
+    base = teacher_workspace_dir(teacher_id) / "telemetry"
+    base.mkdir(parents=True, exist_ok=True)
+    return base / "memory_events.jsonl"
+
+
+def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    rec: Dict[str, Any] = {
+        "ts": datetime.now().isoformat(timespec="seconds"),
+        "event": str(event or "").strip() or "unknown",
+    }
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            if v is None:
+                continue
+            rec[str(k)] = v
+    try:
+        path = _teacher_memory_event_log_path(teacher_id)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        return
+
+
+def _teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _teacher_memory_record_ttl_days(rec: Dict[str, Any]) -> int:
+    try:
+        if rec.get("ttl_days") is not None:
+            return max(0, int(rec.get("ttl_days") or 0))
+    except Exception:
+        pass
+    meta = rec.get("meta") if isinstance(rec.get("meta"), dict) else {}
+    if isinstance(meta, dict):
+        try:
+            if meta.get("ttl_days") is not None:
+                return max(0, int(meta.get("ttl_days") or 0))
+        except Exception:
+            pass
+    target = str(rec.get("target") or "").strip().upper()
+    source = str(rec.get("source") or "").strip().lower()
+    if target == "DAILY" or source == "auto_flush":
+        return TEACHER_MEMORY_TTL_DAYS_DAILY
+    return TEACHER_MEMORY_TTL_DAYS_MEMORY
+
+
+def _teacher_memory_record_expire_at(rec: Dict[str, Any]) -> Optional[datetime]:
+    expire_from_field = _teacher_memory_parse_dt(rec.get("expires_at"))
+    if expire_from_field is not None:
+        return expire_from_field
+    ttl_days = _teacher_memory_record_ttl_days(rec)
+    if ttl_days <= 0:
+        return None
+    base_ts = _teacher_memory_parse_dt(rec.get("applied_at")) or _teacher_memory_parse_dt(rec.get("created_at"))
+    if base_ts is None:
+        return None
+    return base_ts + timedelta(days=int(ttl_days))
+
+
+def _teacher_memory_is_expired_record(rec: Dict[str, Any], now: Optional[datetime] = None) -> bool:
+    if not TEACHER_MEMORY_DECAY_ENABLED:
+        return False
+    expire_at = _teacher_memory_record_expire_at(rec)
+    if expire_at is None:
+        return False
+    if now is not None:
+        now_dt = now
+    elif expire_at.tzinfo:
+        now_dt = datetime.now(expire_at.tzinfo)
+    else:
+        now_dt = datetime.now()
+    return now_dt >= expire_at
+
+
+def _teacher_memory_age_days(rec: Dict[str, Any], now: Optional[datetime] = None) -> int:
+    base_ts = _teacher_memory_parse_dt(rec.get("applied_at")) or _teacher_memory_parse_dt(rec.get("created_at"))
+    if base_ts is None:
+        return 0
+    if base_ts.tzinfo:
+        now_dt = now or datetime.now(base_ts.tzinfo)
+    else:
+        now_dt = now or datetime.now()
+    return max(0, int((now_dt - base_ts).total_seconds() // 86400))
+
+
+def _teacher_memory_priority_score(
+    *,
+    target: str,
+    title: str,
+    content: str,
+    source: str,
+    meta: Optional[Dict[str, Any]] = None,
+) -> int:
+    text = f"{title or ''}\n{content or ''}".strip()
+    source_norm = str(source or "manual").strip().lower()
+    target_norm = str(target or "MEMORY").strip().upper()
+    score = 0.0
+
+    if source_norm == "manual":
+        score += 70
+    elif source_norm == "auto_intent":
+        score += 62
+    elif source_norm == "auto_infer":
+        score += 54
+    elif source_norm == "auto_flush":
+        score += 36
+    else:
+        score += 44
+
+    if target_norm == "MEMORY":
+        score += 12
+    elif target_norm == "DAILY":
+        score += 4
+
+    if any(p.search(text) for p in _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS):
+        score += 15
+    if any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS):
+        score += 10
+    if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS):
+        score -= 18
+    if _teacher_memory_is_sensitive(text):
+        score = 0
+    if len(_teacher_memory_norm_text(text)) < 12:
+        score -= 8
+    if "先" in text and "后" in text:
+        score += 6
+    if "模板" in text or "格式" in text or "结构" in text:
+        score += 6
+
+    if isinstance(meta, dict):
+        try:
+            similar_hits = int(meta.get("similar_hits") or 0)
+        except Exception:
+            similar_hits = 0
+        if similar_hits > 0:
+            score += min(16, similar_hits * 4)
+
+    return max(0, min(100, int(round(score))))
+
+
+def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
+    priority = rec.get("priority_score")
+    try:
+        p = float(priority)
+    except Exception:
+        p = float(
+            _teacher_memory_priority_score(
+                target=str(rec.get("target") or "MEMORY"),
+                title=str(rec.get("title") or ""),
+                content=str(rec.get("content") or ""),
+                source=str(rec.get("source") or "manual"),
+                meta=rec.get("meta") if isinstance(rec.get("meta"), dict) else None,
+            )
+        )
+    age_days = _teacher_memory_age_days(rec)
+    ttl_days = _teacher_memory_record_ttl_days(rec)
+    if not TEACHER_MEMORY_DECAY_ENABLED or ttl_days <= 0:
+        return p
+    decay = max(0.2, 1.0 - (age_days / max(1, ttl_days)))
+    return p * decay
+
+
+def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
+    path = _teacher_proposal_path(teacher_id, proposal_id)
+    if not path.exists():
+        return None
+    try:
+        rec = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(rec, dict):
+        return None
+    if "proposal_id" not in rec:
+        rec["proposal_id"] = proposal_id
+    return rec
+
+
+def _teacher_memory_active_applied_records(
+    teacher_id: str,
+    *,
+    target: Optional[str] = None,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    target_norm = str(target or "").strip().upper() or None
+    out: List[Dict[str, Any]] = []
+    now = datetime.now()
+    for rec in _teacher_memory_recent_proposals(teacher_id, limit=max(200, limit * 4)):
+        if str(rec.get("status") or "").strip().lower() != "applied":
+            continue
+        if rec.get("superseded_by"):
+            continue
+        rec_target = str(rec.get("target") or "").strip().upper()
+        if target_norm and rec_target != target_norm:
+            continue
+        if _teacher_memory_is_expired_record(rec, now=now):
+            continue
+        out.append(rec)
+    out.sort(key=lambda r: (_teacher_memory_rank_score(r), str(r.get("applied_at") or r.get("created_at") or "")), reverse=True)
+    return out[: max(1, int(limit or 200))]
+
+
+def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: int = 24) -> List[str]:
+    path = teacher_session_file(teacher_id, session_id)
+    if not path.exists():
+        return []
+    take = max(1, min(int(limit or 24), 120))
+    out: List[str] = []
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    for line in reversed(lines):
+        text = str(line or "").strip()
+        if not text:
+            continue
+        try:
+            rec = json.loads(text)
+        except Exception:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        if str(rec.get("role") or "") != "user":
+            continue
+        if bool(rec.get("synthetic")):
+            continue
+        content = str(rec.get("content") or "").strip()
+        if not content:
+            continue
+        out.append(content[:400])
+        if len(out) >= take:
+            break
+    out.reverse()
+    return out
+
+
+def _teacher_memory_shingles(text: str) -> set[str]:
+    compact = re.sub(r"\s+", "", str(text or ""))
+    if not compact:
+        return set()
+    if len(compact) == 1:
+        return {compact}
+    return {compact[i : i + 2] for i in range(len(compact) - 1)}
+
+
+def _teacher_memory_loose_match(a: str, b: str) -> bool:
+    na = _teacher_memory_norm_text(a)
+    nb = _teacher_memory_norm_text(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    if len(na) <= len(nb):
+        short, long = na, nb
+    else:
+        short, long = nb, na
+    if len(short) >= 12 and short in long:
+        return True
+    sa = _teacher_memory_shingles(na)
+    sb = _teacher_memory_shingles(nb)
+    if not sa or not sb:
+        return False
+    union = sa | sb
+    if not union:
+        return False
+    jac = len(sa & sb) / len(union)
+    return jac >= 0.72
+
+
+def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str) -> Optional[Dict[str, Any]]:
+    if not TEACHER_MEMORY_AUTO_INFER_ENABLED:
+        return None
+    text = str(user_text or "").strip()
+    norm = _teacher_memory_norm_text(text)
+    if len(norm) < TEACHER_MEMORY_AUTO_INFER_MIN_CHARS:
+        return None
+    if any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS):
+        return None
+    if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS):
+        return None
+    if not any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS):
+        return None
+    history = _teacher_memory_recent_user_turns(
+        teacher_id,
+        session_id,
+        limit=TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
+    )
+    similar_hits = 0
+    for prior in history:
+        if _teacher_memory_loose_match(text, prior):
+            similar_hits += 1
+    if similar_hits < TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS:
+        return None
+    return {
+        "target": "MEMORY",
+        "title": "自动记忆：老师默认偏好",
+        "content": text[:1200].strip(),
+        "trigger": "implicit_repeated_preference",
+        "similar_hits": similar_hits,
+    }
+
+
+def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, Any]:
+    for item in load_teacher_sessions_index(teacher_id):
+        if str(item.get("session_id") or "") == str(session_id):
+            return item
+    return {}
+
+
+def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_no: int) -> None:
+    items = load_teacher_sessions_index(teacher_id)
+    now = datetime.now().isoformat(timespec="seconds")
+    found: Optional[Dict[str, Any]] = None
+    for item in items:
+        if item.get("session_id") == session_id:
+            found = item
+            break
+    if found is None:
+        found = {"session_id": session_id, "message_count": 0}
+        items.append(found)
+    found["updated_at"] = now
+    found["memory_flush_at"] = now
+    found["memory_flush_cycle"] = max(1, int(cycle_no or 1))
+    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
+
+
+def _teacher_memory_has_term(text: str, terms: Tuple[str, ...]) -> bool:
+    t = str(text or "")
+    return any(term in t for term in terms)
+
+
+def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
+    n = _teacher_memory_norm_text(new_text)
+    o = _teacher_memory_norm_text(old_text)
+    if not n or not o or n == o:
+        return False
+    for a_terms, b_terms in _TEACHER_MEMORY_CONFLICT_GROUPS:
+        if _teacher_memory_has_term(n, a_terms) and _teacher_memory_has_term(o, b_terms):
+            return True
+        if _teacher_memory_has_term(n, b_terms) and _teacher_memory_has_term(o, a_terms):
+            return True
+    return False
+
+
+def _teacher_memory_find_conflicting_applied(
+    teacher_id: str,
+    *,
+    proposal_id: str,
+    target: str,
+    content: str,
+) -> List[str]:
+    if str(target or "").upper() != "MEMORY":
+        return []
+    out: List[str] = []
+    for rec in _teacher_memory_recent_proposals(teacher_id, limit=500):
+        rid = str(rec.get("proposal_id") or "").strip()
+        if not rid or rid == proposal_id:
+            continue
+        if str(rec.get("status") or "").strip().lower() != "applied":
+            continue
+        if str(rec.get("target") or "").strip().upper() != "MEMORY":
+            continue
+        if rec.get("superseded_by"):
+            continue
+        old_content = str(rec.get("content") or "")
+        if _teacher_memory_conflicts(content, old_content):
+            out.append(rid)
+    return out
+
+
+def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
+    if not proposal_ids:
+        return
+    stamp = datetime.now().isoformat(timespec="seconds")
+    for pid in proposal_ids:
+        path = _teacher_proposal_path(teacher_id, pid)
+        if not path.exists():
+            continue
+        try:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            rec = {}
+        if not isinstance(rec, dict):
+            continue
+        rec["superseded_at"] = stamp
+        rec["superseded_by"] = str(by_proposal_id or "")
+        _atomic_write_json(path, rec)
+
+
 def teacher_memory_propose(
     teacher_id: str,
     target: str,
     title: str,
     content: str,
+    *,
+    source: str = "manual",
+    meta: Optional[Dict[str, Any]] = None,
+    dedupe_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     ensure_teacher_workspace(teacher_id)
     proposal_id = f"tmem_{uuid.uuid4().hex[:12]}"
+    source_norm = str(source or "manual").strip().lower() or "manual"
+    target_norm = str(target or "MEMORY").upper()
+    created_at = datetime.now().isoformat(timespec="seconds")
+    priority_score = _teacher_memory_priority_score(
+        target=target_norm,
+        title=(title or "").strip(),
+        content=(content or "").strip(),
+        source=source_norm,
+        meta=meta if isinstance(meta, dict) else None,
+    )
+    ttl_days = _teacher_memory_record_ttl_days({"target": target_norm, "source": source_norm, "meta": meta})
     record = {
         "proposal_id": proposal_id,
         "teacher_id": teacher_id,
-        "target": str(target or "MEMORY").upper(),
+        "target": target_norm,
         "title": (title or "").strip(),
         "content": (content or "").strip(),
+        "source": source_norm,
+        "priority_score": priority_score,
+        "ttl_days": ttl_days,
         "status": "proposed",
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": created_at,
     }
+    expire_at = _teacher_memory_record_expire_at(record)
+    if expire_at is not None:
+        record["expires_at"] = expire_at.isoformat(timespec="seconds")
+    if isinstance(meta, dict) and meta:
+        record["meta"] = meta
+    if dedupe_key:
+        record["dedupe_key"] = str(dedupe_key).strip()[:120]
     path = _teacher_proposal_path(teacher_id, proposal_id)
     _atomic_write_json(path, record)
-    return {"ok": True, "proposal_id": proposal_id, "proposal": record}
+
+    if not TEACHER_MEMORY_AUTO_APPLY_ENABLED:
+        return {"ok": True, "proposal_id": proposal_id, "proposal": record}
+
+    if target_norm not in TEACHER_MEMORY_AUTO_APPLY_TARGETS:
+        stamp = datetime.now().isoformat(timespec="seconds")
+        record["status"] = "rejected"
+        record["rejected_at"] = stamp
+        record["reject_reason"] = "target_not_allowed_for_auto_apply"
+        _atomic_write_json(path, record)
+        return {
+            "ok": False,
+            "proposal_id": proposal_id,
+            "status": "rejected",
+            "error": "target_not_allowed_for_auto_apply",
+            "proposal": record,
+        }
+
+    applied = teacher_memory_apply(teacher_id, proposal_id=proposal_id, approve=True)
+    if applied.get("error"):
+        stamp = datetime.now().isoformat(timespec="seconds")
+        try:
+            latest = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            latest = record
+        if not isinstance(latest, dict):
+            latest = record
+        latest["status"] = "rejected"
+        latest["rejected_at"] = stamp
+        latest["reject_reason"] = str(applied.get("error") or "auto_apply_failed")
+        _atomic_write_json(path, latest)
+        return {
+            "ok": False,
+            "proposal_id": proposal_id,
+            "status": "rejected",
+            "error": str(applied.get("error") or "auto_apply_failed"),
+            "proposal": latest,
+        }
+
+    try:
+        final_record = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        final_record = record
+    return {
+        "ok": True,
+        "proposal_id": proposal_id,
+        "status": str(applied.get("status") or "applied"),
+        "auto_applied": True,
+        "proposal": final_record if isinstance(final_record, dict) else record,
+    }
 
 
 def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True) -> Dict[str, Any]:
@@ -1387,13 +2390,40 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
         record["status"] = "rejected"
         record["rejected_at"] = datetime.now().isoformat(timespec="seconds")
         _atomic_write_json(path, record)
+        _teacher_memory_log_event(
+            teacher_id,
+            "proposal_rejected",
+            {
+                "proposal_id": proposal_id,
+                "target": str(record.get("target") or "MEMORY"),
+                "source": str(record.get("source") or "manual"),
+                "reason": "manual_reject",
+            },
+        )
         return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
 
     target = str(record.get("target") or "MEMORY").upper()
     title = str(record.get("title") or "").strip()
     content = str(record.get("content") or "").strip()
+    source = str(record.get("source") or "manual").strip().lower() or "manual"
     if not content:
         return {"error": "empty content", "proposal_id": proposal_id}
+    if TEACHER_MEMORY_AUTO_APPLY_STRICT and _teacher_memory_is_sensitive(content):
+        record["status"] = "rejected"
+        record["rejected_at"] = datetime.now().isoformat(timespec="seconds")
+        record["reject_reason"] = "sensitive_content_blocked"
+        _atomic_write_json(path, record)
+        _teacher_memory_log_event(
+            teacher_id,
+            "proposal_rejected",
+            {
+                "proposal_id": proposal_id,
+                "target": target,
+                "source": source,
+                "reason": "sensitive_content_blocked",
+            },
+        )
+        return {"error": "sensitive_content_blocked", "proposal_id": proposal_id}
 
     if target == "DAILY":
         out_path = teacher_daily_memory_path(teacher_id)
@@ -1402,6 +2432,13 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
     else:
         out_path = teacher_workspace_file(teacher_id, "MEMORY.md")
 
+    supersedes = _teacher_memory_find_conflicting_applied(
+        teacher_id,
+        proposal_id=proposal_id,
+        target=target,
+        content=content,
+    )
+
     stamp = datetime.now().isoformat(timespec="seconds")
     entry_lines = []
     if title:
@@ -1409,6 +2446,10 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
     else:
         entry_lines.append("## Memory Update")
     entry_lines.append(f"- ts: {stamp}")
+    entry_lines.append(f"- entry_id: {proposal_id}")
+    entry_lines.append(f"- source: {source}")
+    if supersedes:
+        entry_lines.append(f"- supersedes: {', '.join(supersedes)}")
     entry_lines.append("")
     entry_lines.append(content)
     entry = "\n".join(entry_lines).strip() + "\n\n"
@@ -1419,6 +2460,14 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
     record["status"] = "applied"
     record["applied_at"] = stamp
     record["applied_to"] = str(out_path)
+    record["ttl_days"] = _teacher_memory_record_ttl_days(record)
+    expire_at = _teacher_memory_record_expire_at(record)
+    if expire_at is not None:
+        record["expires_at"] = expire_at.isoformat(timespec="seconds")
+    else:
+        record.pop("expires_at", None)
+    if supersedes:
+        record["supersedes"] = supersedes
 
     # Best-effort semantic indexing for later retrieval; do not block apply on failures.
     mem0_info: Optional[Dict[str, Any]] = None
@@ -1435,6 +2484,7 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
                     "proposal_id": proposal_id,
                     "target": target,
                     "title": title or "Memory Update",
+                    "source": source,
                     "ts": stamp,
                 },
             )
@@ -1454,10 +2504,324 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
         record["mem0"] = mem0_info
 
     _atomic_write_json(path, record)
+    if supersedes:
+        _teacher_memory_mark_superseded(teacher_id, supersedes, by_proposal_id=proposal_id)
+    _teacher_memory_log_event(
+        teacher_id,
+        "proposal_applied",
+        {
+            "proposal_id": proposal_id,
+            "target": target,
+            "source": source,
+            "priority_score": int(record.get("priority_score") or 0),
+            "supersedes": len(supersedes),
+            "ttl_days": _teacher_memory_record_ttl_days(record),
+            "expired": bool(_teacher_memory_is_expired_record(record)),
+        },
+    )
     out: Dict[str, Any] = {"ok": True, "proposal_id": proposal_id, "status": "applied", "applied_to": str(out_path)}
     if mem0_info is not None:
         out["mem0"] = mem0_info
+    if supersedes:
+        out["supersedes"] = supersedes
     return out
+
+
+def _teacher_memory_norm_text(text: str) -> str:
+    compact = re.sub(r"\s+", " ", str(text or "")).strip().lower()
+    compact = re.sub(r"[，。！？、,.!?;；:：`'\"“”‘’（）()\\[\\]{}<>]", "", compact)
+    return compact
+
+
+def _teacher_memory_stable_hash(*parts: str) -> str:
+    joined = "||".join(str(p or "").strip() for p in parts)
+    return hashlib.sha1(joined.encode("utf-8", errors="ignore")).hexdigest()[:20]
+
+
+def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
+    ensure_teacher_workspace(teacher_id)
+    proposals_dir = teacher_workspace_dir(teacher_id) / "proposals"
+    if not proposals_dir.exists():
+        return []
+    take = max(1, min(int(limit or 200), 1000))
+    files = sorted(
+        proposals_dir.glob("*.json"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    out: List[Dict[str, Any]] = []
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if "proposal_id" not in data:
+            data["proposal_id"] = path.stem
+        out.append(data)
+        if len(out) >= take:
+            break
+    return out
+
+
+def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
+    if TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY <= 0:
+        return False
+    today = datetime.now().date().isoformat()
+    count = 0
+    for rec in _teacher_memory_recent_proposals(teacher_id, limit=300):
+        created_at = str(rec.get("created_at") or "")
+        if not created_at.startswith(today):
+            continue
+        status = str(rec.get("status") or "").strip().lower()
+        if status not in {"proposed", "applied"}:
+            continue
+        source = str(rec.get("source") or "").strip().lower()
+        if not source.startswith("auto_"):
+            continue
+        count += 1
+        if count >= TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY:
+            return True
+    return False
+
+
+def _teacher_memory_find_duplicate(
+    teacher_id: str,
+    *,
+    target: str,
+    content: str,
+    dedupe_key: str,
+) -> Optional[Dict[str, Any]]:
+    target_norm = str(target or "MEMORY").upper()
+    content_norm = _teacher_memory_norm_text(content)
+    for rec in _teacher_memory_recent_proposals(teacher_id, limit=300):
+        status = str(rec.get("status") or "").strip().lower()
+        if status not in {"proposed", "applied"}:
+            continue
+        rec_key = str(rec.get("dedupe_key") or "").strip()
+        if rec_key and rec_key == dedupe_key:
+            return rec
+        rec_target = str(rec.get("target") or "").upper()
+        if rec_target != target_norm:
+            continue
+        rec_content_norm = _teacher_memory_norm_text(str(rec.get("content") or ""))
+        if content_norm and rec_content_norm and rec_content_norm == content_norm:
+            return rec
+    return None
+
+
+def _teacher_session_compaction_cycle_no(teacher_id: str, session_id: str) -> int:
+    item = _teacher_session_index_item(teacher_id, session_id)
+    try:
+        runs = int(item.get("compaction_runs") or 0)
+    except Exception:
+        runs = 0
+    return max(1, runs + 1)
+
+
+def teacher_memory_auto_propose_from_turn(
+    teacher_id: str,
+    session_id: str,
+    user_text: str,
+    assistant_text: str,
+) -> Dict[str, Any]:
+    if not TEACHER_MEMORY_AUTO_ENABLED:
+        return {"ok": False, "reason": "disabled"}
+    text = str(user_text or "").strip()
+    if not text:
+        return {"ok": False, "reason": "empty_user_text"}
+    if len(_teacher_memory_norm_text(text)) < TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS:
+        return {"ok": False, "reason": "too_short"}
+
+    has_intent = any(p.search(text) for p in _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS)
+    inferred = None
+    if not has_intent:
+        inferred = _teacher_memory_auto_infer_candidate(teacher_id, session_id, text)
+        if not inferred:
+            return {"ok": False, "reason": "no_intent"}
+    if _teacher_memory_auto_quota_reached(teacher_id):
+        return {"ok": False, "reason": "daily_quota_reached"}
+
+    if inferred:
+        target = str(inferred.get("target") or "MEMORY").upper()
+        title = str(inferred.get("title") or "自动记忆：老师默认偏好")
+        content = str(inferred.get("content") or text[:1200]).strip()
+        trigger = str(inferred.get("trigger") or "implicit_repeated_preference")
+        source = "auto_infer"
+        dedupe_key = _teacher_memory_stable_hash("auto_infer", teacher_id, target, _teacher_memory_norm_text(content))
+        meta = {
+            "session_id": str(session_id or "main"),
+            "trigger": trigger,
+            "similar_hits": int(inferred.get("similar_hits") or 0),
+            "user_text_preview": text[:160],
+            "assistant_text_preview": str(assistant_text or "")[:160],
+        }
+    else:
+        target = "DAILY" if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS) else "MEMORY"
+        content = text[:1200].strip()
+        source = "auto_intent"
+        title = "自动记忆：老师长期偏好" if target == "MEMORY" else "自动记录：老师临时偏好"
+        dedupe_key = _teacher_memory_stable_hash("auto_intent", teacher_id, target, _teacher_memory_norm_text(content))
+        meta = {
+            "session_id": str(session_id or "main"),
+            "trigger": "explicit_intent",
+            "user_text_preview": text[:160],
+            "assistant_text_preview": str(assistant_text or "")[:160],
+        }
+    priority_score = _teacher_memory_priority_score(
+        target=target,
+        title=title,
+        content=content,
+        source=source,
+        meta=meta,
+    )
+    if source == "auto_infer" and priority_score < TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY:
+        _teacher_memory_log_event(
+            teacher_id,
+            "auto_infer_skipped",
+            {
+                "session_id": str(session_id or "main"),
+                "priority_score": priority_score,
+                "min_priority": TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
+                "query_preview": text[:120],
+            },
+        )
+        return {
+            "ok": False,
+            "created": False,
+            "target": target,
+            "reason": "low_priority",
+            "priority_score": priority_score,
+            "min_priority": TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
+        }
+    dup = _teacher_memory_find_duplicate(teacher_id, target=target, content=content, dedupe_key=dedupe_key)
+    if dup:
+        return {"ok": True, "created": False, "reason": "duplicate", "proposal_id": dup.get("proposal_id")}
+
+    result = teacher_memory_propose(
+        teacher_id,
+        target=target,
+        title=title,
+        content=content,
+        source=source,
+        meta=meta,
+        dedupe_key=dedupe_key,
+    )
+    if not result.get("ok"):
+        return {
+            "ok": False,
+            "created": False,
+            "target": target,
+            "proposal_id": result.get("proposal_id"),
+            "reason": str(result.get("error") or "auto_apply_failed"),
+        }
+    return {
+        "ok": True,
+        "created": True,
+        "target": target,
+        "proposal_id": result.get("proposal_id"),
+        "status": str(result.get("status") or "applied"),
+        "priority_score": priority_score,
+    }
+
+
+def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
+    if not TEACHER_MEMORY_AUTO_ENABLED or not TEACHER_MEMORY_FLUSH_ENABLED:
+        return {"ok": False, "reason": "disabled"}
+    if not TEACHER_SESSION_COMPACT_ENABLED:
+        return {"ok": False, "reason": "compaction_disabled"}
+    path = teacher_session_file(teacher_id, session_id)
+    if not path.exists():
+        return {"ok": False, "reason": "session_not_found"}
+
+    records: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        text = (line or "").strip()
+        if not text:
+            continue
+        try:
+            rec = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(rec, dict):
+            records.append(rec)
+
+    dialog = [r for r in records if str(r.get("role") or "") in {"user", "assistant"} and not bool(r.get("synthetic"))]
+    threshold = max(1, TEACHER_SESSION_COMPACT_MAX_MESSAGES - TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES)
+    if len(dialog) < threshold:
+        return {"ok": False, "reason": "below_threshold", "messages": len(dialog), "threshold": threshold}
+    if _teacher_memory_auto_quota_reached(teacher_id):
+        return {"ok": False, "reason": "daily_quota_reached"}
+
+    cycle_no = _teacher_session_compaction_cycle_no(teacher_id, session_id)
+    idx = _teacher_session_index_item(teacher_id, session_id)
+    try:
+        flushed_cycle = int(idx.get("memory_flush_cycle") or 0)
+    except Exception:
+        flushed_cycle = 0
+    if flushed_cycle >= cycle_no:
+        return {"ok": False, "reason": "already_flushed_cycle", "cycle": cycle_no}
+
+    dedupe_key = _teacher_memory_stable_hash("auto_flush", teacher_id, session_id, f"cycle_{cycle_no}")
+    dup = _teacher_memory_find_duplicate(
+        teacher_id,
+        target="DAILY",
+        content=f"auto_flush:{session_id}:cycle_{cycle_no}",
+        dedupe_key=dedupe_key,
+    )
+    if dup:
+        return {"ok": True, "created": False, "reason": "duplicate", "proposal_id": dup.get("proposal_id")}
+
+    tail = dialog[-min(12, len(dialog)) :]
+    transcript = _teacher_compact_transcript(tail, TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS).strip()
+    if not transcript:
+        return {"ok": False, "reason": "empty_transcript"}
+
+    today = datetime.now().date().isoformat()
+    title = f"自动会话记要 {today}"
+    content = (
+        f"- session_id: {session_id}\n"
+        f"- trigger: near_compaction\n"
+        f"- cycle: {cycle_no}\n"
+        f"- dialog_messages: {len(dialog)}\n"
+        f"- compact_threshold: {TEACHER_SESSION_COMPACT_MAX_MESSAGES}\n\n"
+        "### 近期对话摘录\n"
+        f"{transcript}"
+    )
+    result = teacher_memory_propose(
+        teacher_id,
+        target="DAILY",
+        title=title,
+        content=content[:2400],
+        source="auto_flush",
+        meta={
+            "session_id": str(session_id or "main"),
+            "trigger": "near_compaction",
+            "cycle": cycle_no,
+            "dialog_messages": len(dialog),
+            "compact_threshold": TEACHER_SESSION_COMPACT_MAX_MESSAGES,
+            "soft_margin_messages": TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
+        },
+        dedupe_key=dedupe_key,
+    )
+    if not result.get("ok"):
+        return {
+            "ok": False,
+            "created": False,
+            "target": "DAILY",
+            "proposal_id": result.get("proposal_id"),
+            "reason": str(result.get("error") or "auto_apply_failed"),
+        }
+    _mark_teacher_session_memory_flush(teacher_id, session_id, cycle_no=cycle_no)
+    return {
+        "ok": True,
+        "created": True,
+        "target": "DAILY",
+        "proposal_id": result.get("proposal_id"),
+        "status": str(result.get("status") or "applied"),
+        "cycle": cycle_no,
+    }
 
 app = FastAPI(title="Physics Agent API", version="0.2.0")
 
@@ -1502,6 +2866,11 @@ class ChatStartRequest(ChatRequest):
     session_id: Optional[str] = None
 
 
+class TeacherMemoryProposalReviewRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    approve: bool = True
+
+
 class StudentImportRequest(BaseModel):
     source: Optional[str] = None
     exam_id: Optional[str] = None
@@ -1544,11 +2913,45 @@ class ExamUploadDraftSaveRequest(BaseModel):
     meta: Optional[Dict[str, Any]] = None
     questions: Optional[List[Dict[str, Any]]] = None
     score_schema: Optional[Dict[str, Any]] = None
+    answer_key_text: Optional[str] = None
+
+
+class RoutingSimulateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    role: Optional[str] = "teacher"
+    skill_id: Optional[str] = None
+    kind: Optional[str] = None
+    needs_tools: Optional[bool] = False
+    needs_json: Optional[bool] = False
+    config: Optional[Dict[str, Any]] = None
+
+
+class RoutingProposalCreateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    note: Optional[str] = None
+    config: Dict[str, Any]
+
+
+class RoutingProposalReviewRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    approve: Optional[bool] = True
+
+
+class RoutingRollbackRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    target_version: int
+    note: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
+
+
+def model_dump_compat(model: BaseModel, *, exclude_none: bool = False) -> Dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump(exclude_none=exclude_none)  # type: ignore[attr-defined]
+    return model.dict(exclude_none=exclude_none)
 
 
 def run_script(args: List[str]) -> str:
@@ -1647,7 +3050,7 @@ def clean_ocr_text(text: str) -> str:
     return "\n".join(lines)
 
 
-def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR") -> str:
+def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     text = ""
     try:
         import pdfplumber  # type: ignore
@@ -1677,7 +3080,7 @@ def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FRE
         try:
             t0 = time.monotonic()
             with _limit(_OCR_SEMAPHORE):
-                ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode, timeout=ocr_timeout)
+                ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode, prompt=prompt, timeout=ocr_timeout)
             diag_log(
                 "pdf.ocr.done",
                 {
@@ -1700,12 +3103,12 @@ def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FRE
     return clean_ocr_text(text)
 
 
-def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR") -> str:
+def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        return extract_text_from_pdf(path, language=language, ocr_mode=ocr_mode)
+        return extract_text_from_pdf(path, language=language, ocr_mode=ocr_mode, prompt=prompt)
     if suffix in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}:
-        return extract_text_from_image(path, language=language, ocr_mode=ocr_mode)
+        return extract_text_from_image(path, language=language, ocr_mode=ocr_mode, prompt=prompt)
     if suffix in {".md", ".markdown", ".tex", ".txt"}:
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
@@ -1724,7 +3127,7 @@ def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FR
     raise RuntimeError(f"不支持的文件类型：{suffix or path.name}")
 
 
-def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR") -> str:
+def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     _, ocr_with_sdk = load_ocr_utils()
     if not ocr_with_sdk:
         raise RuntimeError("OCR unavailable: ocr_utils not available")
@@ -1732,7 +3135,7 @@ def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "F
         ocr_timeout = parse_timeout_env("OCR_TIMEOUT_SEC")
         t0 = time.monotonic()
         with _limit(_OCR_SEMAPHORE):
-            ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode, timeout=ocr_timeout)
+            ocr_text = ocr_with_sdk(path, language=language, mode=ocr_mode, prompt=prompt, timeout=ocr_timeout)
         diag_log(
             "image.ocr.done",
             {
@@ -2569,6 +3972,175 @@ def write_exam_answers_csv(path: Path, answers: List[Dict[str, Any]]) -> None:
             writer.writerow(out)
 
 
+def load_exam_answer_key_from_csv(path: Path) -> Dict[str, str]:
+    answers: Dict[str, str] = {}
+    if not path.exists():
+        return answers
+    with path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            qid = str(row.get("question_id") or row.get("question_no") or "").strip()
+            if not qid:
+                continue
+            correct = normalize_objective_answer(str(row.get("correct_answer") or ""))
+            if correct:
+                answers[qid] = correct
+    return answers
+
+
+def load_exam_max_scores_from_questions_csv(path: Path) -> Dict[str, float]:
+    scores: Dict[str, float] = {}
+    if not path.exists():
+        return scores
+    with path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            qid = str(row.get("question_id") or "").strip()
+            if not qid:
+                continue
+            raw = row.get("max_score")
+            if raw is None or raw == "":
+                continue
+            try:
+                scores[qid] = float(raw)
+            except Exception:
+                continue
+    return scores
+
+
+def ensure_questions_max_score(
+    questions_csv: Path,
+    qids: Iterable[str],
+    default_score: float = 1.0,
+) -> List[str]:
+    """
+    Ensure questions.csv has max_score for the given qids. Returns qids that were defaulted.
+    """
+    target = {str(q or "").strip() for q in qids if str(q or "").strip()}
+    if not target or not questions_csv.exists():
+        return []
+
+    rows: List[Dict[str, Any]] = []
+    defaulted: List[str] = []
+    fields = ["question_id", "question_no", "sub_no", "order", "max_score", "stem_ref"]
+    try:
+        with questions_csv.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                out = {k: row.get(k, "") for k in fields}
+                qid = str(out.get("question_id") or "").strip()
+                if qid and qid in target:
+                    raw = out.get("max_score")
+                    if raw is None or str(raw).strip() == "":
+                        out["max_score"] = str(default_score)
+                        defaulted.append(qid)
+                rows.append(out)
+    except Exception:
+        return []
+
+    if not defaulted:
+        return []
+    try:
+        with questions_csv.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
+    except Exception:
+        return []
+    return defaulted
+
+
+def score_objective_answer(raw_answer: str, correct: str, max_score: float) -> Tuple[float, int]:
+    # Keep consistent with skills/physics-teacher-ops/scripts/apply_answer_key.py
+    if not raw_answer:
+        return 0.0, 0
+    raw = normalize_objective_answer(raw_answer)
+    if not raw:
+        return 0.0, 0
+
+    if len(correct) == 1:
+        return (max_score if raw == correct else 0.0), (1 if raw == correct else 0)
+
+    correct_set = set(correct)
+    raw_set = set(raw)
+    if raw_set == correct_set:
+        return max_score, 1
+    if raw_set.issubset(correct_set):
+        # partial credit (no wrong option)
+        return 3.0, 0
+    return 0.0, 0
+
+
+def apply_answer_key_to_responses_csv(
+    responses_path: Path,
+    answers_csv: Path,
+    questions_csv: Path,
+    out_path: Path,
+) -> Dict[str, Any]:
+    """
+    Fill missing scores for objective answers based on answers.csv + questions.csv max_score.
+    Returns basic stats for UI/logging.
+    """
+    answers = load_exam_answer_key_from_csv(answers_csv)
+    max_scores = load_exam_max_scores_from_questions_csv(questions_csv)
+
+    stats = {
+        "updated_rows": 0,
+        "total_rows": 0,
+        "scored_rows": 0,
+        "missing_answer_qids": [],
+        "missing_max_score_qids": [],
+    }
+    missing_answer_qids: set[str] = set()
+    missing_max_score_qids: set[str] = set()
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with responses_path.open(encoding="utf-8") as f_in, out_path.open("w", newline="", encoding="utf-8") as f_out:
+        reader = csv.DictReader(f_in)
+        fieldnames = list(reader.fieldnames or [])
+        if "is_correct" not in fieldnames:
+            fieldnames.append("is_correct")
+
+        writer = csv.DictWriter(f_out, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for row in reader:
+            stats["total_rows"] += 1
+            qid = str(row.get("question_id") or "").strip()
+            raw_answer = str(row.get("raw_answer") or "").strip()
+            score_val = row.get("score", "")
+
+            scored = parse_score_value(score_val)
+            if scored is not None:
+                stats["scored_rows"] += 1
+                if row.get("is_correct") is None:
+                    row["is_correct"] = ""
+                writer.writerow(row)
+                continue
+
+            # Only score if we have an objective answer and required keys.
+            if raw_answer:
+                if qid not in answers:
+                    missing_answer_qids.add(qid)
+                elif qid not in max_scores:
+                    missing_max_score_qids.add(qid)
+                else:
+                    score, is_correct = score_objective_answer(raw_answer, answers[qid], max_scores[qid])
+                    row["score"] = str(int(score)) if float(score).is_integer() else str(score)
+                    row["is_correct"] = str(is_correct)
+                    stats["updated_rows"] += 1
+                    stats["scored_rows"] += 1 if score is not None else 0
+            else:
+                if row.get("is_correct") is None:
+                    row["is_correct"] = ""
+            writer.writerow(row)
+
+    stats["missing_answer_qids"] = sorted([q for q in missing_answer_qids if q])
+    stats["missing_max_score_qids"] = sorted([q for q in missing_max_score_qids if q])
+    return stats
+
+
 def process_exam_upload_job(job_id: str) -> None:
     job = load_exam_job(job_id)
     job_dir = exam_job_path(job_id)
@@ -2759,13 +4331,16 @@ def process_exam_upload_job(job_id: str) -> None:
     answer_parse_warnings: List[str] = []
     if answer_files:
         write_exam_job(job_id, {"step": "extract_answers", "progress": 45})
+        answer_ocr_prompt = "请做OCR，只返回题号与选择题答案，不要解释。推荐每行一个：`1 A`、`2 C`、`12(1) B`。"
         answer_text_parts: List[str] = []
         for fname in answer_files:
             path = answers_dir / str(fname)
             if not path.exists():
                 continue
             try:
-                answer_text_parts.append(extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
+                answer_text_parts.append(
+                    extract_text_from_file(path, language=language, ocr_mode=ocr_mode, prompt=answer_ocr_prompt)
+                )
             except Exception as exc:
                 warnings.append(f"答案文件 {fname} 解析失败：{str(exc)[:120]}")
         answer_text = "\n\n".join([t for t in answer_text_parts if t])
@@ -2781,44 +4356,87 @@ def process_exam_upload_job(job_id: str) -> None:
     # Ensure questions.csv exists with best-effort max scores.
     # If we need to score raw answers, default max_score=1 for those questions unless teacher edits later.
     max_scores = compute_max_scores_from_rows(rows)
-    needs_answer_scoring = any(
-        (r.get("score") is None) and str(r.get("raw_answer") or "").strip() for r in rows
-    )
+    needs_answer_scoring = any((r.get("score") is None) and str(r.get("raw_answer") or "").strip() for r in rows)
+    qids_need: set[str] = set()
+    defaulted_max_score_qids: List[str] = []
     if needs_answer_scoring and answers:
-        qids_need = {str(r.get("question_id") or "").strip() for r in rows if (r.get("score") is None) and str(r.get("raw_answer") or "").strip()}
-        for qid in qids_need:
+        qids_need = {
+            str(r.get("question_id") or "").strip()
+            for r in rows
+            if (r.get("score") is None) and str(r.get("raw_answer") or "").strip()
+        }
+        for qid in sorted(qids_need):
             if not qid:
                 continue
             if qid not in max_scores:
                 max_scores[qid] = 1.0
+                defaulted_max_score_qids.append(qid)
 
     questions_csv = derived_dir / "questions.csv"
     write_exam_questions_csv(questions_csv, questions, max_scores=max_scores)
 
     # Apply answer key -> produce responses_scored.csv (best-effort).
+    answer_apply_stats: Dict[str, Any] = {}
     if needs_answer_scoring and answers and answers_csv.exists():
-        script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "apply_answer_key.py"
-        cmd = [
-            "python3",
-            str(script),
-            "--responses",
-            str(responses_unscored_csv),
-            "--answers",
-            str(answers_csv),
-            "--questions",
-            str(questions_csv),
-            "--out",
-            str(responses_scored_csv),
-        ]
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
-        if proc.returncode != 0 or not responses_scored_csv.exists():
-            warnings.append("未能根据标准答案自动补齐客观题得分（将保留原始成绩表得分）。")
-            # Fallback: treat unscored as scored.
+        try:
+            answer_apply_stats = apply_answer_key_to_responses_csv(
+                responses_unscored_csv,
+                answers_csv,
+                questions_csv,
+                responses_scored_csv,
+            )
+            if answer_apply_stats.get("updated_rows"):
+                diag_log(
+                    "exam_upload.answer_key.applied",
+                    {
+                        "job_id": job_id,
+                        "updated_rows": answer_apply_stats.get("updated_rows"),
+                        "total_rows": answer_apply_stats.get("total_rows"),
+                    },
+                )
+            missing_ans = answer_apply_stats.get("missing_answer_qids") or []
+            missing_max = answer_apply_stats.get("missing_max_score_qids") or []
+            if missing_ans:
+                preview = "，".join(missing_ans[:8])
+                more = f" 等{len(missing_ans)}题" if len(missing_ans) > 8 else ""
+                warnings.append(f"标准答案缺少题号：{preview}{more}（这些题无法自动评分）")
+            if missing_max:
+                preview = "，".join(missing_max[:8])
+                more = f" 等{len(missing_max)}题" if len(missing_max) > 8 else ""
+                warnings.append(f"题目满分缺失：{preview}{more}（这些题无法自动评分）")
+        except Exception as exc:
+            warnings.append(f"未能根据标准答案自动补齐客观题得分：{str(exc)[:120]}")
             shutil.copy2(responses_unscored_csv, responses_scored_csv)
-        else:
-            diag_log("exam_upload.answer_key.applied", {"job_id": job_id, "answers": len(answers), "qids": len(max_scores)})
     else:
         shutil.copy2(responses_unscored_csv, responses_scored_csv)
+
+    # Compute raw/scored counts for UI (avoid relying on "totals", which requires numeric scores).
+    raw_students: set[str] = set()
+    scored_students: set[str] = set()
+    responses_total = 0
+    responses_scored = 0
+    try:
+        with responses_scored_csv.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                responses_total += 1
+                sid = str(row.get("student_id") or row.get("student_name") or "").strip()
+                if sid:
+                    raw_students.add(sid)
+                if parse_score_value(row.get("score")) is not None:
+                    responses_scored += 1
+                    if sid:
+                        scored_students.add(sid)
+    except Exception:
+        pass
+
+    scoring_status = "unscored"
+    if responses_scored <= 0:
+        scoring_status = "unscored"
+    elif responses_total and responses_scored >= responses_total:
+        scoring_status = "scored"
+    else:
+        scoring_status = "partial"
 
     # Draft payload
     totals_result = compute_exam_totals(responses_scored_csv)
@@ -2866,10 +4484,22 @@ def process_exam_upload_job(job_id: str) -> None:
         }
         if answers
         else {"count": 0, "source_files": answer_files},
+        "scoring": {
+            "status": scoring_status,
+            "responses_total": responses_total,
+            "responses_scored": responses_scored,
+            "students_total": len(raw_students),
+            "students_scored": len(scored_students),
+            "default_max_score_qids": defaulted_max_score_qids,
+        },
         "counts": {
-            "students": len(totals_result["totals"]),
-            "responses": len(rows),
+            "students": len(raw_students),
+            "responses": responses_total or len(rows),
             "questions": len(questions),
+        },
+        "counts_scored": {
+            "students": len(scored_students),
+            "responses": responses_scored,
         },
         "totals_summary": {
             "avg_total": round(avg_total, 3),
@@ -2889,7 +4519,10 @@ def process_exam_upload_job(job_id: str) -> None:
             "progress": 100,
             "exam_id": exam_id,
             "counts": parsed_payload.get("counts"),
+            "counts_scored": parsed_payload.get("counts_scored"),
             "totals_summary": parsed_payload.get("totals_summary"),
+            "scoring": parsed_payload.get("scoring"),
+            "answer_key": parsed_payload.get("answer_key"),
             "warnings": warnings,
             "draft_version": 1,
         },
@@ -3641,6 +5274,513 @@ def exam_question_detail(exam_id: str, question_id: Optional[str] = None, questi
     }
 
 
+_EXAM_CHART_DEFAULT_TYPES = ["score_distribution", "knowledge_radar", "class_compare", "question_discrimination"]
+_EXAM_CHART_TYPE_ALIASES = {
+    "score_distribution": "score_distribution",
+    "distribution": "score_distribution",
+    "histogram": "score_distribution",
+    "成绩分布": "score_distribution",
+    "分布": "score_distribution",
+    "knowledge_radar": "knowledge_radar",
+    "radar": "knowledge_radar",
+    "knowledge": "knowledge_radar",
+    "知识点雷达": "knowledge_radar",
+    "雷达图": "knowledge_radar",
+    "class_compare": "class_compare",
+    "class": "class_compare",
+    "group_compare": "class_compare",
+    "班级对比": "class_compare",
+    "对比": "class_compare",
+    "question_discrimination": "question_discrimination",
+    "discrimination": "question_discrimination",
+    "区分度": "question_discrimination",
+    "题目区分度": "question_discrimination",
+}
+
+
+def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        out = int(value)
+    except Exception:
+        out = default
+    if out < minimum:
+        return minimum
+    if out > maximum:
+        return maximum
+    return out
+
+
+def _normalize_exam_chart_types(value: Any) -> List[str]:
+    raw_items: List[str] = []
+    if isinstance(value, list):
+        raw_items = [str(v or "").strip() for v in value]
+    elif isinstance(value, str):
+        raw_items = [x.strip() for x in re.split(r"[,\s，;；]+", value) if x.strip()]
+    normalized: List[str] = []
+    for item in raw_items:
+        key = _EXAM_CHART_TYPE_ALIASES.get(item.lower()) or _EXAM_CHART_TYPE_ALIASES.get(item)
+        if not key:
+            continue
+        if key not in normalized:
+            normalized.append(key)
+    return normalized or list(_EXAM_CHART_DEFAULT_TYPES)
+
+
+def _build_exam_chart_bundle_input(exam_id: str, top_n: int) -> Dict[str, Any]:
+    manifest = load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+    responses_path = exam_responses_path(manifest)
+    if not responses_path or not responses_path.exists():
+        return {"error": "responses_missing", "exam_id": exam_id}
+
+    totals_result = compute_exam_totals(responses_path)
+    totals: Dict[str, float] = totals_result.get("totals") or {}
+    students_meta: Dict[str, Dict[str, str]] = totals_result.get("students") or {}
+    if not totals:
+        return {"error": "no_scored_responses", "exam_id": exam_id}
+
+    score_values = [float(v) for v in totals.values()]
+    student_count = len(score_values)
+    warnings: List[str] = []
+
+    class_scores: Dict[str, List[float]] = {}
+    for sid, total in totals.items():
+        cls = str((students_meta.get(sid) or {}).get("class_name") or "").strip() or "未分班"
+        class_scores.setdefault(cls, []).append(float(total))
+
+    class_compare_mode = "class"
+    class_compare: List[Dict[str, Any]] = []
+    if len(class_scores) >= 2:
+        for cls, vals in class_scores.items():
+            class_compare.append(
+                {
+                    "label": cls,
+                    "avg_total": round(sum(vals) / len(vals), 3),
+                    "student_count": len(vals),
+                }
+            )
+        class_compare.sort(key=lambda x: x.get("avg_total") or 0, reverse=True)
+    else:
+        class_compare_mode = "tier"
+        ranked_scores = [float(v) for _, v in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
+        if ranked_scores:
+            n = len(ranked_scores)
+            idx1 = max(1, n // 3)
+            idx2 = n if n < 3 else min(n, max(idx1 + 1, (2 * n) // 3))
+            segments = [
+                ("Top 33%", ranked_scores[:idx1]),
+                ("Middle 34%", ranked_scores[idx1:idx2]),
+                ("Bottom 33%", ranked_scores[idx2:]),
+            ]
+            for label, vals in segments:
+                if not vals:
+                    continue
+                class_compare.append(
+                    {
+                        "label": label,
+                        "avg_total": round(sum(vals) / len(vals), 3),
+                        "student_count": len(vals),
+                    }
+                )
+
+    analysis_res = exam_analysis_get(exam_id)
+    kp_items: List[Dict[str, Any]] = []
+    if analysis_res.get("ok"):
+        analysis = analysis_res.get("analysis") if isinstance(analysis_res.get("analysis"), dict) else {}
+        raw_kps = analysis.get("knowledge_points") if isinstance(analysis, dict) else None
+        if isinstance(raw_kps, list):
+            for row in raw_kps:
+                if not isinstance(row, dict):
+                    continue
+                label = str(row.get("kp_id") or row.get("name") or row.get("kp") or "").strip()
+                if not label:
+                    continue
+                mastery: Optional[float] = None
+                loss_rate = parse_score_value(row.get("loss_rate"))
+                if loss_rate is not None:
+                    mastery = 1.0 - float(loss_rate)
+                if mastery is None:
+                    avg_score = parse_score_value(row.get("avg_score"))
+                    coverage_score = parse_score_value(row.get("coverage_score"))
+                    if (avg_score is not None) and (coverage_score is not None) and coverage_score > 0:
+                        mastery = float(avg_score) / float(coverage_score)
+                if mastery is None:
+                    mastery = parse_score_value(row.get("mastery"))
+                if mastery is None:
+                    continue
+                mastery = max(0.0, min(1.0, float(mastery)))
+                kp_items.append(
+                    {
+                        "label": label,
+                        "mastery": round(mastery, 4),
+                        "loss_rate": round(1.0 - mastery, 4),
+                        "coverage_count": int(row.get("coverage_count") or 0),
+                    }
+                )
+    if kp_items:
+        kp_items.sort(key=lambda x: x.get("mastery") or 0)
+        kp_limit = _safe_int_arg(top_n, default=8, minimum=3, maximum=12)
+        kp_items = kp_items[:kp_limit]
+    else:
+        warnings.append("知识点雷达图数据不足（analysis.knowledge_points 缺失或为空）。")
+
+    questions_path = exam_questions_path(manifest)
+    questions = read_questions_csv(questions_path) if questions_path else {}
+    question_scores: Dict[str, Dict[str, float]] = {}
+    question_meta: Dict[str, Dict[str, Any]] = {}
+    observed_max: Dict[str, float] = {}
+    with responses_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            sid = str(row.get("student_id") or row.get("student_name") or "").strip()
+            qid = str(row.get("question_id") or "").strip()
+            score = parse_score_value(row.get("score"))
+            if not sid or not qid or score is None:
+                continue
+            per_q = question_scores.setdefault(qid, {})
+            prev = per_q.get(sid)
+            if (prev is None) or (score > prev):
+                per_q[sid] = float(score)
+            prev_max = observed_max.get(qid)
+            observed_max[qid] = float(score) if prev_max is None else max(prev_max, float(score))
+            if qid not in question_meta:
+                question_meta[qid] = {
+                    "question_no": str(row.get("question_no") or "").strip(),
+                    "question_id": qid,
+                }
+
+    question_discrimination: List[Dict[str, Any]] = []
+    ranked_students = [sid for sid, _ in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
+    if len(ranked_students) >= 4:
+        group_size = max(1, int(len(ranked_students) * 0.27))
+        group_size = min(group_size, len(ranked_students) // 2)
+        top_ids = ranked_students[:group_size]
+        bottom_ids = ranked_students[-group_size:]
+        for qid, per_student in question_scores.items():
+            q_meta = questions.get(qid) or question_meta.get(qid) or {}
+            max_score = parse_score_value(q_meta.get("max_score"))
+            if (max_score is None) or (max_score <= 0):
+                max_score = observed_max.get(qid)
+            if (max_score is None) or (max_score <= 0):
+                continue
+            top_vals = [float(per_student[sid]) / float(max_score) for sid in top_ids if sid in per_student]
+            bottom_vals = [float(per_student[sid]) / float(max_score) for sid in bottom_ids if sid in per_student]
+            if (not top_vals) or (not bottom_vals):
+                continue
+            disc = (sum(top_vals) / len(top_vals)) - (sum(bottom_vals) / len(bottom_vals))
+            avg_score = sum(per_student.values()) / len(per_student) if per_student else 0.0
+            q_no = str(q_meta.get("question_no") or "").strip()
+            label = q_no if q_no.upper().startswith("Q") else (f"Q{q_no}" if q_no else qid)
+            question_discrimination.append(
+                {
+                    "question_id": qid,
+                    "label": label,
+                    "discrimination": round(float(disc), 4),
+                    "avg_score": round(float(avg_score), 4),
+                    "max_score": float(max_score),
+                    "response_count": len(per_student),
+                }
+            )
+        question_discrimination.sort(key=lambda x: x.get("discrimination") or 0)
+        question_discrimination = question_discrimination[: _safe_int_arg(top_n, default=12, minimum=3, maximum=30)]
+    else:
+        warnings.append("题目区分度图数据不足（学生数至少需要 4 人）。")
+
+    return {
+        "ok": True,
+        "exam_id": exam_id,
+        "student_count": student_count,
+        "scores": score_values,
+        "knowledge_points": kp_items,
+        "class_compare": class_compare,
+        "class_compare_mode": class_compare_mode,
+        "question_discrimination": question_discrimination,
+        "warnings": warnings,
+    }
+
+
+def _chart_code_score_distribution() -> str:
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "import numpy as np\n"
+        "scores = [float(x) for x in (input_data.get('scores') or []) if x is not None]\n"
+        "if not scores:\n"
+        "    raise ValueError('no score data')\n"
+        "title = str(input_data.get('title') or 'Score Distribution')\n"
+        "bins = min(15, max(6, int(np.sqrt(len(scores)))))\n"
+        "plt.figure(figsize=(8, 4.8))\n"
+        "plt.hist(scores, bins=bins, color='#3B82F6', edgecolor='white', alpha=0.92)\n"
+        "mean_val = float(np.mean(scores))\n"
+        "median_val = float(np.median(scores))\n"
+        "plt.axvline(mean_val, color='#EF4444', linestyle='--', linewidth=1.8, label='mean=' + format(mean_val, '.1f'))\n"
+        "plt.axvline(median_val, color='#10B981', linestyle='-.', linewidth=1.6, label='median=' + format(median_val, '.1f'))\n"
+        "plt.title(title)\n"
+        "plt.xlabel('Total Score')\n"
+        "plt.ylabel('Students')\n"
+        "plt.grid(axis='y', alpha=0.25)\n"
+        "plt.legend(frameon=False)\n"
+        "save_chart('score_distribution.png')\n"
+    )
+
+
+def _chart_code_knowledge_radar() -> str:
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "import numpy as np\n"
+        "items = input_data.get('items') or []\n"
+        "labels = []\n"
+        "values = []\n"
+        "for row in items:\n"
+        "    row = row or {}\n"
+        "    label = str(row.get('label') or row.get('kp_id') or '').strip()\n"
+        "    if not label:\n"
+        "        continue\n"
+        "    try:\n"
+        "        val = float(row.get('mastery'))\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "    labels.append(label)\n"
+        "    values.append(max(0.0, min(1.0, val)))\n"
+        "if not labels:\n"
+        "    raise ValueError('no knowledge data')\n"
+        "title = str(input_data.get('title') or 'Knowledge Mastery Radar')\n"
+        "plt.figure(figsize=(6.6, 6.2))\n"
+        "if len(labels) >= 3:\n"
+        "    angles = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()\n"
+        "    values_loop = values + values[:1]\n"
+        "    angles_loop = angles + angles[:1]\n"
+        "    ax = plt.subplot(111, polar=True)\n"
+        "    ax.plot(angles_loop, values_loop, color='#2563EB', linewidth=2)\n"
+        "    ax.fill(angles_loop, values_loop, color='#60A5FA', alpha=0.35)\n"
+        "    ax.set_xticks(angles)\n"
+        "    ax.set_xticklabels(labels)\n"
+        "    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])\n"
+        "    ax.set_ylim(0, 1.0)\n"
+        "    ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'])\n"
+        "    ax.set_title(title, pad=18)\n"
+        "else:\n"
+        "    plt.bar(labels, values, color='#2563EB', alpha=0.9)\n"
+        "    plt.ylim(0, 1.0)\n"
+        "    plt.title(title)\n"
+        "    plt.ylabel('Mastery (0-1)')\n"
+        "    plt.grid(axis='y', alpha=0.25)\n"
+        "save_chart('knowledge_radar.png')\n"
+    )
+
+
+def _chart_code_class_compare() -> str:
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "items = input_data.get('items') or []\n"
+        "labels = []\n"
+        "avg_scores = []\n"
+        "counts = []\n"
+        "for row in items:\n"
+        "    row = row or {}\n"
+        "    label = str(row.get('label') or '').strip()\n"
+        "    if not label:\n"
+        "        continue\n"
+        "    try:\n"
+        "        avg = float(row.get('avg_total'))\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "    labels.append(label)\n"
+        "    avg_scores.append(avg)\n"
+        "    counts.append(int(row.get('student_count') or 0))\n"
+        "if not labels:\n"
+        "    raise ValueError('no class compare data')\n"
+        "title = str(input_data.get('title') or 'Class Compare')\n"
+        "x_label = str(input_data.get('x_label') or 'Group')\n"
+        "plt.figure(figsize=(8, 4.8))\n"
+        "bars = plt.bar(labels, avg_scores, color='#0EA5E9', alpha=0.9)\n"
+        "for bar, cnt in zip(bars, counts):\n"
+        "    h = bar.get_height()\n"
+        "    plt.text(bar.get_x() + bar.get_width() / 2, h, 'n=' + str(cnt), ha='center', va='bottom', fontsize=9)\n"
+        "plt.title(title)\n"
+        "plt.xlabel(x_label)\n"
+        "plt.ylabel('Average Total Score')\n"
+        "plt.grid(axis='y', alpha=0.25)\n"
+        "save_chart('class_compare.png')\n"
+    )
+
+
+def _chart_code_question_discrimination() -> str:
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "import numpy as np\n"
+        "items = input_data.get('items') or []\n"
+        "labels = []\n"
+        "values = []\n"
+        "for row in items:\n"
+        "    row = row or {}\n"
+        "    label = str(row.get('label') or row.get('question_id') or '').strip()\n"
+        "    if not label:\n"
+        "        continue\n"
+        "    try:\n"
+        "        v = float(row.get('discrimination'))\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "    labels.append(label)\n"
+        "    values.append(v)\n"
+        "if not labels:\n"
+        "    raise ValueError('no discrimination data')\n"
+        "title = str(input_data.get('title') or 'Question Discrimination')\n"
+        "height = max(4.8, 0.35 * len(labels) + 1.5)\n"
+        "plt.figure(figsize=(9, height))\n"
+        "y = np.arange(len(labels))\n"
+        "colors = ['#10B981' if v >= 0.3 else ('#F59E0B' if v >= 0.2 else '#EF4444') for v in values]\n"
+        "plt.barh(y, values, color=colors, alpha=0.92)\n"
+        "plt.yticks(y, labels)\n"
+        "plt.axvline(0.2, color='#F59E0B', linestyle='--', linewidth=1.2)\n"
+        "plt.axvline(0.4, color='#10B981', linestyle='--', linewidth=1.2)\n"
+        "x_min = min(-0.1, min(values) - 0.05)\n"
+        "x_max = max(0.6, max(values) + 0.08)\n"
+        "plt.xlim(x_min, x_max)\n"
+        "for idx, v in enumerate(values):\n"
+        "    offset = 0.01 if v >= 0 else -0.08\n"
+        "    plt.text(v + offset, idx, format(v, '.2f'), va='center', fontsize=8)\n"
+        "plt.gca().invert_yaxis()\n"
+        "plt.title(title)\n"
+        "plt.xlabel('Discrimination (Top27% - Bottom27%)')\n"
+        "plt.grid(axis='x', alpha=0.25)\n"
+        "save_chart('question_discrimination.png')\n"
+    )
+
+
+def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
+    exam_id = str(args.get("exam_id") or "").strip()
+    if not exam_id:
+        return {"error": "exam_id_required"}
+
+    top_n = _safe_int_arg(args.get("top_n"), default=12, minimum=3, maximum=30)
+    timeout_sec = _safe_int_arg(args.get("timeout_sec"), default=120, minimum=30, maximum=3600)
+    chart_types = _normalize_exam_chart_types(args.get("chart_types"))
+
+    bundle = _build_exam_chart_bundle_input(exam_id, top_n=top_n)
+    if bundle.get("error"):
+        return bundle
+
+    warnings = list(bundle.get("warnings") or [])
+    charts: List[Dict[str, Any]] = []
+
+    def run_chart(
+        chart_type: str,
+        title: str,
+        python_code: str,
+        input_data: Dict[str, Any],
+        save_as: str,
+    ) -> None:
+        result = execute_chart_exec(
+            {
+                "python_code": python_code,
+                "input_data": input_data,
+                "chart_hint": f"{chart_type}:{exam_id}",
+                "timeout_sec": timeout_sec,
+                "save_as": save_as,
+            },
+            app_root=APP_ROOT,
+            uploads_dir=UPLOADS_DIR,
+        )
+        entry = {
+            "chart_type": chart_type,
+            "title": title,
+            "ok": bool(result.get("ok")),
+            "run_id": result.get("run_id"),
+            "image_url": result.get("image_url"),
+            "meta_url": result.get("meta_url"),
+            "artifacts": result.get("artifacts") or [],
+        }
+        if not entry["ok"]:
+            stderr = str(result.get("stderr") or "").strip()
+            if stderr:
+                entry["stderr"] = stderr[:400]
+            warnings.append(f"{title} 生成失败。")
+        charts.append(entry)
+
+    for chart_type in chart_types:
+        if chart_type == "score_distribution":
+            scores = bundle.get("scores") or []
+            if not scores:
+                warnings.append("成绩分布图数据不足。")
+                continue
+            run_chart(
+                chart_type=chart_type,
+                title="成绩分布图",
+                python_code=_chart_code_score_distribution(),
+                input_data={"title": f"Score Distribution · {exam_id}", "scores": scores},
+                save_as="score_distribution.png",
+            )
+            continue
+
+        if chart_type == "knowledge_radar":
+            kp_items = bundle.get("knowledge_points") or []
+            if not kp_items:
+                warnings.append("知识点雷达图数据不足。")
+                continue
+            run_chart(
+                chart_type=chart_type,
+                title="知识点掌握雷达图",
+                python_code=_chart_code_knowledge_radar(),
+                input_data={"title": f"Knowledge Mastery · {exam_id}", "items": kp_items},
+                save_as="knowledge_radar.png",
+            )
+            continue
+
+        if chart_type == "class_compare":
+            compare_items = bundle.get("class_compare") or []
+            if not compare_items:
+                warnings.append("班级/分层对比图数据不足。")
+                continue
+            compare_mode = str(bundle.get("class_compare_mode") or "class")
+            x_label = "Class" if compare_mode == "class" else "Tier"
+            run_chart(
+                chart_type=chart_type,
+                title="班级（或分层）均分对比图",
+                python_code=_chart_code_class_compare(),
+                input_data={
+                    "title": f"Average Score Compare · {exam_id}",
+                    "x_label": x_label,
+                    "items": compare_items,
+                },
+                save_as="class_compare.png",
+            )
+            continue
+
+        if chart_type == "question_discrimination":
+            items = bundle.get("question_discrimination") or []
+            if not items:
+                warnings.append("题目区分度图数据不足。")
+                continue
+            run_chart(
+                chart_type=chart_type,
+                title="题目区分度图（低到高）",
+                python_code=_chart_code_question_discrimination(),
+                input_data={"title": f"Question Discrimination · {exam_id}", "items": items},
+                save_as="question_discrimination.png",
+            )
+            continue
+
+    successful = [c for c in charts if c.get("ok") and c.get("image_url")]
+    markdown_lines = [f"### 考试分析图表 · {exam_id}"]
+    for item in successful:
+        title = str(item.get("title") or item.get("chart_type") or "chart")
+        markdown_lines.append(f"#### {title}")
+        markdown_lines.append(f"![{title}]({item.get('image_url')})")
+    markdown = "\n\n".join(markdown_lines) if successful else ""
+
+    return {
+        "ok": bool(successful),
+        "exam_id": exam_id,
+        "chart_types_requested": chart_types,
+        "generated_count": len(successful),
+        "student_count": bundle.get("student_count"),
+        "charts": charts,
+        "warnings": warnings,
+        "markdown": markdown,
+    }
+
+
 def list_assignments() -> Dict[str, Any]:
     assignments_dir = DATA_DIR / "assignments"
     if not assignments_dir.exists():
@@ -4012,6 +6152,7 @@ def llm_assignment_gate(req: ChatRequest) -> Optional[Dict[str, Any]]:
             role_hint="teacher",
             skill_id=req.skill_id,
             kind="teacher.assignment_gate",
+            teacher_id=req.teacher_id,
         )
     except Exception as exc:
         diag_log("llm_gate.error", {"error": str(exc)})
@@ -4990,21 +7131,68 @@ def list_skills() -> Dict[str, Any]:
     return payload
 
 
+def llm_routing_catalog() -> Dict[str, Any]:
+    providers_raw = LLM_GATEWAY.registry.get("providers") if isinstance(LLM_GATEWAY.registry.get("providers"), dict) else {}
+    providers: List[Dict[str, Any]] = []
+    for provider_name in sorted(providers_raw.keys()):
+        provider_cfg = providers_raw.get(provider_name) if isinstance(providers_raw.get(provider_name), dict) else {}
+        modes_raw = provider_cfg.get("modes") if isinstance(provider_cfg.get("modes"), dict) else {}
+        modes: List[Dict[str, Any]] = []
+        for mode_name in sorted(modes_raw.keys()):
+            mode_cfg = modes_raw.get(mode_name) if isinstance(modes_raw.get(mode_name), dict) else {}
+            modes.append(
+                {
+                    "mode": mode_name,
+                    "default_model": str(mode_cfg.get("default_model") or "").strip(),
+                    "model_env": str(mode_cfg.get("model_env") or "").strip(),
+                }
+            )
+        providers.append({"provider": provider_name, "modes": modes})
+    defaults = LLM_GATEWAY.registry.get("defaults") if isinstance(LLM_GATEWAY.registry.get("defaults"), dict) else {}
+    routing_cfg = LLM_GATEWAY.registry.get("routing") if isinstance(LLM_GATEWAY.registry.get("routing"), dict) else {}
+    return {
+        "providers": providers,
+        "defaults": {
+            "provider": str(defaults.get("provider") or "").strip(),
+            "mode": str(defaults.get("mode") or "").strip(),
+        },
+        "fallback_chain": [str(x) for x in (routing_cfg.get("fallback_chain") or []) if str(x).strip()],
+    }
+
+
 def _routing_actor_from_teacher_id(teacher_id: Optional[str]) -> str:
     return resolve_teacher_id(teacher_id)
 
 
+def _ensure_teacher_routing_file(actor: str) -> Path:
+    from .llm_routing import ensure_routing_file
+
+    config_path = teacher_llm_routing_path(actor)
+    if not config_path.exists() and LLM_ROUTING_PATH.exists():
+        try:
+            legacy = json.loads(LLM_ROUTING_PATH.read_text(encoding="utf-8"))
+            if isinstance(legacy, dict):
+                legacy.setdefault("schema_version", 1)
+                legacy["updated_at"] = datetime.now().isoformat(timespec="seconds")
+                legacy["updated_by"] = actor
+                _atomic_write_json(config_path, legacy)
+        except Exception:
+            pass
+    ensure_routing_file(config_path, actor=actor)
+    return config_path
+
+
 def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import ensure_routing_file, get_active_routing, list_proposals
+    from .llm_routing import get_active_routing, list_proposals
 
     actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    ensure_routing_file(LLM_ROUTING_PATH, actor=actor)
-    overview = get_active_routing(LLM_ROUTING_PATH, LLM_GATEWAY.registry)
+    config_path = _ensure_teacher_routing_file(actor)
+    overview = get_active_routing(config_path, LLM_GATEWAY.registry)
     history_limit = max(1, min(int(args.get("history_limit", 20) or 20), 200))
     proposal_limit = max(1, min(int(args.get("proposal_limit", 20) or 20), 200))
     proposal_status = str(args.get("proposal_status") or "").strip() or None
     history = overview.get("history") or []
-    proposals = list_proposals(LLM_ROUTING_PATH, limit=proposal_limit, status=proposal_status)
+    proposals = list_proposals(config_path, limit=proposal_limit, status=proposal_status)
     return {
         "ok": True,
         "teacher_id": actor,
@@ -5012,12 +7200,19 @@ def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
         "validation": overview.get("validation") or {},
         "history": history[:history_limit],
         "proposals": proposals,
-        "config_path": str(LLM_ROUTING_PATH),
+        "catalog": llm_routing_catalog(),
+        "config_path": str(config_path),
     }
 
 
 def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import RoutingContext, ensure_routing_file, get_compiled_routing, simulate_routing
+    from .llm_routing import (
+        CompiledRouting,
+        RoutingContext,
+        get_compiled_routing,
+        simulate_routing,
+        validate_routing_config,
+    )
 
     def _as_bool_arg(value: Any, default: bool = False) -> bool:
         if value is None:
@@ -5032,8 +7227,30 @@ def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
         return default
 
     actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    ensure_routing_file(LLM_ROUTING_PATH, actor=actor)
-    compiled = get_compiled_routing(LLM_ROUTING_PATH, LLM_GATEWAY.registry)
+    config_path = _ensure_teacher_routing_file(actor)
+    config_override = args.get("config") if isinstance(args.get("config"), dict) else None
+    override_validation: Optional[Dict[str, Any]] = None
+    if config_override:
+        override_validation = validate_routing_config(config_override, LLM_GATEWAY.registry)
+        normalized = override_validation.get("normalized") if isinstance(override_validation.get("normalized"), dict) else {}
+        channels = normalized.get("channels") if isinstance(normalized.get("channels"), list) else []
+        rules = normalized.get("rules") if isinstance(normalized.get("rules"), list) else []
+        channels_by_id: Dict[str, Dict[str, Any]] = {}
+        for item in channels:
+            if not isinstance(item, dict):
+                continue
+            channel_id = str(item.get("id") or "").strip()
+            if channel_id:
+                channels_by_id[channel_id] = item
+        compiled = CompiledRouting(
+            config=normalized,
+            errors=list(override_validation.get("errors") or []),
+            warnings=list(override_validation.get("warnings") or []),
+            channels_by_id=channels_by_id,
+            rules=[r for r in rules if isinstance(r, dict)],
+        )
+    else:
+        compiled = get_compiled_routing(config_path, LLM_GATEWAY.registry)
     ctx = RoutingContext(
         role=str(args.get("role") or "teacher").strip() or "teacher",
         skill_id=str(args.get("skill_id") or "").strip() or None,
@@ -5042,20 +7259,28 @@ def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
         needs_json=_as_bool_arg(args.get("needs_json"), False),
     )
     result = simulate_routing(compiled, ctx)
-    return {"ok": True, "teacher_id": actor, **result}
+    result_payload = {"ok": True, "teacher_id": actor, **result}
+    if override_validation is not None:
+        result_payload["config_override"] = True
+        result_payload["override_validation"] = {
+            "ok": bool(override_validation.get("ok")),
+            "errors": list(override_validation.get("errors") or []),
+            "warnings": list(override_validation.get("warnings") or []),
+        }
+    return result_payload
 
 
 def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import create_routing_proposal, ensure_routing_file
+    from .llm_routing import create_routing_proposal
 
     actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    ensure_routing_file(LLM_ROUTING_PATH, actor=actor)
+    config_path = _ensure_teacher_routing_file(actor)
     config_payload = args.get("config") if isinstance(args.get("config"), dict) else None
     if not config_payload:
         return {"ok": False, "error": "config_required"}
     note = str(args.get("note") or "").strip()
     result = create_routing_proposal(
-        config_path=LLM_ROUTING_PATH,
+        config_path=config_path,
         model_registry=LLM_GATEWAY.registry,
         config_payload=config_payload,
         actor=actor,
@@ -5066,16 +7291,16 @@ def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import apply_routing_proposal, ensure_routing_file
+    from .llm_routing import apply_routing_proposal
 
     actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    ensure_routing_file(LLM_ROUTING_PATH, actor=actor)
+    config_path = _ensure_teacher_routing_file(actor)
     proposal_id = str(args.get("proposal_id") or "").strip()
     approve = bool(args.get("approve", True))
     if not proposal_id:
         return {"ok": False, "error": "proposal_id_required"}
     result = apply_routing_proposal(
-        config_path=LLM_ROUTING_PATH,
+        config_path=config_path,
         model_registry=LLM_GATEWAY.registry,
         proposal_id=proposal_id,
         approve=approve,
@@ -5086,20 +7311,34 @@ def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import ensure_routing_file, rollback_routing_config
+    from .llm_routing import rollback_routing_config
 
     actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    ensure_routing_file(LLM_ROUTING_PATH, actor=actor)
+    config_path = _ensure_teacher_routing_file(actor)
     target_version = args.get("target_version")
     note = str(args.get("note") or "").strip()
     result = rollback_routing_config(
-        config_path=LLM_ROUTING_PATH,
+        config_path=config_path,
         model_registry=LLM_GATEWAY.registry,
         target_version=target_version,
         actor=actor,
         note=note,
     )
     result["teacher_id"] = actor
+    return result
+
+
+def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    from .llm_routing import read_proposal
+
+    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
+    config_path = _ensure_teacher_routing_file(actor)
+    proposal_id = str(args.get("proposal_id") or "").strip()
+    if not proposal_id:
+        return {"ok": False, "error": "proposal_id_required"}
+    result = read_proposal(config_path, proposal_id=proposal_id)
+    result["teacher_id"] = actor
+    result["config_path"] = str(config_path)
     return result
 
 
@@ -5315,6 +7554,369 @@ def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "output": out, "pdf": pdf_path}
 
 
+def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
+    return execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+
+
+_CHART_AGENT_PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
+
+
+def _chart_agent_bool(value: Any, default: bool = True) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return bool(default)
+
+
+def _chart_agent_engine(value: Any) -> str:
+    engine = str(value or "auto").strip().lower()
+    if engine in {"auto", "llm", "opencode"}:
+        return engine
+    return "auto"
+
+
+def _chart_agent_opencode_overrides(args: Dict[str, Any]) -> Dict[str, Any]:
+    overrides: Dict[str, Any] = {}
+    key_map = {
+        "opencode_bin": "bin",
+        "opencode_mode": "mode",
+        "opencode_attach_url": "attach_url",
+        "opencode_agent": "agent",
+        "opencode_model": "model",
+        "opencode_config_path": "config_path",
+        "opencode_timeout_sec": "timeout_sec",
+        "opencode_max_retries": "max_retries",
+    }
+    for src, target in key_map.items():
+        value = args.get(src)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        overrides[target] = value
+    if "opencode_enabled" in args:
+        overrides["enabled"] = _chart_agent_bool(args.get("opencode_enabled"), default=True)
+    return overrides
+
+
+def _chart_agent_packages(value: Any) -> List[str]:
+    raw: List[str] = []
+    if isinstance(value, list):
+        raw = [str(x or "").strip() for x in value]
+    elif isinstance(value, str):
+        raw = [x.strip() for x in re.split(r"[,\s;；，]+", value) if x.strip()]
+    out: List[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not item or not _CHART_AGENT_PKG_RE.fullmatch(item):
+            continue
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out[:24]
+
+
+def _chart_agent_extract_python_code(text: str) -> str:
+    content = str(text or "").strip()
+    if not content:
+        return ""
+    patterns = [
+        r"```python\s*(.*?)```",
+        r"```py\s*(.*?)```",
+        r"```\s*(.*?)```",
+    ]
+    for pat in patterns:
+        match = re.search(pat, content, re.S | re.I)
+        if match:
+            return str(match.group(1) or "").strip()
+    return ""
+
+
+def _chart_agent_default_code() -> str:
+    return (
+        "import matplotlib.pyplot as plt\n"
+        "data = input_data if isinstance(input_data, dict) else {}\n"
+        "numeric = {}\n"
+        "for k, v in data.items():\n"
+        "    try:\n"
+        "        numeric[str(k)] = float(v)\n"
+        "    except Exception:\n"
+        "        continue\n"
+        "plt.figure(figsize=(8, 4.8))\n"
+        "if numeric:\n"
+        "    labels = list(numeric.keys())\n"
+        "    values = list(numeric.values())\n"
+        "    plt.bar(labels, values, color='#3B82F6', alpha=0.9)\n"
+        "    plt.xticks(rotation=20, ha='right')\n"
+        "    plt.ylabel('Value')\n"
+        "else:\n"
+        "    text = str(input_data)[:220]\n"
+        "    plt.axis('off')\n"
+        "    plt.text(0.5, 0.5, text or 'No numeric input_data found', ha='center', va='center', wrap=True)\n"
+        "plt.title('Auto Generated Chart')\n"
+        "plt.tight_layout()\n"
+        "save_chart()\n"
+    )
+
+
+def _chart_agent_generate_candidate(
+    task: str,
+    input_data: Any,
+    last_error: str,
+    previous_code: str,
+    attempt: int,
+    max_retries: int,
+) -> Dict[str, Any]:
+    try:
+        payload_text = json.dumps(input_data, ensure_ascii=False)
+    except Exception:
+        payload_text = str(input_data)
+    if len(payload_text) > 5000:
+        payload_text = payload_text[:5000] + "...[truncated]"
+
+    system = (
+        "你是教师端图表代码生成器。输出必须是JSON对象，不要Markdown。\n"
+        "必须输出字段：python_code（字符串），packages（字符串数组，可空），summary（字符串）。\n"
+        "python_code规则：\n"
+        "- 使用 matplotlib（可选 numpy/pandas/seaborn）。\n"
+        "- 变量 input_data 已可直接使用。\n"
+        "- 必须调用 save_chart('main.png') 或 save_chart()。\n"
+        "- 代码必须可直接运行，禁止解释文字。"
+    )
+    user = (
+        f"任务描述:\n{task}\n\n"
+        f"输入数据(JSON):\n{payload_text}\n\n"
+        f"当前重试: {attempt}/{max_retries}\n"
+        f"上次错误:\n{last_error or '(none)'}\n\n"
+        f"上次代码:\n{previous_code[:3000] if previous_code else '(none)'}\n"
+    )
+    try:
+        resp = call_llm(
+            [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            role_hint="teacher",
+            kind="chart.agent.codegen",
+        )
+        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
+    except Exception as exc:
+        return {"python_code": "", "packages": [], "summary": "", "raw": f"llm_error: {exc}"}
+
+    parsed = parse_json_from_text(content) or {}
+    python_code = str(parsed.get("python_code") or "").strip()
+    if not python_code:
+        python_code = _chart_agent_extract_python_code(content)
+    packages = _chart_agent_packages(parsed.get("packages"))
+    summary = str(parsed.get("summary") or "").strip()
+    return {"python_code": python_code, "packages": packages, "summary": summary, "raw": content}
+
+
+def _chart_agent_generate_candidate_opencode(
+    task: str,
+    input_data: Any,
+    last_error: str,
+    previous_code: str,
+    attempt: int,
+    max_retries: int,
+    opencode_overrides: Dict[str, Any],
+) -> Dict[str, Any]:
+    result = run_opencode_codegen(
+        app_root=APP_ROOT,
+        task=task,
+        input_data=input_data,
+        last_error=last_error,
+        previous_code=previous_code,
+        attempt=attempt,
+        max_retries=max_retries,
+        overrides=opencode_overrides,
+    )
+    return {
+        "python_code": str(result.get("python_code") or "").strip(),
+        "packages": _chart_agent_packages(result.get("packages")),
+        "summary": str(result.get("summary") or "").strip(),
+        "raw": result.get("raw") or "",
+        "error": result.get("error"),
+        "meta": {
+            "ok": bool(result.get("ok")),
+            "exit_code": result.get("exit_code"),
+            "duration_sec": result.get("duration_sec"),
+            "stderr": str(result.get("stderr") or "")[:800],
+            "command": result.get("command") or [],
+        },
+    }
+
+
+def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
+    task = str(args.get("task") or "").strip()
+    if not task:
+        return {"error": "task_required"}
+
+    timeout_sec = _safe_int_arg(args.get("timeout_sec"), default=180, minimum=30, maximum=3600)
+    max_retries = _safe_int_arg(args.get("max_retries"), default=3, minimum=1, maximum=6)
+    auto_install = _chart_agent_bool(args.get("auto_install"), default=True)
+    requested_engine = _chart_agent_engine(args.get("engine"))
+    chart_hint = str(args.get("chart_hint") or task[:120]).strip()
+    save_as = str(args.get("save_as") or "main.png").strip() or "main.png"
+    input_data = args.get("input_data")
+    requested_packages = _chart_agent_packages(args.get("packages"))
+    opencode_overrides = _chart_agent_opencode_overrides(args)
+    opencode_status = resolve_opencode_status(APP_ROOT, overrides=opencode_overrides)
+    opencode_cfg = opencode_status.get("config") if isinstance(opencode_status.get("config"), dict) else {}
+
+    effective_max_retries = max_retries
+    if requested_engine == "opencode" and isinstance(opencode_cfg, dict):
+        effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
+    elif requested_engine == "auto" and opencode_status.get("available") and isinstance(opencode_cfg, dict):
+        effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
+
+    if requested_engine == "opencode":
+        if not opencode_status.get("enabled"):
+            return {
+                "ok": False,
+                "error": "opencode_disabled",
+                "detail": "opencode bridge disabled",
+                "engine_requested": requested_engine,
+                "opencode_status": opencode_status,
+            }
+        if not opencode_status.get("available"):
+            return {
+                "ok": False,
+                "error": "opencode_unavailable",
+                "detail": opencode_status.get("reason") or "opencode unavailable",
+                "engine_requested": requested_engine,
+                "opencode_status": opencode_status,
+            }
+
+    attempts: List[Dict[str, Any]] = []
+    last_error = ""
+    previous_code = ""
+
+    for attempt in range(1, effective_max_retries + 1):
+        attempt_engine = requested_engine
+        if requested_engine == "auto":
+            attempt_engine = "opencode" if opencode_status.get("available") else "llm"
+
+        if attempt_engine == "opencode":
+            candidate = _chart_agent_generate_candidate_opencode(
+                task=task,
+                input_data=input_data,
+                last_error=last_error,
+                previous_code=previous_code,
+                attempt=attempt,
+                max_retries=effective_max_retries,
+                opencode_overrides=opencode_overrides,
+            )
+            # Auto mode can fallback to local LLM when opencode generation fails.
+            if requested_engine == "auto" and not str(candidate.get("python_code") or "").strip():
+                fallback_candidate = _chart_agent_generate_candidate(
+                    task=task,
+                    input_data=input_data,
+                    last_error=last_error,
+                    previous_code=previous_code,
+                    attempt=attempt,
+                    max_retries=effective_max_retries,
+                )
+                fallback_candidate["fallback_from"] = "opencode"
+                candidate = fallback_candidate
+                attempt_engine = "llm"
+        else:
+            candidate = _chart_agent_generate_candidate(
+                task=task,
+                input_data=input_data,
+                last_error=last_error,
+                previous_code=previous_code,
+                attempt=attempt,
+                max_retries=effective_max_retries,
+            )
+
+        python_code = str(candidate.get("python_code") or "").strip() or _chart_agent_default_code()
+        llm_packages = _chart_agent_packages(candidate.get("packages"))
+        merged_packages: List[str] = []
+        seen: set[str] = set()
+        for pkg in requested_packages + llm_packages:
+            key = pkg.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged_packages.append(pkg)
+
+        exec_res = execute_chart_exec(
+            {
+                "python_code": python_code,
+                "input_data": input_data,
+                "chart_hint": chart_hint,
+                "timeout_sec": timeout_sec,
+                "save_as": save_as,
+                "auto_install": auto_install,
+                "packages": merged_packages,
+                "max_retries": 2,
+            },
+            app_root=APP_ROOT,
+            uploads_dir=UPLOADS_DIR,
+        )
+
+        attempts.append(
+            {
+                "attempt": attempt,
+                "engine": attempt_engine,
+                "packages": merged_packages,
+                "summary": candidate.get("summary") or "",
+                "code_preview": python_code[:1200],
+                "codegen_error": candidate.get("error"),
+                "codegen_meta": candidate.get("meta") if isinstance(candidate.get("meta"), dict) else None,
+                "execution": {
+                    "ok": bool(exec_res.get("ok")),
+                    "run_id": exec_res.get("run_id"),
+                    "exit_code": exec_res.get("exit_code"),
+                    "timed_out": exec_res.get("timed_out"),
+                    "image_url": exec_res.get("image_url"),
+                    "meta_url": exec_res.get("meta_url"),
+                    "stderr": str(exec_res.get("stderr") or "")[:500],
+                },
+            }
+        )
+
+        if exec_res.get("ok") and exec_res.get("image_url"):
+            title = str(args.get("title") or "图表结果").strip() or "图表结果"
+            markdown = f"### {title}\n\n![{title}]({exec_res.get('image_url')})"
+            return {
+                "ok": True,
+                "task": task,
+                "attempt_used": attempt,
+                "engine_requested": requested_engine,
+                "engine_used": attempt_engine,
+                "image_url": exec_res.get("image_url"),
+                "meta_url": exec_res.get("meta_url"),
+                "run_id": exec_res.get("run_id"),
+                "artifacts": exec_res.get("artifacts") or [],
+                "installed_packages": exec_res.get("installed_packages") or [],
+                "python_executable": exec_res.get("python_executable"),
+                "markdown": markdown,
+                "attempts": attempts,
+                "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
+            }
+
+        previous_code = python_code
+        last_error = str(exec_res.get("stderr") or exec_res.get("error") or "unknown_error")
+
+    return {
+        "ok": False,
+        "error": "chart_agent_failed",
+        "task": task,
+        "max_retries": effective_max_retries,
+        "engine_requested": requested_engine,
+        "last_error": last_error[:1200],
+        "attempts": attempts,
+        "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
+    }
+
+
 _SAFE_TOOL_ID_RE = re.compile(r"^[^\x00/\\\\]+$")
 
 
@@ -5467,12 +8069,22 @@ def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
+    if DEFAULT_TOOL_REGISTRY.get(name) is None:
+        return {"error": f"unknown tool: {name}"}
+    issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, args)
+    if issues:
+        return {"error": "invalid_arguments", "tool": name, "issues": issues[:20]}
+
     if name == "exam.list":
         return list_exams()
     if name == "exam.get":
         return exam_get(args.get("exam_id", ""))
     if name == "exam.analysis.get":
         return exam_analysis_get(args.get("exam_id", ""))
+    if name == "exam.analysis.charts.generate":
+        if role != "teacher":
+            return {"error": "permission denied", "detail": "exam.analysis.charts.generate requires teacher role"}
+        return exam_analysis_charts_generate(args)
     if name == "exam.students.list":
         return exam_students_list(args.get("exam_id", ""), int(args.get("limit", 50) or 50))
     if name == "exam.student.get":
@@ -5519,6 +8131,14 @@ def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -
         return core_example_register(args)
     if name == "core_example.render":
         return core_example_render(args)
+    if name == "chart.agent.run":
+        if role != "teacher":
+            return {"error": "permission denied", "detail": "chart.agent.run requires teacher role"}
+        return chart_agent_run(args)
+    if name == "chart.exec":
+        if role != "teacher":
+            return {"error": "permission denied", "detail": "chart.exec requires teacher role"}
+        return chart_exec(args)
     if name == "teacher.workspace.init":
         teacher_id = resolve_teacher_id(args.get("teacher_id"))
         base = ensure_teacher_workspace(teacher_id)
@@ -5585,6 +8205,8 @@ def call_llm(
     max_tokens: Optional[int] = None,
     skill_id: Optional[str] = None,
     kind: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    skill_runtime: Optional[Any] = None,
 ) -> Dict[str, Any]:
     req = UnifiedLLMRequest(messages=messages, tools=tools, tool_choice="auto" if tools else None, max_tokens=max_tokens)
     t0 = time.monotonic()
@@ -5601,27 +8223,39 @@ def call_llm(
     route_target_provider = ""
     route_target_mode = ""
     route_target_model = ""
+    route_source = "gateway_default"
+    route_policy_route_id = ""
+    route_actor = ""
+    route_config_path = ""
+    if role_hint == "teacher":
+        route_actor = resolve_teacher_id(teacher_id)
+        route_config_path = str(_ensure_teacher_routing_file(route_actor))
+    else:
+        route_config_path = str(routing_config_path_for_role(role_hint, teacher_id))
     route_attempt_errors: List[Dict[str, str]] = []
     route_validation_errors: List[str] = []
     route_validation_warnings: List[str] = []
     route_exception = ""
+    route_policy_exception = ""
     with _limit(limiter):
         result = None
+        routing_context: Optional[Any] = None
         try:
             from .llm_routing import RoutingContext, get_compiled_routing, resolve_routing
 
-            compiled = get_compiled_routing(LLM_ROUTING_PATH, LLM_GATEWAY.registry)
+            routing_context = RoutingContext(
+                role=role_hint,
+                skill_id=skill_id,
+                kind=kind,
+                needs_tools=bool(tools),
+                needs_json=bool(req.json_schema),
+            )
+            compiled = get_compiled_routing(Path(route_config_path), LLM_GATEWAY.registry)
             route_validation_errors = list(compiled.errors)
             route_validation_warnings = list(compiled.warnings)
             decision = resolve_routing(
                 compiled,
-                RoutingContext(
-                    role=role_hint,
-                    skill_id=skill_id,
-                    kind=kind,
-                    needs_tools=bool(tools),
-                    needs_json=bool(req.json_schema),
-                ),
+                routing_context,
             )
             route_reason = decision.reason
             route_rule_id = decision.matched_rule_id or ""
@@ -5651,13 +8285,78 @@ def call_llm(
                         route_target_provider = candidate.provider
                         route_target_mode = candidate.mode
                         route_target_model = candidate.model
+                        route_source = "teacher_routing"
                         break
                     except Exception as exc:
-                        route_attempt_errors.append({"channel_id": candidate.channel_id, "error": str(exc)[:200]})
+                        route_attempt_errors.append(
+                            {"source": "teacher_routing", "channel_id": candidate.channel_id, "error": str(exc)[:200]}
+                        )
         except Exception as exc:
             route_exception = str(exc)[:200]
 
+        if result is None and skill_runtime is not None:
+            resolver = getattr(skill_runtime, "resolve_model_targets", None)
+            if callable(resolver):
+                try:
+                    policy_targets = resolver(
+                        role_hint=role_hint,
+                        kind=kind,
+                        needs_tools=bool(tools),
+                        needs_json=bool(req.json_schema),
+                    )
+                except Exception as exc:
+                    policy_targets = []
+                    route_policy_exception = str(exc)[:200]
+                for item in policy_targets or []:
+                    provider = str(item.get("provider") or "").strip()
+                    mode = str(item.get("mode") or "").strip()
+                    model = str(item.get("model") or "").strip()
+                    if not provider or not mode or not model:
+                        continue
+                    policy_route_id = str(item.get("route_id") or "").strip()
+                    temperature = item.get("temperature")
+                    max_tokens_override = item.get("max_tokens")
+                    route_req = UnifiedLLMRequest(
+                        messages=req.messages,
+                        input_text=req.input_text,
+                        tools=req.tools,
+                        tool_choice=req.tool_choice,
+                        json_schema=req.json_schema,
+                        temperature=temperature if temperature is not None else req.temperature,
+                        max_tokens=req.max_tokens if req.max_tokens is not None else max_tokens_override,
+                        stream=req.stream,
+                        metadata=dict(req.metadata or {}),
+                    )
+                    try:
+                        result = LLM_GATEWAY.generate(
+                            route_req,
+                            provider=provider,
+                            mode=mode,
+                            model=model,
+                            allow_fallback=False,
+                        )
+                        route_selected = True
+                        route_source = "skill_policy"
+                        route_policy_route_id = policy_route_id
+                        route_reason = "skill_policy_default" if policy_route_id == "default" else "skill_policy_matched"
+                        route_rule_id = ""
+                        route_channel_id = f"skill_policy:{policy_route_id or 'default'}"
+                        route_target_provider = provider
+                        route_target_mode = mode
+                        route_target_model = model
+                        break
+                    except Exception as exc:
+                        route_attempt_errors.append(
+                            {
+                                "source": "skill_policy",
+                                "route_id": policy_route_id or "default",
+                                "error": str(exc)[:200],
+                            }
+                        )
+
         if result is None:
+            if not route_reason:
+                route_reason = "gateway_fallback"
             result = LLM_GATEWAY.generate(req, allow_fallback=True)
     diag_log(
         "llm.call.done",
@@ -5674,10 +8373,15 @@ def call_llm(
             "route_provider": route_target_provider,
             "route_mode": route_target_mode,
             "route_model": route_target_model,
+            "route_source": route_source,
+            "route_policy_route_id": route_policy_route_id,
+            "route_actor": route_actor,
+            "route_config_path": route_config_path,
             "route_attempt_errors": route_attempt_errors,
             "route_validation_errors": route_validation_errors[:10],
             "route_validation_warnings": route_validation_warnings[:10],
             "route_exception": route_exception,
+            "route_policy_exception": route_policy_exception,
         },
     )
     return result.as_chat_completion()
@@ -5742,6 +8446,7 @@ def allowed_tools(role_hint: Optional[str]) -> set:
             "exam.list",
             "exam.get",
             "exam.analysis.get",
+            "exam.analysis.charts.generate",
             "exam.students.list",
             "exam.student.get",
             "exam.question.get",
@@ -5758,6 +8463,8 @@ def allowed_tools(role_hint: Optional[str]) -> set:
             "core_example.search",
             "core_example.register",
             "core_example.render",
+            "chart.agent.run",
+            "chart.exec",
             "teacher.workspace.init",
             "teacher.memory.get",
             "teacher.memory.search",
@@ -6009,6 +8716,8 @@ def _generate_longform_reply(
     min_chars: int,
     role_hint: Optional[str],
     skill_id: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    skill_runtime: Optional[Any] = None,
 ) -> str:
     max_tokens = _calc_longform_max_tokens(min_chars)
     resp = call_llm(
@@ -6018,6 +8727,8 @@ def _generate_longform_reply(
         max_tokens=max_tokens,
         skill_id=skill_id,
         kind="chat.exam_longform",
+        teacher_id=teacher_id,
+        skill_runtime=skill_runtime,
     )
     content = resp.get("choices", [{}])[0].get("message", {}).get("content") or ""
     if _non_ws_len(content) >= min_chars:
@@ -6041,6 +8752,8 @@ def _generate_longform_reply(
         max_tokens=max_tokens,
         skill_id=skill_id,
         kind="chat.exam_longform",
+        teacher_id=teacher_id,
+        skill_runtime=skill_runtime,
     )
     content2 = resp2.get("choices", [{}])[0].get("message", {}).get("content") or ""
     if _non_ws_len(content2) >= min_chars:
@@ -6053,6 +8766,7 @@ def run_agent(
     role_hint: Optional[str],
     extra_system: Optional[str] = None,
     skill_id: Optional[str] = None,
+    teacher_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     system_message = {"role": "system", "content": build_system_prompt(role_hint)}
     convo = [system_message]
@@ -6136,10 +8850,15 @@ def run_agent(
                             ),
                         }
                     )
-                    reply = _generate_longform_reply(convo, min_chars=min_chars, role_hint=role_hint, skill_id=skill_id)
+                    reply = _generate_longform_reply(
+                        convo,
+                        min_chars=min_chars,
+                        role_hint=role_hint,
+                        skill_id=skill_id,
+                        teacher_id=teacher_id,
+                        skill_runtime=skill_runtime,
+                    )
                     return {"reply": reply}
-
-    from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
     teacher_tools = [DEFAULT_TOOL_REGISTRY.require(name).to_openai() for name in sorted(allowed_tools("teacher"))]
     tools = (
@@ -6152,7 +8871,15 @@ def run_agent(
     tool_budget_exhausted = False
 
     for _ in range(max_tool_rounds):
-        resp = call_llm(convo, tools=tools, role_hint=role_hint, skill_id=skill_id, kind="chat.agent")
+        resp = call_llm(
+            convo,
+            tools=tools,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            kind="chat.agent",
+            teacher_id=teacher_id,
+            skill_runtime=skill_runtime,
+        )
         message = resp["choices"][0]["message"]
         content = message.get("content")
         tool_calls = message.get("tool_calls")
@@ -6259,6 +8986,8 @@ def run_agent(
             max_tokens=2048,
             skill_id=skill_id,
             kind="chat.agent_no_tools",
+            teacher_id=teacher_id,
+            skill_runtime=skill_runtime,
         )
         content = resp.get("choices", [{}])[0].get("message", {}).get("content") or ""
         if content:
@@ -6295,12 +9024,13 @@ async def chat(req: ChatRequest):
             diag_log("teacher_chat.preflight_reply", {"reply_preview": preflight[:500]})
             return ChatResponse(reply=preflight, role=role_hint)
     extra_system = None
+    effective_teacher_id: Optional[str] = None
     last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
     last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
 
     if role_hint == "teacher":
-        teacher_id = resolve_teacher_id(req.teacher_id)
-        extra_system = teacher_build_context(teacher_id, query=last_user_text, session_id="main")
+        effective_teacher_id = resolve_teacher_id(req.teacher_id)
+        extra_system = teacher_build_context(effective_teacher_id, query=last_user_text, session_id="main")
 
     if role_hint == "student":
         assignment_detail = None
@@ -6333,9 +9063,27 @@ async def chat(req: ChatRequest):
             if not allowed:
                 # Fast fail to avoid a single student spamming concurrent generations.
                 return ChatResponse(reply="正在生成上一条回复，请稍候再试。", role=role_hint)
-            result = await run_in_threadpool(partial(run_agent, messages, role_hint, extra_system=extra_system, skill_id=req.skill_id))
+            result = await run_in_threadpool(
+                partial(
+                    run_agent,
+                    messages,
+                    role_hint,
+                    extra_system=extra_system,
+                    skill_id=req.skill_id,
+                    teacher_id=effective_teacher_id or req.teacher_id,
+                )
+            )
     else:
-        result = await run_in_threadpool(partial(run_agent, messages, role_hint, extra_system=extra_system, skill_id=req.skill_id))
+        result = await run_in_threadpool(
+            partial(
+                run_agent,
+                messages,
+                role_hint,
+                extra_system=extra_system,
+                skill_id=req.skill_id,
+                teacher_id=effective_teacher_id or req.teacher_id,
+            )
+        )
     reply_text = normalize_math_delimiters(result.get("reply", ""))
     if reply_text != result.get("reply", ""):
         diag_log(
@@ -6384,7 +9132,11 @@ def _detect_role_hint(req: ChatRequest) -> Optional[str]:
     return role_hint
 
 
-def _compute_chat_reply_sync(req: ChatRequest, session_id: str = "main") -> Tuple[str, Optional[str], str]:
+def _compute_chat_reply_sync(
+    req: ChatRequest,
+    session_id: str = "main",
+    teacher_id_override: Optional[str] = None,
+) -> Tuple[str, Optional[str], str]:
     role_hint = _detect_role_hint(req)
 
     if role_hint == "teacher":
@@ -6404,9 +9156,10 @@ def _compute_chat_reply_sync(req: ChatRequest, session_id: str = "main") -> Tupl
     last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
     last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
 
+    effective_teacher_id: Optional[str] = None
     if role_hint == "teacher":
-        teacher_id = resolve_teacher_id(req.teacher_id)
-        extra_system = teacher_build_context(teacher_id, query=last_user_text, session_id=str(session_id or "main"))
+        effective_teacher_id = resolve_teacher_id(teacher_id_override or req.teacher_id)
+        extra_system = teacher_build_context(effective_teacher_id, query=last_user_text, session_id=str(session_id or "main"))
 
     if role_hint == "student":
         assignment_detail = None
@@ -6440,9 +9193,21 @@ def _compute_chat_reply_sync(req: ChatRequest, session_id: str = "main") -> Tupl
         with _student_inflight(req.student_id) as allowed:
             if not allowed:
                 return "正在生成上一条回复，请稍候再试。", role_hint, last_user_text
-            result = run_agent(messages, role_hint, extra_system=extra_system, skill_id=req.skill_id)
+            result = run_agent(
+                messages,
+                role_hint,
+                extra_system=extra_system,
+                skill_id=req.skill_id,
+                teacher_id=effective_teacher_id or req.teacher_id,
+            )
     else:
-        result = run_agent(messages, role_hint, extra_system=extra_system, skill_id=req.skill_id)
+        result = run_agent(
+            messages,
+            role_hint,
+            extra_system=extra_system,
+            skill_id=req.skill_id,
+            teacher_id=effective_teacher_id or req.teacher_id,
+        )
 
     reply_text = normalize_math_delimiters(result.get("reply", ""))
     result["reply"] = reply_text
@@ -6483,7 +9248,11 @@ def process_chat_job(job_id: str) -> None:
 
         write_chat_job(job_id, {"status": "processing", "step": "agent", "error": ""})
         t0 = time.monotonic()
-        reply_text, role_hint, last_user_text = _compute_chat_reply_sync(req, session_id=str(job.get("session_id") or "main"))
+        reply_text, role_hint, last_user_text = _compute_chat_reply_sync(
+            req,
+            session_id=str(job.get("session_id") or "main"),
+            teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
+        )
         duration_ms = int((time.monotonic() - t0) * 1000)
         write_chat_job(
             job_id,
@@ -6561,6 +9330,44 @@ def process_chat_job(job_id: str) -> None:
                     preview=last_user_text or reply_text,
                     message_increment=2,
                 )
+                try:
+                    auto_intent = teacher_memory_auto_propose_from_turn(
+                        teacher_id,
+                        session_id=session_id,
+                        user_text=last_user_text,
+                        assistant_text=reply_text,
+                    )
+                    if auto_intent.get("created"):
+                        diag_log(
+                            "teacher.memory.auto_intent.proposed",
+                            {
+                                "teacher_id": teacher_id,
+                                "session_id": session_id,
+                                "proposal_id": auto_intent.get("proposal_id"),
+                                "target": auto_intent.get("target"),
+                            },
+                        )
+                except Exception as exc:
+                    diag_log(
+                        "teacher.memory.auto_intent.failed",
+                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                    )
+                try:
+                    auto_flush = teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
+                    if auto_flush.get("created"):
+                        diag_log(
+                            "teacher.memory.auto_flush.proposed",
+                            {
+                                "teacher_id": teacher_id,
+                                "session_id": session_id,
+                                "proposal_id": auto_flush.get("proposal_id"),
+                            },
+                        )
+                except Exception as exc:
+                    diag_log(
+                        "teacher.memory.auto_flush.failed",
+                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                    )
                 maybe_compact_teacher_session(teacher_id, session_id)
             except Exception as exc:
                 diag_log(
@@ -6604,7 +9411,7 @@ async def chat_start(req: ChatStartRequest):
         "messages": [{"role": m.role, "content": m.content} for m in req.messages],
         "role": req.role,
         "skill_id": req.skill_id,
-        "teacher_id": req.teacher_id,
+        "teacher_id": teacher_id if role_hint == "teacher" else req.teacher_id,
         "student_id": req.student_id,
         "assignment_id": req.assignment_id,
         "assignment_date": req.assignment_date,
@@ -6708,13 +9515,56 @@ async def chat_status(job_id: str):
     return job
 
 
+def _paginate_session_items(items: List[Dict[str, Any]], cursor: int, limit: int) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
+    total = len(items)
+    start = max(0, int(cursor or 0))
+    page_size = max(1, min(int(limit or 20), 100))
+    if start >= total:
+        return [], None, total
+    end = min(total, start + page_size)
+    next_cursor: Optional[int] = end if end < total else None
+    return items[start:end], next_cursor, total
+
+
 @app.get("/student/history/sessions")
-async def student_history_sessions(student_id: str, limit: int = 20):
+async def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0):
     student_id = (student_id or "").strip()
     if not student_id:
         raise HTTPException(status_code=400, detail="student_id is required")
     items = load_student_sessions_index(student_id)
-    return {"ok": True, "student_id": student_id, "sessions": items[: max(1, min(int(limit), 50))]}
+    page, next_cursor, total = _paginate_session_items(items, cursor=cursor, limit=limit)
+    return {
+        "ok": True,
+        "student_id": student_id,
+        "sessions": page,
+        "next_cursor": next_cursor,
+        "total": total,
+    }
+
+
+@app.get("/student/session/view-state")
+async def student_session_view_state(student_id: str):
+    student_id = (student_id or "").strip()
+    if not student_id:
+        raise HTTPException(status_code=400, detail="student_id is required")
+    state = load_student_session_view_state(student_id)
+    return {"ok": True, "student_id": student_id, "state": state}
+
+
+@app.put("/student/session/view-state")
+async def update_student_session_view_state(req: Dict[str, Any]):
+    student_id = str((req or {}).get("student_id") or "").strip()
+    if not student_id:
+        raise HTTPException(status_code=400, detail="student_id is required")
+    incoming = _normalize_session_view_state_payload((req or {}).get("state") or {})
+    current = load_student_session_view_state(student_id)
+    if _compare_iso_ts(current.get("updated_at"), incoming.get("updated_at")) > 0:
+        return {"ok": True, "student_id": student_id, "state": current, "stale": True}
+    if not incoming.get("updated_at"):
+        incoming["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
+    save_student_session_view_state(student_id, incoming)
+    saved = load_student_session_view_state(student_id)
+    return {"ok": True, "student_id": student_id, "state": saved, "stale": False}
 
 
 @app.get("/student/history/session")
@@ -6785,10 +9635,39 @@ async def student_history_session(
 
 
 @app.get("/teacher/history/sessions")
-async def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20):
+async def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0):
     teacher_id_final = resolve_teacher_id(teacher_id)
     items = load_teacher_sessions_index(teacher_id_final)
-    return {"ok": True, "teacher_id": teacher_id_final, "sessions": items[: max(1, min(int(limit), 50))]}
+    page, next_cursor, total = _paginate_session_items(items, cursor=cursor, limit=limit)
+    return {
+        "ok": True,
+        "teacher_id": teacher_id_final,
+        "sessions": page,
+        "next_cursor": next_cursor,
+        "total": total,
+    }
+
+
+@app.get("/teacher/session/view-state")
+async def teacher_session_view_state(teacher_id: Optional[str] = None):
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    state = load_teacher_session_view_state(teacher_id_final)
+    return {"ok": True, "teacher_id": teacher_id_final, "state": state}
+
+
+@app.put("/teacher/session/view-state")
+async def update_teacher_session_view_state(req: Dict[str, Any]):
+    teacher_id = str((req or {}).get("teacher_id") or "").strip()
+    teacher_id_final = resolve_teacher_id(teacher_id or None)
+    incoming = _normalize_session_view_state_payload((req or {}).get("state") or {})
+    current = load_teacher_session_view_state(teacher_id_final)
+    if _compare_iso_ts(current.get("updated_at"), incoming.get("updated_at")) > 0:
+        return {"ok": True, "teacher_id": teacher_id_final, "state": current, "stale": True}
+    if not incoming.get("updated_at"):
+        incoming["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
+    save_teacher_session_view_state(teacher_id_final, incoming)
+    saved = load_teacher_session_view_state(teacher_id_final)
+    return {"ok": True, "teacher_id": teacher_id_final, "state": saved, "stale": False}
 
 
 @app.get("/teacher/history/session")
@@ -6855,6 +9734,31 @@ async def teacher_history_session(
     messages = list(reversed(messages_rev))
     next_cursor = max(0, int(min_idx))
     return {"ok": True, "teacher_id": teacher_id_final, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
+
+
+@app.get("/teacher/memory/proposals")
+async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    result = teacher_memory_list_proposals(teacher_id_final, status=status, limit=limit)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "invalid_request")
+    return result
+
+
+@app.get("/teacher/memory/insights")
+async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14):
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    return teacher_memory_insights(teacher_id_final, days=days)
+
+
+@app.post("/teacher/memory/proposals/{proposal_id}/review")
+async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
+    teacher_id_final = resolve_teacher_id(req.teacher_id)
+    result = teacher_memory_apply(teacher_id_final, proposal_id=str(proposal_id or "").strip(), approve=bool(req.approve))
+    if result.get("error"):
+        code = 404 if str(result.get("error")) == "proposal not found" else 400
+        raise HTTPException(status_code=code, detail=result.get("error"))
+    return result
 
 
 @app.post("/upload")
@@ -7346,6 +10250,8 @@ async def exam_upload_draft(job_id: str):
     score_schema = parsed.get("score_schema") or {}
     warnings = parsed.get("warnings") or []
     answer_key = parsed.get("answer_key") or {}
+    scoring = parsed.get("scoring") or {}
+    counts_scored = parsed.get("counts_scored") or {}
 
     if isinstance(override.get("meta"), dict) and override.get("meta"):
         meta = {**meta, **override.get("meta")}
@@ -7353,6 +10259,24 @@ async def exam_upload_draft(job_id: str):
         questions = override.get("questions")
     if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):
         score_schema = {**score_schema, **override.get("score_schema")}
+
+    # Answer key override (text-based) - used during confirm scoring.
+    answer_key_text = str(override.get("answer_key_text") or "").strip()
+    if answer_key_text:
+        override_answers, override_ans_warnings = parse_exam_answer_key_text(answer_key_text)
+        answer_key = {
+            "count": len(override_answers),
+            "source": "override",
+            "warnings": override_ans_warnings,
+        }
+    elif isinstance(answer_key, dict) and answer_key:
+        answer_key = {**answer_key, "source": "ocr" if answer_key.get("count") else "none"}
+
+    answer_text_excerpt = ""
+    try:
+        answer_text_excerpt = read_text_safe(job_dir / "answer_text.txt", limit=6000)
+    except Exception:
+        answer_text_excerpt = ""
 
     draft = {
         "job_id": job_id,
@@ -7363,11 +10287,15 @@ async def exam_upload_draft(job_id: str):
         "score_files": parsed.get("score_files") or job.get("score_files") or [],
         "answer_files": parsed.get("answer_files") or job.get("answer_files") or [],
         "counts": parsed.get("counts") or {},
+        "counts_scored": counts_scored,
         "totals_summary": parsed.get("totals_summary") or {},
+        "scoring": scoring,
         "meta": meta,
         "questions": questions,
         "score_schema": score_schema,
         "answer_key": answer_key,
+        "answer_key_text": answer_key_text,
+        "answer_text_excerpt": answer_text_excerpt,
         "warnings": warnings,
         "draft_saved": bool(override),
         "draft_version": int(job.get("draft_version") or 1),
@@ -7408,6 +10336,8 @@ async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
         override["questions"] = req.questions
     if req.score_schema is not None:
         override["score_schema"] = req.score_schema
+    if req.answer_key_text is not None:
+        override["answer_key_text"] = str(req.answer_key_text or "")
     override_path.write_text(json.dumps(override, ensure_ascii=False, indent=2), encoding="utf-8")
     new_version = int(job.get("draft_version") or 1) + 1
     write_exam_job(req.job_id, {"draft_version": new_version})
@@ -7504,10 +10434,11 @@ async def exam_upload_confirm(req: ExamUploadConfirmRequest):
         write_exam_job(req.job_id, {"status": "failed", "error": "responses missing", "step": "failed"})
         raise HTTPException(status_code=400, detail="responses missing")
     # Always keep a copy of the unscored responses if available (useful for re-scoring with updated max_score).
+    # Back-compat: if missing, fall back to the scored csv as "unscored".
     if src_unscored.exists():
         shutil.copy2(src_unscored, dest_derived_dir / "responses_unscored.csv")
     else:
-        shutil.copy2(src_responses, dest_derived_dir / "responses_scored.csv")
+        shutil.copy2(src_responses, dest_derived_dir / "responses_unscored.csv")
     if src_questions.exists():
         shutil.copy2(src_questions, dest_derived_dir / "questions.csv")
     if src_answers.exists():
@@ -7521,34 +10452,39 @@ async def exam_upload_confirm(req: ExamUploadConfirmRequest):
             max_scores = None
         write_exam_questions_csv(dest_derived_dir / "questions.csv", questions_override, max_scores=max_scores)
 
-    # If we have answer key + unscored responses, apply it now so the final exam uses the teacher-edited max_score.
+    # If teacher provided an answer key override (text), rebuild answers.csv now.
+    answer_key_text = str(override.get("answer_key_text") or "").strip()
     dest_unscored = dest_derived_dir / "responses_unscored.csv"
     dest_answers = dest_derived_dir / "answers.csv"
     dest_questions = dest_derived_dir / "questions.csv"
     dest_scored = dest_derived_dir / "responses_scored.csv"
+    if answer_key_text:
+        try:
+            override_answers, _override_warnings = parse_exam_answer_key_text(answer_key_text)
+            if override_answers:
+                write_exam_answers_csv(dest_answers, override_answers)
+            else:
+                # Teacher override is empty/invalid: remove stale answers so we don't silently score with old key.
+                try:
+                    if dest_answers.exists():
+                        dest_answers.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # Apply answer key + unscored responses, so the final exam uses the teacher-edited max_score and latest answer key.
     if dest_unscored.exists() and dest_answers.exists() and dest_questions.exists():
         try:
-            script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "apply_answer_key.py"
-            cmd = [
-                "python3",
-                str(script),
-                "--responses",
-                str(dest_unscored),
-                "--answers",
-                str(dest_answers),
-                "--questions",
-                str(dest_questions),
-                "--out",
-                str(dest_scored),
-            ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
-            if proc.returncode != 0 or not dest_scored.exists():
-                # Fallback: keep the job's scored version if present, otherwise keep unscored.
-                if src_responses.exists():
-                    shutil.copy2(src_responses, dest_scored)
-                else:
-                    shutil.copy2(dest_unscored, dest_scored)
+            # If answers were provided late (via override), questions.csv may not have max_score yet.
+            try:
+                ans_map = load_exam_answer_key_from_csv(dest_answers)
+                ensure_questions_max_score(dest_questions, ans_map.keys(), default_score=1.0)
+            except Exception:
+                pass
+            apply_answer_key_to_responses_csv(dest_unscored, dest_answers, dest_questions, dest_scored)
         except Exception:
+            # Fallback: keep the job's scored version if present, otherwise keep unscored.
             if src_responses.exists():
                 shutil.copy2(src_responses, dest_scored)
             else:
@@ -8112,6 +11048,90 @@ async def lessons():
 @app.get("/skills")
 async def skills():
     return list_skills()
+
+
+@app.get("/charts/{run_id}/{file_name}")
+async def chart_image_file(run_id: str, file_name: str):
+    path = resolve_chart_image_path(UPLOADS_DIR, run_id, file_name)
+    if not path:
+        raise HTTPException(status_code=404, detail="chart file not found")
+    return FileResponse(path)
+
+
+@app.get("/chart-runs/{run_id}/meta")
+async def chart_run_meta(run_id: str):
+    path = resolve_chart_run_meta_path(UPLOADS_DIR, run_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="chart run not found")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="failed to read chart run meta")
+
+
+@app.get("/teacher/llm-routing")
+async def teacher_llm_routing(
+    teacher_id: Optional[str] = None,
+    history_limit: int = 20,
+    proposal_limit: int = 20,
+    proposal_status: Optional[str] = None,
+):
+    result = teacher_llm_routing_get(
+        {
+            "teacher_id": teacher_id,
+            "history_limit": history_limit,
+            "proposal_limit": proposal_limit,
+            "proposal_status": proposal_status,
+        }
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.post("/teacher/llm-routing/simulate")
+async def teacher_llm_routing_simulate_api(req: RoutingSimulateRequest):
+    result = teacher_llm_routing_simulate(model_dump_compat(req, exclude_none=True))
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.post("/teacher/llm-routing/proposals")
+async def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
+    result = teacher_llm_routing_propose(model_dump_compat(req, exclude_none=True))
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@app.get("/teacher/llm-routing/proposals/{proposal_id}")
+async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optional[str] = None):
+    result = teacher_llm_routing_proposal_get({"proposal_id": proposal_id, "teacher_id": teacher_id})
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() == "proposal_not_found" else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
+
+
+@app.post("/teacher/llm-routing/proposals/{proposal_id}/review")
+async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: RoutingProposalReviewRequest):
+    payload = model_dump_compat(req, exclude_none=True)
+    payload["proposal_id"] = proposal_id
+    result = teacher_llm_routing_apply(payload)
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() == "proposal_not_found" else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
+
+
+@app.post("/teacher/llm-routing/rollback")
+async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
+    result = teacher_llm_routing_rollback(model_dump_compat(req, exclude_none=True))
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() in {"history_not_found", "target_version_not_found"} else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
 
 
 @app.post("/assignment/generate")
