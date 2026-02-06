@@ -7,5 +7,9 @@ PyYAML==6.0.2
 pdfplumber==0.11.4
 xlrd==2.0.1
 mem0==1.0.3
+matplotlib==3.9.2
+numpy==2.0.2
+pandas==2.2.3
+seaborn==0.13.2
 deepseek-ocr>=0.1.1; python_version>="3.10"
 multi-ocr-sdk>=0.4.0; python_version>="3.10"
