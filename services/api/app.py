@@ -4067,8 +4067,10 @@ def score_objective_answer(raw_answer: str, correct: str, max_score: float) -> T
     if raw_set == correct_set:
         return max_score, 1
     if raw_set.issubset(correct_set):
-        # partial credit (no wrong option)
-        return 3.0, 0
+        # Multi-select partial credit: no wrong option but missed some correct options.
+        # Rule: 全对满分，漏选得一半分，错选 0 分。
+        # (blank is already handled above as 0)
+        return max_score * 0.5, 0
     return 0.0, 0
 
 
@@ -5271,6 +5273,202 @@ def exam_question_detail(exam_id: str, question_id: Optional[str] = None, questi
         "sample_top_students": top_students,
         "sample_bottom_students": bottom_students,
         "response_count": len(by_student),
+    }
+
+
+def _parse_question_no_int(value: Any) -> Optional[int]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        out = int(text)
+        return out if out > 0 else None
+    except Exception:
+        pass
+    match = re.match(r"^(\d+)", text)
+    if not match:
+        return None
+    try:
+        out = int(match.group(1))
+    except Exception:
+        return None
+    return out if out > 0 else None
+
+
+def _median_float(values: List[float]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    size = len(ordered)
+    mid = size // 2
+    if size % 2 == 1:
+        return float(ordered[mid])
+    return float((ordered[mid - 1] + ordered[mid]) / 2.0)
+
+
+def exam_range_top_students(
+    exam_id: str,
+    start_question_no: Any,
+    end_question_no: Any,
+    top_n: int = 10,
+) -> Dict[str, Any]:
+    manifest = load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+
+    responses_path = exam_responses_path(manifest)
+    if not responses_path or not responses_path.exists():
+        return {"error": "responses_missing", "exam_id": exam_id}
+
+    start_q = _parse_question_no_int(start_question_no)
+    end_q = _parse_question_no_int(end_question_no)
+    if start_q is None or end_q is None:
+        return {
+            "error": "invalid_question_range",
+            "exam_id": exam_id,
+            "message": "start_question_no 和 end_question_no 必须是正整数。",
+        }
+    if start_q > end_q:
+        start_q, end_q = end_q, start_q
+
+    sample_n = _safe_int_arg(top_n, default=10, minimum=1, maximum=100)
+
+    questions_path = exam_questions_path(manifest)
+    questions = read_questions_csv(questions_path) if questions_path else {}
+    question_no_by_id: Dict[str, int] = {}
+    max_score_by_no: Dict[int, float] = {}
+    known_question_nos: set[int] = set()
+    for qid, q_meta in questions.items():
+        q_no = _parse_question_no_int(q_meta.get("question_no"))
+        if q_no is None:
+            continue
+        known_question_nos.add(q_no)
+        question_no_by_id[qid] = q_no
+        if not (start_q <= q_no <= end_q):
+            continue
+        q_max = parse_score_value(q_meta.get("max_score"))
+        if q_max is None:
+            continue
+        max_score_by_no[q_no] = max_score_by_no.get(q_no, 0.0) + q_max
+
+    total_scores: Dict[str, float] = {}
+    range_scores: Dict[str, float] = {}
+    students_meta: Dict[str, Dict[str, str]] = {}
+    range_answered_question_nos: Dict[str, set[int]] = {}
+    observed_question_nos: set[int] = set()
+
+    with responses_path.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
+            if not student_id:
+                continue
+            if student_id not in students_meta:
+                students_meta[student_id] = {
+                    "student_id": student_id,
+                    "student_name": str(row.get("student_name") or "").strip(),
+                    "class_name": str(row.get("class_name") or "").strip(),
+                }
+
+            score = parse_score_value(row.get("score"))
+            if score is not None:
+                total_scores[student_id] = total_scores.get(student_id, 0.0) + score
+            else:
+                total_scores.setdefault(student_id, 0.0)
+
+            q_no = _parse_question_no_int(row.get("question_no"))
+            if q_no is None:
+                qid = str(row.get("question_id") or "").strip()
+                if qid:
+                    q_no = question_no_by_id.get(qid)
+            if q_no is None or q_no < start_q or q_no > end_q:
+                continue
+
+            observed_question_nos.add(q_no)
+            range_answered_question_nos.setdefault(student_id, set()).add(q_no)
+            if score is not None:
+                range_scores[student_id] = range_scores.get(student_id, 0.0) + score
+
+    if not total_scores:
+        return {"error": "no_scored_responses", "exam_id": exam_id}
+
+    if questions:
+        expected_question_nos = sorted(q for q in known_question_nos if start_q <= q <= end_q)
+    else:
+        expected_question_nos = sorted(observed_question_nos)
+    if not expected_question_nos:
+        return {
+            "error": "question_range_not_found",
+            "exam_id": exam_id,
+            "range": {"start_question_no": start_q, "end_question_no": end_q},
+            "message": "在该考试中未找到指定题号区间。",
+        }
+
+    student_rows: List[Dict[str, Any]] = []
+    expected_count = len(expected_question_nos)
+    for student_id in sorted(total_scores.keys()):
+        meta = students_meta.get(student_id) or {}
+        answered = len(range_answered_question_nos.get(student_id) or set())
+        student_rows.append(
+            {
+                "student_id": student_id,
+                "student_name": meta.get("student_name", ""),
+                "class_name": meta.get("class_name", ""),
+                "range_score": round(float(range_scores.get(student_id, 0.0)), 3),
+                "total_score": round(float(total_scores.get(student_id, 0.0)), 3),
+                "answered_questions": answered,
+                "missing_questions": max(0, expected_count - answered),
+            }
+        )
+
+    sorted_desc = sorted(
+        student_rows,
+        key=lambda item: (
+            -(item.get("range_score") or 0.0),
+            -(item.get("total_score") or 0.0),
+            str(item.get("student_id") or ""),
+        ),
+    )
+    sorted_asc = sorted(
+        student_rows,
+        key=lambda item: (
+            item.get("range_score") or 0.0,
+            item.get("total_score") or 0.0,
+            str(item.get("student_id") or ""),
+        ),
+    )
+
+    top_students: List[Dict[str, Any]] = []
+    bottom_students: List[Dict[str, Any]] = []
+    for index, item in enumerate(sorted_desc[:sample_n], start=1):
+        top_students.append({**item, "rank": index})
+    for index, item in enumerate(sorted_asc[:sample_n], start=1):
+        bottom_students.append({**item, "rank": index})
+
+    score_values = [float(item.get("range_score") or 0.0) for item in student_rows]
+    max_possible_score = 0.0
+    for q_no in expected_question_nos:
+        max_possible_score += float(max_score_by_no.get(q_no) or 0.0)
+
+    return {
+        "ok": True,
+        "exam_id": exam_id,
+        "range": {
+            "start_question_no": start_q,
+            "end_question_no": end_q,
+            "question_count": len(expected_question_nos),
+            "question_nos": expected_question_nos,
+            "max_possible_score": round(max_possible_score, 3) if max_possible_score > 0 else None,
+        },
+        "summary": {
+            "student_count": len(student_rows),
+            "avg_score": round(sum(score_values) / len(score_values), 3) if score_values else 0.0,
+            "median_score": round(_median_float(score_values), 3) if score_values else 0.0,
+            "max_score": round(max(score_values), 3) if score_values else 0.0,
+            "min_score": round(min(score_values), 3) if score_values else 0.0,
+        },
+        "top_students": top_students,
+        "bottom_students": bottom_students,
     }
 
 
@@ -7575,10 +7773,13 @@ def _chart_agent_bool(value: Any, default: bool = True) -> bool:
 
 
 def _chart_agent_engine(value: Any) -> str:
-    engine = str(value or "auto").strip().lower()
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return "opencode"
+    engine = raw
     if engine in {"auto", "llm", "opencode"}:
         return engine
-    return "auto"
+    return "opencode"
 
 
 def _chart_agent_opencode_overrides(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -7760,6 +7961,7 @@ def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
     timeout_sec = _safe_int_arg(args.get("timeout_sec"), default=180, minimum=30, maximum=3600)
     max_retries = _safe_int_arg(args.get("max_retries"), default=3, minimum=1, maximum=6)
     auto_install = _chart_agent_bool(args.get("auto_install"), default=True)
+    explicit_engine = bool(str(args.get("engine") or "").strip())
     requested_engine = _chart_agent_engine(args.get("engine"))
     chart_hint = str(args.get("chart_hint") or task[:120]).strip()
     save_as = str(args.get("save_as") or "main.png").strip() or "main.png"
@@ -7769,13 +7971,17 @@ def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
     opencode_status = resolve_opencode_status(APP_ROOT, overrides=opencode_overrides)
     opencode_cfg = opencode_status.get("config") if isinstance(opencode_status.get("config"), dict) else {}
 
+    effective_engine = requested_engine
+    if requested_engine == "opencode" and not opencode_status.get("available") and not explicit_engine:
+        effective_engine = "llm"
+
     effective_max_retries = max_retries
-    if requested_engine == "opencode" and isinstance(opencode_cfg, dict):
+    if effective_engine == "opencode" and isinstance(opencode_cfg, dict):
         effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
-    elif requested_engine == "auto" and opencode_status.get("available") and isinstance(opencode_cfg, dict):
+    elif effective_engine == "auto" and opencode_status.get("available") and isinstance(opencode_cfg, dict):
         effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
 
-    if requested_engine == "opencode":
+    if requested_engine == "opencode" and explicit_engine:
         if not opencode_status.get("enabled"):
             return {
                 "ok": False,
@@ -7798,8 +8004,8 @@ def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
     previous_code = ""
 
     for attempt in range(1, effective_max_retries + 1):
-        attempt_engine = requested_engine
-        if requested_engine == "auto":
+        attempt_engine = effective_engine
+        if effective_engine == "auto":
             attempt_engine = "opencode" if opencode_status.get("available") else "llm"
 
         if attempt_engine == "opencode":
@@ -7813,7 +8019,7 @@ def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
                 opencode_overrides=opencode_overrides,
             )
             # Auto mode can fallback to local LLM when opencode generation fails.
-            if requested_engine == "auto" and not str(candidate.get("python_code") or "").strip():
+            if effective_engine == "auto" and not str(candidate.get("python_code") or "").strip():
                 fallback_candidate = _chart_agent_generate_candidate(
                     task=task,
                     input_data=input_data,
@@ -8099,6 +8305,13 @@ def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -
             args.get("exam_id", ""),
             question_id=args.get("question_id"),
             question_no=args.get("question_no"),
+        )
+    if name == "exam.range.top_students":
+        return exam_range_top_students(
+            args.get("exam_id", ""),
+            start_question_no=args.get("start_question_no"),
+            end_question_no=args.get("end_question_no"),
+            top_n=args.get("top_n", 10),
         )
     if name == "assignment.list":
         return list_assignments()
@@ -8450,6 +8663,7 @@ def allowed_tools(role_hint: Optional[str]) -> set:
             "exam.students.list",
             "exam.student.get",
             "exam.question.get",
+            "exam.range.top_students",
             "assignment.list",
             "lesson.list",
             "lesson.capture",
