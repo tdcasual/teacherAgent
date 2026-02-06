@@ -12,8 +12,8 @@ def load_app(tmp_dir: Path):
     os.environ["DIAG_LOG"] = "0"
     os.environ["TEACHER_SESSION_COMPACT_ENABLED"] = "1"
     os.environ["TEACHER_SESSION_COMPACT_MAIN_ONLY"] = "1"
-    os.environ["TEACHER_SESSION_COMPACT_MAX_MESSAGES"] = "6"
-    os.environ["TEACHER_SESSION_COMPACT_KEEP_TAIL"] = "2"
+    os.environ["TEACHER_SESSION_COMPACT_MAX_MESSAGES"] = "20"
+    os.environ["TEACHER_SESSION_COMPACT_KEEP_TAIL"] = "10"
     os.environ["TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC"] = "0"
     import services.api.app as app_mod
 
@@ -30,7 +30,7 @@ class TeacherSessionCompactionTest(unittest.TestCase):
 
             teacher_id = app_mod.resolve_teacher_id("teacher")
             session_id = "main"
-            for i in range(4):
+            for i in range(12):
                 app_mod.append_teacher_session_message(teacher_id, session_id, "user", f"旧用户消息{i}")
                 app_mod.append_teacher_session_message(teacher_id, session_id, "assistant", f"旧助手消息{i}")
 
@@ -62,9 +62,8 @@ class TeacherSessionCompactionTest(unittest.TestCase):
             self.assertIn("会话压缩摘要", str(summary.get("content") or ""))
 
             dialog = [r for r in records if r.get("role") in {"user", "assistant"} and not r.get("synthetic")]
-            self.assertLessEqual(len(dialog), 2)
+            self.assertLessEqual(len(dialog), 10)
 
 
 if __name__ == "__main__":
     unittest.main()
-
