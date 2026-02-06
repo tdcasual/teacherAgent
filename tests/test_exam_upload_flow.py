@@ -264,6 +264,77 @@ class ExamUploadFlowTest(unittest.TestCase):
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 self.assertTrue("answers" in (manifest.get("files") or {}))
 
+    def test_exam_upload_answer_key_override_via_draft_save(self):
+        with TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            app_mod = load_app(tmp_dir)
+            with TestClient(app_mod.app) as client:
+
+                exam_id = "EX_UPLOAD_OVERRIDE_ANS"
+                paper_pdf = make_pdf_bytes("Physics Exam Paper")
+                # Score sheet contains objective answers (A/B/C) instead of numeric scores.
+                xlsx = make_minimal_xlsx(
+                    headers=["姓名", "班级", "1", "2"],
+                    rows=[
+                        ["张三", "高二2403班", "A", "C"],
+                        ["李四", "高二2403班", "B", "C"],
+                    ],
+                )
+
+                files = [
+                    ("paper_files", ("paper.pdf", paper_pdf, "application/pdf")),
+                    ("score_files", ("scores.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ]
+                data = {"exam_id": exam_id, "date": "2026-02-05", "class_name": "高二2403班"}
+
+                res = client.post("/exam/upload/start", data=data, files=files)
+                self.assertEqual(res.status_code, 200)
+                payload = res.json()
+                self.assertTrue(payload["ok"])
+                job_id = payload["job_id"]
+
+                # Poll until done
+                status = None
+                for _ in range(120):
+                    res = client.get("/exam/upload/status", params={"job_id": job_id})
+                    self.assertEqual(res.status_code, 200)
+                    status_payload = res.json()
+                    status = status_payload.get("status")
+                    if status == "done":
+                        break
+                    if status == "failed":
+                        self.fail(f"exam upload failed: {status_payload}")
+                    time.sleep(0.1)
+                self.assertEqual(status, "done")
+
+                # Save draft with answer key override (text).
+                res = client.get("/exam/upload/draft", params={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+                draft = res.json()["draft"]
+                res = client.post(
+                    "/exam/upload/draft/save",
+                    json={
+                        "job_id": job_id,
+                        "meta": draft.get("meta") or {},
+                        "questions": draft.get("questions") or [],
+                        "score_schema": draft.get("score_schema") or {},
+                        "answer_key_text": "1 A\n2 C\n",
+                    },
+                )
+                self.assertEqual(res.status_code, 200)
+
+                # Confirm should use override to score.
+                res = client.post("/exam/upload/confirm", json={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+
+                # Exam derived scored responses should contain numeric scores.
+                scored_path = Path(os.environ["DATA_DIR"]) / "exams" / exam_id / "derived" / "responses_scored.csv"
+                self.assertTrue(scored_path.exists())
+                with scored_path.open(encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    rows = list(reader)
+                self.assertTrue(any((r.get("score") or "").strip() != "" for r in rows))
+
 
 if __name__ == "__main__":
     unittest.main()
