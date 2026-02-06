@@ -1,9 +1,9 @@
-enabled: false
+enabled: true
 bin: opencode
 mode: run
 attach_url: http://127.0.0.1:4096
-agent: chart-builder
-model: ""
+agent: ""
+model: opencode/gpt-5-nano
 config_path: ""
 timeout_sec: 180
 max_retries: 3
