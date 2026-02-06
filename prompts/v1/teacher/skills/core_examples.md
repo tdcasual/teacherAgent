@@ -6,8 +6,8 @@
 1) 需要查询例题：core_example.search（可按 kp_id 或 example_id 过滤）。
 2) 需要新增登记：core_example.register（必须提供 example_id、kp_id、core_model）。
 3) 需要输出讲义：core_example.render（提供 example_id，可选 out 路径）。
+4) 需要展示例题难度/知识点分布图时，优先调用 chart.agent.run；明确要手写代码时再用 chart.exec。
 
 输出要求：
 - 登记时提示老师补齐：difficulty、tags、source_ref、讨论要点。
 - 渲染后明确输出文件路径（默认 output/pdf/core_example_<id>.pdf）。
-
