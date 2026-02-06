@@ -14,9 +14,51 @@ agent:
       - student.search
       - student.profile.get
       - student.profile.update
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 10
+  model_policy:
+    enabled: true
+    default:
+      provider: deepseek
+      mode: openai-chat
+      model: deepseek-chat
+      temperature: 0.4
+    routes:
+      - id: student_dialogue
+        priority: 220
+        match:
+          roles: [student]
+          kinds: [chat.agent]
+        target:
+          provider: deepseek
+          mode: openai-chat
+          model: deepseek-chat
+          temperature: 0.4
+      - id: teacher_diagnosis
+        priority: 200
+        match:
+          roles: [teacher]
+          kinds: [chat.agent]
+          needs_tools: true
+        target:
+          provider: siliconflow
+          mode: openai-chat
+          model: deepseek-ai/DeepSeek-V3.2
+          temperature: 0.2
+      - id: student_no_tools
+        priority: 180
+        match:
+          roles: [student]
+          kinds: [chat.agent_no_tools]
+          needs_tools: false
+        target:
+          provider: deepseek
+          mode: openai-chat
+          model: deepseek-chat
+          temperature: 0.3
 ui:
   prompts:
     - 查看学生画像 高二2403班_武熙语。
