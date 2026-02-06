@@ -1,0 +1,10 @@
+enabled: false
+bin: opencode
+mode: run
+attach_url: http://127.0.0.1:4096
+agent: chart-builder
+model: ""
+config_path: ""
+timeout_sec: 180
+max_retries: 3
+extra_env: {}
