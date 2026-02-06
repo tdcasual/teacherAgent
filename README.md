@@ -9,6 +9,8 @@
 - 学生对话诊断、学习讨论（Socratic）、费曼反思、作业发放
 - 学生作业拍照 OCR 评分与画像自动更新
 - 核心例题库：标准解法、核心模型、变式模板
+- 老师端高权限图表执行：可通过 `chart.exec` 运行 Python 代码并返回 Markdown 图片
+- 图表智能体支持 `opencode` 链路：`chart.agent.run` 可配置 `engine=auto|opencode|llm`，并可按需覆盖 opencode 的 model/agent/attach 参数
 
 ## 技能列表与职责边界
 ### 1) `physics-teacher-ops`
@@ -100,7 +102,7 @@ frontend/
 
 ## 重要原则
 - 画像是事实源：`data/student_profiles/*.json`
-- mem0 是摘要记忆层：只写确认后的短摘要
+- mem0 是摘要记忆层：老师端记忆写入后自动做语义索引（受开关控制）
 - 题库优先，自动生成补足
 - 不保存原始分数，只保存派生字段
 
@@ -248,6 +250,14 @@ npm run dev:student
 - `CHAT_WORKER_POOL_SIZE`：聊天异步 worker 数量（lane-aware 队列消费线程数，默认 `4`）
 - `CHAT_LANE_MAX_QUEUE`：单个会话 lane 允许的最大排队量（排队+执行中，默认 `6`）
 - `CHAT_LANE_DEBOUNCE_MS`：同一 lane 相同输入的去抖时间窗（毫秒，默认 `500`）
+- `CHAT_JOB_CLAIM_TTL_SEC`：聊天任务 claim.lock 的过期时间（秒；用于多进程防重复处理，默认 `600`）
+- `OPENCODE_BRIDGE_ENABLED`：是否启用 opencode 图表桥接（默认由 `config/opencode_bridge.yaml` 决定）
+- `OPENCODE_BRIDGE_FILE`：opencode 桥接配置文件路径（默认 `config/opencode_bridge.yaml`）
+- `OPENCODE_BRIDGE_BIN`：opencode 可执行文件（默认 `opencode`）
+- `OPENCODE_BRIDGE_MODE`：`run` 或 `attach`
+- `OPENCODE_BRIDGE_ATTACH_URL`：attach 模式地址（如 `http://127.0.0.1:4096`）
+- `OPENCODE_BRIDGE_AGENT` / `OPENCODE_BRIDGE_MODEL`：默认 agent 与模型
+- `OPENCODE_BRIDGE_TIMEOUT_SEC` / `OPENCODE_BRIDGE_MAX_RETRIES`：opencode 代码生成阶段超时与重试
 - `PROFILE_CACHE_TTL_SEC`：学生画像读取缓存 TTL（秒，默认 `10`）
 - `ASSIGNMENT_DETAIL_CACHE_TTL_SEC`：作业详情读取缓存 TTL（秒，默认 `10`）
 - `PROFILE_UPDATE_ASYNC`：学生端聊天后画像更新是否走异步队列（默认 `1`）
@@ -259,6 +269,27 @@ npm run dev:student
 - `TEACHER_SESSION_COMPACT_KEEP_TAIL`：压缩后保留的最近消息数（默认 `40`）
 - `TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC`：同一会话两次压缩的最小间隔秒数（默认 `60`）
 - `TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS`：用于生成压缩摘要的最大文本长度（默认 `12000`）
+- `TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY`：老师端是否将会话压缩摘要注入系统上下文（默认 `1`）
+- `TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS`：注入的会话摘要最大长度（字符；默认 `1500`）
+- `TEACHER_MEMORY_AUTO_ENABLED`：是否启用老师端自动记忆（默认 `1`）
+- `TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS`：自动记忆最小有效内容长度（默认 `12`）
+- `TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY`：单老师每天最多自动写入数量（默认 `8`）
+- `TEACHER_MEMORY_AUTO_APPLY_ENABLED`：是否启用提案创建后自动应用（默认 `1`）
+- `TEACHER_MEMORY_AUTO_APPLY_TARGETS`：允许自动应用的 target 列表（默认 `DAILY,MEMORY`）
+- `TEACHER_MEMORY_AUTO_APPLY_STRICT`：自动应用严格模式（敏感信息拦截、冲突替换等，默认 `1`）
+- `TEACHER_MEMORY_AUTO_INFER_ENABLED`：是否启用“无记住口令”的重复偏好自动推断（默认 `1`）
+- `TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS`：触发自动推断所需的近似重复次数（默认 `2`，含当前轮）
+- `TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS`：自动推断回看最近老师发言轮数（默认 `24`）
+- `TEACHER_MEMORY_AUTO_INFER_MIN_CHARS`：自动推断最小有效内容长度（默认 `16`）
+- `TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY`：自动推断提案最低优先级（0-100，默认 `58`；低于阈值只记录跳过事件不落盘）
+- `TEACHER_MEMORY_DECAY_ENABLED`：是否启用记忆衰减与过期过滤（默认 `1`）
+- `TEACHER_MEMORY_TTL_DAYS_MEMORY`：长期记忆默认 TTL 天数（默认 `180`，`0` 表示不过期）
+- `TEACHER_MEMORY_TTL_DAYS_DAILY`：每日记忆默认 TTL 天数（默认 `14`，`0` 表示不过期）
+- `TEACHER_MEMORY_CONTEXT_MAX_ENTRIES`：老师上下文注入时保留的活跃记忆条数上限（默认 `18`）
+- `TEACHER_MEMORY_SEARCH_FILTER_EXPIRED`：检索结果是否过滤过期记忆（默认 `1`）
+- `TEACHER_MEMORY_FLUSH_ENABLED`：是否启用“接近压缩阈值”自动 flush（默认 `1`）
+- `TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES`：距离压缩阈值多少条消息时触发 flush（默认 `24`）
+- `TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS`：flush 可写入的近期对话摘录上限（默认 `2400`）
 - `TEACHER_MEM0_ENABLED`：老师端是否启用 mem0 语义检索（默认 `0`）
 - `TEACHER_MEM0_WRITE_ENABLED`：老师端在 `teacher.memory.apply` 时是否写入 mem0（默认 `1`，但需先启用 `TEACHER_MEM0_ENABLED`）
 - `TEACHER_MEM0_INDEX_DAILY`：是否将 `target=DAILY` 的每日记录也写入 mem0（默认 `0`）
@@ -266,6 +297,13 @@ npm run dev:student
 - `TEACHER_MEM0_THRESHOLD`：mem0 最低相似度阈值（默认 `0.0`）
 - `TEACHER_MEM0_CHUNK_CHARS`：写入 mem0 的分块大小（字符；默认 `900`）
 - `TEACHER_MEM0_CHUNK_OVERLAP_CHARS`：写入 mem0 的分块重叠（字符；默认 `100`）
+
+### 老师端默认记忆规则
+- 出现明确长期信号（如“以后/默认/统一/固定”）时，优先写入 `MEMORY.md`。
+- 未出现“记住”口令时，若在最近对话中重复出现同类稳定偏好（输出结构/格式/讲解风格/作业参数），会自动推断并写入 `MEMORY.md`。
+- 含明显时效词（如“今天/本周/这次/临时/暂时”）的内容优先写入 `memory/YYYY-MM-DD.md`。
+- 命中敏感模式（key/token/password 等）会被自动拦截，不会写入工作区。
+- 每条记忆会计算 `priority_score` 并带有 TTL；检索与上下文注入默认只使用“未过期、未被替代”的活跃记忆。
 
 ---
 
