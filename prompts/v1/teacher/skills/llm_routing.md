@@ -8,6 +8,7 @@
 3) 变更必须走提案流程：`teacher.llm_routing.propose` -> 等老师确认 -> `teacher.llm_routing.apply`。
 4) 未经老师明确确认，不得调用 apply 执行生效。
 5) 若配置异常或线上效果退化，优先建议回滚并调用 `teacher.llm_routing.rollback`。
+6) 若老师要求可视化路由命中或渠道占比，优先调用 `chart.agent.run`；明确要手写代码时再用 `chart.exec`。
 
 输出要求：
 - 用表格或清单说明“任务类型 -> 规则 -> 渠道 -> 模型”映射。
