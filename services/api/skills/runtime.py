@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from ..prompt_builder import DEFAULT_PROMPT_VERSION, PROMPTS_DIR
-from .spec import SkillSpec
+from .spec import SkillModelPolicy, SkillSpec
 
 
 def _read_prompt_module(version: str, relpath: str) -> str:
@@ -54,6 +54,7 @@ class SkillRuntime:
     max_tool_rounds: Optional[int]
     max_tool_calls: Optional[int]
     context_providers: List[str]
+    model_policy: SkillModelPolicy
 
     def apply_tool_policy(self, role_allowed: Set[str]) -> Set[str]:
         allowed = set(role_allowed)
@@ -62,6 +63,65 @@ class SkillRuntime:
         if self.tools_deny:
             allowed -= set(self.tools_deny)
         return allowed
+
+    def resolve_model_targets(
+        self,
+        role_hint: Optional[str],
+        kind: Optional[str],
+        needs_tools: bool,
+        needs_json: bool,
+    ) -> List[Dict[str, Any]]:
+        policy = self.model_policy
+        if not policy.enabled:
+            return []
+
+        resolved: List[Dict[str, Any]] = []
+        seen: set[tuple] = set()
+        role = (role_hint or "").strip()
+        kind_value = (kind or "").strip()
+
+        for route in policy.routes:
+            match = route.match
+            if match.roles and role not in set(match.roles):
+                continue
+            if match.kinds and kind_value not in set(match.kinds):
+                continue
+            if match.needs_tools is not None and bool(match.needs_tools) != bool(needs_tools):
+                continue
+            if match.needs_json is not None and bool(match.needs_json) != bool(needs_json):
+                continue
+            target = route.target
+            key = (target.provider, target.mode, target.model, target.temperature, target.max_tokens)
+            if key in seen:
+                continue
+            seen.add(key)
+            resolved.append(
+                {
+                    "route_id": route.route_id,
+                    "provider": target.provider,
+                    "mode": target.mode,
+                    "model": target.model,
+                    "temperature": target.temperature,
+                    "max_tokens": target.max_tokens,
+                }
+            )
+
+        if resolved:
+            return resolved
+
+        if policy.default is None:
+            return []
+        target = policy.default
+        return [
+            {
+                "route_id": "default",
+                "provider": target.provider,
+                "mode": target.mode,
+                "model": target.model,
+                "temperature": target.temperature,
+                "max_tokens": target.max_tokens,
+            }
+        ]
 
 
 def compile_skill_runtime(
@@ -100,5 +160,5 @@ def compile_skill_runtime(
         max_tool_rounds=skill.agent.budgets.max_tool_rounds,
         max_tool_calls=skill.agent.budgets.max_tool_calls,
         context_providers=skill.agent.context_providers,
+        model_policy=skill.agent.model_policy,
     )
-
