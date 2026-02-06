@@ -7,6 +7,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
         from services.api.skills.spec import (
             SkillAgentSpec,
             SkillBudgets,
+            SkillModelPolicy,
             SkillSpec,
             SkillToolsPolicy,
             SkillUiSpec,
@@ -24,6 +25,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
                 context_providers=[],
                 tools=SkillToolsPolicy(allow=None, deny=[]),
                 budgets=SkillBudgets(max_tool_rounds=None, max_tool_calls=None),
+                model_policy=SkillModelPolicy(enabled=False, default=None, routes=[]),
             ),
             source_path="(in-memory)",
         )
@@ -36,6 +38,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
         from services.api.skills.spec import (
             SkillAgentSpec,
             SkillBudgets,
+            SkillModelPolicy,
             SkillSpec,
             SkillToolsPolicy,
             SkillUiSpec,
@@ -53,6 +56,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
                 context_providers=[],
                 tools=SkillToolsPolicy(allow=None, deny=[]),
                 budgets=SkillBudgets(max_tool_rounds=None, max_tool_calls=None),
+                model_policy=SkillModelPolicy(enabled=False, default=None, routes=[]),
             ),
             source_path="(in-memory)",
         )
@@ -64,4 +68,3 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
