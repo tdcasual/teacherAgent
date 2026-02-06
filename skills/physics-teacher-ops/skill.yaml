@@ -16,6 +16,35 @@ agent:
   budgets:
     max_tool_rounds: 5
     max_tool_calls: 12
+  model_policy:
+    enabled: true
+    default:
+      provider: siliconflow
+      mode: openai-chat
+      model: deepseek-ai/DeepSeek-V3.2
+      temperature: 0.2
+    routes:
+      - id: exam_longform
+        priority: 220
+        match:
+          kinds: [chat.exam_longform]
+          needs_tools: false
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
+          max_tokens: 4096
+      - id: planning_no_tools
+        priority: 180
+        match:
+          kinds: [chat.agent_no_tools]
+          needs_tools: false
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
 ui:
   prompts:
     - 列出所有考试，并给出最新考试概览。
