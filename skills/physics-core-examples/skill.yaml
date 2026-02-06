@@ -11,9 +11,29 @@ agent:
       - core_example.search
       - core_example.register
       - core_example.render
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 10
+  model_policy:
+    enabled: true
+    default:
+      provider: siliconflow
+      mode: openai-chat
+      model: deepseek-ai/DeepSeek-V3.2
+      temperature: 0.2
+    routes:
+      - id: core_summary
+        priority: 160
+        match:
+          kinds: [chat.agent_no_tools]
+          needs_tools: false
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
 ui:
   prompts:
     - 登记核心例题 CE001，知识点 KP-M01。
