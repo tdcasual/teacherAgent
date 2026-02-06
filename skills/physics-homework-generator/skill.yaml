@@ -16,9 +16,40 @@ agent:
       - student.search
       - student.profile.get
       - student.profile.update
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 10
+  model_policy:
+    enabled: true
+    default:
+      provider: siliconflow
+      mode: openai-chat
+      model: deepseek-ai/DeepSeek-V3.2
+      temperature: 0.2
+    routes:
+      - id: assignment_parse
+        priority: 220
+        match:
+          kinds: [upload.assignment_parse, upload.assignment_confirm]
+          needs_json: true
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.1
+          max_tokens: 4096
+      - id: homework_agent_tools
+        priority: 180
+        match:
+          kinds: [chat.agent]
+          needs_tools: true
+        target:
+          provider: siliconflow
+          mode: openai-chat
+          model: deepseek-ai/DeepSeek-V3.2
+          temperature: 0.2
 ui:
   prompts:
     - 生成作业 A2403_2026-02-04，知识点 KP-M01,KP-E04，每个 5 题。
