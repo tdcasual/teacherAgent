@@ -10,7 +10,7 @@
 - 学生作业拍照 OCR 评分与画像自动更新
 - 核心例题库：标准解法、核心模型、变式模板
 - 老师端高权限图表执行：可通过 `chart.exec` 运行 Python 代码并返回 Markdown 图片
-- 图表智能体支持 `opencode` 链路：`chart.agent.run` 可配置 `engine=auto|opencode|llm`，并可按需覆盖 opencode 的 model/agent/attach 参数
+- 图表智能体支持 `opencode` 链路：`chart.agent.run` 默认走 `engine=opencode`（可切换 `auto|llm`），并可按需覆盖 opencode 的 model/agent/attach 参数
 
 ## 技能列表与职责边界
 ### 1) `physics-teacher-ops`
