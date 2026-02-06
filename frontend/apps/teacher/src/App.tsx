@@ -394,7 +394,6 @@ const buildSessionViewStateSignature = (state: SessionViewStatePayload) => {
   const normalized = {
     title_map: Object.fromEntries(titleEntries),
     hidden_ids: [...state.hidden_ids],
-    active_session_id: state.active_session_id || '',
     updated_at: state.updated_at || '',
   }
   return JSON.stringify(normalized)
@@ -405,6 +404,9 @@ const readTeacherLocalViewState = (): SessionViewStatePayload => {
     const raw = localStorage.getItem(TEACHER_SESSION_VIEW_STATE_KEY)
     if (raw) {
       const parsed = normalizeSessionViewStatePayload(JSON.parse(raw))
+      if (!parsed.active_session_id) {
+        parsed.active_session_id = String(localStorage.getItem('teacherActiveSessionId') || '').trim()
+      }
       if (parsed.updated_at) return parsed
     }
   } catch {
@@ -442,6 +444,23 @@ const timeFromIso = (iso?: string) => {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return nowTime()
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+const formatSessionUpdatedLabel = (ts?: string) => {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.floor((today.getTime() - target.getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDays <= 0) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  if (diffDays === 1) return '昨天'
+  if (diffDays < 7) {
+    const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    return names[d.getDay()] || ''
+  }
+  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace('/', '-')
 }
 
 const removeEmptyParagraphs = () => {
@@ -588,7 +607,11 @@ export default function App() {
     const raw = localStorage.getItem('teacherMainView')
     return raw === 'routing' ? 'routing' : 'chat'
   })
+  const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => localStorage.getItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => localStorage.getItem('teacherSkillsOpen') !== 'false')
+  const [workbenchTab, setWorkbenchTab] = useState<'skills' | 'memory'>(() =>
+    localStorage.getItem('teacherWorkbenchTab') === 'memory' ? 'memory' : 'skills'
+  )
   const [activeSkillId, setActiveSkillId] = useState(() => localStorage.getItem('teacherActiveSkillId') || 'physics-teacher-ops')
   const [cursorPos, setCursorPos] = useState(0)
   const [skillQuery, setSkillQuery] = useState('')
@@ -645,11 +668,11 @@ export default function App() {
   const [historyCursor, setHistoryCursor] = useState(0)
   const [historyHasMore, setHistoryHasMore] = useState(false)
   const [historyQuery, setHistoryQuery] = useState('')
+  const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [sessionTitleMap, setSessionTitleMap] = useState<Record<string, string>>(() => initialViewStateRef.current.title_map)
   const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>(() => initialViewStateRef.current.hidden_ids)
   const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
-  const [renamingSessionId, setRenamingSessionId] = useState('')
-  const [renamingTitle, setRenamingTitle] = useState('')
+  const [openSessionMenuId, setOpenSessionMenuId] = useState('')
   const [sessionLoading, setSessionLoading] = useState(false)
   const [sessionError, setSessionError] = useState('')
   const [sessionCursor, setSessionCursor] = useState(-1)
@@ -657,7 +680,6 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState(() => initialViewStateRef.current.active_session_id || 'main')
   const [viewStateUpdatedAt, setViewStateUpdatedAt] = useState(() => initialViewStateRef.current.updated_at || new Date().toISOString())
   const [viewStateSyncReady, setViewStateSyncReady] = useState(false)
-  const [memoryPanelOpen, setMemoryPanelOpen] = useState(false)
   const [proposalLoading, setProposalLoading] = useState(false)
   const [proposalError, setProposalError] = useState('')
   const [proposals, setProposals] = useState<TeacherMemoryProposal[]>([])
@@ -702,9 +724,11 @@ export default function App() {
   const [examDraftActionStatus, setExamDraftActionStatus] = useState('')
   const [examDraftActionError, setExamDraftActionError] = useState('')
   const [examConfirming, setExamConfirming] = useState(false)
+  const [topbarHeight, setTopbarHeight] = useState(64)
 
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const topbarRef = useRef<HTMLElement | null>(null)
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
   const activeSessionRef = useRef(activeSessionId)
   const historyRequestRef = useRef(0)
@@ -720,10 +744,10 @@ export default function App() {
       normalizeSessionViewStatePayload({
         title_map: sessionTitleMap,
         hidden_ids: deletedSessionIds,
-        active_session_id: activeSessionId,
+        active_session_id: '',
         updated_at: viewStateUpdatedAt,
       }),
-    [activeSessionId, deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
+    [deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
   )
 
   useEffect(() => {
@@ -740,8 +764,36 @@ export default function App() {
   }, [skillsOpen])
 
   useEffect(() => {
+    localStorage.setItem('teacherWorkbenchTab', workbenchTab)
+  }, [workbenchTab])
+
+  useEffect(() => {
+    localStorage.setItem('teacherSessionSidebarOpen', String(sessionSidebarOpen))
+  }, [sessionSidebarOpen])
+
+  useEffect(() => {
     localStorage.setItem('teacherMainView', mainView)
   }, [mainView])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const el = topbarRef.current
+    if (!el) return
+    const updateHeight = () => {
+      setTopbarHeight(Math.max(56, Math.round(el.getBoundingClientRect().height)))
+    }
+    updateHeight()
+    let observer: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateHeight)
+      observer.observe(el)
+    }
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      window.removeEventListener('resize', updateHeight)
+      observer?.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     if (activeSkillId) localStorage.setItem('teacherActiveSkillId', activeSkillId)
@@ -765,17 +817,65 @@ export default function App() {
   }, [localDraftSessionIds])
 
   useEffect(() => {
+    if (!openSessionMenuId) return
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.session-menu-wrap')) return
+      setOpenSessionMenuId('')
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenSessionMenuId('')
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [openSessionMenuId])
+
+  useEffect(() => {
+    if (!sessionSidebarOpen) {
+      setOpenSessionMenuId('')
+    }
+  }, [sessionSidebarOpen])
+
+  useEffect(() => {
+    if (mainView !== 'chat') {
+      setOpenSessionMenuId('')
+      setSessionSidebarOpen(false)
+      setSkillsOpen(false)
+    }
+  }, [mainView])
+
+  useEffect(() => {
+    if (activeSessionId) localStorage.setItem('teacherActiveSessionId', activeSessionId)
+    else localStorage.removeItem('teacherActiveSessionId')
+  }, [activeSessionId])
+
+  useEffect(() => {
     currentViewStateRef.current = currentViewState
-    localStorage.setItem(TEACHER_SESSION_VIEW_STATE_KEY, JSON.stringify(currentViewState))
+    localStorage.setItem(
+      TEACHER_SESSION_VIEW_STATE_KEY,
+      JSON.stringify({
+        ...currentViewState,
+        active_session_id: activeSessionId,
+      }),
+    )
     localStorage.setItem('teacherSessionTitles', JSON.stringify(currentViewState.title_map))
     localStorage.setItem('teacherDeletedSessions', JSON.stringify(currentViewState.hidden_ids))
-    if (currentViewState.active_session_id) localStorage.setItem('teacherActiveSessionId', currentViewState.active_session_id)
-    else localStorage.removeItem('teacherActiveSessionId')
-  }, [currentViewState])
+  }, [activeSessionId, currentViewState])
 
   const pushTeacherViewState = useCallback(
     async (state: SessionViewStatePayload) => {
-      const payload = normalizeSessionViewStatePayload(state)
+      const payload = normalizeSessionViewStatePayload({
+        ...state,
+        active_session_id: '',
+      })
       const res = await fetch(`${apiBase}/teacher/session/view-state`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -810,7 +910,6 @@ export default function App() {
           applyingViewStateRef.current = true
           setSessionTitleMap(remoteState.title_map)
           setDeletedSessionIds(remoteState.hidden_ids)
-          if (remoteState.active_session_id) setActiveSessionId(remoteState.active_session_id)
           setViewStateUpdatedAt(remoteState.updated_at || new Date().toISOString())
           lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(remoteState)
           return
@@ -842,7 +941,7 @@ export default function App() {
       return
     }
     setViewStateUpdatedAt(new Date().toISOString())
-  }, [activeSessionId, deletedSessionIds, sessionTitleMap, viewStateSyncReady])
+  }, [deletedSessionIds, sessionTitleMap, viewStateSyncReady])
 
   useEffect(() => {
     if (!viewStateSyncReady) return
@@ -913,6 +1012,14 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, sending])
 
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = '0px'
+    const next = Math.min(220, Math.max(56, el.scrollHeight))
+    el.style.height = `${next}px`
+  }, [input, pendingChatJob?.job_id])
+
   const renderedMessages = useMemo(() => {
     const cache = markdownCacheRef.current
     return messages.map((msg): RenderedMessage => {
@@ -972,17 +1079,17 @@ export default function App() {
   }, [fetchSkills])
 
   useEffect(() => {
-    if (!skillsOpen) return
+    if (!skillsOpen || workbenchTab !== 'skills') return
     void fetchSkills()
-  }, [skillsOpen, fetchSkills])
+  }, [skillsOpen, workbenchTab, fetchSkills])
 
   useEffect(() => {
-    if (!skillsOpen) return
+    if (!skillsOpen || workbenchTab !== 'skills') return
     const timer = window.setInterval(() => {
       void fetchSkills()
     }, 30000)
     return () => window.clearInterval(timer)
-  }, [skillsOpen, fetchSkills])
+  }, [skillsOpen, workbenchTab, fetchSkills])
 
   const refreshTeacherSessions = useCallback(
     async (mode: 'reset' | 'more' = 'reset') => {
@@ -1169,10 +1276,11 @@ export default function App() {
   }, [apiBase])
 
   useEffect(() => {
-    if (!memoryPanelOpen) return
+    if (!skillsOpen) return
+    if (workbenchTab !== 'memory') return
     void refreshMemoryProposals()
     void refreshMemoryInsights()
-  }, [memoryPanelOpen, refreshMemoryInsights, refreshMemoryProposals])
+  }, [skillsOpen, workbenchTab, refreshMemoryInsights, refreshMemoryProposals])
 
   const formatUploadJobStatus = (job: UploadJobStatus) => {
     const lines: string[] = []
@@ -1836,17 +1944,18 @@ export default function App() {
   }, [skillQuery, showFavoritesOnly, favorites, skillList])
 
   const visibleHistorySessions = useMemo(() => {
-    const deleted = new Set(deletedSessionIds)
+    const archived = new Set(deletedSessionIds)
     const q = historyQuery.trim().toLowerCase()
     return historySessions.filter((item) => {
       const sid = String(item.session_id || '').trim()
-      if (!sid || deleted.has(sid)) return false
-      if (!q) return true
+      if (!sid) return false
       const title = (sessionTitleMap[sid] || '').toLowerCase()
       const preview = (item.preview || '').toLowerCase()
-      return sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
+      const matched = !q || sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
+      if (!matched) return false
+      return showArchivedSessions ? archived.has(sid) : !archived.has(sid)
     })
-  }, [historySessions, deletedSessionIds, historyQuery, sessionTitleMap])
+  }, [historySessions, deletedSessionIds, historyQuery, sessionTitleMap, showArchivedSessions])
 
   const groupedHistorySessions = useMemo(() => {
     const buckets = new Map<string, SessionGroup<TeacherHistorySession>>()
@@ -1876,15 +1985,23 @@ export default function App() {
     [sessionTitleMap],
   )
 
+  const closeSessionSidebarOnMobile = useCallback(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      setSessionSidebarOpen(false)
+    }
+  }, [])
+
   const startNewTeacherSession = useCallback(() => {
     const next = `session_${new Date().toISOString().slice(0, 10)}_${Math.random().toString(16).slice(2, 6)}`
     sessionRequestRef.current += 1
     setLocalDraftSessionIds((prev) => (prev.includes(next) ? prev : [next, ...prev]))
+    setShowArchivedSessions(false)
     setActiveSessionId(next)
     setSessionCursor(-1)
     setSessionHasMore(false)
     setSessionError('')
-    setRenamingSessionId('')
+    setOpenSessionMenuId('')
     setPendingChatJob(null)
     setSending(false)
     setInput('')
@@ -1902,43 +2019,53 @@ export default function App() {
         time: nowTime(),
       },
     ])
-  }, [])
+    closeSessionSidebarOnMobile()
+  }, [closeSessionSidebarOnMobile])
 
-  const beginRenameSession = useCallback(
+  const renameSession = useCallback(
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      setRenamingSessionId(sid)
-      setRenamingTitle(getSessionTitle(sid))
-    },
-    [getSessionTitle],
-  )
-
-  const submitRenameSession = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      const title = renamingTitle.trim()
+      const nextTitle = window.prompt('输入会话名称', getSessionTitle(sid))
+      if (nextTitle == null) {
+        setOpenSessionMenuId('')
+        return
+      }
+      const title = nextTitle.trim()
       setSessionTitleMap((prev) => {
         const next = { ...prev }
         if (title) next[sid] = title
         else delete next[sid]
         return next
       })
-      setRenamingSessionId('')
-      setRenamingTitle('')
+      setOpenSessionMenuId('')
     },
-    [renamingTitle],
+    [getSessionTitle],
   )
 
-  const deleteSession = useCallback(
+  const toggleSessionMenu = useCallback(
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      if (!window.confirm(`确认删除会话 ${getSessionTitle(sid)}？`)) return
-      setDeletedSessionIds((prev) => (prev.includes(sid) ? prev : [...prev, sid]))
-      setLocalDraftSessionIds((prev) => prev.filter((id) => id !== sid))
-      if (activeSessionId === sid) {
+      setOpenSessionMenuId((prev) => (prev === sid ? '' : sid))
+    },
+    [],
+  )
+
+  const toggleSessionArchive = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      const isArchived = deletedSessionIds.includes(sid)
+      const action = isArchived ? '恢复' : '归档'
+      if (!window.confirm(`确认${action}会话 ${getSessionTitle(sid)}？`)) return
+      setOpenSessionMenuId('')
+      setDeletedSessionIds((prev) => {
+        if (isArchived) return prev.filter((id) => id !== sid)
+        if (prev.includes(sid)) return prev
+        return [...prev, sid]
+      })
+      if (!isArchived && activeSessionId === sid) {
         const next = visibleHistorySessions.find((item) => item.session_id !== sid)?.session_id
         if (next) {
           setActiveSessionId(next)
@@ -1950,7 +2077,7 @@ export default function App() {
         }
       }
     },
-    [activeSessionId, getSessionTitle, startNewTeacherSession, visibleHistorySessions],
+    [activeSessionId, deletedSessionIds, getSessionTitle, startNewTeacherSession, visibleHistorySessions],
   )
 
   const activeSkill = useMemo(() => {
@@ -2688,16 +2815,24 @@ export default function App() {
     }
 
     if (event.key === 'Enter' && !event.shiftKey) {
+      if ((event.nativeEvent as any)?.isComposing) return
       event.preventDefault()
+      if (!input.trim()) return
+      if (pendingChatJob?.job_id || sending) return
       void submitMessage()
     }
   }
 
   return (
-    <div className="app teacher">
-      <header className="topbar">
+    <div className="app teacher" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px` }}>
+      <header ref={topbarRef} className="topbar">
         <div className="top-left">
           <div className="brand">物理教学助手 · 老师端</div>
+          {mainView === 'chat' ? (
+            <button className="ghost" type="button" onClick={() => setSessionSidebarOpen((prev) => !prev)}>
+              {sessionSidebarOpen ? '收起会话' : '展开会话'}
+            </button>
+          ) : null}
           {mainView === 'chat' ? (
             <button className="ghost" onClick={startNewTeacherSession}>
               新会话
@@ -2714,15 +2849,32 @@ export default function App() {
             </button>
           </div>
           <div className="role-badge teacher">身份：老师</div>
-          {mainView === 'chat' && activeSkill ? <div className="role-badge">当前技能：{activeSkill.title}</div> : null}
           {mainView === 'chat' ? (
-            <button className="ghost" onClick={() => setSkillsOpen((prev) => !prev)}>
-              技能
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => {
+                if (skillsOpen && workbenchTab === 'skills') {
+                  setSkillsOpen(false)
+                  return
+                }
+                setWorkbenchTab('skills')
+                setSkillsOpen(true)
+              }}
+            >
+              {skillsOpen ? '收起工作台' : 'GPTs'}
             </button>
           ) : null}
           {mainView === 'chat' ? (
-            <button className="ghost" onClick={() => setMemoryPanelOpen((prev) => !prev)}>
-              记忆记录
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => {
+                setWorkbenchTab('memory')
+                setSkillsOpen(true)
+              }}
+            >
+              记忆
             </button>
           ) : null}
           <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
@@ -2741,14 +2893,35 @@ export default function App() {
         </section>
       )}
 
-      <div className={`teacher-layout ${mainView === 'chat' ? 'chat-view' : ''} ${skillsOpen ? 'skills-open' : ''}`}>
+      <div
+        className={`teacher-layout ${mainView === 'chat' ? 'chat-view' : ''} ${sessionSidebarOpen ? 'session-open' : 'session-collapsed'} ${skillsOpen ? 'workbench-open' : ''}`}
+      >
         {mainView === 'chat' ? (
-          <aside className="session-sidebar">
+          <button
+            type="button"
+            className={`layout-overlay ${sessionSidebarOpen || skillsOpen ? 'show' : ''}`}
+            aria-label="关闭侧边栏"
+            onClick={() => {
+              setSessionSidebarOpen(false)
+              setSkillsOpen(false)
+            }}
+          />
+        ) : null}
+        {mainView === 'chat' ? (
+          <aside className={`session-sidebar ${sessionSidebarOpen ? 'open' : 'collapsed'}`}>
             <div className="session-sidebar-header">
               <strong>历史会话</strong>
-              <button type="button" className="ghost" disabled={historyLoading} onClick={() => void refreshTeacherSessions()}>
-                {historyLoading ? '刷新中…' : '刷新'}
-              </button>
+              <div className="session-sidebar-actions">
+                <button type="button" className="ghost" onClick={startNewTeacherSession}>
+                  新建
+                </button>
+                <button type="button" className="ghost" disabled={historyLoading} onClick={() => void refreshTeacherSessions()}>
+                  {historyLoading ? '刷新中…' : '刷新'}
+                </button>
+                <button type="button" className="ghost" onClick={() => setShowArchivedSessions((prev) => !prev)}>
+                  {showArchivedSessions ? '查看会话' : '查看归档'}
+                </button>
+              </div>
             </div>
             <div className="session-search">
               <input
@@ -2758,7 +2931,9 @@ export default function App() {
               />
             </div>
             {historyError ? <div className="status err">{historyError}</div> : null}
-            {!historyLoading && visibleHistorySessions.length === 0 ? <div className="history-hint">暂无历史会话。</div> : null}
+            {!historyLoading && visibleHistorySessions.length === 0 ? (
+              <div className="history-hint">{showArchivedSessions ? '暂无归档会话。' : '暂无历史会话。'}</div>
+            ) : null}
             <div className="session-groups">
               {groupedHistorySessions.map((group) => (
                 <div key={group.key} className="session-group">
@@ -2767,7 +2942,9 @@ export default function App() {
                     {group.items.map((item) => {
                       const sid = item.session_id || 'main'
                       const isActive = sid === activeSessionId
-                      const isRenaming = sid === renamingSessionId
+                      const isMenuOpen = sid === openSessionMenuId
+                      const isArchived = deletedSessionIds.includes(sid)
+                      const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                       return (
                         <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
                           <button
@@ -2778,40 +2955,47 @@ export default function App() {
                               setSessionCursor(-1)
                               setSessionHasMore(false)
                               setSessionError('')
-                              setRenamingSessionId('')
+                              setOpenSessionMenuId('')
+                              closeSessionSidebarOnMobile()
                             }}
                           >
                             <div className="session-main">
                               <div className="session-id">{getSessionTitle(sid)}</div>
                               <div className="session-meta">
-                                <span>{item.updated_at || '-'}</span>
-                                <span>{item.message_count || 0} 条</span>
+                                {(item.message_count || 0).toString()} 条{updatedLabel ? ` · ${updatedLabel}` : ''}
                               </div>
                             </div>
                             {item.preview ? <div className="session-preview">{item.preview}</div> : null}
                           </button>
-                          <div className="session-item-actions">
-                            <button type="button" className="ghost" onClick={() => beginRenameSession(sid)}>
-                              重命名
-                            </button>
-                            <button type="button" className="ghost" onClick={() => deleteSession(sid)}>
-                              删除
-                            </button>
-                          </div>
-                          {isRenaming ? (
-                            <form
-                              className="session-rename-form"
-                              onSubmit={(e) => {
-                                e.preventDefault()
-                                submitRenameSession(sid)
+                          <div className="session-menu-wrap">
+                            <button
+                              type="button"
+                              className="session-menu-trigger"
+                              aria-haspopup="menu"
+                              aria-expanded={isMenuOpen}
+                              aria-label={`会话 ${getSessionTitle(sid)} 操作`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleSessionMenu(sid)
                               }}
                             >
-                              <input value={renamingTitle} onChange={(e) => setRenamingTitle(e.target.value)} placeholder="输入会话名称" />
-                              <button type="submit" className="ghost">
-                                保存
-                              </button>
-                            </form>
-                          ) : null}
+                              ⋯
+                            </button>
+                            {isMenuOpen ? (
+                              <div className="session-menu" role="menu">
+                                <button type="button" className="session-menu-item" onClick={() => renameSession(sid)}>
+                                  重命名
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`session-menu-item${isArchived ? '' : ' danger'}`}
+                                  onClick={() => toggleSessionArchive(sid)}
+                                >
+                                  {isArchived ? '恢复' : '归档'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       )
                     })}
@@ -2844,165 +3028,52 @@ export default function App() {
           ) : (
             <>
 
-          {memoryPanelOpen && (
-            <section className="memory-panel">
-              <div className="history-header">
-                <strong>自动记忆记录</strong>
-                <div className="history-actions">
-                  <div className="view-switch">
-                    <button
-                      type="button"
-                      className={memoryStatusFilter === 'applied' ? 'active' : ''}
-                      onClick={() => setMemoryStatusFilter('applied')}
-                    >
-                      已写入
-                    </button>
-                    <button
-                      type="button"
-                      className={memoryStatusFilter === 'rejected' ? 'active' : ''}
-                      onClick={() => setMemoryStatusFilter('rejected')}
-                    >
-                      已拦截
-                    </button>
-                    <button
-                      type="button"
-                      className={memoryStatusFilter === 'all' ? 'active' : ''}
-                      onClick={() => setMemoryStatusFilter('all')}
-                    >
-                      全部
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="ghost"
-                    disabled={proposalLoading}
-                    onClick={() => {
-                      void refreshMemoryProposals()
-                      void refreshMemoryInsights()
-                    }}
-                  >
-                    {proposalLoading ? '刷新中…' : '刷新'}
-                  </button>
-                </div>
-              </div>
-              {memoryInsights?.summary && (
-                <div className="memory-metrics-grid">
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">{memoryInsights.summary.active_total ?? 0}</div>
-                    <div className="memory-metric-label">活跃记忆</div>
-                  </div>
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">{memoryInsights.summary.expired_total ?? 0}</div>
-                    <div className="memory-metric-label">已过期</div>
-                  </div>
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">{memoryInsights.summary.superseded_total ?? 0}</div>
-                    <div className="memory-metric-label">已替代</div>
-                  </div>
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">{memoryInsights.summary.avg_priority_active ?? 0}</div>
-                    <div className="memory-metric-label">平均优先级</div>
-                  </div>
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">
-                      {`${Math.round((memoryInsights.retrieval?.search_hit_rate ?? 0) * 100)}%`}
-                    </div>
-                    <div className="memory-metric-label">检索命中率(14d)</div>
-                  </div>
-                  <div className="memory-metric-card">
-                    <div className="memory-metric-value">{memoryInsights.retrieval?.search_calls ?? 0}</div>
-                    <div className="memory-metric-label">检索次数(14d)</div>
-                  </div>
-                </div>
-              )}
-              {Array.isArray(memoryInsights?.top_queries) && (memoryInsights?.top_queries || []).length > 0 && (
-                <div className="memory-query-list">
-                  <div className="muted">高频命中查询（14天）</div>
-                  {(memoryInsights?.top_queries || []).slice(0, 5).map((q) => (
-                    <div key={q.query} className="proposal-meta">
-                      <span>{q.query}</span>
-                      <span>
-                        {q.hit_calls}/{q.calls}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {proposalError ? <div className="status err">{proposalError}</div> : null}
-              {!proposalLoading && proposals.length === 0 ? <div className="history-hint">暂无记录。</div> : null}
-              {proposals.length > 0 && (
-                <div className="proposal-list">
-                  {proposals.map((p) => (
-                    <div key={p.proposal_id} className="proposal-item">
-                      <div className="proposal-title">
-                        {p.title || 'Memory Update'} <span className="muted">[{p.target || 'MEMORY'}]</span>
-                      </div>
-                      <div className="proposal-meta">
-                        <span>{p.created_at || '-'}</span>
-                        <span>{p.source || 'manual'}</span>
-                        <span className={`memory-status-chip ${String(p.status || '').toLowerCase() || 'unknown'}`}>
-                          {String(p.status || '').toLowerCase() === 'applied'
-                            ? '已写入'
-                            : String(p.status || '').toLowerCase() === 'rejected'
-                              ? '已拦截'
-                              : '待处理'}
-                        </span>
-                      </div>
-                      <div className="proposal-content">{p.content || ''}</div>
-                      <div className="proposal-meta">
-                        <span>{p.proposal_id}</span>
-                        <span>{p.applied_at || p.rejected_at || '-'}</span>
-                      </div>
-                      {p.reject_reason ? <div className="muted">原因：{p.reject_reason}</div> : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
           <div className="messages">
-            {renderedMessages.map((msg) => (
-              <div key={msg.id} className={`message ${msg.role}`}>
-                <div className="bubble">
-                  <div className="meta">
-                    {msg.role === 'user' ? '我' : '助手'} · {msg.time}
+            <div className="messages-inner">
+              {renderedMessages.map((msg) => (
+                <div key={msg.id} className={`message ${msg.role}`}>
+                  <div className="bubble">
+                    <div className="meta">
+                      {msg.role === 'user' ? '我' : '助手'} · {msg.time}
+                    </div>
+                    <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
                   </div>
-                  <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
                 </div>
-              </div>
-            ))}
-            {sending && !pendingChatJob?.job_id && (
-              <div className="message assistant">
-                <div className="bubble typing">
-                  <div className="meta">助手 · {nowTime()}</div>
-                  <div className="text">正在思考…</div>
+              ))}
+              {sending && !pendingChatJob?.job_id && (
+                <div className="message assistant">
+                  <div className="bubble typing">
+                    <div className="meta">助手 · {nowTime()}</div>
+                    <div className="text">正在思考…</div>
+                  </div>
                 </div>
-              </div>
-            )}
-            <div ref={endRef} />
+              )}
+              <div ref={endRef} />
+            </div>
           </div>
 
           <form className="composer" onSubmit={handleSend}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value)
-                setCursorPos(e.target.selectionStart || e.target.value.length)
-              }}
-              onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
-              onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
-              onKeyDown={handleKeyDown}
-              placeholder="输入指令或问题，使用 @ 查看技能。回车发送，上档键+回车换行"
-              rows={3}
-              disabled={Boolean(pendingChatJob?.job_id)}
-            />
-            <div className="composer-actions">
-              <span className="composer-hint">{chatQueueHint || '@ 技能 | 回车发送'}</span>
-              <button type="submit" className="send-btn" disabled={sending || Boolean(pendingChatJob?.job_id)}>
-                发送
-              </button>
+            <div className="composer-inner">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  setCursorPos(e.target.selectionStart || e.target.value.length)
+                }}
+                onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
+                onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
+                onKeyDown={handleKeyDown}
+                placeholder="输入指令或问题，使用 @ 查看技能。回车发送，上档键+回车换行"
+                rows={3}
+                disabled={Boolean(pendingChatJob?.job_id)}
+              />
+              <div className="composer-actions">
+                <span className="composer-hint">{chatQueueHint || '@ 技能 | 回车发送'}</span>
+                <button type="submit" className="send-btn" disabled={sending || Boolean(pendingChatJob?.job_id)}>
+                  发送
+                </button>
+              </div>
             </div>
           </form>
 
@@ -3724,82 +3795,209 @@ export default function App() {
 
         {mainView === 'chat' && (
           <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
-          <div className="skills-header">
-            <h3>技能提示</h3>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="ghost" onClick={() => void fetchSkills()} disabled={skillsLoading}>
-                刷新
+            <div className="skills-header">
+              <h3>工作台</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    if (workbenchTab === 'skills') {
+                      void fetchSkills()
+                    } else {
+                      void refreshMemoryProposals()
+                      void refreshMemoryInsights()
+                    }
+                  }}
+                  disabled={workbenchTab === 'skills' ? skillsLoading : proposalLoading}
+                >
+                  刷新
+                </button>
+                <button className="ghost" onClick={() => setSkillsOpen(false)}>
+                  收起
+                </button>
+              </div>
+            </div>
+            <div className="view-switch workbench-switch">
+              <button type="button" className={workbenchTab === 'skills' ? 'active' : ''} onClick={() => setWorkbenchTab('skills')}>
+                GPTs
               </button>
-              <button className="ghost" onClick={() => setSkillsOpen(false)}>
-                收起
+              <button type="button" className={workbenchTab === 'memory' ? 'active' : ''} onClick={() => setWorkbenchTab('memory')}>
+                自动记忆
               </button>
             </div>
-          </div>
-          <div className="skills-tools">
-            <input
-              value={skillQuery}
-              onChange={(e) => setSkillQuery(e.target.value)}
-              placeholder="搜索技能"
-            />
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={showFavoritesOnly}
-                onChange={(e) => setShowFavoritesOnly(e.target.checked)}
-              />
-              只看收藏
-            </label>
-          </div>
-          {skillsLoading && <div className="skills-status">正在加载技能...</div>}
-          {skillsError && <div className="skills-status err">{skillsError}</div>}
-          <div className="skills-body">
-            {filteredSkills.map((skill) => (
-              <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
-                <div className="skill-title">
-                  <div>
-                    <strong>{skill.title}</strong>
+            {workbenchTab === 'skills' ? (
+              <>
+                <div className="skills-tools">
+                  <input
+                    value={skillQuery}
+                    onChange={(e) => setSkillQuery(e.target.value)}
+                    placeholder="搜索技能"
+                  />
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={showFavoritesOnly}
+                      onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+                    />
+                    只看收藏
+                  </label>
+                </div>
+                {skillsLoading && <div className="skills-status">正在加载技能...</div>}
+                {skillsError && <div className="skills-status err">{skillsError}</div>}
+                <div className="skills-body">
+                  {filteredSkills.map((skill) => (
+                    <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
+                      <div className="skill-title">
+                        <div>
+                          <strong>{skill.title}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          className={`fav ${favorites.includes(skill.id) ? 'active' : ''}`}
+                          onClick={() => toggleFavorite(skill.id)}
+                          aria-label="收藏技能"
+                        >
+                          {favorites.includes(skill.id) ? '★' : '☆'}
+                        </button>
+                      </div>
+                      <p>{skill.desc}</p>
+                      <div className="skill-prompts">
+                        {skill.prompts.map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
+                            onClick={() => {
+                              setActiveSkillId(skill.id)
+                              insertPrompt(prompt)
+                            }}
+                          >
+                            使用模板
+                          </button>
+                        ))}
+                      </div>
+                      <div className="skill-examples">
+                        {skill.examples.map((ex) => (
+                          <button
+                            key={ex}
+                            type="button"
+                            onClick={() => {
+                              setActiveSkillId(skill.id)
+                              insertPrompt(ex)
+                            }}
+                          >
+                            {ex}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <section className="memory-panel workbench-memory">
+                <div className="history-header">
+                  <strong>自动记忆记录</strong>
+                  <div className="history-actions">
+                    <div className="view-switch">
+                      <button
+                        type="button"
+                        className={memoryStatusFilter === 'applied' ? 'active' : ''}
+                        onClick={() => setMemoryStatusFilter('applied')}
+                      >
+                        已写入
+                      </button>
+                      <button
+                        type="button"
+                        className={memoryStatusFilter === 'rejected' ? 'active' : ''}
+                        onClick={() => setMemoryStatusFilter('rejected')}
+                      >
+                        已拦截
+                      </button>
+                      <button
+                        type="button"
+                        className={memoryStatusFilter === 'all' ? 'active' : ''}
+                        onClick={() => setMemoryStatusFilter('all')}
+                      >
+                        全部
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`fav ${favorites.includes(skill.id) ? 'active' : ''}`}
-                    onClick={() => toggleFavorite(skill.id)}
-                    aria-label="收藏技能"
-                  >
-                    {favorites.includes(skill.id) ? '★' : '☆'}
-                  </button>
                 </div>
-                <p>{skill.desc}</p>
-                <div className="skill-prompts">
-                  {skill.prompts.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => {
-                        setActiveSkillId(skill.id)
-                        insertPrompt(prompt)
-                      }}
-                    >
-                      使用模板
-                    </button>
-                  ))}
-                </div>
-                <div className="skill-examples">
-                  {skill.examples.map((ex) => (
-                    <button
-                      key={ex}
-                      type="button"
-                      onClick={() => {
-                        setActiveSkillId(skill.id)
-                        insertPrompt(ex)
-                      }}
-                    >
-                      {ex}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+                {memoryInsights?.summary && (
+                  <div className="memory-metrics-grid">
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">{memoryInsights.summary.active_total ?? 0}</div>
+                      <div className="memory-metric-label">活跃记忆</div>
+                    </div>
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">{memoryInsights.summary.expired_total ?? 0}</div>
+                      <div className="memory-metric-label">已过期</div>
+                    </div>
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">{memoryInsights.summary.superseded_total ?? 0}</div>
+                      <div className="memory-metric-label">已替代</div>
+                    </div>
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">{memoryInsights.summary.avg_priority_active ?? 0}</div>
+                      <div className="memory-metric-label">平均优先级</div>
+                    </div>
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">
+                        {`${Math.round((memoryInsights.retrieval?.search_hit_rate ?? 0) * 100)}%`}
+                      </div>
+                      <div className="memory-metric-label">检索命中率(14d)</div>
+                    </div>
+                    <div className="memory-metric-card">
+                      <div className="memory-metric-value">{memoryInsights.retrieval?.search_calls ?? 0}</div>
+                      <div className="memory-metric-label">检索次数(14d)</div>
+                    </div>
+                  </div>
+                )}
+                {Array.isArray(memoryInsights?.top_queries) && (memoryInsights?.top_queries || []).length > 0 && (
+                  <div className="memory-query-list">
+                    <div className="muted">高频命中查询（14天）</div>
+                    {(memoryInsights?.top_queries || []).slice(0, 5).map((q) => (
+                      <div key={q.query} className="proposal-meta">
+                        <span>{q.query}</span>
+                        <span>
+                          {q.hit_calls}/{q.calls}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {proposalError ? <div className="status err">{proposalError}</div> : null}
+                {!proposalLoading && proposals.length === 0 ? <div className="history-hint">暂无记录。</div> : null}
+                {proposals.length > 0 && (
+                  <div className="proposal-list">
+                    {proposals.map((p) => (
+                      <div key={p.proposal_id} className="proposal-item">
+                        <div className="proposal-title">
+                          {p.title || 'Memory Update'} <span className="muted">[{p.target || 'MEMORY'}]</span>
+                        </div>
+                        <div className="proposal-meta">
+                          <span>{p.created_at || '-'}</span>
+                          <span>{p.source || 'manual'}</span>
+                          <span className={`memory-status-chip ${String(p.status || '').toLowerCase() || 'unknown'}`}>
+                            {String(p.status || '').toLowerCase() === 'applied'
+                              ? '已写入'
+                              : String(p.status || '').toLowerCase() === 'rejected'
+                                ? '已拦截'
+                                : '待处理'}
+                          </span>
+                        </div>
+                        <div className="proposal-content">{p.content || ''}</div>
+                        <div className="proposal-meta">
+                          <span>{p.proposal_id}</span>
+                          <span>{p.applied_at || p.rejected_at || '-'}</span>
+                        </div>
+                        {p.reject_reason ? <div className="muted">原因：{p.reject_reason}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
           </aside>
         )}
       </div>
