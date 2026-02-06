@@ -10,6 +10,7 @@ def load_app(tmp_dir: Path):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
     os.environ["DIAG_LOG"] = "0"
+    os.environ["TEACHER_MEMORY_AUTO_APPLY_ENABLED"] = "0"
     # Default: keep mem0 disabled unless a test enables it explicitly.
     os.environ.pop("TEACHER_MEM0_ENABLED", None)
     os.environ.pop("TEACHER_MEM0_WRITE_ENABLED", None)
@@ -81,4 +82,3 @@ class TeacherMem0IntegrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
