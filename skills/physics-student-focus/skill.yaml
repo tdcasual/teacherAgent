@@ -13,11 +13,33 @@ agent:
       - student.profile.update
       - exam.get
       - exam.analysis.get
+      - exam.analysis.charts.generate
       - exam.student.get
       - assignment.list
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 10
+  model_policy:
+    enabled: true
+    default:
+      provider: openai
+      mode: openai-chat
+      model: gpt-4.1-mini
+      temperature: 0.2
+    routes:
+      - id: student_focus_tools
+        priority: 180
+        match:
+          kinds: [chat.agent]
+          needs_tools: true
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
+          max_tokens: 3072
 ui:
   prompts:
     - 请分析学生 高二2403班_武熙语 的最近作业表现。
