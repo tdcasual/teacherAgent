@@ -13,9 +13,40 @@ agent:
       - teacher.llm_routing.propose
       - teacher.llm_routing.apply
       - teacher.llm_routing.rollback
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 8
+  model_policy:
+    enabled: true
+    default:
+      provider: openai
+      mode: openai-chat
+      model: gpt-4.1-mini
+      temperature: 0.2
+    routes:
+      - id: routing_simulation
+        priority: 200
+        match:
+          kinds: [chat.agent]
+          needs_tools: true
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
+          max_tokens: 3072
+      - id: routing_summary
+        priority: 160
+        match:
+          kinds: [chat.agent_no_tools]
+          needs_tools: false
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
 ui:
   prompts:
     - 先读取当前路由配置，再给我一个“教师对话/作业解析/考试分析”三类任务的分流方案。
