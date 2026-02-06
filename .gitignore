@@ -38,9 +38,13 @@ data/student_profiles/
 data/teacher_focus/
 data/teacher_workspaces/
 data/teacher_chat_sessions/
+data/student_chat_sessions/
 
 # Assignments generated from question bank / core examples
 data/assignments/
 
 # Uploads
 uploads/
+
+# Local chart artifacts (generated during development/tests)
+main.png
