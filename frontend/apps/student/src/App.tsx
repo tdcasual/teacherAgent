@@ -213,7 +213,6 @@ const buildSessionViewStateSignature = (state: SessionViewStatePayload) => {
   const normalized = {
     title_map: Object.fromEntries(titleEntries),
     hidden_ids: [...state.hidden_ids],
-    active_session_id: state.active_session_id || '',
     updated_at: state.updated_at || '',
   }
   return JSON.stringify(normalized)
@@ -233,6 +232,9 @@ const readStudentLocalViewState = (studentId: string): SessionViewStatePayload =
     const raw = localStorage.getItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`)
     if (raw) {
       const parsed = normalizeSessionViewStatePayload(JSON.parse(raw))
+      if (!parsed.active_session_id) {
+        parsed.active_session_id = String(localStorage.getItem(`studentActiveSession:${sid}`) || '').trim()
+      }
       if (parsed.updated_at) return parsed
     }
   } catch {
@@ -426,6 +428,7 @@ export default function App() {
   const [historyCursor, setHistoryCursor] = useState(0)
   const [historyHasMore, setHistoryHasMore] = useState(false)
   const [historyQuery, setHistoryQuery] = useState('')
+  const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [sessionTitleMap, setSessionTitleMap] = useState<Record<string, string>>({})
   const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>([])
   const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
@@ -455,10 +458,10 @@ export default function App() {
       normalizeSessionViewStatePayload({
         title_map: sessionTitleMap,
         hidden_ids: deletedSessionIds,
-        active_session_id: activeSessionId,
+        active_session_id: '',
         updated_at: viewStateUpdatedAt,
       }),
-    [activeSessionId, deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
+    [deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
   )
 
   useEffect(() => {
@@ -875,12 +878,14 @@ export default function App() {
           applyingViewStateRef.current = true
           setSessionTitleMap(remoteState.title_map)
           setDeletedSessionIds(remoteState.hidden_ids)
-          setActiveSessionId(remoteState.active_session_id || '')
           setViewStateUpdatedAt(remoteState.updated_at || new Date().toISOString())
           lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(remoteState)
           return
         }
-        const payload = normalizeSessionViewStatePayload(localState)
+        const payload = normalizeSessionViewStatePayload({
+          ...localState,
+          active_session_id: '',
+        })
         const saveRes = await fetch(`${apiBase}/student/session/view-state`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -917,9 +922,9 @@ export default function App() {
     localStorage.setItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`, JSON.stringify(currentViewState))
     localStorage.setItem(`studentSessionTitles:${sid}`, JSON.stringify(currentViewState.title_map))
     localStorage.setItem(`studentDeletedSessions:${sid}`, JSON.stringify(currentViewState.hidden_ids))
-    if (currentViewState.active_session_id) localStorage.setItem(`studentActiveSession:${sid}`, currentViewState.active_session_id)
+    if (activeSessionId) localStorage.setItem(`studentActiveSession:${sid}`, activeSessionId)
     else localStorage.removeItem(`studentActiveSession:${sid}`)
-  }, [currentViewState, verifiedStudent?.student_id])
+  }, [activeSessionId, currentViewState, verifiedStudent?.student_id])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -929,7 +934,7 @@ export default function App() {
       return
     }
     setViewStateUpdatedAt(new Date().toISOString())
-  }, [activeSessionId, deletedSessionIds, sessionTitleMap, verifiedStudent?.student_id, viewStateSyncReady])
+  }, [deletedSessionIds, sessionTitleMap, verifiedStudent?.student_id, viewStateSyncReady])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -938,7 +943,10 @@ export default function App() {
     if (signature === lastSyncedViewStateSignatureRef.current) return
     const timer = window.setTimeout(async () => {
       try {
-        const payload = normalizeSessionViewStatePayload(currentViewState)
+        const payload = normalizeSessionViewStatePayload({
+          ...currentViewState,
+          active_session_id: '',
+        })
         const res = await fetch(`${apiBase}/student/session/view-state`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -1126,17 +1134,18 @@ export default function App() {
   )
 
   const visibleSessions = useMemo(() => {
-    const deleted = new Set(deletedSessionIds)
+    const archived = new Set(deletedSessionIds)
     const q = historyQuery.trim().toLowerCase()
     return sessions.filter((item) => {
       const sid = String(item.session_id || '').trim()
-      if (!sid || deleted.has(sid)) return false
-      if (!q) return true
+      if (!sid) return false
       const title = (sessionTitleMap[sid] || '').toLowerCase()
       const preview = (item.preview || '').toLowerCase()
-      return sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
+      const matched = !q || sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
+      if (!matched) return false
+      return showArchivedSessions ? archived.has(sid) : !archived.has(sid)
     })
-  }, [sessions, deletedSessionIds, historyQuery, sessionTitleMap])
+  }, [sessions, deletedSessionIds, historyQuery, sessionTitleMap, showArchivedSessions])
 
   const groupedSessions = useMemo(() => {
     const buckets = new Map<string, SessionGroup<StudentHistorySession>>()
@@ -1168,6 +1177,7 @@ export default function App() {
     const next = `general_${todayDate()}_${Math.random().toString(16).slice(2, 6)}`
     sessionRequestRef.current += 1
     setLocalDraftSessionIds((prev) => (prev.includes(next) ? prev : [next, ...prev]))
+    setShowArchivedSessions(false)
     setActiveSessionId(next)
     setSessionCursor(-1)
     setSessionHasMore(false)
@@ -1225,15 +1235,20 @@ export default function App() {
     [],
   )
 
-  const deleteSession = useCallback(
+  const toggleSessionArchive = useCallback(
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      if (!window.confirm(`确认删除会话 ${getSessionTitle(sid)}？`)) return
+      const isArchived = deletedSessionIds.includes(sid)
+      const action = isArchived ? '恢复' : '归档'
+      if (!window.confirm(`确认${action}会话 ${getSessionTitle(sid)}？`)) return
       setOpenSessionMenuId('')
-      setDeletedSessionIds((prev) => (prev.includes(sid) ? prev : [...prev, sid]))
-      setLocalDraftSessionIds((prev) => prev.filter((id) => id !== sid))
-      if (activeSessionId === sid) {
+      setDeletedSessionIds((prev) => {
+        if (isArchived) return prev.filter((id) => id !== sid)
+        if (prev.includes(sid)) return prev
+        return [...prev, sid]
+      })
+      if (!isArchived && activeSessionId === sid) {
         const next = visibleSessions.find((item) => item.session_id !== sid)?.session_id
         if (next) {
           setActiveSessionId(next)
@@ -1245,7 +1260,7 @@ export default function App() {
         }
       }
     },
-    [activeSessionId, getSessionTitle, startNewStudentSession, visibleSessions],
+    [activeSessionId, deletedSessionIds, getSessionTitle, startNewStudentSession, visibleSessions],
   )
 
   return (
@@ -1302,6 +1317,9 @@ export default function App() {
               >
                 {historyLoading ? '刷新中…' : '刷新'}
               </button>
+              <button type="button" className="ghost" disabled={!verifiedStudent} onClick={() => setShowArchivedSessions((prev) => !prev)}>
+                {showArchivedSessions ? '查看会话' : '查看归档'}
+              </button>
             </div>
           </div>
           <div className="session-search">
@@ -1315,7 +1333,7 @@ export default function App() {
           {!verifiedStudent && <div className="history-hint">请先完成姓名验证后查看历史记录。</div>}
           {historyError && <div className="status err">{historyError}</div>}
           {verifiedStudent && !historyLoading && visibleSessions.length === 0 && !historyError && (
-            <div className="history-hint">暂无历史记录。</div>
+            <div className="history-hint">{showArchivedSessions ? '暂无归档会话。' : '暂无历史记录。'}</div>
           )}
           <div className="session-groups">
             {groupedSessions.map((group) => (
@@ -1326,6 +1344,7 @@ export default function App() {
                     const sid = item.session_id
                     const isActive = sid === activeSessionId
                     const isMenuOpen = sid === openSessionMenuId
+                    const isArchived = deletedSessionIds.includes(sid)
                     const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                     return (
                       <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
@@ -1376,12 +1395,12 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
-                                className="session-menu-item danger"
+                                className={`session-menu-item${isArchived ? '' : ' danger'}`}
                                 onClick={() => {
-                                  deleteSession(sid)
+                                  toggleSessionArchive(sid)
                                 }}
                               >
-                                删除
+                                {isArchived ? '恢复' : '归档'}
                               </button>
                             </div>
                           ) : null}
