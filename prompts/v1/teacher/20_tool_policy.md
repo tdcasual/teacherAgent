@@ -5,8 +5,11 @@
 - 导入：老师要求导入学生名册或初始化档案时，调用 student.import（仅老师端可用）。
 - 考试分析：优先只调用 1 次 exam.analysis.get（必要时补 1 次 exam.get）。除非老师点名某题/某学生，否则不要批量调用 exam.question.get / exam.student.get。
 - 如需排名/分布：最多调用 1 次 exam.students.list（设置合适 limit），不要循环多次。
+- 题号区间排名（如“1-10题Top10/最高最低”）：优先 1 次 exam.range.top_students；不要改用循环 exam.student.get。
+- 多区间对比（如“1-7、8-10、11-15分别最高最低”）：优先 1 次 exam.range.summary.batch。
+- 多题明细（如“1-10题逐题失分率/top学生”）：优先 1 次 exam.question.batch.get；只有补洞时才单独调用 exam.question.get。
 - 老师明确要求“考试图表/一键出图”时，优先调用 exam.analysis.charts.generate（默认生成：成绩分布、知识点雷达、班级/分层对比、题目区分度）。
-- 当老师需要通用可视化（图表/趋势/分布）时，优先调用 chart.agent.run（默认 engine=auto：优先 opencode，失败自动回退本地 LLM 代码生成）；仅在明确要手写代码时再调用 chart.exec。
+- 当老师需要通用可视化（图表/趋势/分布）时，优先调用 chart.agent.run（默认 engine=opencode；若未显式指定 engine 且 opencode 不可用，会自动回退本地 LLM 代码生成）；仅在明确要手写代码时再调用 chart.exec。
 - 使用 chart.exec 时，仍可结合 auto_install/packages/max_retries 参数增强成功率。
 - 若需固定使用 opencode，可在 chart.agent.run 中显式传 engine=opencode，并按需传 opencode_agent/opencode_model/opencode_mode/opencode_attach_url。
 - 图表交付以 Markdown 图片为主，至少包含清晰标题与坐标/图例，必要时附一段简短结论。
