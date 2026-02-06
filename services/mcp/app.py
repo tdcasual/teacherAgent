@@ -583,8 +583,16 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
     if req.method == "tools/call":
         name = req.params.get("name")
         args = req.params.get("arguments", {})
+        if not isinstance(name, str) or not name.strip():
+            return _jsonrpc_error(req.id, -32602, "missing required field: name")
+        name = name.strip()
+        if name not in MCP_TOOL_NAMES:
+            return _jsonrpc_error(req.id, -32601, f"Unknown tool: {name}")
         if not isinstance(args, dict):
             args = {}
+        issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, args)
+        if issues:
+            return _jsonrpc_error(req.id, -32602, "invalid arguments", {"tool": name, "issues": issues[:20]})
         try:
             if name == "student.search":
                 return _jsonrpc_ok(req.id, _tool_student_search(args))
