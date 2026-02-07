@@ -113,6 +113,7 @@ from .chat_worker_service import (
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
 )
+from .chart_agent_run_service import ChartAgentRunDeps, chart_agent_run as _chart_agent_run_impl
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
@@ -146,6 +147,7 @@ from .exam_upload_draft_service import (
 )
 from .exam_upload_parse_service import ExamUploadParseDeps, process_exam_upload_job as _process_exam_upload_job_impl
 from .exam_upload_start_service import ExamUploadStartDeps, start_exam_upload as _start_exam_upload_impl
+from .lesson_core_tool_service import LessonCaptureDeps, lesson_capture as _lesson_capture_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .session_view_state import (
@@ -6281,173 +6283,7 @@ def _chart_agent_generate_candidate_opencode(
 
 
 def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
-    task = str(args.get("task") or "").strip()
-    if not task:
-        return {"error": "task_required"}
-
-    timeout_sec = _safe_int_arg(args.get("timeout_sec"), default=180, minimum=30, maximum=3600)
-    max_retries = _safe_int_arg(args.get("max_retries"), default=3, minimum=1, maximum=6)
-    auto_install = _chart_agent_bool(args.get("auto_install"), default=True)
-    explicit_engine = bool(str(args.get("engine") or "").strip())
-    requested_engine = _chart_agent_engine(args.get("engine"))
-    chart_hint = str(args.get("chart_hint") or task[:120]).strip()
-    save_as = str(args.get("save_as") or "main.png").strip() or "main.png"
-    input_data = args.get("input_data")
-    requested_packages = _chart_agent_packages(args.get("packages"))
-    opencode_overrides = _chart_agent_opencode_overrides(args)
-    opencode_status = resolve_opencode_status(APP_ROOT, overrides=opencode_overrides)
-    opencode_cfg = opencode_status.get("config") if isinstance(opencode_status.get("config"), dict) else {}
-
-    effective_engine = requested_engine
-    if requested_engine == "opencode" and not opencode_status.get("available") and not explicit_engine:
-        effective_engine = "llm"
-
-    effective_max_retries = max_retries
-    if effective_engine == "opencode" and isinstance(opencode_cfg, dict):
-        effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
-    elif effective_engine == "auto" and opencode_status.get("available") and isinstance(opencode_cfg, dict):
-        effective_max_retries = _safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
-
-    if requested_engine == "opencode" and explicit_engine:
-        if not opencode_status.get("enabled"):
-            return {
-                "ok": False,
-                "error": "opencode_disabled",
-                "detail": "opencode bridge disabled",
-                "engine_requested": requested_engine,
-                "opencode_status": opencode_status,
-            }
-        if not opencode_status.get("available"):
-            return {
-                "ok": False,
-                "error": "opencode_unavailable",
-                "detail": opencode_status.get("reason") or "opencode unavailable",
-                "engine_requested": requested_engine,
-                "opencode_status": opencode_status,
-            }
-
-    attempts: List[Dict[str, Any]] = []
-    last_error = ""
-    previous_code = ""
-
-    for attempt in range(1, effective_max_retries + 1):
-        attempt_engine = effective_engine
-        if effective_engine == "auto":
-            attempt_engine = "opencode" if opencode_status.get("available") else "llm"
-
-        if attempt_engine == "opencode":
-            candidate = _chart_agent_generate_candidate_opencode(
-                task=task,
-                input_data=input_data,
-                last_error=last_error,
-                previous_code=previous_code,
-                attempt=attempt,
-                max_retries=effective_max_retries,
-                opencode_overrides=opencode_overrides,
-            )
-            # Auto mode can fallback to local LLM when opencode generation fails.
-            if effective_engine == "auto" and not str(candidate.get("python_code") or "").strip():
-                fallback_candidate = _chart_agent_generate_candidate(
-                    task=task,
-                    input_data=input_data,
-                    last_error=last_error,
-                    previous_code=previous_code,
-                    attempt=attempt,
-                    max_retries=effective_max_retries,
-                )
-                fallback_candidate["fallback_from"] = "opencode"
-                candidate = fallback_candidate
-                attempt_engine = "llm"
-        else:
-            candidate = _chart_agent_generate_candidate(
-                task=task,
-                input_data=input_data,
-                last_error=last_error,
-                previous_code=previous_code,
-                attempt=attempt,
-                max_retries=effective_max_retries,
-            )
-
-        python_code = str(candidate.get("python_code") or "").strip() or _chart_agent_default_code()
-        llm_packages = _chart_agent_packages(candidate.get("packages"))
-        merged_packages: List[str] = []
-        seen: set[str] = set()
-        for pkg in requested_packages + llm_packages:
-            key = pkg.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            merged_packages.append(pkg)
-
-        exec_res = execute_chart_exec(
-            {
-                "python_code": python_code,
-                "input_data": input_data,
-                "chart_hint": chart_hint,
-                "timeout_sec": timeout_sec,
-                "save_as": save_as,
-                "auto_install": auto_install,
-                "packages": merged_packages,
-                "max_retries": 2,
-            },
-            app_root=APP_ROOT,
-            uploads_dir=UPLOADS_DIR,
-        )
-
-        attempts.append(
-            {
-                "attempt": attempt,
-                "engine": attempt_engine,
-                "packages": merged_packages,
-                "summary": candidate.get("summary") or "",
-                "code_preview": python_code[:1200],
-                "codegen_error": candidate.get("error"),
-                "codegen_meta": candidate.get("meta") if isinstance(candidate.get("meta"), dict) else None,
-                "execution": {
-                    "ok": bool(exec_res.get("ok")),
-                    "run_id": exec_res.get("run_id"),
-                    "exit_code": exec_res.get("exit_code"),
-                    "timed_out": exec_res.get("timed_out"),
-                    "image_url": exec_res.get("image_url"),
-                    "meta_url": exec_res.get("meta_url"),
-                    "stderr": str(exec_res.get("stderr") or "")[:500],
-                },
-            }
-        )
-
-        if exec_res.get("ok") and exec_res.get("image_url"):
-            title = str(args.get("title") or "图表结果").strip() or "图表结果"
-            markdown = f"### {title}\n\n![{title}]({exec_res.get('image_url')})"
-            return {
-                "ok": True,
-                "task": task,
-                "attempt_used": attempt,
-                "engine_requested": requested_engine,
-                "engine_used": attempt_engine,
-                "image_url": exec_res.get("image_url"),
-                "meta_url": exec_res.get("meta_url"),
-                "run_id": exec_res.get("run_id"),
-                "artifacts": exec_res.get("artifacts") or [],
-                "installed_packages": exec_res.get("installed_packages") or [],
-                "python_executable": exec_res.get("python_executable"),
-                "markdown": markdown,
-                "attempts": attempts,
-                "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
-            }
-
-        previous_code = python_code
-        last_error = str(exec_res.get("stderr") or exec_res.get("error") or "unknown_error")
-
-    return {
-        "ok": False,
-        "error": "chart_agent_failed",
-        "task": task,
-        "max_retries": effective_max_retries,
-        "engine_requested": requested_engine,
-        "last_error": last_error[:1200],
-        "attempts": attempts,
-        "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
-    }
+    return _chart_agent_run_impl(args, deps=_chart_agent_run_deps())
 
 
 _SAFE_TOOL_ID_RE = re.compile(r"^[^\x00/\\\\]+$")
@@ -6476,53 +6312,7 @@ def _resolve_app_path(path_value: Any, must_exist: bool = True) -> Optional[Path
 
 
 def lesson_capture(args: Dict[str, Any]) -> Dict[str, Any]:
-    lesson_id = str(args.get("lesson_id") or "").strip()
-    topic = str(args.get("topic") or "").strip()
-    if not _is_safe_tool_id(lesson_id):
-        return {"error": "invalid_lesson_id"}
-    if not topic:
-        return {"error": "missing_topic"}
-
-    sources = args.get("sources")
-    if not isinstance(sources, list) or not sources:
-        return {"error": "sources must be a non-empty array of file paths"}
-
-    resolved_sources: List[str] = []
-    for s in sources:
-        p = _resolve_app_path(s, must_exist=True)
-        if not p:
-            return {"error": "source_not_found_or_outside_app_root", "source": str(s)}
-        resolved_sources.append(str(p))
-
-    script = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
-    cmd = ["python3", str(script), "--lesson-id", lesson_id, "--topic", topic, "--sources", *resolved_sources]
-
-    if args.get("class_name"):
-        cmd += ["--class-name", str(args.get("class_name"))]
-    if args.get("discussion_notes"):
-        p = _resolve_app_path(args.get("discussion_notes"), must_exist=True)
-        if not p:
-            return {"error": "discussion_notes_not_found_or_outside_app_root"}
-        cmd += ["--discussion-notes", str(p)]
-    if args.get("lesson_plan"):
-        p = _resolve_app_path(args.get("lesson_plan"), must_exist=True)
-        if not p:
-            return {"error": "lesson_plan_not_found_or_outside_app_root"}
-        cmd += ["--lesson-plan", str(p)]
-    if args.get("force_ocr"):
-        cmd += ["--force-ocr"]
-    if args.get("ocr_mode"):
-        cmd += ["--ocr-mode", str(args.get("ocr_mode"))]
-    if args.get("language"):
-        cmd += ["--language", str(args.get("language"))]
-    if args.get("out_base"):
-        out_base = _resolve_app_path(args.get("out_base"), must_exist=False)
-        if not out_base:
-            return {"error": "out_base_outside_app_root"}
-        cmd += ["--out-base", str(out_base)]
-
-    out = run_script(cmd)
-    return {"ok": True, "output": out, "lesson_id": lesson_id}
+    return _lesson_capture_impl(args, deps=_lesson_core_tool_deps())
 
 
 def core_example_search(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -7865,6 +7655,32 @@ def _teacher_routing_api_deps():
 def _chart_api_deps():
     return ChartApiDeps(
         chart_exec=lambda args: execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    )
+
+
+def _chart_agent_run_deps():
+    return ChartAgentRunDeps(
+        safe_int_arg=_safe_int_arg,
+        chart_bool=_chart_agent_bool,
+        chart_engine=_chart_agent_engine,
+        chart_packages=_chart_agent_packages,
+        chart_opencode_overrides=_chart_agent_opencode_overrides,
+        resolve_opencode_status=resolve_opencode_status,
+        app_root=APP_ROOT,
+        uploads_dir=UPLOADS_DIR,
+        generate_candidate=_chart_agent_generate_candidate,
+        generate_candidate_opencode=_chart_agent_generate_candidate_opencode,
+        execute_chart_exec=execute_chart_exec,
+        default_code=_chart_agent_default_code,
+    )
+
+
+def _lesson_core_tool_deps():
+    return LessonCaptureDeps(
+        is_safe_tool_id=_is_safe_tool_id,
+        resolve_app_path=_resolve_app_path,
+        app_root=APP_ROOT,
+        run_script=run_script,
     )
 
 
