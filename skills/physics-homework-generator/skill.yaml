@@ -3,6 +3,22 @@ schema_version: 2
 title: 作业生成
 desc: 基于课堂讨论生成课后诊断与作业
 allowed_roles: [teacher]
+routing:
+  intents: [assignment, assignment_generate]
+  keywords:
+    - 生成作业
+    - 布置作业
+    - 作业id
+    - 作业 id
+  keyword_weights:
+    生成作业: 6
+    布置作业: 6
+    作业id: 6
+    作业 id: 6
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/homework_generator.md

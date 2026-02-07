@@ -41,6 +41,13 @@ def _as_float_opt(value: Any) -> Optional[float]:
         return None
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return default
+
+
 def _as_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
@@ -128,6 +135,18 @@ class SkillUiSpec:
 
 
 @dataclass(frozen=True)
+class SkillRoutingSpec:
+    keywords: List[str]
+    negative_keywords: List[str]
+    intents: List[str]
+    keyword_weights: Dict[str, int]
+    min_score: int
+    min_margin: int
+    confidence_floor: float
+    match_mode: str
+
+
+@dataclass(frozen=True)
 class SkillSpec:
     skill_id: str
     schema_version: int
@@ -135,6 +154,7 @@ class SkillSpec:
     desc: str
     allowed_roles: List[str]
     ui: SkillUiSpec
+    routing: SkillRoutingSpec
     agent: SkillAgentSpec
     source_path: str
 
@@ -177,6 +197,16 @@ class SkillSpec:
             "allowed_roles": self.allowed_roles,
             "prompts": self.ui.prompts,
             "examples": self.ui.examples,
+            "routing": {
+                "keywords": self.routing.keywords,
+                "negative_keywords": self.routing.negative_keywords,
+                "intents": self.routing.intents,
+                "keyword_weights": dict(self.routing.keyword_weights),
+                "min_score": int(self.routing.min_score),
+                "min_margin": int(self.routing.min_margin),
+                "confidence_floor": float(self.routing.confidence_floor),
+                "match_mode": self.routing.match_mode,
+            },
             "agent": {
                 "prompt_modules": self.agent.prompt_modules,
                 "context_providers": self.agent.context_providers,
@@ -244,6 +274,44 @@ def _parse_model_policy(raw: Any) -> SkillModelPolicy:
     return SkillModelPolicy(enabled=enabled and has_any, default=default_target, routes=routes)
 
 
+def _parse_routing(raw: Any) -> SkillRoutingSpec:
+    routing_raw = raw if isinstance(raw, dict) else {}
+    keywords = _as_str_list(routing_raw.get("keywords"))
+    negative_keywords = _as_str_list(routing_raw.get("negative_keywords") or routing_raw.get("negativeKeywords"))
+    intents = _as_str_list(routing_raw.get("intents"))
+
+    keyword_weights_raw = routing_raw.get("keyword_weights") if isinstance(routing_raw.get("keyword_weights"), dict) else {}
+    keyword_weights: Dict[str, int] = {}
+    for key, value in keyword_weights_raw.items():
+        text = str(key or "").strip()
+        if not text:
+            continue
+        weight = _as_int(value, 0)
+        if weight <= 0:
+            continue
+        keyword_weights[text] = min(50, max(1, weight))
+
+    min_score = max(1, _as_int(routing_raw.get("min_score"), 3))
+    min_margin = max(0, _as_int(routing_raw.get("min_margin"), 1))
+    confidence_floor = _as_float_opt(routing_raw.get("confidence_floor"))
+    if confidence_floor is None:
+        confidence_floor = 0.28
+    confidence_floor = max(0.0, min(0.95, float(confidence_floor)))
+    match_mode_raw = str(routing_raw.get("match_mode") or "").strip().lower()
+    match_mode = match_mode_raw if match_mode_raw in {"substring", "word_boundary"} else "substring"
+
+    return SkillRoutingSpec(
+        keywords=keywords,
+        negative_keywords=negative_keywords,
+        intents=intents,
+        keyword_weights=keyword_weights,
+        min_score=min_score,
+        min_margin=min_margin,
+        confidence_floor=confidence_floor,
+        match_mode=match_mode,
+    )
+
+
 def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> SkillSpec:
     schema_version = _as_int_opt(raw.get("schema_version")) or _as_int_opt(raw.get("schemaVersion")) or 1
 
@@ -255,6 +323,7 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
     ui_prompts = _as_str_list(ui_raw.get("prompts") if isinstance(ui_raw, dict) else raw.get("prompts"))
     ui_examples = _as_str_list(ui_raw.get("examples") if isinstance(ui_raw, dict) else raw.get("examples"))
     ui = SkillUiSpec(prompts=ui_prompts, examples=ui_examples)
+    routing = _parse_routing(raw.get("routing"))
 
     agent_raw = raw.get("agent") if isinstance(raw.get("agent"), dict) else {}
     prompt_modules = _as_str_list(agent_raw.get("prompt_modules") or agent_raw.get("promptModules"))
@@ -288,6 +357,7 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
         desc=desc,
         allowed_roles=allowed_roles,
         ui=ui,
+        routing=routing,
         agent=agent,
         source_path=source_path,
     )
