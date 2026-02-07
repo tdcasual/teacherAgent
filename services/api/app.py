@@ -31,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
+from .exam_api_service import ExamApiDeps
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 
@@ -10194,7 +10195,7 @@ async def verify_student(req: StudentVerifyRequest):
 
 
 def _exam_api_deps():
-    return {}
+    return ExamApiDeps(exam_get=exam_get)
 
 
 def _assignment_api_deps():
