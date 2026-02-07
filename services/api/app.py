@@ -240,6 +240,14 @@ from .teacher_memory_search_service import (
     TeacherMemorySearchDeps,
     teacher_memory_search as _teacher_memory_search_impl,
 )
+from .teacher_memory_store_service import (
+    TeacherMemoryStoreDeps,
+    teacher_memory_active_applied_records as _teacher_memory_active_applied_records_impl,
+    teacher_memory_event_log_path as _teacher_memory_event_log_path_impl,
+    teacher_memory_load_events as _teacher_memory_load_events_impl,
+    teacher_memory_load_record as _teacher_memory_load_record_impl,
+    teacher_memory_log_event as _teacher_memory_log_event_impl,
+)
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
 from .teacher_session_compaction_service import (
     TeacherSessionCompactionDeps,
@@ -1512,26 +1520,7 @@ def teacher_memory_list_proposals(
 
 
 def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
-    path = _teacher_memory_event_log_path(teacher_id)
-    if not path.exists():
-        return []
-    out: List[Dict[str, Any]] = []
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    for raw in reversed(lines):
-        line = str(raw or "").strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except Exception:
-            continue
-        if not isinstance(rec, dict):
-            continue
-        out.append(rec)
-        if len(out) >= max(100, int(limit or 5000)):
-            break
-    out.reverse()
-    return out
+    return _teacher_memory_load_events_impl(teacher_id, deps=_teacher_memory_store_deps(), limit=limit)
 
 
 def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
@@ -1547,27 +1536,11 @@ def _teacher_memory_is_sensitive(content: str) -> bool:
 
 
 def _teacher_memory_event_log_path(teacher_id: str) -> Path:
-    base = teacher_workspace_dir(teacher_id) / "telemetry"
-    base.mkdir(parents=True, exist_ok=True)
-    return base / "memory_events.jsonl"
+    return _teacher_memory_event_log_path_impl(teacher_id, deps=_teacher_memory_store_deps())
 
 
 def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
-    rec: Dict[str, Any] = {
-        "ts": datetime.now().isoformat(timespec="seconds"),
-        "event": str(event or "").strip() or "unknown",
-    }
-    if isinstance(payload, dict):
-        for k, v in payload.items():
-            if v is None:
-                continue
-            rec[str(k)] = v
-    try:
-        path = _teacher_memory_event_log_path(teacher_id)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    except Exception:
-        return
+    _teacher_memory_log_event_impl(teacher_id, event, payload=payload, deps=_teacher_memory_store_deps())
 
 
 def _teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
@@ -1636,18 +1609,7 @@ def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
 
 
 def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
-    path = _teacher_proposal_path(teacher_id, proposal_id)
-    if not path.exists():
-        return None
-    try:
-        rec = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(rec, dict):
-        return None
-    if "proposal_id" not in rec:
-        rec["proposal_id"] = proposal_id
-    return rec
+    return _teacher_memory_load_record_impl(teacher_id, proposal_id, deps=_teacher_memory_store_deps())
 
 
 def _teacher_memory_active_applied_records(
@@ -1656,22 +1618,12 @@ def _teacher_memory_active_applied_records(
     target: Optional[str] = None,
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
-    target_norm = str(target or "").strip().upper() or None
-    out: List[Dict[str, Any]] = []
-    now = datetime.now()
-    for rec in _teacher_memory_recent_proposals(teacher_id, limit=max(200, limit * 4)):
-        if str(rec.get("status") or "").strip().lower() != "applied":
-            continue
-        if rec.get("superseded_by"):
-            continue
-        rec_target = str(rec.get("target") or "").strip().upper()
-        if target_norm and rec_target != target_norm:
-            continue
-        if _teacher_memory_is_expired_record(rec, now=now):
-            continue
-        out.append(rec)
-    out.sort(key=lambda r: (_teacher_memory_rank_score(r), str(r.get("applied_at") or r.get("created_at") or "")), reverse=True)
-    return out[: max(1, int(limit or 200))]
+    return _teacher_memory_active_applied_records_impl(
+        teacher_id,
+        deps=_teacher_memory_store_deps(),
+        target=target,
+        limit=limit,
+    )
 
 
 def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: int = 24) -> List[str]:
@@ -7005,6 +6957,17 @@ def _teacher_memory_record_deps():
         auto_max_proposals_per_day=TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
         proposal_path=_teacher_proposal_path,
         atomic_write_json=_atomic_write_json,
+    )
+
+
+def _teacher_memory_store_deps():
+    return TeacherMemoryStoreDeps(
+        teacher_workspace_dir=teacher_workspace_dir,
+        proposal_path=_teacher_proposal_path,
+        recent_proposals=lambda teacher_id, limit: _teacher_memory_recent_proposals(teacher_id, limit=limit),
+        is_expired_record=lambda rec, now: _teacher_memory_is_expired_record(rec, now=now),
+        rank_score=_teacher_memory_rank_score,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
