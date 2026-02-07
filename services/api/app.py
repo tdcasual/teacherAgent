@@ -48,6 +48,10 @@ from .assignment_generate_service import (
     AssignmentGenerateError,
     generate_assignment as _generate_assignment_impl,
 )
+from .assignment_generate_tool_service import (
+    AssignmentGenerateToolDeps,
+    assignment_generate as _assignment_generate_tool_impl,
+)
 from .assignment_progress_service import (
     AssignmentProgressDeps,
     compute_assignment_progress as _compute_assignment_progress_impl,
@@ -120,6 +124,10 @@ from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
 from .assignment_today_service import AssignmentTodayDeps, assignment_today as _assignment_today_impl
+from .assignment_uploaded_question_service import (
+    AssignmentUploadedQuestionDeps,
+    write_uploaded_questions as _write_uploaded_questions_impl,
+)
 from .assignment_upload_start_service import (
     AssignmentUploadStartDeps,
     AssignmentUploadStartError,
@@ -2527,58 +2535,12 @@ def process_exam_upload_job(job_id: str) -> None:
 
 
 def write_uploaded_questions(out_dir: Path, assignment_id: str, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    stem_dir = out_dir / "uploaded_stems"
-    answer_dir = out_dir / "uploaded_answers"
-    stem_dir.mkdir(parents=True, exist_ok=True)
-    answer_dir.mkdir(parents=True, exist_ok=True)
-
-    rows: List[Dict[str, Any]] = []
-    slug = safe_slug(assignment_id)
-    for idx, q in enumerate(questions, start=1):
-        qid = f"UP-{slug}-{idx:03d}"
-        stem = str(q.get("stem") or "").strip()
-        answer = str(q.get("answer") or "").strip()
-        kp = str(q.get("kp") or "uncategorized").strip() or "uncategorized"
-        difficulty = normalize_difficulty(q.get("difficulty"))
-        qtype = str(q.get("type") or "upload").strip() or "upload"
-        tags = q.get("tags") or []
-        if isinstance(tags, list):
-            tags_str = ",".join([str(t) for t in tags if t])
-        else:
-            tags_str = str(tags)
-
-        stem_ref = stem_dir / f"{qid}.md"
-        stem_ref.write_text(stem or "【空题干】请补充题干。", encoding="utf-8")
-
-        answer_ref = ""
-        answer_text = ""
-        if answer:
-            answer_ref = str(answer_dir / f"{qid}.md")
-            Path(answer_ref).write_text(answer, encoding="utf-8")
-            answer_text = answer
-
-        rows.append(
-            {
-                "question_id": qid,
-                "kp_id": kp,
-                "difficulty": difficulty,
-                "type": qtype,
-                "stem_ref": str(stem_ref),
-                "answer_ref": answer_ref,
-                "answer_text": answer_text,
-                "source": "teacher_upload",
-                "tags": tags_str,
-            }
-        )
-
-    questions_path = out_dir / "questions.csv"
-    if rows:
-        with questions_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(row)
-    return rows
+    return _write_uploaded_questions_impl(
+        out_dir,
+        assignment_id,
+        questions,
+        deps=_assignment_uploaded_question_deps(),
+    )
 def detect_role(text: str) -> Optional[str]:
     normalized = normalize(text)
     if "老师" in normalized or "教师" in normalized:
@@ -4061,58 +4023,7 @@ def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "select_practice.py"
-    assignment_id = str(args.get("assignment_id", ""))
-    date_str = parse_date_str(args.get("date"))
-    source = str(args.get("source") or "teacher")
-    requirements_payload = args.get("requirements")
-    if not args.get("skip_validation"):
-        req_result = ensure_requirements_for_assignment(assignment_id, date_str, requirements_payload, source)
-        if req_result and req_result.get("error"):
-            return req_result
-    kp_value = str(args.get("kp", "") or "")
-    cmd = [
-        "python3",
-        str(script),
-        "--assignment-id",
-        assignment_id,
-    ]
-    if kp_value:
-        cmd += ["--kp", kp_value]
-    question_ids = args.get("question_ids")
-    if question_ids:
-        cmd += ["--question-ids", str(question_ids)]
-    mode = args.get("mode")
-    if mode:
-        cmd += ["--mode", str(mode)]
-    date_val = args.get("date")
-    if date_val:
-        cmd += ["--date", str(date_val)]
-    class_name = args.get("class_name")
-    if class_name:
-        cmd += ["--class-name", str(class_name)]
-    student_ids = args.get("student_ids")
-    if student_ids:
-        cmd += ["--student-ids", str(student_ids)]
-    source = args.get("source")
-    if source:
-        cmd += ["--source", str(source)]
-    per_kp = args.get("per_kp")
-    if per_kp is not None:
-        cmd += ["--per-kp", str(per_kp)]
-    if args.get("core_examples"):
-        cmd += ["--core-examples", str(args.get("core_examples"))]
-    if args.get("generate"):
-        cmd += ["--generate"]
-    out = run_script(cmd)
-    try:
-        postprocess_assignment_meta(
-            assignment_id,
-            due_at=args.get("due_at"),
-        )
-    except Exception as exc:
-        diag_log("assignment.meta.postprocess_failed", {"assignment_id": assignment_id, "error": str(exc)[:200]})
-    return {"ok": True, "output": out, "assignment_id": args.get("assignment_id")}
+    return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps())
 
 
 def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -5122,6 +5033,24 @@ def _assignment_generate_deps():
         run_script=run_script,
         postprocess_assignment_meta=postprocess_assignment_meta,
         diag_log=diag_log,
+    )
+
+
+def _assignment_generate_tool_deps():
+    return AssignmentGenerateToolDeps(
+        app_root=APP_ROOT,
+        parse_date_str=parse_date_str,
+        ensure_requirements_for_assignment=ensure_requirements_for_assignment,
+        run_script=run_script,
+        postprocess_assignment_meta=postprocess_assignment_meta,
+        diag_log=diag_log,
+    )
+
+
+def _assignment_uploaded_question_deps():
+    return AssignmentUploadedQuestionDeps(
+        safe_slug=safe_slug,
+        normalize_difficulty=normalize_difficulty,
     )
 
 
