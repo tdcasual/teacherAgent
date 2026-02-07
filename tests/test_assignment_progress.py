@@ -24,6 +24,27 @@ def write_json(path: Path, payload):
 
 
 class AssignmentProgressTest(unittest.TestCase):
+    def test_assignment_routes_use_assignment_api_deps(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                sentinel = object()
+                captured = {}
+
+                def _fake_impl(assignment_id: str, *, deps):
+                    captured["assignment_id"] = assignment_id
+                    captured["deps"] = deps
+                    return {"assignment_id": assignment_id}
+
+                app_mod._get_assignment_detail_api_impl = _fake_impl
+                app_mod._assignment_api_deps = lambda: sentinel
+
+                res = client.get("/assignment/A1")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(captured.get("assignment_id"), "A1")
+                self.assertIs(captured.get("deps"), sentinel)
+
     def test_progress_endpoint_returns_404_for_missing_assignment(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)

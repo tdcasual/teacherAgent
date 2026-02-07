@@ -12,6 +12,18 @@
 - 老师端高权限图表执行：可通过 `chart.exec` 运行 Python 代码并返回 Markdown 图片
 - 图表智能体支持 `opencode` 链路：`chart.agent.run` 默认走 `engine=opencode`（可切换 `auto|llm`），并可按需覆盖 opencode 的 model/agent/attach 参数
 
+## API 模块化（app.py）
+`services/api/app.py` 当前作为 FastAPI 组合层，核心路由编排按领域拆分到独立服务：
+- `exam_api_service.py`
+- `assignment_api_service.py`
+- `student_profile_api_service.py`
+- `teacher_routing_api_service.py`
+- `chart_api_service.py`
+- `chat_api_service.py`
+- `teacher_memory_api_service.py`
+- `upload_io_service.py`
+- `llm_agent_tooling_service.py`
+
 ## 技能列表与职责边界
 ### 1) `physics-teacher-ops`
 老师侧：考试分析、知识点管理、备课与课堂讨论、课前/课后材料输出。

@@ -20,6 +20,27 @@ def load_app(tmp_dir: Path):
 
 
 class ExamEndpointsTest(unittest.TestCase):
+    def test_exam_routes_use_exam_api_service_deps(self):
+        with TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            app_mod = load_app(tmp_dir)
+            client = TestClient(app_mod.app)
+            sentinel = object()
+            captured = {}
+
+            def _fake_impl(exam_id: str, *, deps):
+                captured["exam_id"] = exam_id
+                captured["deps"] = deps
+                return {"ok": True, "exam_id": exam_id}
+
+            app_mod._get_exam_detail_api_impl = _fake_impl
+            app_mod._exam_api_deps = lambda: sentinel
+
+            res = client.get("/exam/E1")
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(captured.get("exam_id"), "E1")
+            self.assertIs(captured.get("deps"), sentinel)
+
     def test_exam_endpoints_from_manifest(self):
         with TemporaryDirectory() as td:
             tmp_dir = Path(td)

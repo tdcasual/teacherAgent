@@ -30,9 +30,22 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
+from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
+from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
+from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
+from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
+from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+from .teacher_memory_api_service import (
+    TeacherMemoryApiDeps,
+    list_proposals_api as _list_teacher_memory_proposals_api_impl,
+    review_proposal_api as _review_teacher_memory_proposal_api_impl,
+)
+from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
+from .upload_io_service import sanitize_filename_io
+from .llm_agent_tooling_service import parse_tool_json_safe
 
 try:
     from mem0_config import load_dotenv
@@ -3011,7 +3024,7 @@ async def save_upload_file(upload: UploadFile, dest: Path, chunk_size: int = 102
 
 
 def sanitize_filename(name: str) -> str:
-    return Path(name or "").name
+    return sanitize_filename_io(name)
 
 
 def safe_slug(value: str) -> str:
@@ -7867,7 +7880,7 @@ def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
-    return execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    return _chart_exec_api_impl(args, deps=_chart_api_deps())
 
 
 _CHART_AGENT_PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
@@ -8733,15 +8746,13 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
     text = content.strip()
     if text.startswith("```"):
         text = re.sub(r"^```\w*\n|```$", "", text, flags=re.S).strip()
-    try:
-        data = json.loads(text)
-    except Exception:
+    data = parse_tool_json_safe(text)
+    if data is None:
         match = re.search(r"\{.*\}", text, re.S)
         if not match:
             return None
-        try:
-            data = json.loads(match.group(0))
-        except Exception:
+        data = parse_tool_json_safe(match.group(0))
+        if data is None:
             return None
     if isinstance(data, dict) and data.get("tool"):
         return data
@@ -9720,8 +9731,7 @@ def process_chat_job(job_id: str) -> None:
     finally:
         _release_lockfile(claim_path)
 
-@app.post("/chat/start")
-async def chat_start(req: ChatStartRequest):
+def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     request_id = (req.request_id or "").strip()
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id is required")
@@ -9830,6 +9840,11 @@ async def chat_start(req: ChatStartRequest):
         "lane_queue_size": queue_info.get("lane_queue_size", 0),
         "lane_active": bool(queue_info.get("lane_active")),
     }
+
+
+@app.post("/chat/start")
+async def chat_start(req: ChatStartRequest):
+    return _start_chat_api_impl(req, deps=_chat_api_deps())
 
 
 @app.get("/chat/status")
@@ -10081,8 +10096,12 @@ async def teacher_history_session(
 
 @app.get("/teacher/memory/proposals")
 async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    result = teacher_memory_list_proposals(teacher_id_final, status=status, limit=limit)
+    result = _list_teacher_memory_proposals_api_impl(
+        teacher_id,
+        status=status,
+        limit=limit,
+        deps=_teacher_memory_api_deps(),
+    )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "invalid_request")
     return result
@@ -10096,8 +10115,12 @@ async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: in
 
 @app.post("/teacher/memory/proposals/{proposal_id}/review")
 async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
-    teacher_id_final = resolve_teacher_id(req.teacher_id)
-    result = teacher_memory_apply(teacher_id_final, proposal_id=str(proposal_id or "").strip(), approve=bool(req.approve))
+    result = _review_teacher_memory_proposal_api_impl(
+        proposal_id,
+        teacher_id=req.teacher_id,
+        approve=bool(req.approve),
+        deps=_teacher_memory_api_deps(),
+    )
     if result.get("error"):
         code = 404 if str(result.get("error")) == "proposal not found" else 400
         raise HTTPException(status_code=code, detail=result.get("error"))
@@ -10120,10 +10143,12 @@ async def upload(files: list[UploadFile] = File(...)):
 
 @app.get("/student/profile/{student_id}")
 async def get_profile(student_id: str):
-    profile_path = DATA_DIR / "student_profiles" / f"{student_id}.json"
-    if not profile_path.exists():
+    result = _get_profile_api_impl(student_id, deps=_student_profile_api_deps())
+    if result.get("error") in {"profile not found", "profile_not_found"}:
         raise HTTPException(status_code=404, detail="profile not found")
-    return json.loads(profile_path.read_text(encoding="utf-8"))
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
 
 
 @app.post("/student/profile/update")
@@ -10193,6 +10218,46 @@ async def verify_student(req: StudentVerifyRequest):
     return {"ok": True, "student": candidate}
 
 
+def _exam_api_deps():
+    return ExamApiDeps(exam_get=exam_get)
+
+
+def _assignment_api_deps():
+    return AssignmentApiDeps(
+        build_assignment_detail=lambda assignment_id, include_text=True: build_assignment_detail(
+            DATA_DIR / "assignments" / str(assignment_id or ""),
+            include_text=include_text,
+        ),
+        assignment_exists=lambda assignment_id: (DATA_DIR / "assignments" / str(assignment_id or "")).exists(),
+    )
+
+
+def _student_profile_api_deps():
+    return StudentProfileApiDeps(student_profile_get=student_profile_get)
+
+
+def _teacher_routing_api_deps():
+    return TeacherRoutingApiDeps(teacher_llm_routing_get=teacher_llm_routing_get)
+
+
+def _chart_api_deps():
+    return ChartApiDeps(
+        chart_exec=lambda args: execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    )
+
+
+def _chat_api_deps():
+    return ChatApiDeps(start_chat=_chat_start_orchestration)
+
+
+def _teacher_memory_api_deps():
+    return TeacherMemoryApiDeps(
+        resolve_teacher_id=resolve_teacher_id,
+        teacher_memory_list_proposals=teacher_memory_list_proposals,
+        teacher_memory_apply=teacher_memory_apply,
+    )
+
+
 @app.get("/exams")
 async def exams():
     return list_exams()
@@ -10200,7 +10265,7 @@ async def exams():
 
 @app.get("/exam/{exam_id}")
 async def exam_detail(exam_id: str):
-    result = exam_get(exam_id)
+    result = _get_exam_detail_api_impl(exam_id, deps=_exam_api_deps())
     if result.get("error") == "exam_not_found":
         raise HTTPException(status_code=404, detail="exam not found")
     if result.get("error"):
@@ -11377,10 +11442,12 @@ async def assignment_today(
 
 @app.get("/assignment/{assignment_id}")
 async def assignment_detail(assignment_id: str):
-    folder = DATA_DIR / "assignments" / assignment_id
-    if not folder.exists():
+    result = _get_assignment_detail_api_impl(assignment_id, deps=_assignment_api_deps())
+    if result.get("error") == "assignment_not_found":
         raise HTTPException(status_code=404, detail="assignment not found")
-    return build_assignment_detail(folder, include_text=True)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
 
 
 @app.get("/lessons")
@@ -11419,13 +11486,14 @@ async def teacher_llm_routing(
     proposal_limit: int = 20,
     proposal_status: Optional[str] = None,
 ):
-    result = teacher_llm_routing_get(
+    result = _get_routing_api_impl(
         {
             "teacher_id": teacher_id,
             "history_limit": history_limit,
             "proposal_limit": proposal_limit,
             "proposal_status": proposal_status,
-        }
+        },
+        deps=_teacher_routing_api_deps(),
     )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)

@@ -39,6 +39,32 @@ def pick_gateway_target(app_mod, prefer_provider: Optional[str] = None):
 
 
 class LLMRoutingEndpointsTest(unittest.TestCase):
+    def test_get_endpoint_uses_teacher_routing_api_deps(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            client = TestClient(app_mod.app)
+            sentinel = object()
+            captured = {}
+
+            def fake_get(args, *, deps):  # type: ignore[no-untyped-def]
+                captured["args"] = dict(args)
+                captured["deps"] = deps
+                return {"ok": True, "catalog": {"providers": {}}, "routing": {"rules": []}}
+
+            app_mod._get_routing_api_impl = fake_get  # type: ignore[attr-defined]
+            app_mod._teacher_routing_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+
+            res = client.get(
+                "/teacher/llm-routing",
+                params={"teacher_id": "t01", "history_limit": 7, "proposal_limit": 9, "proposal_status": "active"},
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual((captured.get("args") or {}).get("teacher_id"), "t01")
+            self.assertEqual((captured.get("args") or {}).get("history_limit"), 7)
+            self.assertEqual((captured.get("args") or {}).get("proposal_limit"), 9)
+            self.assertEqual((captured.get("args") or {}).get("proposal_status"), "active")
+            self.assertIs(captured.get("deps"), sentinel)
+
     def test_get_endpoint_returns_catalog(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))

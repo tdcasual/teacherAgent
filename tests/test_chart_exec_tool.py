@@ -19,6 +19,25 @@ def load_app(tmp_dir: Path):
 
 
 class ChartExecToolTest(unittest.TestCase):
+    def test_chart_exec_dispatch_uses_chart_api_service_deps(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            sentinel = object()
+            captured = {}
+
+            def fake_impl(args, *, deps):  # type: ignore[no-untyped-def]
+                captured["args"] = dict(args)
+                captured["deps"] = deps
+                return {"ok": True}
+
+            app_mod._chart_exec_api_impl = fake_impl  # type: ignore[attr-defined]
+            app_mod._chart_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+
+            res = app_mod.tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
+            self.assertTrue(res.get("ok"))
+            self.assertEqual((captured.get("args") or {}).get("python_code"), "print('hi')")
+            self.assertIs(captured.get("deps"), sentinel)
+
     def test_chart_exec_dispatch_calls_executor_for_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))

@@ -6,6 +6,18 @@
 - Base URL：`http://localhost:8000`
 - Content-Type：`application/json`（除文件上传/表单接口）
 
+## 实现说明（app.py 模块化）
+`services/api/app.py` 作为组合根（composition root），路由通过 deps 工厂委托到 domain API service：
+- `services/api/exam_api_service.py`
+- `services/api/assignment_api_service.py`
+- `services/api/student_profile_api_service.py`
+- `services/api/teacher_routing_api_service.py`
+- `services/api/chart_api_service.py`
+- `services/api/chat_api_service.py`
+- `services/api/teacher_memory_api_service.py`
+- `services/api/upload_io_service.py`
+- `services/api/llm_agent_tooling_service.py`
+
 ---
 
 ## Health
