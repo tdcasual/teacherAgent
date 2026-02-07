@@ -76,9 +76,13 @@ from .assignment_intent_service import (
     extract_assignment_id as _extract_assignment_id_impl,
     extract_date as _extract_date_impl,
     extract_kp_list as _extract_kp_list_impl,
+    extract_numbered_item as _extract_numbered_item_impl,
     extract_per_kp as _extract_per_kp_impl,
     extract_question_ids as _extract_question_ids_impl,
     extract_requirements_from_text as _extract_requirements_from_text_impl,
+    normalize_numbered_block as _normalize_numbered_block_impl,
+    parse_grade_and_level as _parse_grade_and_level_impl,
+    parse_subject_topic as _parse_subject_topic_impl,
 )
 from .assignment_llm_gate_service import (
     AssignmentLlmGateDeps,
@@ -327,6 +331,12 @@ from .student_import_service import (
     import_students_from_responses as _import_students_from_responses_impl,
     resolve_responses_file as _resolve_responses_file_impl,
     student_import as _student_import_impl,
+)
+from .student_ops_api_service import (
+    StudentOpsApiDeps,
+    update_profile as _update_profile_api_impl,
+    upload_files as _upload_files_api_impl,
+    verify_student as _verify_student_api_impl,
 )
 from .student_directory_service import (
     StudentDirectoryDeps,
@@ -2606,46 +2616,16 @@ def llm_assignment_gate(req: ChatRequest) -> Optional[Dict[str, Any]]:
     return _llm_assignment_gate_impl(req, deps=_assignment_llm_gate_deps())
 
 def normalize_numbered_block(text: str) -> str:
-    return re.sub(r"(?<!\n)\s*([1-8][).）])", r"\n\1", text)
+    return _normalize_numbered_block_impl(text)
 
 def extract_numbered_item(text: str, idx: int) -> Optional[str]:
-    pattern = rf"(?:^|\n)\s*{idx}[).）]\s*(.*?)(?=\n\s*{idx+1}[).）]|$)"
-    match = re.search(pattern, text, re.S)
-    if not match:
-        return None
-    return match.group(1).strip()
+    return _extract_numbered_item_impl(text, idx)
 
 def parse_subject_topic(text: str) -> Tuple[str, str]:
-    subject = ""
-    topic = ""
-    if not text:
-        return subject, topic
-    subjects = ["物理", "数学", "化学", "生物", "语文", "英语", "历史", "地理", "政治"]
-    for sub in subjects:
-        if sub in text:
-            subject = sub
-            break
-    if subject:
-        topic = text.replace(subject, "").replace(":", "").replace("：", "").strip()
-    else:
-        # attempt split by separators
-        parts = re.split(r"[+/｜|,，;；\s]+", text, maxsplit=1)
-        if parts:
-            subject = parts[0].strip() if parts[0].strip() else ""
-            topic = parts[1].strip() if len(parts) > 1 else ""
-    return subject, topic
+    return _parse_subject_topic_impl(text)
 
 def parse_grade_and_level(text: str) -> Tuple[str, str]:
-    if not text:
-        return "", ""
-    level = ""
-    for key in ["偏弱", "中等", "较强", "混合", "弱", "强", "一般"]:
-        if key in text:
-            level = normalize_class_level(key) or ""
-            text = text.replace(key, "").strip()
-            break
-    grade = text.replace("&", " ").replace("：", " ").strip()
-    return grade, level
+    return _parse_grade_and_level_impl(text)
 
 def extract_requirements_from_text(text: str) -> Dict[str, Any]:
     return _extract_requirements_from_text_impl(text)
@@ -3238,16 +3218,7 @@ async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryPro
 
 @app.post("/upload")
 async def upload(files: list[UploadFile] = File(...)):
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    saved = []
-    for f in files:
-        fname = sanitize_filename(f.filename)
-        if not fname:
-            continue
-        dest = UPLOADS_DIR / fname
-        await save_upload_file(f, dest)
-        saved.append(str(dest))
-    return {"saved": saved}
+    return await _upload_files_api_impl(files, deps=_student_ops_api_deps())
 
 @app.get("/student/profile/{student_id}")
 async def get_profile(student_id: str):
@@ -3267,25 +3238,16 @@ async def update_profile(
     next_focus: Optional[str] = Form(""),
     interaction_note: Optional[str] = Form(""),
 ):
-    script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
-    args = [
-        "python3",
-        str(script),
-        "--student-id",
-        student_id,
-        "--weak-kp",
-        weak_kp or "",
-        "--strong-kp",
-        strong_kp or "",
-        "--medium-kp",
-        medium_kp or "",
-        "--next-focus",
-        next_focus or "",
-        "--interaction-note",
-        interaction_note or "",
-    ]
-    out = run_script(args)
-    return JSONResponse({"ok": True, "output": out})
+    payload = _update_profile_api_impl(
+        student_id=student_id,
+        weak_kp=weak_kp,
+        strong_kp=strong_kp,
+        medium_kp=medium_kp,
+        next_focus=next_focus,
+        interaction_note=interaction_note,
+        deps=_student_ops_api_deps(),
+    )
+    return JSONResponse(payload)
 
 @app.post("/student/import")
 async def import_students(req: StudentImportRequest):
@@ -3296,31 +3258,7 @@ async def import_students(req: StudentImportRequest):
 
 @app.post("/student/verify")
 async def verify_student(req: StudentVerifyRequest):
-    name = (req.name or "").strip()
-    class_name = (req.class_name or "").strip()
-    if not name:
-        return {"ok": False, "error": "missing_name", "message": "请先输入姓名。"}
-    candidates = student_candidates_by_name(name)
-    if class_name:
-        class_norm = normalize(class_name)
-        candidates = [c for c in candidates if normalize(c.get("class_name", "")) == class_norm]
-    if not candidates:
-        diag_log("student.verify.not_found", {"name": name, "class_name": class_name})
-        return {"ok": False, "error": "not_found", "message": "未找到该学生，请检查姓名或班级。"}
-    if len(candidates) > 1:
-        diag_log(
-            "student.verify.multiple",
-            {"name": name, "class_name": class_name, "candidates": candidates[:10]},
-        )
-        return {
-            "ok": False,
-            "error": "multiple",
-            "message": "同名学生，请补充班级。",
-            "candidates": candidates[:10],
-        }
-    candidate = candidates[0]
-    diag_log("student.verify.ok", candidate)
-    return {"ok": True, "student": candidate}
+    return _verify_student_api_impl(req.name, req.class_name, deps=_student_ops_api_deps())
 
 def _tool_dispatch_deps():
     return ToolDispatchDeps(
@@ -3776,6 +3714,18 @@ def _student_directory_deps():
         data_dir=DATA_DIR,
         load_profile_file=load_profile_file,
         normalize=normalize,
+    )
+
+def _student_ops_api_deps():
+    return StudentOpsApiDeps(
+        uploads_dir=UPLOADS_DIR,
+        app_root=APP_ROOT,
+        sanitize_filename=sanitize_filename,
+        save_upload_file=save_upload_file,
+        run_script=run_script,
+        student_candidates_by_name=student_candidates_by_name,
+        normalize=normalize,
+        diag_log=diag_log,
     )
 
 def _teacher_llm_routing_deps():
