@@ -31,6 +31,10 @@ from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
+from .assignment_progress_service import (
+    AssignmentProgressDeps,
+    compute_assignment_progress as _compute_assignment_progress_impl,
+)
 from .assignment_intent_service import (
     detect_assignment_intent as _detect_assignment_intent_impl,
     extract_assignment_id as _extract_assignment_id_impl,
@@ -4910,105 +4914,11 @@ def _best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[st
 
 
 def compute_assignment_progress(assignment_id: str, include_students: bool = True) -> Dict[str, Any]:
-    folder = DATA_DIR / "assignments" / assignment_id
-    if not folder.exists():
-        return {"ok": False, "error": "assignment_not_found", "assignment_id": assignment_id}
-    meta = load_assignment_meta(folder)
-    if not meta:
-        meta = {"assignment_id": assignment_id}
-
-    # Ensure scope/expected_students/due_at are normalized and persisted for stable "expected roster" snapshots.
-    postprocess_assignment_meta(assignment_id)
-    meta = load_assignment_meta(folder) or meta
-
-    expected_raw = meta.get("expected_students")
-    expected_students: List[str] = []
-    if isinstance(expected_raw, list):
-        expected_students = [str(s).strip() for s in expected_raw if str(s).strip()]
-
-    due_at = normalize_due_at(meta.get("due_at"))
-    due_ts = None
-    if due_at:
-        try:
-            due_ts = datetime.fromisoformat(due_at.replace("Z", "+00:00")).timestamp()
-        except Exception:
-            due_ts = None
-
-    now_ts = time.time()
-    profiles = {p.get("student_id"): p for p in list_all_student_profiles() if p.get("student_id")}
-
-    students_out: List[Dict[str, Any]] = []
-    discussion_pass_count = 0
-    submission_count = 0
-    completed_count = 0
-    overdue_count = 0
-
-    for sid in expected_students:
-        p = profiles.get(sid) or {}
-        discussion = _session_discussion_pass(sid, assignment_id)
-        discussion_pass = bool(discussion.get("pass"))
-        if discussion_pass:
-            discussion_pass_count += 1
-
-        attempts = _list_submission_attempts(assignment_id, sid)
-        best = _best_submission_attempt(attempts)
-        submitted = bool(best)
-        if submitted:
-            submission_count += 1
-
-        complete = discussion_pass and submitted
-        if complete:
-            completed_count += 1
-
-        overdue = bool(due_ts and now_ts > due_ts and not complete)
-        if overdue:
-            overdue_count += 1
-
-        if include_students:
-            students_out.append(
-                {
-                    "student_id": sid,
-                    "student_name": p.get("student_name") or "",
-                    "class_name": p.get("class_name") or "",
-                    "discussion": discussion,
-                    "submission": {
-                        "attempts": len(attempts),
-                        "best": best,
-                    },
-                    "complete": complete,
-                    "overdue": overdue,
-                }
-            )
-
-    if include_students:
-        students_out.sort(key=lambda x: (str(x.get("class_name") or ""), str(x.get("student_name") or ""), str(x.get("student_id") or "")))
-
-    result = {
-        "ok": True,
-        "assignment_id": assignment_id,
-        "date": resolve_assignment_date(meta, folder),
-        "scope": meta.get("scope") or "",
-        "class_name": meta.get("class_name") or "",
-        "due_at": due_at or "",
-        "expected_count": len(expected_students),
-        "counts": {
-            "expected": len(expected_students),
-            "discussion_pass": discussion_pass_count,
-            "submitted": submission_count,
-            "completed": completed_count,
-            "overdue": overdue_count,
-        },
-        "students": students_out if include_students else [],
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-
-    # Cache for debugging/inspection; safe even if include_students=False (UI should request include_students=True).
-    try:
-        _atomic_write_json(folder / "progress.json", result)
-    except Exception:
-        pass
-
-    return result
+    return _compute_assignment_progress_impl(
+        assignment_id,
+        deps=_assignment_progress_deps(),
+        include_students=include_students,
+    )
 
 
 def derive_kp_from_profile(profile: Dict[str, Any]) -> List[str]:
@@ -6507,6 +6417,23 @@ def _exam_upload_start_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         diag_log=diag_log,
         uuid_hex=lambda: uuid.uuid4().hex,
+    )
+
+
+def _assignment_progress_deps():
+    return AssignmentProgressDeps(
+        data_dir=DATA_DIR,
+        load_assignment_meta=load_assignment_meta,
+        postprocess_assignment_meta=postprocess_assignment_meta,
+        normalize_due_at=normalize_due_at,
+        list_all_student_profiles=list_all_student_profiles,
+        session_discussion_pass=_session_discussion_pass,
+        list_submission_attempts=_list_submission_attempts,
+        best_submission_attempt=_best_submission_attempt,
+        resolve_assignment_date=resolve_assignment_date,
+        atomic_write_json=_atomic_write_json,
+        time_time=time.time,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
