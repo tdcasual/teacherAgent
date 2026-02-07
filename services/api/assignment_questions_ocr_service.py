@@ -5,11 +5,16 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 
+def _default_sanitize_filename(name: str) -> str:
+    return Path(str(name or "").strip()).name
+
+
 @dataclass(frozen=True)
 class AssignmentQuestionsOcrDeps:
     uploads_dir: Path
     app_root: Path
     run_script: Callable[[list[str]], str]
+    sanitize_filename: Callable[[str], str] = _default_sanitize_filename
 
 
 async def assignment_questions_ocr(
@@ -29,7 +34,10 @@ async def assignment_questions_ocr(
 
     file_paths: List[str] = []
     for upload_file in files:
-        dest = batch_dir / upload_file.filename
+        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
+        if not filename:
+            continue
+        dest = batch_dir / filename
         dest.write_bytes(await upload_file.read())
         file_paths.append(str(dest))
 

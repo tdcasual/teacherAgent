@@ -5,12 +5,17 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 
+def _default_sanitize_filename(name: str) -> str:
+    return Path(str(name or "").strip()).name
+
+
 @dataclass(frozen=True)
 class StudentSubmitDeps:
     uploads_dir: Path
     app_root: Path
     student_submissions_dir: Path
     run_script: Callable[[list[str]], str]
+    sanitize_filename: Callable[[str], str] = _default_sanitize_filename
 
 
 async def submit(
@@ -25,7 +30,10 @@ async def submit(
 
     file_paths: List[str] = []
     for upload_file in files:
-        dest = deps.uploads_dir / upload_file.filename
+        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
+        if not filename:
+            continue
+        dest = deps.uploads_dir / filename
         dest.write_bytes(await upload_file.read())
         file_paths.append(str(dest))
 

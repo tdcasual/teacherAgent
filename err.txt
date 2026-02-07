@@ -1,0 +1,14 @@
+[Critical] Remote Code Execution (RCE) in `services/api/chart_executor.py`
+The `execute_chart_exec` function executes user-provided Python code using `exec()` without any sandboxing.
+Attackers can execute arbitrary system commands, read/write files outside the intended directory, and compromise the server.
+Proof of concept provided in `tests/reproduce_chart_rce.py`.
+
+[Resolved] Path Traversal in `services/api/student_submit_service.py`
+The `submit` function previously allowed unsanitized filenames, enabling arbitrary file overwrite.
+This was identified and fixed by adding `sanitize_filename` validation.
+Verification test `tests/reproduce_student_submit_vuln.py` now passes (vulnerability not reproducible).
+
+[Resolved] Path Traversal in `services/api/assignment_questions_ocr_service.py`
+Similar to the above, the `assignment_questions_ocr` function allowed unsanitized filenames.
+This was identified and fixed.
+Verification test `tests/reproduce_ocr_vuln.py` now passes.

@@ -1,0 +1,103 @@
+import type { MatrixCase } from './helpers/e2eMatrixCases'
+import { registerMatrixCases } from './helpers/e2eMatrixCases'
+
+const studentLoopCases: MatrixCase[] = [
+  {
+    id: 'I001',
+    priority: 'P0',
+    title: 'Student sees only accessible assignments by scope',
+    given: 'Student identity and mixed assignment scopes exist',
+    when: 'Open student assignment list',
+    then: 'Only public class and personal eligible assignments are shown',
+  },
+  {
+    id: 'I002',
+    priority: 'P0',
+    title: 'Diagnostic chat can trigger personalized practice generation',
+    given: 'Student diagnostic conversation reaches completion trigger',
+    when: 'Run generate practice action',
+    then: 'Personalized practice set is created',
+  },
+  {
+    id: 'I003',
+    priority: 'P1',
+    title: 'Feynman reflection persists and advances flow',
+    given: 'Reflection step is active',
+    when: 'Submit reflection content',
+    then: 'Content is saved and next step becomes available',
+  },
+  {
+    id: 'I004',
+    priority: 'P0',
+    title: 'Student multi-image submit returns grading summary',
+    given: '/student/submit endpoint is available',
+    when: 'Upload multiple homework images',
+    then: 'Response includes grading summary',
+  },
+  {
+    id: 'I005',
+    priority: 'P0',
+    title: 'Auto assignment mode selects latest eligible assignment',
+    given: 'auto_assignment flag is true',
+    when: 'Submit without explicit assignment id',
+    then: 'Server resolves and records nearest eligible assignment',
+  },
+  {
+    id: 'I006',
+    priority: 'P1',
+    title: 'Mixed valid and invalid files return partial-failure feedback',
+    given: 'One valid image and one invalid file format',
+    when: 'Submit files',
+    then: 'Result reports partial failures with readable guidance',
+  },
+  {
+    id: 'I007',
+    priority: 'P1',
+    title: 'Partial OCR failure preserves successful page outputs',
+    given: 'OCR pipeline fails for subset of pages',
+    when: 'Submit multi-page content',
+    then: 'Successful pages still produce scoring output',
+  },
+  {
+    id: 'I008',
+    priority: 'P0',
+    title: 'Profile knowledge points update after successful submit',
+    given: 'Student profile is readable before submission',
+    when: 'Submit graded homework and reload profile',
+    then: 'Weak and strong knowledge points change as expected',
+  },
+  {
+    id: 'I009',
+    priority: 'P1',
+    title: 'Repeated submits preserve ordering and timestamps',
+    given: 'Student submits same assignment multiple times',
+    when: 'Fetch submission history',
+    then: 'Entries keep strict chronological order',
+  },
+  {
+    id: 'I010',
+    priority: 'P1',
+    title: 'Visibility list updates when assignment scope policy changes',
+    given: 'Assignment visibility policy changes on server',
+    when: 'Refresh student assignment list',
+    then: 'Visible assignments reflect latest policy',
+  },
+  {
+    id: 'I011',
+    priority: 'P1',
+    title: 'Network retry path does not duplicate student submissions',
+    given: 'Transient network failure during submit',
+    when: 'Retry submission',
+    then: 'Exactly one persisted submission record exists',
+  },
+  {
+    id: 'I012',
+    priority: 'P2',
+    title: 'Long conversation scroll and composer remain stable',
+    given: 'Student chat contains long history',
+    when: 'Alternate between scrolling and typing',
+    then: 'Composer position remains stable and usable',
+  },
+]
+
+registerMatrixCases('Student Learning Loop', studentLoopCases)

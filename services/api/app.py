@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 import hashlib
 from pathlib import Path
@@ -535,6 +535,8 @@ TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC = max(0, int(os.getenv("TEACHER_SESSION
 TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS = max(2000, int(os.getenv("TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS", "12000") or "12000"))
 _TEACHER_SESSION_COMPACT_TS: Dict[str, float] = {}
 _TEACHER_SESSION_COMPACT_LOCK = threading.Lock()
+_SESSION_INDEX_LOCKS: Dict[str, threading.RLock] = {}
+_SESSION_INDEX_LOCKS_LOCK = threading.Lock()
 TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY = os.getenv("TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY", "1").lower() in {"1", "true", "yes", "on"}
 TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS = max(0, int(os.getenv("TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS", "1500") or "1500"))
 TEACHER_MEMORY_AUTO_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
@@ -1218,6 +1220,15 @@ def student_session_view_state_path(student_id: str) -> Path:
 def teacher_session_view_state_path(teacher_id: str) -> Path:
     return teacher_sessions_base_dir(teacher_id) / "view_state.json"
 
+def _session_index_lock(path: Path) -> threading.RLock:
+    key = str(path.resolve())
+    with _SESSION_INDEX_LOCKS_LOCK:
+        lock = _SESSION_INDEX_LOCKS.get(key)
+        if lock is None:
+            lock = threading.RLock()
+            _SESSION_INDEX_LOCKS[key] = lock
+        return lock
+
 def _compare_iso_ts(a: Any, b: Any) -> int:
     return _compare_iso_ts_impl(a, b)
 
@@ -1268,36 +1279,38 @@ def update_student_session_index(
     preview: str,
     message_increment: int = 0,
 ) -> None:
-    items = load_student_sessions_index(student_id)
-    now = datetime.now().isoformat(timespec="seconds")
-    found = None
-    for item in items:
-        if item.get("session_id") == session_id:
-            found = item
-            break
-    if found is None:
-        found = {"session_id": session_id, "message_count": 0}
-        items.append(found)
-    found["updated_at"] = now
-    if assignment_id is not None:
-        found["assignment_id"] = assignment_id
-    if date_str is not None:
-        found["date"] = date_str
-    if preview:
-        found["preview"] = preview[:200]
-    try:
-        found["message_count"] = int(found.get("message_count") or 0)
-    except Exception:
-        found["message_count"] = 0
-    try:
-        inc = int(message_increment or 0)
-    except Exception:
-        inc = 0
-    if inc:
-        found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
+    path = student_sessions_index_path(student_id)
+    with _session_index_lock(path):
+        items = load_student_sessions_index(student_id)
+        now = datetime.now().isoformat(timespec="seconds")
+        found = None
+        for item in items:
+            if item.get("session_id") == session_id:
+                found = item
+                break
+        if found is None:
+            found = {"session_id": session_id, "message_count": 0}
+            items.append(found)
+        found["updated_at"] = now
+        if assignment_id is not None:
+            found["assignment_id"] = assignment_id
+        if date_str is not None:
+            found["date"] = date_str
+        if preview:
+            found["preview"] = preview[:200]
+        try:
+            found["message_count"] = int(found.get("message_count") or 0)
+        except Exception:
+            found["message_count"] = 0
+        try:
+            inc = int(message_increment or 0)
+        except Exception:
+            inc = 0
+        if inc:
+            found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
 
-    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_student_sessions_index(student_id, items[:SESSION_INDEX_MAX_ITEMS])
+        items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        save_student_sessions_index(student_id, items[:SESSION_INDEX_MAX_ITEMS])
 
 def append_student_session_message(
     student_id: str,
@@ -1392,32 +1405,34 @@ def update_teacher_session_index(
     preview: str,
     message_increment: int = 0,
 ) -> None:
-    items = load_teacher_sessions_index(teacher_id)
-    now = datetime.now().isoformat(timespec="seconds")
-    found = None
-    for item in items:
-        if item.get("session_id") == session_id:
-            found = item
-            break
-    if found is None:
-        found = {"session_id": session_id, "message_count": 0}
-        items.append(found)
-    found["updated_at"] = now
-    if preview:
-        found["preview"] = preview[:200]
-    try:
-        found["message_count"] = int(found.get("message_count") or 0)
-    except Exception:
-        found["message_count"] = 0
-    try:
-        inc = int(message_increment or 0)
-    except Exception:
-        inc = 0
-    if inc:
-        found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
+    path = teacher_sessions_index_path(teacher_id)
+    with _session_index_lock(path):
+        items = load_teacher_sessions_index(teacher_id)
+        now = datetime.now().isoformat(timespec="seconds")
+        found = None
+        for item in items:
+            if item.get("session_id") == session_id:
+                found = item
+                break
+        if found is None:
+            found = {"session_id": session_id, "message_count": 0}
+            items.append(found)
+        found["updated_at"] = now
+        if preview:
+            found["preview"] = preview[:200]
+        try:
+            found["message_count"] = int(found.get("message_count") or 0)
+        except Exception:
+            found["message_count"] = 0
+        try:
+            inc = int(message_increment or 0)
+        except Exception:
+            inc = 0
+        if inc:
+            found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
 
-    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
+        items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
 
 def append_teacher_session_message(
     teacher_id: str,
@@ -1497,11 +1512,17 @@ def _teacher_compact_summary(records: List[Dict[str, Any]], previous_summary: st
 
 def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    tmp.replace(path)
+    tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 def _mark_teacher_session_compacted(
     teacher_id: str,
@@ -1872,7 +1893,18 @@ def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> 
         deps=_teacher_memory_auto_deps(),
     )
 
-app = FastAPI(title="Physics Agent API", version="0.2.0")
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
+    _validate_master_key_policy_impl(getenv=os.getenv)
+    start_upload_worker()
+    if PROFILE_UPDATE_ASYNC:
+        start_profile_update_worker()
+    start_exam_upload_worker()
+    start_chat_worker()
+    yield
+
+
+app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=_app_lifespan)
 
 origins = os.getenv("CORS_ORIGINS", "*")
 origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]
@@ -1883,15 +1915,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def _startup_jobs() -> None:
-    _validate_master_key_policy_impl(getenv=os.getenv)
-    start_upload_worker()
-    if PROFILE_UPDATE_ASYNC:
-        start_profile_update_worker()
-    start_exam_upload_worker()
-    start_chat_worker()
 
 def model_dump_compat(model: BaseModel, *, exclude_none: bool = False) -> Dict[str, Any]:
     if hasattr(model, "model_dump"):
@@ -3640,6 +3663,7 @@ def _assignment_questions_ocr_deps():
         uploads_dir=UPLOADS_DIR,
         app_root=APP_ROOT,
         run_script=run_script,
+        sanitize_filename=sanitize_filename,
     )
 
 def _student_submit_deps():
@@ -3648,6 +3672,7 @@ def _student_submit_deps():
         app_root=APP_ROOT,
         student_submissions_dir=STUDENT_SUBMISSIONS_DIR,
         run_script=run_script,
+        sanitize_filename=sanitize_filename,
     )
 
 def _assignment_upload_start_deps():

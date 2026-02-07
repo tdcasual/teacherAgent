@@ -1146,16 +1146,7 @@ export default function App() {
     if (pendingChatJob.session_id && pendingChatJob.session_id !== activeSessionId) {
       setActiveSessionId(pendingChatJob.session_id)
     }
-    const alreadyHasPlaceholder = messages.some((m) => m.id === pendingChatJob.placeholder_id)
-    if (alreadyHasPlaceholder) return
-    // Minimal restore so the pending reply can render somewhere.
-    setMessages((prev) => [
-      ...prev,
-      ...(pendingChatJob.user_text
-        ? [{ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() }]
-        : []),
-      { id: pendingChatJob.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() },
-    ])
+    // Run only on mount to recover the original pending session once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

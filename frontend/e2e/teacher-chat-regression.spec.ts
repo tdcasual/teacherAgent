@@ -964,6 +964,144 @@ test('restores pending messages when chat/start resolves after session switch', 
   await expect(page.getByText('正在生成…')).toBeVisible()
 })
 
+test('restoring pending job keeps only one pending status bubble', async ({ page }) => {
+  await setupTeacherState(page)
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'teacherPendingChatJob',
+      JSON.stringify({
+        job_id: 'job_restore_pending',
+        request_id: 'req_restore_pending',
+        placeholder_id: 'asst_restore_pending_1',
+        user_text: '描述 武熙语 学生',
+        session_id: 'main',
+        created_at: Date.now(),
+      }),
+    )
+  })
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/skills') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ skills: mockSkills }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 0, preview: '' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/session') {
+      await page.waitForTimeout(300)
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          session_id: 'main',
+          messages: [],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: 'job_restore_pending',
+          status: 'processing',
+        }),
+      })
+      return
+    }
+
+    if (path === '/teacher/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            teacher_id: 'teacher',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            teacher_id: 'teacher',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  const pendingStatusCount = async () =>
+    page.evaluate(() => {
+      const targets = new Set(['正在生成…', '正在恢复上一条回复…'])
+      return Array.from(document.querySelectorAll('.message.assistant .text')).filter((el) =>
+        targets.has(String((el as HTMLElement).innerText || '').trim()),
+      ).length
+    })
+
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+
+  let maxPendingStatusCount = 0
+  for (let i = 0; i < 16; i += 1) {
+    const current = await pendingStatusCount()
+    maxPendingStatusCount = Math.max(maxPendingStatusCount, current)
+    await page.waitForTimeout(120)
+  }
+  expect(maxPendingStatusCount).toBeLessThanOrEqual(1)
+})
+
 test('keeps draft session in sidebar after page reload before server persists it', async ({ page }) => {
   await page.addInitScript(() => {
     const FLAG = '__teacher_reload_test_bootstrapped__'

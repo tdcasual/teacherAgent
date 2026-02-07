@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 
@@ -214,7 +213,9 @@ def teacher_memory_mark_superseded(
 def teacher_memory_auto_quota_reached(teacher_id: str, *, deps: TeacherMemoryRecordDeps) -> bool:
     if deps.auto_max_proposals_per_day <= 0:
         return False
-    today = datetime.now().date().isoformat()
+    today = str(deps.now_iso() or "").strip().split("T", 1)[0]
+    if not today:
+        return False
     count = 0
     for rec in teacher_memory_recent_proposals(teacher_id, deps=deps, limit=300):
         created_at = str(rec.get("created_at") or "")
