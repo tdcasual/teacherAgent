@@ -104,6 +104,33 @@ class RoutingRollbackRequest(BaseModel):
     note: Optional[str] = None
 
 
+class TeacherProviderRegistryCreateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    provider_id: Optional[str] = None
+    display_name: Optional[str] = None
+    base_url: str
+    api_key: str
+    default_model: Optional[str] = None
+    enabled: Optional[bool] = True
+
+
+class TeacherProviderRegistryUpdateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    display_name: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    default_model: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class TeacherProviderRegistryDeleteRequest(BaseModel):
+    teacher_id: Optional[str] = None
+
+
+class TeacherProviderRegistryProbeRequest(BaseModel):
+    teacher_id: Optional[str] = None
+
+
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None

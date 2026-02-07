@@ -99,6 +99,7 @@ export type RoutingCatalogMode = {
 
 export type RoutingCatalogProvider = {
   provider: string
+  source?: string
   modes: RoutingCatalogMode[]
 }
 
@@ -166,6 +167,46 @@ export type RoutingRollbackResult = {
   ok: boolean
   version?: number
   error?: string
+}
+
+export type TeacherProviderItem = {
+  id: string
+  provider: string
+  display_name: string
+  base_url: string
+  api_key_masked: string
+  default_mode: string
+  default_model: string
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+  source: 'private'
+}
+
+export type TeacherProviderRegistryOverview = {
+  ok: boolean
+  teacher_id: string
+  providers: TeacherProviderItem[]
+  shared_catalog: RoutingCatalog
+  catalog: RoutingCatalog
+  config_path: string
+}
+
+export type TeacherProviderRegistryMutationResult = {
+  ok: boolean
+  teacher_id?: string
+  provider?: TeacherProviderItem
+  provider_id?: string
+  error?: string
+}
+
+export type TeacherProviderProbeModelsResult = {
+  ok: boolean
+  teacher_id?: string
+  provider_id?: string
+  models?: string[]
+  error?: string
+  detail?: string
 }
 
 export const emptyRoutingConfig = (): RoutingConfig => ({

@@ -1,5 +1,8 @@
 import type {
   RoutingOverview,
+  TeacherProviderProbeModelsResult,
+  TeacherProviderRegistryMutationResult,
+  TeacherProviderRegistryOverview,
   RoutingProposalDetail,
   RoutingProposalResult,
   RoutingRollbackResult,
@@ -112,4 +115,85 @@ export const rollbackRoutingConfig = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+}
+
+export const fetchProviderRegistry = async (apiBase: string, params?: { teacher_id?: string }) => {
+  const base = normalizeBase(apiBase)
+  const query = toQuery({ teacher_id: params?.teacher_id })
+  return requestJson<TeacherProviderRegistryOverview>(`${base}/teacher/provider-registry${query}`)
+}
+
+export const createProviderRegistryItem = async (
+  apiBase: string,
+  payload: {
+    teacher_id?: string
+    provider_id?: string
+    display_name?: string
+    base_url: string
+    api_key: string
+    default_model?: string
+    enabled?: boolean
+  },
+) => {
+  const base = normalizeBase(apiBase)
+  return requestJson<TeacherProviderRegistryMutationResult>(`${base}/teacher/provider-registry/providers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export const updateProviderRegistryItem = async (
+  apiBase: string,
+  providerId: string,
+  payload: {
+    teacher_id?: string
+    display_name?: string
+    base_url?: string
+    api_key?: string
+    default_model?: string
+    enabled?: boolean
+  },
+) => {
+  const base = normalizeBase(apiBase)
+  return requestJson<TeacherProviderRegistryMutationResult>(
+    `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export const deleteProviderRegistryItem = async (
+  apiBase: string,
+  providerId: string,
+  payload: { teacher_id?: string },
+) => {
+  const base = normalizeBase(apiBase)
+  return requestJson<TeacherProviderRegistryMutationResult>(
+    `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}`,
+    {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export const probeProviderRegistryModels = async (
+  apiBase: string,
+  providerId: string,
+  payload: { teacher_id?: string },
+) => {
+  const base = normalizeBase(apiBase)
+  return requestJson<TeacherProviderProbeModelsResult>(
+    `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}/probe-models`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
 }

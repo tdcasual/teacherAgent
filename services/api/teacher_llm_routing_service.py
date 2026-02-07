@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from .teacher_provider_registry_service import _catalog as _provider_catalog_from_registry
+
 
 @dataclass(frozen=True)
 class TeacherLlmRoutingDeps:
     model_registry: Dict[str, Any]
+    resolve_model_registry: Callable[[str], Dict[str, Any]]
     resolve_teacher_id: Callable[[Optional[str]], str]
     teacher_llm_routing_path: Callable[[str], Path]
     legacy_routing_path: Path
@@ -16,34 +19,21 @@ class TeacherLlmRoutingDeps:
     now_iso: Callable[[], str]
 
 
-def llm_routing_catalog(*, deps: TeacherLlmRoutingDeps) -> Dict[str, Any]:
-    providers_raw = deps.model_registry.get("providers") if isinstance(deps.model_registry.get("providers"), dict) else {}
-    providers = []
-    for provider_name in sorted(providers_raw.keys()):
-        provider_cfg = providers_raw.get(provider_name) if isinstance(providers_raw.get(provider_name), dict) else {}
-        modes_raw = provider_cfg.get("modes") if isinstance(provider_cfg.get("modes"), dict) else {}
-        modes = []
-        for mode_name in sorted(modes_raw.keys()):
-            mode_cfg = modes_raw.get(mode_name) if isinstance(modes_raw.get(mode_name), dict) else {}
-            modes.append(
-                {
-                    "mode": mode_name,
-                    "default_model": str(mode_cfg.get("default_model") or "").strip(),
-                    "model_env": str(mode_cfg.get("model_env") or "").strip(),
-                }
-            )
-        providers.append({"provider": provider_name, "modes": modes})
+def _registry_for_actor(actor: str, *, deps: TeacherLlmRoutingDeps) -> Dict[str, Any]:
+    try:
+        merged = deps.resolve_model_registry(actor)
+    except Exception:
+        merged = None
+    if isinstance(merged, dict):
+        return merged
+    if isinstance(deps.model_registry, dict):
+        return deps.model_registry
+    return {}
 
-    defaults = deps.model_registry.get("defaults") if isinstance(deps.model_registry.get("defaults"), dict) else {}
-    routing_cfg = deps.model_registry.get("routing") if isinstance(deps.model_registry.get("routing"), dict) else {}
-    return {
-        "providers": providers,
-        "defaults": {
-            "provider": str(defaults.get("provider") or "").strip(),
-            "mode": str(defaults.get("mode") or "").strip(),
-        },
-        "fallback_chain": [str(x) for x in (routing_cfg.get("fallback_chain") or []) if str(x).strip()],
-    }
+
+def llm_routing_catalog(*, deps: TeacherLlmRoutingDeps, actor: Optional[str] = None) -> Dict[str, Any]:
+    registry = _registry_for_actor(actor, deps=deps) if actor else deps.model_registry
+    return _provider_catalog_from_registry(registry if isinstance(registry, dict) else {})
 
 
 def routing_actor_from_teacher_id(teacher_id: Optional[str], *, deps: TeacherLlmRoutingDeps) -> str:
@@ -73,7 +63,8 @@ def teacher_llm_routing_get(args: Dict[str, Any], *, deps: TeacherLlmRoutingDeps
 
     actor = routing_actor_from_teacher_id(args.get("teacher_id"), deps=deps)
     config_path = ensure_teacher_routing_file(actor, deps=deps)
-    overview = get_active_routing(config_path, deps.model_registry)
+    registry = _registry_for_actor(actor, deps=deps)
+    overview = get_active_routing(config_path, registry)
     history_limit = max(1, min(int(args.get("history_limit", 20) or 20), 200))
     proposal_limit = max(1, min(int(args.get("proposal_limit", 20) or 20), 200))
     proposal_status = str(args.get("proposal_status") or "").strip() or None
@@ -86,7 +77,7 @@ def teacher_llm_routing_get(args: Dict[str, Any], *, deps: TeacherLlmRoutingDeps
         "validation": overview.get("validation") or {},
         "history": history[:history_limit],
         "proposals": proposals,
-        "catalog": llm_routing_catalog(deps=deps),
+        "catalog": llm_routing_catalog(deps=deps, actor=actor),
         "config_path": str(config_path),
     }
 
@@ -114,11 +105,12 @@ def teacher_llm_routing_simulate(args: Dict[str, Any], *, deps: TeacherLlmRoutin
 
     actor = routing_actor_from_teacher_id(args.get("teacher_id"), deps=deps)
     config_path = ensure_teacher_routing_file(actor, deps=deps)
+    registry = _registry_for_actor(actor, deps=deps)
     config_override = args.get("config") if isinstance(args.get("config"), dict) else None
     override_validation: Optional[Dict[str, Any]] = None
 
     if config_override:
-        override_validation = validate_routing_config(config_override, deps.model_registry)
+        override_validation = validate_routing_config(config_override, registry)
         normalized = override_validation.get("normalized") if isinstance(override_validation.get("normalized"), dict) else {}
         channels = normalized.get("channels") if isinstance(normalized.get("channels"), list) else []
         rules = normalized.get("rules") if isinstance(normalized.get("rules"), list) else []
@@ -137,7 +129,7 @@ def teacher_llm_routing_simulate(args: Dict[str, Any], *, deps: TeacherLlmRoutin
             rules=[r for r in rules if isinstance(r, dict)],
         )
     else:
-        compiled = get_compiled_routing(config_path, deps.model_registry)
+        compiled = get_compiled_routing(config_path, registry)
 
     ctx = RoutingContext(
         role=str(args.get("role") or "teacher").strip() or "teacher",
@@ -163,13 +155,14 @@ def teacher_llm_routing_propose(args: Dict[str, Any], *, deps: TeacherLlmRouting
 
     actor = routing_actor_from_teacher_id(args.get("teacher_id"), deps=deps)
     config_path = ensure_teacher_routing_file(actor, deps=deps)
+    registry = _registry_for_actor(actor, deps=deps)
     config_payload = args.get("config") if isinstance(args.get("config"), dict) else None
     if not config_payload:
         return {"ok": False, "error": "config_required"}
     note = str(args.get("note") or "").strip()
     result = create_routing_proposal(
         config_path=config_path,
-        model_registry=deps.model_registry,
+        model_registry=registry,
         config_payload=config_payload,
         actor=actor,
         note=note,
@@ -183,13 +176,14 @@ def teacher_llm_routing_apply(args: Dict[str, Any], *, deps: TeacherLlmRoutingDe
 
     actor = routing_actor_from_teacher_id(args.get("teacher_id"), deps=deps)
     config_path = ensure_teacher_routing_file(actor, deps=deps)
+    registry = _registry_for_actor(actor, deps=deps)
     proposal_id = str(args.get("proposal_id") or "").strip()
     approve = bool(args.get("approve", True))
     if not proposal_id:
         return {"ok": False, "error": "proposal_id_required"}
     result = apply_routing_proposal(
         config_path=config_path,
-        model_registry=deps.model_registry,
+        model_registry=registry,
         proposal_id=proposal_id,
         approve=approve,
         actor=actor,
@@ -203,11 +197,12 @@ def teacher_llm_routing_rollback(args: Dict[str, Any], *, deps: TeacherLlmRoutin
 
     actor = routing_actor_from_teacher_id(args.get("teacher_id"), deps=deps)
     config_path = ensure_teacher_routing_file(actor, deps=deps)
+    registry = _registry_for_actor(actor, deps=deps)
     target_version = args.get("target_version")
     note = str(args.get("note") or "").strip()
     result = rollback_routing_config(
         config_path=config_path,
-        model_registry=deps.model_registry,
+        model_registry=registry,
         target_version=target_version,
         actor=actor,
         note=note,

@@ -41,6 +41,10 @@ from .api_models import (
     RoutingSimulateRequest,
     StudentImportRequest,
     StudentVerifyRequest,
+    TeacherProviderRegistryCreateRequest,
+    TeacherProviderRegistryDeleteRequest,
+    TeacherProviderRegistryProbeRequest,
+    TeacherProviderRegistryUpdateRequest,
     TeacherMemoryProposalReviewRequest,
     UploadConfirmRequest,
     UploadDraftSaveRequest,
@@ -421,6 +425,17 @@ from .teacher_llm_routing_service import (
     teacher_llm_routing_propose as _teacher_llm_routing_propose_impl,
     teacher_llm_routing_rollback as _teacher_llm_routing_rollback_impl,
     teacher_llm_routing_simulate as _teacher_llm_routing_simulate_impl,
+)
+from .teacher_provider_registry_service import (
+    TeacherProviderRegistryDeps,
+    merged_model_registry as _merged_model_registry_impl,
+    resolve_provider_target as _resolve_provider_target_impl,
+    teacher_provider_registry_create as _teacher_provider_registry_create_impl,
+    teacher_provider_registry_delete as _teacher_provider_registry_delete_impl,
+    teacher_provider_registry_get as _teacher_provider_registry_get_impl,
+    teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
+    teacher_provider_registry_update as _teacher_provider_registry_update_impl,
+    validate_master_key_policy as _validate_master_key_policy_impl,
 )
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
 from .teacher_assignment_preflight_service import (
@@ -1315,6 +1330,14 @@ def teacher_llm_routing_path(teacher_id: Optional[str] = None) -> Path:
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_workspace_dir(teacher_id_final) / "llm_routing.json"
 
+def teacher_provider_registry_path(teacher_id: Optional[str] = None) -> Path:
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    return teacher_workspace_dir(teacher_id_final) / "provider_registry.json"
+
+def teacher_provider_registry_audit_path(teacher_id: Optional[str] = None) -> Path:
+    teacher_id_final = resolve_teacher_id(teacher_id)
+    return teacher_workspace_dir(teacher_id_final) / "provider_registry_audit.jsonl"
+
 def routing_config_path_for_role(role_hint: Optional[str], teacher_id: Optional[str] = None) -> Path:
     if role_hint == "teacher":
         return teacher_llm_routing_path(teacher_id)
@@ -1856,6 +1879,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup_jobs() -> None:
+    _validate_master_key_policy_impl(getenv=os.getenv)
     start_upload_worker()
     if PROFILE_UPDATE_ASYNC:
         start_profile_update_worker()
@@ -2803,6 +2827,21 @@ def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
 def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_proposal_get_impl(args, deps=_teacher_llm_routing_deps())
 
+def teacher_provider_registry_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_provider_registry_get_impl(args, deps=_teacher_provider_registry_deps())
+
+def teacher_provider_registry_create(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_provider_registry_create_impl(args, deps=_teacher_provider_registry_deps())
+
+def teacher_provider_registry_update(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_provider_registry_update_impl(args, deps=_teacher_provider_registry_deps())
+
+def teacher_provider_registry_delete(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_provider_registry_delete_impl(args, deps=_teacher_provider_registry_deps())
+
+def teacher_provider_registry_probe_models(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_provider_registry_probe_models_impl(args, deps=_teacher_provider_registry_deps())
+
 def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
     return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps())
 
@@ -3716,9 +3755,20 @@ def _student_ops_api_deps():
         diag_log=diag_log,
     )
 
+def _teacher_provider_registry_deps():
+    return TeacherProviderRegistryDeps(
+        model_registry=LLM_GATEWAY.registry,
+        resolve_teacher_id=resolve_teacher_id,
+        teacher_workspace_dir=teacher_workspace_dir,
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        getenv=os.getenv,
+    )
+
 def _teacher_llm_routing_deps():
     return TeacherLlmRoutingDeps(
         model_registry=LLM_GATEWAY.registry,
+        resolve_model_registry=lambda teacher_id: _merged_model_registry_impl(teacher_id, deps=_teacher_provider_registry_deps()),
         resolve_teacher_id=resolve_teacher_id,
         teacher_llm_routing_path=teacher_llm_routing_path,
         legacy_routing_path=LLM_ROUTING_PATH,
@@ -3794,6 +3844,14 @@ def _chat_runtime_deps():
         student_limiter=_LLM_SEMAPHORE_STUDENT,
         teacher_limiter=_LLM_SEMAPHORE_TEACHER,
         resolve_teacher_id=resolve_teacher_id,
+        resolve_teacher_model_registry=lambda teacher_id: _merged_model_registry_impl(teacher_id, deps=_teacher_provider_registry_deps()),
+        resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _resolve_provider_target_impl(
+            teacher_id,
+            provider,
+            mode,
+            model,
+            deps=_teacher_provider_registry_deps(),
+        ),
         ensure_teacher_routing_file=_ensure_teacher_routing_file,
         routing_config_path_for_role=routing_config_path_for_role,
         diag_log=diag_log,
@@ -4587,6 +4645,50 @@ async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
     result = teacher_llm_routing_rollback(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
         status_code = 404 if str(result.get("error") or "").strip() in {"history_not_found", "target_version_not_found"} else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
+
+@app.get("/teacher/provider-registry")
+async def teacher_provider_registry_api(teacher_id: Optional[str] = None):
+    result = teacher_provider_registry_get({"teacher_id": teacher_id})
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+@app.post("/teacher/provider-registry/providers")
+async def teacher_provider_registry_create_api(req: TeacherProviderRegistryCreateRequest):
+    result = teacher_provider_registry_create(model_dump_compat(req, exclude_none=True))
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+@app.patch("/teacher/provider-registry/providers/{provider_id}")
+async def teacher_provider_registry_update_api(provider_id: str, req: TeacherProviderRegistryUpdateRequest):
+    payload = model_dump_compat(req, exclude_none=True)
+    payload["provider_id"] = provider_id
+    result = teacher_provider_registry_update(payload)
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() == "provider_not_found" else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
+
+@app.delete("/teacher/provider-registry/providers/{provider_id}")
+async def teacher_provider_registry_delete_api(provider_id: str, req: TeacherProviderRegistryDeleteRequest):
+    payload = model_dump_compat(req, exclude_none=True)
+    payload["provider_id"] = provider_id
+    result = teacher_provider_registry_delete(payload)
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() == "provider_not_found" else 400
+        raise HTTPException(status_code=status_code, detail=result)
+    return result
+
+@app.post("/teacher/provider-registry/providers/{provider_id}/probe-models")
+async def teacher_provider_registry_probe_models_api(provider_id: str, req: TeacherProviderRegistryProbeRequest):
+    payload = model_dump_compat(req, exclude_none=True)
+    payload["provider_id"] = provider_id
+    result = teacher_provider_registry_probe_models(payload)
+    if not result.get("ok"):
+        status_code = 404 if str(result.get("error") or "").strip() == "provider_not_found" else 400
         raise HTTPException(status_code=status_code, detail=result)
     return result
 

@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  createProviderRegistryItem,
   createRoutingProposal,
+  deleteProviderRegistryItem,
+  fetchProviderRegistry,
   fetchRoutingProposalDetail,
   fetchRoutingOverview,
+  probeProviderRegistryModels,
   reviewRoutingProposal,
   rollbackRoutingConfig,
   simulateRouting,
+  updateProviderRegistryItem,
 } from './routingApi'
 import type {
   RoutingCatalogProvider,
   RoutingChannel,
   RoutingConfig,
   RoutingOverview,
+  TeacherProviderItem,
+  TeacherProviderRegistryOverview,
   RoutingProposalDetail,
   RoutingRule,
   RoutingSimulateResult,
@@ -111,6 +118,20 @@ export default function RoutingPage({ apiBase }: Props) {
   const [expandedProposalIds, setExpandedProposalIds] = useState<Record<string, boolean>>({})
   const [proposalDetails, setProposalDetails] = useState<Record<string, RoutingProposalDetail>>({})
   const [proposalLoadingMap, setProposalLoadingMap] = useState<Record<string, boolean>>({})
+  const [providerOverview, setProviderOverview] = useState<TeacherProviderRegistryOverview | null>(null)
+  const [providerBusy, setProviderBusy] = useState(false)
+  const [providerProbeMap, setProviderProbeMap] = useState<Record<string, string>>({})
+  const [providerCreateForm, setProviderCreateForm] = useState({
+    provider_id: '',
+    display_name: '',
+    base_url: '',
+    api_key: '',
+    default_model: '',
+    enabled: true,
+  })
+  const [providerEditMap, setProviderEditMap] = useState<
+    Record<string, { display_name: string; base_url: string; default_model: string; enabled: boolean; api_key: string }>
+  >({})
 
   useEffect(() => {
     localStorage.setItem('teacherRoutingTeacherId', teacherId)
@@ -129,12 +150,16 @@ export default function RoutingPage({ apiBase }: Props) {
       if (!silent) setLoading(true)
       setError('')
       try {
-        const data = await fetchRoutingOverview(apiBase, {
-          teacher_id: teacherId || undefined,
-          history_limit: 40,
-          proposal_limit: 40,
-        })
+        const [data, providerData] = await Promise.all([
+          fetchRoutingOverview(apiBase, {
+            teacher_id: teacherId || undefined,
+            history_limit: 40,
+            proposal_limit: 40,
+          }),
+          fetchProviderRegistry(apiBase, { teacher_id: teacherId || undefined }),
+        ])
         setOverview(data)
+        setProviderOverview(providerData)
         if (forceReplaceDraft || !hasLocalEdits) {
           setDraft(cloneConfig(data.routing || emptyRoutingConfig()))
           setHasLocalEdits(false)
@@ -158,6 +183,20 @@ export default function RoutingPage({ apiBase }: Props) {
     }, 30000)
     return () => window.clearInterval(timer)
   }, [loadOverview])
+
+  useEffect(() => {
+    const next: Record<string, { display_name: string; base_url: string; default_model: string; enabled: boolean; api_key: string }> = {}
+    ;(providerOverview?.providers || []).forEach((item) => {
+      next[item.provider] = {
+        display_name: item.display_name || '',
+        base_url: item.base_url || '',
+        default_model: item.default_model || '',
+        enabled: item.enabled !== false,
+        api_key: '',
+      }
+    })
+    setProviderEditMap(next)
+  }, [providerOverview?.providers])
 
   const providers = useMemo(() => (overview?.catalog?.providers || []) as RoutingCatalogProvider[], [overview?.catalog?.providers])
   const providerModeMap = useMemo(() => {
@@ -236,6 +275,108 @@ export default function RoutingPage({ apiBase }: Props) {
       ...prev,
       rules: prev.rules.map((rule, idx) => (idx === index ? updater(rule) : rule)),
     }))
+  }
+
+  const handleCreateProvider = async () => {
+    if (!providerCreateForm.base_url.trim() || !providerCreateForm.api_key.trim()) {
+      setError('新增 Provider 需要填写 base_url 和 api_key')
+      return
+    }
+    setProviderBusy(true)
+    setError('')
+    setStatus('')
+    try {
+      const result = await createProviderRegistryItem(apiBase, {
+        teacher_id: teacherId || undefined,
+        provider_id: providerCreateForm.provider_id.trim() || undefined,
+        display_name: providerCreateForm.display_name.trim() || undefined,
+        base_url: providerCreateForm.base_url.trim(),
+        api_key: providerCreateForm.api_key.trim(),
+        default_model: providerCreateForm.default_model.trim() || undefined,
+        enabled: providerCreateForm.enabled,
+      })
+      if (!result.ok) throw new Error(result.error ? String(result.error) : '新增失败')
+      setProviderCreateForm({
+        provider_id: '',
+        display_name: '',
+        base_url: '',
+        api_key: '',
+        default_model: '',
+        enabled: true,
+      })
+      setStatus('Provider 已新增并即时生效。')
+      await loadOverview({ silent: true })
+    } catch (err) {
+      setError((err as Error).message || '新增 Provider 失败')
+    } finally {
+      setProviderBusy(false)
+    }
+  }
+
+  const handleUpdateProvider = async (providerId: string) => {
+    const draftForm = providerEditMap[providerId]
+    if (!draftForm) return
+    setProviderBusy(true)
+    setError('')
+    setStatus('')
+    try {
+      const payload: {
+        teacher_id?: string
+        display_name?: string
+        base_url?: string
+        default_model?: string
+        enabled?: boolean
+        api_key?: string
+      } = {
+        teacher_id: teacherId || undefined,
+        display_name: draftForm.display_name.trim() || undefined,
+        base_url: draftForm.base_url.trim() || undefined,
+        default_model: draftForm.default_model.trim() || undefined,
+        enabled: Boolean(draftForm.enabled),
+      }
+      if (draftForm.api_key.trim()) payload.api_key = draftForm.api_key.trim()
+      const result = await updateProviderRegistryItem(apiBase, providerId, payload)
+      if (!result.ok) throw new Error(result.error ? String(result.error) : '更新失败')
+      setStatus(`Provider ${providerId} 已更新。`)
+      await loadOverview({ silent: true })
+    } catch (err) {
+      setError((err as Error).message || '更新 Provider 失败')
+    } finally {
+      setProviderBusy(false)
+    }
+  }
+
+  const handleDisableProvider = async (providerId: string) => {
+    setProviderBusy(true)
+    setError('')
+    setStatus('')
+    try {
+      const result = await deleteProviderRegistryItem(apiBase, providerId, { teacher_id: teacherId || undefined })
+      if (!result.ok) throw new Error(result.error ? String(result.error) : '禁用失败')
+      setStatus(`Provider ${providerId} 已禁用。`)
+      await loadOverview({ silent: true })
+    } catch (err) {
+      setError((err as Error).message || '禁用 Provider 失败')
+    } finally {
+      setProviderBusy(false)
+    }
+  }
+
+  const handleProbeProviderModels = async (providerId: string) => {
+    setProviderBusy(true)
+    setError('')
+    setStatus('')
+    try {
+      const result = await probeProviderRegistryModels(apiBase, providerId, { teacher_id: teacherId || undefined })
+      if (!result.ok) throw new Error(result.detail || result.error || '探测失败')
+      const models = (result.models || []).slice(0, 12)
+      setProviderProbeMap((prev) => ({ ...prev, [providerId]: models.join('，') || '未返回模型列表' }))
+      setStatus(`Provider ${providerId} 探测完成。`)
+    } catch (err) {
+      setError((err as Error).message || '探测模型失败')
+    } finally {
+      setProviderBusy(false)
+    }
   }
 
   const handleResetDraft = () => {
@@ -408,6 +549,193 @@ export default function RoutingPage({ apiBase }: Props) {
         ) : null}
         {status && <div className="status ok">{status}</div>}
         {error && <div className="status err">{error}</div>}
+      </section>
+
+      <section className="routing-card">
+        <div className="routing-section-header">
+          <h3>Provider 管理（共享 + 私有）</h3>
+        </div>
+        <div className="routing-meta-grid">
+          <div className="routing-stat">共享 Provider：{providerOverview?.shared_catalog?.providers?.length ?? 0}</div>
+          <div className="routing-stat">私有 Provider：{providerOverview?.providers?.length ?? 0}</div>
+          <div className="routing-stat">配置文件：{providerOverview?.config_path || '—'}</div>
+        </div>
+        <div className="routing-item">
+          <div className="routing-item-head">
+            <strong>新增私有 Provider（OpenAI-Compatible）</strong>
+          </div>
+          <div className="routing-grid">
+            <div className="routing-field">
+              <label>Provider ID（可选）</label>
+              <input
+                value={providerCreateForm.provider_id}
+                onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, provider_id: e.target.value }))}
+                placeholder="例如：tprv_proxy_main"
+              />
+            </div>
+            <div className="routing-field">
+              <label>显示名称</label>
+              <input
+                value={providerCreateForm.display_name}
+                onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                placeholder="例如：主中转"
+              />
+            </div>
+            <div className="routing-field">
+              <label>Base URL</label>
+              <input
+                value={providerCreateForm.base_url}
+                onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))}
+                placeholder="例如：https://proxy.example.com/v1"
+              />
+            </div>
+            <div className="routing-field">
+              <label>API Key</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={providerCreateForm.api_key}
+                  onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))}
+                  placeholder="仅提交时可见，后续仅显示掩码"
+                />
+            </div>
+            <div className="routing-field">
+              <label>默认模型</label>
+              <input
+                value={providerCreateForm.default_model}
+                onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
+                placeholder="例如：gpt-4.1-mini"
+              />
+            </div>
+            <div className="routing-field">
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={providerCreateForm.enabled}
+                  onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                />
+                启用
+              </label>
+            </div>
+          </div>
+          <div className="routing-actions">
+            <button type="button" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>
+              {providerBusy ? '处理中…' : '新增 Provider'}
+            </button>
+          </div>
+        </div>
+
+        <div className="routing-subsection">
+          <h4>私有 Provider 列表</h4>
+          {(providerOverview?.providers || []).length === 0 ? <div className="muted">暂无私有 Provider。</div> : null}
+          {(providerOverview?.providers || []).map((item: TeacherProviderItem) => {
+            const edit = providerEditMap[item.provider] || {
+              display_name: item.display_name || '',
+              base_url: item.base_url || '',
+              default_model: item.default_model || '',
+              enabled: item.enabled !== false,
+              api_key: '',
+            }
+            return (
+              <div key={item.provider} className="routing-item">
+                <div className="routing-item-head">
+                  <strong>{item.provider}</strong>
+                  <span className="muted"> key: {item.api_key_masked || '已隐藏'}</span>
+                </div>
+                <div className="routing-grid">
+                  <div className="routing-field">
+                    <label>显示名称</label>
+                    <input
+                      value={edit.display_name}
+                      onChange={(e) =>
+                        setProviderEditMap((prev) => ({
+                          ...prev,
+                          [item.provider]: { ...edit, display_name: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="routing-field">
+                    <label>Base URL</label>
+                    <input
+                      value={edit.base_url}
+                      onChange={(e) =>
+                        setProviderEditMap((prev) => ({
+                          ...prev,
+                          [item.provider]: { ...edit, base_url: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="routing-field">
+                    <label>默认模型</label>
+                    <input
+                      value={edit.default_model}
+                      onChange={(e) =>
+                        setProviderEditMap((prev) => ({
+                          ...prev,
+                          [item.provider]: { ...edit, default_model: e.target.value },
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className="routing-field">
+                    <label>轮换 API Key（可选）</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={edit.api_key}
+                      onChange={(e) =>
+                        setProviderEditMap((prev) => ({
+                          ...prev,
+                          [item.provider]: { ...edit, api_key: e.target.value },
+                        }))
+                      }
+                      placeholder="留空表示不变更"
+                    />
+                  </div>
+                  <div className="routing-field">
+                    <label className="toggle">
+                      <input
+                        type="checkbox"
+                        checked={edit.enabled}
+                        onChange={(e) =>
+                          setProviderEditMap((prev) => ({
+                            ...prev,
+                            [item.provider]: { ...edit, enabled: e.target.checked },
+                          }))
+                        }
+                      />
+                      启用
+                    </label>
+                  </div>
+                </div>
+                <div className="routing-actions">
+                  <button type="button" onClick={() => void handleUpdateProvider(item.provider)} disabled={providerBusy || busy}>
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => void handleProbeProviderModels(item.provider)}
+                    disabled={providerBusy || busy}
+                  >
+                    探测模型
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => void handleDisableProvider(item.provider)}
+                    disabled={providerBusy || busy}
+                  >
+                    禁用
+                  </button>
+                </div>
+                {providerProbeMap[item.provider] ? <div className="muted">探测结果：{providerProbeMap[item.provider]}</div> : null}
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       <section className="routing-card">

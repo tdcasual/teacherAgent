@@ -16,6 +16,8 @@ class ChatRuntimeDeps:
     student_limiter: Any
     teacher_limiter: Any
     resolve_teacher_id: Callable[[Optional[str]], str]
+    resolve_teacher_model_registry: Callable[[str], Dict[str, Any]]
+    resolve_teacher_provider_target: Callable[[str, str, str, str], Optional[Dict[str, Any]]]
     ensure_teacher_routing_file: Callable[[str], Path]
     routing_config_path_for_role: Callable[[Optional[str], Optional[str]], Path]
     diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
@@ -54,16 +56,23 @@ def call_llm_runtime(
     route_policy_route_id = ""
     route_actor = ""
     route_config_path = ""
+    route_exception = ""
+    route_policy_exception = ""
+    routing_registry: Dict[str, Any] = deps.gateway.registry if isinstance(getattr(deps.gateway, "registry", None), dict) else {}
     if role_hint == "teacher":
         route_actor = deps.resolve_teacher_id(teacher_id)
         route_config_path = str(deps.ensure_teacher_routing_file(route_actor))
+        try:
+            merged_registry = deps.resolve_teacher_model_registry(route_actor)
+            if isinstance(merged_registry, dict):
+                routing_registry = merged_registry
+        except Exception as exc:
+            route_exception = str(exc)[:200]
     else:
         route_config_path = str(deps.routing_config_path_for_role(role_hint, teacher_id))
     route_attempt_errors: List[Dict[str, str]] = []
     route_validation_errors: List[str] = []
     route_validation_warnings: List[str] = []
-    route_exception = ""
-    route_policy_exception = ""
 
     with deps.limit(limiter):
         result = None
@@ -78,7 +87,7 @@ def call_llm_runtime(
                 needs_tools=bool(tools),
                 needs_json=bool(req.json_schema),
             )
-            compiled = get_compiled_routing(Path(route_config_path), deps.gateway.registry)
+            compiled = get_compiled_routing(Path(route_config_path), routing_registry)
             route_validation_errors = list(compiled.errors)
             route_validation_warnings = list(compiled.warnings)
             decision = resolve_routing(compiled, routing_context)
@@ -98,14 +107,34 @@ def call_llm_runtime(
                         stream=req.stream,
                         metadata=dict(req.metadata or {}),
                     )
+                    target_override = None
+                    if role_hint == "teacher" and route_actor:
+                        try:
+                            target_override = deps.resolve_teacher_provider_target(
+                                route_actor,
+                                candidate.provider,
+                                candidate.mode,
+                                candidate.model,
+                            )
+                        except Exception as exc:
+                            route_attempt_errors.append(
+                                {
+                                    "source": "teacher_provider_target",
+                                    "channel_id": candidate.channel_id,
+                                    "error": str(exc)[:200],
+                                }
+                            )
                     try:
-                        result = deps.gateway.generate(
-                            route_req,
-                            provider=candidate.provider,
-                            mode=candidate.mode,
-                            model=candidate.model,
-                            allow_fallback=False,
-                        )
+                        if isinstance(target_override, dict):
+                            result = deps.gateway.generate(route_req, allow_fallback=False, target_override=target_override)
+                        else:
+                            result = deps.gateway.generate(
+                                route_req,
+                                provider=candidate.provider,
+                                mode=candidate.mode,
+                                model=candidate.model,
+                                allow_fallback=False,
+                            )
                         route_channel_id = candidate.channel_id
                         route_target_provider = candidate.provider
                         route_target_mode = candidate.mode
@@ -152,14 +181,34 @@ def call_llm_runtime(
                         stream=req.stream,
                         metadata=dict(req.metadata or {}),
                     )
+                    target_override = None
+                    if role_hint == "teacher" and route_actor:
+                        try:
+                            target_override = deps.resolve_teacher_provider_target(
+                                route_actor,
+                                provider,
+                                mode,
+                                model,
+                            )
+                        except Exception as exc:
+                            route_attempt_errors.append(
+                                {
+                                    "source": "skill_policy_provider_target",
+                                    "route_id": policy_route_id or "default",
+                                    "error": str(exc)[:200],
+                                }
+                            )
                     try:
-                        result = deps.gateway.generate(
-                            route_req,
-                            provider=provider,
-                            mode=mode,
-                            model=model,
-                            allow_fallback=False,
-                        )
+                        if isinstance(target_override, dict):
+                            result = deps.gateway.generate(route_req, allow_fallback=False, target_override=target_override)
+                        else:
+                            result = deps.gateway.generate(
+                                route_req,
+                                provider=provider,
+                                mode=mode,
+                                model=model,
+                                allow_fallback=False,
+                            )
                         route_selected = True
                         route_source = "skill_policy"
                         route_policy_route_id = policy_route_id

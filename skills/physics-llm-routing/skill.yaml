@@ -12,10 +12,19 @@ routing:
     - 路由回滚
     - teacher.llm_routing
     - fallback channel
+    - api key
+    - base url
+    - 中转
+    - 代理地址
+    - provider registry
+    - 私有 provider
   keyword_weights:
     模型路由: 7
     路由回滚: 7
     teacher.llm_routing: 8
+    base url: 7
+    中转: 7
+    私有 provider: 8
   min_score: 3
   min_margin: 1
   confidence_floor: 0.28

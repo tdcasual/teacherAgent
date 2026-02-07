@@ -20,13 +20,14 @@ class _FakeGateway:
         self.registry = object()
         self.calls = []
 
-    def generate(self, req, provider=None, mode=None, model=None, allow_fallback=True):
+    def generate(self, req, provider=None, mode=None, model=None, allow_fallback=True, target_override=None):
         self.calls.append(
             {
                 "provider": provider,
                 "mode": mode,
                 "model": model,
                 "allow_fallback": allow_fallback,
+                "target_override": bool(target_override),
                 "messages_len": len(req.messages or []),
             }
         )
@@ -54,6 +55,8 @@ class ChatRuntimeServiceTest(unittest.TestCase):
             student_limiter=student_limiter,
             teacher_limiter=teacher_limiter,
             resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher_default"),
+            resolve_teacher_model_registry=lambda _actor: {},
+            resolve_teacher_provider_target=lambda _teacher_id, _provider, _mode, _model: None,
             ensure_teacher_routing_file=lambda actor: Path(f"/tmp/{actor}.json"),
             routing_config_path_for_role=lambda role_hint, teacher_id: Path("/tmp/default-routing.json"),
             diag_log=lambda event, payload=None: logs.append((event, payload or {})),
@@ -90,6 +93,8 @@ class ChatRuntimeServiceTest(unittest.TestCase):
             student_limiter=student_limiter,
             teacher_limiter=teacher_limiter,
             resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher_default"),
+            resolve_teacher_model_registry=lambda _actor: {},
+            resolve_teacher_provider_target=lambda _teacher_id, _provider, _mode, _model: None,
             ensure_teacher_routing_file=lambda actor: Path(f"/tmp/{actor}.json"),
             routing_config_path_for_role=lambda role_hint, teacher_id: Path("/tmp/default-routing.json"),
             diag_log=lambda *_args, **_kwargs: None,

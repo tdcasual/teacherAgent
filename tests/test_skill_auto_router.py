@@ -42,6 +42,17 @@ class SkillAutoRouterTest(unittest.TestCase):
         self.assertEqual(result.get("effective_skill_id"), "physics-llm-routing")
         self.assertIn("auto_rule", str(result.get("reason") or ""))
 
+    def test_teacher_auto_routes_provider_registry_requests(self):
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id=None,
+            last_user_text="帮我配置一个私有 provider，填 base url 和 api key 走中转",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertEqual(result.get("effective_skill_id"), "physics-llm-routing")
+        self.assertIn("auto_rule", str(result.get("reason") or ""))
+
     def test_ambiguous_low_margin_falls_back_to_default(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,

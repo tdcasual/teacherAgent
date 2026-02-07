@@ -425,6 +425,82 @@ class LLMGateway:
             return GeminiNativeAdapter(target, self._session)
         return OpenAIChatAdapter(target, self._session)
 
+    def _target_from_override(
+        self,
+        override: Dict[str, Any],
+        *,
+        provider: Optional[str],
+        mode: Optional[str],
+        model: Optional[str],
+    ) -> Target:
+        defaults = self.registry.get("defaults", {}) if isinstance(self.registry.get("defaults"), dict) else {}
+
+        provider_final = str(override.get("provider") or provider or "custom").strip() or "custom"
+        mode_final = str(override.get("mode") or mode or "openai-chat").strip() or "openai-chat"
+        model_final = str(override.get("model") or model or "").strip()
+        if not model_final:
+            raise ValueError("target_override.model required")
+
+        base_url = str(override.get("base_url") or "").strip().rstrip("/")
+        if not base_url:
+            raise ValueError("target_override.base_url required")
+
+        endpoint = str(override.get("endpoint") or "").strip()
+        if not endpoint:
+            raise ValueError("target_override.endpoint required")
+
+        headers_raw = override.get("headers") if isinstance(override.get("headers"), dict) else {}
+        headers = {str(k): str(v) for k, v in headers_raw.items() if str(k).strip() and str(v).strip()}
+        if not headers:
+            api_key = str(override.get("api_key") or "").strip()
+            auth_type = str(override.get("auth_type") or "bearer").strip().lower()
+            auth_header = str(override.get("auth_header") or "").strip() or (
+                "x-goog-api-key" if auth_type == "x-goog-api-key" else "Authorization"
+            )
+            auth_prefix = str(override.get("auth_prefix") or "Bearer ").strip()
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                if auth_type == "x-goog-api-key":
+                    headers[auth_header] = api_key
+                else:
+                    headers[auth_header] = f"{auth_prefix}{api_key}"
+        if "Content-Type" not in headers:
+            headers["Content-Type"] = "application/json"
+
+        timeout_override = override.get("timeout_sec")
+        timeout_sec: Optional[float]
+        if timeout_override is None or timeout_override == "":
+            timeout_sec = float(defaults.get("timeout_sec", 120))
+        else:
+            text = str(timeout_override).strip().lower()
+            if text in {"0", "none", "inf", "infinite", "null"}:
+                timeout_sec = None
+            else:
+                try:
+                    timeout_sec = float(timeout_override)
+                except Exception:
+                    timeout_sec = float(defaults.get("timeout_sec", 120))
+
+        retry_override = override.get("retry")
+        if retry_override is None or retry_override == "":
+            retry = int(defaults.get("retry", 1))
+        else:
+            try:
+                retry = int(retry_override)
+            except Exception:
+                retry = int(defaults.get("retry", 1))
+
+        return Target(
+            provider=provider_final,
+            mode=mode_final,
+            model=model_final,
+            base_url=base_url,
+            endpoint=endpoint,
+            headers=headers,
+            timeout_sec=timeout_sec,
+            retry=max(1, retry),
+        )
+
     def _is_retryable(self, exc: Exception) -> bool:
         # Conservative retry policy: only retry obvious transient failures.
         try:
@@ -453,11 +529,14 @@ class LLMGateway:
         mode: Optional[str] = None,
         model: Optional[str] = None,
         allow_fallback: bool = True,
+        target_override: Optional[Dict[str, Any]] = None,
     ) -> UnifiedLLMResponse:
         errors: List[Exception] = []
         targets: List[Target] = []
 
-        if provider or mode or model or os.getenv("LLM_PROVIDER") or os.getenv("LLM_MODE") or os.getenv("LLM_MODEL"):
+        if isinstance(target_override, dict):
+            targets.append(self._target_from_override(target_override, provider=provider, mode=mode, model=model))
+        elif provider or mode or model or os.getenv("LLM_PROVIDER") or os.getenv("LLM_MODE") or os.getenv("LLM_MODEL"):
             targets.append(self.resolve_target(provider, mode, model))
         else:
             targets.append(self.resolve_target())
