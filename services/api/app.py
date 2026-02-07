@@ -194,6 +194,7 @@ from .chat_worker_service import (
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
 )
+from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chat_support_service import (
     ChatSupportDeps,
     allowed_tools as _allowed_tools_impl,
@@ -3910,6 +3911,13 @@ def _compute_chat_reply_deps():
         student_inflight=_student_inflight,
         run_agent=run_agent,
         normalize_math_delimiters=normalize_math_delimiters,
+        resolve_effective_skill=lambda role_hint, requested_skill_id, last_user_text: _resolve_effective_skill_impl(
+            app_root=APP_ROOT,
+            role_hint=role_hint,
+            requested_skill_id=requested_skill_id,
+            last_user_text=last_user_text,
+            detect_assignment_intent=detect_assignment_intent,
+        ),
     )
 
 def _chat_job_process_deps():

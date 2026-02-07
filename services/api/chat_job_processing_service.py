@@ -24,6 +24,7 @@ class ComputeChatReplyDeps:
     student_inflight: Callable[[Optional[str]], Any]
     run_agent: Callable[..., Dict[str, Any]]
     normalize_math_delimiters: Callable[[str], str]
+    resolve_effective_skill: Callable[[Optional[str], Optional[str], str], Dict[str, Any]]
 
 
 def detect_role_hint(req: Any, *, detect_role: Callable[[str], Optional[str]]) -> Optional[str]:
@@ -46,22 +47,61 @@ def compute_chat_reply_sync(
     teacher_id_override: Optional[str] = None,
 ) -> Tuple[str, Optional[str], str]:
     role_hint = detect_role_hint(req, detect_role=deps.detect_role)
+    req_agent_id = str(getattr(req, "agent_id", "") or "")
+    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
+    requested_skill_id = str(getattr(req, "skill_id", "") or "").strip()
+    effective_skill_id = requested_skill_id
+
+    resolve_payload: Dict[str, Any] = {}
+    try:
+        resolve_payload = deps.resolve_effective_skill(role_hint, requested_skill_id, last_user_text) or {}
+        resolved = str(resolve_payload.get("effective_skill_id") or "").strip()
+        if resolved and resolved != requested_skill_id:
+            req.skill_id = resolved
+        effective_skill_id = str(getattr(req, "skill_id", "") or "").strip()
+        deps.diag_log(
+            "skill.resolve",
+            {
+                "role": role_hint or "unknown",
+                "requested_skill_id": requested_skill_id,
+                "effective_skill_id": effective_skill_id,
+                "reason": str(resolve_payload.get("reason") or ""),
+                "confidence": resolve_payload.get("confidence"),
+                "matched_rule": str(resolve_payload.get("matched_rule") or ""),
+                "candidates": resolve_payload.get("candidates") or [],
+                "best_score": int(resolve_payload.get("best_score") or 0),
+                "second_score": int(resolve_payload.get("second_score") or 0),
+                "threshold_blocked": bool(resolve_payload.get("threshold_blocked")),
+                "load_errors": int(resolve_payload.get("load_errors") or 0),
+            },
+        )
+    except Exception as exc:
+        deps.diag_log(
+            "skill.resolve.failed",
+            {
+                "role": role_hint or "unknown",
+                "requested_skill_id": requested_skill_id,
+                "error": str(exc)[:200],
+            },
+        )
 
     if role_hint == "teacher":
         deps.diag_log(
             "teacher_chat.in",
             {
-                "last_user": next((m.content for m in reversed(req.messages) if m.role == "user"), "")[:500],
-                "skill_id": req.skill_id,
+                "last_user": last_user_text[:500],
+                "agent_id": req_agent_id,
+                "skill_id": effective_skill_id,
+                "skill_id_requested": requested_skill_id,
+                "skill_id_effective": effective_skill_id,
             },
         )
         preflight = deps.teacher_assignment_preflight(req)
         if preflight:
             deps.diag_log("teacher_chat.preflight_reply", {"reply_preview": preflight[:500]})
-            return preflight, role_hint, next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
+            return preflight, role_hint, last_user_text
 
     extra_system = None
-    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
     last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
 
     effective_teacher_id: Optional[str] = None
@@ -191,6 +231,8 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                 "duration_ms": duration_ms,
                 "reply": reply_text,
                 "role": role_hint,
+                "skill_id_requested": str(job.get("skill_id") or ""),
+                "skill_id_effective": str(getattr(req, "skill_id", "") or ""),
             },
         )
 
@@ -244,14 +286,27 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     session_id,
                     "user",
                     last_user_text,
-                    meta={"request_id": job.get("request_id") or "", "skill_id": req.skill_id or ""},
+                    meta={
+                        "request_id": job.get("request_id") or "",
+                        "agent_id": req_agent_id,
+                        "skill_id": req.skill_id or "",
+                        "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
+                    },
                 )
                 deps.append_teacher_session_message(
                     teacher_id,
                     session_id,
                     "assistant",
                     reply_text,
-                    meta={"job_id": job_id, "request_id": job.get("request_id") or "", "skill_id": req.skill_id or ""},
+                    meta={
+                        "job_id": job_id,
+                        "request_id": job.get("request_id") or "",
+                        "agent_id": req_agent_id,
+                        "skill_id": req.skill_id or "",
+                        "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
+                    },
                 )
                 deps.update_teacher_session_index(
                     teacher_id,

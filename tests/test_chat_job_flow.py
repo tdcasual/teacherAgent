@@ -24,13 +24,15 @@ class ChatJobFlowTest(unittest.TestCase):
             app_mod = load_app(tmp)
             app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            captured = {"skill_id": None}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None):
+            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
                 last_user = ""
                 for m in reversed(messages or []):
                     if m.get("role") == "user":
                         last_user = str(m.get("content") or "")
                         break
+                captured["skill_id"] = skill_id
                 return {"reply": f"echo:{role_hint}:{last_user}"}
 
             app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
@@ -39,7 +41,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 payload = {
                     "request_id": "req_test_001",
                     "role": "teacher",
-                    "messages": [{"role": "user", "content": "hello"}],
+                    "messages": [{"role": "user", "content": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题"}],
                 }
                 res1 = client.post("/chat/start", json=payload)
                 self.assertEqual(res1.status_code, 200)
@@ -58,7 +60,10 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(res_status.status_code, 200)
                 data = res_status.json()
                 self.assertEqual(data["status"], "done")
-                self.assertIn("echo:teacher:hello", data.get("reply", ""))
+                self.assertIn("echo:teacher:", data.get("reply", ""))
+                self.assertEqual(data.get("skill_id_requested"), "")
+                self.assertEqual(data.get("skill_id_effective"), "physics-homework-generator")
+                self.assertEqual(captured["skill_id"], "physics-homework-generator")
 
     def test_chat_status_missing_job(self):
         with TemporaryDirectory() as td:
