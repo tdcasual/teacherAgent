@@ -35,6 +35,7 @@ from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolv
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
+from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
 
 try:
     from mem0_config import load_dotenv
@@ -10122,10 +10123,12 @@ async def upload(files: list[UploadFile] = File(...)):
 
 @app.get("/student/profile/{student_id}")
 async def get_profile(student_id: str):
-    profile_path = DATA_DIR / "student_profiles" / f"{student_id}.json"
-    if not profile_path.exists():
+    result = _get_profile_api_impl(student_id, deps=_student_profile_api_deps())
+    if result.get("error") in {"profile not found", "profile_not_found"}:
         raise HTTPException(status_code=404, detail="profile not found")
-    return json.loads(profile_path.read_text(encoding="utf-8"))
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
 
 
 @app.post("/student/profile/update")
@@ -10207,6 +10210,10 @@ def _assignment_api_deps():
         ),
         assignment_exists=lambda assignment_id: (DATA_DIR / "assignments" / str(assignment_id or "")).exists(),
     )
+
+
+def _student_profile_api_deps():
+    return StudentProfileApiDeps(student_profile_get=student_profile_get)
 
 
 @app.get("/exams")

@@ -18,6 +18,27 @@ def load_app(tmp_dir: Path):
 
 
 class StudentHistoryFlowTest(unittest.TestCase):
+    def test_student_profile_route_uses_profile_api_deps(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                sentinel = object()
+                captured = {}
+
+                def _fake_impl(student_id: str, *, deps):
+                    captured["student_id"] = student_id
+                    captured["deps"] = deps
+                    return {"student_id": student_id}
+
+                app_mod._get_profile_api_impl = _fake_impl
+                app_mod._student_profile_api_deps = lambda: sentinel
+
+                res = client.get("/student/profile/S1")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(captured.get("student_id"), "S1")
+                self.assertIs(captured.get("deps"), sentinel)
+
     def test_student_chat_writes_history_and_lists_sessions(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
