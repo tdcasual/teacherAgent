@@ -305,6 +305,18 @@ from .session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
     save_session_view_state as _save_session_view_state_impl,
 )
+from .session_history_api_service import (
+    SessionHistoryApiDeps,
+    SessionHistoryApiError,
+    student_history_session as _student_history_session_api_impl,
+    student_history_sessions as _student_history_sessions_api_impl,
+    student_session_view_state as _student_session_view_state_api_impl,
+    teacher_history_session as _teacher_history_session_api_impl,
+    teacher_history_sessions as _teacher_history_sessions_api_impl,
+    teacher_session_view_state as _teacher_session_view_state_api_impl,
+    update_student_session_view_state as _update_student_session_view_state_api_impl,
+    update_teacher_session_view_state as _update_teacher_session_view_state_api_impl,
+)
 from .session_discussion_service import (
     SessionDiscussionDeps,
     session_discussion_pass as _session_discussion_pass_impl,
@@ -632,7 +644,6 @@ def _limit(sema: threading.BoundedSemaphore):
     finally:
         sema.release()
 
-
 def _trim_messages(messages: List[Dict[str, Any]], role_hint: Optional[str] = None) -> List[Dict[str, Any]]:
     if not messages:
         return []
@@ -676,7 +687,6 @@ def _student_inflight(student_id: Optional[str]):
             else:
                 _STUDENT_INFLIGHT[student_id] = cur - 1
 
-
 def _setup_diag_logger() -> Optional[logging.Logger]:
     if not DIAG_LOG_ENABLED:
         return None
@@ -695,7 +705,6 @@ def _setup_diag_logger() -> Optional[logging.Logger]:
 _DIAG_LOGGER = _setup_diag_logger()
 LLM_GATEWAY = LLMGateway()
 
-
 def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
     if not DIAG_LOG_ENABLED or _DIAG_LOGGER is None:
         return
@@ -710,11 +719,9 @@ def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
     except Exception:
         pass
 
-
 def upload_job_path(job_id: str) -> Path:
     safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
     return UPLOAD_JOB_DIR / (safe or job_id)
-
 
 def load_upload_job(job_id: str) -> Dict[str, Any]:
     job_dir = upload_job_path(job_id)
@@ -722,7 +729,6 @@ def load_upload_job(job_id: str) -> Dict[str, Any]:
     if not job_path.exists():
         raise FileNotFoundError(f"job not found: {job_id}")
     return json.loads(job_path.read_text(encoding="utf-8"))
-
 
 def write_upload_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     job_dir = upload_job_path(job_id)
@@ -739,13 +745,11 @@ def write_upload_job(job_id: str, updates: Dict[str, Any], overwrite: bool = Fal
     _atomic_write_json(job_path, data)
     return data
 
-
 def _atomic_write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
-
 
 def safe_fs_id(value: str, prefix: str = "id") -> str:
     raw = str(value or "").strip()
@@ -755,13 +759,11 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
         slug = f"{prefix}_{digest}"
     return slug
 
-
 def enqueue_upload_job(job_id: str) -> None:
     with UPLOAD_JOB_LOCK:
         if job_id not in UPLOAD_JOB_QUEUE:
             UPLOAD_JOB_QUEUE.append(job_id)
     UPLOAD_JOB_EVENT.set()
-
 
 def scan_pending_upload_jobs() -> None:
     UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
@@ -774,7 +776,6 @@ def scan_pending_upload_jobs() -> None:
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
             enqueue_upload_job(job_id)
-
 
 def upload_job_worker_loop() -> None:
     while True:
@@ -800,7 +801,6 @@ def upload_job_worker_loop() -> None:
                 },
             )
 
-
 def start_upload_worker() -> None:
     global UPLOAD_JOB_WORKER_STARTED
     if UPLOAD_JOB_WORKER_STARTED:
@@ -810,11 +810,9 @@ def start_upload_worker() -> None:
     thread.start()
     UPLOAD_JOB_WORKER_STARTED = True
 
-
 def exam_job_path(job_id: str) -> Path:
     safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
     return EXAM_UPLOAD_JOB_DIR / (safe or job_id)
-
 
 def load_exam_job(job_id: str) -> Dict[str, Any]:
     job_dir = exam_job_path(job_id)
@@ -822,7 +820,6 @@ def load_exam_job(job_id: str) -> Dict[str, Any]:
     if not job_path.exists():
         raise FileNotFoundError(f"exam job not found: {job_id}")
     return json.loads(job_path.read_text(encoding="utf-8"))
-
 
 def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     job_dir = exam_job_path(job_id)
@@ -839,13 +836,11 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
     _atomic_write_json(job_path, data)
     return data
 
-
 def enqueue_exam_job(job_id: str) -> None:
     with EXAM_JOB_LOCK:
         if job_id not in EXAM_JOB_QUEUE:
             EXAM_JOB_QUEUE.append(job_id)
     EXAM_JOB_EVENT.set()
-
 
 def scan_pending_exam_jobs() -> None:
     EXAM_UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
@@ -858,7 +853,6 @@ def scan_pending_exam_jobs() -> None:
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
             enqueue_exam_job(job_id)
-
 
 def exam_job_worker_loop() -> None:
     while True:
@@ -884,7 +878,6 @@ def exam_job_worker_loop() -> None:
                 },
             )
 
-
 def start_exam_upload_worker() -> None:
     global EXAM_JOB_WORKER_STARTED
     if EXAM_JOB_WORKER_STARTED:
@@ -894,18 +887,14 @@ def start_exam_upload_worker() -> None:
     thread.start()
     EXAM_JOB_WORKER_STARTED = True
 
-
 def chat_job_path(job_id: str) -> Path:
     return _chat_job_path_impl(job_id, deps=_chat_job_repo_deps())
-
 
 def load_chat_job(job_id: str) -> Dict[str, Any]:
     return _load_chat_job_impl(job_id, deps=_chat_job_repo_deps())
 
-
 def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     return _write_chat_job_impl(job_id, updates, deps=_chat_job_repo_deps(), overwrite=overwrite)
-
 
 def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
     """
@@ -939,17 +928,14 @@ def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
         return True
     return False
 
-
 def _release_lockfile(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
     except Exception:
         pass
 
-
 def _chat_job_claim_path(job_id: str) -> Path:
     return chat_job_path(job_id) / "claim.lock"
-
 
 def _chat_last_user_text(messages: Any) -> str:
     if not isinstance(messages, list):
@@ -962,11 +948,9 @@ def _chat_last_user_text(messages: Any) -> str:
         return str(msg.get("content") or "")
     return ""
 
-
 def _chat_text_fingerprint(text: str) -> str:
     normalized = re.sub(r"\s+", " ", str(text or "").strip().lower())
     return hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest()
-
 
 def resolve_chat_lane_id(
     role_hint: Optional[str],
@@ -987,7 +971,6 @@ def resolve_chat_lane_id(
     rid = safe_fs_id(request_id or "req", prefix="req")
     return f"unknown:{sid}:{rid}"
 
-
 def resolve_chat_lane_id_from_job(job: Dict[str, Any]) -> str:
     lane_id = str(job.get("lane_id") or "").strip()
     if lane_id:
@@ -1006,13 +989,11 @@ def resolve_chat_lane_id_from_job(job: Dict[str, Any]) -> str:
         request_id=request_id,
     )
 
-
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
     q = CHAT_JOB_LANES.get(lane_id)
     queued = len(q) if q else 0
     active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
     return {"queued": queued, "active": active, "total": queued + active}
-
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
     q = CHAT_JOB_LANES.get(lane_id)
@@ -1023,7 +1004,6 @@ def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
             return i
     return 0
 
-
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
     if job_id in CHAT_JOB_QUEUED:
         return _chat_find_position_locked(lane_id, job_id)
@@ -1033,10 +1013,8 @@ def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
     CHAT_JOB_TO_LANE[job_id] = lane_id
     return len(q)
 
-
 def _chat_has_pending_locked() -> bool:
     return any(len(q) > 0 for q in CHAT_JOB_LANES.values())
-
 
 def _chat_pick_next_locked() -> Tuple[str, str]:
     global CHAT_LANE_CURSOR
@@ -1060,7 +1038,6 @@ def _chat_pick_next_locked() -> Tuple[str, str]:
         return job_id, lane_id
     return "", ""
 
-
 def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
     CHAT_JOB_ACTIVE_LANES.discard(lane_id)
     CHAT_JOB_TO_LANE.pop(job_id, None)
@@ -1068,10 +1045,8 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
     if q is not None and len(q) == 0:
         CHAT_JOB_LANES.pop(lane_id, None)
 
-
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
     CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
-
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
     if CHAT_LANE_DEBOUNCE_MS <= 0:
@@ -1086,22 +1061,17 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
         return None
     return job_id
 
-
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
-
 
 def scan_pending_chat_jobs() -> None:
     _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
 
-
 def chat_job_worker_loop() -> None:
     _chat_job_worker_loop_impl(deps=_chat_worker_deps())
 
-
 def start_chat_worker() -> None:
     _start_chat_worker_impl(deps=_chat_worker_deps())
-
 
 def load_chat_request_index() -> Dict[str, str]:
     request_index_path = CHAT_IDEMPOTENCY_STATE.request_index_path
@@ -1119,10 +1089,8 @@ def load_chat_request_index() -> Dict[str, str]:
             out[k] = v
     return out
 
-
 def _chat_request_map_path(request_id: str) -> Path:
     return CHAT_IDEMPOTENCY_STATE.request_map_dir / f"{safe_fs_id(request_id, prefix='req')}.txt"
-
 
 def _chat_request_map_get(request_id: str) -> Optional[str]:
     request_id = str(request_id or "").strip()
@@ -1147,7 +1115,6 @@ def _chat_request_map_get(request_id: str) -> Optional[str]:
         pass
     return job_id
 
-
 def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
     request_id = str(request_id or "").strip()
     job_id = str(job_id or "").strip()
@@ -1170,7 +1137,6 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
             pass
     return True
 
-
 def upsert_chat_request_index(request_id: str, job_id: str) -> None:
     """
     Best-effort idempotency mapping. Primary mapping is per-request lockfile under CHAT_REQUEST_MAP_DIR.
@@ -1184,7 +1150,6 @@ def upsert_chat_request_index(request_id: str, job_id: str) -> None:
             _atomic_write_json(CHAT_IDEMPOTENCY_STATE.request_index_path, idx)
     except Exception:
         pass
-
 
 def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
     job_id = _chat_request_map_get(request_id)
@@ -1206,54 +1171,42 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
         return None
     return legacy
 
-
 def student_sessions_base_dir(student_id: str) -> Path:
     return STUDENT_SESSIONS_DIR / safe_fs_id(student_id, prefix="student")
-
 
 def student_sessions_index_path(student_id: str) -> Path:
     return student_sessions_base_dir(student_id) / "index.json"
 
-
 def student_session_view_state_path(student_id: str) -> Path:
     return student_sessions_base_dir(student_id) / "view_state.json"
-
 
 def teacher_session_view_state_path(teacher_id: str) -> Path:
     return teacher_sessions_base_dir(teacher_id) / "view_state.json"
 
-
 def _compare_iso_ts(a: Any, b: Any) -> int:
     return _compare_iso_ts_impl(a, b)
-
 
 def _default_session_view_state() -> Dict[str, Any]:
     return _default_session_view_state_impl()
 
-
 def _normalize_session_view_state_payload(raw: Any) -> Dict[str, Any]:
     return _normalize_session_view_state_payload_impl(raw)
-
 
 def load_student_session_view_state(student_id: str) -> Dict[str, Any]:
     path = student_session_view_state_path(student_id)
     return _load_session_view_state_impl(path)
 
-
 def save_student_session_view_state(student_id: str, state: Dict[str, Any]) -> None:
     path = student_session_view_state_path(student_id)
     _save_session_view_state_impl(path, state)
-
 
 def load_teacher_session_view_state(teacher_id: str) -> Dict[str, Any]:
     path = teacher_session_view_state_path(teacher_id)
     return _load_session_view_state_impl(path)
 
-
 def save_teacher_session_view_state(teacher_id: str, state: Dict[str, Any]) -> None:
     path = teacher_session_view_state_path(teacher_id)
     _save_session_view_state_impl(path, state)
-
 
 def load_student_sessions_index(student_id: str) -> List[Dict[str, Any]]:
     path = student_sessions_index_path(student_id)
@@ -1265,15 +1218,12 @@ def load_student_sessions_index(student_id: str) -> List[Dict[str, Any]]:
         return []
     return data if isinstance(data, list) else []
 
-
 def save_student_sessions_index(student_id: str, items: List[Dict[str, Any]]) -> None:
     path = student_sessions_index_path(student_id)
     _atomic_write_json(path, items)
 
-
 def student_session_file(student_id: str, session_id: str) -> Path:
     return student_sessions_base_dir(student_id) / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
-
 
 def update_student_session_index(
     student_id: str,
@@ -1314,7 +1264,6 @@ def update_student_session_index(
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     save_student_sessions_index(student_id, items[:SESSION_INDEX_MAX_ITEMS])
 
-
 def append_student_session_message(
     student_id: str,
     session_id: str,
@@ -1335,16 +1284,13 @@ def append_student_session_message(
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-
 def resolve_teacher_id(teacher_id: Optional[str] = None) -> str:
     raw = (teacher_id or os.getenv("DEFAULT_TEACHER_ID") or "teacher").strip()
     # Use a stable filesystem-safe id; keep original value in USER.md if needed.
     return safe_fs_id(raw, prefix="teacher")
 
-
 def teacher_workspace_dir(teacher_id: str) -> Path:
     return TEACHER_WORKSPACES_DIR / safe_fs_id(teacher_id, prefix="teacher")
-
 
 def teacher_workspace_file(teacher_id: str, name: str) -> Path:
     allowed = {"AGENTS.md", "SOUL.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"}
@@ -1352,42 +1298,33 @@ def teacher_workspace_file(teacher_id: str, name: str) -> Path:
         raise ValueError(f"invalid teacher workspace file: {name}")
     return teacher_workspace_dir(teacher_id) / name
 
-
 def teacher_llm_routing_path(teacher_id: Optional[str] = None) -> Path:
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_workspace_dir(teacher_id_final) / "llm_routing.json"
-
 
 def routing_config_path_for_role(role_hint: Optional[str], teacher_id: Optional[str] = None) -> Path:
     if role_hint == "teacher":
         return teacher_llm_routing_path(teacher_id)
     return LLM_ROUTING_PATH
 
-
 def teacher_daily_memory_dir(teacher_id: str) -> Path:
     return teacher_workspace_dir(teacher_id) / "memory"
-
 
 def teacher_daily_memory_path(teacher_id: str, date_str: Optional[str] = None) -> Path:
     date_final = parse_date_str(date_str)
     return teacher_daily_memory_dir(teacher_id) / f"{date_final}.md"
 
-
 def ensure_teacher_workspace(teacher_id: str) -> Path:
     return _ensure_teacher_workspace_impl(teacher_id, deps=_teacher_workspace_deps())
-
 
 def teacher_read_text(path: Path, max_chars: int = 8000) -> str:
     return _teacher_read_text_impl(path, max_chars=max_chars)
 
-
 def teacher_sessions_base_dir(teacher_id: str) -> Path:
     return TEACHER_SESSIONS_DIR / safe_fs_id(teacher_id, prefix="teacher")
 
-
 def teacher_sessions_index_path(teacher_id: str) -> Path:
     return teacher_sessions_base_dir(teacher_id) / "index.json"
-
 
 def load_teacher_sessions_index(teacher_id: str) -> List[Dict[str, Any]]:
     path = teacher_sessions_index_path(teacher_id)
@@ -1399,15 +1336,12 @@ def load_teacher_sessions_index(teacher_id: str) -> List[Dict[str, Any]]:
         return []
     return data if isinstance(data, list) else []
 
-
 def save_teacher_sessions_index(teacher_id: str, items: List[Dict[str, Any]]) -> None:
     path = teacher_sessions_index_path(teacher_id)
     _atomic_write_json(path, items)
 
-
 def teacher_session_file(teacher_id: str, session_id: str) -> Path:
     return teacher_sessions_base_dir(teacher_id) / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
-
 
 def update_teacher_session_index(
     teacher_id: str,
@@ -1442,7 +1376,6 @@ def update_teacher_session_index(
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
 
-
 def append_teacher_session_message(
     teacher_id: str,
     session_id: str,
@@ -1463,10 +1396,8 @@ def append_teacher_session_message(
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-
 def _teacher_compact_key(teacher_id: str, session_id: str) -> str:
     return f"{safe_fs_id(teacher_id, prefix='teacher')}:{safe_fs_id(session_id, prefix='session')}"
-
 
 def _teacher_compact_allowed(teacher_id: str, session_id: str) -> bool:
     key = _teacher_compact_key(teacher_id, session_id)
@@ -1479,7 +1410,6 @@ def _teacher_compact_allowed(teacher_id: str, session_id: str) -> bool:
             return False
         _TEACHER_SESSION_COMPACT_TS[key] = now
     return True
-
 
 def _teacher_compact_transcript(records: List[Dict[str, Any]], max_chars: int) -> str:
     parts: List[str] = []
@@ -1503,7 +1433,6 @@ def _teacher_compact_transcript(records: List[Dict[str, Any]], max_chars: int) -
         used += len(line) + 1
     return "\n".join(parts).strip()
 
-
 def _teacher_compact_summary(records: List[Dict[str, Any]], previous_summary: str) -> str:
     transcript = _teacher_compact_transcript(records, TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS)
     snippets: List[str] = []
@@ -1523,7 +1452,6 @@ def _teacher_compact_summary(records: List[Dict[str, Any]], previous_summary: st
     parts.extend(snippets)
     return "\n".join(parts).strip()
 
-
 def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -1531,7 +1459,6 @@ def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) ->
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     tmp.replace(path)
-
 
 def _mark_teacher_session_compacted(
     teacher_id: str,
@@ -1567,14 +1494,12 @@ def _mark_teacher_session_compacted(
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
 
-
 def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
     return _maybe_compact_teacher_session_impl(
         teacher_id,
         session_id,
         deps=_teacher_session_compaction_deps(),
     )
-
 
 def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: int) -> str:
     if max_chars <= 0:
@@ -1604,7 +1529,6 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
         return ""
     return ""
 
-
 def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
     active = _teacher_memory_active_applied_records(
         teacher_id,
@@ -1630,7 +1554,6 @@ def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
         used += len(line) + 1
     return "\n".join(lines).strip()
 
-
 def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_chars: int = 6000, session_id: str = "main") -> str:
     return _build_teacher_context_impl(
         teacher_id,
@@ -1640,7 +1563,6 @@ def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_char
         session_id=session_id,
     )
 
-
 def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[str, Any]:
     return _teacher_memory_search_impl(
         teacher_id,
@@ -1649,12 +1571,10 @@ def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[s
         limit=limit,
     )
 
-
 def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
     ensure_teacher_workspace(teacher_id)
     base = teacher_workspace_dir(teacher_id) / "proposals"
     return base / f"{safe_fs_id(proposal_id, prefix='proposal')}.json"
-
 
 def teacher_memory_list_proposals(
     teacher_id: str,
@@ -1692,10 +1612,8 @@ def teacher_memory_list_proposals(
             break
     return {"ok": True, "teacher_id": teacher_id, "proposals": items}
 
-
 def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
     return _teacher_memory_load_events_impl(teacher_id, deps=_teacher_memory_store_deps(), limit=limit)
-
 
 def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
     return _teacher_memory_insights_impl(
@@ -1704,22 +1622,17 @@ def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
         days=days,
     )
 
-
 def _teacher_memory_is_sensitive(content: str) -> bool:
     return _teacher_memory_is_sensitive_impl(content, patterns=_TEACHER_MEMORY_SENSITIVE_PATTERNS)
-
 
 def _teacher_memory_event_log_path(teacher_id: str) -> Path:
     return _teacher_memory_event_log_path_impl(teacher_id, deps=_teacher_memory_store_deps())
 
-
 def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
     _teacher_memory_log_event_impl(teacher_id, event, payload=payload, deps=_teacher_memory_store_deps())
 
-
 def _teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
     return _teacher_memory_parse_dt_impl(raw)
-
 
 def _teacher_memory_record_ttl_days(rec: Dict[str, Any]) -> int:
     return _teacher_memory_record_ttl_days_impl(
@@ -1728,14 +1641,12 @@ def _teacher_memory_record_ttl_days(rec: Dict[str, Any]) -> int:
         ttl_days_memory=TEACHER_MEMORY_TTL_DAYS_MEMORY,
     )
 
-
 def _teacher_memory_record_expire_at(rec: Dict[str, Any]) -> Optional[datetime]:
     return _teacher_memory_record_expire_at_impl(
         rec,
         parse_dt=_teacher_memory_parse_dt,
         record_ttl_days=_teacher_memory_record_ttl_days,
     )
-
 
 def _teacher_memory_is_expired_record(rec: Dict[str, Any], now: Optional[datetime] = None) -> bool:
     return _teacher_memory_is_expired_record_impl(
@@ -1745,10 +1656,8 @@ def _teacher_memory_is_expired_record(rec: Dict[str, Any], now: Optional[datetim
         now=now,
     )
 
-
 def _teacher_memory_age_days(rec: Dict[str, Any], now: Optional[datetime] = None) -> int:
     return _teacher_memory_age_days_impl(rec, parse_dt=_teacher_memory_parse_dt, now=now)
-
 
 def _teacher_memory_priority_score(
     *,
@@ -1771,7 +1680,6 @@ def _teacher_memory_priority_score(
         norm_text=_teacher_memory_norm_text,
     )
 
-
 def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
     return _teacher_memory_rank_score_impl(
         rec,
@@ -1781,10 +1689,8 @@ def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
         record_ttl_days=_teacher_memory_record_ttl_days,
     )
 
-
 def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
     return _teacher_memory_load_record_impl(teacher_id, proposal_id, deps=_teacher_memory_store_deps())
-
 
 def _teacher_memory_active_applied_records(
     teacher_id: str,
@@ -1799,30 +1705,23 @@ def _teacher_memory_active_applied_records(
         limit=limit,
     )
 
-
 def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: int = 24) -> List[str]:
     return _teacher_memory_recent_user_turns_impl(teacher_id, session_id, deps=_teacher_memory_record_deps(), limit=limit)
-
 
 def _teacher_memory_loose_match(a: str, b: str) -> bool:
     return _teacher_memory_loose_match_impl(a, b, norm_text=_teacher_memory_norm_text)
 
-
 def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str) -> Optional[Dict[str, Any]]:
     return _teacher_memory_auto_infer_candidate_impl(teacher_id, session_id, user_text, deps=_teacher_memory_record_deps())
-
 
 def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, Any]:
     return _teacher_session_index_item_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
 
-
 def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_no: int) -> None:
     _mark_teacher_session_memory_flush_impl(teacher_id, session_id, cycle_no, deps=_teacher_memory_record_deps())
 
-
 def _teacher_memory_has_term(text: str, terms: Tuple[str, ...]) -> bool:
     return _teacher_memory_has_term_impl(text, terms)
-
 
 def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
     return _teacher_memory_conflicts_impl(
@@ -1831,7 +1730,6 @@ def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
         norm_text=_teacher_memory_norm_text,
         conflict_groups=_TEACHER_MEMORY_CONFLICT_GROUPS,
     )
-
 
 def _teacher_memory_find_conflicting_applied(
     teacher_id: str,
@@ -1848,10 +1746,8 @@ def _teacher_memory_find_conflicting_applied(
         deps=_teacher_memory_record_deps(),
     )
 
-
 def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
     _teacher_memory_mark_superseded_impl(teacher_id, proposal_ids, by_proposal_id, deps=_teacher_memory_record_deps())
-
 
 def teacher_memory_propose(
     teacher_id: str,
@@ -1874,7 +1770,6 @@ def teacher_memory_propose(
         dedupe_key=dedupe_key,
     )
 
-
 def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True) -> Dict[str, Any]:
     return _teacher_memory_apply_impl(
         teacher_id,
@@ -1883,22 +1778,17 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
         approve=approve,
     )
 
-
 def _teacher_memory_norm_text(text: str) -> str:
     return _teacher_memory_norm_text_impl(text)
-
 
 def _teacher_memory_stable_hash(*parts: str) -> str:
     return _teacher_memory_stable_hash_impl(*parts)
 
-
 def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
     return _teacher_memory_recent_proposals_impl(teacher_id, deps=_teacher_memory_record_deps(), limit=limit)
 
-
 def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
     return _teacher_memory_auto_quota_reached_impl(teacher_id, deps=_teacher_memory_record_deps())
-
 
 def _teacher_memory_find_duplicate(
     teacher_id: str,
@@ -1915,10 +1805,8 @@ def _teacher_memory_find_duplicate(
         deps=_teacher_memory_record_deps(),
     )
 
-
 def _teacher_session_compaction_cycle_no(teacher_id: str, session_id: str) -> int:
     return _teacher_session_compaction_cycle_no_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
-
 
 def teacher_memory_auto_propose_from_turn(
     teacher_id: str,
@@ -1933,7 +1821,6 @@ def teacher_memory_auto_propose_from_turn(
         assistant_text,
         deps=_teacher_memory_auto_deps(),
     )
-
 
 def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
     return _teacher_memory_auto_flush_from_session_impl(
@@ -1954,7 +1841,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def _startup_jobs() -> None:
     start_upload_worker()
@@ -1963,12 +1849,10 @@ def _startup_jobs() -> None:
     start_exam_upload_worker()
     start_chat_worker()
 
-
 def model_dump_compat(model: BaseModel, *, exclude_none: bool = False) -> Dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump(exclude_none=exclude_none)  # type: ignore[attr-defined]
     return model.dict(exclude_none=exclude_none)
-
 
 def run_script(args: List[str]) -> str:
     env = os.environ.copy()
@@ -1980,19 +1864,15 @@ def run_script(args: List[str]) -> str:
         raise HTTPException(status_code=500, detail=proc.stderr or proc.stdout)
     return proc.stdout
 
-
 def normalize(text: str) -> str:
     return re.sub(r"\s+", "", text or "").lower()
-
 
 def parse_ids_value(value: Any) -> List[str]:
     parts = parse_list_value(value)
     return [p for p in parts if p]
 
-
 def parse_timeout_env(name: str) -> Optional[float]:
     return _parse_timeout_env_impl(name)
-
 
 async def save_upload_file(upload: UploadFile, dest: Path, chunk_size: int = 1024 * 1024) -> int:
     return await _save_upload_file_impl(
@@ -2002,14 +1882,11 @@ async def save_upload_file(upload: UploadFile, dest: Path, chunk_size: int = 102
         run_in_threadpool=run_in_threadpool,
     )
 
-
 def sanitize_filename(name: str) -> str:
     return sanitize_filename_io(name)
 
-
 def safe_slug(value: str) -> str:
     return re.sub(r"[^\w-]+", "_", value or "").strip("_") or "assignment"
-
 
 def resolve_scope(scope: str, student_ids: List[str], class_name: str) -> str:
     scope_norm = (scope or "").strip().lower()
@@ -2021,18 +1898,14 @@ def resolve_scope(scope: str, student_ids: List[str], class_name: str) -> str:
         return "class"
     return "public"
 
-
 def _ensure_ocr_api_key_aliases() -> None:
     _ensure_ocr_api_key_aliases_impl()
-
 
 def load_ocr_utils():
     return _load_ocr_utils_impl()
 
-
 def clean_ocr_text(text: str) -> str:
     return _clean_ocr_text_impl(text)
-
 
 def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     return _extract_text_from_pdf_impl(
@@ -2043,7 +1916,6 @@ def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FRE
         prompt=prompt,
     )
 
-
 def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     return _extract_text_from_file_impl(
         path,
@@ -2052,7 +1924,6 @@ def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FR
         ocr_mode=ocr_mode,
         prompt=prompt,
     )
-
 
 def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
     return _extract_text_from_image_impl(
@@ -2063,30 +1934,23 @@ def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "F
         prompt=prompt,
     )
 
-
 def truncate_text(text: str, limit: int = 12000) -> str:
     return _truncate_text_impl(text, limit)
-
 
 def parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
     return _parse_llm_json_impl(content)
 
-
 def llm_parse_assignment_payload(source_text: str, answer_text: str) -> Dict[str, Any]:
     return _llm_parse_assignment_payload_impl(source_text, answer_text, deps=_upload_llm_deps())
-
 
 def summarize_questions_for_prompt(questions: List[Dict[str, Any]], limit: int = 4000) -> str:
     return _summarize_questions_for_prompt_impl(questions, limit=limit)
 
-
 def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
     return _compute_requirements_missing_impl(requirements)
 
-
 def merge_requirements(base: Dict[str, Any], update: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     return _merge_requirements_impl(base, update, overwrite=overwrite)
-
 
 def llm_autofill_requirements(
     source_text: str,
@@ -2104,74 +1968,56 @@ def llm_autofill_requirements(
         deps=_upload_llm_deps(),
     )
 
-
 def process_upload_job(job_id: str) -> None:
     _process_upload_job_impl(job_id, deps=_assignment_upload_parse_deps())
-
 
 def normalize_student_id_for_exam(class_name: str, student_name: str) -> str:
     return _normalize_student_id_for_exam_impl(class_name, student_name)
 
-
 def normalize_excel_cell(value: Any) -> str:
     return _normalize_excel_cell_impl(value)
-
 
 def parse_exam_question_label(label: str) -> Optional[Tuple[int, Optional[str], str]]:
     return _parse_exam_question_label_impl(label)
 
-
 def build_exam_question_id(q_no: int, sub_no: Optional[str]) -> str:
     return _build_exam_question_id_impl(q_no, sub_no)
-
 
 def xlsx_to_table_preview(path: Path, max_rows: int = 60, max_cols: int = 30) -> str:
     return _xlsx_to_table_preview_impl(path, deps=_upload_llm_deps(), max_rows=max_rows, max_cols=max_cols)
 
-
 def xls_to_table_preview(path: Path, max_rows: int = 60, max_cols: int = 30) -> str:
     return _xls_to_table_preview_impl(path, deps=_upload_llm_deps(), max_rows=max_rows, max_cols=max_cols)
-
 
 def llm_parse_exam_scores(table_text: str) -> Dict[str, Any]:
     return _llm_parse_exam_scores_impl(table_text, deps=_upload_llm_deps())
 
-
 def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
     return _build_exam_rows_from_parsed_scores_impl(exam_id, parsed)
-
 
 def write_exam_responses_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
     _write_exam_responses_csv_impl(path, rows)
 
-
 def write_exam_questions_csv(path: Path, questions: List[Dict[str, Any]], max_scores: Optional[Dict[str, float]] = None) -> None:
     _write_exam_questions_csv_impl(path, questions, max_scores=max_scores)
-
 
 def compute_max_scores_from_rows(rows: List[Dict[str, Any]]) -> Dict[str, float]:
     return _compute_max_scores_from_rows_impl(rows)
 
-
 def normalize_objective_answer(value: str) -> str:
     return _normalize_objective_answer_impl(value)
-
 
 def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     return _parse_exam_answer_key_text_impl(text)
 
-
 def write_exam_answers_csv(path: Path, answers: List[Dict[str, Any]]) -> None:
     _write_exam_answers_csv_impl(path, answers)
-
 
 def load_exam_answer_key_from_csv(path: Path) -> Dict[str, str]:
     return _load_exam_answer_key_from_csv_impl(path)
 
-
 def load_exam_max_scores_from_questions_csv(path: Path) -> Dict[str, float]:
     return _load_exam_max_scores_from_questions_csv_impl(path)
-
 
 def ensure_questions_max_score(
     questions_csv: Path,
@@ -2180,10 +2026,8 @@ def ensure_questions_max_score(
 ) -> List[str]:
     return _ensure_questions_max_score_impl(questions_csv, qids, default_score=default_score)
 
-
 def score_objective_answer(raw_answer: str, correct: str, max_score: float) -> Tuple[float, int]:
     return _score_objective_answer_impl(raw_answer, correct, max_score)
-
 
 def apply_answer_key_to_responses_csv(
     responses_path: Path,
@@ -2192,7 +2036,6 @@ def apply_answer_key_to_responses_csv(
     out_path: Path,
 ) -> Dict[str, Any]:
     return _apply_answer_key_to_responses_csv_impl(responses_path, answers_csv, questions_csv, out_path)
-
 
 def _parse_xlsx_with_script(
     xlsx_path: Path,
@@ -2217,10 +2060,8 @@ def _parse_xlsx_with_script(
             file_rows.append(item)
     return file_rows
 
-
 def process_exam_upload_job(job_id: str) -> None:
     _process_exam_upload_job_impl(job_id, deps=_exam_upload_parse_deps())
-
 
 def write_uploaded_questions(out_dir: Path, assignment_id: str, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return _write_uploaded_questions_impl(
@@ -2236,7 +2077,6 @@ def detect_role(text: str) -> Optional[str]:
     if "学生" in normalized:
         return "student"
     return None
-
 
 def load_profile_file(path: Path) -> Dict[str, Any]:
     if not path.exists():
@@ -2269,17 +2109,14 @@ def load_profile_file(path: Path) -> Dict[str, Any]:
     except Exception:
         return {}
 
-
 def student_search(query: str, limit: int = 5) -> Dict[str, Any]:
     return _student_search_impl(query, limit, _student_directory_deps())
-
 
 def student_profile_get(student_id: str) -> Dict[str, Any]:
     profile_path = DATA_DIR / "student_profiles" / f"{student_id}.json"
     if not profile_path.exists():
         return {"error": "profile not found", "student_id": student_id}
     return json.loads(profile_path.read_text(encoding="utf-8"))
-
 
 def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
@@ -2290,7 +2127,6 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     out = run_script(cmd)
     return {"ok": True, "output": out}
 
-
 def enqueue_profile_update(args: Dict[str, Any]) -> None:
     # Best-effort queue: coalesce on the worker side.
     with _PROFILE_UPDATE_LOCK:
@@ -2299,7 +2135,6 @@ def enqueue_profile_update(args: Dict[str, Any]) -> None:
             return
         _PROFILE_UPDATE_QUEUE.append(args)
         _PROFILE_UPDATE_EVENT.set()
-
 
 def profile_update_worker_loop() -> None:
     while True:
@@ -2340,7 +2175,6 @@ def profile_update_worker_loop() -> None:
             except Exception as exc:
                 diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
 
-
 def start_profile_update_worker() -> None:
     global _PROFILE_UPDATE_WORKER_STARTED
     if _PROFILE_UPDATE_WORKER_STARTED:
@@ -2349,22 +2183,17 @@ def start_profile_update_worker() -> None:
     thread.start()
     _PROFILE_UPDATE_WORKER_STARTED = True
 
-
 def student_candidates_by_name(name: str) -> List[Dict[str, str]]:
     return _student_candidates_by_name_impl(name, _student_directory_deps())
-
 
 def list_all_student_profiles() -> List[Dict[str, str]]:
     return _list_all_student_profiles_impl(_student_directory_deps())
 
-
 def list_all_student_ids() -> List[str]:
     return _list_all_student_ids_impl(_student_directory_deps())
 
-
 def list_student_ids_by_class(class_name: str) -> List[str]:
     return _list_student_ids_by_class_impl(class_name, _student_directory_deps())
-
 
 def normalize_due_at(value: Optional[str]) -> Optional[str]:
     raw = str(value or "").strip()
@@ -2380,7 +2209,6 @@ def normalize_due_at(value: Optional[str]) -> Optional[str]:
     except Exception:
         return None
 
-
 def compute_expected_students(scope: str, class_name: str, student_ids: List[str]) -> List[str]:
     scope_val = resolve_scope(scope, student_ids, class_name)
     if scope_val == "student":
@@ -2388,7 +2216,6 @@ def compute_expected_students(scope: str, class_name: str, student_ids: List[str
     if scope_val == "class":
         return list_student_ids_by_class(class_name)
     return list_all_student_ids()
-
 
 def count_csv_rows(path: Path) -> int:
     try:
@@ -2400,7 +2227,6 @@ def count_csv_rows(path: Path) -> int:
         return max(count, 0)
     except Exception:
         return 0
-
 
 def list_exams() -> Dict[str, Any]:
     exams_dir = DATA_DIR / "exams"
@@ -2428,14 +2254,12 @@ def list_exams() -> Dict[str, Any]:
     items.sort(key=lambda x: x.get("generated_at") or "", reverse=True)
     return {"exams": items}
 
-
 def load_exam_manifest(exam_id: str) -> Dict[str, Any]:
     exam_id = str(exam_id or "").strip()
     if not exam_id:
         return {}
     manifest_path = DATA_DIR / "exams" / exam_id / "manifest.json"
     return load_profile_file(manifest_path)
-
 
 def resolve_manifest_path(path_value: Any) -> Optional[Path]:
     raw = str(path_value or "").strip()
@@ -2446,13 +2270,11 @@ def resolve_manifest_path(path_value: Any) -> Optional[Path]:
         path = (APP_ROOT / path).resolve()
     return path
 
-
 def exam_file_path(manifest: Dict[str, Any], key: str) -> Optional[Path]:
     files = manifest.get("files") or {}
     if not isinstance(files, dict):
         return None
     return resolve_manifest_path(files.get(key))
-
 
 def exam_responses_path(manifest: Dict[str, Any]) -> Optional[Path]:
     files = manifest.get("files") or {}
@@ -2464,7 +2286,6 @@ def exam_responses_path(manifest: Dict[str, Any]) -> Optional[Path]:
             return path
     return None
 
-
 def exam_questions_path(manifest: Dict[str, Any]) -> Optional[Path]:
     files = manifest.get("files") or {}
     if not isinstance(files, dict):
@@ -2474,7 +2295,6 @@ def exam_questions_path(manifest: Dict[str, Any]) -> Optional[Path]:
         if path and path.exists():
             return path
     return None
-
 
 def exam_analysis_draft_path(manifest: Dict[str, Any]) -> Optional[Path]:
     files = manifest.get("files") or {}
@@ -2488,7 +2308,6 @@ def exam_analysis_draft_path(manifest: Dict[str, Any]) -> Optional[Path]:
     fallback = DATA_DIR / "analysis" / exam_id / "draft.json"
     return fallback if fallback.exists() else None
 
-
 def parse_score_value(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -2499,7 +2318,6 @@ def parse_score_value(value: Any) -> Optional[float]:
         return float(s)
     except Exception:
         return None
-
 
 def read_questions_csv(path: Path) -> Dict[str, Dict[str, Any]]:
     questions: Dict[str, Dict[str, Any]] = {}
@@ -2522,7 +2340,6 @@ def read_questions_csv(path: Path) -> Dict[str, Dict[str, Any]]:
         return questions
     return questions
 
-
 def compute_exam_totals(responses_path: Path) -> Dict[str, Any]:
     totals: Dict[str, float] = {}
     student_meta: Dict[str, Dict[str, str]] = {}
@@ -2544,18 +2361,14 @@ def compute_exam_totals(responses_path: Path) -> Dict[str, Any]:
                 }
     return {"totals": totals, "students": student_meta}
 
-
 def exam_get(exam_id: str) -> Dict[str, Any]:
     return _exam_get_impl(exam_id, _exam_overview_deps())
-
 
 def exam_analysis_get(exam_id: str) -> Dict[str, Any]:
     return _exam_analysis_get_impl(exam_id, _exam_overview_deps())
 
-
 def exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
     return _exam_students_list_impl(exam_id, limit, _exam_overview_deps())
-
 
 def exam_student_detail(exam_id: str, student_id: Optional[str] = None, student_name: Optional[str] = None, class_name: Optional[str] = None) -> Dict[str, Any]:
     return _exam_student_detail_impl(
@@ -2565,7 +2378,6 @@ def exam_student_detail(exam_id: str, student_id: Optional[str] = None, student_
         student_name=student_name,
         class_name=class_name,
     )
-
 
 def exam_question_detail(
     exam_id: str,
@@ -2580,7 +2392,6 @@ def exam_question_detail(
         question_no=question_no,
         top_n=top_n,
     )
-
 
 def _parse_question_no_int(value: Any) -> Optional[int]:
     text = str(value or "").strip()
@@ -2600,7 +2411,6 @@ def _parse_question_no_int(value: Any) -> Optional[int]:
         return None
     return out if out > 0 else None
 
-
 def _median_float(values: List[float]) -> float:
     if not values:
         return 0.0
@@ -2610,7 +2420,6 @@ def _median_float(values: List[float]) -> float:
     if size % 2 == 1:
         return float(ordered[mid])
     return float((ordered[mid - 1] + ordered[mid]) / 2.0)
-
 
 def exam_range_top_students(
     exam_id: str,
@@ -2625,7 +2434,6 @@ def exam_range_top_students(
         top_n=top_n,
         deps=_exam_range_deps(),
     )
-
 
 def _normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
     raw_items: List[Any] = []
@@ -2645,7 +2453,6 @@ def _normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
             break
     return normalized
 
-
 def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
     return _exam_range_summary_batch_impl(
         exam_id,
@@ -2653,7 +2460,6 @@ def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[
         top_n=top_n,
         deps=_exam_range_deps(),
     )
-
 
 def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
     return _exam_question_batch_detail_impl(
@@ -2687,7 +2493,6 @@ _EXAM_CHART_TYPE_ALIASES = {
     "题目区分度": "question_discrimination",
 }
 
-
 def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
         out = int(value)
@@ -2698,7 +2503,6 @@ def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
     if out > maximum:
         return maximum
     return out
-
 
 def _normalize_exam_chart_types(value: Any) -> List[str]:
     raw_items: List[str] = []
@@ -2715,18 +2519,14 @@ def _normalize_exam_chart_types(value: Any) -> List[str]:
             normalized.append(key)
     return normalized or list(_EXAM_CHART_DEFAULT_TYPES)
 
-
 def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
-
 
 def list_assignments() -> Dict[str, Any]:
     return _list_assignments_impl(deps=_assignment_catalog_deps())
 
-
 def today_iso() -> str:
     return datetime.now().date().isoformat()
-
 
 def parse_date_str(date_str: Optional[str]) -> str:
     if not date_str:
@@ -2736,13 +2536,11 @@ def parse_date_str(date_str: Optional[str]) -> str:
     except Exception:
         return today_iso()
 
-
 def load_assignment_meta(folder: Path) -> Dict[str, Any]:
     meta_path = folder / "meta.json"
     if meta_path.exists():
         return load_profile_file(meta_path)
     return {}
-
 
 def load_assignment_requirements(folder: Path) -> Dict[str, Any]:
     req_path = folder / "requirements.json"
@@ -2750,30 +2548,23 @@ def load_assignment_requirements(folder: Path) -> Dict[str, Any]:
         return load_profile_file(req_path)
     return {}
 
-
 def parse_list_value(value: Any) -> List[str]:
     return _parse_list_value_impl(value)
-
 
 def normalize_preferences(values: List[str]) -> Tuple[List[str], List[str]]:
     return _normalize_preferences_impl(values)
 
-
 def normalize_class_level(value: str) -> Optional[str]:
     return _normalize_class_level_impl(value)
-
 
 def parse_duration(value: Any) -> Optional[int]:
     return _parse_duration_impl(value)
 
-
 def normalize_difficulty(value: Any) -> str:
     return _normalize_difficulty_impl(value)
 
-
 def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     return _validate_requirements_impl(payload)
-
 
 def save_assignment_requirements(
     assignment_id: str,
@@ -2791,7 +2582,6 @@ def save_assignment_requirements(
         validate=validate,
     )
 
-
 def ensure_requirements_for_assignment(
     assignment_id: str,
     date_str: str,
@@ -2806,22 +2596,17 @@ def ensure_requirements_for_assignment(
         deps=_assignment_requirements_deps(),
     )
 
-
 def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
     return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
-
 
 def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     return _parse_json_from_text_impl(text)
 
-
 def llm_assignment_gate(req: ChatRequest) -> Optional[Dict[str, Any]]:
     return _llm_assignment_gate_impl(req, deps=_assignment_llm_gate_deps())
 
-
 def normalize_numbered_block(text: str) -> str:
     return re.sub(r"(?<!\n)\s*([1-8][).）])", r"\n\1", text)
-
 
 def extract_numbered_item(text: str, idx: int) -> Optional[str]:
     pattern = rf"(?:^|\n)\s*{idx}[).）]\s*(.*?)(?=\n\s*{idx+1}[).）]|$)"
@@ -2829,7 +2614,6 @@ def extract_numbered_item(text: str, idx: int) -> Optional[str]:
     if not match:
         return None
     return match.group(1).strip()
-
 
 def parse_subject_topic(text: str) -> Tuple[str, str]:
     subject = ""
@@ -2851,7 +2635,6 @@ def parse_subject_topic(text: str) -> Tuple[str, str]:
             topic = parts[1].strip() if len(parts) > 1 else ""
     return subject, topic
 
-
 def parse_grade_and_level(text: str) -> Tuple[str, str]:
     if not text:
         return "", ""
@@ -2864,50 +2647,38 @@ def parse_grade_and_level(text: str) -> Tuple[str, str]:
     grade = text.replace("&", " ").replace("：", " ").strip()
     return grade, level
 
-
 def extract_requirements_from_text(text: str) -> Dict[str, Any]:
     return _extract_requirements_from_text_impl(text)
-
 
 def detect_assignment_intent(text: str) -> bool:
     return _detect_assignment_intent_impl(text)
 
-
 def extract_assignment_id(text: str) -> Optional[str]:
     return _extract_assignment_id_impl(text)
-
 
 def extract_date(text: str) -> Optional[str]:
     return _extract_date_impl(text)
 
-
 def extract_kp_list(text: str) -> List[str]:
     return _extract_kp_list_impl(text)
-
 
 def extract_question_ids(text: str) -> List[str]:
     return _extract_question_ids_impl(text)
 
-
 def extract_per_kp(text: str) -> Optional[int]:
     return _extract_per_kp_impl(text)
-
 
 def teacher_assignment_preflight(req: ChatRequest) -> Optional[str]:
     return _teacher_assignment_preflight_impl(req, deps=_teacher_assignment_preflight_deps())
 
-
 def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]:
     return _resolve_assignment_date_impl(meta, folder)
-
 
 def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
     return _assignment_specificity_impl(meta, student_id, class_name)
 
-
 def parse_iso_timestamp(value: Optional[str]) -> float:
     return _parse_iso_timestamp_impl(value)
-
 
 def find_assignment_for_date(
     date_str: str,
@@ -2921,10 +2692,8 @@ def find_assignment_for_date(
         deps=_assignment_catalog_deps(),
     )
 
-
 def read_text_safe(path: Path, limit: int = 4000) -> str:
     return _read_text_safe_impl(path, limit=limit)
-
 
 def build_assignment_detail(folder: Path, include_text: bool = True) -> Dict[str, Any]:
     return _build_assignment_detail_impl(
@@ -2932,7 +2701,6 @@ def build_assignment_detail(folder: Path, include_text: bool = True) -> Dict[str
         include_text=include_text,
         deps=_assignment_catalog_deps(),
     )
-
 
 def _assignment_detail_fingerprint(folder: Path) -> Tuple[float, float, float]:
     # Fast invalidation: if key files change, refresh cache.
@@ -2945,7 +2713,6 @@ def _assignment_detail_fingerprint(folder: Path) -> Tuple[float, float, float]:
         except Exception:
             return 0.0
     return (mtime(meta_path), mtime(req_path), mtime(q_path))
-
 
 def build_assignment_detail_cached(folder: Path, include_text: bool = True) -> Dict[str, Any]:
     if ASSIGNMENT_DETAIL_CACHE_TTL_SEC <= 0:
@@ -2964,7 +2731,6 @@ def build_assignment_detail_cached(folder: Path, include_text: bool = True) -> D
         _ASSIGNMENT_DETAIL_CACHE[key] = (now, fp, data)
     return data
 
-
 def postprocess_assignment_meta(
     assignment_id: str,
     *,
@@ -2980,7 +2746,6 @@ def postprocess_assignment_meta(
         deps=_assignment_meta_postprocess_deps(),
     )
 
-
 def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
     return _session_discussion_pass_impl(
         student_id,
@@ -2992,22 +2757,17 @@ def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, A
         ),
     )
 
-
 def _counted_grade_item(item: Dict[str, Any]) -> bool:
     return _counted_grade_item_impl(item, deps=_assignment_submission_attempt_deps())
-
 
 def _compute_submission_attempt(attempt_dir: Path) -> Optional[Dict[str, Any]]:
     return _compute_submission_attempt_impl(attempt_dir, deps=_assignment_submission_attempt_deps())
 
-
 def _list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
     return _list_submission_attempts_impl(assignment_id, student_id, deps=_assignment_submission_attempt_deps())
 
-
 def _best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return _best_submission_attempt_impl(attempts)
-
 
 def compute_assignment_progress(assignment_id: str, include_students: bool = True) -> Dict[str, Any]:
     return _compute_assignment_progress_impl(
@@ -3015,7 +2775,6 @@ def compute_assignment_progress(assignment_id: str, include_students: bool = Tru
         deps=_assignment_progress_deps(),
         include_students=include_students,
     )
-
 
 def derive_kp_from_profile(profile: Dict[str, Any]) -> List[str]:
     kp_list = []
@@ -3028,11 +2787,9 @@ def derive_kp_from_profile(profile: Dict[str, Any]) -> List[str]:
                 kp_list.append(kp)
     return [kp for kp in kp_list if kp]
 
-
 def safe_assignment_id(student_id: str, date_str: str) -> str:
     slug = re.sub(r"[^\w-]+", "_", student_id).strip("_") if student_id else "student"
     return f"AUTO_{slug}_{date_str}"
-
 
 def build_assignment_context(detail: Optional[Dict[str, Any]], study_mode: bool = False) -> Optional[str]:
     return _build_assignment_context_impl(
@@ -3041,82 +2798,62 @@ def build_assignment_context(detail: Optional[Dict[str, Any]], study_mode: bool 
         discussion_complete_marker=DISCUSSION_COMPLETE_MARKER,
     )
 
-
 def build_verified_student_context(student_id: str, profile: Optional[Dict[str, Any]] = None) -> str:
     return _build_verified_student_context_impl(student_id, profile=profile)
-
 
 def detect_student_study_trigger(text: str) -> bool:
     return _detect_student_study_trigger_impl(text)
 
-
 def build_interaction_note(last_user: str, reply: str, assignment_id: Optional[str] = None) -> str:
     return _build_interaction_note_impl(last_user, reply, assignment_id=assignment_id)
-
 
 def detect_math_delimiters(text: str) -> bool:
     return _detect_math_delimiters_impl(text)
 
-
 def detect_latex_tokens(text: str) -> bool:
     return _detect_latex_tokens_impl(text)
-
 
 def normalize_math_delimiters(text: str) -> str:
     return _normalize_math_delimiters_impl(text)
 
-
 def list_lessons() -> Dict[str, Any]:
     return _list_lessons_impl(deps=_content_catalog_deps())
-
 
 def list_skills() -> Dict[str, Any]:
     return _list_skills_impl(deps=_content_catalog_deps())
 
-
 def _ensure_teacher_routing_file(actor: str) -> Path:
     return _ensure_teacher_routing_file_impl(actor, deps=_teacher_llm_routing_deps())
-
 
 def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_get_impl(args, deps=_teacher_llm_routing_deps())
 
-
 def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_simulate_impl(args, deps=_teacher_llm_routing_deps())
-
 
 def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_propose_impl(args, deps=_teacher_llm_routing_deps())
 
-
 def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_apply_impl(args, deps=_teacher_llm_routing_deps())
-
 
 def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_rollback_impl(args, deps=_teacher_llm_routing_deps())
 
-
 def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
     return _teacher_llm_routing_proposal_get_impl(args, deps=_teacher_llm_routing_deps())
-
 
 def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
     return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps())
 
-
 def import_students_from_responses(path: Path, mode: str = "merge") -> Dict[str, Any]:
     return _import_students_from_responses_impl(path, deps=_student_import_deps(), mode=mode)
-
 
 def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
     return _student_import_impl(args, deps=_student_import_deps())
 
-
 def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps())
-
 
 def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
     script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
@@ -3138,10 +2875,8 @@ def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
     pdf_path = str(out_pdf) if out_pdf else f"output/pdf/assignment_{assignment_id}.pdf"
     return {"ok": True, "output": out, "pdf": pdf_path}
 
-
 def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
     return _chart_exec_api_impl(args, deps=_chart_api_deps())
-
 
 def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
     return _chart_agent_run_impl(args, deps=_chart_agent_run_deps())
@@ -3149,11 +2884,9 @@ def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
 
 _SAFE_TOOL_ID_RE = re.compile(r"^[^\x00/\\\\]+$")
 
-
 def _is_safe_tool_id(value: Any) -> bool:
     text = str(value or "").strip()
     return bool(text) and bool(_SAFE_TOOL_ID_RE.match(text))
-
 
 def _resolve_app_path(path_value: Any, must_exist: bool = True) -> Optional[Path]:
     raw = str(path_value or "").strip()
@@ -3171,26 +2904,20 @@ def _resolve_app_path(path_value: Any, must_exist: bool = True) -> Optional[Path
         return None
     return p
 
-
 def lesson_capture(args: Dict[str, Any]) -> Dict[str, Any]:
     return _lesson_capture_impl(args, deps=_lesson_core_tool_deps())
-
 
 def core_example_search(args: Dict[str, Any]) -> Dict[str, Any]:
     return _core_example_search_impl(args, deps=_core_example_tool_deps())
 
-
 def core_example_register(args: Dict[str, Any]) -> Dict[str, Any]:
     return _core_example_register_impl(args, deps=_core_example_tool_deps())
-
 
 def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
     return _core_example_render_impl(args, deps=_core_example_tool_deps())
 
-
 def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
     return _tool_dispatch_impl(name, args, role, deps=_tool_dispatch_deps())
-
 
 def call_llm(
     messages: List[Dict[str, Any]],
@@ -3214,34 +2941,26 @@ def call_llm(
         skill_runtime=skill_runtime,
     )
 
-
 def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
     return _parse_tool_json_impl(content)
-
 
 def build_system_prompt(role_hint: Optional[str]) -> str:
     return _build_system_prompt_impl(role_hint, deps=_chat_support_deps())
 
-
 def allowed_tools(role_hint: Optional[str]) -> set:
     return _allowed_tools_impl(role_hint)
-
 
 def _non_ws_len(text: str) -> int:
     return len(re.sub(r"\s+", "", text or ""))
 
-
 def extract_min_chars_requirement(text: str) -> Optional[int]:
     return _extract_min_chars_requirement_impl(text)
-
 
 def extract_exam_id(text: str) -> Optional[str]:
     return _extract_exam_id_impl(text)
 
-
 def is_exam_analysis_request(text: str) -> bool:
     return _is_exam_analysis_request_impl(text)
-
 
 def _percentile(sorted_vals: List[float], p: float) -> float:
     if not sorted_vals:
@@ -3255,7 +2974,6 @@ def _percentile(sorted_vals: List[float], p: float) -> float:
     frac = idx - lo
     return float(sorted_vals[lo]) * (1.0 - frac) + float(sorted_vals[hi]) * frac
 
-
 def _score_band_label(percent: float) -> str:
     p = max(0.0, min(100.0, float(percent)))
     if p >= 100.0:
@@ -3264,10 +2982,8 @@ def _score_band_label(percent: float) -> str:
     end = 100 if start >= 90 else (start + 9)
     return f"{start}–{end}%"
 
-
 def summarize_exam_students(exam_id: str, max_total: Optional[float]) -> Dict[str, Any]:
     return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps())
-
 
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
     path = DATA_DIR / "knowledge" / "knowledge_points.csv"
@@ -3290,7 +3006,6 @@ def load_kp_catalog() -> Dict[str, Dict[str, str]]:
         return {}
     return out
 
-
 def load_question_kp_map() -> Dict[str, str]:
     path = DATA_DIR / "knowledge" / "knowledge_point_map.csv"
     if not path.exists():
@@ -3308,14 +3023,11 @@ def load_question_kp_map() -> Dict[str, str]:
         return {}
     return out
 
-
 def build_exam_longform_context(exam_id: str) -> Dict[str, Any]:
     return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps())
 
-
 def _calc_longform_max_tokens(min_chars: int) -> int:
     return _calc_longform_max_tokens_impl(min_chars)
-
 
 def _generate_longform_reply(
     convo: List[Dict[str, Any]],
@@ -3335,7 +3047,6 @@ def _generate_longform_reply(
         deps=_exam_longform_deps(),
     )
 
-
 def run_agent(
     messages: List[Dict[str, Any]],
     role_hint: Optional[str],
@@ -3352,11 +3063,9 @@ def run_agent(
         teacher_id=teacher_id,
     )
 
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
@@ -3385,10 +3094,8 @@ async def chat(req: ChatRequest):
             diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
     return ChatResponse(reply=reply_text, role=role_hint)
 
-
 def _detect_role_hint(req: ChatRequest) -> Optional[str]:
     return _detect_role_hint_impl(req, detect_role=detect_role)
-
 
 def _compute_chat_reply_sync(
     req: ChatRequest,
@@ -3402,7 +3109,6 @@ def _compute_chat_reply_sync(
         teacher_id_override=teacher_id_override,
     )
 
-
 def resolve_student_session_id(student_id: str, assignment_id: Optional[str], assignment_date: Optional[str]) -> str:
     return _resolve_student_session_id_impl(
         student_id,
@@ -3411,18 +3117,14 @@ def resolve_student_session_id(student_id: str, assignment_id: Optional[str], as
         parse_date_str=parse_date_str,
     )
 
-
 def process_chat_job(job_id: str) -> None:
     _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
-
 def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
-
 
 @app.post("/chat/start")
 async def chat_start(req: ChatStartRequest):
     return _start_chat_api_impl(req, deps=_chat_api_deps())
-
 
 @app.get("/chat/status")
 async def chat_status(job_id: str):
@@ -3431,51 +3133,26 @@ async def chat_status(job_id: str):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job not found")
 
-
-def _paginate_session_items(items: List[Dict[str, Any]], cursor: int, limit: int) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
-    return _paginate_session_items_impl(items, cursor=cursor, limit=limit)
-
-
 @app.get("/student/history/sessions")
 async def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0):
-    student_id = (student_id or "").strip()
-    if not student_id:
-        raise HTTPException(status_code=400, detail="student_id is required")
-    items = load_student_sessions_index(student_id)
-    page, next_cursor, total = _paginate_session_items(items, cursor=cursor, limit=limit)
-    return {
-        "ok": True,
-        "student_id": student_id,
-        "sessions": page,
-        "next_cursor": next_cursor,
-        "total": total,
-    }
-
+    try:
+        return _student_history_sessions_api_impl(student_id, limit=limit, cursor=cursor, deps=_session_history_api_deps())
+    except SessionHistoryApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @app.get("/student/session/view-state")
 async def student_session_view_state(student_id: str):
-    student_id = (student_id or "").strip()
-    if not student_id:
-        raise HTTPException(status_code=400, detail="student_id is required")
-    state = load_student_session_view_state(student_id)
-    return {"ok": True, "student_id": student_id, "state": state}
-
+    try:
+        return _student_session_view_state_api_impl(student_id, deps=_session_history_api_deps())
+    except SessionHistoryApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @app.put("/student/session/view-state")
 async def update_student_session_view_state(req: Dict[str, Any]):
-    student_id = str((req or {}).get("student_id") or "").strip()
-    if not student_id:
-        raise HTTPException(status_code=400, detail="student_id is required")
-    incoming = _normalize_session_view_state_payload((req or {}).get("state") or {})
-    current = load_student_session_view_state(student_id)
-    if _compare_iso_ts(current.get("updated_at"), incoming.get("updated_at")) > 0:
-        return {"ok": True, "student_id": student_id, "state": current, "stale": True}
-    if not incoming.get("updated_at"):
-        incoming["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
-    save_student_session_view_state(student_id, incoming)
-    saved = load_student_session_view_state(student_id)
-    return {"ok": True, "student_id": student_id, "state": saved, "stale": False}
-
+    try:
+        return _update_student_session_view_state_api_impl(req, deps=_session_history_api_deps())
+    except SessionHistoryApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @app.get("/student/history/session")
 async def student_history_session(
@@ -3485,52 +3162,29 @@ async def student_history_session(
     limit: int = 50,
     direction: str = "backward",
 ):
-    student_id = (student_id or "").strip()
-    session_id = (session_id or "").strip()
-    if not student_id or not session_id:
-        raise HTTPException(status_code=400, detail="student_id and session_id are required")
-    path = student_session_file(student_id, session_id)
-    page = _load_session_messages_impl(path, cursor=cursor, limit=limit, direction=direction)
-    messages = page.get("messages") or []
-    next_cursor = page.get("next_cursor")
-    return {"ok": True, "student_id": student_id, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
-
+    try:
+        return _student_history_session_api_impl(
+            student_id,
+            session_id,
+            cursor=cursor,
+            limit=limit,
+            direction=direction,
+            deps=_session_history_api_deps(),
+        )
+    except SessionHistoryApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @app.get("/teacher/history/sessions")
 async def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0):
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    items = load_teacher_sessions_index(teacher_id_final)
-    page, next_cursor, total = _paginate_session_items(items, cursor=cursor, limit=limit)
-    return {
-        "ok": True,
-        "teacher_id": teacher_id_final,
-        "sessions": page,
-        "next_cursor": next_cursor,
-        "total": total,
-    }
-
+    return _teacher_history_sessions_api_impl(teacher_id, limit=limit, cursor=cursor, deps=_session_history_api_deps())
 
 @app.get("/teacher/session/view-state")
 async def teacher_session_view_state(teacher_id: Optional[str] = None):
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    state = load_teacher_session_view_state(teacher_id_final)
-    return {"ok": True, "teacher_id": teacher_id_final, "state": state}
-
+    return _teacher_session_view_state_api_impl(teacher_id, deps=_session_history_api_deps())
 
 @app.put("/teacher/session/view-state")
 async def update_teacher_session_view_state(req: Dict[str, Any]):
-    teacher_id = str((req or {}).get("teacher_id") or "").strip()
-    teacher_id_final = resolve_teacher_id(teacher_id or None)
-    incoming = _normalize_session_view_state_payload((req or {}).get("state") or {})
-    current = load_teacher_session_view_state(teacher_id_final)
-    if _compare_iso_ts(current.get("updated_at"), incoming.get("updated_at")) > 0:
-        return {"ok": True, "teacher_id": teacher_id_final, "state": current, "stale": True}
-    if not incoming.get("updated_at"):
-        incoming["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
-    save_teacher_session_view_state(teacher_id_final, incoming)
-    saved = load_teacher_session_view_state(teacher_id_final)
-    return {"ok": True, "teacher_id": teacher_id_final, "state": saved, "stale": False}
-
+    return _update_teacher_session_view_state_api_impl(req, deps=_session_history_api_deps())
 
 @app.get("/teacher/history/session")
 async def teacher_history_session(
@@ -3540,16 +3194,17 @@ async def teacher_history_session(
     limit: int = 50,
     direction: str = "backward",
 ):
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    session_id = (session_id or "").strip()
-    if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
-    path = teacher_session_file(teacher_id_final, session_id)
-    page = _load_session_messages_impl(path, cursor=cursor, limit=limit, direction=direction)
-    messages = page.get("messages") or []
-    next_cursor = page.get("next_cursor")
-    return {"ok": True, "teacher_id": teacher_id_final, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
-
+    try:
+        return _teacher_history_session_api_impl(
+            session_id,
+            teacher_id,
+            cursor=cursor,
+            limit=limit,
+            direction=direction,
+            deps=_session_history_api_deps(),
+        )
+    except SessionHistoryApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 @app.get("/teacher/memory/proposals")
 async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
@@ -3563,12 +3218,10 @@ async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Opt
         raise HTTPException(status_code=400, detail=result.get("error") or "invalid_request")
     return result
 
-
 @app.get("/teacher/memory/insights")
 async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14):
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_memory_insights(teacher_id_final, days=days)
-
 
 @app.post("/teacher/memory/proposals/{proposal_id}/review")
 async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
@@ -3583,7 +3236,6 @@ async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryPro
         raise HTTPException(status_code=code, detail=result.get("error"))
     return result
 
-
 @app.post("/upload")
 async def upload(files: list[UploadFile] = File(...)):
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -3597,7 +3249,6 @@ async def upload(files: list[UploadFile] = File(...)):
         saved.append(str(dest))
     return {"saved": saved}
 
-
 @app.get("/student/profile/{student_id}")
 async def get_profile(student_id: str):
     result = _get_profile_api_impl(student_id, deps=_student_profile_api_deps())
@@ -3606,7 +3257,6 @@ async def get_profile(student_id: str):
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result)
     return result
-
 
 @app.post("/student/profile/update")
 async def update_profile(
@@ -3637,14 +3287,12 @@ async def update_profile(
     out = run_script(args)
     return JSONResponse({"ok": True, "output": out})
 
-
 @app.post("/student/import")
 async def import_students(req: StudentImportRequest):
     result = student_import(req.dict())
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
-
 
 @app.post("/student/verify")
 async def verify_student(req: StudentVerifyRequest):
@@ -3673,7 +3321,6 @@ async def verify_student(req: StudentVerifyRequest):
     candidate = candidates[0]
     diag_log("student.verify.ok", candidate)
     return {"ok": True, "student": candidate}
-
 
 def _tool_dispatch_deps():
     return ToolDispatchDeps(
@@ -3720,7 +3367,6 @@ def _tool_dispatch_deps():
         teacher_llm_routing_rollback=teacher_llm_routing_rollback,
     )
 
-
 def _exam_range_deps():
     return ExamRangeDeps(
         load_exam_manifest=load_exam_manifest,
@@ -3731,7 +3377,6 @@ def _exam_range_deps():
         safe_int_arg=_safe_int_arg,
         exam_question_detail=exam_question_detail,
     )
-
 
 def _exam_analysis_charts_deps():
     return ExamAnalysisChartsDeps(
@@ -3748,7 +3393,6 @@ def _exam_analysis_charts_deps():
         execute_chart_exec=execute_chart_exec,
     )
 
-
 def _exam_longform_deps():
     return ExamLongformDeps(
         data_dir=DATA_DIR,
@@ -3758,7 +3402,6 @@ def _exam_longform_deps():
         call_llm=call_llm,
         non_ws_len=_non_ws_len,
     )
-
 
 def _exam_upload_parse_deps():
     return ExamUploadParseDeps(
@@ -3789,7 +3432,6 @@ def _exam_upload_parse_deps():
         parse_date_str=parse_date_str,
     )
 
-
 def _exam_upload_confirm_deps():
     return ExamUploadConfirmDeps(
         app_root=APP_ROOT,
@@ -3808,7 +3450,6 @@ def _exam_upload_confirm_deps():
         copy2=shutil.copy2,
     )
 
-
 def _exam_upload_start_deps():
     return ExamUploadStartDeps(
         parse_date_str=parse_date_str,
@@ -3821,7 +3462,6 @@ def _exam_upload_start_deps():
         diag_log=diag_log,
         uuid_hex=lambda: uuid.uuid4().hex,
     )
-
 
 def _exam_upload_api_deps():
     return ExamUploadApiDeps(
@@ -3842,7 +3482,6 @@ def _exam_upload_api_deps():
         ),
     )
 
-
 def _upload_llm_deps():
     return UploadLlmDeps(
         app_root=APP_ROOT,
@@ -3858,14 +3497,12 @@ def _upload_llm_deps():
         normalize_excel_cell=_normalize_excel_cell_impl,
     )
 
-
 def _upload_text_deps():
     return UploadTextDeps(
         diag_log=diag_log,
         limit=_limit,
         ocr_semaphore=_OCR_SEMAPHORE,
     )
-
 
 def _content_catalog_deps():
     from .skills.loader import load_skills
@@ -3877,14 +3514,12 @@ def _content_catalog_deps():
         load_skills=load_skills,
     )
 
-
 def _chat_support_deps():
     return ChatSupportDeps(
         compile_system_prompt=compile_system_prompt,
         diag_log=diag_log,
         getenv=os.getenv,
     )
-
 
 def _exam_overview_deps():
     return ExamOverviewDeps(
@@ -3898,13 +3533,11 @@ def _exam_overview_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _assignment_submission_attempt_deps():
     return AssignmentSubmissionAttemptDeps(
         student_submissions_dir=STUDENT_SUBMISSIONS_DIR,
         grade_count_conf_threshold=GRADE_COUNT_CONF_THRESHOLD,
     )
-
 
 def _assignment_progress_deps():
     return AssignmentProgressDeps(
@@ -3922,20 +3555,17 @@ def _assignment_progress_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _assignment_requirements_deps():
     return AssignmentRequirementsDeps(
         data_dir=DATA_DIR,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _assignment_llm_gate_deps():
     return AssignmentLlmGateDeps(
         diag_log=diag_log,
         call_llm=call_llm,
     )
-
 
 def _assignment_catalog_deps():
     return AssignmentCatalogDeps(
@@ -3946,7 +3576,6 @@ def _assignment_catalog_deps():
         count_csv_rows=count_csv_rows,
         sanitize_filename=sanitize_filename,
     )
-
 
 def _assignment_meta_postprocess_deps():
     return AssignmentMetaPostprocessDeps(
@@ -3961,7 +3590,6 @@ def _assignment_meta_postprocess_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _assignment_upload_parse_deps():
     return AssignmentUploadParseDeps(
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
@@ -3975,7 +3603,6 @@ def _assignment_upload_parse_deps():
         llm_autofill_requirements=llm_autofill_requirements,
         diag_log=diag_log,
     )
-
 
 def _assignment_upload_legacy_deps():
     return AssignmentUploadLegacyDeps(
@@ -3996,7 +3623,6 @@ def _assignment_upload_legacy_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _assignment_today_deps():
     return AssignmentTodayDeps(
         data_dir=DATA_DIR,
@@ -4011,7 +3637,6 @@ def _assignment_today_deps():
         build_assignment_detail=build_assignment_detail,
     )
 
-
 def _assignment_generate_deps():
     return AssignmentGenerateDeps(
         app_root=APP_ROOT,
@@ -4021,7 +3646,6 @@ def _assignment_generate_deps():
         postprocess_assignment_meta=postprocess_assignment_meta,
         diag_log=diag_log,
     )
-
 
 def _assignment_generate_tool_deps():
     return AssignmentGenerateToolDeps(
@@ -4033,13 +3657,11 @@ def _assignment_generate_tool_deps():
         diag_log=diag_log,
     )
 
-
 def _assignment_uploaded_question_deps():
     return AssignmentUploadedQuestionDeps(
         safe_slug=safe_slug,
         normalize_difficulty=normalize_difficulty,
     )
-
 
 def _assignment_questions_ocr_deps():
     return AssignmentQuestionsOcrDeps(
@@ -4048,7 +3670,6 @@ def _assignment_questions_ocr_deps():
         run_script=run_script,
     )
 
-
 def _student_submit_deps():
     return StudentSubmitDeps(
         uploads_dir=UPLOADS_DIR,
@@ -4056,7 +3677,6 @@ def _student_submit_deps():
         student_submissions_dir=STUDENT_SUBMISSIONS_DIR,
         run_script=run_script,
     )
-
 
 def _assignment_upload_start_deps():
     return AssignmentUploadStartDeps(
@@ -4074,7 +3694,6 @@ def _assignment_upload_start_deps():
         diag_log=diag_log,
     )
 
-
 def _assignment_upload_query_deps():
     return AssignmentUploadQueryDeps(
         load_upload_job=load_upload_job,
@@ -4086,7 +3705,6 @@ def _assignment_upload_query_deps():
         compute_requirements_missing=compute_requirements_missing,
         parse_list_value=parse_list_value,
     )
-
 
 def _assignment_upload_draft_save_deps():
     return AssignmentUploadDraftSaveDeps(
@@ -4100,7 +3718,6 @@ def _assignment_upload_draft_save_deps():
         write_upload_job=write_upload_job,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
-
 
 def _assignment_upload_confirm_deps():
     return AssignmentUploadConfirmDeps(
@@ -4121,10 +3738,8 @@ def _assignment_upload_confirm_deps():
         copy2=shutil.copy2,
     )
 
-
 def _exam_api_deps():
     return ExamApiDeps(exam_get=exam_get)
-
 
 def _exam_detail_deps():
     return ExamDetailDeps(
@@ -4136,7 +3751,6 @@ def _exam_detail_deps():
         safe_int_arg=_safe_int_arg,
     )
 
-
 def _assignment_api_deps():
     return AssignmentApiDeps(
         build_assignment_detail=lambda assignment_id, include_text=True: build_assignment_detail(
@@ -4146,10 +3760,8 @@ def _assignment_api_deps():
         assignment_exists=lambda assignment_id: (DATA_DIR / "assignments" / str(assignment_id or "")).exists(),
     )
 
-
 def _student_profile_api_deps():
     return StudentProfileApiDeps(student_profile_get=student_profile_get)
-
 
 def _student_import_deps():
     return StudentImportDeps(
@@ -4159,14 +3771,12 @@ def _student_import_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _student_directory_deps():
     return StudentDirectoryDeps(
         data_dir=DATA_DIR,
         load_profile_file=load_profile_file,
         normalize=normalize,
     )
-
 
 def _teacher_llm_routing_deps():
     return TeacherLlmRoutingDeps(
@@ -4178,16 +3788,13 @@ def _teacher_llm_routing_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _teacher_routing_api_deps():
     return TeacherRoutingApiDeps(teacher_llm_routing_get=teacher_llm_routing_get)
-
 
 def _chart_api_deps():
     return ChartApiDeps(
         chart_exec=lambda args: execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
     )
-
 
 def _chart_agent_run_deps():
     return ChartAgentRunDeps(
@@ -4224,7 +3831,6 @@ def _chart_agent_run_deps():
         default_code=_chart_agent_default_code_impl,
     )
 
-
 def _lesson_core_tool_deps():
     return LessonCaptureDeps(
         is_safe_tool_id=_is_safe_tool_id,
@@ -4232,7 +3838,6 @@ def _lesson_core_tool_deps():
         app_root=APP_ROOT,
         run_script=run_script,
     )
-
 
 def _core_example_tool_deps():
     return CoreExampleToolDeps(
@@ -4242,7 +3847,6 @@ def _core_example_tool_deps():
         resolve_app_path=_resolve_app_path,
         run_script=run_script,
     )
-
 
 def _chat_runtime_deps():
     return ChatRuntimeDeps(
@@ -4258,7 +3862,6 @@ def _chat_runtime_deps():
         monotonic=time.monotonic,
     )
 
-
 def _chat_job_repo_deps():
     return ChatJobRepositoryDeps(
         chat_job_dir=CHAT_JOB_DIR,
@@ -4266,15 +3869,12 @@ def _chat_job_repo_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
-
 def _chat_worker_started_get() -> bool:
     return bool(CHAT_JOB_WORKER_STARTED)
-
 
 def _chat_worker_started_set(value: bool) -> None:
     global CHAT_JOB_WORKER_STARTED
     CHAT_JOB_WORKER_STARTED = bool(value)
-
 
 def _chat_worker_deps():
     return ChatWorkerDeps(
@@ -4298,7 +3898,6 @@ def _chat_worker_deps():
         sleep=time.sleep,
         thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
     )
-
 
 def _chat_start_deps():
     return ChatStartDeps(
@@ -4324,7 +3923,6 @@ def _chat_start_deps():
         chat_register_recent_locked=_chat_register_recent_locked,
     )
 
-
 def _chat_status_deps():
     return ChatStatusDeps(
         load_chat_job=load_chat_job,
@@ -4335,6 +3933,23 @@ def _chat_status_deps():
         chat_find_position_locked=_chat_find_position_locked,
     )
 
+def _session_history_api_deps():
+    return SessionHistoryApiDeps(
+        load_student_sessions_index=load_student_sessions_index,
+        load_teacher_sessions_index=load_teacher_sessions_index,
+        paginate_session_items=lambda items, cursor, limit: _paginate_session_items_impl(items, cursor=cursor, limit=limit),
+        load_student_session_view_state=load_student_session_view_state,
+        load_teacher_session_view_state=load_teacher_session_view_state,
+        normalize_session_view_state_payload=_normalize_session_view_state_payload_impl,
+        compare_iso_ts=_compare_iso_ts_impl,
+        now_iso_millis=lambda: datetime.now().isoformat(timespec="milliseconds"),
+        save_student_session_view_state=save_student_session_view_state,
+        save_teacher_session_view_state=save_teacher_session_view_state,
+        student_session_file=student_session_file,
+        teacher_session_file=teacher_session_file,
+        load_session_messages=_load_session_messages_impl,
+        resolve_teacher_id=resolve_teacher_id,
+    )
 
 def _compute_chat_reply_deps():
     return ComputeChatReplyDeps(
@@ -4362,7 +3977,6 @@ def _compute_chat_reply_deps():
         run_agent=run_agent,
         normalize_math_delimiters=normalize_math_delimiters,
     )
-
 
 def _chat_job_process_deps():
     return ChatJobProcessDeps(
@@ -4397,14 +4011,12 @@ def _chat_job_process_deps():
         release_lockfile=_release_lockfile,
     )
 
-
 def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, Any]:
     try:
         from .mem0_adapter import teacher_mem0_search
     except Exception:
         return {"ok": False, "matches": []}
     return teacher_mem0_search(teacher_id, query, limit=limit)
-
 
 def _teacher_mem0_should_index_target(target: str) -> bool:
     try:
@@ -4416,12 +4028,10 @@ def _teacher_mem0_should_index_target(target: str) -> bool:
     except Exception:
         return False
 
-
 def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     from .mem0_adapter import teacher_mem0_index_entry
 
     return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)
-
 
 def _teacher_memory_search_deps():
     return TeacherMemorySearchDeps(
@@ -4436,7 +4046,6 @@ def _teacher_memory_search_deps():
         teacher_daily_memory_dir=teacher_daily_memory_dir,
     )
 
-
 def _teacher_memory_insights_deps():
     return TeacherMemoryInsightsDeps(
         ensure_teacher_workspace=ensure_teacher_workspace,
@@ -4448,7 +4057,6 @@ def _teacher_memory_insights_deps():
         load_events=lambda teacher_id, limit: _teacher_memory_load_events(teacher_id, limit=limit),
         parse_dt=_teacher_memory_parse_dt,
     )
-
 
 def _teacher_memory_apply_deps():
     return TeacherMemoryApplyDeps(
@@ -4479,7 +4087,6 @@ def _teacher_memory_apply_deps():
         mem0_index_entry=_teacher_mem0_index_entry,
     )
 
-
 def _teacher_memory_propose_deps():
     return TeacherMemoryProposeDeps(
         ensure_teacher_workspace=ensure_teacher_workspace,
@@ -4498,7 +4105,6 @@ def _teacher_memory_propose_deps():
             approve=approve,
         ),
     )
-
 
 def _teacher_memory_record_deps():
     return TeacherMemoryRecordDeps(
@@ -4524,7 +4130,6 @@ def _teacher_memory_record_deps():
         atomic_write_json=_atomic_write_json,
     )
 
-
 def _teacher_memory_store_deps():
     return TeacherMemoryStoreDeps(
         teacher_workspace_dir=teacher_workspace_dir,
@@ -4534,7 +4139,6 @@ def _teacher_memory_store_deps():
         rank_score=_teacher_memory_rank_score,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
-
 
 def _teacher_memory_auto_deps():
     return TeacherMemoryAutoDeps(
@@ -4563,13 +4167,11 @@ def _teacher_memory_auto_deps():
         mark_session_memory_flush=_mark_teacher_session_memory_flush,
     )
 
-
 def _teacher_workspace_deps():
     return TeacherWorkspaceDeps(
         teacher_workspace_dir=teacher_workspace_dir,
         teacher_daily_memory_dir=teacher_daily_memory_dir,
     )
-
 
 def _teacher_context_deps():
     return TeacherContextDeps(
@@ -4582,7 +4184,6 @@ def _teacher_context_deps():
         teacher_session_summary_text=_teacher_session_summary_text,
         teacher_memory_log_event=_teacher_memory_log_event,
     )
-
 
 def _teacher_assignment_preflight_deps():
     return TeacherAssignmentPreflightDeps(
@@ -4598,7 +4199,6 @@ def _teacher_assignment_preflight_deps():
         assignment_generate=assignment_generate,
     )
 
-
 def _teacher_session_compaction_deps():
     return TeacherSessionCompactionDeps(
         compact_enabled=TEACHER_SESSION_COMPACT_ENABLED,
@@ -4613,7 +4213,6 @@ def _teacher_session_compaction_deps():
         mark_teacher_session_compacted=_mark_teacher_session_compacted,
         diag_log=diag_log,
     )
-
 
 def _agent_runtime_deps():
     return AgentRuntimeDeps(
@@ -4634,10 +4233,8 @@ def _agent_runtime_deps():
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
     )
 
-
 def _chat_api_deps():
     return ChatApiDeps(start_chat=_chat_start_orchestration)
-
 
 def _teacher_memory_api_deps():
     return TeacherMemoryApiDeps(
@@ -4646,11 +4243,9 @@ def _teacher_memory_api_deps():
         teacher_memory_apply=teacher_memory_apply,
     )
 
-
 @app.get("/exams")
 async def exams():
     return list_exams()
-
 
 @app.get("/exam/{exam_id}")
 async def exam_detail(exam_id: str):
@@ -4661,7 +4256,6 @@ async def exam_detail(exam_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/exam/{exam_id}/analysis")
 async def exam_analysis(exam_id: str):
     result = exam_analysis_get(exam_id)
@@ -4670,7 +4264,6 @@ async def exam_analysis(exam_id: str):
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result)
     return result
-
 
 @app.get("/exam/{exam_id}/students")
 async def exam_students(exam_id: str, limit: int = 50):
@@ -4681,7 +4274,6 @@ async def exam_students(exam_id: str, limit: int = 50):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/exam/{exam_id}/student/{student_id}")
 async def exam_student(exam_id: str, student_id: str):
     result = exam_student_detail(exam_id, student_id=student_id)
@@ -4690,7 +4282,6 @@ async def exam_student(exam_id: str, student_id: str):
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result)
     return result
-
 
 @app.get("/exam/{exam_id}/question/{question_id}")
 async def exam_question(exam_id: str, question_id: str):
@@ -4701,11 +4292,9 @@ async def exam_question(exam_id: str, question_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/assignments")
 async def assignments():
     return list_assignments()
-
 
 @app.get("/teacher/assignment/progress")
 async def teacher_assignment_progress(assignment_id: str, include_students: bool = True):
@@ -4716,7 +4305,6 @@ async def teacher_assignment_progress(assignment_id: str, include_students: bool
     if not result.get("ok") and result.get("error") == "assignment_not_found":
         raise HTTPException(status_code=404, detail="assignment not found")
     return result
-
 
 @app.get("/teacher/assignments/progress")
 async def teacher_assignments_progress(date: Optional[str] = None):
@@ -4735,7 +4323,6 @@ async def teacher_assignments_progress(date: Optional[str] = None):
     out.sort(key=lambda x: (x.get("updated_at") or ""), reverse=True)
     return {"ok": True, "date": date_str, "assignments": out}
 
-
 @app.post("/assignment/requirements")
 async def assignment_requirements(req: AssignmentRequirementsRequest):
     date_str = parse_date_str(req.date)
@@ -4749,7 +4336,6 @@ async def assignment_requirements(req: AssignmentRequirementsRequest):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/assignment/{assignment_id}/requirements")
 async def assignment_requirements_get(assignment_id: str):
     folder = DATA_DIR / "assignments" / assignment_id
@@ -4759,7 +4345,6 @@ async def assignment_requirements_get(assignment_id: str):
     if not requirements:
         return {"assignment_id": assignment_id, "requirements": None}
     return {"assignment_id": assignment_id, "requirements": requirements}
-
 
 @app.post("/assignment/upload")
 async def assignment_upload(
@@ -4789,7 +4374,6 @@ async def assignment_upload(
     except AssignmentUploadLegacyError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.post("/exam/upload/start")
 async def exam_upload_start(
     exam_id: Optional[str] = Form(""),
@@ -4816,7 +4400,6 @@ async def exam_upload_start(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-
 @app.get("/exam/upload/status")
 async def exam_upload_status(job_id: str):
     try:
@@ -4824,14 +4407,12 @@ async def exam_upload_status(job_id: str):
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.get("/exam/upload/draft")
 async def exam_upload_draft(job_id: str):
     try:
         return _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps())
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-
 
 @app.post("/exam/upload/draft/save")
 async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
@@ -4847,14 +4428,12 @@ async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.post("/exam/upload/confirm")
 async def exam_upload_confirm(req: ExamUploadConfirmRequest):
     try:
         return _exam_upload_confirm_api_impl(req.job_id, deps=_exam_upload_api_deps())
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-
 
 @app.post("/assignment/upload/start")
 async def assignment_upload_start(
@@ -4886,7 +4465,6 @@ async def assignment_upload_start(
     except AssignmentUploadStartError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.get("/assignment/upload/status")
 async def assignment_upload_status(job_id: str):
     try:
@@ -4894,14 +4472,12 @@ async def assignment_upload_status(job_id: str):
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.get("/assignment/upload/draft")
 async def assignment_upload_draft(job_id: str):
     try:
         return _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps())
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-
 
 @app.post("/assignment/upload/draft/save")
 async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
@@ -4914,7 +4490,6 @@ async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
         )
     except AssignmentUploadDraftSaveError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-
 
 @app.post("/assignment/upload/confirm")
 async def assignment_upload_confirm(req: UploadConfirmRequest):
@@ -4944,7 +4519,6 @@ async def assignment_upload_confirm(req: UploadConfirmRequest):
     except AssignmentUploadConfirmError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.get("/assignment/{assignment_id}/download")
 async def assignment_download(assignment_id: str, file: str):
     folder = DATA_DIR / "assignments" / assignment_id / "source"
@@ -4959,7 +4533,6 @@ async def assignment_download(assignment_id: str, file: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="file not found")
     return FileResponse(path)
-
 
 @app.get("/assignment/today")
 async def assignment_today(
@@ -4978,7 +4551,6 @@ async def assignment_today(
         deps=_assignment_today_deps(),
     )
 
-
 @app.get("/assignment/{assignment_id}")
 async def assignment_detail(assignment_id: str):
     result = _get_assignment_detail_api_impl(assignment_id, deps=_assignment_api_deps())
@@ -4988,16 +4560,13 @@ async def assignment_detail(assignment_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/lessons")
 async def lessons():
     return list_lessons()
 
-
 @app.get("/skills")
 async def skills():
     return list_skills()
-
 
 @app.get("/charts/{run_id}/{file_name}")
 async def chart_image_file(run_id: str, file_name: str):
@@ -5005,7 +4574,6 @@ async def chart_image_file(run_id: str, file_name: str):
     if not path:
         raise HTTPException(status_code=404, detail="chart file not found")
     return FileResponse(path)
-
 
 @app.get("/chart-runs/{run_id}/meta")
 async def chart_run_meta(run_id: str):
@@ -5016,7 +4584,6 @@ async def chart_run_meta(run_id: str):
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         raise HTTPException(status_code=500, detail="failed to read chart run meta")
-
 
 @app.get("/teacher/llm-routing")
 async def teacher_llm_routing(
@@ -5038,14 +4605,12 @@ async def teacher_llm_routing(
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.post("/teacher/llm-routing/simulate")
 async def teacher_llm_routing_simulate_api(req: RoutingSimulateRequest):
     result = teacher_llm_routing_simulate(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result
-
 
 @app.post("/teacher/llm-routing/proposals")
 async def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
@@ -5054,7 +4619,6 @@ async def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-
 @app.get("/teacher/llm-routing/proposals/{proposal_id}")
 async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optional[str] = None):
     result = teacher_llm_routing_proposal_get({"proposal_id": proposal_id, "teacher_id": teacher_id})
@@ -5062,7 +4626,6 @@ async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optiona
         status_code = 404 if str(result.get("error") or "").strip() == "proposal_not_found" else 400
         raise HTTPException(status_code=status_code, detail=result)
     return result
-
 
 @app.post("/teacher/llm-routing/proposals/{proposal_id}/review")
 async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: RoutingProposalReviewRequest):
@@ -5074,7 +4637,6 @@ async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: Routing
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-
 @app.post("/teacher/llm-routing/rollback")
 async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
     result = teacher_llm_routing_rollback(model_dump_compat(req, exclude_none=True))
@@ -5082,7 +4644,6 @@ async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
         status_code = 404 if str(result.get("error") or "").strip() in {"history_not_found", "target_version_not_found"} else 400
         raise HTTPException(status_code=status_code, detail=result)
     return result
-
 
 @app.post("/assignment/generate")
 async def generate_assignment(
@@ -5120,13 +4681,11 @@ async def generate_assignment(
     except AssignmentGenerateError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-
 @app.post("/assignment/render")
 async def render_assignment(assignment_id: str = Form(...)):
     script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
     out = run_script(["python3", str(script), "--assignment-id", assignment_id])
     return {"ok": True, "output": out}
-
 
 @app.post("/assignment/questions/ocr")
 async def assignment_questions_ocr(
@@ -5148,7 +4707,6 @@ async def assignment_questions_ocr(
         language=language,
         deps=_assignment_questions_ocr_deps(),
     )
-
 
 @app.post("/student/submit")
 async def submit(
