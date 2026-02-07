@@ -161,9 +161,17 @@ from .teacher_memory_api_service import (
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
     review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
+from .teacher_memory_apply_service import (
+    TeacherMemoryApplyDeps,
+    teacher_memory_apply as _teacher_memory_apply_impl,
+)
 from .teacher_memory_insights_service import (
     TeacherMemoryInsightsDeps,
     teacher_memory_insights as _teacher_memory_insights_impl,
+)
+from .teacher_memory_propose_service import (
+    TeacherMemoryProposeDeps,
+    teacher_memory_propose as _teacher_memory_propose_impl,
 )
 from .teacher_memory_search_service import (
     TeacherMemorySearchDeps,
@@ -1884,243 +1892,25 @@ def teacher_memory_propose(
     meta: Optional[Dict[str, Any]] = None,
     dedupe_key: Optional[str] = None,
 ) -> Dict[str, Any]:
-    ensure_teacher_workspace(teacher_id)
-    proposal_id = f"tmem_{uuid.uuid4().hex[:12]}"
-    source_norm = str(source or "manual").strip().lower() or "manual"
-    target_norm = str(target or "MEMORY").upper()
-    created_at = datetime.now().isoformat(timespec="seconds")
-    priority_score = _teacher_memory_priority_score(
-        target=target_norm,
-        title=(title or "").strip(),
-        content=(content or "").strip(),
-        source=source_norm,
-        meta=meta if isinstance(meta, dict) else None,
+    return _teacher_memory_propose_impl(
+        teacher_id,
+        target,
+        title,
+        content,
+        deps=_teacher_memory_propose_deps(),
+        source=source,
+        meta=meta,
+        dedupe_key=dedupe_key,
     )
-    ttl_days = _teacher_memory_record_ttl_days({"target": target_norm, "source": source_norm, "meta": meta})
-    record = {
-        "proposal_id": proposal_id,
-        "teacher_id": teacher_id,
-        "target": target_norm,
-        "title": (title or "").strip(),
-        "content": (content or "").strip(),
-        "source": source_norm,
-        "priority_score": priority_score,
-        "ttl_days": ttl_days,
-        "status": "proposed",
-        "created_at": created_at,
-    }
-    expire_at = _teacher_memory_record_expire_at(record)
-    if expire_at is not None:
-        record["expires_at"] = expire_at.isoformat(timespec="seconds")
-    if isinstance(meta, dict) and meta:
-        record["meta"] = meta
-    if dedupe_key:
-        record["dedupe_key"] = str(dedupe_key).strip()[:120]
-    path = _teacher_proposal_path(teacher_id, proposal_id)
-    _atomic_write_json(path, record)
-
-    if not TEACHER_MEMORY_AUTO_APPLY_ENABLED:
-        return {"ok": True, "proposal_id": proposal_id, "proposal": record}
-
-    if target_norm not in TEACHER_MEMORY_AUTO_APPLY_TARGETS:
-        stamp = datetime.now().isoformat(timespec="seconds")
-        record["status"] = "rejected"
-        record["rejected_at"] = stamp
-        record["reject_reason"] = "target_not_allowed_for_auto_apply"
-        _atomic_write_json(path, record)
-        return {
-            "ok": False,
-            "proposal_id": proposal_id,
-            "status": "rejected",
-            "error": "target_not_allowed_for_auto_apply",
-            "proposal": record,
-        }
-
-    applied = teacher_memory_apply(teacher_id, proposal_id=proposal_id, approve=True)
-    if applied.get("error"):
-        stamp = datetime.now().isoformat(timespec="seconds")
-        try:
-            latest = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            latest = record
-        if not isinstance(latest, dict):
-            latest = record
-        latest["status"] = "rejected"
-        latest["rejected_at"] = stamp
-        latest["reject_reason"] = str(applied.get("error") or "auto_apply_failed")
-        _atomic_write_json(path, latest)
-        return {
-            "ok": False,
-            "proposal_id": proposal_id,
-            "status": "rejected",
-            "error": str(applied.get("error") or "auto_apply_failed"),
-            "proposal": latest,
-        }
-
-    try:
-        final_record = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        final_record = record
-    return {
-        "ok": True,
-        "proposal_id": proposal_id,
-        "status": str(applied.get("status") or "applied"),
-        "auto_applied": True,
-        "proposal": final_record if isinstance(final_record, dict) else record,
-    }
 
 
 def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True) -> Dict[str, Any]:
-    path = _teacher_proposal_path(teacher_id, proposal_id)
-    if not path.exists():
-        return {"error": "proposal not found", "proposal_id": proposal_id}
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        record = {}
-    status = str(record.get("status") or "proposed")
-    if status in {"applied", "rejected"}:
-        return {"ok": True, "proposal_id": proposal_id, "status": status, "detail": "already processed"}
-
-    if not approve:
-        record["status"] = "rejected"
-        record["rejected_at"] = datetime.now().isoformat(timespec="seconds")
-        _atomic_write_json(path, record)
-        _teacher_memory_log_event(
-            teacher_id,
-            "proposal_rejected",
-            {
-                "proposal_id": proposal_id,
-                "target": str(record.get("target") or "MEMORY"),
-                "source": str(record.get("source") or "manual"),
-                "reason": "manual_reject",
-            },
-        )
-        return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
-
-    target = str(record.get("target") or "MEMORY").upper()
-    title = str(record.get("title") or "").strip()
-    content = str(record.get("content") or "").strip()
-    source = str(record.get("source") or "manual").strip().lower() or "manual"
-    if not content:
-        return {"error": "empty content", "proposal_id": proposal_id}
-    if TEACHER_MEMORY_AUTO_APPLY_STRICT and _teacher_memory_is_sensitive(content):
-        record["status"] = "rejected"
-        record["rejected_at"] = datetime.now().isoformat(timespec="seconds")
-        record["reject_reason"] = "sensitive_content_blocked"
-        _atomic_write_json(path, record)
-        _teacher_memory_log_event(
-            teacher_id,
-            "proposal_rejected",
-            {
-                "proposal_id": proposal_id,
-                "target": target,
-                "source": source,
-                "reason": "sensitive_content_blocked",
-            },
-        )
-        return {"error": "sensitive_content_blocked", "proposal_id": proposal_id}
-
-    if target == "DAILY":
-        out_path = teacher_daily_memory_path(teacher_id)
-    elif target in {"MEMORY", "USER", "AGENTS", "SOUL", "HEARTBEAT"}:
-        out_path = teacher_workspace_file(teacher_id, f"{target}.md" if target != "MEMORY" else "MEMORY.md")
-    else:
-        out_path = teacher_workspace_file(teacher_id, "MEMORY.md")
-
-    supersedes = _teacher_memory_find_conflicting_applied(
+    return _teacher_memory_apply_impl(
         teacher_id,
-        proposal_id=proposal_id,
-        target=target,
-        content=content,
+        proposal_id,
+        deps=_teacher_memory_apply_deps(),
+        approve=approve,
     )
-
-    stamp = datetime.now().isoformat(timespec="seconds")
-    entry_lines = []
-    if title:
-        entry_lines.append(f"## {title}".strip())
-    else:
-        entry_lines.append("## Memory Update")
-    entry_lines.append(f"- ts: {stamp}")
-    entry_lines.append(f"- entry_id: {proposal_id}")
-    entry_lines.append(f"- source: {source}")
-    if supersedes:
-        entry_lines.append(f"- supersedes: {', '.join(supersedes)}")
-    entry_lines.append("")
-    entry_lines.append(content)
-    entry = "\n".join(entry_lines).strip() + "\n\n"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("a", encoding="utf-8") as f:
-        f.write(entry)
-
-    record["status"] = "applied"
-    record["applied_at"] = stamp
-    record["applied_to"] = str(out_path)
-    record["ttl_days"] = _teacher_memory_record_ttl_days(record)
-    expire_at = _teacher_memory_record_expire_at(record)
-    if expire_at is not None:
-        record["expires_at"] = expire_at.isoformat(timespec="seconds")
-    else:
-        record.pop("expires_at", None)
-    if supersedes:
-        record["supersedes"] = supersedes
-
-    # Best-effort semantic indexing for later retrieval; do not block apply on failures.
-    mem0_info: Optional[Dict[str, Any]] = None
-    try:
-        from .mem0_adapter import teacher_mem0_index_entry, teacher_mem0_should_index_target
-
-        if teacher_mem0_should_index_target(target):
-            index_text = f"{title or 'Memory Update'}\n{content}".strip()
-            mem0_info = teacher_mem0_index_entry(
-                teacher_id,
-                index_text,
-                metadata={
-                    "file": str(out_path),
-                    "proposal_id": proposal_id,
-                    "target": target,
-                    "title": title or "Memory Update",
-                    "source": source,
-                    "ts": stamp,
-                },
-            )
-            diag_log(
-                "teacher.mem0.index.done",
-                {
-                    "teacher_id": teacher_id,
-                    "proposal_id": proposal_id,
-                    "ok": bool(mem0_info.get("ok") if isinstance(mem0_info, dict) else False),
-                },
-            )
-    except Exception as exc:
-        mem0_info = {"ok": False, "error": str(exc)[:200]}
-        diag_log("teacher.mem0.index.crash", {"teacher_id": teacher_id, "proposal_id": proposal_id, "error": str(exc)[:200]})
-
-    if mem0_info is not None:
-        record["mem0"] = mem0_info
-
-    _atomic_write_json(path, record)
-    if supersedes:
-        _teacher_memory_mark_superseded(teacher_id, supersedes, by_proposal_id=proposal_id)
-    _teacher_memory_log_event(
-        teacher_id,
-        "proposal_applied",
-        {
-            "proposal_id": proposal_id,
-            "target": target,
-            "source": source,
-            "priority_score": int(record.get("priority_score") or 0),
-            "supersedes": len(supersedes),
-            "ttl_days": _teacher_memory_record_ttl_days(record),
-            "expired": bool(_teacher_memory_is_expired_record(record)),
-        },
-    )
-    out: Dict[str, Any] = {"ok": True, "proposal_id": proposal_id, "status": "applied", "applied_to": str(out_path)}
-    if mem0_info is not None:
-        out["mem0"] = mem0_info
-    if supersedes:
-        out["supersedes"] = supersedes
-    return out
 
 
 def _teacher_memory_norm_text(text: str) -> str:
@@ -8178,6 +7968,23 @@ def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, A
     return teacher_mem0_search(teacher_id, query, limit=limit)
 
 
+def _teacher_mem0_should_index_target(target: str) -> bool:
+    try:
+        from .mem0_adapter import teacher_mem0_should_index_target
+    except Exception:
+        return False
+    try:
+        return bool(teacher_mem0_should_index_target(target))
+    except Exception:
+        return False
+
+
+def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    from .mem0_adapter import teacher_mem0_index_entry
+
+    return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)
+
+
 def _teacher_memory_search_deps():
     return TeacherMemorySearchDeps(
         ensure_teacher_workspace=ensure_teacher_workspace,
@@ -8202,6 +8009,56 @@ def _teacher_memory_insights_deps():
         age_days=lambda rec, now: _teacher_memory_age_days(rec, now=now),
         load_events=lambda teacher_id, limit: _teacher_memory_load_events(teacher_id, limit=limit),
         parse_dt=_teacher_memory_parse_dt,
+    )
+
+
+def _teacher_memory_apply_deps():
+    return TeacherMemoryApplyDeps(
+        proposal_path=_teacher_proposal_path,
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        log_event=_teacher_memory_log_event,
+        is_sensitive=_teacher_memory_is_sensitive,
+        auto_apply_strict=TEACHER_MEMORY_AUTO_APPLY_STRICT,
+        teacher_daily_memory_path=teacher_daily_memory_path,
+        teacher_workspace_file=teacher_workspace_file,
+        find_conflicting_applied=lambda teacher_id, proposal_id, target, content: _teacher_memory_find_conflicting_applied(
+            teacher_id,
+            proposal_id=proposal_id,
+            target=target,
+            content=content,
+        ),
+        record_ttl_days=_teacher_memory_record_ttl_days,
+        record_expire_at=_teacher_memory_record_expire_at,
+        is_expired_record=_teacher_memory_is_expired_record,
+        mark_superseded=lambda teacher_id, proposal_ids, by_proposal_id: _teacher_memory_mark_superseded(
+            teacher_id,
+            proposal_ids,
+            by_proposal_id=by_proposal_id,
+        ),
+        diag_log=diag_log,
+        mem0_should_index_target=_teacher_mem0_should_index_target,
+        mem0_index_entry=_teacher_mem0_index_entry,
+    )
+
+
+def _teacher_memory_propose_deps():
+    return TeacherMemoryProposeDeps(
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        proposal_path=_teacher_proposal_path,
+        atomic_write_json=_atomic_write_json,
+        uuid_hex=lambda: uuid.uuid4().hex,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        priority_score=_teacher_memory_priority_score,
+        record_ttl_days=_teacher_memory_record_ttl_days,
+        record_expire_at=_teacher_memory_record_expire_at,
+        auto_apply_enabled=TEACHER_MEMORY_AUTO_APPLY_ENABLED,
+        auto_apply_targets=TEACHER_MEMORY_AUTO_APPLY_TARGETS,
+        apply=lambda teacher_id, proposal_id, approve: teacher_memory_apply(
+            teacher_id,
+            proposal_id,
+            approve=approve,
+        ),
     )
 
 
