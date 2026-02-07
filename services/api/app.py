@@ -39,6 +39,7 @@ from .prompt_builder import compile_system_prompt
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
 from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
 from .upload_io_service import sanitize_filename_io
+from .llm_agent_tooling_service import parse_tool_json_safe
 
 try:
     from mem0_config import load_dotenv
@@ -8739,15 +8740,13 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
     text = content.strip()
     if text.startswith("```"):
         text = re.sub(r"^```\w*\n|```$", "", text, flags=re.S).strip()
-    try:
-        data = json.loads(text)
-    except Exception:
+    data = parse_tool_json_safe(text)
+    if data is None:
         match = re.search(r"\{.*\}", text, re.S)
         if not match:
             return None
-        try:
-            data = json.loads(match.group(0))
-        except Exception:
+        data = parse_tool_json_safe(match.group(0))
+        if data is None:
             return None
     if isinstance(data, dict) and data.get("tool"):
         return data
