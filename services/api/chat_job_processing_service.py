@@ -217,6 +217,7 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             deps.write_chat_job(job_id, {"status": "failed", "error": "invalid_request", "error_detail": str(exc)[:200]})
             return
 
+        req_agent_id = str(getattr(req, "agent_id", "") or "")
         deps.write_chat_job(job_id, {"status": "processing", "step": "agent", "error": ""})
         t0 = deps.monotonic()
         reply_text, role_hint, last_user_text = deps.compute_chat_reply_sync(
@@ -225,6 +226,58 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
         )
         duration_ms = int((deps.monotonic() - t0) * 1000)
+
+        teacher_id = ""
+        session_id = ""
+        if role_hint == "teacher":
+            teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
+            session_id = str(job.get("session_id") or "").strip() or "main"
+            try:
+                deps.append_teacher_session_message(
+                    teacher_id,
+                    session_id,
+                    "user",
+                    last_user_text,
+                    meta={
+                        "request_id": job.get("request_id") or "",
+                        "agent_id": req_agent_id,
+                        "skill_id": req.skill_id or "",
+                        "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
+                    },
+                )
+                deps.append_teacher_session_message(
+                    teacher_id,
+                    session_id,
+                    "assistant",
+                    reply_text,
+                    meta={
+                        "job_id": job_id,
+                        "request_id": job.get("request_id") or "",
+                        "agent_id": req_agent_id,
+                        "skill_id": req.skill_id or "",
+                        "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
+                    },
+                )
+                deps.update_teacher_session_index(
+                    teacher_id,
+                    session_id,
+                    preview=last_user_text or reply_text,
+                    message_increment=2,
+                )
+            except Exception as exc:
+                detail = str(exc)[:200]
+                deps.diag_log(
+                    "teacher.history.append_failed",
+                    {"teacher_id": str(job.get("teacher_id") or ""), "error": detail},
+                )
+                deps.write_chat_job(
+                    job_id,
+                    {"status": "failed", "error": "history_persist_failed", "error_detail": detail},
+                )
+                return
+
         deps.write_chat_job(
             job_id,
             {
@@ -280,85 +333,56 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
 
         if role_hint == "teacher":
             try:
-                teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
-                session_id = str(job.get("session_id") or "").strip() or "main"
                 deps.ensure_teacher_workspace(teacher_id)
-                deps.append_teacher_session_message(
-                    teacher_id,
-                    session_id,
-                    "user",
-                    last_user_text,
-                    meta={
-                        "request_id": job.get("request_id") or "",
-                        "agent_id": req_agent_id,
-                        "skill_id": req.skill_id or "",
-                        "skill_id_requested": str(job.get("skill_id") or ""),
-                        "skill_id_effective": req.skill_id or "",
-                    },
+            except Exception as exc:
+                deps.diag_log(
+                    "teacher.workspace.ensure_failed",
+                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
                 )
-                deps.append_teacher_session_message(
+            try:
+                auto_intent = deps.teacher_memory_auto_propose_from_turn(
                     teacher_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={
-                        "job_id": job_id,
-                        "request_id": job.get("request_id") or "",
-                        "agent_id": req_agent_id,
-                        "skill_id": req.skill_id or "",
-                        "skill_id_requested": str(job.get("skill_id") or ""),
-                        "skill_id_effective": req.skill_id or "",
-                    },
+                    session_id=session_id,
+                    user_text=last_user_text,
+                    assistant_text=reply_text,
                 )
-                deps.update_teacher_session_index(
-                    teacher_id,
-                    session_id,
-                    preview=last_user_text or reply_text,
-                    message_increment=2,
-                )
-                try:
-                    auto_intent = deps.teacher_memory_auto_propose_from_turn(
-                        teacher_id,
-                        session_id=session_id,
-                        user_text=last_user_text,
-                        assistant_text=reply_text,
-                    )
-                    if auto_intent.get("created"):
-                        deps.diag_log(
-                            "teacher.memory.auto_intent.proposed",
-                            {
-                                "teacher_id": teacher_id,
-                                "session_id": session_id,
-                                "proposal_id": auto_intent.get("proposal_id"),
-                                "target": auto_intent.get("target"),
-                            },
-                        )
-                except Exception as exc:
+                if auto_intent.get("created"):
                     deps.diag_log(
-                        "teacher.memory.auto_intent.failed",
-                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                        "teacher.memory.auto_intent.proposed",
+                        {
+                            "teacher_id": teacher_id,
+                            "session_id": session_id,
+                            "proposal_id": auto_intent.get("proposal_id"),
+                            "target": auto_intent.get("target"),
+                        },
                     )
-                try:
-                    auto_flush = deps.teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
-                    if auto_flush.get("created"):
-                        deps.diag_log(
-                            "teacher.memory.auto_flush.proposed",
-                            {
-                                "teacher_id": teacher_id,
-                                "session_id": session_id,
-                                "proposal_id": auto_flush.get("proposal_id"),
-                            },
-                        )
-                except Exception as exc:
+            except Exception as exc:
+                deps.diag_log(
+                    "teacher.memory.auto_intent.failed",
+                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                )
+            try:
+                auto_flush = deps.teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
+                if auto_flush.get("created"):
                     deps.diag_log(
-                        "teacher.memory.auto_flush.failed",
-                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                        "teacher.memory.auto_flush.proposed",
+                        {
+                            "teacher_id": teacher_id,
+                            "session_id": session_id,
+                            "proposal_id": auto_flush.get("proposal_id"),
+                        },
                     )
+            except Exception as exc:
+                deps.diag_log(
+                    "teacher.memory.auto_flush.failed",
+                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+                )
+            try:
                 deps.maybe_compact_teacher_session(teacher_id, session_id)
             except Exception as exc:
                 deps.diag_log(
-                    "teacher.history.append_failed",
-                    {"teacher_id": str(job.get("teacher_id") or ""), "error": str(exc)[:200]},
+                    "teacher.session.compact_failed",
+                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
                 )
     finally:
         deps.release_lockfile(claim_path)

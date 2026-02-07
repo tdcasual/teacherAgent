@@ -775,9 +775,16 @@ def write_upload_job(job_id: str, updates: Dict[str, Any], overwrite: bool = Fal
 
 def _atomic_write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    # Use unique temp names so concurrent writers don't contend on one *.tmp file.
+    tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 def safe_fs_id(value: str, prefix: str = "id") -> str:
     raw = str(value or "").strip()

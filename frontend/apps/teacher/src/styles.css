@@ -1560,12 +1560,12 @@ select:focus {
 @media (min-width: 1024px) {
   .teacher-layout.chat-view {
     grid-template-columns: 300px minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
   }
 
   .teacher-layout.chat-view.workbench-open {
     grid-template-columns: 300px minmax(0, 1fr) 320px;
-    align-items: start;
+    align-items: stretch;
   }
 
   .teacher-layout.chat-view.session-collapsed {
@@ -1578,12 +1578,14 @@ select:focus {
 
   .teacher-layout:not(.chat-view) {
     grid-template-columns: minmax(0, 1fr);
-    align-items: start;
+    align-items: stretch;
   }
 }
 
 .routing-shell {
   gap: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .routing-page {
@@ -1807,7 +1809,8 @@ select:focus {
   }
 
   .top-actions .view-switch {
-    display: none;
+    display: inline-flex;
+    order: -1;
   }
 
   .top-actions .role-badge {

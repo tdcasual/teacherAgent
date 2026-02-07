@@ -25,6 +25,7 @@ import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TEACHER_SESSION_VIEW_STATE_KEY = 'teacherSessionViewState'
+const TEACHER_LOCAL_DRAFT_SESSIONS_KEY = 'teacherLocalDraftSessionIds'
 
 type Message = {
   id: string
@@ -62,6 +63,16 @@ type ChatStartResult = {
   lane_queue_size?: number
   lane_active?: boolean
   debounced?: boolean
+}
+
+type PendingChatJob = {
+  job_id: string
+  request_id: string
+  placeholder_id: string
+  user_text: string
+  session_id: string
+  lane_id?: string
+  created_at: number
 }
 
 type TeacherHistorySession = {
@@ -473,6 +484,18 @@ const readTeacherLocalViewState = (): SessionViewStatePayload => {
   })
 }
 
+const readTeacherLocalDraftSessionIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(TEACHER_LOCAL_DRAFT_SESSIONS_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    const cleaned = parsed.map((item) => String(item || '').trim()).filter(Boolean)
+    return Array.from(new Set(cleaned))
+  } catch {
+    return []
+  }
+}
+
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`
 
 const nowTime = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -482,6 +505,33 @@ const timeFromIso = (iso?: string) => {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return nowTime()
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+const pendingUserMessageId = (jobId: string) => `pending_user_${jobId}`
+
+const withPendingChatOverlay = (messages: Message[], pending: PendingChatJob | null, targetSessionId: string): Message[] => {
+  if (!pending?.job_id || pending.session_id !== targetSessionId) return messages
+  if (messages.some((msg) => msg.id === pending.placeholder_id)) return messages
+
+  const next = [...messages]
+  const hasUserText = pending.user_text
+    ? next.some((msg) => msg.role === 'user' && msg.content === pending.user_text)
+    : true
+  if (!hasUserText && pending.user_text) {
+    next.push({
+      id: pendingUserMessageId(pending.job_id),
+      role: 'user',
+      content: pending.user_text,
+      time: timeFromIso(new Date(pending.created_at).toISOString()),
+    })
+  }
+  next.push({
+    id: pending.placeholder_id,
+    role: 'assistant',
+    content: '正在生成…',
+    time: nowTime(),
+  })
+  return next
 }
 
 const formatSessionUpdatedLabel = (ts?: string) => {
@@ -721,7 +771,7 @@ export default function App() {
   const [showArchivedSessions, setShowArchivedSessions] = useState(false)
   const [sessionTitleMap, setSessionTitleMap] = useState<Record<string, string>>(() => initialViewStateRef.current.title_map)
   const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>(() => initialViewStateRef.current.hidden_ids)
-  const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
+  const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>(() => readTeacherLocalDraftSessionIds())
   const [openSessionMenuId, setOpenSessionMenuId] = useState('')
   const [sessionLoading, setSessionLoading] = useState(false)
   const [sessionError, setSessionError] = useState('')
@@ -737,15 +787,7 @@ export default function App() {
   const [memoryInsights, setMemoryInsights] = useState<TeacherMemoryInsightsResponse | null>(null)
   const [chatQueueHint, setChatQueueHint] = useState('')
   const PENDING_CHAT_KEY = 'teacherPendingChatJob'
-  const [pendingChatJob, setPendingChatJob] = useState<{
-    job_id: string
-    request_id: string
-    placeholder_id: string
-    user_text: string
-    session_id: string
-    lane_id?: string
-    created_at: number
-  } | null>(() => {
+  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() => {
     try {
       const raw = localStorage.getItem(PENDING_CHAT_KEY)
       return raw ? (JSON.parse(raw) as any) : null
@@ -786,6 +828,7 @@ export default function App() {
   const historyCursorRef = useRef(0)
   const historyHasMoreRef = useRef(false)
   const localDraftSessionIdsRef = useRef<string[]>([])
+  const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
   const applyingViewStateRef = useRef(false)
   const currentViewStateRef = useRef<SessionViewStatePayload>(initialViewStateRef.current)
   const lastSyncedViewStateSignatureRef = useRef(buildSessionViewStateSignature(initialViewStateRef.current))
@@ -892,6 +935,24 @@ export default function App() {
   useEffect(() => {
     localDraftSessionIdsRef.current = localDraftSessionIds
   }, [localDraftSessionIds])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TEACHER_LOCAL_DRAFT_SESSIONS_KEY, JSON.stringify(localDraftSessionIds))
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [localDraftSessionIds])
+
+  useEffect(() => {
+    pendingChatJobRef.current = pendingChatJob
+  }, [pendingChatJob])
+
+  useEffect(() => {
+    const sid = String(pendingChatJob?.session_id || '').trim()
+    if (!sid || sid === 'main') return
+    setLocalDraftSessionIds((prev) => (prev.includes(sid) ? prev : [sid, ...prev]))
+  }, [pendingChatJob?.session_id])
 
   useEffect(() => {
     if (!openSessionMenuId) return
@@ -1066,6 +1127,19 @@ export default function App() {
     if (pendingChatJob) localStorage.setItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
     else localStorage.removeItem(PENDING_CHAT_KEY)
   }, [pendingChatJob, PENDING_CHAT_KEY])
+
+  useEffect(() => {
+    if (!pendingChatJob?.job_id) return
+    if (!activeSessionId || pendingChatJob.session_id !== activeSessionId) return
+    setMessages((prev) => withPendingChatOverlay(prev, pendingChatJob, activeSessionId))
+  }, [
+    activeSessionId,
+    pendingChatJob?.created_at,
+    pendingChatJob?.job_id,
+    pendingChatJob?.placeholder_id,
+    pendingChatJob?.session_id,
+    pendingChatJob?.user_text,
+  ])
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
@@ -1259,6 +1333,9 @@ export default function App() {
             } as Message
           })
           .filter(Boolean) as Message[]
+        const mappedWithPending = append
+          ? mapped
+          : withPendingChatOverlay(mapped, pendingChatJobRef.current, targetSessionId)
         const next = typeof data.next_cursor === 'number' ? data.next_cursor : 0
         setSessionCursor(next)
         setSessionHasMore(mapped.length >= 1 && next > 0)
@@ -1266,8 +1343,8 @@ export default function App() {
           setMessages((prev) => [...mapped, ...prev])
         } else {
           setMessages(
-            mapped.length
-              ? mapped
+            mappedWithPending.length
+              ? mappedWithPending
               : [
                   {
                     id: makeId(),
@@ -2574,7 +2651,10 @@ export default function App() {
       if (!sid) return
       const isArchived = deletedSessionIds.includes(sid)
       const action = isArchived ? '恢复' : '归档'
-      if (!window.confirm(`确认${action}会话 ${getSessionTitle(sid)}？`)) return
+      if (!window.confirm(`确认${action}会话 ${getSessionTitle(sid)}？`)) {
+        setOpenSessionMenuId('')
+        return
+      }
       setOpenSessionMenuId('')
       setDeletedSessionIds((prev) => {
         if (isArchived) return prev.filter((id) => id !== sid)
