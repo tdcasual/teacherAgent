@@ -31,6 +31,7 @@ from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
+from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
@@ -7871,7 +7872,7 @@ def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
-    return execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    return _chart_exec_api_impl(args, deps=_chart_api_deps())
 
 
 _CHART_AGENT_PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
@@ -10219,6 +10220,12 @@ def _student_profile_api_deps():
 
 def _teacher_routing_api_deps():
     return TeacherRoutingApiDeps(teacher_llm_routing_get=teacher_llm_routing_get)
+
+
+def _chart_api_deps():
+    return ChartApiDeps(
+        chart_exec=lambda args: execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    )
 
 
 @app.get("/exams")
