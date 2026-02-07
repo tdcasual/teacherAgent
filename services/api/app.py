@@ -38,6 +38,7 @@ from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
 from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
+from .upload_io_service import sanitize_filename_io
 
 try:
     from mem0_config import load_dotenv
@@ -3016,7 +3017,7 @@ async def save_upload_file(upload: UploadFile, dest: Path, chunk_size: int = 102
 
 
 def sanitize_filename(name: str) -> str:
-    return Path(name or "").name
+    return sanitize_filename_io(name)
 
 
 def safe_slug(value: str) -> str:
