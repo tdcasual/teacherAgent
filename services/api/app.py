@@ -35,6 +35,23 @@ from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_imp
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
+from .exam_analysis_charts_service import (
+    ExamAnalysisChartsDeps,
+    exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
+)
+from .exam_longform_service import (
+    ExamLongformDeps,
+    build_exam_longform_context as _build_exam_longform_context_impl,
+    calc_longform_max_tokens as _calc_longform_max_tokens_impl,
+    generate_longform_reply as _generate_longform_reply_impl,
+    summarize_exam_students as _summarize_exam_students_impl,
+)
+from .exam_range_service import (
+    ExamRangeDeps,
+    exam_question_batch_detail as _exam_question_batch_detail_impl,
+    exam_range_summary_batch as _exam_range_summary_batch_impl,
+    exam_range_top_students as _exam_range_top_students_impl,
+)
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .session_view_state import (
@@ -5261,164 +5278,13 @@ def exam_range_top_students(
     end_question_no: Any,
     top_n: int = 10,
 ) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-
-    responses_path = exam_responses_path(manifest)
-    if not responses_path or not responses_path.exists():
-        return {"error": "responses_missing", "exam_id": exam_id}
-
-    start_q = _parse_question_no_int(start_question_no)
-    end_q = _parse_question_no_int(end_question_no)
-    if start_q is None or end_q is None:
-        return {
-            "error": "invalid_question_range",
-            "exam_id": exam_id,
-            "message": "start_question_no 和 end_question_no 必须是正整数。",
-        }
-    if start_q > end_q:
-        start_q, end_q = end_q, start_q
-
-    sample_n = _safe_int_arg(top_n, default=10, minimum=1, maximum=100)
-
-    questions_path = exam_questions_path(manifest)
-    questions = read_questions_csv(questions_path) if questions_path else {}
-    question_no_by_id: Dict[str, int] = {}
-    max_score_by_no: Dict[int, float] = {}
-    known_question_nos: set[int] = set()
-    for qid, q_meta in questions.items():
-        q_no = _parse_question_no_int(q_meta.get("question_no"))
-        if q_no is None:
-            continue
-        known_question_nos.add(q_no)
-        question_no_by_id[qid] = q_no
-        if not (start_q <= q_no <= end_q):
-            continue
-        q_max = parse_score_value(q_meta.get("max_score"))
-        if q_max is None:
-            continue
-        max_score_by_no[q_no] = max_score_by_no.get(q_no, 0.0) + q_max
-
-    total_scores: Dict[str, float] = {}
-    range_scores: Dict[str, float] = {}
-    students_meta: Dict[str, Dict[str, str]] = {}
-    range_answered_question_nos: Dict[str, set[int]] = {}
-    observed_question_nos: set[int] = set()
-
-    with responses_path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
-            if not student_id:
-                continue
-            if student_id not in students_meta:
-                students_meta[student_id] = {
-                    "student_id": student_id,
-                    "student_name": str(row.get("student_name") or "").strip(),
-                    "class_name": str(row.get("class_name") or "").strip(),
-                }
-
-            score = parse_score_value(row.get("score"))
-            if score is not None:
-                total_scores[student_id] = total_scores.get(student_id, 0.0) + score
-            else:
-                total_scores.setdefault(student_id, 0.0)
-
-            q_no = _parse_question_no_int(row.get("question_no"))
-            if q_no is None:
-                qid = str(row.get("question_id") or "").strip()
-                if qid:
-                    q_no = question_no_by_id.get(qid)
-            if q_no is None or q_no < start_q or q_no > end_q:
-                continue
-
-            observed_question_nos.add(q_no)
-            range_answered_question_nos.setdefault(student_id, set()).add(q_no)
-            if score is not None:
-                range_scores[student_id] = range_scores.get(student_id, 0.0) + score
-
-    if not total_scores:
-        return {"error": "no_scored_responses", "exam_id": exam_id}
-
-    if questions:
-        expected_question_nos = sorted(q for q in known_question_nos if start_q <= q <= end_q)
-    else:
-        expected_question_nos = sorted(observed_question_nos)
-    if not expected_question_nos:
-        return {
-            "error": "question_range_not_found",
-            "exam_id": exam_id,
-            "range": {"start_question_no": start_q, "end_question_no": end_q},
-            "message": "在该考试中未找到指定题号区间。",
-        }
-
-    student_rows: List[Dict[str, Any]] = []
-    expected_count = len(expected_question_nos)
-    for student_id in sorted(total_scores.keys()):
-        meta = students_meta.get(student_id) or {}
-        answered = len(range_answered_question_nos.get(student_id) or set())
-        student_rows.append(
-            {
-                "student_id": student_id,
-                "student_name": meta.get("student_name", ""),
-                "class_name": meta.get("class_name", ""),
-                "range_score": round(float(range_scores.get(student_id, 0.0)), 3),
-                "total_score": round(float(total_scores.get(student_id, 0.0)), 3),
-                "answered_questions": answered,
-                "missing_questions": max(0, expected_count - answered),
-            }
-        )
-
-    sorted_desc = sorted(
-        student_rows,
-        key=lambda item: (
-            -(item.get("range_score") or 0.0),
-            -(item.get("total_score") or 0.0),
-            str(item.get("student_id") or ""),
-        ),
+    return _exam_range_top_students_impl(
+        exam_id,
+        start_question_no,
+        end_question_no,
+        top_n=top_n,
+        deps=_exam_range_deps(),
     )
-    sorted_asc = sorted(
-        student_rows,
-        key=lambda item: (
-            item.get("range_score") or 0.0,
-            item.get("total_score") or 0.0,
-            str(item.get("student_id") or ""),
-        ),
-    )
-
-    top_students: List[Dict[str, Any]] = []
-    bottom_students: List[Dict[str, Any]] = []
-    for index, item in enumerate(sorted_desc[:sample_n], start=1):
-        top_students.append({**item, "rank": index})
-    for index, item in enumerate(sorted_asc[:sample_n], start=1):
-        bottom_students.append({**item, "rank": index})
-
-    score_values = [float(item.get("range_score") or 0.0) for item in student_rows]
-    max_possible_score = 0.0
-    for q_no in expected_question_nos:
-        max_possible_score += float(max_score_by_no.get(q_no) or 0.0)
-
-    return {
-        "ok": True,
-        "exam_id": exam_id,
-        "range": {
-            "start_question_no": start_q,
-            "end_question_no": end_q,
-            "question_count": len(expected_question_nos),
-            "question_nos": expected_question_nos,
-            "max_possible_score": round(max_possible_score, 3) if max_possible_score > 0 else None,
-        },
-        "summary": {
-            "student_count": len(student_rows),
-            "avg_score": round(sum(score_values) / len(score_values), 3) if score_values else 0.0,
-            "median_score": round(_median_float(score_values), 3) if score_values else 0.0,
-            "max_score": round(max(score_values), 3) if score_values else 0.0,
-            "min_score": round(min(score_values), 3) if score_values else 0.0,
-        },
-        "top_students": top_students,
-        "bottom_students": bottom_students,
-    }
 
 
 def _normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
@@ -5441,92 +5307,21 @@ def _normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
 
 
 def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-    if not isinstance(ranges, list) or not ranges:
-        return {"error": "invalid_ranges", "exam_id": exam_id, "message": "ranges 必须是非空数组。"}
-
-    sample_n = _safe_int_arg(top_n, default=5, minimum=1, maximum=50)
-    results: List[Dict[str, Any]] = []
-    invalid_ranges: List[Dict[str, Any]] = []
-    for idx, item in enumerate(ranges, start=1):
-        if not isinstance(item, dict):
-            invalid_ranges.append({"index": idx, "error": "range_item_not_object"})
-            continue
-        start_q = item.get("start_question_no")
-        end_q = item.get("end_question_no")
-        label = str(item.get("label") or "").strip()
-        result = exam_range_top_students(exam_id, start_q, end_q, top_n=sample_n)
-        if not result.get("ok"):
-            invalid_ranges.append(
-                {
-                    "index": idx,
-                    "label": label or f"range_{idx}",
-                    "error": result.get("error") or "range_compute_failed",
-                    "message": result.get("message") or "",
-                }
-            )
-            continue
-        results.append(
-            {
-                "index": idx,
-                "label": label or f"{result['range']['start_question_no']}-{result['range']['end_question_no']}",
-                "range": result.get("range"),
-                "summary": result.get("summary"),
-                "top_students": result.get("top_students"),
-                "bottom_students": result.get("bottom_students"),
-            }
-        )
-
-    return {
-        "ok": bool(results),
-        "exam_id": exam_id,
-        "range_count_requested": len(ranges),
-        "range_count_succeeded": len(results),
-        "range_count_failed": len(invalid_ranges),
-        "ranges": results,
-        "invalid_ranges": invalid_ranges,
-    }
+    return _exam_range_summary_batch_impl(
+        exam_id,
+        ranges,
+        top_n=top_n,
+        deps=_exam_range_deps(),
+    )
 
 
 def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-
-    normalized_nos = _normalize_question_no_list(question_nos, maximum=200)
-    if not normalized_nos:
-        return {"error": "invalid_question_nos", "exam_id": exam_id, "message": "question_nos 必须包含至少一个有效题号。"}
-
-    sample_n = _safe_int_arg(top_n, default=5, minimum=1, maximum=100)
-    items: List[Dict[str, Any]] = []
-    missing_question_nos: List[int] = []
-    for q_no in normalized_nos:
-        detail = exam_question_detail(exam_id, question_no=str(q_no), top_n=sample_n)
-        if detail.get("ok"):
-            items.append(
-                {
-                    "question_no": q_no,
-                    "question": detail.get("question"),
-                    "distribution": detail.get("distribution"),
-                    "sample_top_students": detail.get("sample_top_students"),
-                    "sample_bottom_students": detail.get("sample_bottom_students"),
-                    "response_count": detail.get("response_count"),
-                }
-            )
-            continue
-        missing_question_nos.append(q_no)
-
-    return {
-        "ok": bool(items),
-        "exam_id": exam_id,
-        "requested_question_nos": normalized_nos,
-        "question_count_succeeded": len(items),
-        "question_count_failed": len(missing_question_nos),
-        "questions": items,
-        "missing_question_nos": missing_question_nos,
-    }
+    return _exam_question_batch_detail_impl(
+        exam_id,
+        question_nos,
+        top_n=top_n,
+        deps=_exam_range_deps(),
+    )
 
 
 _EXAM_CHART_DEFAULT_TYPES = ["score_distribution", "knowledge_radar", "class_compare", "question_discrimination"]
@@ -5904,136 +5699,7 @@ def _chart_code_question_discrimination() -> str:
 
 
 def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    exam_id = str(args.get("exam_id") or "").strip()
-    if not exam_id:
-        return {"error": "exam_id_required"}
-
-    top_n = _safe_int_arg(args.get("top_n"), default=12, minimum=3, maximum=30)
-    timeout_sec = _safe_int_arg(args.get("timeout_sec"), default=120, minimum=30, maximum=3600)
-    chart_types = _normalize_exam_chart_types(args.get("chart_types"))
-
-    bundle = _build_exam_chart_bundle_input(exam_id, top_n=top_n)
-    if bundle.get("error"):
-        return bundle
-
-    warnings = list(bundle.get("warnings") or [])
-    charts: List[Dict[str, Any]] = []
-
-    def run_chart(
-        chart_type: str,
-        title: str,
-        python_code: str,
-        input_data: Dict[str, Any],
-        save_as: str,
-    ) -> None:
-        result = execute_chart_exec(
-            {
-                "python_code": python_code,
-                "input_data": input_data,
-                "chart_hint": f"{chart_type}:{exam_id}",
-                "timeout_sec": timeout_sec,
-                "save_as": save_as,
-            },
-            app_root=APP_ROOT,
-            uploads_dir=UPLOADS_DIR,
-        )
-        entry = {
-            "chart_type": chart_type,
-            "title": title,
-            "ok": bool(result.get("ok")),
-            "run_id": result.get("run_id"),
-            "image_url": result.get("image_url"),
-            "meta_url": result.get("meta_url"),
-            "artifacts": result.get("artifacts") or [],
-        }
-        if not entry["ok"]:
-            stderr = str(result.get("stderr") or "").strip()
-            if stderr:
-                entry["stderr"] = stderr[:400]
-            warnings.append(f"{title} 生成失败。")
-        charts.append(entry)
-
-    for chart_type in chart_types:
-        if chart_type == "score_distribution":
-            scores = bundle.get("scores") or []
-            if not scores:
-                warnings.append("成绩分布图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="成绩分布图",
-                python_code=_chart_code_score_distribution(),
-                input_data={"title": f"Score Distribution · {exam_id}", "scores": scores},
-                save_as="score_distribution.png",
-            )
-            continue
-
-        if chart_type == "knowledge_radar":
-            kp_items = bundle.get("knowledge_points") or []
-            if not kp_items:
-                warnings.append("知识点雷达图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="知识点掌握雷达图",
-                python_code=_chart_code_knowledge_radar(),
-                input_data={"title": f"Knowledge Mastery · {exam_id}", "items": kp_items},
-                save_as="knowledge_radar.png",
-            )
-            continue
-
-        if chart_type == "class_compare":
-            compare_items = bundle.get("class_compare") or []
-            if not compare_items:
-                warnings.append("班级/分层对比图数据不足。")
-                continue
-            compare_mode = str(bundle.get("class_compare_mode") or "class")
-            x_label = "Class" if compare_mode == "class" else "Tier"
-            run_chart(
-                chart_type=chart_type,
-                title="班级（或分层）均分对比图",
-                python_code=_chart_code_class_compare(),
-                input_data={
-                    "title": f"Average Score Compare · {exam_id}",
-                    "x_label": x_label,
-                    "items": compare_items,
-                },
-                save_as="class_compare.png",
-            )
-            continue
-
-        if chart_type == "question_discrimination":
-            items = bundle.get("question_discrimination") or []
-            if not items:
-                warnings.append("题目区分度图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="题目区分度图（低到高）",
-                python_code=_chart_code_question_discrimination(),
-                input_data={"title": f"Question Discrimination · {exam_id}", "items": items},
-                save_as="question_discrimination.png",
-            )
-            continue
-
-    successful = [c for c in charts if c.get("ok") and c.get("image_url")]
-    markdown_lines = [f"### 考试分析图表 · {exam_id}"]
-    for item in successful:
-        title = str(item.get("title") or item.get("chart_type") or "chart")
-        markdown_lines.append(f"#### {title}")
-        markdown_lines.append(f"![{title}]({item.get('image_url')})")
-    markdown = "\n\n".join(markdown_lines) if successful else ""
-
-    return {
-        "ok": bool(successful),
-        "exam_id": exam_id,
-        "chart_types_requested": chart_types,
-        "generated_count": len(successful),
-        "student_count": bundle.get("student_count"),
-        "charts": charts,
-        "warnings": warnings,
-        "markdown": markdown,
-    }
+    return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
 
 
 def list_assignments() -> Dict[str, Any]:
@@ -8690,49 +8356,7 @@ def _score_band_label(percent: float) -> str:
 
 
 def summarize_exam_students(exam_id: str, max_total: Optional[float]) -> Dict[str, Any]:
-    res = exam_students_list(exam_id, limit=500)
-    if not res.get("ok"):
-        return {"error": res.get("error") or "students_list_failed", "exam_id": exam_id}
-    students = res.get("students") or []
-    scores: List[float] = []
-    for item in students:
-        score = item.get("total_score")
-        if isinstance(score, (int, float)):
-            scores.append(float(score))
-    scores_sorted = sorted(scores)
-    stats: Dict[str, Any] = {}
-    if scores_sorted:
-        stats = {
-            "min": round(scores_sorted[0], 3),
-            "p10": round(_percentile(scores_sorted, 0.10), 3),
-            "p25": round(_percentile(scores_sorted, 0.25), 3),
-            "median": round(_percentile(scores_sorted, 0.50), 3),
-            "p75": round(_percentile(scores_sorted, 0.75), 3),
-            "p90": round(_percentile(scores_sorted, 0.90), 3),
-            "max": round(scores_sorted[-1], 3),
-        }
-    bands = []
-    if max_total and isinstance(max_total, (int, float)) and float(max_total) > 0 and scores_sorted:
-        buckets = [(0, 9), (10, 19), (20, 29), (30, 39), (40, 49), (50, 59), (60, 69), (70, 79), (80, 89), (90, 100)]
-        for lo, hi in buckets:
-            label = f"{lo}–{hi}%"
-            count = 0
-            for s in scores_sorted:
-                pct = (float(s) / float(max_total)) * 100.0
-                bucket = _score_band_label(pct)
-                if bucket == label:
-                    count += 1
-            bands.append({"band": label, "count": count})
-    top_students = students[:5]
-    bottom_students = students[-5:] if len(students) >= 5 else students[:]
-    return {
-        "exam_id": exam_id,
-        "total_students": res.get("total_students", len(students)),
-        "score_stats": stats,
-        "score_bands": bands,
-        "top_students": top_students,
-        "bottom_students": bottom_students,
-    }
+    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps())
 
 
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
@@ -8776,77 +8400,11 @@ def load_question_kp_map() -> Dict[str, str]:
 
 
 def build_exam_longform_context(exam_id: str) -> Dict[str, Any]:
-    overview = exam_get(exam_id)
-    analysis_res = exam_analysis_get(exam_id)
-    analysis_payload = analysis_res.get("analysis") if isinstance(analysis_res, dict) else None
-    max_total = None
-    if isinstance(analysis_payload, dict):
-        totals = analysis_payload.get("totals")
-        if isinstance(totals, dict):
-            max_total = totals.get("max_total")
-            try:
-                max_total = float(max_total) if max_total is not None else None
-            except Exception:
-                max_total = None
-    students_summary = summarize_exam_students(exam_id, max_total=max_total)
-    kp_catalog_all = load_kp_catalog()
-    q_kp_map_all = load_question_kp_map()
-    needed_qids: set[str] = set()
-    needed_kp_ids: set[str] = set()
-    if isinstance(analysis_payload, dict):
-        for item in (analysis_payload.get("question_metrics") or []) + (analysis_payload.get("high_loss_questions") or []):
-            if not isinstance(item, dict):
-                continue
-            qid = str(item.get("question_id") or "").strip()
-            if qid:
-                needed_qids.add(qid)
-        for item in analysis_payload.get("knowledge_points") or []:
-            if not isinstance(item, dict):
-                continue
-            kp_id = str(item.get("kp_id") or "").strip()
-            if kp_id:
-                needed_kp_ids.add(kp_id)
-    for qid in needed_qids:
-        kp_id = q_kp_map_all.get(qid)
-        if kp_id:
-            needed_kp_ids.add(kp_id)
-    kp_catalog = {kp_id: kp_catalog_all[kp_id] for kp_id in needed_kp_ids if kp_id in kp_catalog_all}
-    q_kp_map = {qid: q_kp_map_all[qid] for qid in needed_qids if qid in q_kp_map_all}
-
-    overview_slim: Dict[str, Any] = overview if not overview.get("ok") else {}
-    if overview.get("ok"):
-        overview_slim = {
-            "ok": True,
-            "exam_id": overview.get("exam_id"),
-            "generated_at": overview.get("generated_at"),
-            "meta": overview.get("meta"),
-            "counts": overview.get("counts"),
-            "totals_summary": overview.get("totals_summary"),
-            "score_mode": overview.get("score_mode"),
-        }
-
-    analysis_slim: Dict[str, Any] = analysis_res if not analysis_res.get("ok") else {}
-    if analysis_res.get("ok"):
-        analysis_slim = {
-            "ok": True,
-            "exam_id": analysis_res.get("exam_id"),
-            "analysis": analysis_payload,
-            "source": analysis_res.get("source"),
-        }
-
-    return {
-        "exam_overview": overview_slim,
-        "exam_analysis": analysis_slim,
-        "students_summary": students_summary,
-        "knowledge_points_catalog": kp_catalog,
-        "question_kp_map": q_kp_map,
-    }
+    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps())
 
 
 def _calc_longform_max_tokens(min_chars: int) -> int:
-    # Rough heuristic: Chinese 1 char ~ 1 token-ish; keep headroom but cap.
-    base = int(max(512, min_chars) * 2)
-    return max(2048, min(base, 8192))
+    return _calc_longform_max_tokens_impl(min_chars)
 
 
 def _generate_longform_reply(
@@ -8857,46 +8415,15 @@ def _generate_longform_reply(
     teacher_id: Optional[str] = None,
     skill_runtime: Optional[Any] = None,
 ) -> str:
-    max_tokens = _calc_longform_max_tokens(min_chars)
-    resp = call_llm(
+    return _generate_longform_reply_impl(
         convo,
-        tools=None,
-        role_hint=role_hint,
-        max_tokens=max_tokens,
-        skill_id=skill_id,
-        kind="chat.exam_longform",
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
+        min_chars,
+        role_hint,
+        skill_id,
+        teacher_id,
+        skill_runtime,
+        deps=_exam_longform_deps(),
     )
-    content = resp.get("choices", [{}])[0].get("message", {}).get("content") or ""
-    if _non_ws_len(content) >= min_chars:
-        return content
-
-    expand_convo = convo + [
-        {"role": "assistant", "content": content},
-        {
-            "role": "user",
-            "content": (
-                f"请在不改变事实前提下继续补充扩写，使全文字数不少于 {min_chars} 字。"
-                "避免重复已有内容，优先补充：逐题/知识点的具体诊断、典型错误成因、分层教学策略、课内讲评与课后训练安排、可操作的下一步。"
-                "不要调用任何工具。"
-            ),
-        },
-    ]
-    resp2 = call_llm(
-        expand_convo,
-        tools=None,
-        role_hint=role_hint,
-        max_tokens=max_tokens,
-        skill_id=skill_id,
-        kind="chat.exam_longform",
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-    )
-    content2 = resp2.get("choices", [{}])[0].get("message", {}).get("content") or ""
-    if _non_ws_len(content2) >= min_chars:
-        return content2
-    return content2 if _non_ws_len(content2) > _non_ws_len(content) else content
 
 
 def run_agent(
@@ -10045,6 +9572,45 @@ def _tool_dispatch_deps():
         teacher_llm_routing_propose=teacher_llm_routing_propose,
         teacher_llm_routing_apply=teacher_llm_routing_apply,
         teacher_llm_routing_rollback=teacher_llm_routing_rollback,
+    )
+
+
+def _exam_range_deps():
+    return ExamRangeDeps(
+        load_exam_manifest=load_exam_manifest,
+        exam_responses_path=exam_responses_path,
+        exam_questions_path=exam_questions_path,
+        read_questions_csv=read_questions_csv,
+        parse_score_value=parse_score_value,
+        safe_int_arg=_safe_int_arg,
+        exam_question_detail=exam_question_detail,
+    )
+
+
+def _exam_analysis_charts_deps():
+    return ExamAnalysisChartsDeps(
+        app_root=APP_ROOT,
+        uploads_dir=UPLOADS_DIR,
+        safe_int_arg=_safe_int_arg,
+        load_exam_manifest=load_exam_manifest,
+        exam_responses_path=exam_responses_path,
+        compute_exam_totals=compute_exam_totals,
+        exam_analysis_get=exam_analysis_get,
+        parse_score_value=parse_score_value,
+        exam_questions_path=exam_questions_path,
+        read_questions_csv=read_questions_csv,
+        execute_chart_exec=execute_chart_exec,
+    )
+
+
+def _exam_longform_deps():
+    return ExamLongformDeps(
+        data_dir=DATA_DIR,
+        exam_students_list=exam_students_list,
+        exam_get=exam_get,
+        exam_analysis_get=exam_analysis_get,
+        call_llm=call_llm,
+        non_ws_len=_non_ws_len,
     )
 
 
