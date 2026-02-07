@@ -14,7 +14,6 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
-from difflib import SequenceMatcher
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -263,6 +262,14 @@ from .student_import_service import (
     import_students_from_responses as _import_students_from_responses_impl,
     resolve_responses_file as _resolve_responses_file_impl,
     student_import as _student_import_impl,
+)
+from .student_directory_service import (
+    StudentDirectoryDeps,
+    list_all_student_ids as _list_all_student_ids_impl,
+    list_all_student_profiles as _list_all_student_profiles_impl,
+    list_student_ids_by_class as _list_student_ids_by_class_impl,
+    student_candidates_by_name as _student_candidates_by_name_impl,
+    student_search as _student_search_impl,
 )
 from .student_submit_service import StudentSubmitDeps, submit as _student_submit_impl
 from .teacher_memory_api_service import (
@@ -2586,47 +2593,7 @@ def load_profile_file(path: Path) -> Dict[str, Any]:
 
 
 def student_search(query: str, limit: int = 5) -> Dict[str, Any]:
-    profiles_dir = DATA_DIR / "student_profiles"
-    if not profiles_dir.exists():
-        return {"matches": []}
-
-    q_norm = normalize(query)
-    matches = []
-    for path in profiles_dir.glob("*.json"):
-        profile = load_profile_file(path)
-        student_id = profile.get("student_id") or path.stem
-        candidates = [
-            student_id,
-            profile.get("student_name", ""),
-            profile.get("class_name", ""),
-        ] + (profile.get("aliases") or [])
-
-        best_score = 0.0
-        for cand in candidates:
-            if not cand:
-                continue
-            cand_norm = normalize(str(cand))
-            if not cand_norm:
-                continue
-            if q_norm and q_norm in cand_norm:
-                score = 1.0
-            else:
-                score = SequenceMatcher(None, q_norm, cand_norm).ratio() if q_norm else 0.0
-            if score > best_score:
-                best_score = score
-
-        if best_score > 0.1:
-            matches.append(
-                {
-                    "student_id": student_id,
-                    "student_name": profile.get("student_name", ""),
-                    "class_name": profile.get("class_name", ""),
-                    "score": round(best_score, 3),
-                }
-            )
-
-    matches.sort(key=lambda x: x["score"], reverse=True)
-    return {"matches": matches[:limit]}
+    return _student_search_impl(query, limit, _student_directory_deps())
 
 
 def student_profile_get(student_id: str) -> Dict[str, Any]:
@@ -2706,84 +2673,19 @@ def start_profile_update_worker() -> None:
 
 
 def student_candidates_by_name(name: str) -> List[Dict[str, str]]:
-    profiles_dir = DATA_DIR / "student_profiles"
-    if not profiles_dir.exists():
-        return []
-    q_norm = normalize(name)
-    if not q_norm:
-        return []
-    results: List[Dict[str, str]] = []
-    for path in profiles_dir.glob("*.json"):
-        profile = load_profile_file(path)
-        student_id = profile.get("student_id") or path.stem
-        student_name = profile.get("student_name", "")
-        class_name = profile.get("class_name", "")
-        aliases = profile.get("aliases") or []
-        if q_norm in {
-            normalize(student_name),
-            normalize(student_id),
-            normalize(f"{class_name}{student_name}") if class_name and student_name else "",
-        }:
-            results.append(
-                {
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                }
-            )
-            continue
-        matched_alias = False
-        for alias in aliases:
-            if q_norm == normalize(alias):
-                matched_alias = True
-                break
-        if matched_alias:
-            results.append(
-                {
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                }
-            )
-    return results
+    return _student_candidates_by_name_impl(name, _student_directory_deps())
 
 
 def list_all_student_profiles() -> List[Dict[str, str]]:
-    profiles_dir = DATA_DIR / "student_profiles"
-    if not profiles_dir.exists():
-        return []
-    out: List[Dict[str, str]] = []
-    seen: set[str] = set()
-    for path in profiles_dir.glob("*.json"):
-        profile = load_profile_file(path)
-        student_id = str(profile.get("student_id") or path.stem).strip()
-        if not student_id or student_id in seen:
-            continue
-        seen.add(student_id)
-        out.append(
-            {
-                "student_id": student_id,
-                "student_name": str(profile.get("student_name") or ""),
-                "class_name": str(profile.get("class_name") or ""),
-            }
-        )
-    return out
+    return _list_all_student_profiles_impl(_student_directory_deps())
 
 
 def list_all_student_ids() -> List[str]:
-    return sorted([p.get("student_id") for p in list_all_student_profiles() if p.get("student_id")])
+    return _list_all_student_ids_impl(_student_directory_deps())
 
 
 def list_student_ids_by_class(class_name: str) -> List[str]:
-    class_norm = normalize(class_name or "")
-    if not class_norm:
-        return []
-    out: List[str] = []
-    for p in list_all_student_profiles():
-        if normalize(p.get("class_name") or "") == class_norm and p.get("student_id"):
-            out.append(p["student_id"])
-    out.sort()
-    return out
+    return _list_student_ids_by_class_impl(class_name, _student_directory_deps())
 
 
 def normalize_due_at(value: Optional[str]) -> Optional[str]:
@@ -5019,6 +4921,14 @@ def _student_import_deps():
         data_dir=DATA_DIR,
         load_profile_file=load_profile_file,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
+def _student_directory_deps():
+    return StudentDirectoryDeps(
+        data_dir=DATA_DIR,
+        load_profile_file=load_profile_file,
+        normalize=normalize,
     )
 
 
