@@ -209,6 +209,12 @@ from .exam_longform_service import (
     generate_longform_reply as _generate_longform_reply_impl,
     summarize_exam_students as _summarize_exam_students_impl,
 )
+from .exam_overview_service import (
+    ExamOverviewDeps,
+    exam_analysis_get as _exam_analysis_get_impl,
+    exam_get as _exam_get_impl,
+    exam_students_list as _exam_students_list_impl,
+)
 from .exam_range_service import (
     ExamRangeDeps,
     exam_question_batch_detail as _exam_question_batch_detail_impl,
@@ -2868,113 +2874,15 @@ def compute_exam_totals(responses_path: Path) -> Dict[str, Any]:
 
 
 def exam_get(exam_id: str) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-    responses_path = exam_responses_path(manifest)
-    questions_path = exam_questions_path(manifest)
-    analysis_path = exam_analysis_draft_path(manifest)
-    questions = read_questions_csv(questions_path) if questions_path else {}
-    totals_result = compute_exam_totals(responses_path) if responses_path and responses_path.exists() else {"totals": {}, "students": {}}
-    totals = totals_result["totals"]
-    total_values = sorted(totals.values())
-    avg_total = sum(total_values) / len(total_values) if total_values else 0.0
-    median_total = total_values[len(total_values) // 2] if total_values else 0.0
-    meta = manifest.get("meta") if isinstance(manifest.get("meta"), dict) else {}
-    score_mode = meta.get("score_mode") if isinstance(meta, dict) else None
-    if not score_mode:
-        score_mode = "question" if questions else "unknown"
-    return {
-        "ok": True,
-        "exam_id": manifest.get("exam_id") or exam_id,
-        "generated_at": manifest.get("generated_at"),
-        "meta": meta or {},
-        "counts": {
-            "students": len(totals),
-            "questions": len(questions),
-        },
-        "totals_summary": {
-            "avg_total": round(avg_total, 3),
-            "median_total": round(median_total, 3),
-            "max_total_observed": max(total_values) if total_values else 0.0,
-            "min_total_observed": min(total_values) if total_values else 0.0,
-        },
-        "score_mode": score_mode,
-        "files": {
-            "manifest": str((DATA_DIR / "exams" / exam_id / "manifest.json").resolve()),
-            "responses": str(responses_path) if responses_path else None,
-            "questions": str(questions_path) if questions_path else None,
-            "analysis_draft": str(analysis_path) if analysis_path else None,
-        },
-    }
+    return _exam_get_impl(exam_id, _exam_overview_deps())
 
 
 def exam_analysis_get(exam_id: str) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-    analysis_path = exam_analysis_draft_path(manifest)
-    if analysis_path and analysis_path.exists():
-        try:
-            payload = json.loads(analysis_path.read_text(encoding="utf-8"))
-            return {"ok": True, "exam_id": exam_id, "analysis": payload, "source": str(analysis_path)}
-        except Exception:
-            return {"error": "analysis_parse_failed", "exam_id": exam_id, "source": str(analysis_path)}
-
-    # If no precomputed draft exists, compute a minimal summary.
-    responses_path = exam_responses_path(manifest)
-    if not responses_path or not responses_path.exists():
-        return {"error": "responses_missing", "exam_id": exam_id}
-    totals_result = compute_exam_totals(responses_path)
-    totals = sorted(totals_result["totals"].values())
-    avg_total = sum(totals) / len(totals) if totals else 0.0
-    median_total = totals[len(totals) // 2] if totals else 0.0
-    return {
-        "ok": True,
-        "exam_id": exam_id,
-        "analysis": {
-            "exam_id": exam_id,
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "totals": {
-                "student_count": len(totals),
-                "avg_total": round(avg_total, 3),
-                "median_total": round(median_total, 3),
-                "max_total_observed": max(totals) if totals else 0.0,
-                "min_total_observed": min(totals) if totals else 0.0,
-            },
-            "notes": "No precomputed analysis draft found; returned minimal totals summary.",
-        },
-        "source": "computed",
-    }
+    return _exam_analysis_get_impl(exam_id, _exam_overview_deps())
 
 
 def exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
-    manifest = load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-    responses_path = exam_responses_path(manifest)
-    if not responses_path or not responses_path.exists():
-        return {"error": "responses_missing", "exam_id": exam_id}
-    totals_result = compute_exam_totals(responses_path)
-    totals: Dict[str, float] = totals_result["totals"]
-    students_meta: Dict[str, Dict[str, str]] = totals_result["students"]
-    items = []
-    for student_id, total_score in totals.items():
-        meta = students_meta.get(student_id) or {}
-        items.append(
-            {
-                "student_id": student_id,
-                "student_name": meta.get("student_name", ""),
-                "class_name": meta.get("class_name", ""),
-                "total_score": round(total_score, 3),
-            }
-        )
-    items.sort(key=lambda x: x["total_score"], reverse=True)
-    total_students = len(items)
-    for idx, item in enumerate(items, start=1):
-        item["rank"] = idx
-        item["percentile"] = round(1.0 - (idx - 1) / total_students, 4) if total_students else 0.0
-    return {"ok": True, "exam_id": exam_id, "total_students": total_students, "students": items[: max(1, int(limit or 50))]}
+    return _exam_students_list_impl(exam_id, limit, _exam_overview_deps())
 
 
 def exam_student_detail(exam_id: str, student_id: Optional[str] = None, student_name: Optional[str] = None, class_name: Optional[str] = None) -> Dict[str, Any]:
@@ -4660,6 +4568,19 @@ def _exam_upload_start_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         diag_log=diag_log,
         uuid_hex=lambda: uuid.uuid4().hex,
+    )
+
+
+def _exam_overview_deps():
+    return ExamOverviewDeps(
+        data_dir=DATA_DIR,
+        load_exam_manifest=load_exam_manifest,
+        exam_responses_path=exam_responses_path,
+        exam_questions_path=exam_questions_path,
+        exam_analysis_draft_path=exam_analysis_draft_path,
+        read_questions_csv=read_questions_csv,
+        compute_exam_totals=compute_exam_totals,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
