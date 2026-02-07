@@ -14,7 +14,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from functools import partial
-from datetime import datetime, timedelta
+from datetime import datetime
 from difflib import SequenceMatcher
 import hashlib
 from pathlib import Path
@@ -203,6 +203,21 @@ from .teacher_memory_apply_service import (
 from .teacher_memory_insights_service import (
     TeacherMemoryInsightsDeps,
     teacher_memory_insights as _teacher_memory_insights_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_age_days as _teacher_memory_age_days_impl,
+    teacher_memory_conflicts as _teacher_memory_conflicts_impl,
+    teacher_memory_has_term as _teacher_memory_has_term_impl,
+    teacher_memory_is_expired_record as _teacher_memory_is_expired_record_impl,
+    teacher_memory_is_sensitive as _teacher_memory_is_sensitive_impl,
+    teacher_memory_loose_match as _teacher_memory_loose_match_impl,
+    teacher_memory_norm_text as _teacher_memory_norm_text_impl,
+    teacher_memory_parse_dt as _teacher_memory_parse_dt_impl,
+    teacher_memory_priority_score as _teacher_memory_priority_score_impl,
+    teacher_memory_rank_score as _teacher_memory_rank_score_impl,
+    teacher_memory_record_expire_at as _teacher_memory_record_expire_at_impl,
+    teacher_memory_record_ttl_days as _teacher_memory_record_ttl_days_impl,
+    teacher_memory_stable_hash as _teacher_memory_stable_hash_impl,
 )
 from .teacher_memory_propose_service import (
     TeacherMemoryProposeDeps,
@@ -1515,10 +1530,7 @@ def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
 
 
 def _teacher_memory_is_sensitive(content: str) -> bool:
-    text = str(content or "")
-    if not text.strip():
-        return False
-    return any(p.search(text) for p in _TEACHER_MEMORY_SENSITIVE_PATTERNS)
+    return _teacher_memory_is_sensitive_impl(content, patterns=_TEACHER_MEMORY_SENSITIVE_PATTERNS)
 
 
 def _teacher_memory_event_log_path(teacher_id: str) -> Path:
@@ -1546,74 +1558,36 @@ def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dic
 
 
 def _teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
-    text = str(raw or "").strip()
-    if not text:
-        return None
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        return datetime.fromisoformat(text)
-    except Exception:
-        return None
+    return _teacher_memory_parse_dt_impl(raw)
 
 
 def _teacher_memory_record_ttl_days(rec: Dict[str, Any]) -> int:
-    try:
-        if rec.get("ttl_days") is not None:
-            return max(0, int(rec.get("ttl_days") or 0))
-    except Exception:
-        pass
-    meta = rec.get("meta") if isinstance(rec.get("meta"), dict) else {}
-    if isinstance(meta, dict):
-        try:
-            if meta.get("ttl_days") is not None:
-                return max(0, int(meta.get("ttl_days") or 0))
-        except Exception:
-            pass
-    target = str(rec.get("target") or "").strip().upper()
-    source = str(rec.get("source") or "").strip().lower()
-    if target == "DAILY" or source == "auto_flush":
-        return TEACHER_MEMORY_TTL_DAYS_DAILY
-    return TEACHER_MEMORY_TTL_DAYS_MEMORY
+    return _teacher_memory_record_ttl_days_impl(
+        rec,
+        ttl_days_daily=TEACHER_MEMORY_TTL_DAYS_DAILY,
+        ttl_days_memory=TEACHER_MEMORY_TTL_DAYS_MEMORY,
+    )
 
 
 def _teacher_memory_record_expire_at(rec: Dict[str, Any]) -> Optional[datetime]:
-    expire_from_field = _teacher_memory_parse_dt(rec.get("expires_at"))
-    if expire_from_field is not None:
-        return expire_from_field
-    ttl_days = _teacher_memory_record_ttl_days(rec)
-    if ttl_days <= 0:
-        return None
-    base_ts = _teacher_memory_parse_dt(rec.get("applied_at")) or _teacher_memory_parse_dt(rec.get("created_at"))
-    if base_ts is None:
-        return None
-    return base_ts + timedelta(days=int(ttl_days))
+    return _teacher_memory_record_expire_at_impl(
+        rec,
+        parse_dt=_teacher_memory_parse_dt,
+        record_ttl_days=_teacher_memory_record_ttl_days,
+    )
 
 
 def _teacher_memory_is_expired_record(rec: Dict[str, Any], now: Optional[datetime] = None) -> bool:
-    if not TEACHER_MEMORY_DECAY_ENABLED:
-        return False
-    expire_at = _teacher_memory_record_expire_at(rec)
-    if expire_at is None:
-        return False
-    if now is not None:
-        now_dt = now
-    elif expire_at.tzinfo:
-        now_dt = datetime.now(expire_at.tzinfo)
-    else:
-        now_dt = datetime.now()
-    return now_dt >= expire_at
+    return _teacher_memory_is_expired_record_impl(
+        rec,
+        decay_enabled=TEACHER_MEMORY_DECAY_ENABLED,
+        record_expire_at=_teacher_memory_record_expire_at,
+        now=now,
+    )
 
 
 def _teacher_memory_age_days(rec: Dict[str, Any], now: Optional[datetime] = None) -> int:
-    base_ts = _teacher_memory_parse_dt(rec.get("applied_at")) or _teacher_memory_parse_dt(rec.get("created_at"))
-    if base_ts is None:
-        return 0
-    if base_ts.tzinfo:
-        now_dt = now or datetime.now(base_ts.tzinfo)
-    else:
-        now_dt = now or datetime.now()
-    return max(0, int((now_dt - base_ts).total_seconds() // 86400))
+    return _teacher_memory_age_days_impl(rec, parse_dt=_teacher_memory_parse_dt, now=now)
 
 
 def _teacher_memory_priority_score(
@@ -1624,73 +1598,28 @@ def _teacher_memory_priority_score(
     source: str,
     meta: Optional[Dict[str, Any]] = None,
 ) -> int:
-    text = f"{title or ''}\n{content or ''}".strip()
-    source_norm = str(source or "manual").strip().lower()
-    target_norm = str(target or "MEMORY").strip().upper()
-    score = 0.0
-
-    if source_norm == "manual":
-        score += 70
-    elif source_norm == "auto_intent":
-        score += 62
-    elif source_norm == "auto_infer":
-        score += 54
-    elif source_norm == "auto_flush":
-        score += 36
-    else:
-        score += 44
-
-    if target_norm == "MEMORY":
-        score += 12
-    elif target_norm == "DAILY":
-        score += 4
-
-    if any(p.search(text) for p in _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS):
-        score += 15
-    if any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS):
-        score += 10
-    if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS):
-        score -= 18
-    if _teacher_memory_is_sensitive(text):
-        score = 0
-    if len(_teacher_memory_norm_text(text)) < 12:
-        score -= 8
-    if "先" in text and "后" in text:
-        score += 6
-    if "模板" in text or "格式" in text or "结构" in text:
-        score += 6
-
-    if isinstance(meta, dict):
-        try:
-            similar_hits = int(meta.get("similar_hits") or 0)
-        except Exception:
-            similar_hits = 0
-        if similar_hits > 0:
-            score += min(16, similar_hits * 4)
-
-    return max(0, min(100, int(round(score))))
+    return _teacher_memory_priority_score_impl(
+        target=target,
+        title=title,
+        content=content,
+        source=source,
+        meta=meta,
+        durable_intent_patterns=_TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
+        auto_infer_stable_patterns=_TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
+        temporary_hint_patterns=_TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
+        is_sensitive=_teacher_memory_is_sensitive,
+        norm_text=_teacher_memory_norm_text,
+    )
 
 
 def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
-    priority = rec.get("priority_score")
-    try:
-        p = float(priority)
-    except Exception:
-        p = float(
-            _teacher_memory_priority_score(
-                target=str(rec.get("target") or "MEMORY"),
-                title=str(rec.get("title") or ""),
-                content=str(rec.get("content") or ""),
-                source=str(rec.get("source") or "manual"),
-                meta=rec.get("meta") if isinstance(rec.get("meta"), dict) else None,
-            )
-        )
-    age_days = _teacher_memory_age_days(rec)
-    ttl_days = _teacher_memory_record_ttl_days(rec)
-    if not TEACHER_MEMORY_DECAY_ENABLED or ttl_days <= 0:
-        return p
-    decay = max(0.2, 1.0 - (age_days / max(1, ttl_days)))
-    return p * decay
+    return _teacher_memory_rank_score_impl(
+        rec,
+        decay_enabled=TEACHER_MEMORY_DECAY_ENABLED,
+        priority_score=_teacher_memory_priority_score,
+        age_days=_teacher_memory_age_days,
+        record_ttl_days=_teacher_memory_record_ttl_days,
+    )
 
 
 def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
@@ -1763,37 +1692,8 @@ def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: i
     return out
 
 
-def _teacher_memory_shingles(text: str) -> set[str]:
-    compact = re.sub(r"\s+", "", str(text or ""))
-    if not compact:
-        return set()
-    if len(compact) == 1:
-        return {compact}
-    return {compact[i : i + 2] for i in range(len(compact) - 1)}
-
-
 def _teacher_memory_loose_match(a: str, b: str) -> bool:
-    na = _teacher_memory_norm_text(a)
-    nb = _teacher_memory_norm_text(b)
-    if not na or not nb:
-        return False
-    if na == nb:
-        return True
-    if len(na) <= len(nb):
-        short, long = na, nb
-    else:
-        short, long = nb, na
-    if len(short) >= 12 and short in long:
-        return True
-    sa = _teacher_memory_shingles(na)
-    sb = _teacher_memory_shingles(nb)
-    if not sa or not sb:
-        return False
-    union = sa | sb
-    if not union:
-        return False
-    jac = len(sa & sb) / len(union)
-    return jac >= 0.72
+    return _teacher_memory_loose_match_impl(a, b, norm_text=_teacher_memory_norm_text)
 
 
 def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str) -> Optional[Dict[str, Any]]:
@@ -1855,21 +1755,16 @@ def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_n
 
 
 def _teacher_memory_has_term(text: str, terms: Tuple[str, ...]) -> bool:
-    t = str(text or "")
-    return any(term in t for term in terms)
+    return _teacher_memory_has_term_impl(text, terms)
 
 
 def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
-    n = _teacher_memory_norm_text(new_text)
-    o = _teacher_memory_norm_text(old_text)
-    if not n or not o or n == o:
-        return False
-    for a_terms, b_terms in _TEACHER_MEMORY_CONFLICT_GROUPS:
-        if _teacher_memory_has_term(n, a_terms) and _teacher_memory_has_term(o, b_terms):
-            return True
-        if _teacher_memory_has_term(n, b_terms) and _teacher_memory_has_term(o, a_terms):
-            return True
-    return False
+    return _teacher_memory_conflicts_impl(
+        new_text,
+        old_text,
+        norm_text=_teacher_memory_norm_text,
+        conflict_groups=_TEACHER_MEMORY_CONFLICT_GROUPS,
+    )
 
 
 def _teacher_memory_find_conflicting_applied(
@@ -1949,14 +1844,11 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
 
 
 def _teacher_memory_norm_text(text: str) -> str:
-    compact = re.sub(r"\s+", " ", str(text or "")).strip().lower()
-    compact = re.sub(r"[，。！？、,.!?;；:：`'\"“”‘’（）()\\[\\]{}<>]", "", compact)
-    return compact
+    return _teacher_memory_norm_text_impl(text)
 
 
 def _teacher_memory_stable_hash(*parts: str) -> str:
-    joined = "||".join(str(p or "").strip() for p in parts)
-    return hashlib.sha1(joined.encode("utf-8", errors="ignore")).hexdigest()[:20]
+    return _teacher_memory_stable_hash_impl(*parts)
 
 
 def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
