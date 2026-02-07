@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-from .assignment_api_service import AssignmentApiDeps
+from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
@@ -11393,10 +11393,12 @@ async def assignment_today(
 
 @app.get("/assignment/{assignment_id}")
 async def assignment_detail(assignment_id: str):
-    folder = DATA_DIR / "assignments" / assignment_id
-    if not folder.exists():
+    result = _get_assignment_detail_api_impl(assignment_id, deps=_assignment_api_deps())
+    if result.get("error") == "assignment_not_found":
         raise HTTPException(status_code=404, detail="assignment not found")
-    return build_assignment_detail(folder, include_text=True)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
 
 
 @app.get("/lessons")

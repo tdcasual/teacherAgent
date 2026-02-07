@@ -39,6 +39,7 @@ class UploadDraftFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp_dir = Path(td)
             app_mod = load_app(tmp_dir)
+            self.assertTrue(hasattr(app_mod, "_assignment_api_deps"))
             client = TestClient(app_mod.app)
 
             job_id = "job_test_001"
