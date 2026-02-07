@@ -32,6 +32,11 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
 from .assignment_context_service import build_assignment_context as _build_assignment_context_impl
+from .assignment_generate_service import (
+    AssignmentGenerateDeps,
+    AssignmentGenerateError,
+    generate_assignment as _generate_assignment_impl,
+)
 from .assignment_progress_service import (
     AssignmentProgressDeps,
     compute_assignment_progress as _compute_assignment_progress_impl,
@@ -86,6 +91,10 @@ from .assignment_upload_draft_service import (
     save_assignment_draft_override as _save_assignment_draft_override_impl,
 )
 from .assignment_upload_parse_service import AssignmentUploadParseDeps, process_upload_job as _process_upload_job_impl
+from .assignment_questions_ocr_service import (
+    AssignmentQuestionsOcrDeps,
+    assignment_questions_ocr as _assignment_questions_ocr_impl,
+)
 from .assignment_upload_query_service import (
     AssignmentUploadQueryDeps,
     AssignmentUploadQueryError,
@@ -99,6 +108,7 @@ from .assignment_submission_attempt_service import (
     counted_grade_item as _counted_grade_item_impl,
     list_submission_attempts as _list_submission_attempts_impl,
 )
+from .assignment_today_service import AssignmentTodayDeps, assignment_today as _assignment_today_impl
 from .assignment_upload_start_service import (
     AssignmentUploadStartDeps,
     AssignmentUploadStartError,
@@ -232,6 +242,7 @@ from .student_import_service import (
     resolve_responses_file as _resolve_responses_file_impl,
     student_import as _student_import_impl,
 )
+from .student_submit_service import StudentSubmitDeps, submit as _student_submit_impl
 from .teacher_memory_api_service import (
     TeacherMemoryApiDeps,
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
@@ -5217,6 +5228,49 @@ def _assignment_upload_legacy_deps():
     )
 
 
+def _assignment_today_deps():
+    return AssignmentTodayDeps(
+        data_dir=DATA_DIR,
+        parse_date_str=parse_date_str,
+        has_llm_key=lambda: bool(os.getenv("OPENAI_API_KEY") or os.getenv("SILICONFLOW_API_KEY")),
+        load_profile_file=load_profile_file,
+        find_assignment_for_date=find_assignment_for_date,
+        derive_kp_from_profile=derive_kp_from_profile,
+        safe_assignment_id=safe_assignment_id,
+        assignment_generate=assignment_generate,
+        load_assignment_meta=load_assignment_meta,
+        build_assignment_detail=build_assignment_detail,
+    )
+
+
+def _assignment_generate_deps():
+    return AssignmentGenerateDeps(
+        app_root=APP_ROOT,
+        parse_date_str=parse_date_str,
+        ensure_requirements_for_assignment=ensure_requirements_for_assignment,
+        run_script=run_script,
+        postprocess_assignment_meta=postprocess_assignment_meta,
+        diag_log=diag_log,
+    )
+
+
+def _assignment_questions_ocr_deps():
+    return AssignmentQuestionsOcrDeps(
+        uploads_dir=UPLOADS_DIR,
+        app_root=APP_ROOT,
+        run_script=run_script,
+    )
+
+
+def _student_submit_deps():
+    return StudentSubmitDeps(
+        uploads_dir=UPLOADS_DIR,
+        app_root=APP_ROOT,
+        student_submissions_dir=STUDENT_SUBMISSIONS_DIR,
+        run_script=run_script,
+    )
+
+
 def _assignment_upload_start_deps():
     return AssignmentUploadStartDeps(
         new_job_id=lambda: f"job_{uuid.uuid4().hex[:12]}",
@@ -6164,40 +6218,14 @@ async def assignment_today(
     generate: bool = True,
     per_kp: int = 5,
 ):
-    date_str = parse_date_str(date)
-    if generate and not (os.getenv("OPENAI_API_KEY") or os.getenv("SILICONFLOW_API_KEY")):
-        generate = False
-    profile = {}
-    class_name = None
-    if student_id:
-        profile = load_profile_file(DATA_DIR / "student_profiles" / f"{student_id}.json")
-        class_name = profile.get("class_name")
-
-    found = find_assignment_for_date(date_str, student_id=student_id, class_name=class_name)
-    if not found and auto_generate:
-        kp_list = derive_kp_from_profile(profile)
-        if not kp_list:
-            kp_list = ["uncategorized"]
-        assignment_id = safe_assignment_id(student_id, date_str)
-        args = {
-            "assignment_id": assignment_id,
-            "kp": ",".join(kp_list),
-            "per_kp": per_kp,
-            "generate": bool(generate),
-            "mode": "auto",
-            "date": date_str,
-            "student_ids": student_id,
-            "class_name": class_name or "",
-            "source": "auto",
-        }
-        assignment_generate(args)
-        found = {"folder": DATA_DIR / "assignments" / assignment_id, "meta": load_assignment_meta(DATA_DIR / "assignments" / assignment_id)}
-
-    if not found:
-        return {"date": date_str, "assignment": None}
-
-    detail = build_assignment_detail(found["folder"], include_text=True)
-    return {"date": date_str, "assignment": detail}
+    return _assignment_today_impl(
+        student_id=student_id,
+        date=date,
+        auto_generate=auto_generate,
+        generate=generate,
+        per_kp=per_kp,
+        deps=_assignment_today_deps(),
+    )
 
 
 @app.get("/assignment/{assignment_id}")
@@ -6321,54 +6349,25 @@ async def generate_assignment(
     source: Optional[str] = Form(""),
     requirements_json: Optional[str] = Form(""),
 ):
-    script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "select_practice.py"
-    requirements_payload = None
-    if requirements_json:
-        try:
-            requirements_payload = json.loads(requirements_json)
-        except Exception:
-            raise HTTPException(status_code=400, detail="requirements_json is not valid JSON")
-    date_str = parse_date_str(date)
-    req_result = ensure_requirements_for_assignment(
-        assignment_id,
-        date_str,
-        requirements_payload,
-        str(source or "teacher"),
-    )
-    if req_result and req_result.get("error"):
-        raise HTTPException(status_code=400, detail=req_result)
-    args = [
-        "python3",
-        str(script),
-        "--assignment-id",
-        assignment_id,
-        "--per-kp",
-        str(per_kp),
-    ]
-    if kp:
-        args += ["--kp", kp]
-    if question_ids:
-        args += ["--question-ids", question_ids]
-    if mode:
-        args += ["--mode", mode]
-    if date:
-        args += ["--date", date]
-    if class_name:
-        args += ["--class-name", class_name]
-    if student_ids:
-        args += ["--student-ids", student_ids]
-    if source:
-        args += ["--source", source]
-    if core_examples:
-        args += ["--core-examples", core_examples]
-    if generate:
-        args += ["--generate"]
-    out = run_script(args)
     try:
-        postprocess_assignment_meta(assignment_id, due_at=due_at or None)
-    except Exception as exc:
-        diag_log("assignment.meta.postprocess_failed", {"assignment_id": assignment_id, "error": str(exc)[:200]})
-    return {"ok": True, "output": out}
+        return _generate_assignment_impl(
+            assignment_id=assignment_id,
+            kp=kp,
+            question_ids=question_ids,
+            per_kp=per_kp,
+            core_examples=core_examples,
+            generate=generate,
+            mode=mode,
+            date=date,
+            due_at=due_at,
+            class_name=class_name,
+            student_ids=student_ids,
+            source=source,
+            requirements_json=requirements_json,
+            deps=_assignment_generate_deps(),
+        )
+    except AssignmentGenerateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/assignment/render")
@@ -6388,36 +6387,16 @@ async def assignment_questions_ocr(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    batch_dir = UPLOADS_DIR / "assignment_ocr" / assignment_id
-    batch_dir.mkdir(parents=True, exist_ok=True)
-    file_paths = []
-    for f in files:
-        dest = batch_dir / f.filename
-        dest.write_bytes(await f.read())
-        file_paths.append(str(dest))
-
-    script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "ingest_assignment_questions.py"
-    args = [
-        "python3",
-        str(script),
-        "--assignment-id",
-        assignment_id,
-        "--kp-id",
-        kp_id or "uncategorized",
-        "--difficulty",
-        difficulty or "basic",
-        "--tags",
-        tags or "ocr",
-        "--ocr-mode",
-        ocr_mode or "FREE_OCR",
-        "--language",
-        language or "zh",
-        "--files",
-        *file_paths,
-    ]
-    out = run_script(args)
-    return {"ok": True, "output": out, "files": file_paths}
+    return await _assignment_questions_ocr_impl(
+        assignment_id=assignment_id,
+        files=files,
+        kp_id=kp_id,
+        difficulty=difficulty,
+        tags=tags,
+        ocr_mode=ocr_mode,
+        language=language,
+        deps=_assignment_questions_ocr_deps(),
+    )
 
 
 @app.post("/student/submit")
@@ -6427,18 +6406,10 @@ async def submit(
     assignment_id: Optional[str] = Form(None),
     auto_assignment: bool = Form(False),
 ):
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    file_paths = []
-    for f in files:
-        dest = UPLOADS_DIR / f.filename
-        dest.write_bytes(await f.read())
-        file_paths.append(str(dest))
-
-    script = APP_ROOT / "scripts" / "grade_submission.py"
-    args = ["python3", str(script), "--student-id", student_id, "--out-dir", str(STUDENT_SUBMISSIONS_DIR), "--files", *file_paths]
-    if assignment_id:
-        args += ["--assignment-id", assignment_id]
-    if auto_assignment or not assignment_id:
-        args += ["--auto-assignment"]
-    out = run_script(args)
-    return {"ok": True, "output": out}
+    return await _student_submit_impl(
+        student_id=student_id,
+        files=files,
+        assignment_id=assignment_id,
+        auto_assignment=auto_assignment,
+        deps=_student_submit_deps(),
+    )
