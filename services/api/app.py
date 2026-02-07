@@ -73,6 +73,11 @@ from .assignment_upload_draft_save_service import (
     AssignmentUploadDraftSaveError,
     save_assignment_upload_draft as _save_assignment_upload_draft_impl,
 )
+from .assignment_upload_legacy_service import (
+    AssignmentUploadLegacyDeps,
+    AssignmentUploadLegacyError,
+    assignment_upload as _assignment_upload_legacy_impl,
+)
 from .assignment_upload_draft_service import (
     assignment_upload_not_ready_detail as _assignment_upload_not_ready_detail_impl,
     build_assignment_upload_draft as _build_assignment_upload_draft_impl,
@@ -5192,6 +5197,26 @@ def _assignment_upload_parse_deps():
     )
 
 
+def _assignment_upload_legacy_deps():
+    return AssignmentUploadLegacyDeps(
+        data_dir=DATA_DIR,
+        parse_date_str=parse_date_str,
+        sanitize_filename=sanitize_filename,
+        save_upload_file=save_upload_file,
+        extract_text_from_pdf=extract_text_from_pdf,
+        extract_text_from_image=extract_text_from_image,
+        llm_parse_assignment_payload=llm_parse_assignment_payload,
+        write_uploaded_questions=write_uploaded_questions,
+        compute_requirements_missing=compute_requirements_missing,
+        llm_autofill_requirements=llm_autofill_requirements,
+        save_assignment_requirements=save_assignment_requirements,
+        parse_ids_value=parse_ids_value,
+        resolve_scope=resolve_scope,
+        load_assignment_meta=load_assignment_meta,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
 def _assignment_upload_start_deps():
     return AssignmentUploadStartDeps(
         new_job_id=lambda: f"job_{uuid.uuid4().hex[:12]}",
@@ -5888,154 +5913,21 @@ async def assignment_upload(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    date_str = parse_date_str(date)
-    out_dir = DATA_DIR / "assignments" / assignment_id
-    source_dir = out_dir / "source"
-    answers_dir = out_dir / "answer_source"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    answers_dir.mkdir(parents=True, exist_ok=True)
-
-    saved_sources = []
-    delivery_mode = "image"
-    for f in files:
-        fname = sanitize_filename(f.filename)
-        if not fname:
-            continue
-        dest = source_dir / fname
-        await save_upload_file(f, dest)
-        saved_sources.append(fname)
-        suffix = dest.suffix.lower()
-        if suffix == ".pdf":
-            delivery_mode = "pdf"
-        elif suffix in {".md", ".markdown", ".tex", ".txt"} and delivery_mode != "pdf":
-            delivery_mode = "text"
-
-    saved_answers = []
-    if answer_files:
-        for f in answer_files:
-            fname = sanitize_filename(f.filename)
-            if not fname:
-                continue
-            dest = answers_dir / fname
-            await save_upload_file(f, dest)
-            saved_answers.append(fname)
-
-    if not saved_sources:
-        raise HTTPException(status_code=400, detail="No source files uploaded")
-
-    # Extract source text
-    source_text_parts = []
-    extraction_warnings: List[str] = []
-    for fname in saved_sources:
-        path = source_dir / fname
-        if path.suffix.lower() == ".pdf":
-            source_text_parts.append(extract_text_from_pdf(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
-        else:
-            source_text_parts.append(extract_text_from_image(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
-    source_text = "\n\n".join([t for t in source_text_parts if t])
-    (out_dir / "source_text.txt").write_text(source_text or "", encoding="utf-8")
-
-    if not source_text.strip():
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "source_text_empty",
-                "message": "未能从上传文件中解析出文本。",
-                "hints": [
-                    "如果是扫描件，请确保 OCR 可用，或上传更清晰的图片。",
-                    "如果是 PDF，请确认包含可复制文字。",
-                    "也可以上传答案文件帮助解析。",
-                ],
-            },
+    try:
+        return await _assignment_upload_legacy_impl(
+            deps=_assignment_upload_legacy_deps(),
+            assignment_id=assignment_id,
+            date=date,
+            scope=scope,
+            class_name=class_name,
+            student_ids=student_ids,
+            files=files,
+            answer_files=answer_files,
+            ocr_mode=ocr_mode,
+            language=language,
         )
-    if len(source_text.strip()) < 200:
-        extraction_warnings.append("解析文本较少，作业要求可能不完整。")
-
-    # Extract answer text (optional)
-    answer_text_parts = []
-    for fname in saved_answers:
-        path = answers_dir / fname
-        if path.suffix.lower() == ".pdf":
-            answer_text_parts.append(extract_text_from_pdf(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
-        else:
-            answer_text_parts.append(extract_text_from_image(path, language=language or "zh", ocr_mode=ocr_mode or "FREE_OCR"))
-    answer_text = "\n\n".join([t for t in answer_text_parts if t])
-    if answer_text:
-        (out_dir / "answer_text.txt").write_text(answer_text, encoding="utf-8")
-
-    parsed = llm_parse_assignment_payload(source_text, answer_text)
-    if parsed.get("error"):
-        raise HTTPException(status_code=400, detail=parsed)
-
-    questions = parsed.get("questions") or []
-    if not isinstance(questions, list) or not questions:
-        raise HTTPException(status_code=400, detail="No questions parsed from source")
-
-    rows = write_uploaded_questions(out_dir, assignment_id, questions)
-
-    requirements = parsed.get("requirements") or {}
-    missing = compute_requirements_missing(requirements)
-    autofilled = False
-    if missing:
-        requirements, missing, autofilled = llm_autofill_requirements(
-            source_text,
-            answer_text,
-            questions,
-            requirements,
-            missing,
-        )
-        if autofilled and missing:
-            extraction_warnings.append("作业要求已自动补全部分字段，请核对并补充缺失项。")
-    # store requirements (do not block on missing)
-    save_assignment_requirements(
-        assignment_id,
-        requirements,
-        date_str,
-        created_by="teacher_upload",
-        validate=False,
-    )
-
-    student_ids_list = parse_ids_value(student_ids)
-    scope_val = resolve_scope(scope or "", student_ids_list, class_name or "")
-    if scope_val == "student" and not student_ids_list:
-        raise HTTPException(status_code=400, detail="student scope requires student_ids")
-
-    meta_path = out_dir / "meta.json"
-    meta = load_assignment_meta(out_dir) if meta_path.exists() else {}
-    meta.update(
-        {
-            "assignment_id": assignment_id,
-            "date": date_str,
-            "mode": "upload",
-            "target_kp": requirements.get("core_concepts") or [],
-            "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
-            "class_name": class_name or "",
-            "student_ids": student_ids_list,
-            "scope": scope_val,
-            "source": "teacher",
-            "delivery_mode": delivery_mode,
-            "source_files": saved_sources,
-            "answer_files": saved_answers,
-            "requirements_missing": missing,
-            "requirements_autofilled": autofilled,
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
-        }
-    )
-    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    return {
-        "ok": True,
-        "status": "partial" if missing else "ok",
-        "message": "作业创建成功" + ("，已自动补全部分要求，请补充缺失项。" if missing else "。"),
-        "assignment_id": assignment_id,
-        "date": date_str,
-        "delivery_mode": delivery_mode,
-        "question_count": len(rows),
-        "requirements_missing": missing,
-        "requirements_autofilled": autofilled,
-        "requirements": requirements,
-        "warnings": extraction_warnings,
-    }
+    except AssignmentUploadLegacyError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/exam/upload/start")
