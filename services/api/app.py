@@ -101,8 +101,19 @@ from .chat_job_service import (
     load_chat_job as _load_chat_job_impl,
     write_chat_job as _write_chat_job_impl,
 )
+from .chat_job_processing_service import (
+    ChatJobProcessDeps,
+    ComputeChatReplyDeps,
+    compute_chat_reply_sync as _compute_chat_reply_sync_impl,
+    detect_role_hint as _detect_role_hint_impl,
+    process_chat_job as _process_chat_job_impl,
+)
 from .chat_preflight import resolve_role_hint as _resolve_role_hint_impl
 from .chat_runtime_service import ChatRuntimeDeps, call_llm_runtime as _call_llm_runtime_impl
+from .chat_session_utils import (
+    paginate_session_items as _paginate_session_items_impl,
+    resolve_student_session_id as _resolve_student_session_id_impl,
+)
 from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
 from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
@@ -6357,15 +6368,7 @@ async def chat(req: ChatRequest):
 
 
 def _detect_role_hint(req: ChatRequest) -> Optional[str]:
-    role_hint = req.role
-    if not role_hint or role_hint == "unknown":
-        for msg in reversed(req.messages):
-            if msg.role == "user":
-                detected = detect_role(msg.content)
-                if detected:
-                    role_hint = detected
-                    break
-    return role_hint
+    return _detect_role_hint_impl(req, detect_role=detect_role)
 
 
 def _compute_chat_reply_sync(
@@ -6373,245 +6376,25 @@ def _compute_chat_reply_sync(
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,
 ) -> Tuple[str, Optional[str], str]:
-    role_hint = _detect_role_hint(req)
-
-    if role_hint == "teacher":
-        diag_log(
-            "teacher_chat.in",
-            {
-                "last_user": next((m.content for m in reversed(req.messages) if m.role == "user"), "")[:500],
-                "skill_id": req.skill_id,
-            },
-        )
-        preflight = teacher_assignment_preflight(req)
-        if preflight:
-            diag_log("teacher_chat.preflight_reply", {"reply_preview": preflight[:500]})
-            return preflight, role_hint, next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
-
-    extra_system = None
-    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
-    last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
-
-    effective_teacher_id: Optional[str] = None
-    if role_hint == "teacher":
-        effective_teacher_id = resolve_teacher_id(teacher_id_override or req.teacher_id)
-        extra_system = teacher_build_context(effective_teacher_id, query=last_user_text, session_id=str(session_id or "main"))
-
-    if role_hint == "student":
-        assignment_detail = None
-        extra_parts: List[str] = []
-        study_mode = detect_student_study_trigger(last_user_text) or (
-            ("【诊断问题】" in last_assistant_text) or ("【训练问题】" in last_assistant_text)
-        )
-        profile = {}
-        if req.student_id:
-            profile = load_profile_file(DATA_DIR / "student_profiles" / f"{req.student_id}.json")
-            extra_parts.append(build_verified_student_context(req.student_id, profile))
-        if req.assignment_id:
-            folder = DATA_DIR / "assignments" / req.assignment_id
-            if folder.exists():
-                assignment_detail = build_assignment_detail_cached(folder, include_text=False)
-        elif req.student_id:
-            date_str = parse_date_str(req.assignment_date)
-            class_name = profile.get("class_name")
-            found = find_assignment_for_date(date_str, student_id=req.student_id, class_name=class_name)
-            if found:
-                assignment_detail = build_assignment_detail_cached(found["folder"], include_text=False)
-        if assignment_detail and study_mode:
-            extra_parts.append(build_assignment_context(assignment_detail, study_mode=True))
-        if extra_parts:
-            extra_system = "\n\n".join(extra_parts)
-            if len(extra_system) > CHAT_EXTRA_SYSTEM_MAX_CHARS:
-                extra_system = extra_system[:CHAT_EXTRA_SYSTEM_MAX_CHARS] + "…"
-
-    messages = _trim_messages([{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint)
-    if role_hint == "student":
-        with _student_inflight(req.student_id) as allowed:
-            if not allowed:
-                return "正在生成上一条回复，请稍候再试。", role_hint, last_user_text
-            result = run_agent(
-                messages,
-                role_hint,
-                extra_system=extra_system,
-                skill_id=req.skill_id,
-                teacher_id=effective_teacher_id or req.teacher_id,
-            )
-    else:
-        result = run_agent(
-            messages,
-            role_hint,
-            extra_system=extra_system,
-            skill_id=req.skill_id,
-            teacher_id=effective_teacher_id or req.teacher_id,
-        )
-
-    reply_text = normalize_math_delimiters(result.get("reply", ""))
-    result["reply"] = reply_text
-    return reply_text, role_hint, last_user_text
+    return _compute_chat_reply_sync_impl(
+        req,
+        deps=_compute_chat_reply_deps(),
+        session_id=session_id,
+        teacher_id_override=teacher_id_override,
+    )
 
 
 def resolve_student_session_id(student_id: str, assignment_id: Optional[str], assignment_date: Optional[str]) -> str:
-    if assignment_id:
-        return str(assignment_id)
-    date_str = parse_date_str(assignment_date)
-    return f"general_{date_str}"
+    return _resolve_student_session_id_impl(
+        student_id,
+        assignment_id,
+        assignment_date,
+        parse_date_str=parse_date_str,
+    )
 
 
 def process_chat_job(job_id: str) -> None:
-    claim_path = _chat_job_claim_path(job_id)
-    if not _try_acquire_lockfile(claim_path, CHAT_JOB_CLAIM_TTL_SEC):
-        # Another process is (likely) working on it.
-        return
-    try:
-        job = load_chat_job(job_id)
-        status = str(job.get("status") or "")
-        if status in {"done", "failed", "cancelled"}:
-            return
-
-        req_payload = job.get("request") or {}
-        if not isinstance(req_payload, dict):
-            req_payload = {}
-        messages_payload = req_payload.get("messages") or []
-        if not isinstance(messages_payload, list) or not messages_payload:
-            write_chat_job(job_id, {"status": "failed", "error": "missing_messages"})
-            return
-
-        try:
-            req = ChatRequest(**req_payload)
-        except Exception as exc:
-            write_chat_job(job_id, {"status": "failed", "error": "invalid_request", "error_detail": str(exc)[:200]})
-            return
-
-        write_chat_job(job_id, {"status": "processing", "step": "agent", "error": ""})
-        t0 = time.monotonic()
-        reply_text, role_hint, last_user_text = _compute_chat_reply_sync(
-            req,
-            session_id=str(job.get("session_id") or "main"),
-            teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
-        )
-        duration_ms = int((time.monotonic() - t0) * 1000)
-        write_chat_job(
-            job_id,
-            {
-                "status": "done",
-                "step": "done",
-                "duration_ms": duration_ms,
-                "reply": reply_text,
-                "role": role_hint,
-            },
-        )
-
-        if role_hint == "student" and req.student_id:
-            try:
-                note = build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
-                payload = {"student_id": req.student_id, "interaction_note": note}
-                if PROFILE_UPDATE_ASYNC:
-                    enqueue_profile_update(payload)
-                else:
-                    student_profile_update(payload)
-            except Exception as exc:
-                diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
-
-            try:
-                session_id = str(job.get("session_id") or "") or resolve_student_session_id(
-                    req.student_id, req.assignment_id, req.assignment_date
-                )
-                append_student_session_message(
-                    req.student_id,
-                    session_id,
-                    "user",
-                    last_user_text,
-                    meta={"request_id": job.get("request_id") or ""},
-                )
-                append_student_session_message(
-                    req.student_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={"job_id": job_id, "request_id": job.get("request_id") or ""},
-                )
-                update_student_session_index(
-                    req.student_id,
-                    session_id,
-                    req.assignment_id,
-                    parse_date_str(req.assignment_date),
-                    preview=last_user_text or reply_text,
-                    message_increment=2,
-                )
-            except Exception as exc:
-                diag_log("student.history.append_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
-
-        if role_hint == "teacher":
-            try:
-                teacher_id = str(job.get("teacher_id") or "").strip() or resolve_teacher_id(req.teacher_id)
-                session_id = str(job.get("session_id") or "").strip() or "main"
-                ensure_teacher_workspace(teacher_id)
-                append_teacher_session_message(
-                    teacher_id,
-                    session_id,
-                    "user",
-                    last_user_text,
-                    meta={"request_id": job.get("request_id") or "", "skill_id": req.skill_id or ""},
-                )
-                append_teacher_session_message(
-                    teacher_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={"job_id": job_id, "request_id": job.get("request_id") or "", "skill_id": req.skill_id or ""},
-                )
-                update_teacher_session_index(
-                    teacher_id,
-                    session_id,
-                    preview=last_user_text or reply_text,
-                    message_increment=2,
-                )
-                try:
-                    auto_intent = teacher_memory_auto_propose_from_turn(
-                        teacher_id,
-                        session_id=session_id,
-                        user_text=last_user_text,
-                        assistant_text=reply_text,
-                    )
-                    if auto_intent.get("created"):
-                        diag_log(
-                            "teacher.memory.auto_intent.proposed",
-                            {
-                                "teacher_id": teacher_id,
-                                "session_id": session_id,
-                                "proposal_id": auto_intent.get("proposal_id"),
-                                "target": auto_intent.get("target"),
-                            },
-                        )
-                except Exception as exc:
-                    diag_log(
-                        "teacher.memory.auto_intent.failed",
-                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                    )
-                try:
-                    auto_flush = teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
-                    if auto_flush.get("created"):
-                        diag_log(
-                            "teacher.memory.auto_flush.proposed",
-                            {
-                                "teacher_id": teacher_id,
-                                "session_id": session_id,
-                                "proposal_id": auto_flush.get("proposal_id"),
-                            },
-                        )
-                except Exception as exc:
-                    diag_log(
-                        "teacher.memory.auto_flush.failed",
-                        {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                    )
-                maybe_compact_teacher_session(teacher_id, session_id)
-            except Exception as exc:
-                diag_log(
-                    "teacher.history.append_failed",
-                    {"teacher_id": str(job.get("teacher_id") or ""), "error": str(exc)[:200]},
-                )
-    finally:
-        _release_lockfile(claim_path)
+    _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
 
 def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
@@ -6631,14 +6414,7 @@ async def chat_status(job_id: str):
 
 
 def _paginate_session_items(items: List[Dict[str, Any]], cursor: int, limit: int) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
-    total = len(items)
-    start = max(0, int(cursor or 0))
-    page_size = max(1, min(int(limit or 20), 100))
-    if start >= total:
-        return [], None, total
-    end = min(total, start + page_size)
-    next_cursor: Optional[int] = end if end < total else None
-    return items[start:end], next_cursor, total
+    return _paginate_session_items_impl(items, cursor=cursor, limit=limit)
 
 
 @app.get("/student/history/sessions")
@@ -7381,6 +7157,68 @@ def _chat_status_deps():
         chat_job_lock=CHAT_JOB_LOCK,
         chat_lane_load_locked=_chat_lane_load_locked,
         chat_find_position_locked=_chat_find_position_locked,
+    )
+
+
+def _compute_chat_reply_deps():
+    return ComputeChatReplyDeps(
+        detect_role=detect_role,
+        diag_log=diag_log,
+        teacher_assignment_preflight=teacher_assignment_preflight,
+        resolve_teacher_id=resolve_teacher_id,
+        teacher_build_context=lambda teacher_id, query, max_chars, session_id: teacher_build_context(
+            teacher_id,
+            query=query,
+            max_chars=max_chars,
+            session_id=session_id,
+        ),
+        detect_student_study_trigger=detect_student_study_trigger,
+        load_profile_file=load_profile_file,
+        data_dir=DATA_DIR,
+        build_verified_student_context=build_verified_student_context,
+        build_assignment_detail_cached=build_assignment_detail_cached,
+        find_assignment_for_date=find_assignment_for_date,
+        parse_date_str=parse_date_str,
+        build_assignment_context=build_assignment_context,
+        chat_extra_system_max_chars=CHAT_EXTRA_SYSTEM_MAX_CHARS,
+        trim_messages=lambda messages, role_hint=None: _trim_messages(messages, role_hint=role_hint),
+        student_inflight=_student_inflight,
+        run_agent=run_agent,
+        normalize_math_delimiters=normalize_math_delimiters,
+    )
+
+
+def _chat_job_process_deps():
+    return ChatJobProcessDeps(
+        chat_job_claim_path=_chat_job_claim_path,
+        try_acquire_lockfile=_try_acquire_lockfile,
+        chat_job_claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
+        load_chat_job=load_chat_job,
+        write_chat_job=lambda job_id, updates: write_chat_job(job_id, updates),
+        chat_request_model=ChatRequest,
+        compute_chat_reply_sync=lambda req, session_id, teacher_id_override: _compute_chat_reply_sync(
+            req,
+            session_id=session_id,
+            teacher_id_override=teacher_id_override,
+        ),
+        monotonic=time.monotonic,
+        build_interaction_note=build_interaction_note,
+        profile_update_async=PROFILE_UPDATE_ASYNC,
+        enqueue_profile_update=enqueue_profile_update,
+        student_profile_update=student_profile_update,
+        resolve_student_session_id=resolve_student_session_id,
+        append_student_session_message=append_student_session_message,
+        update_student_session_index=update_student_session_index,
+        parse_date_str=parse_date_str,
+        resolve_teacher_id=resolve_teacher_id,
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        append_teacher_session_message=append_teacher_session_message,
+        update_teacher_session_index=update_teacher_session_index,
+        teacher_memory_auto_propose_from_turn=teacher_memory_auto_propose_from_turn,
+        teacher_memory_auto_flush_from_session=teacher_memory_auto_flush_from_session,
+        maybe_compact_teacher_session=maybe_compact_teacher_session,
+        diag_log=diag_log,
+        release_lockfile=_release_lockfile,
     )
 
 
