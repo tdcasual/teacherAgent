@@ -290,6 +290,10 @@ from .teacher_memory_store_service import (
     teacher_memory_log_event as _teacher_memory_log_event_impl,
 )
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
+from .teacher_assignment_preflight_service import (
+    TeacherAssignmentPreflightDeps,
+    teacher_assignment_preflight as _teacher_assignment_preflight_impl,
+)
 from .teacher_session_compaction_service import (
     TeacherSessionCompactionDeps,
     maybe_compact_teacher_session as _maybe_compact_teacher_session_impl,
@@ -3520,105 +3524,7 @@ def extract_per_kp(text: str) -> Optional[int]:
 
 
 def teacher_assignment_preflight(req: ChatRequest) -> Optional[str]:
-    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
-    if not detect_assignment_intent(last_user_text):
-        diag_log("teacher_preflight.skip", {"reason": "no_assignment_intent"})
-        return None
-
-    analysis = llm_assignment_gate(req)
-    if not analysis:
-        diag_log("teacher_preflight.skip", {"reason": "llm_gate_none"})
-        return None
-    if analysis.get("intent") != "assignment":
-        diag_log("teacher_preflight.skip", {"reason": "intent_other"})
-        return None
-
-    # Skill policy gate: avoid bypassing skill tool allowlists via this fast-path.
-    required_tools = {"assignment.generate", "assignment.requirements.save"}
-    allowed = set(allowed_tools("teacher"))
-    loaded = None
-    try:
-        from .skills.loader import load_skills
-        from .skills.router import resolve_skill
-
-        loaded = load_skills(APP_ROOT / "skills")
-        selection = resolve_skill(loaded, req.skill_id, "teacher")
-        spec = selection.skill
-        if spec:
-            if spec.agent.tools.allow is not None:
-                allowed &= set(spec.agent.tools.allow)
-            if spec.agent.tools.deny:
-                allowed -= set(spec.agent.tools.deny)
-    except Exception as exc:
-        diag_log("teacher_preflight.skill_policy_failed", {"error": str(exc)[:200]})
-
-    if not required_tools.issubset(allowed):
-        title = "作业生成"
-        try:
-            if loaded:
-                hw = loaded.skills.get("physics-homework-generator")
-                if hw and hw.title:
-                    title = hw.title
-        except Exception:
-            pass
-        diag_log("teacher_preflight.skip", {"reason": "skill_policy_denied"})
-        return f"当前技能未开启作业生成功能。请切换到「{title}」技能后再试。"
-
-    assignment_id = analysis.get("assignment_id") or req.assignment_id
-    date_str = parse_date_str(analysis.get("date") or req.assignment_date or today_iso())
-
-    missing = analysis.get("missing") or []
-    if not assignment_id and "作业ID" not in missing:
-        missing = ["作业ID"] + missing
-
-    if missing:
-        diag_log("teacher_preflight.missing", {"missing": missing})
-        prompt = analysis.get("next_prompt") or format_requirements_prompt(errors=missing, include_assignment_id=not assignment_id)
-        return prompt
-
-    requirements_payload = analysis.get("requirements") or {}
-    if requirements_payload:
-        save_assignment_requirements(assignment_id, requirements_payload, date_str, created_by="teacher", validate=False)
-
-    if not analysis.get("ready_to_generate"):
-        diag_log("teacher_preflight.not_ready", {"assignment_id": assignment_id})
-        return analysis.get("next_prompt") or "已保存作业要求。请补充知识点或上传截图题目后再生成作业。"
-
-    kp_list = analysis.get("kp_list") or []
-    question_ids = analysis.get("question_ids") or []
-    per_kp = analysis.get("per_kp") or 5
-    mode = analysis.get("mode") or "kp"
-
-    args = {
-        "assignment_id": assignment_id,
-        "kp": ",".join(kp_list) if kp_list else "",
-        "question_ids": ",".join(question_ids) if question_ids else "",
-        "per_kp": per_kp,
-        "mode": mode,
-        "date": date_str,
-        "source": "teacher",
-        "skip_validation": True,
-    }
-    result = assignment_generate(args)
-    if result.get("error"):
-        diag_log("teacher_preflight.generate_error", {"error": result.get("error")})
-        return analysis.get("next_prompt") or format_requirements_prompt(errors=[str(result.get("error"))])
-    output = result.get("output", "")
-    diag_log(
-        "teacher_preflight.generated",
-        {
-            "assignment_id": assignment_id,
-            "mode": mode,
-            "per_kp": per_kp,
-        },
-    )
-    return (
-        f"作业已生成：{assignment_id}\n"
-        f"- 日期：{date_str}\n"
-        f"- 模式：{mode}\n"
-        f"- 每个知识点题量：{per_kp}\n"
-        f"{output}"
-    )
+    return _teacher_assignment_preflight_impl(req, deps=_teacher_assignment_preflight_deps())
 
 
 def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]:
@@ -5790,6 +5696,21 @@ def _teacher_context_deps():
         session_summary_max_chars=TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
         teacher_session_summary_text=_teacher_session_summary_text,
         teacher_memory_log_event=_teacher_memory_log_event,
+    )
+
+
+def _teacher_assignment_preflight_deps():
+    return TeacherAssignmentPreflightDeps(
+        app_root=APP_ROOT,
+        detect_assignment_intent=detect_assignment_intent,
+        llm_assignment_gate=llm_assignment_gate,
+        diag_log=diag_log,
+        allowed_tools=allowed_tools,
+        parse_date_str=parse_date_str,
+        today_iso=today_iso,
+        format_requirements_prompt=format_requirements_prompt,
+        save_assignment_requirements=save_assignment_requirements,
+        assignment_generate=assignment_generate,
     )
 
 
