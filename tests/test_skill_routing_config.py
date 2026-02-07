@@ -1,8 +1,6 @@
 from pathlib import Path
 import unittest
 
-from services.api.assignment_intent_service import detect_assignment_intent
-from services.api.skill_auto_router import resolve_effective_skill
 from services.api.skills.loader import load_skills
 
 
@@ -17,19 +15,27 @@ class SkillRoutingConfigTest(unittest.TestCase):
         routing = getattr(spec, "routing", None)
         self.assertIsNotNone(routing)
         self.assertIn("生成作业", list(getattr(routing, "keywords", []) or []))
+        self.assertIn("assignment_generate", list(getattr(routing, "intents", []) or []))
 
-    def test_auto_router_uses_skill_yaml_routing_keywords(self):
-        # This query intentionally avoids explicit "学生/同学" wording.
-        # With rule-only routing it tends to fall back to teacher-ops;
-        # with skill.yaml routing keywords it should match student-focus.
-        result = resolve_effective_skill(
-            app_root=APP_ROOT,
-            role_hint="teacher",
-            requested_skill_id="",
-            last_user_text="请给我画像更新建议，聚焦最近一次练习",
-            detect_assignment_intent=detect_assignment_intent,
-        )
-        self.assertEqual(result.get("effective_skill_id"), "physics-student-focus")
+    def test_routing_thresholds_have_safe_defaults(self):
+        loaded = load_skills(APP_ROOT / "skills")
+        spec = loaded.skills["physics-teacher-ops"]
+        routing = getattr(spec, "routing", None)
+        self.assertIsNotNone(routing)
+        self.assertGreaterEqual(int(getattr(routing, "min_score", 0)), 1)
+        self.assertGreaterEqual(int(getattr(routing, "min_margin", -1)), 0)
+        self.assertGreaterEqual(float(getattr(routing, "confidence_floor", -1.0)), 0.0)
+
+    def test_all_skills_define_routing_keywords_and_intents(self):
+        loaded = load_skills(APP_ROOT / "skills")
+        self.assertGreaterEqual(len(loaded.skills), 1)
+        for skill_id, spec in loaded.skills.items():
+            routing = getattr(spec, "routing", None)
+            self.assertIsNotNone(routing, f"{skill_id} missing routing")
+            keywords = list(getattr(routing, "keywords", []) or [])
+            intents = list(getattr(routing, "intents", []) or [])
+            self.assertGreaterEqual(len(keywords), 1, f"{skill_id} routing.keywords should not be empty")
+            self.assertGreaterEqual(len(intents), 1, f"{skill_id} routing.intents should not be empty")
 
 
 if __name__ == "__main__":

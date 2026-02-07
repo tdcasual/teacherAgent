@@ -194,6 +194,7 @@ from .chat_worker_service import (
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
 )
+from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chat_support_service import (
     ChatSupportDeps,
     allowed_tools as _allowed_tools_impl,

@@ -15,6 +15,10 @@ routing:
     学生画像: 7
     画像更新: 6
     个体诊断: 6
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/student_focus.md

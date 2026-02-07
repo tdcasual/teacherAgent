@@ -54,6 +54,8 @@ class SkillRouteReportScriptTest(unittest.TestCase):
             self.assertEqual(payload.get("total"), 3)
             self.assertEqual((payload.get("reasons") or {}).get("explicit"), 1)
             self.assertEqual((payload.get("effective_skills") or {}).get("physics-homework-generator"), 1)
+            self.assertIn("(empty) -> physics-homework-generator", payload.get("transitions") or {})
+            self.assertAlmostEqual(float(payload.get("auto_hit_rate") or 0.0), 1 / 3, places=3)
 
 
 if __name__ == "__main__":

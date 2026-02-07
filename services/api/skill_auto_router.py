@@ -20,8 +20,8 @@ _TIE_BREAK_ORDER = [
     "physics-lesson-capture",
     "physics-core-examples",
     "physics-student-focus",
-    "physics-teacher-ops",
     "physics-student-coach",
+    "physics-teacher-ops",
 ]
 _TIE_BREAK_INDEX = {skill_id: idx for idx, skill_id in enumerate(_TIE_BREAK_ORDER)}
 
@@ -31,6 +31,9 @@ class _ScoreRow:
     skill_id: str
     score: int
     hits: List[str]
+    min_score: int
+    min_margin: int
+    confidence_floor: float
 
 
 def _role_allowed(spec: Any, role_hint: Optional[str]) -> bool:
@@ -52,16 +55,25 @@ def _default_from_available(role_hint: Optional[str], available_ids: List[str]) 
     return sorted(available_ids)[0]
 
 
+def _keyword_hit(text: str, key: str, mode: str) -> bool:
+    if not key:
+        return False
+    if mode == "word_boundary":
+        pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])", flags=re.I)
+        return bool(pattern.search(text))
+    return key in text
+
+
 def _score_from_skill_config(
     skill_spec: Any,
     text: str,
     *,
     assignment_intent: bool,
     assignment_generation: bool,
-) -> Tuple[int, List[str]]:
+) -> Tuple[int, List[str], int, int, float]:
     routing = getattr(skill_spec, "routing", None)
     if routing is None:
-        return 0, []
+        return 0, [], 3, 1, 0.28
 
     score = 0
     hits: List[str] = []
@@ -69,6 +81,12 @@ def _score_from_skill_config(
     negative_keywords = [str(x or "").strip().lower() for x in (getattr(routing, "negative_keywords", []) or [])]
     intents = [str(x or "").strip().lower() for x in (getattr(routing, "intents", []) or [])]
     raw_weights = dict(getattr(routing, "keyword_weights", {}) or {})
+    match_mode = str(getattr(routing, "match_mode", "substring") or "substring").strip().lower()
+    min_score = max(1, int(getattr(routing, "min_score", 3) or 3))
+    min_margin = max(0, int(getattr(routing, "min_margin", 1) or 1))
+    confidence_floor = float(getattr(routing, "confidence_floor", 0.28) or 0.28)
+    confidence_floor = max(0.0, min(0.95, confidence_floor))
+
     keyword_weights = {
         str(key or "").strip().lower(): max(1, int(value))
         for key, value in raw_weights.items()
@@ -78,14 +96,14 @@ def _score_from_skill_config(
     for key in keywords:
         if not key:
             continue
-        if key in text:
+        if _keyword_hit(text, key, match_mode):
             score += min(50, max(1, int(keyword_weights.get(key, 3))))
             hits.append(f"cfg:{key}")
 
     for key in negative_keywords:
         if not key:
             continue
-        if key in text:
+        if _keyword_hit(text, key, match_mode):
             score -= 3
             hits.append(f"cfg-neg:{key}")
 
@@ -113,8 +131,11 @@ def _score_from_skill_config(
     if "teacher_ops" in intents and (("考试" in text) or ("讲评" in text) or ("备课" in text)):
         score += 3
         hits.append("cfg-intent:teacher_ops")
+    if "student_coach" in intents and (("开始作业" in text) or ("开始练习" in text) or ("讲解错题" in text)):
+        score += 4
+        hits.append("cfg-intent:student_coach")
 
-    return score, hits
+    return score, hits, min_score, min_margin, confidence_floor
 
 
 def _score_teacher_skill(
@@ -220,6 +241,20 @@ def _score_teacher_skill(
             hits.append("single_student_regex")
         return score, hits
 
+    if skill_id == "physics-student-coach":
+        for key, weight in (
+            ("开始今天作业", 4),
+            ("开始作业", 3),
+            ("开始练习", 3),
+            ("讲解错题", 3),
+            ("错题讲解", 3),
+            ("学习建议", 2),
+        ):
+            if key in text:
+                score += weight
+                hits.append(key)
+        return score, hits
+
     if skill_id == "physics-teacher-ops":
         for key, weight in (
             ("考试分析", 5),
@@ -275,10 +310,10 @@ def _score_role_skill(
     return 0, []
 
 
-def _confidence_for_auto(best: int, second: int) -> float:
+def _confidence_for_auto(best: int, second: int, floor: float) -> float:
     gap = max(0, best - second)
-    base = 0.48 + min(0.30, best * 0.05)
-    boost = 0.06 if gap >= 3 else (0.03 if gap >= 1 else 0.0)
+    base = floor + min(0.35, best * 0.04)
+    boost = 0.08 if gap >= 4 else (0.04 if gap >= 2 else 0.0)
     return max(0.0, min(0.95, base + boost))
 
 
@@ -324,6 +359,9 @@ def resolve_effective_skill(
             "confidence": 1.0,
             "matched_rule": "explicit",
             "candidates": [],
+            "best_score": 0,
+            "second_score": 0,
+            "threshold_blocked": False,
             "load_errors": len(loaded.errors or []),
         }
 
@@ -338,7 +376,7 @@ def resolve_effective_skill(
     score_rows: List[_ScoreRow] = []
     for skill_id in available_ids:
         spec = skills.get(skill_id)
-        cfg_score, cfg_hits = _score_from_skill_config(
+        cfg_score, cfg_hits, min_score, min_margin, confidence_floor = _score_from_skill_config(
             spec,
             text,
             assignment_intent=assignment_intent,
@@ -354,7 +392,16 @@ def resolve_effective_skill(
         score = int(cfg_score) + int(rule_score)
         hits = list(cfg_hits) + list(rule_hits)
         if score > 0:
-            score_rows.append(_ScoreRow(skill_id=skill_id, score=score, hits=hits))
+            score_rows.append(
+                _ScoreRow(
+                    skill_id=skill_id,
+                    score=score,
+                    hits=hits,
+                    min_score=min_score,
+                    min_margin=min_margin,
+                    confidence_floor=confidence_floor,
+                )
+            )
 
     score_rows.sort(
         key=lambda row: (
@@ -372,6 +419,9 @@ def resolve_effective_skill(
     ]
 
     if best is not None:
+        threshold_blocked = best.score < int(best.min_score)
+        margin = max(0, int(best.min_margin))
+        ambiguous = (best.score - second_score) < margin
         reason_prefix = ""
         if requested and not requested_valid:
             reason_prefix = "requested_invalid_"
@@ -379,13 +429,33 @@ def resolve_effective_skill(
             reason_prefix = "requested_unknown_"
         elif requested and requested_valid and requested_exists and not requested_allowed:
             reason_prefix = "requested_not_allowed_"
+
+        if not threshold_blocked and not ambiguous:
+            return {
+                "requested_skill_id": requested,
+                "effective_skill_id": best.skill_id,
+                "reason": f"{reason_prefix}auto_rule",
+                "confidence": _confidence_for_auto(best.score, second_score, best.confidence_floor),
+                "matched_rule": ",".join(best.hits[:3]) or "auto_rule",
+                "candidates": candidates,
+                "best_score": int(best.score),
+                "second_score": int(second_score),
+                "threshold_blocked": False,
+                "load_errors": len(loaded.errors or []),
+            }
+
+        blocked_reason = "ambiguous_auto_rule_default" if ambiguous else "auto_threshold_blocked_default"
+        reason = f"{reason_prefix}{blocked_reason}" if reason_prefix else blocked_reason
         return {
             "requested_skill_id": requested,
-            "effective_skill_id": best.skill_id,
-            "reason": f"{reason_prefix}auto_rule",
-            "confidence": _confidence_for_auto(best.score, second_score),
-            "matched_rule": ",".join(best.hits[:3]) or "auto_rule",
+            "effective_skill_id": default_skill_id,
+            "reason": reason,
+            "confidence": float(best.confidence_floor),
+            "matched_rule": "default",
             "candidates": candidates,
+            "best_score": int(best.score),
+            "second_score": int(second_score),
+            "threshold_blocked": bool(threshold_blocked),
             "load_errors": len(loaded.errors or []),
         }
 
@@ -410,5 +480,8 @@ def resolve_effective_skill(
         "confidence": 0.28 if effective else 0.0,
         "matched_rule": "default",
         "candidates": candidates,
+        "best_score": 0,
+        "second_score": 0,
+        "threshold_blocked": False,
         "load_errors": len(loaded.errors or []),
     }

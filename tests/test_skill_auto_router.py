@@ -42,6 +42,17 @@ class SkillAutoRouterTest(unittest.TestCase):
         self.assertEqual(result.get("effective_skill_id"), "physics-llm-routing")
         self.assertIn("auto_rule", str(result.get("reason") or ""))
 
+    def test_ambiguous_low_margin_falls_back_to_default(self):
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id="",
+            last_user_text="我想要一个分析方案",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertTrue(str(result.get("reason") or "").startswith("role_default") or "default" in str(result.get("reason") or ""))
+        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+
     def test_student_invalid_requested_skill_falls_back_to_student_default(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,

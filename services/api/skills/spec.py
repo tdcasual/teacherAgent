@@ -140,6 +140,10 @@ class SkillRoutingSpec:
     negative_keywords: List[str]
     intents: List[str]
     keyword_weights: Dict[str, int]
+    min_score: int
+    min_margin: int
+    confidence_floor: float
+    match_mode: str
 
 
 @dataclass(frozen=True)
@@ -198,6 +202,10 @@ class SkillSpec:
                 "negative_keywords": self.routing.negative_keywords,
                 "intents": self.routing.intents,
                 "keyword_weights": dict(self.routing.keyword_weights),
+                "min_score": int(self.routing.min_score),
+                "min_margin": int(self.routing.min_margin),
+                "confidence_floor": float(self.routing.confidence_floor),
+                "match_mode": self.routing.match_mode,
             },
             "agent": {
                 "prompt_modules": self.agent.prompt_modules,
@@ -282,11 +290,25 @@ def _parse_routing(raw: Any) -> SkillRoutingSpec:
         if weight <= 0:
             continue
         keyword_weights[text] = min(50, max(1, weight))
+
+    min_score = max(1, _as_int(routing_raw.get("min_score"), 3))
+    min_margin = max(0, _as_int(routing_raw.get("min_margin"), 1))
+    confidence_floor = _as_float_opt(routing_raw.get("confidence_floor"))
+    if confidence_floor is None:
+        confidence_floor = 0.28
+    confidence_floor = max(0.0, min(0.95, float(confidence_floor)))
+    match_mode_raw = str(routing_raw.get("match_mode") or "").strip().lower()
+    match_mode = match_mode_raw if match_mode_raw in {"substring", "word_boundary"} else "substring"
+
     return SkillRoutingSpec(
         keywords=keywords,
         negative_keywords=negative_keywords,
         intents=intents,
         keyword_weights=keyword_weights,
+        min_score=min_score,
+        min_margin=min_margin,
+        confidence_floor=confidence_floor,
+        match_mode=match_mode,
     )
 
 

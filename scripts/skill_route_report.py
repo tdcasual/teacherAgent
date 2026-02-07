@@ -36,19 +36,20 @@ def build_report(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     explicit = 0
     auto = 0
     defaulted = 0
+    ambiguous = 0
 
     for item in skill_rows:
         role = str(item.get("role") or "unknown").strip() or "unknown"
         reason = str(item.get("reason") or "").strip() or "unknown"
-        requested = str(item.get("requested_skill_id") or "").strip()
+        requested_raw = str(item.get("requested_skill_id") or "").strip()
         effective = str(item.get("effective_skill_id") or "").strip()
+        requested = requested_raw or "(empty)"
 
         by_role[role] += 1
         by_reason[reason] += 1
         if effective:
             by_effective[effective] += 1
-        if requested:
-            transitions[f"{requested} -> {effective or '(empty)'}"] += 1
+        transitions[f"{requested} -> {effective or '(empty)'}"] += 1
 
         if reason == "explicit":
             explicit += 1
@@ -56,12 +57,19 @@ def build_report(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             auto += 1
         if "default" in reason:
             defaulted += 1
+        if "ambiguous" in reason:
+            ambiguous += 1
 
+    denom = float(total or 1)
     return {
         "total": total,
         "explicit": explicit,
         "auto_rule": auto,
         "default": defaulted,
+        "ambiguous": ambiguous,
+        "auto_hit_rate": float(auto) / denom,
+        "default_rate": float(defaulted) / denom,
+        "ambiguous_rate": float(ambiguous) / denom,
         "reasons": dict(by_reason),
         "roles": dict(by_role),
         "effective_skills": dict(by_effective),
@@ -75,7 +83,13 @@ def _render_text(report: Dict[str, Any]) -> str:
     lines.append(
         f"Breakdown: explicit={int(report.get('explicit') or 0)} "
         f"auto_rule={int(report.get('auto_rule') or 0)} "
-        f"default={int(report.get('default') or 0)}"
+        f"default={int(report.get('default') or 0)} "
+        f"ambiguous={int(report.get('ambiguous') or 0)}"
+    )
+    lines.append(
+        f"Rates: auto_hit_rate={float(report.get('auto_hit_rate') or 0.0):.3f} "
+        f"default_rate={float(report.get('default_rate') or 0.0):.3f} "
+        f"ambiguous_rate={float(report.get('ambiguous_rate') or 0.0):.3f}"
     )
 
     reasons = report.get("reasons") or {}

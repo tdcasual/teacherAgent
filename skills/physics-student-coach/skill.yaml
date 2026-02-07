@@ -15,6 +15,10 @@ routing:
     开始今天作业: 7
     开始作业: 6
     开始练习: 6
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - student/skills/student_coach.md

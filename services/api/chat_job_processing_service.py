@@ -47,6 +47,7 @@ def compute_chat_reply_sync(
     teacher_id_override: Optional[str] = None,
 ) -> Tuple[str, Optional[str], str]:
     role_hint = detect_role_hint(req, detect_role=deps.detect_role)
+    req_agent_id = str(getattr(req, "agent_id", "") or "")
     last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
     requested_skill_id = str(getattr(req, "skill_id", "") or "").strip()
     effective_skill_id = requested_skill_id
@@ -68,6 +69,9 @@ def compute_chat_reply_sync(
                 "confidence": resolve_payload.get("confidence"),
                 "matched_rule": str(resolve_payload.get("matched_rule") or ""),
                 "candidates": resolve_payload.get("candidates") or [],
+                "best_score": int(resolve_payload.get("best_score") or 0),
+                "second_score": int(resolve_payload.get("second_score") or 0),
+                "threshold_blocked": bool(resolve_payload.get("threshold_blocked")),
                 "load_errors": int(resolve_payload.get("load_errors") or 0),
             },
         )
@@ -86,7 +90,7 @@ def compute_chat_reply_sync(
             "teacher_chat.in",
             {
                 "last_user": last_user_text[:500],
-                "agent_id": req.agent_id,
+                "agent_id": req_agent_id,
                 "skill_id": effective_skill_id,
                 "skill_id_requested": requested_skill_id,
                 "skill_id_effective": effective_skill_id,
@@ -141,7 +145,7 @@ def compute_chat_reply_sync(
                 messages,
                 role_hint,
                 extra_system=extra_system,
-                agent_id=req.agent_id,
+                agent_id=req_agent_id,
                 skill_id=req.skill_id,
                 teacher_id=effective_teacher_id or req.teacher_id,
             )
@@ -150,7 +154,7 @@ def compute_chat_reply_sync(
             messages,
             role_hint,
             extra_system=extra_system,
-            agent_id=req.agent_id,
+            agent_id=req_agent_id,
             skill_id=req.skill_id,
             teacher_id=effective_teacher_id or req.teacher_id,
         )
@@ -286,9 +290,10 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     last_user_text,
                     meta={
                         "request_id": job.get("request_id") or "",
-                        "agent_id": req.agent_id or "",
+                        "agent_id": req_agent_id,
                         "skill_id": req.skill_id or "",
                         "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
                     },
                 )
                 deps.append_teacher_session_message(
@@ -299,9 +304,10 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     meta={
                         "job_id": job_id,
                         "request_id": job.get("request_id") or "",
-                        "agent_id": req.agent_id or "",
+                        "agent_id": req_agent_id,
                         "skill_id": req.skill_id or "",
                         "skill_id_requested": str(job.get("skill_id") or ""),
+                        "skill_id_effective": req.skill_id or "",
                     },
                 )
                 deps.update_teacher_session_index(

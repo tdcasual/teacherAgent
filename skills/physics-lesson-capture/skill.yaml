@@ -16,6 +16,10 @@ routing:
     课堂采集: 7
     lesson.capture: 7
     ocr: 4
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/lesson_capture.md

@@ -22,6 +22,10 @@ routing:
     作业id: 6
     作业 id: 6
     渲染作业: 4
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/homework_generator.md
