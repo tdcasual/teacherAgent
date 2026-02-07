@@ -13,6 +13,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     role: Optional[str] = None
+    agent_id: Optional[str] = None
     skill_id: Optional[str] = None
     teacher_id: Optional[str] = None
     student_id: Optional[str] = None

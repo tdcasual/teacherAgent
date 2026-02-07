@@ -31,6 +31,26 @@ export default defineConfig({
   build: {
     outDir: '../../dist-teacher',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
+            return 'vendor-react'
+          }
+          if (
+            id.includes('/remark-') ||
+            id.includes('/rehype-') ||
+            id.includes('/unified/') ||
+            id.includes('/unist-util-visit/') ||
+            id.includes('/katex/')
+          ) {
+            return 'vendor-markdown'
+          }
+          return undefined
+        },
+      },
+    },
   },
   server: {
     port: 3002,

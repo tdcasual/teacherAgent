@@ -1,4 +1,5 @@
 # Physics Teaching Helper Agent
+[![Teacher E2E](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml/badge.svg?branch=main)](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml)
 
 本项目是一套面向物理教学的多技能 agent 系统，覆盖考试分析、课堂内容采集、课后诊断、学生个性化辅导、题库与核心例题管理等完整流程。
 
@@ -189,6 +190,9 @@ docker compose --profile qdrant up -d
 - `ghcr.io/<owner>/<repo>/mcp`
 - `ghcr.io/<owner>/<repo>/frontend`
 
+另有老师端回归工作流：`.github/workflows/teacher-e2e.yml`  
+在 `pull_request` 与 `push(main)` 上运行 `npm run e2e:teacher`，并上传 `playwright-report` 与 `test-results` 作为构建产物。
+
 ### 5) Frontend（Vite + PWA）
 前端已内置 PWA 支持，可直接“添加到主屏”。  
 可通过构建变量设置 API 地址：
@@ -220,6 +224,13 @@ npm run dev:teacher
 npm run dev:student
 ```
 
+### 4) 运行老师端 E2E 回归（Playwright）
+```bash
+cd frontend
+npx playwright install --with-deps chromium
+npm run e2e:teacher
+```
+
 默认访问：
 - 学生端：`http://localhost:3001`
 - 老师端：`http://localhost:3002`
@@ -227,7 +238,7 @@ npm run dev:student
 ---
 
 ## 前端使用说明（师生分端）
-- **老师端**：支持 `@技能` 提示与快捷插入，技能栏可折叠与滚动，支持富文本与 LaTeX。  
+- **老师端**：支持 `@agent` 与 `$skill` 召唤提示与快捷插入，技能栏可折叠与滚动，支持富文本与 LaTeX。  
 - **学生端**：仅支持提问学科问题与提交作业，支持富文本与 LaTeX。  
 
 ---

@@ -53,6 +53,20 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
 def _default_teacher_tools_to_openai(allowed: Set[str]) -> List[Dict[str, Any]]:
     return [DEFAULT_TOOL_REGISTRY.require(name).to_openai() for name in sorted(allowed)]
 
+def _normalize_agent_id(agent_id: Optional[str]) -> str:
+    text = str(agent_id or "").strip()
+    if not text:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", text):
+        return ""
+    return text
+
+def _chat_kind_for_agent(base_kind: str, agent_id: Optional[str]) -> str:
+    normalized = _normalize_agent_id(agent_id)
+    if not normalized or normalized in {"default", "auto"}:
+        return base_kind
+    return f"{base_kind}.{normalized}"
+
 
 def run_agent_runtime(
     messages: List[Dict[str, Any]],
@@ -60,6 +74,7 @@ def run_agent_runtime(
     *,
     deps: AgentRuntimeDeps,
     extra_system: Optional[str] = None,
+    agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -149,6 +164,8 @@ def run_agent_runtime(
                     return {"reply": reply}
 
     tools = deps.teacher_tools_to_openai(allowed) if role_hint == "teacher" else []
+    chat_kind = _chat_kind_for_agent("chat.agent", agent_id)
+    chat_no_tools_kind = _chat_kind_for_agent("chat.agent_no_tools", agent_id)
 
     tool_calls_total = 0
     tool_budget_exhausted = False
@@ -159,7 +176,7 @@ def run_agent_runtime(
             tools=tools,
             role_hint=role_hint,
             skill_id=skill_id,
-            kind="chat.agent",
+            kind=chat_kind,
             teacher_id=teacher_id,
             skill_runtime=skill_runtime,
         )
@@ -268,7 +285,7 @@ def run_agent_runtime(
             role_hint=role_hint,
             max_tokens=2048,
             skill_id=skill_id,
-            kind="chat.agent_no_tools",
+            kind=chat_no_tools_kind,
             teacher_id=teacher_id,
             skill_runtime=skill_runtime,
         )

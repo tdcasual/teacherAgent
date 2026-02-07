@@ -25,7 +25,7 @@ class ChatJobFlowTest(unittest.TestCase):
             app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None):
+            def fake_run_agent(messages, role_hint=None, extra_system=None, agent_id=None, skill_id=None, teacher_id=None):
                 last_user = ""
                 for m in reversed(messages or []):
                     if m.get("role") == "user":
@@ -151,6 +151,38 @@ class ChatJobFlowTest(unittest.TestCase):
             routed_models = [str(item.get("model") or "") for item in calls if item.get("allow_fallback") is False]
             self.assertIn("model-alpha", routed_models)
             self.assertIn("model-beta", routed_models)
+
+    def test_chat_start_propagates_agent_id_into_runtime(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+
+            captured = {"agent_id": None}
+
+            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+                captured["agent_id"] = agent_id
+                return {"reply": "ok"}
+
+            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+
+            with TestClient(app_mod.app) as client:
+                payload = {
+                    "request_id": "req_agent_id_001",
+                    "role": "teacher",
+                    "agent_id": "opencode",
+                    "messages": [{"role": "user", "content": "hello"}],
+                }
+                res = client.post("/chat/start", json=payload)
+                self.assertEqual(res.status_code, 200)
+                job_id = res.json()["job_id"]
+                app_mod.process_chat_job(job_id)
+                status = client.get("/chat/status", params={"job_id": job_id})
+                self.assertEqual(status.status_code, 200)
+                self.assertEqual(status.json().get("status"), "done")
+
+            self.assertEqual(captured["agent_id"], "opencode")
 
 
 if __name__ == "__main__":

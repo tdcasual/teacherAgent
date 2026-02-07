@@ -9,6 +9,18 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { visit } from 'unist-util-visit'
 import RoutingPage from './features/routing/RoutingPage'
+import {
+  buildInvocationToken,
+  findInvocationTrigger,
+  parseInvocationInput,
+  type InvocationTriggerType,
+} from './features/chat/invocation'
+import { decideSkillRouting } from './features/chat/requestRouting'
+import { useChatScroll } from './features/chat/useChatScroll'
+import ChatComposer from './features/chat/ChatComposer'
+import ChatMessages from './features/chat/ChatMessages'
+import MentionPanel from './features/chat/MentionPanel'
+import SessionSidebar from './features/chat/SessionSidebar'
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -261,6 +273,19 @@ type Skill = {
   examples: string[]
 }
 
+type AgentOption = {
+  id: string
+  title: string
+  desc: string
+}
+
+type MentionOption = {
+  id: string
+  title: string
+  desc: string
+  type: InvocationTriggerType
+}
+
 type SkillResponse = {
   skills: Array<{
     id: string
@@ -345,8 +370,21 @@ const fallbackSkills: Skill[] = [
   },
 ]
 
+const fallbackAgents: AgentOption[] = [
+  {
+    id: 'default',
+    title: '默认 Agent',
+    desc: '按系统路由自动选择执行链路。',
+  },
+  {
+    id: 'opencode',
+    title: 'OpenCode Agent',
+    desc: '优先按 opencode 路由执行（需后端已配置）。',
+  },
+]
+
 const TEACHER_GREETING =
-  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n在输入框中输入 `@` 可以看到技能提示。'
+  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n召唤规则：`@agent` 选择执行代理，`$skill` 选择技能。'
 
 const parseOptionalIso = (value?: string) => {
   const raw = String(value || '').trim()
@@ -620,7 +658,9 @@ export default function App() {
     const raw = localStorage.getItem('teacherWorkbenchTab')
     return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
   })
+  const [activeAgentId, setActiveAgentId] = useState(() => localStorage.getItem('teacherActiveAgentId') || 'default')
   const [activeSkillId, setActiveSkillId] = useState(() => localStorage.getItem('teacherActiveSkillId') || 'physics-teacher-ops')
+  const [skillPinned, setSkillPinned] = useState(() => localStorage.getItem('teacherSkillPinned') === 'true')
   const [cursorPos, setCursorPos] = useState(0)
   const [skillQuery, setSkillQuery] = useState('')
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
@@ -635,6 +675,7 @@ export default function App() {
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsError, setSkillsError] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [composerWarning, setComposerWarning] = useState('')
   const [uploadMode, setUploadMode] = useState<'assignment' | 'exam'>(() => {
     const raw = localStorage.getItem('teacherUploadMode')
     return raw === 'exam' ? 'exam' : 'assignment'
@@ -733,8 +774,6 @@ export default function App() {
   const [examDraftActionError, setExamDraftActionError] = useState('')
   const [examConfirming, setExamConfirming] = useState(false)
   const [topbarHeight, setTopbarHeight] = useState(64)
-
-  const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const topbarRef = useRef<HTMLElement | null>(null)
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
@@ -757,6 +796,18 @@ export default function App() {
       }),
     [deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
   )
+
+  const {
+    messagesRef,
+    showScrollToBottom,
+    enableAutoScroll,
+    handleMessagesScroll,
+    scrollMessagesToBottom,
+  } = useChatScroll({
+    activeSessionId,
+    messages,
+    sending,
+  })
 
   useEffect(() => {
     localStorage.setItem('apiBaseTeacher', apiBase)
@@ -804,9 +855,24 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (activeAgentId) localStorage.setItem('teacherActiveAgentId', activeAgentId)
+    else localStorage.removeItem('teacherActiveAgentId')
+  }, [activeAgentId])
+
+  useEffect(() => {
     if (activeSkillId) localStorage.setItem('teacherActiveSkillId', activeSkillId)
     else localStorage.removeItem('teacherActiveSkillId')
   }, [activeSkillId])
+
+  useEffect(() => {
+    localStorage.setItem('teacherSkillPinned', String(skillPinned))
+  }, [skillPinned])
+
+  useEffect(() => {
+    if (!composerWarning) return
+    if (!input.trim()) return
+    setComposerWarning('')
+  }, [composerWarning, input])
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
@@ -1015,10 +1081,6 @@ export default function App() {
     ])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, sending])
 
   useEffect(() => {
     const el = inputRef.current
@@ -2216,19 +2278,35 @@ export default function App() {
     }
   }, [pendingChatJob?.job_id, apiBase, refreshTeacherSessions])
 
+  const agentList = useMemo(() => fallbackAgents, [])
+
   const mention = useMemo(() => {
-    const uptoCursor = input.slice(0, cursorPos)
-    const match = /@([^\s@]*)$/.exec(uptoCursor)
-    if (!match) return null
-    const query = match[1].toLowerCase()
-    const items = skillList.filter(
-      (skill) =>
-        skill.title.toLowerCase().includes(query) ||
-        skill.desc.toLowerCase().includes(query) ||
-        skill.id.toLowerCase().includes(query)
+    const trigger = findInvocationTrigger(input, cursorPos)
+    if (!trigger) return null
+    const query = trigger.query
+    const source: MentionOption[] =
+      trigger.type === 'skill'
+        ? skillList.map((skill) => ({
+            id: skill.id,
+            title: skill.title,
+            desc: skill.desc,
+            type: 'skill' as const,
+          }))
+        : agentList.map((agent) => ({
+            id: agent.id,
+            title: agent.title,
+            desc: agent.desc,
+            type: 'agent' as const,
+          }))
+
+    const items = source.filter(
+      (item) =>
+        item.title.toLowerCase().includes(query) ||
+        item.desc.toLowerCase().includes(query) ||
+        item.id.toLowerCase().includes(query),
     )
-    return { start: match.index, query, items }
-  }, [input, cursorPos, skillList])
+    return { start: trigger.start, query, type: trigger.type, items }
+  }, [agentList, cursorPos, input, skillList])
 
   useEffect(() => {
     if (mention && mention.items.length) {
@@ -2318,24 +2396,14 @@ export default function App() {
     })
   }, [isMobileViewport])
 
-  const openWorkbenchTab = useCallback(
-    (tab: WorkbenchTab) => {
-      setWorkbenchTab(tab)
-      setSkillsOpen(true)
-      if (isMobileViewport()) setSessionSidebarOpen(false)
-    },
-    [isMobileViewport],
-  )
-
   const toggleSkillsWorkbench = useCallback(() => {
-    if (skillsOpen && workbenchTab === 'skills') {
+    if (skillsOpen) {
       setSkillsOpen(false)
       return
     }
-    setWorkbenchTab('skills')
     setSkillsOpen(true)
     if (isMobileViewport()) setSessionSidebarOpen(false)
-  }, [isMobileViewport, skillsOpen, workbenchTab])
+  }, [isMobileViewport, skillsOpen])
 
   const startNewTeacherSession = useCallback(() => {
     const next = `session_${new Date().toISOString().slice(0, 10)}_${Math.random().toString(16).slice(2, 6)}`
@@ -2431,9 +2499,26 @@ export default function App() {
   }, [activeSkillId, skillList])
 
   useEffect(() => {
-    if (!activeSkillId) return
-    if (!activeSkill) setActiveSkillId('')
+    if (!activeSkillId) {
+      setActiveSkillId('physics-teacher-ops')
+      setSkillPinned(false)
+      return
+    }
+    if (!activeSkill) {
+      setActiveSkillId('physics-teacher-ops')
+      setSkillPinned(false)
+    }
   }, [activeSkillId, activeSkill])
+
+  useEffect(() => {
+    if (!activeAgentId) {
+      setActiveAgentId('default')
+      return
+    }
+    if (!agentList.some((item) => item.id === activeAgentId)) {
+      setActiveAgentId('default')
+    }
+  }, [activeAgentId, agentList])
 
   const computeLocalRequirementsMissing = (req: Record<string, any>) => {
     const missing: string[] = []
@@ -2598,6 +2683,11 @@ export default function App() {
     return items.map((key) => requirementLabels[key] || key).join('、')
   }
 
+  const chooseSkill = (skillId: string, pinned = true) => {
+    setActiveSkillId(skillId)
+    setSkillPinned(pinned)
+  }
+
   const insertPrompt = (prompt: string) => {
     const nextValue = input ? `${input}\n${prompt}` : prompt
     setInput(nextValue)
@@ -2609,17 +2699,40 @@ export default function App() {
     })
   }
 
-  const insertSkillMention = (skill: Skill) => {
-    if (!mention) return
-    setActiveSkillId(skill.id)
-    const template = skill.prompts[0] || '请描述你的需求。'
-    const before = input.slice(0, mention.start)
+  const insertInvocationTokenAtCursor = (type: InvocationTriggerType, id: string) => {
+    const token = buildInvocationToken(type, id)
+    if (!token) return
+    const before = input.slice(0, cursorPos)
     const after = input.slice(cursorPos)
-    const nextValue = `${before}${template} ${after}`.replace(/\s+$/, ' ')
+    const leading = before && !/\s$/.test(before) ? ' ' : ''
+    const trailing = after && !/^\s/.test(after) ? ' ' : ''
+    const nextValue = `${before}${leading}${token}${trailing}${after}`
+    const nextPos = (before + leading + token).length
     setInput(nextValue)
     requestAnimationFrame(() => {
       if (!inputRef.current) return
-      const nextPos = `${before}${template} `.length
+      inputRef.current.focus()
+      inputRef.current.setSelectionRange(nextPos, nextPos)
+      setCursorPos(nextPos)
+    })
+  }
+
+  const insertMention = (item: MentionOption) => {
+    if (!mention) return
+    const token = buildInvocationToken(item.type, item.id)
+    if (!token) return
+    if (item.type === 'skill') {
+      chooseSkill(item.id, true)
+    } else {
+      setActiveAgentId(item.id)
+    }
+    const before = input.slice(0, mention.start)
+    const after = input.slice(cursorPos)
+    const nextValue = `${before}${token} ${after}`.replace(/\s+$/, ' ')
+    setInput(nextValue)
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return
+      const nextPos = `${before}${token} `.length
       inputRef.current.focus()
       inputRef.current.setSelectionRange(nextPos, nextPos)
       setCursorPos(nextPos)
@@ -2634,20 +2747,49 @@ export default function App() {
     if (pendingChatJob?.job_id) return
     const trimmed = input.trim()
     if (!trimmed) return
+    const parsedInvocation = parseInvocationInput(trimmed, {
+      knownAgentIds: agentList.map((item) => item.id),
+      knownSkillIds: skillList.map((item) => item.id),
+      activeAgentId,
+      activeSkillId: activeSkillId || 'physics-teacher-ops',
+      defaultAgentId: 'default',
+    })
+    const cleanedText = parsedInvocation.cleanedInput.trim()
+    if (!cleanedText) {
+      setComposerWarning('请在召唤后补充问题内容。')
+      return
+    }
+    const routingDecision = decideSkillRouting({
+      parsedInvocation,
+      activeSkillId,
+      skillPinned,
+    })
+    if (routingDecision.normalizedWarnings.length) {
+      setComposerWarning(routingDecision.normalizedWarnings.join('；'))
+    } else {
+      setComposerWarning('')
+    }
+    if (routingDecision.shouldPinEffectiveSkill && parsedInvocation.effectiveSkillId) {
+      chooseSkill(parsedInvocation.effectiveSkillId, true)
+    }
+    if (parsedInvocation.effectiveAgentId && parsedInvocation.effectiveAgentId !== activeAgentId) {
+      setActiveAgentId(parsedInvocation.effectiveAgentId)
+    }
 
     const sessionId = activeSessionId || 'main'
     if (!activeSessionId) setActiveSessionId(sessionId)
     const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
+    enableAutoScroll()
     setMessages((prev) => [
       ...prev,
-      { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
+      { id: makeId(), role: 'user', content: cleanedText, time: nowTime() },
       { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
     ])
     setInput('')
 
-    const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
+    const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
       .slice(-40)
       .map((msg) => ({ role: msg.role, content: msg.content }))
 
@@ -2661,7 +2803,8 @@ export default function App() {
           session_id: sessionId,
           messages: contextMessages,
           role: 'teacher',
-          skill_id: activeSkillId || undefined,
+          agent_id: parsedInvocation.effectiveAgentId || activeAgentId || undefined,
+          skill_id: routingDecision.skillIdForRequest,
         }),
       })
       if (!res.ok) {
@@ -2677,7 +2820,7 @@ export default function App() {
         job_id: data.job_id,
         request_id: requestId,
         placeholder_id: placeholderId,
-        user_text: trimmed,
+        user_text: cleanedText,
         session_id: sessionId,
         lane_id: data.lane_id,
         created_at: Date.now(),
@@ -3169,8 +3312,8 @@ export default function App() {
       }
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault()
-        const skill = mention.items[mentionIndex]
-        if (skill) insertSkillMention(skill)
+        const item = mention.items[mentionIndex]
+        if (item) insertMention(item)
         return
       }
     }
@@ -3211,12 +3354,7 @@ export default function App() {
               type="button"
               onClick={toggleSkillsWorkbench}
             >
-              {skillsOpen && workbenchTab === 'skills' ? '收起工作台' : 'GPTs'}
-            </button>
-          ) : null}
-          {mainView === 'chat' ? (
-            <button className="ghost" type="button" onClick={() => openWorkbenchTab('workflow')}>
-              工作流
+              {skillsOpen ? '收起工作台' : '打开工作台'}
             </button>
           ) : null}
           <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
@@ -3250,118 +3388,40 @@ export default function App() {
           />
         ) : null}
         {mainView === 'chat' ? (
-          <aside className={`session-sidebar ${sessionSidebarOpen ? 'open' : 'collapsed'}`}>
-            <div className="session-sidebar-header">
-              <strong>历史会话</strong>
-              <div className="session-sidebar-actions">
-                <button type="button" className="ghost" onClick={startNewTeacherSession}>
-                  新建
-                </button>
-                <button type="button" className="ghost" disabled={historyLoading} onClick={() => void refreshTeacherSessions()}>
-                  {historyLoading ? '刷新中…' : '刷新'}
-                </button>
-                <button type="button" className="ghost" onClick={() => setShowArchivedSessions((prev) => !prev)}>
-                  {showArchivedSessions ? '查看会话' : '查看归档'}
-                </button>
-              </div>
-            </div>
-            <div className="session-search">
-              <input
-                value={historyQuery}
-                onChange={(e) => setHistoryQuery(e.target.value)}
-                placeholder="搜索会话"
-              />
-            </div>
-            {historyError ? <div className="status err">{historyError}</div> : null}
-            {!historyLoading && visibleHistorySessions.length === 0 ? (
-              <div className="history-hint">{showArchivedSessions ? '暂无归档会话。' : '暂无历史会话。'}</div>
-            ) : null}
-            <div className="session-groups">
-              {groupedHistorySessions.map((group) => (
-                <div key={group.key} className="session-group">
-                  <div className="session-group-title">{group.label}</div>
-                  <div className="session-list">
-                    {group.items.map((item) => {
-                      const sid = item.session_id || 'main'
-                      const isActive = sid === activeSessionId
-                      const isMenuOpen = sid === openSessionMenuId
-                      const isArchived = deletedSessionIds.includes(sid)
-                      const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
-                      return (
-                        <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
-                          <button
-                            type="button"
-                            className="session-select"
-                            onClick={() => {
-                              setActiveSessionId(sid)
-                              setSessionCursor(-1)
-                              setSessionHasMore(false)
-                              setSessionError('')
-                              setOpenSessionMenuId('')
-                              closeSessionSidebarOnMobile()
-                            }}
-                          >
-                            <div className="session-main">
-                              <div className="session-id">{getSessionTitle(sid)}</div>
-                              <div className="session-meta">
-                                {(item.message_count || 0).toString()} 条{updatedLabel ? ` · ${updatedLabel}` : ''}
-                              </div>
-                            </div>
-                            {item.preview ? <div className="session-preview">{item.preview}</div> : null}
-                          </button>
-                          <div className="session-menu-wrap">
-                            <button
-                              type="button"
-                              className="session-menu-trigger"
-                              aria-haspopup="menu"
-                              aria-expanded={isMenuOpen}
-                              aria-label={`会话 ${getSessionTitle(sid)} 操作`}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                toggleSessionMenu(sid)
-                              }}
-                            >
-                              ⋯
-                            </button>
-                            {isMenuOpen ? (
-                              <div className="session-menu" role="menu">
-                                <button type="button" className="session-menu-item" onClick={() => renameSession(sid)}>
-                                  重命名
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`session-menu-item${isArchived ? '' : ' danger'}`}
-                                  onClick={() => toggleSessionArchive(sid)}
-                                >
-                                  {isArchived ? '恢复' : '归档'}
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="history-footer">
-              <button type="button" className="ghost" disabled={!historyHasMore || historyLoading} onClick={() => void refreshTeacherSessions('more')}>
-                {historyLoading ? '加载中…' : historyHasMore ? '加载更多会话' : '已显示全部会话'}
-              </button>
-            </div>
-            <div className="history-footer">
-              <button
-                type="button"
-                className="ghost"
-                disabled={!sessionHasMore || sessionLoading}
-                onClick={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
-              >
-                {sessionLoading ? '加载中…' : sessionHasMore ? '加载更早消息' : '没有更早消息'}
-              </button>
-              {sessionError ? <div className="status err">{sessionError}</div> : null}
-            </div>
-          </aside>
+          <SessionSidebar
+            open={sessionSidebarOpen}
+            historyQuery={historyQuery}
+            historyLoading={historyLoading}
+            historyError={historyError}
+            showArchivedSessions={showArchivedSessions}
+            visibleHistoryCount={visibleHistorySessions.length}
+            groupedHistorySessions={groupedHistorySessions}
+            activeSessionId={activeSessionId}
+            openSessionMenuId={openSessionMenuId}
+            deletedSessionIds={deletedSessionIds}
+            historyHasMore={historyHasMore}
+            sessionHasMore={sessionHasMore}
+            sessionLoading={sessionLoading}
+            sessionError={sessionError}
+            onStartNewSession={startNewTeacherSession}
+            onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
+            onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
+            onHistoryQueryChange={setHistoryQuery}
+            onSelectSession={(sid) => {
+              setActiveSessionId(sid)
+              setSessionCursor(-1)
+              setSessionHasMore(false)
+              setSessionError('')
+              setOpenSessionMenuId('')
+              closeSessionSidebarOnMobile()
+            }}
+            onToggleSessionMenu={toggleSessionMenu}
+            onRenameSession={renameSession}
+            onToggleSessionArchive={toggleSessionArchive}
+            onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
+            getSessionTitle={getSessionTitle}
+            formatSessionUpdatedLabel={formatSessionUpdatedLabel}
+          />
         ) : null}
 
         <main className={`chat-shell ${mainView === 'routing' ? 'routing-shell' : ''}`}>
@@ -3370,75 +3430,40 @@ export default function App() {
           ) : (
             <>
 
-          <div className="messages">
-            <div className="messages-inner">
-              {renderedMessages.map((msg) => (
-                <div key={msg.id} className={`message ${msg.role}`}>
-                  <div className="bubble">
-                    <div className="meta">
-                      {msg.role === 'user' ? '我' : '助手'} · {msg.time}
-                    </div>
-                    <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
-                  </div>
-                </div>
-              ))}
-              {sending && !pendingChatJob?.job_id && (
-                <div className="message assistant">
-                  <div className="bubble typing">
-                    <div className="meta">助手 · {nowTime()}</div>
-                    <div className="text">正在思考…</div>
-                  </div>
-                </div>
-              )}
-              <div ref={endRef} />
-            </div>
-          </div>
+          <ChatMessages
+            renderedMessages={renderedMessages}
+            sending={sending}
+            hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
+            typingTimeLabel={nowTime()}
+            messagesRef={messagesRef}
+            onMessagesScroll={handleMessagesScroll}
+            showScrollToBottom={showScrollToBottom}
+            onScrollToBottom={() => scrollMessagesToBottom('smooth')}
+          />
 
-          <form className="composer" onSubmit={handleSend}>
-            <div className="composer-inner">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  setCursorPos(e.target.selectionStart || e.target.value.length)
-                }}
-                onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
-                onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart || input.length)}
-                onKeyDown={handleKeyDown}
-                placeholder="输入指令或问题，使用 @ 查看技能。回车发送，上档键+回车换行"
-                rows={3}
-                disabled={Boolean(pendingChatJob?.job_id)}
-              />
-              <div className="composer-actions">
-                <span className="composer-hint">{chatQueueHint || '@ 技能 | 回车发送'}</span>
-                <button type="submit" className="send-btn" disabled={sending || Boolean(pendingChatJob?.job_id)}>
-                  发送
-                </button>
-              </div>
-            </div>
-          </form>
+          <ChatComposer
+            activeAgentId={activeAgentId || 'default'}
+            activeSkillId={activeSkillId || 'physics-teacher-ops'}
+            skillPinned={skillPinned}
+            input={input}
+            pendingChatJob={Boolean(pendingChatJob?.job_id)}
+            sending={sending}
+            chatQueueHint={chatQueueHint}
+            composerWarning={composerWarning}
+            inputRef={inputRef}
+            onSubmit={handleSend}
+            onInputChange={(value, selectionStart) => {
+              setInput(value)
+              setCursorPos(selectionStart)
+            }}
+            onInputClick={(selectionStart) => setCursorPos(selectionStart)}
+            onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
+            onInputKeyDown={handleKeyDown}
+          />
 
 	          {/* workflow panels moved to right workbench */}
 
-          {mention && mention.items.length > 0 && (
-            <div className="mention-panel">
-              <div className="mention-title">技能建议（↑↓ 选择 / 回车插入）</div>
-              <div className="mention-list">
-                {mention.items.map((skill, index) => (
-                  <button
-                    key={skill.id}
-                    type="button"
-                    className={index === mentionIndex ? 'active' : ''}
-                    onClick={() => insertSkillMention(skill)}
-                  >
-                    <strong>{skill.title}</strong>
-                    {skill.desc ? <span className="muted">{skill.desc}</span> : null}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={insertMention} />
             </>
           )}
         </main>
@@ -3477,7 +3502,7 @@ export default function App() {
             </div>
             <div className="view-switch workbench-switch">
               <button type="button" className={workbenchTab === 'skills' ? 'active' : ''} onClick={() => setWorkbenchTab('skills')}>
-                GPTs
+                技能
               </button>
               <button type="button" className={workbenchTab === 'memory' ? 'active' : ''} onClick={() => setWorkbenchTab('memory')}>
                 自动记忆
@@ -3488,12 +3513,60 @@ export default function App() {
             </div>
             {workbenchTab === 'skills' ? (
               <>
+                <section className="agent-panel">
+                  <div className="agent-panel-header">
+                    <strong>执行 Agent</strong>
+                    <span className="muted">`@agent` 召唤</span>
+                  </div>
+                  <div className="agent-list">
+                    {agentList.map((agent) => (
+                      <div key={agent.id} className={`agent-card ${agent.id === activeAgentId ? 'active' : ''}`}>
+                        <div className="agent-title">
+                          <strong>@{agent.id}</strong>
+                          <span>{agent.title}</span>
+                        </div>
+                        <p>{agent.desc}</p>
+                        <div className="agent-actions">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveAgentId(agent.id)
+                              setComposerWarning('')
+                            }}
+                          >
+                            设为当前
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveAgentId(agent.id)
+                              insertInvocationTokenAtCursor('agent', agent.id)
+                            }}
+                          >
+                            插入 @
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
                 <div className="skills-tools">
                   <input
                     value={skillQuery}
                     onChange={(e) => setSkillQuery(e.target.value)}
                     placeholder="搜索技能"
                   />
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={!skillPinned}
+                    onClick={() => {
+                      setSkillPinned(false)
+                      setComposerWarning('已切换到自动技能路由（未显式指定时由后端自动选择）。')
+                    }}
+                  >
+                    使用自动路由
+                  </button>
                   <label className="toggle">
                     <input
                       type="checkbox"
@@ -3507,7 +3580,7 @@ export default function App() {
                 {skillsError && <div className="skills-status err">{skillsError}</div>}
                 <div className="skills-body">
                   {filteredSkills.map((skill) => (
-                    <div key={skill.id} className={`skill-card ${skill.id === activeSkillId ? 'active' : ''}`}>
+                    <div key={skill.id} className={`skill-card ${skillPinned && skill.id === activeSkillId ? 'active' : ''}`}>
                       <div className="skill-title">
                         <div>
                           <strong>{skill.title}</strong>
@@ -3522,13 +3595,33 @@ export default function App() {
                         </button>
                       </div>
                       <p>{skill.desc}</p>
+                      <div className="skill-actions">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            chooseSkill(skill.id, true)
+                            setComposerWarning('')
+                          }}
+                        >
+                          设为当前
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            chooseSkill(skill.id, true)
+                            insertInvocationTokenAtCursor('skill', skill.id)
+                          }}
+                        >
+                          插入 $
+                        </button>
+                      </div>
                       <div className="skill-prompts">
                         {skill.prompts.map((prompt) => (
                           <button
                             key={prompt}
                             type="button"
                             onClick={() => {
-                              setActiveSkillId(skill.id)
+                              chooseSkill(skill.id, true)
                               insertPrompt(prompt)
                             }}
                           >
@@ -3542,7 +3635,7 @@ export default function App() {
                             key={ex}
                             type="button"
                             onClick={() => {
-                              setActiveSkillId(skill.id)
+                              chooseSkill(skill.id, true)
                               insertPrompt(ex)
                             }}
                           >

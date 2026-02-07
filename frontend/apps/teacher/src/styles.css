@@ -535,11 +535,13 @@ select:focus {
   flex-direction: column;
   gap: 10px;
   padding: 16px;
-  overflow: auto;
+  overflow: hidden;
   background: var(--surface);
 }
 
 .messages {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 10px 0 6px;
   background: var(--surface);
@@ -674,9 +676,8 @@ select:focus {
   padding: 10px 16px 14px;
   background: linear-gradient(to top, var(--surface) 70%, rgba(255, 255, 255, 0));
   border-top: 1px solid var(--border);
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
+  position: relative;
+  z-index: 2;
 }
 
 .composer-inner {
@@ -689,6 +690,23 @@ select:focus {
   box-shadow: var(--shadow-sm);
   display: grid;
   gap: 10px;
+}
+
+.composer-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #4b5563;
+  background: #f8fafc;
 }
 
 .composer textarea {
@@ -732,6 +750,18 @@ select:focus {
 .send-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.scroll-to-bottom {
+  align-self: center;
+  border: 1px solid var(--border-strong);
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
 }
 
 .upload-card {
@@ -1330,6 +1360,75 @@ select:focus {
 
 .workbench-workflow .status {
   overflow-x: auto;
+}
+
+.agent-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.agent-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-list {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 8px 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.agent-card.active {
+  border-color: #8adac5;
+  background: #f1fbf8;
+}
+
+.agent-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.agent-title strong {
+  color: #0f766e;
+}
+
+.agent-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.agent-actions,
+.skill-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agent-actions button,
+.skill-actions button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: #334155;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .skills-tools {

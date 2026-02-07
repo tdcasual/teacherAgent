@@ -3,6 +3,18 @@ schema_version: 2
 title: 学生教练
 desc: 学生侧讨论、作业批改与画像更新
 allowed_roles: [teacher, student]
+routing:
+  intents: [student_coach]
+  keywords:
+    - 开始今天作业
+    - 开始作业
+    - 开始练习
+    - 讲解错题
+    - 学生教练
+  keyword_weights:
+    开始今天作业: 7
+    开始作业: 6
+    开始练习: 6
 agent:
   prompt_modules:
     - student/skills/student_coach.md

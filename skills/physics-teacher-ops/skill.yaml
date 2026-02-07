@@ -3,6 +3,21 @@ schema_version: 2
 title: 教师运营
 desc: 考试分析、课前检测、备课与课堂讨论
 allowed_roles: [teacher]
+routing:
+  intents: [teacher_ops]
+  keywords:
+    - 考试分析
+    - 试卷讲评
+    - 课前检测
+    - 备课建议
+    - 课堂讨论
+  negative_keywords:
+    - 模型路由
+    - 生成作业
+  keyword_weights:
+    考试分析: 7
+    试卷讲评: 6
+    课前检测: 5
 agent:
   prompt_modules:
     - teacher/skills/teacher_ops.md

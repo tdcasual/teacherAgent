@@ -8,6 +8,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
             SkillAgentSpec,
             SkillBudgets,
             SkillModelPolicy,
+            SkillRoutingSpec,
             SkillSpec,
             SkillToolsPolicy,
             SkillUiSpec,
@@ -20,6 +21,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
             desc="",
             allowed_roles=["teacher"],
             ui=SkillUiSpec(prompts=[], examples=[]),
+            routing=SkillRoutingSpec(keywords=[], negative_keywords=[], intents=[], keyword_weights={}),
             agent=SkillAgentSpec(
                 prompt_modules=["../../../../etc/passwd"],
                 context_providers=[],
@@ -39,6 +41,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
             SkillAgentSpec,
             SkillBudgets,
             SkillModelPolicy,
+            SkillRoutingSpec,
             SkillSpec,
             SkillToolsPolicy,
             SkillUiSpec,
@@ -51,6 +54,7 @@ class SkillPromptModuleSecurityTest(unittest.TestCase):
             desc="",
             allowed_roles=["teacher"],
             ui=SkillUiSpec(prompts=[], examples=[]),
+            routing=SkillRoutingSpec(keywords=[], negative_keywords=[], intents=[], keyword_weights={}),
             agent=SkillAgentSpec(
                 prompt_modules=["teacher/skills/core_examples.md"],
                 context_providers=[],

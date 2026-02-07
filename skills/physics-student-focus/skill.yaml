@@ -3,6 +3,18 @@ schema_version: 2
 title: 学生重点分析
 desc: 针对某个学生进行重点诊断与画像更新
 allowed_roles: [teacher]
+routing:
+  intents: [student_focus]
+  keywords:
+    - 学生画像
+    - 画像更新
+    - 个体诊断
+    - 最近作业表现
+    - 某个学生
+  keyword_weights:
+    学生画像: 7
+    画像更新: 6
+    个体诊断: 6
 agent:
   prompt_modules:
     - teacher/skills/student_focus.md

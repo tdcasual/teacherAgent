@@ -208,6 +208,7 @@ from .chat_support_service import (
     is_exam_analysis_request as _is_exam_analysis_request_impl,
     normalize_math_delimiters as _normalize_math_delimiters_impl,
 )
+from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chart_agent_run_service import (
     ChartAgentRunDeps,
     chart_agent_bool as _chart_agent_bool_impl,
@@ -3009,6 +3010,7 @@ def run_agent(
     messages: List[Dict[str, Any]],
     role_hint: Optional[str],
     extra_system: Optional[str] = None,
+    agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -3017,6 +3019,7 @@ def run_agent(
         role_hint,
         deps=_agent_runtime_deps(),
         extra_system=extra_system,
+        agent_id=agent_id,
         skill_id=skill_id,
         teacher_id=teacher_id,
     )
@@ -3910,6 +3913,13 @@ def _compute_chat_reply_deps():
         student_inflight=_student_inflight,
         run_agent=run_agent,
         normalize_math_delimiters=normalize_math_delimiters,
+        resolve_effective_skill=lambda role_hint, requested_skill_id, last_user_text: _resolve_effective_skill_impl(
+            app_root=APP_ROOT,
+            role_hint=role_hint,
+            requested_skill_id=requested_skill_id,
+            last_user_text=last_user_text,
+            detect_assignment_intent=detect_assignment_intent,
+        ),
     )
 
 def _chat_job_process_deps():

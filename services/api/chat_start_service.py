@@ -59,6 +59,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
     req_payload = {
         "messages": [{"role": m.role, "content": m.content} for m in req.messages],
         "role": req.role,
+        "agent_id": req.agent_id,
         "skill_id": req.skill_id,
         "teacher_id": teacher_id if role_hint == "teacher" else req.teacher_id,
         "student_id": req.student_id,
@@ -67,7 +68,14 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         "auto_generate_assignment": req.auto_generate_assignment,
     }
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
-    fingerprint = deps.chat_text_fingerprint(last_user_text)
+    fingerprint_seed = "|".join(
+        [
+            str(req_payload.get("agent_id") or "").strip(),
+            str(req_payload.get("skill_id") or "").strip(),
+            str(last_user_text or ""),
+        ]
+    )
+    fingerprint = deps.chat_text_fingerprint(fingerprint_seed)
 
     with deps.chat_job_lock:
         recent_job_id = deps.chat_recent_job_locked(lane_id, fingerprint)
@@ -105,6 +113,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         "step": "queued",
         "progress": 0,
         "role": role_hint or req.role or "unknown",
+        "agent_id": req.agent_id or "",
         "skill_id": req.skill_id or "",
         "teacher_id": teacher_id,
         "student_id": req.student_id or "",

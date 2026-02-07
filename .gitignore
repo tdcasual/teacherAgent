@@ -13,6 +13,8 @@ frontend/.vite/
 frontend/node_modules/
 frontend/dist-student/
 frontend/dist-teacher/
+frontend/playwright-report/
+frontend/test-results/
 
 # Local vector stores / embeddings
 .mem0/

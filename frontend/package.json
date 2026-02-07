@@ -9,6 +9,7 @@
     "build:student": "vite build --config vite.student.config.ts",
     "build:teacher": "vite build --config vite.teacher.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "e2e:teacher": "playwright test -c playwright.teacher.config.ts",
     "preview:student": "vite preview --config vite.student.config.ts",
     "preview:teacher": "vite preview --config vite.teacher.config.ts"
   },
@@ -27,6 +28,7 @@
     "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
