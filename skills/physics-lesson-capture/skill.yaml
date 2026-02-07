@@ -3,6 +3,23 @@ schema_version: 2
 title: 课堂采集
 desc: 课堂材料文字识别并抽取例题与讨论结构
 allowed_roles: [teacher]
+routing:
+  intents: [lesson_capture]
+  keywords:
+    - 课堂采集
+    - lesson.capture
+    - 课堂材料
+    - 板书
+    - ocr
+    - 抽取例题
+  keyword_weights:
+    课堂采集: 7
+    lesson.capture: 7
+    ocr: 4
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/lesson_capture.md

@@ -3,6 +3,23 @@ schema_version: 2
 title: 模型路由管理
 desc: 配置多渠道多模型路由，并按任务类型分配模型
 allowed_roles: [teacher]
+routing:
+  intents: [routing]
+  keywords:
+    - 模型路由
+    - 路由配置
+    - 路由仿真
+    - 路由回滚
+    - teacher.llm_routing
+    - fallback channel
+  keyword_weights:
+    模型路由: 7
+    路由回滚: 7
+    teacher.llm_routing: 8
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
 agent:
   prompt_modules:
     - teacher/skills/llm_routing.md

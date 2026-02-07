@@ -26,6 +26,17 @@ class SkillRoutingConfigTest(unittest.TestCase):
         self.assertGreaterEqual(int(getattr(routing, "min_margin", -1)), 0)
         self.assertGreaterEqual(float(getattr(routing, "confidence_floor", -1.0)), 0.0)
 
+    def test_all_skills_define_routing_keywords_and_intents(self):
+        loaded = load_skills(APP_ROOT / "skills")
+        self.assertGreaterEqual(len(loaded.skills), 1)
+        for skill_id, spec in loaded.skills.items():
+            routing = getattr(spec, "routing", None)
+            self.assertIsNotNone(routing, f"{skill_id} missing routing")
+            keywords = list(getattr(routing, "keywords", []) or [])
+            intents = list(getattr(routing, "intents", []) or [])
+            self.assertGreaterEqual(len(keywords), 1, f"{skill_id} routing.keywords should not be empty")
+            self.assertGreaterEqual(len(intents), 1, f"{skill_id} routing.intents should not be empty")
+
 
 if __name__ == "__main__":
     unittest.main()

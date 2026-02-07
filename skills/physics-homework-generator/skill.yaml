@@ -10,11 +10,18 @@ routing:
     - 布置作业
     - 作业id
     - 作业 id
+    - 渲染作业
+    - 每个知识点
+    - 题量
+  negative_keywords:
+    - 模型路由
+    - 路由回滚
   keyword_weights:
     生成作业: 6
     布置作业: 6
     作业id: 6
     作业 id: 6
+    渲染作业: 4
   min_score: 3
   min_margin: 1
   confidence_floor: 0.28

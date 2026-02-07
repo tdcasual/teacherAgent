@@ -3,6 +3,22 @@ schema_version: 2
 title: 核心例题库
 desc: 登记核心例题、标准解法与变式题
 allowed_roles: [teacher]
+routing:
+  intents: [core_examples]
+  keywords:
+    - 核心例题
+    - 变式题
+    - 例题库
+    - ce
+    - core_example
+  keyword_weights:
+    核心例题: 7
+    变式题: 6
+    core_example: 6
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: word_boundary
 agent:
   prompt_modules:
     - teacher/skills/core_examples.md

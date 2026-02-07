@@ -10,6 +10,10 @@ routing:
     - 试卷讲评
     - 课前检测
     - 备课建议
+    - 课堂讨论
+  negative_keywords:
+    - 模型路由
+    - 生成作业
   keyword_weights:
     考试分析: 7
     试卷讲评: 6
