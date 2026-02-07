@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
+from .assignment_api_service import AssignmentApiDeps
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
@@ -10199,7 +10200,13 @@ def _exam_api_deps():
 
 
 def _assignment_api_deps():
-    return {}
+    return AssignmentApiDeps(
+        build_assignment_detail=lambda assignment_id, include_text=True: build_assignment_detail(
+            DATA_DIR / "assignments" / str(assignment_id or ""),
+            include_text=include_text,
+        ),
+        assignment_exists=lambda assignment_id: (DATA_DIR / "assignments" / str(assignment_id or "")).exists(),
+    )
 
 
 @app.get("/exams")
