@@ -1,5 +1,76 @@
-import type { MatrixCase } from './helpers/e2eMatrixCases'
+import { expect } from '@playwright/test'
+import type { MatrixCase, MatrixCaseRunner } from './helpers/e2eMatrixCases'
 import { registerMatrixCases } from './helpers/e2eMatrixCases'
+import {
+  TEACHER_COMPOSER_PLACEHOLDER,
+  openTeacherApp,
+  setupBasicTeacherApiMocks,
+  setupTeacherState,
+} from './helpers/teacherHarness'
+
+const fakePdfFile = {
+  name: 'sample.pdf',
+  mimeType: 'application/pdf',
+  buffer: Buffer.from('%PDF-1.4 sample'),
+}
+
+const fakeXlsxFile = {
+  name: 'scores.xlsx',
+  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  buffer: Buffer.from('xlsx-sample'),
+}
+
+const buildAssignmentDraft = (jobId: string, assignmentId: string, missing: string[] = []) => ({
+  job_id: jobId,
+  assignment_id: assignmentId,
+  date: '2026-02-08',
+  scope: 'public',
+  delivery_mode: 'pdf',
+  requirements: {
+    subject: '物理',
+    topic: missing.includes('topic') ? '' : '电场强度',
+    grade_level: '高二',
+    class_level: '中等',
+    core_concepts: ['电场'],
+    typical_problem: '受力分析',
+    misconceptions: missing.includes('misconceptions') ? [] : ['方向错误', '单位混乱', '漏条件', '乱代数'],
+    duration_minutes: 40,
+    preferences: ['分层训练'],
+    extra_constraints: '',
+  },
+  requirements_missing: missing,
+  questions: [{ id: 1, stem: '题干示例' }],
+  draft_saved: true,
+})
+
+const buildExamDraft = (jobId: string, examId: string) => ({
+  job_id: jobId,
+  exam_id: examId,
+  meta: {
+    date: '2026-02-08',
+    class_name: '高二2403班',
+  },
+  date: '2026-02-08',
+  questions: [
+    { question_id: 'Q1', question_no: '1', max_score: 4 },
+    { question_id: 'Q2', question_no: '2', max_score: 6 },
+  ],
+  score_schema: {},
+  answer_key_text: '',
+  answer_text_excerpt: '1 A\n2 C',
+  counts: { students: 2, questions: 2 },
+  scoring: {
+    status: 'partial',
+    students_total: 2,
+    students_scored: 1,
+    default_max_score_qids: ['Q2'],
+  },
+  totals_summary: {
+    avg_total: 71,
+    median_total: 72,
+    max_total_observed: 90,
+  },
+})
 
 const skillWorkbenchCases: MatrixCase[] = [
   {
@@ -330,6 +401,541 @@ const examWorkflowCases: MatrixCase[] = [
   },
 ]
 
-registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases)
-registerMatrixCases('Teacher Assignment Workflow', assignmentWorkflowCases)
-registerMatrixCases('Teacher Exam Workflow', examWorkflowCases)
+const implementations: Partial<Record<string, MatrixCaseRunner>> = {
+  C004: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+
+    const homeworkSkillCard = page
+      .locator('.skill-card')
+      .filter({ has: page.getByText('作业生成') })
+      .first()
+
+    await homeworkSkillCard.getByRole('button', { name: '设为当前' }).click()
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('固定技能请求')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  },
+
+  C005: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+
+    const homeworkSkillCard = page
+      .locator('.skill-card')
+      .filter({ has: page.getByText('作业生成') })
+      .first()
+
+    await homeworkSkillCard.getByRole('button', { name: '设为当前' }).click()
+    await page.getByRole('button', { name: '使用自动路由' }).click()
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('自动路由请求')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    const payload = chatStartCalls[0] as Record<string, unknown>
+    expect(Object.prototype.hasOwnProperty.call(payload, 'skill_id')).toBe(false)
+  },
+
+  D001: async ({ page }) => {
+    let uploadCalls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/assignment/upload/start', async (route) => {
+      uploadCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await expect(page.getByText('请填写作业编号')).toBeVisible()
+    expect(uploadCalls).toBe(0)
+  },
+
+  D002: async ({ page }) => {
+    let uploadCalls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/assignment/upload/start', async (route) => {
+      uploadCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-002')
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect(page.getByText('请至少上传一份作业文件（文档或图片）')).toBeVisible()
+    expect(uploadCalls).toBe(0)
+  },
+
+  D003: async ({ page }) => {
+    let uploadCalls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/assignment/upload/start', async (route) => {
+      uploadCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-003')
+    await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('class')
+    await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect(page.getByText('班级作业请填写班级')).toBeVisible()
+    expect(uploadCalls).toBe(0)
+  },
+
+  D004: async ({ page }) => {
+    let uploadCalls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/assignment/upload/start', async (route) => {
+      uploadCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-004')
+    await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('student')
+    await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect(page.getByText('私人作业请填写学生编号')).toBeVisible()
+    expect(uploadCalls).toBe(0)
+  },
+
+  D007: async ({ page }) => {
+    const jobId = 'job_assignment_failed_p0'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'failed', error: '解析失败' }),
+      })
+    })
+
+    await page.goto('/')
+    await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
+  },
+
+  D008: async ({ page }) => {
+    const jobId = 'job_assignment_save_p0'
+    let savePayload: any = null
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: jobId,
+          status: 'done',
+          progress: 100,
+          assignment_id: 'HW-P0-SAVE',
+          requirements_missing: [],
+        }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildAssignmentDraft(jobId, 'HW-P0-SAVE') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft/save', async (route) => {
+      savePayload = JSON.parse(route.request().postData() || '{}')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, message: '草稿已保存。' }),
+      })
+    })
+
+    await page.goto('/')
+
+    await page.getByDisplayValue('电场强度').fill('电场综合')
+    await page.getByRole('button', { name: '保存草稿' }).click()
+
+    await expect.poll(() => savePayload).not.toBeNull()
+    expect(savePayload?.requirements?.topic).toBe('电场综合')
+    await expect(page.getByText('草稿已保存。')).toBeVisible()
+  },
+
+  D009: async ({ page }) => {
+    const jobId = 'job_assignment_missing_p0'
+    let confirmCalls = 0
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: jobId,
+          status: 'done',
+          progress: 100,
+          assignment_id: 'HW-P0-MISSING',
+          requirements_missing: ['topic', 'misconceptions'],
+        }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildAssignmentDraft(jobId, 'HW-P0-MISSING', ['topic', 'misconceptions']) }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/confirm', async (route) => {
+      confirmCalls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.goto('/')
+
+    const confirmBtn = page.locator('.confirm-btn')
+    await expect(confirmBtn).toBeDisabled()
+    await expect(confirmBtn).toHaveAttribute('title', /请先补全/)
+    await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
+    expect(confirmCalls).toBe(0)
+  },
+
+  D010: async ({ page }) => {
+    const jobId = 'job_assignment_confirming_p0'
+    let confirmCalls = 0
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: jobId,
+          status: 'done',
+          progress: 100,
+          assignment_id: 'HW-P0-CONFIRMING',
+          requirements_missing: [],
+        }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildAssignmentDraft(jobId, 'HW-P0-CONFIRMING') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft/save', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, message: '草稿已保存。' }) })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/confirm', async (route) => {
+      confirmCalls += 1
+      await new Promise((resolve) => setTimeout(resolve, 240))
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment_id: 'HW-P0-CONFIRMING', question_count: 1 }),
+      })
+    })
+
+    await page.goto('/')
+
+    const confirmBtn = page.locator('.confirm-btn')
+    await confirmBtn.click()
+    await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
+
+    await expect.poll(() => confirmCalls).toBe(1)
+  },
+
+  D011: async ({ page }) => {
+    const jobId = 'job_assignment_confirmed_p0'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: jobId,
+          status: 'done',
+          progress: 100,
+          assignment_id: 'HW-P0-CONFIRMED',
+          requirements_missing: [],
+        }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildAssignmentDraft(jobId, 'HW-P0-CONFIRMED') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/draft/save', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, message: '草稿已保存。' }) })
+    })
+
+    await page.route('http://localhost:8000/assignment/upload/confirm', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment_id: 'HW-P0-CONFIRMED', question_count: 1 }),
+      })
+    })
+
+    await page.goto('/')
+
+    const confirmBtn = page.locator('.confirm-btn')
+    await confirmBtn.click()
+
+    await expect(confirmBtn).toHaveText('已创建')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
+  },
+
+  E001: async ({ page }) => {
+    let calls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/exam/upload/start', async (route) => {
+      calls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.getByRole('button', { name: '考试', exact: true }).first().click()
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
+    expect(calls).toBe(0)
+  },
+
+  E002: async ({ page }) => {
+    let calls = 0
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+
+    await page.route('http://localhost:8000/exam/upload/start', async (route) => {
+      calls += 1
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+    })
+
+    await page.getByRole('button', { name: '考试', exact: true }).first().click()
+    await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
+    expect(calls).toBe(0)
+  },
+
+  E005: async ({ page }) => {
+    const jobId = 'job_exam_save_p0'
+    let savePayload: any = null
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-P0-SAVE' }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-P0-SAVE') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+      savePayload = JSON.parse(route.request().postData() || '{}')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, message: '考试草稿已保存。' }),
+      })
+    })
+
+    await page.goto('/')
+
+    const examSection = page.locator('#workflow-exam-draft-section')
+    const metaCard = examSection.locator('.draft-card').first()
+
+    await metaCard.locator('input').nth(0).fill('2026-02-10')
+    await metaCard.locator('input').nth(1).fill('高二2404班')
+
+    await examSection.getByRole('button', { name: '保存草稿' }).click()
+
+    await expect.poll(() => savePayload).not.toBeNull()
+    expect(savePayload?.meta?.date).toBe('2026-02-10')
+    expect(savePayload?.meta?.class_name).toBe('高二2404班')
+    await expect(page.getByText('考试草稿已保存。')).toBeVisible()
+  },
+
+  E006: async ({ page }) => {
+    const jobId = 'job_exam_confirm_p0'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-P0-CONFIRM' }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-P0-CONFIRM') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, message: '考试草稿已保存。' }) })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/confirm', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          message: '考试已确认创建。',
+          exam_id: 'EX-P0-CONFIRM',
+          question_count: 2,
+        }),
+      })
+    })
+
+    await page.goto('/')
+
+    const examSection = page.locator('#workflow-exam-draft-section')
+    await examSection.getByRole('button', { name: '创建考试' }).click()
+
+    await expect(examSection.getByRole('button', { name: '已创建' })).toBeVisible()
+    await expect(page.getByText('考试已确认创建。')).toBeVisible()
+  },
+
+  E007: async ({ page }) => {
+    const jobId = 'job_exam_confirmed_p0'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'confirmed', progress: 100, exam_id: 'EX-P0-CONFIRMED' }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-P0-CONFIRMED') }),
+      })
+    })
+
+    await page.goto('/')
+
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
+  },
+
+  E008: async ({ page }) => {
+    const jobId = 'job_exam_failed_p0'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'failed', error: '解析失败' }),
+      })
+    })
+
+    await page.goto('/')
+
+    await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
+  },
+}
+
+registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases, implementations)
+registerMatrixCases('Teacher Assignment Workflow', assignmentWorkflowCases, implementations)
+registerMatrixCases('Teacher Exam Workflow', examWorkflowCases, implementations)

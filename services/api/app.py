@@ -3664,6 +3664,7 @@ def _assignment_questions_ocr_deps():
         app_root=APP_ROOT,
         run_script=run_script,
         sanitize_filename=sanitize_filename,
+        sanitize_assignment_id=safe_slug,
     )
 
 def _student_submit_deps():
@@ -3949,6 +3950,11 @@ def _chat_start_deps():
         write_chat_job=lambda job_id, updates, overwrite=False: write_chat_job(job_id, updates, overwrite=overwrite),
         enqueue_chat_job=lambda job_id, lane_id=None: enqueue_chat_job(job_id, lane_id=lane_id),
         chat_register_recent_locked=_chat_register_recent_locked,
+        append_student_session_message=append_student_session_message,
+        update_student_session_index=update_student_session_index,
+        append_teacher_session_message=append_teacher_session_message,
+        update_teacher_session_index=update_teacher_session_index,
+        parse_date_str=parse_date_str,
     )
 
 def _chat_status_deps():

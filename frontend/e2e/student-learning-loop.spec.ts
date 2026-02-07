@@ -1,4 +1,5 @@
-import type { MatrixCase } from './helpers/e2eMatrixCases'
+import { expect } from '@playwright/test'
+import type { MatrixCase, MatrixCaseRunner } from './helpers/e2eMatrixCases'
 import { registerMatrixCases } from './helpers/e2eMatrixCases'
 
 const studentLoopCases: MatrixCase[] = [
@@ -100,4 +101,198 @@ const studentLoopCases: MatrixCase[] = [
   },
 ]
 
-registerMatrixCases('Student Learning Loop', studentLoopCases)
+const implementations: Partial<Record<string, MatrixCaseRunner>> = {
+  I001: async ({ page }) => {
+    await page.goto('/')
+
+    await page.route('http://localhost:8000/assignment/today**', async (route) => {
+      const studentId = new URL(route.request().url()).searchParams.get('student_id')
+      expect(studentId).toBe('S001')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          assignment: {
+            assignment_id: 'A-ACCESSIBLE-001',
+            date: '2026-02-08',
+            question_count: 8,
+            meta: { target_kp: ['KP-M01'] },
+          },
+        }),
+      })
+    })
+
+    const data = await page.evaluate(async () => {
+      const res = await fetch('http://localhost:8000/assignment/today?student_id=S001')
+      return res.json()
+    })
+
+    expect(data.ok).toBe(true)
+    expect(data.assignment.assignment_id).toBe('A-ACCESSIBLE-001')
+  },
+
+  I002: async ({ page }) => {
+    await page.goto('/')
+    let chatStartCalls = 0
+
+    await page.route('http://localhost:8000/chat/start', async (route) => {
+      chatStartCalls += 1
+      const payload = JSON.parse(route.request().postData() || '{}')
+      expect(payload.role).toBe('student')
+      expect(payload.student_id).toBe('S001')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: 'student_job_1', status: 'done', reply: '已生成个性化练习' }),
+      })
+    })
+
+    const data = await page.evaluate(async () => {
+      const res = await fetch('http://localhost:8000/chat/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: 'student',
+          student_id: 'S001',
+          assignment_id: 'A-ACCESSIBLE-001',
+          messages: [{ role: 'user', content: '请根据我的诊断生成练习' }],
+        }),
+      })
+      return res.json()
+    })
+
+    expect(chatStartCalls).toBe(1)
+    expect(data.ok).toBe(true)
+    expect(data.reply).toBe('已生成个性化练习')
+  },
+
+  I004: async ({ page }) => {
+    await page.goto('/')
+
+    await page.route('http://localhost:8000/student/submit', async (route) => {
+      const contentType = route.request().headerValue('content-type') || ''
+      expect(contentType).toContain('multipart/form-data')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          assignment_id: 'A-ACCESSIBLE-001',
+          grading: {
+            score_earned: 78,
+            score_total: 100,
+            graded_pages: 2,
+          },
+        }),
+      })
+    })
+
+    const data = await page.evaluate(async () => {
+      const form = new FormData()
+      form.append('student_id', 'S001')
+      form.append('assignment_id', 'A-ACCESSIBLE-001')
+      form.append('files', new File(['img-1'], 'p1.jpg', { type: 'image/jpeg' }))
+      form.append('files', new File(['img-2'], 'p2.jpg', { type: 'image/jpeg' }))
+
+      const res = await fetch('http://localhost:8000/student/submit', {
+        method: 'POST',
+        body: form,
+      })
+      return res.json()
+    })
+
+    expect(data.ok).toBe(true)
+    expect(data.grading.score_earned).toBe(78)
+    expect(data.grading.graded_pages).toBe(2)
+  },
+
+  I005: async ({ page }) => {
+    await page.goto('/')
+
+    await page.route('http://localhost:8000/student/submit', async (route) => {
+      const bodyText = route.request().postData() || ''
+      expect(bodyText).toContain('auto_assignment')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          assignment_id: 'A-LATEST-ELIGIBLE-009',
+          auto_assignment: true,
+        }),
+      })
+    })
+
+    const data = await page.evaluate(async () => {
+      const form = new FormData()
+      form.append('student_id', 'S001')
+      form.append('auto_assignment', 'true')
+      form.append('files', new File(['img'], 'auto.jpg', { type: 'image/jpeg' }))
+
+      const res = await fetch('http://localhost:8000/student/submit', {
+        method: 'POST',
+        body: form,
+      })
+      return res.json()
+    })
+
+    expect(data.ok).toBe(true)
+    expect(data.assignment_id).toBe('A-LATEST-ELIGIBLE-009')
+    expect(data.auto_assignment).toBe(true)
+  },
+
+  I008: async ({ page }) => {
+    await page.goto('/')
+    const profile = {
+      student_id: 'S001',
+      weak_kp: ['KP-E01'],
+      strong_kp: ['KP-M02'],
+    }
+
+    await page.route('http://localhost:8000/student/profile/S001', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(profile),
+      })
+    })
+
+    await page.route('http://localhost:8000/student/submit', async (route) => {
+      profile.weak_kp = ['KP-E03']
+      profile.strong_kp = ['KP-M02', 'KP-M05']
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment_id: 'A-ACCESSIBLE-001', score_earned: 88 }),
+      })
+    })
+
+    const before = await page.evaluate(async () => {
+      const res = await fetch('http://localhost:8000/student/profile/S001')
+      return res.json()
+    })
+
+    await page.evaluate(async () => {
+      const form = new FormData()
+      form.append('student_id', 'S001')
+      form.append('assignment_id', 'A-ACCESSIBLE-001')
+      form.append('files', new File(['img'], 'submit.jpg', { type: 'image/jpeg' }))
+      await fetch('http://localhost:8000/student/submit', {
+        method: 'POST',
+        body: form,
+      })
+    })
+
+    const after = await page.evaluate(async () => {
+      const res = await fetch('http://localhost:8000/student/profile/S001')
+      return res.json()
+    })
+
+    expect(before.weak_kp).toEqual(['KP-E01'])
+    expect(after.weak_kp).toEqual(['KP-E03'])
+    expect(after.strong_kp).toEqual(['KP-M02', 'KP-M05'])
+  },
+}
+
+registerMatrixCases('Student Learning Loop', studentLoopCases, implementations)

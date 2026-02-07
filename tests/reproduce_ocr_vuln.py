@@ -19,6 +19,7 @@ class AssignmentQuestionsOcrDeps:
     app_root: Path
     run_script: Callable[[List[str]], str]
     sanitize_filename: Callable[[str], str]
+    sanitize_assignment_id: Callable[[str], str]
 
 import sys
 import os
@@ -55,7 +56,8 @@ async def reproduce_ocr_vulnerability():
         uploads_dir=uploads_dir,
         app_root=app_root,
         run_script=lambda args: "mock output",
-        sanitize_filename=sanitize_filename
+        sanitize_filename=sanitize_filename,
+        sanitize_assignment_id=lambda s: Path(str(s or "").strip()).name,
     )
     
     print(f"Initial target file content: {target_file.read_text()}")

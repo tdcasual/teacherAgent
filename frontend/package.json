@@ -10,6 +10,8 @@
     "build:teacher": "vite build --config vite.teacher.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "e2e:teacher": "playwright test -c playwright.teacher.config.ts",
+    "e2e:student": "playwright test -c playwright.student.config.ts",
+    "e2e:mobile-menu": "npm run e2e:teacher -- e2e/teacher-session-sidebar.spec.ts --grep \"mobile session menu supports keyboard navigation and escape focus return\" && npm run e2e:student -- e2e/student-session-sidebar.spec.ts --grep \"mobile session menu supports keyboard navigation and escape focus return\"",
     "preview:student": "vite preview --config vite.student.config.ts",
     "preview:teacher": "vite preview --config vite.teacher.config.ts"
   },

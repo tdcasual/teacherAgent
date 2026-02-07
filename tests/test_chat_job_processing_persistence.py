@@ -107,6 +107,64 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
         self.assertIn("write:failed", events)
         self.assertNotIn("write:done", events)
 
+    def test_student_history_persist_failure_marks_failed(self):
+        events: list[str] = []
+        state = {
+            "job_id": "cjob_test_002",
+            "status": "queued",
+            "session_id": "student_session_001",
+            "teacher_id": "",
+            "request_id": "req_test_002",
+            "skill_id": "",
+            "request": {
+                "messages": [{"role": "user", "content": "讲一下牛顿第二定律"}],
+                "role": "student",
+                "agent_id": "default",
+                "skill_id": "",
+                "teacher_id": "",
+                "student_id": "S001",
+                "assignment_id": "HW_1",
+                "assignment_date": "2026-02-08",
+                "auto_generate_assignment": None,
+            },
+        }
+
+        def _write_chat_job(_job_id, updates):
+            if "status" in updates:
+                events.append(f"write:{updates.get('status')}")
+            state.update(dict(updates or {}))
+
+        deps = ChatJobProcessDeps(
+            chat_job_claim_path=lambda _job_id: "/tmp/claim.lock",
+            try_acquire_lockfile=lambda _path, _ttl: True,
+            chat_job_claim_ttl_sec=600,
+            load_chat_job=lambda _job_id: dict(state),
+            write_chat_job=_write_chat_job,
+            chat_request_model=lambda **payload: _Req(**payload),
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: ("回复内容", "student", "讲一下牛顿第二定律"),
+            monotonic=lambda: 0.0,
+            build_interaction_note=lambda _u, _a, assignment_id=None: "",
+            profile_update_async=False,
+            enqueue_profile_update=lambda _payload: None,
+            student_profile_update=lambda _payload: None,
+            resolve_student_session_id=lambda _student_id, _assignment_id, _assignment_date: "student_session",
+            append_student_session_message=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("disk-full")),
+            update_student_session_index=lambda *args, **kwargs: None,
+            parse_date_str=lambda raw: str(raw or ""),
+            resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+            ensure_teacher_workspace=lambda _teacher_id: None,
+            append_teacher_session_message=lambda *args, **kwargs: None,
+            update_teacher_session_index=lambda *args, **kwargs: None,
+            teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
+            teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
+            maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            release_lockfile=lambda _path: None,
+        )
+        process_chat_job("cjob_test_002", deps=deps)
+        self.assertIn("write:failed", events)
+        self.assertNotIn("write:done", events)
+
 
 if __name__ == "__main__":
     unittest.main()

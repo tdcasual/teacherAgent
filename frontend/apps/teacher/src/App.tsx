@@ -2537,15 +2537,33 @@ export default function App() {
       if (!root || !root.contains(target)) return
       if (target.closest('textarea, input, select, [contenteditable="true"]')) return
 
+      const tryScroll = (el: HTMLElement | null) => {
+        if (!el) return false
+        const beforeTop = el.scrollTop
+        const beforeLeft = el.scrollLeft
+        if (event.deltaY) el.scrollTop += event.deltaY
+        if (event.deltaX) el.scrollLeft += event.deltaX
+        return el.scrollTop !== beforeTop || el.scrollLeft !== beforeLeft
+      }
+
       let zone = wheelScrollZoneRef.current
       if (zone === 'session' && !sessionSidebarOpen) zone = 'chat'
       if (zone === 'workbench' && !skillsOpen) zone = 'chat'
-      const destination = resolveWheelScrollTarget(zone) || resolveWheelScrollTarget('chat')
-      if (!destination) return
-
-      if (event.deltaY) destination.scrollTop += event.deltaY
-      if (event.deltaX) destination.scrollLeft += event.deltaX
-      event.preventDefault()
+      const destination = resolveWheelScrollTarget(zone)
+      if (tryScroll(destination)) {
+        event.preventDefault()
+        return
+      }
+      const fallbackZones: WheelScrollZone[] = ['chat', 'session', 'workbench']
+      for (const nextZone of fallbackZones) {
+        if (nextZone === zone) continue
+        const fallback = resolveWheelScrollTarget(nextZone)
+        if (fallback === destination) continue
+        if (tryScroll(fallback)) {
+          event.preventDefault()
+          return
+        }
+      }
     }
     window.addEventListener('wheel', onWheel, { passive: false, capture: true })
     return () => {

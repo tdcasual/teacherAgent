@@ -261,3 +261,407 @@ test('exam upload start uses updated API base from settings', async ({ page }) =
 
   await expect.poll(() => customBaseUploadCalls).toBe(1)
 })
+
+test('exam confirm success sets terminal button text and clears active marker', async ({ page }) => {
+  const jobId = 'job_exam_system_confirm_success_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-CONFIRM-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-SYS-CONFIRM-001') }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, message: '考试草稿已保存。' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/confirm', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        message: '考试已确认创建。',
+        exam_id: 'EX-SYS-CONFIRM-001',
+      }),
+    })
+  })
+
+  await page.goto('/')
+  const examSection = page.locator('#workflow-exam-draft-section')
+  await examSection.getByRole('button', { name: '创建考试' }).click()
+
+  await expect(examSection.getByRole('button', { name: '已创建' })).toBeVisible()
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload')))
+    .toBeNull()
+})
+
+test('exam draft save failure is surfaced as workflow error', async ({ page }) => {
+  const jobId = 'job_exam_system_save_fail_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-SAVEFAIL-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-SYS-SAVEFAIL-001') }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'text/plain',
+      body: 'exam draft save failed',
+    })
+  })
+
+  await page.goto('/')
+
+  const examSection = page.locator('#workflow-exam-draft-section')
+  await examSection.getByRole('button', { name: '保存草稿' }).click()
+  await expect(examSection.getByText('exam draft save failed')).toBeVisible()
+})
+
+test('exam draft without answer excerpt shows fallback hint text', async ({ page }) => {
+  const jobId = 'job_exam_system_no_excerpt_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-NOEXCERPT-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    const draft = buildExamDraft(jobId, 'EX-SYS-NOEXCERPT-001')
+    draft.answer_text_excerpt = ''
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft }),
+    })
+  })
+
+  await page.goto('/')
+
+  await expect(page.locator('#workflow-exam-draft-section')).toContainText(
+    '未检测到答案文件识别文本。你也可以直接粘贴答案文本。',
+  )
+})
+
+test('exam scoring unscored status renders localized label', async ({ page }) => {
+  const jobId = 'job_exam_system_unscored_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-UNSCORED-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    const draft = buildExamDraft(jobId, 'EX-SYS-UNSCORED-001')
+    draft.scoring.status = 'unscored'
+    draft.scoring.students_scored = 0
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('#workflow-exam-draft-section')).toContainText('评分状态：未评分')
+})
+
+test('exam confirm server error keeps create button available for retry', async ({ page }) => {
+  const jobId = 'job_exam_system_confirm_fail_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-CONFIRMFAIL-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-SYS-CONFIRMFAIL-001') }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, message: '考试草稿已保存。' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/confirm', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'text/plain',
+      body: 'confirm exam failed',
+    })
+  })
+
+  await page.goto('/')
+
+  const examSection = page.locator('#workflow-exam-draft-section')
+  await examSection.getByRole('button', { name: '创建考试' }).click()
+  await expect(examSection.getByText('confirm exam failed')).toBeVisible()
+  await expect(examSection.getByRole('button', { name: '创建考试' })).toBeVisible()
+})
+
+test('custom exam API base is persisted to localStorage', async ({ page }) => {
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+    },
+  })
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByPlaceholder('http://localhost:8000').fill('http://127.0.0.1:9494')
+
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('apiBaseTeacher')))
+    .toBe('http://127.0.0.1:9494')
+})
+
+test('exam failed status clears active upload marker', async ({ page }) => {
+  const jobId = 'job_exam_system_failed_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        job_id: jobId,
+        status: 'failed',
+        error: 'exam parse failed',
+      }),
+    })
+  })
+
+  await page.goto('/')
+  await expect
+    .poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload')))
+    .toBeNull()
+})
+
+test('exam draft load failure is surfaced in workflow panel', async ({ page }) => {
+  const jobId = 'job_exam_system_draft_load_fail_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-DRAFTFAIL-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: 'text/plain',
+      body: 'exam draft load failed',
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByText('exam draft load failed')).toBeVisible()
+})
+
+test('exam draft payload without questions is rejected with explicit error', async ({ page }) => {
+  const jobId = 'job_exam_system_draft_missing_questions_1'
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-DRAFTMISS-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    const draft = buildExamDraft(jobId, 'EX-SYS-DRAFTMISS-001') as any
+    delete draft.questions
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByText('draft 数据缺失')).toBeVisible()
+})
+
+test('exam confirm request payload includes job_id', async ({ page }) => {
+  const jobId = 'job_exam_system_confirm_payload_1'
+  let capturedConfirmBody: any = null
+
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-SYS-PAYLOAD-001' }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, draft: buildExamDraft(jobId, 'EX-SYS-PAYLOAD-001') }),
+    })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.route('http://localhost:8000/exam/upload/confirm', async (route) => {
+    capturedConfirmBody = JSON.parse(route.request().postData() || '{}')
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, exam_id: 'EX-SYS-PAYLOAD-001', message: '考试已确认创建。' }),
+    })
+  })
+
+  await page.goto('/')
+  await page.locator('#workflow-exam-draft-section').getByRole('button', { name: '创建考试' }).click()
+
+  await expect.poll(() => capturedConfirmBody).not.toBeNull()
+  expect(capturedConfirmBody.job_id).toBe(jobId)
+})
+
+test('exam upload validates missing paper file before request', async ({ page }) => {
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+    },
+  })
+
+  await page.getByRole('button', { name: '考试', exact: true }).first().click()
+  await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
+  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+  await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
+})
+
+test('exam upload validates missing score file before request', async ({ page }) => {
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+    },
+  })
+
+  await page.getByRole('button', { name: '考试', exact: true }).first().click()
+  await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
+  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+  await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
+})

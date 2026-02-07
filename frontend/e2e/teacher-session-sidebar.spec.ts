@@ -140,6 +140,46 @@ test('mobile selecting a session collapses sidebar', async ({ page }) => {
   await expect(page.getByRole('button', { name: '展开会话' })).toBeVisible()
 })
 
+test('mobile session menu supports keyboard navigation and escape focus return', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherSessionSidebarOpen: 'true',
+      teacherSkillsOpen: 'false',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  const trigger = page.locator('.session-menu-trigger').first()
+  await trigger.focus()
+  await expect(trigger).toBeFocused()
+
+  await page.keyboard.press('ArrowDown')
+  const menu = page.locator('.session-menu').first()
+  await expect(menu).toBeVisible()
+  const items = menu.locator('.session-menu-item')
+  await expect(items).toHaveCount(2)
+  await expect(items.nth(0)).toBeFocused()
+
+  await page.keyboard.press('ArrowDown')
+  await expect(items.nth(1)).toBeFocused()
+
+  await page.keyboard.press('Home')
+  await expect(items.nth(0)).toBeFocused()
+
+  await page.keyboard.press('End')
+  await expect(items.nth(1)).toBeFocused()
+
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
+
 test('new session is created with session_* id and becomes active', async ({ page }) => {
   await openTeacherApp(page, {
     stateOverrides: {

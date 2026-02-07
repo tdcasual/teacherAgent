@@ -19,6 +19,7 @@ class AssignmentQuestionsOcrDeps:
     app_root: Path
     run_script: Callable[[List[str]], str]
     sanitize_filename: Callable[[str], str]
+    sanitize_assignment_id: Callable[[str], str]
 
 import sys
 import os
@@ -36,12 +37,13 @@ async def reproduce_assignment_id_vuln():
     app_root = base_dir / "app"
     app_root.mkdir()
     
-    # Target file to overwrite: base_dir/target.txt
+    # Target file to overwrite: workspace-root target (outside base_dir)
     # uploads_dir / "assignment_ocr" / assignment_id / filename
-    # assignment_id = "../../.."
-    # path = .../uploads/assignment_ocr/../../../filename -> .../base_dir/filename
+    # assignment_id = "../../.." on old vulnerable code
+    # path = .../tmp_repro_ocr_assign_id/uploads/assignment_ocr/../../../target.txt
+    #      -> workspace ./target.txt
     
-    target_file = base_dir / "target.txt"
+    target_file = Path("./target.txt")
     target_file.write_text("original content")
     
     # Filename is sanitized (from previous fix), so we use a safe filename "target.txt"
@@ -59,7 +61,8 @@ async def reproduce_assignment_id_vuln():
         uploads_dir=uploads_dir,
         app_root=app_root,
         run_script=lambda args: "mock output",
-        sanitize_filename=sanitize_filename
+        sanitize_filename=sanitize_filename,
+        sanitize_assignment_id=lambda s: Path(str(s or "").strip()).name,
     )
     
     try:
@@ -75,8 +78,7 @@ async def reproduce_assignment_id_vuln():
             deps=deps
         )
         
-        # Check if target file is modified
-        # It should be at base_dir / "target.txt" if traversal worked
+        # Check if target file is modified at workspace root.
         if target_file.read_text() == "hacked content":
              print("[CRITICAL] Vulnerability Reproduced: Target file was overwritten via assignment_id!")
         else:
@@ -87,8 +89,17 @@ async def reproduce_assignment_id_vuln():
                  print(f)
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        msg = str(e)
+        if "invalid assignment_id" in msg:
+            print("[SUCCESS] Vulnerability Fixed: malicious assignment_id was rejected.")
+        else:
+            print(f"An error occurred: {e}")
     finally:
+        try:
+            if target_file.exists():
+                target_file.unlink()
+        except Exception:
+            pass
         if base_dir.exists():
              shutil.rmtree(base_dir)
 

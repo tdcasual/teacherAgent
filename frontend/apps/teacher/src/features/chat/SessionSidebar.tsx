@@ -1,3 +1,6 @@
+import { useCallback, useRef, type KeyboardEvent } from 'react'
+import { getNextMenuIndex } from '../../../../shared/sessionMenuNavigation'
+
 type HistorySessionItem = {
   session_id: string
   updated_at?: string
@@ -66,6 +69,98 @@ export default function SessionSidebar({
   getSessionTitle,
   formatSessionUpdatedLabel,
 }: Props) {
+  const menuRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  const toDomSafeId = useCallback((value: string) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_'), [])
+
+  const setMenuRef = useCallback((sessionId: string, node: HTMLDivElement | null) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    if (node) {
+      menuRefs.current[sid] = node
+      return
+    }
+    delete menuRefs.current[sid]
+  }, [])
+
+  const setTriggerRef = useCallback((sessionId: string, node: HTMLButtonElement | null) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    if (node) {
+      triggerRefs.current[sid] = node
+      return
+    }
+    delete triggerRefs.current[sid]
+  }, [])
+
+  const focusMenuItem = useCallback((sessionId: string, target: 'first' | 'last') => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    const menu = menuRefs.current[sid]
+    if (!menu) return
+    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
+    if (!items.length) return
+    const index = target === 'last' ? items.length - 1 : 0
+    items[index]?.focus()
+  }, [])
+
+  const handleTriggerKeyDown = useCallback(
+    (sessionId: string, isMenuOpen: boolean, event: KeyboardEvent<HTMLButtonElement>) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!isMenuOpen) onToggleSessionMenu(sid)
+        const target: 'first' | 'last' = event.key === 'ArrowUp' ? 'last' : 'first'
+        window.setTimeout(() => focusMenuItem(sid, target), 0)
+        return
+      }
+      if (event.key === 'Escape' && isMenuOpen) {
+        event.preventDefault()
+        onToggleSessionMenu(sid)
+      }
+    },
+    [focusMenuItem, onToggleSessionMenu],
+  )
+
+  const handleMenuKeyDown = useCallback(
+    (sessionId: string, event: KeyboardEvent<HTMLDivElement>) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      const menu = menuRefs.current[sid]
+      if (!menu) return
+
+      const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
+      if (!items.length) return
+      const activeIndex = items.findIndex((item) => item === document.activeElement)
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onToggleSessionMenu(sid)
+        triggerRefs.current[sid]?.focus()
+        return
+      }
+      if (event.key === 'Tab') {
+        onToggleSessionMenu(sid)
+        return
+      }
+
+      let direction: 'next' | 'prev' | 'first' | 'last' | null = null
+      if (event.key === 'ArrowDown') direction = 'next'
+      else if (event.key === 'ArrowUp') direction = 'prev'
+      else if (event.key === 'Home') direction = 'first'
+      else if (event.key === 'End') direction = 'last'
+      if (!direction) return
+
+      event.preventDefault()
+      const nextIndex = getNextMenuIndex(activeIndex, items.length, direction)
+      if (nextIndex >= 0) items[nextIndex]?.focus()
+    },
+    [onToggleSessionMenu],
+  )
+
   return (
     <aside className={`session-sidebar ${open ? 'open' : 'collapsed'}`}>
       <div className="session-sidebar-header">
@@ -99,6 +194,9 @@ export default function SessionSidebar({
                 const isActive = sid === activeSessionId
                 const isMenuOpen = sid === openSessionMenuId
                 const isArchived = deletedSessionIds.includes(sid)
+                const menuDomIdBase = `teacher-session-menu-${toDomSafeId(sid)}`
+                const menuId = `${menuDomIdBase}-list`
+                const triggerId = `${menuDomIdBase}-trigger`
                 const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                 return (
                   <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
@@ -114,24 +212,37 @@ export default function SessionSidebar({
                     <div className="session-menu-wrap">
                       <button
                         type="button"
+                        id={triggerId}
+                        ref={(node) => setTriggerRef(sid, node)}
                         className="session-menu-trigger"
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
+                        aria-controls={menuId}
                         aria-label={`会话 ${getSessionTitle(sid)} 操作`}
                         onClick={(e) => {
                           e.stopPropagation()
                           onToggleSessionMenu(sid)
                         }}
+                        onKeyDown={(event) => handleTriggerKeyDown(sid, isMenuOpen, event)}
                       >
                         ⋯
                       </button>
                       {isMenuOpen ? (
-                        <div className="session-menu" role="menu">
-                          <button type="button" className="session-menu-item" onClick={() => onRenameSession(sid)}>
+                        <div
+                          id={menuId}
+                          ref={(node) => setMenuRef(sid, node)}
+                          className="session-menu"
+                          role="menu"
+                          aria-orientation="vertical"
+                          aria-labelledby={triggerId}
+                          onKeyDown={(event) => handleMenuKeyDown(sid, event)}
+                        >
+                          <button type="button" role="menuitem" className="session-menu-item" onClick={() => onRenameSession(sid)}>
                             重命名
                           </button>
                           <button
                             type="button"
+                            role="menuitem"
                             className={`session-menu-item${isArchived ? '' : ' danger'}`}
                             onClick={() => onToggleSessionArchive(sid)}
                           >

@@ -63,6 +63,22 @@ class StudentHistoryFlowTest(unittest.TestCase):
                 self.assertEqual(start.status_code, 200)
                 job_id = start.json()["job_id"]
 
+                # User turn should be persisted at /chat/start to avoid session switching refresh gaps.
+                hist_before_done = client.get(
+                    "/student/history/session",
+                    params={
+                        "student_id": "S001",
+                        "session_id": "general_2026-02-05",
+                        "cursor": -1,
+                        "limit": 10,
+                        "direction": "backward",
+                    },
+                )
+                self.assertEqual(hist_before_done.status_code, 200)
+                msgs_before_done = hist_before_done.json().get("messages") or []
+                self.assertEqual(len(msgs_before_done), 1)
+                self.assertEqual(msgs_before_done[0]["role"], "user")
+
                 app_mod.process_chat_job(job_id)
 
                 sessions = client.get("/student/history/sessions", params={"student_id": "S001"})

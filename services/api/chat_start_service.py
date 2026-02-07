@@ -26,6 +26,11 @@ class ChatStartDeps:
     write_chat_job: Callable[[str, Dict[str, Any], bool], Dict[str, Any]]
     enqueue_chat_job: Callable[[str, Optional[str]], Dict[str, Any]]
     chat_register_recent_locked: Callable[[str, str, str], None]
+    append_student_session_message: Callable[..., None]
+    update_student_session_index: Callable[..., None]
+    append_teacher_session_message: Callable[..., None]
+    update_teacher_session_index: Callable[..., None]
+    parse_date_str: Callable[[Optional[str]], str]
 
 
 def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]:
@@ -124,6 +129,55 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
     }
     deps.write_chat_job(job_id, record, True)
     deps.upsert_chat_request_index(request_id, job_id)
+
+    if last_user_text:
+        try:
+            if role_hint == "student" and req.student_id and session_id:
+                deps.append_student_session_message(
+                    req.student_id,
+                    session_id,
+                    "user",
+                    last_user_text,
+                    meta={"request_id": request_id, "source": "start_prewrite"},
+                )
+                deps.update_student_session_index(
+                    req.student_id,
+                    session_id,
+                    req.assignment_id,
+                    deps.parse_date_str(req.assignment_date),
+                    preview=last_user_text,
+                    message_increment=1,
+                )
+                deps.write_chat_job(job_id, {"user_turn_persisted": True}, False)
+            elif role_hint == "teacher" and session_id:
+                deps.append_teacher_session_message(
+                    teacher_id,
+                    session_id,
+                    "user",
+                    last_user_text,
+                    meta={"request_id": request_id, "source": "start_prewrite"},
+                )
+                deps.update_teacher_session_index(
+                    teacher_id,
+                    session_id,
+                    preview=last_user_text,
+                    message_increment=1,
+                )
+                deps.write_chat_job(job_id, {"user_turn_persisted": True}, False)
+        except Exception as exc:
+            detail = str(exc)[:200]
+            deps.write_chat_job(
+                job_id,
+                {"status": "failed", "error": "history_prewrite_failed", "error_detail": detail},
+                False,
+            )
+            return {
+                "ok": True,
+                "job_id": job_id,
+                "status": "failed",
+                "lane_id": lane_id,
+            }
+
     queue_info = deps.enqueue_chat_job(job_id, lane_id)
     with deps.chat_job_lock:
         deps.chat_register_recent_locked(lane_id, fingerprint, job_id)

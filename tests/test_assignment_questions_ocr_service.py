@@ -55,6 +55,40 @@ class AssignmentQuestionsOcrServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("HW_1", args)
             self.assertIn("--files", args)
 
+    async def test_assignment_id_is_sanitized_and_kept_under_ocr_root(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {}
+
+            def _run_script(args):
+                captured["args"] = list(args)
+                return "ok"
+
+            deps = AssignmentQuestionsOcrDeps(
+                uploads_dir=root / "uploads",
+                app_root=root / "repo",
+                run_script=_run_script,
+            )
+
+            result = await assignment_questions_ocr(
+                assignment_id="../../../../outside",
+                files=[_Upload(filename="q1.png", content=b"abc")],
+                kp_id="kp1",
+                difficulty="hard",
+                tags="ocr,math",
+                ocr_mode="FREE_OCR",
+                language="zh",
+                deps=deps,
+            )
+
+            self.assertEqual(result.get("assignment_id"), "outside")
+            file_path = Path((result.get("files") or [""])[0]).resolve()
+            ocr_root = (root / "uploads" / "assignment_ocr").resolve()
+            self.assertIn(ocr_root, file_path.parents)
+            args = captured["args"]
+            aid_index = args.index("--assignment-id") + 1
+            self.assertEqual(args[aid_index], "outside")
+
 
 if __name__ == "__main__":
     unittest.main()

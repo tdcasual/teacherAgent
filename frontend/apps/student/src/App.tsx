@@ -8,12 +8,14 @@ import rehypeKatex from 'rehype-katex'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import { visit } from 'unist-util-visit'
+import { getNextMenuIndex } from '../../shared/sessionMenuNavigation'
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const STUDENT_WELCOME_MESSAGE = '学生端已就绪。请先填写姓名完成验证，然后开始提问或进入作业讨论。'
 const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问，或输入“开始今天作业”。'
 const STUDENT_SESSION_VIEW_STATE_KEY_PREFIX = 'studentSessionViewState:'
+const STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX = 'studentLocalDraftSessionIds:'
 
 type Message = {
   id: string
@@ -263,6 +265,20 @@ const readStudentLocalViewState = (studentId: string): SessionViewStatePayload =
   })
 }
 
+const readStudentLocalDraftSessionIds = (studentId: string): string[] => {
+  const sid = String(studentId || '').trim()
+  if (!sid) return []
+  try {
+    const raw = localStorage.getItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`)
+    const parsed = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) return []
+    const cleaned = parsed.map((item) => String(item || '').trim()).filter(Boolean)
+    return Array.from(new Set(cleaned))
+  } catch {
+    return []
+  }
+}
+
 const removeEmptyParagraphs = () => {
   return (tree: any) => {
     visit(tree, 'paragraph', (node: any, index: number | null | undefined, parent: any) => {
@@ -377,6 +393,8 @@ const absolutizeChartImageUrls = (html: string, apiBase: string) => {
   return html.replace(/(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
 }
 
+const toDomSafeId = (value: string) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_')
+
 export default function App() {
   const [apiBase, setApiBase] = useState(() => localStorage.getItem('apiBaseStudent') || DEFAULT_API_URL)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -441,6 +459,8 @@ export default function App() {
   const [viewStateUpdatedAt, setViewStateUpdatedAt] = useState(() => new Date().toISOString())
   const [viewStateSyncReady, setViewStateSyncReady] = useState(false)
   const activeSessionRef = useRef('')
+  const sessionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const sessionMenuTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const historyRequestRef = useRef(0)
   const sessionRequestRef = useRef(0)
   const applyingViewStateRef = useRef(false)
@@ -483,8 +503,104 @@ export default function App() {
     }
   }, [verifiedStudent])
 
+  const toggleSessionMenu = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      setOpenSessionMenuId((prev) => (prev === sid ? '' : sid))
+    },
+    [],
+  )
+
+  const setSessionMenuRef = useCallback((sessionId: string, node: HTMLDivElement | null) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    if (node) {
+      sessionMenuRefs.current[sid] = node
+      return
+    }
+    delete sessionMenuRefs.current[sid]
+  }, [])
+
+  const setSessionMenuTriggerRef = useCallback((sessionId: string, node: HTMLButtonElement | null) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    if (node) {
+      sessionMenuTriggerRefs.current[sid] = node
+      return
+    }
+    delete sessionMenuTriggerRefs.current[sid]
+  }, [])
+
+  const focusSessionMenuItem = useCallback((sessionId: string, target: 'first' | 'last') => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    const menu = sessionMenuRefs.current[sid]
+    if (!menu) return
+    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
+    if (!items.length) return
+    const index = target === 'last' ? items.length - 1 : 0
+    items[index]?.focus()
+  }, [])
+
+  const handleSessionMenuTriggerKeyDown = useCallback(
+    (sessionId: string, isMenuOpen: boolean, event: KeyboardEvent<HTMLButtonElement>) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        event.stopPropagation()
+        if (!isMenuOpen) toggleSessionMenu(sid)
+        const target: 'first' | 'last' = event.key === 'ArrowUp' ? 'last' : 'first'
+        window.setTimeout(() => focusSessionMenuItem(sid, target), 0)
+        return
+      }
+      if (event.key === 'Escape' && isMenuOpen) {
+        event.preventDefault()
+        toggleSessionMenu(sid)
+      }
+    },
+    [focusSessionMenuItem, toggleSessionMenu],
+  )
+
+  const handleSessionMenuKeyDown = useCallback(
+    (sessionId: string, event: KeyboardEvent<HTMLDivElement>) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid || openSessionMenuId !== sid) return
+      const menu = sessionMenuRefs.current[sid]
+      if (!menu) return
+      const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
+      if (!items.length) return
+      const activeIndex = items.findIndex((item) => item === document.activeElement)
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        toggleSessionMenu(sid)
+        sessionMenuTriggerRefs.current[sid]?.focus()
+        return
+      }
+      if (event.key === 'Tab') {
+        toggleSessionMenu(sid)
+        return
+      }
+
+      let direction: 'next' | 'prev' | 'first' | 'last' | null = null
+      if (event.key === 'ArrowDown') direction = 'next'
+      else if (event.key === 'ArrowUp') direction = 'prev'
+      else if (event.key === 'Home') direction = 'first'
+      else if (event.key === 'End') direction = 'last'
+      if (!direction) return
+
+      event.preventDefault()
+      const nextIndex = getNextMenuIndex(activeIndex, items.length, direction)
+      if (nextIndex >= 0) items[nextIndex]?.focus()
+    },
+    [openSessionMenuId, toggleSessionMenu],
+  )
+
   useEffect(() => {
     if (!openSessionMenuId) return
+    const sid = openSessionMenuId
     const onPointerDown = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.closest('.session-menu-wrap')) return
@@ -492,6 +608,7 @@ export default function App() {
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
+        sessionMenuTriggerRefs.current[sid]?.focus()
         setOpenSessionMenuId('')
       }
     }
@@ -854,9 +971,11 @@ export default function App() {
     setHistoryCursor(0)
     setHistoryHasMore(false)
     const localState = readStudentLocalViewState(sid)
+    const localDraftSessionIds = readStudentLocalDraftSessionIds(sid)
     applyingViewStateRef.current = true
     setSessionTitleMap(localState.title_map)
     setDeletedSessionIds(localState.hidden_ids)
+    setLocalDraftSessionIds(localDraftSessionIds)
     setActiveSessionId(localState.active_session_id || '')
     setViewStateUpdatedAt(localState.updated_at || new Date().toISOString())
     lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(localState)
@@ -925,6 +1044,16 @@ export default function App() {
     if (activeSessionId) localStorage.setItem(`studentActiveSession:${sid}`, activeSessionId)
     else localStorage.removeItem(`studentActiveSession:${sid}`)
   }, [activeSessionId, currentViewState, verifiedStudent?.student_id])
+
+  useEffect(() => {
+    const sid = verifiedStudent?.student_id?.trim() || ''
+    if (!sid) return
+    try {
+      localStorage.setItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`, JSON.stringify(localDraftSessionIds))
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [localDraftSessionIds, verifiedStudent?.student_id])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -1226,15 +1355,6 @@ export default function App() {
     [getSessionTitle],
   )
 
-  const toggleSessionMenu = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      setOpenSessionMenuId((prev) => (prev === sid ? '' : sid))
-    },
-    [],
-  )
-
   const toggleSessionArchive = useCallback(
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
@@ -1345,6 +1465,9 @@ export default function App() {
                     const isActive = sid === activeSessionId
                     const isMenuOpen = sid === openSessionMenuId
                     const isArchived = deletedSessionIds.includes(sid)
+                    const menuDomIdBase = `student-session-menu-${toDomSafeId(sid)}`
+                    const menuId = `${menuDomIdBase}-list`
+                    const triggerId = `${menuDomIdBase}-trigger`
                     const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                     return (
                       <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
@@ -1371,21 +1494,34 @@ export default function App() {
                         <div className="session-menu-wrap">
                           <button
                             type="button"
+                            id={triggerId}
+                            ref={(node) => setSessionMenuTriggerRef(sid, node)}
                             className="session-menu-trigger"
                             aria-haspopup="menu"
                             aria-expanded={isMenuOpen}
+                            aria-controls={menuId}
                             aria-label={`会话 ${getSessionTitle(sid)} 操作`}
                             onClick={(e) => {
                               e.stopPropagation()
                               toggleSessionMenu(sid)
                             }}
+                            onKeyDown={(event) => handleSessionMenuTriggerKeyDown(sid, isMenuOpen, event)}
                           >
                             ⋯
                           </button>
                           {isMenuOpen ? (
-                            <div className="session-menu" role="menu">
+                            <div
+                              id={menuId}
+                              ref={(node) => setSessionMenuRef(sid, node)}
+                              className="session-menu"
+                              role="menu"
+                              aria-orientation="vertical"
+                              aria-labelledby={triggerId}
+                              onKeyDown={(event) => handleSessionMenuKeyDown(sid, event)}
+                            >
                               <button
                                 type="button"
+                                role="menuitem"
                                 className="session-menu-item"
                                 onClick={() => {
                                   renameSession(sid)
@@ -1395,6 +1531,7 @@ export default function App() {
                               </button>
                               <button
                                 type="button"
+                                role="menuitem"
                                 className={`session-menu-item${isArchived ? '' : ' danger'}`}
                                 onClick={() => {
                                   toggleSessionArchive(sid)

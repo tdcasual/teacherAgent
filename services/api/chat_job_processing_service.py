@@ -226,6 +226,7 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
         )
         duration_ms = int((deps.monotonic() - t0) * 1000)
+        user_turn_persisted = bool(job.get("user_turn_persisted"))
 
         teacher_id = ""
         session_id = ""
@@ -233,19 +234,20 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
             session_id = str(job.get("session_id") or "").strip() or "main"
             try:
-                deps.append_teacher_session_message(
-                    teacher_id,
-                    session_id,
-                    "user",
-                    last_user_text,
-                    meta={
-                        "request_id": job.get("request_id") or "",
-                        "agent_id": req_agent_id,
-                        "skill_id": req.skill_id or "",
-                        "skill_id_requested": str(job.get("skill_id") or ""),
-                        "skill_id_effective": req.skill_id or "",
-                    },
-                )
+                if not user_turn_persisted:
+                    deps.append_teacher_session_message(
+                        teacher_id,
+                        session_id,
+                        "user",
+                        last_user_text,
+                        meta={
+                            "request_id": job.get("request_id") or "",
+                            "agent_id": req_agent_id,
+                            "skill_id": req.skill_id or "",
+                            "skill_id_requested": str(job.get("skill_id") or ""),
+                            "skill_id_effective": req.skill_id or "",
+                        },
+                    )
                 deps.append_teacher_session_message(
                     teacher_id,
                     session_id,
@@ -264,7 +266,7 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     teacher_id,
                     session_id,
                     preview=last_user_text or reply_text,
-                    message_increment=2,
+                    message_increment=1 if user_turn_persisted else 2,
                 )
             except Exception as exc:
                 detail = str(exc)[:200]
@@ -272,6 +274,53 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     "teacher.history.append_failed",
                     {"teacher_id": str(job.get("teacher_id") or ""), "error": detail},
                 )
+                deps.write_chat_job(
+                    job_id,
+                    {"status": "failed", "error": "history_persist_failed", "error_detail": detail},
+                )
+                return
+
+        if role_hint == "student" and req.student_id:
+            try:
+                note = deps.build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
+                payload = {"student_id": req.student_id, "interaction_note": note}
+                if deps.profile_update_async:
+                    deps.enqueue_profile_update(payload)
+                else:
+                    deps.student_profile_update(payload)
+            except Exception as exc:
+                deps.diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
+
+            try:
+                session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
+                    req.student_id, req.assignment_id, req.assignment_date
+                )
+                if not user_turn_persisted:
+                    deps.append_student_session_message(
+                        req.student_id,
+                        session_id,
+                        "user",
+                        last_user_text,
+                        meta={"request_id": job.get("request_id") or ""},
+                    )
+                deps.append_student_session_message(
+                    req.student_id,
+                    session_id,
+                    "assistant",
+                    reply_text,
+                    meta={"job_id": job_id, "request_id": job.get("request_id") or ""},
+                )
+                deps.update_student_session_index(
+                    req.student_id,
+                    session_id,
+                    req.assignment_id,
+                    deps.parse_date_str(req.assignment_date),
+                    preview=last_user_text or reply_text,
+                    message_increment=1 if user_turn_persisted else 2,
+                )
+            except Exception as exc:
+                detail = str(exc)[:200]
+                deps.diag_log("student.history.append_failed", {"student_id": req.student_id, "error": detail})
                 deps.write_chat_job(
                     job_id,
                     {"status": "failed", "error": "history_persist_failed", "error_detail": detail},
@@ -290,46 +339,6 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                 "skill_id_effective": str(getattr(req, "skill_id", "") or ""),
             },
         )
-
-        if role_hint == "student" and req.student_id:
-            try:
-                note = deps.build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
-                payload = {"student_id": req.student_id, "interaction_note": note}
-                if deps.profile_update_async:
-                    deps.enqueue_profile_update(payload)
-                else:
-                    deps.student_profile_update(payload)
-            except Exception as exc:
-                deps.diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
-
-            try:
-                session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
-                    req.student_id, req.assignment_id, req.assignment_date
-                )
-                deps.append_student_session_message(
-                    req.student_id,
-                    session_id,
-                    "user",
-                    last_user_text,
-                    meta={"request_id": job.get("request_id") or ""},
-                )
-                deps.append_student_session_message(
-                    req.student_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={"job_id": job_id, "request_id": job.get("request_id") or ""},
-                )
-                deps.update_student_session_index(
-                    req.student_id,
-                    session_id,
-                    req.assignment_id,
-                    deps.parse_date_str(req.assignment_date),
-                    preview=last_user_text or reply_text,
-                    message_increment=2,
-                )
-            except Exception as exc:
-                deps.diag_log("student.history.append_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
 
         if role_hint == "teacher":
             try:
