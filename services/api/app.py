@@ -340,6 +340,16 @@ from .teacher_memory_store_service import (
     teacher_memory_load_record as _teacher_memory_load_record_impl,
     teacher_memory_log_event as _teacher_memory_log_event_impl,
 )
+from .teacher_llm_routing_service import (
+    TeacherLlmRoutingDeps,
+    ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
+    teacher_llm_routing_apply as _teacher_llm_routing_apply_impl,
+    teacher_llm_routing_get as _teacher_llm_routing_get_impl,
+    teacher_llm_routing_proposal_get as _teacher_llm_routing_proposal_get_impl,
+    teacher_llm_routing_propose as _teacher_llm_routing_propose_impl,
+    teacher_llm_routing_rollback as _teacher_llm_routing_rollback_impl,
+    teacher_llm_routing_simulate as _teacher_llm_routing_simulate_impl,
+)
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
 from .teacher_assignment_preflight_service import (
     TeacherAssignmentPreflightDeps,
@@ -3539,215 +3549,32 @@ def list_skills() -> Dict[str, Any]:
     return payload
 
 
-def llm_routing_catalog() -> Dict[str, Any]:
-    providers_raw = LLM_GATEWAY.registry.get("providers") if isinstance(LLM_GATEWAY.registry.get("providers"), dict) else {}
-    providers: List[Dict[str, Any]] = []
-    for provider_name in sorted(providers_raw.keys()):
-        provider_cfg = providers_raw.get(provider_name) if isinstance(providers_raw.get(provider_name), dict) else {}
-        modes_raw = provider_cfg.get("modes") if isinstance(provider_cfg.get("modes"), dict) else {}
-        modes: List[Dict[str, Any]] = []
-        for mode_name in sorted(modes_raw.keys()):
-            mode_cfg = modes_raw.get(mode_name) if isinstance(modes_raw.get(mode_name), dict) else {}
-            modes.append(
-                {
-                    "mode": mode_name,
-                    "default_model": str(mode_cfg.get("default_model") or "").strip(),
-                    "model_env": str(mode_cfg.get("model_env") or "").strip(),
-                }
-            )
-        providers.append({"provider": provider_name, "modes": modes})
-    defaults = LLM_GATEWAY.registry.get("defaults") if isinstance(LLM_GATEWAY.registry.get("defaults"), dict) else {}
-    routing_cfg = LLM_GATEWAY.registry.get("routing") if isinstance(LLM_GATEWAY.registry.get("routing"), dict) else {}
-    return {
-        "providers": providers,
-        "defaults": {
-            "provider": str(defaults.get("provider") or "").strip(),
-            "mode": str(defaults.get("mode") or "").strip(),
-        },
-        "fallback_chain": [str(x) for x in (routing_cfg.get("fallback_chain") or []) if str(x).strip()],
-    }
-
-
-def _routing_actor_from_teacher_id(teacher_id: Optional[str]) -> str:
-    return resolve_teacher_id(teacher_id)
-
-
 def _ensure_teacher_routing_file(actor: str) -> Path:
-    from .llm_routing import ensure_routing_file
-
-    config_path = teacher_llm_routing_path(actor)
-    if not config_path.exists() and LLM_ROUTING_PATH.exists():
-        try:
-            legacy = json.loads(LLM_ROUTING_PATH.read_text(encoding="utf-8"))
-            if isinstance(legacy, dict):
-                legacy.setdefault("schema_version", 1)
-                legacy["updated_at"] = datetime.now().isoformat(timespec="seconds")
-                legacy["updated_by"] = actor
-                _atomic_write_json(config_path, legacy)
-        except Exception:
-            pass
-    ensure_routing_file(config_path, actor=actor)
-    return config_path
+    return _ensure_teacher_routing_file_impl(actor, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import get_active_routing, list_proposals
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    overview = get_active_routing(config_path, LLM_GATEWAY.registry)
-    history_limit = max(1, min(int(args.get("history_limit", 20) or 20), 200))
-    proposal_limit = max(1, min(int(args.get("proposal_limit", 20) or 20), 200))
-    proposal_status = str(args.get("proposal_status") or "").strip() or None
-    history = overview.get("history") or []
-    proposals = list_proposals(config_path, limit=proposal_limit, status=proposal_status)
-    return {
-        "ok": True,
-        "teacher_id": actor,
-        "routing": overview.get("config") or {},
-        "validation": overview.get("validation") or {},
-        "history": history[:history_limit],
-        "proposals": proposals,
-        "catalog": llm_routing_catalog(),
-        "config_path": str(config_path),
-    }
+    return _teacher_llm_routing_get_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import (
-        CompiledRouting,
-        RoutingContext,
-        get_compiled_routing,
-        simulate_routing,
-        validate_routing_config,
-    )
-
-    def _as_bool_arg(value: Any, default: bool = False) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        text = str(value).strip().lower()
-        if text in {"1", "true", "yes", "on"}:
-            return True
-        if text in {"0", "false", "no", "off"}:
-            return False
-        return default
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    config_override = args.get("config") if isinstance(args.get("config"), dict) else None
-    override_validation: Optional[Dict[str, Any]] = None
-    if config_override:
-        override_validation = validate_routing_config(config_override, LLM_GATEWAY.registry)
-        normalized = override_validation.get("normalized") if isinstance(override_validation.get("normalized"), dict) else {}
-        channels = normalized.get("channels") if isinstance(normalized.get("channels"), list) else []
-        rules = normalized.get("rules") if isinstance(normalized.get("rules"), list) else []
-        channels_by_id: Dict[str, Dict[str, Any]] = {}
-        for item in channels:
-            if not isinstance(item, dict):
-                continue
-            channel_id = str(item.get("id") or "").strip()
-            if channel_id:
-                channels_by_id[channel_id] = item
-        compiled = CompiledRouting(
-            config=normalized,
-            errors=list(override_validation.get("errors") or []),
-            warnings=list(override_validation.get("warnings") or []),
-            channels_by_id=channels_by_id,
-            rules=[r for r in rules if isinstance(r, dict)],
-        )
-    else:
-        compiled = get_compiled_routing(config_path, LLM_GATEWAY.registry)
-    ctx = RoutingContext(
-        role=str(args.get("role") or "teacher").strip() or "teacher",
-        skill_id=str(args.get("skill_id") or "").strip() or None,
-        kind=str(args.get("kind") or "").strip() or None,
-        needs_tools=_as_bool_arg(args.get("needs_tools"), False),
-        needs_json=_as_bool_arg(args.get("needs_json"), False),
-    )
-    result = simulate_routing(compiled, ctx)
-    result_payload = {"ok": True, "teacher_id": actor, **result}
-    if override_validation is not None:
-        result_payload["config_override"] = True
-        result_payload["override_validation"] = {
-            "ok": bool(override_validation.get("ok")),
-            "errors": list(override_validation.get("errors") or []),
-            "warnings": list(override_validation.get("warnings") or []),
-        }
-    return result_payload
+    return _teacher_llm_routing_simulate_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import create_routing_proposal
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    config_payload = args.get("config") if isinstance(args.get("config"), dict) else None
-    if not config_payload:
-        return {"ok": False, "error": "config_required"}
-    note = str(args.get("note") or "").strip()
-    result = create_routing_proposal(
-        config_path=config_path,
-        model_registry=LLM_GATEWAY.registry,
-        config_payload=config_payload,
-        actor=actor,
-        note=note,
-    )
-    result["teacher_id"] = actor
-    return result
+    return _teacher_llm_routing_propose_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import apply_routing_proposal
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    proposal_id = str(args.get("proposal_id") or "").strip()
-    approve = bool(args.get("approve", True))
-    if not proposal_id:
-        return {"ok": False, "error": "proposal_id_required"}
-    result = apply_routing_proposal(
-        config_path=config_path,
-        model_registry=LLM_GATEWAY.registry,
-        proposal_id=proposal_id,
-        approve=approve,
-        actor=actor,
-    )
-    result["teacher_id"] = actor
-    return result
+    return _teacher_llm_routing_apply_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import rollback_routing_config
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    target_version = args.get("target_version")
-    note = str(args.get("note") or "").strip()
-    result = rollback_routing_config(
-        config_path=config_path,
-        model_registry=LLM_GATEWAY.registry,
-        target_version=target_version,
-        actor=actor,
-        note=note,
-    )
-    result["teacher_id"] = actor
-    return result
+    return _teacher_llm_routing_rollback_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .llm_routing import read_proposal
-
-    actor = _routing_actor_from_teacher_id(args.get("teacher_id"))
-    config_path = _ensure_teacher_routing_file(actor)
-    proposal_id = str(args.get("proposal_id") or "").strip()
-    if not proposal_id:
-        return {"ok": False, "error": "proposal_id_required"}
-    result = read_proposal(config_path, proposal_id=proposal_id)
-    result["teacher_id"] = actor
-    result["config_path"] = str(config_path)
-    return result
+    return _teacher_llm_routing_proposal_get_impl(args, deps=_teacher_llm_routing_deps())
 
 
 def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
@@ -4850,6 +4677,17 @@ def _student_directory_deps():
         data_dir=DATA_DIR,
         load_profile_file=load_profile_file,
         normalize=normalize,
+    )
+
+
+def _teacher_llm_routing_deps():
+    return TeacherLlmRoutingDeps(
+        model_registry=LLM_GATEWAY.registry,
+        resolve_teacher_id=resolve_teacher_id,
+        teacher_llm_routing_path=teacher_llm_routing_path,
+        legacy_routing_path=LLM_ROUTING_PATH,
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
