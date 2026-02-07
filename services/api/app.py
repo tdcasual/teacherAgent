@@ -22,7 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import quote
 from collections import deque
 
-from llm_gateway import LLMGateway, UnifiedLLMRequest
+from llm_gateway import LLMGateway
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -95,9 +95,24 @@ from .agent_service import (
     run_agent_runtime as _run_agent_runtime_impl,
 )
 from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
+from .chat_job_repository import ChatJobRepositoryDeps
+from .chat_job_service import (
+    chat_job_path as _chat_job_path_impl,
+    load_chat_job as _load_chat_job_impl,
+    write_chat_job as _write_chat_job_impl,
+)
 from .chat_preflight import resolve_role_hint as _resolve_role_hint_impl
 from .chat_runtime_service import ChatRuntimeDeps, call_llm_runtime as _call_llm_runtime_impl
+from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
+from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
+from .chat_worker_service import (
+    ChatWorkerDeps,
+    chat_job_worker_loop as _chat_job_worker_loop_impl,
+    enqueue_chat_job as _enqueue_chat_job_impl,
+    scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
+    start_chat_worker as _start_chat_worker_impl,
+)
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
@@ -610,32 +625,15 @@ def start_exam_upload_worker() -> None:
 
 
 def chat_job_path(job_id: str) -> Path:
-    safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
-    return CHAT_JOB_DIR / (safe or job_id)
+    return _chat_job_path_impl(job_id, deps=_chat_job_repo_deps())
 
 
 def load_chat_job(job_id: str) -> Dict[str, Any]:
-    job_dir = chat_job_path(job_id)
-    job_path = job_dir / "job.json"
-    if not job_path.exists():
-        raise FileNotFoundError(f"chat job not found: {job_id}")
-    return json.loads(job_path.read_text(encoding="utf-8"))
+    return _load_chat_job_impl(job_id, deps=_chat_job_repo_deps())
 
 
 def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
-    job_dir = chat_job_path(job_id)
-    job_dir.mkdir(parents=True, exist_ok=True)
-    job_path = job_dir / "job.json"
-    data: Dict[str, Any] = {}
-    if job_path.exists() and not overwrite:
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    data.update(updates)
-    data["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    _atomic_write_json(job_path, data)
-    return data
+    return _write_chat_job_impl(job_id, updates, deps=_chat_job_repo_deps(), overwrite=overwrite)
 
 
 def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
@@ -819,80 +817,19 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
 
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
-    lane_final = lane_id or ""
-    if not lane_final:
-        try:
-            job = load_chat_job(job_id)
-            lane_final = resolve_chat_lane_id_from_job(job)
-        except Exception:
-            lane_final = "unknown:session_main:req_unknown"
-    with CHAT_JOB_LOCK:
-        lane_position = _chat_enqueue_locked(job_id, lane_final)
-        lane_load = _chat_lane_load_locked(lane_final)
-    CHAT_JOB_EVENT.set()
-    return {
-        "lane_id": lane_final,
-        "lane_queue_position": lane_position,
-        "lane_queue_size": lane_load["queued"],
-        "lane_active": bool(lane_load["active"]),
-    }
+    return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
 
 
 def scan_pending_chat_jobs() -> None:
-    CHAT_JOB_DIR.mkdir(parents=True, exist_ok=True)
-    for job_path in CHAT_JOB_DIR.glob("*/job.json"):
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        status = str(data.get("status") or "")
-        job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            enqueue_chat_job(job_id, lane_id=resolve_chat_lane_id_from_job(data))
+    _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
 
 
 def chat_job_worker_loop() -> None:
-    while True:
-        CHAT_JOB_EVENT.wait()
-        job_id = ""
-        lane_id = ""
-        with CHAT_JOB_LOCK:
-            job_id, lane_id = _chat_pick_next_locked()
-            if not job_id:
-                CHAT_JOB_EVENT.clear()
-        if not job_id:
-            time.sleep(0.05)
-            continue
-        try:
-            process_chat_job(job_id)
-        except Exception as exc:
-            diag_log("chat.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
-            write_chat_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": str(exc)[:200],
-                },
-            )
-        finally:
-            with CHAT_JOB_LOCK:
-                _chat_mark_done_locked(job_id, lane_id)
-                if _chat_has_pending_locked():
-                    CHAT_JOB_EVENT.set()
-                else:
-                    CHAT_JOB_EVENT.clear()
+    _chat_job_worker_loop_impl(deps=_chat_worker_deps())
 
 
 def start_chat_worker() -> None:
-    global CHAT_JOB_WORKER_STARTED
-    if CHAT_JOB_WORKER_STARTED:
-        return
-    scan_pending_chat_jobs()
-    for i in range(CHAT_WORKER_POOL_SIZE):
-        thread = threading.Thread(target=chat_job_worker_loop, daemon=True, name=f"chat-worker-{i + 1}")
-        thread.start()
-        CHAT_WORKER_THREADS.append(thread)
-    CHAT_JOB_WORKER_STARTED = True
+    _start_chat_worker_impl(deps=_chat_worker_deps())
 
 
 def load_chat_request_index() -> Dict[str, str]:
@@ -7895,114 +7832,7 @@ def process_chat_job(job_id: str) -> None:
         _release_lockfile(claim_path)
 
 def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
-    request_id = (req.request_id or "").strip()
-    if not request_id:
-        raise HTTPException(status_code=400, detail="request_id is required")
-
-    existing_job_id = get_chat_job_id_by_request(request_id)
-    if existing_job_id:
-        try:
-            job = load_chat_job(existing_job_id)
-        except Exception:
-            job = {"job_id": existing_job_id, "status": "queued"}
-        return {"ok": True, "job_id": existing_job_id, "status": job.get("status", "queued")}
-
-    role_hint = _detect_role_hint(req)
-    session_id = req.session_id
-    if role_hint == "student" and req.student_id and not session_id:
-        session_id = resolve_student_session_id(req.student_id, req.assignment_id, req.assignment_date)
-    if role_hint == "teacher" and not session_id:
-        # OpenClaw-style default: direct chats collapse into a shared "main" session.
-        session_id = "main"
-    teacher_id = resolve_teacher_id(req.teacher_id) if role_hint == "teacher" else ""
-    lane_id = resolve_chat_lane_id(
-        role_hint,
-        session_id=session_id,
-        student_id=req.student_id,
-        teacher_id=teacher_id,
-        request_id=request_id,
-    )
-
-    req_payload = {
-        "messages": [{"role": m.role, "content": m.content} for m in req.messages],
-        "role": req.role,
-        "skill_id": req.skill_id,
-        "teacher_id": teacher_id if role_hint == "teacher" else req.teacher_id,
-        "student_id": req.student_id,
-        "assignment_id": req.assignment_id,
-        "assignment_date": req.assignment_date,
-        "auto_generate_assignment": req.auto_generate_assignment,
-    }
-    last_user_text = _chat_last_user_text(req_payload.get("messages"))
-    fingerprint = _chat_text_fingerprint(last_user_text)
-
-    with CHAT_JOB_LOCK:
-        recent_job_id = _chat_recent_job_locked(lane_id, fingerprint)
-    if recent_job_id:
-        try:
-            recent_job = load_chat_job(recent_job_id)
-        except Exception:
-            recent_job = {"job_id": recent_job_id, "status": "queued"}
-        status = str(recent_job.get("status") or "queued")
-        if status in {"queued", "processing"}:
-            # Ensure idempotency for this request_id too.
-            upsert_chat_request_index(request_id, recent_job_id)
-            return {"ok": True, "job_id": recent_job_id, "status": status, "lane_id": lane_id, "debounced": True}
-
-    with CHAT_JOB_LOCK:
-        lane_load = _chat_lane_load_locked(lane_id)
-    if lane_load["total"] >= CHAT_LANE_MAX_QUEUE:
-        raise HTTPException(status_code=429, detail=f"当前会话排队过多（lane={lane_load['total']}），请稍后重试")
-
-    job_id = f"cjob_{uuid.uuid4().hex[:12]}"
-    # Cross-process idempotency: claim request_id -> job_id before creating the job.
-    if not _chat_request_map_set_if_absent(request_id, job_id):
-        existing = get_chat_job_id_by_request(request_id)
-        if existing:
-            try:
-                job = load_chat_job(existing)
-            except Exception:
-                job = {"job_id": existing, "status": "queued"}
-            return {"ok": True, "job_id": existing, "status": job.get("status", "queued")}
-        raise HTTPException(status_code=409, detail="request_id already claimed")
-    record = {
-        "job_id": job_id,
-        "request_id": request_id,
-        "session_id": session_id or "",
-        "status": "queued",
-        "step": "queued",
-        "progress": 0,
-        "role": role_hint or req.role or "unknown",
-        "skill_id": req.skill_id or "",
-        "teacher_id": teacher_id,
-        "student_id": req.student_id or "",
-        "assignment_id": req.assignment_id or "",
-        "lane_id": lane_id,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "request": req_payload,
-    }
-    write_chat_job(job_id, record, overwrite=True)
-    upsert_chat_request_index(request_id, job_id)
-    queue_info = enqueue_chat_job(job_id, lane_id=lane_id)
-    with CHAT_JOB_LOCK:
-        _chat_register_recent_locked(lane_id, fingerprint, job_id)
-    write_chat_job(
-        job_id,
-        {
-            "lane_queue_position": queue_info.get("lane_queue_position", 0),
-            "lane_queue_size": queue_info.get("lane_queue_size", 0),
-            "lane_active": bool(queue_info.get("lane_active")),
-        },
-    )
-    return {
-        "ok": True,
-        "job_id": job_id,
-        "status": "queued",
-        "lane_id": lane_id,
-        "lane_queue_position": queue_info.get("lane_queue_position", 0),
-        "lane_queue_size": queue_info.get("lane_queue_size", 0),
-        "lane_active": bool(queue_info.get("lane_active")),
-    }
+    return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
 
 
 @app.post("/chat/start")
@@ -8013,27 +7843,9 @@ async def chat_start(req: ChatStartRequest):
 @app.get("/chat/status")
 async def chat_status(job_id: str):
     try:
-        job = load_chat_job(job_id)
+        return _get_chat_status_impl(job_id, deps=_chat_status_deps())
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job not found")
-    # Self-healing: if the job is still pending, ensure it's enqueued in *this* process too.
-    # This helps in multi-worker deployments where /chat/start and /chat/status may hit different workers.
-    try:
-        status = str(job.get("status") or "")
-        lane_hint = str(job.get("lane_id") or "").strip()
-        if status in {"queued", "processing"}:
-            enqueue_chat_job(job_id, lane_id=lane_hint or resolve_chat_lane_id_from_job(job))
-    except Exception:
-        pass
-    lane_id = str(job.get("lane_id") or "").strip()
-    if lane_id:
-        with CHAT_JOB_LOCK:
-            lane_load = _chat_lane_load_locked(lane_id)
-            lane_pos = _chat_find_position_locked(lane_id, job_id)
-        job["lane_queue_position"] = lane_pos
-        job["lane_queue_size"] = lane_load["queued"]
-        job["lane_active"] = bool(lane_load["active"])
-    return job
 
 
 def _paginate_session_items(items: List[Dict[str, Any]], cursor: int, limit: int) -> Tuple[List[Dict[str, Any]], Optional[int], int]:
@@ -8655,6 +8467,83 @@ def _chat_runtime_deps():
         routing_config_path_for_role=routing_config_path_for_role,
         diag_log=diag_log,
         monotonic=time.monotonic,
+    )
+
+
+def _chat_job_repo_deps():
+    return ChatJobRepositoryDeps(
+        chat_job_dir=CHAT_JOB_DIR,
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
+def _chat_worker_started_get() -> bool:
+    return bool(CHAT_JOB_WORKER_STARTED)
+
+
+def _chat_worker_started_set(value: bool) -> None:
+    global CHAT_JOB_WORKER_STARTED
+    CHAT_JOB_WORKER_STARTED = bool(value)
+
+
+def _chat_worker_deps():
+    return ChatWorkerDeps(
+        chat_job_dir=CHAT_JOB_DIR,
+        chat_job_lock=CHAT_JOB_LOCK,
+        chat_job_event=CHAT_JOB_EVENT,
+        chat_worker_threads=CHAT_WORKER_THREADS,
+        chat_worker_pool_size=CHAT_WORKER_POOL_SIZE,
+        worker_started_get=_chat_worker_started_get,
+        worker_started_set=_chat_worker_started_set,
+        load_chat_job=load_chat_job,
+        write_chat_job=lambda job_id, updates: write_chat_job(job_id, updates),
+        resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
+        chat_enqueue_locked=_chat_enqueue_locked,
+        chat_lane_load_locked=_chat_lane_load_locked,
+        chat_pick_next_locked=_chat_pick_next_locked,
+        chat_mark_done_locked=_chat_mark_done_locked,
+        chat_has_pending_locked=_chat_has_pending_locked,
+        process_chat_job=process_chat_job,
+        diag_log=diag_log,
+        sleep=time.sleep,
+        thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
+    )
+
+
+def _chat_start_deps():
+    return ChatStartDeps(
+        http_error=lambda code, detail: HTTPException(status_code=code, detail=detail),
+        get_chat_job_id_by_request=get_chat_job_id_by_request,
+        load_chat_job=load_chat_job,
+        detect_role_hint=_detect_role_hint,
+        resolve_student_session_id=resolve_student_session_id,
+        resolve_teacher_id=resolve_teacher_id,
+        resolve_chat_lane_id=resolve_chat_lane_id,
+        chat_last_user_text=_chat_last_user_text,
+        chat_text_fingerprint=_chat_text_fingerprint,
+        chat_job_lock=CHAT_JOB_LOCK,
+        chat_recent_job_locked=_chat_recent_job_locked,
+        upsert_chat_request_index=upsert_chat_request_index,
+        chat_lane_load_locked=_chat_lane_load_locked,
+        chat_lane_max_queue=CHAT_LANE_MAX_QUEUE,
+        chat_request_map_set_if_absent=_chat_request_map_set_if_absent,
+        new_job_id=lambda: f"cjob_{uuid.uuid4().hex[:12]}",
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        write_chat_job=lambda job_id, updates, overwrite=False: write_chat_job(job_id, updates, overwrite=overwrite),
+        enqueue_chat_job=lambda job_id, lane_id=None: enqueue_chat_job(job_id, lane_id=lane_id),
+        chat_register_recent_locked=_chat_register_recent_locked,
+    )
+
+
+def _chat_status_deps():
+    return ChatStatusDeps(
+        load_chat_job=load_chat_job,
+        enqueue_chat_job=lambda job_id, lane_id: enqueue_chat_job(job_id, lane_id=lane_id),
+        resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
+        chat_job_lock=CHAT_JOB_LOCK,
+        chat_lane_load_locked=_chat_lane_load_locked,
+        chat_find_position_locked=_chat_find_position_locked,
     )
 
 
