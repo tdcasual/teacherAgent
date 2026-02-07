@@ -321,6 +321,12 @@ npm run e2e:teacher
 - `TEACHER_MEM0_CHUNK_CHARS`：写入 mem0 的分块大小（字符；默认 `900`）
 - `TEACHER_MEM0_CHUNK_OVERLAP_CHARS`：写入 mem0 的分块重叠（字符；默认 `100`）
 
+### 老师私有 Provider（API Key 加密）
+- `MASTER_KEY`：用于加密/解密老师私有 Provider 的 `api_key`（生产环境必填）。
+- `MASTER_KEY_DEV_DEFAULT`：开发环境回退密钥（默认 `dev-master-key-unsafe-change-me`，仅本地开发使用）。
+- `APP_ENV` / `ENV`：当值为 `production` 或 `prod` 时，若缺少 `MASTER_KEY`，API 启动会直接失败。
+- 私有 Provider 支持自定义 `base_url`，可接 OpenAI 兼容中转；建议生产环境统一使用 `https://`。
+
 ### 老师端默认记忆规则
 - 出现明确长期信号（如“以后/默认/统一/固定”）时，优先写入 `MEMORY.md`。
 - 未出现“记住”口令时，若在最近对话中重复出现同类稳定偏好（输出结构/格式/讲解风格/作业参数），会自动推断并写入 `MEMORY.md`。

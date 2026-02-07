@@ -51,6 +51,53 @@
 
 ---
 
+## 老师端模型路由与 Provider 管理
+
+### GET `/teacher/llm-routing`
+读取当前老师的路由配置、校验结果、历史版本与提案列表。
+
+### POST `/teacher/llm-routing/simulate`
+基于当前配置（或传入草稿）进行路由仿真。
+
+### POST `/teacher/llm-routing/proposals`
+创建路由配置提案。
+
+### GET `/teacher/llm-routing/proposals/{proposal_id}`
+读取提案详情。
+
+### POST `/teacher/llm-routing/proposals/{proposal_id}/review`
+审核提案（生效或拒绝）。
+
+### POST `/teacher/llm-routing/rollback`
+回滚到历史版本。
+
+### GET `/teacher/provider-registry`
+读取老师私有 Provider 列表（脱敏）及共享+私有合并目录。
+
+### POST `/teacher/provider-registry/providers`
+新增私有 Provider（OpenAI-Compatible，支持自定义 `base_url`）。
+- 请求字段：
+  - `teacher_id`（可选，默认 `teacher`）
+  - `provider_id`（可选，未填自动生成；不可与共享 provider 同名）
+  - `display_name`（可选）
+  - `base_url`（必填，例如 `https://proxy.example.com/v1`）
+  - `api_key`（必填，仅写入时可见，返回仅掩码）
+  - `default_model`（可选）
+  - `enabled`（可选，默认 `true`）
+- 说明：可直接填写中转/代理地址；生产环境默认仅允许 `https://`。
+
+### PATCH `/teacher/provider-registry/providers/{provider_id}`
+更新私有 Provider（支持 key 轮换，不回显明文 key）。
+- 可更新字段：`display_name`、`base_url`、`default_model`、`enabled`、`api_key`（轮换）。
+
+### DELETE `/teacher/provider-registry/providers/{provider_id}`
+禁用私有 Provider（软删除）。
+
+### POST `/teacher/provider-registry/providers/{provider_id}/probe-models`
+探测模型列表（依赖上游 `/models` 兼容性；失败不影响手填模型）。
+
+---
+
 ## 技能与列表查询
 ### GET `/skills`
 返回技能列表（从 `skills/*/SKILL.md` 自动扫描）
