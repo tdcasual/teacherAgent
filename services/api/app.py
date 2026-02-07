@@ -88,6 +88,7 @@ from .assignment_upload_start_service import (
     start_assignment_upload as _start_assignment_upload_impl,
 )
 from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
+from .chat_state_store import create_chat_idempotency_store
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
@@ -184,9 +185,7 @@ CHAT_JOB_TO_LANE: Dict[str, str] = {}
 CHAT_LANE_CURSOR = 0
 CHAT_WORKER_THREADS: List[threading.Thread] = []
 CHAT_LANE_RECENT: Dict[str, Tuple[float, str, str]] = {}
-CHAT_REQUEST_MAP_DIR = CHAT_JOB_DIR / "request_index"
-CHAT_REQUEST_INDEX_PATH = CHAT_JOB_DIR / "request_index.json"  # legacy/debug only
-CHAT_REQUEST_INDEX_LOCK = threading.Lock()  # legacy/debug only
+CHAT_IDEMPOTENCY_STATE = create_chat_idempotency_store(CHAT_JOB_DIR)
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
@@ -890,10 +889,11 @@ def start_chat_worker() -> None:
 
 
 def load_chat_request_index() -> Dict[str, str]:
-    if not CHAT_REQUEST_INDEX_PATH.exists():
+    request_index_path = CHAT_IDEMPOTENCY_STATE.request_index_path
+    if not request_index_path.exists():
         return {}
     try:
-        data = json.loads(CHAT_REQUEST_INDEX_PATH.read_text(encoding="utf-8"))
+        data = json.loads(request_index_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
     if not isinstance(data, dict):
@@ -906,7 +906,7 @@ def load_chat_request_index() -> Dict[str, str]:
 
 
 def _chat_request_map_path(request_id: str) -> Path:
-    return CHAT_REQUEST_MAP_DIR / f"{safe_fs_id(request_id, prefix='req')}.txt"
+    return CHAT_IDEMPOTENCY_STATE.request_map_dir / f"{safe_fs_id(request_id, prefix='req')}.txt"
 
 
 def _chat_request_map_get(request_id: str) -> Optional[str]:
@@ -963,10 +963,10 @@ def upsert_chat_request_index(request_id: str, job_id: str) -> None:
     """
     _chat_request_map_set_if_absent(request_id, job_id)
     try:
-        with CHAT_REQUEST_INDEX_LOCK:
+        with CHAT_IDEMPOTENCY_STATE.request_index_lock:
             idx = load_chat_request_index()
             idx[str(request_id)] = str(job_id)
-            _atomic_write_json(CHAT_REQUEST_INDEX_PATH, idx)
+            _atomic_write_json(CHAT_IDEMPOTENCY_STATE.request_index_path, idx)
     except Exception:
         pass
 
@@ -977,7 +977,7 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
         return job_id
     # Fallback to legacy json index (e.g., old jobs created before request map existed).
     try:
-        with CHAT_REQUEST_INDEX_LOCK:
+        with CHAT_IDEMPOTENCY_STATE.request_index_lock:
             idx = load_chat_request_index()
             legacy = idx.get(str(request_id))
     except Exception:
