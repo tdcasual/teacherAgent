@@ -161,7 +161,17 @@ from .teacher_memory_api_service import (
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
     review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
+from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
+from .teacher_session_compaction_service import (
+    TeacherSessionCompactionDeps,
+    maybe_compact_teacher_session as _maybe_compact_teacher_session_impl,
+)
 from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
+from .teacher_workspace_service import (
+    TeacherWorkspaceDeps,
+    ensure_teacher_workspace as _ensure_teacher_workspace_impl,
+    teacher_read_text as _teacher_read_text_impl,
+)
 from .tool_dispatch_service import ToolDispatchDeps, tool_dispatch as _tool_dispatch_impl
 from .upload_io_service import sanitize_filename_io
 try:
@@ -1103,71 +1113,11 @@ def teacher_daily_memory_path(teacher_id: str, date_str: Optional[str] = None) -
 
 
 def ensure_teacher_workspace(teacher_id: str) -> Path:
-    base = teacher_workspace_dir(teacher_id)
-    base.mkdir(parents=True, exist_ok=True)
-    teacher_daily_memory_dir(teacher_id).mkdir(parents=True, exist_ok=True)
-    proposals = base / "proposals"
-    proposals.mkdir(parents=True, exist_ok=True)
-
-    defaults: Dict[str, str] = {
-        "AGENTS.md": (
-            "# Teacher Agent Workspace Rules\n"
-            "\n"
-            "This workspace stores long-term preferences and work logs for the teacher assistant.\n"
-            "\n"
-            "## Memory Policy\n"
-            "- Only write stable preferences/constraints to MEMORY.md after explicit teacher confirmation.\n"
-            "- Write daily notes to memory/YYYY-MM-DD.md freely (short, factual).\n"
-            "- Never store secrets (API keys, passwords, tokens).\n"
-        ),
-        "SOUL.md": (
-            "# Persona\n"
-            "- Be proactive but not pushy.\n"
-            "- Prefer checklists and concrete next actions.\n"
-            "- When unsure about a preference, ask.\n"
-        ),
-        "USER.md": (
-            "# Teacher Profile\n"
-            "- name: (unknown)\n"
-            "- school/class: (unknown)\n"
-            "- preferences:\n"
-            "  - output_style: concise\n"
-            "  - default_language: zh\n"
-        ),
-        "MEMORY.md": (
-            "# Long-Term Memory (Curated)\n"
-            "\n"
-            "Keep this file short and high-signal.\n"
-            "\n"
-            "## Confirmed Preferences\n"
-            "- (none)\n"
-        ),
-        "HEARTBEAT.md": (
-            "# Heartbeat Checklist\n"
-            "- [ ] Review low-confidence OCR grading items\n"
-            "- [ ] Check students with repeated weak KP\n"
-            "- [ ] Prepare tomorrow's pre-class checklist\n"
-        ),
-    }
-
-    for name, content in defaults.items():
-        path = base / name
-        if not path.exists():
-            path.write_text(content, encoding="utf-8")
-
-    return base
+    return _ensure_teacher_workspace_impl(teacher_id, deps=_teacher_workspace_deps())
 
 
 def teacher_read_text(path: Path, max_chars: int = 8000) -> str:
-    if not path.exists():
-        return ""
-    try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
-        return ""
-    if max_chars and len(text) > max_chars:
-        return text[:max_chars] + "…"
-    return text
+    return _teacher_read_text_impl(path, max_chars=max_chars)
 
 
 def teacher_sessions_base_dir(teacher_id: str) -> Path:
@@ -1358,84 +1308,11 @@ def _mark_teacher_session_compacted(
 
 
 def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
-    if not TEACHER_SESSION_COMPACT_ENABLED:
-        return {"ok": False, "reason": "disabled"}
-    if TEACHER_SESSION_COMPACT_MAIN_ONLY and str(session_id) != "main":
-        return {"ok": False, "reason": "main_only"}
-    if not _teacher_compact_allowed(teacher_id, session_id):
-        return {"ok": False, "reason": "cooldown"}
-
-    path = teacher_session_file(teacher_id, session_id)
-    if not path.exists():
-        return {"ok": False, "reason": "session_not_found"}
-
-    raw_lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    if not raw_lines:
-        return {"ok": False, "reason": "empty"}
-    records: List[Dict[str, Any]] = []
-    for line in raw_lines:
-        text = (line or "").strip()
-        if not text:
-            continue
-        try:
-            obj = json.loads(text)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            records.append(obj)
-    dialog = [r for r in records if str(r.get("role") or "") in {"user", "assistant"} and not bool(r.get("synthetic"))]
-    if len(dialog) <= TEACHER_SESSION_COMPACT_MAX_MESSAGES:
-        return {"ok": False, "reason": "below_threshold", "messages": len(dialog)}
-
-    keep_tail = min(max(1, TEACHER_SESSION_COMPACT_KEEP_TAIL), len(dialog))
-    # Keep room for the synthetic summary to be included in the "last N messages" window.
-    keep_tail = min(keep_tail, max(1, CHAT_MAX_MESSAGES_TEACHER - 1))
-    head = dialog[:-keep_tail]
-    tail = dialog[-keep_tail:]
-    if not head:
-        return {"ok": False, "reason": "nothing_to_compact"}
-
-    old_summary = ""
-    for rec in reversed(records):
-        if rec.get("kind") == "session_summary":
-            old_summary = str(rec.get("content") or "").strip()
-            break
-
-    summary_text = _teacher_compact_summary(head, old_summary)
-    stamp = datetime.now().isoformat(timespec="seconds")
-    summary_record = {
-        "ts": stamp,
-        "role": "assistant",
-        "content": f"【会话压缩摘要】\n{summary_text}",
-        "kind": "session_summary",
-        "synthetic": True,
-        "compacted_messages": len(head),
-        "keep_tail": keep_tail,
-    }
-    new_records = [summary_record] + tail
-    _write_teacher_session_records(path, new_records)
-    _mark_teacher_session_compacted(
+    return _maybe_compact_teacher_session_impl(
         teacher_id,
         session_id,
-        compacted_messages=len(head),
-        new_message_count=len(new_records),
+        deps=_teacher_session_compaction_deps(),
     )
-    diag_log(
-        "teacher.session.compacted",
-        {
-            "teacher_id": teacher_id,
-            "session_id": session_id,
-            "compacted_messages": len(head),
-            "tail_messages": len(tail),
-        },
-    )
-    return {
-        "ok": True,
-        "teacher_id": teacher_id,
-        "session_id": session_id,
-        "compacted_messages": len(head),
-        "tail_messages": len(tail),
-    }
 
 
 def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: int) -> str:
@@ -1494,36 +1371,13 @@ def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
 
 
 def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_chars: int = 6000, session_id: str = "main") -> str:
-    """
-    Build a compact teacher-specific context block from workspace files.
-    This is injected as an extra system message for teacher conversations.
-    """
-    ensure_teacher_workspace(teacher_id)
-    parts: List[str] = []
-    user_text = teacher_read_text(teacher_workspace_file(teacher_id, "USER.md"), max_chars=2000).strip()
-    mem_text = _teacher_memory_context_text(teacher_id, max_chars=4000).strip()
-    if user_text:
-        parts.append("【Teacher Profile】\n" + user_text)
-    if mem_text:
-        parts.append("【Long-Term Memory】\n" + mem_text)
-    if TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY:
-        summary = _teacher_session_summary_text(teacher_id, str(session_id or "main"), TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS)
-        if summary:
-            parts.append("【Session Summary】\n" + summary)
-    out = "\n\n".join(parts).strip()
-    if max_chars and len(out) > max_chars:
-        out = out[:max_chars] + "…"
-    _teacher_memory_log_event(
+    return _build_teacher_context_impl(
         teacher_id,
-        "context_injected",
-        {
-            "query_preview": str(query or "")[:80],
-            "context_chars": len(out),
-            "memory_chars": len(mem_text),
-            "session_id": str(session_id or "main"),
-        },
+        deps=_teacher_context_deps(),
+        query=query,
+        max_chars=max_chars,
+        session_id=session_id,
     )
-    return out
 
 
 def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[str, Any]:
@@ -8544,6 +8398,42 @@ def _chat_status_deps():
         chat_job_lock=CHAT_JOB_LOCK,
         chat_lane_load_locked=_chat_lane_load_locked,
         chat_find_position_locked=_chat_find_position_locked,
+    )
+
+
+def _teacher_workspace_deps():
+    return TeacherWorkspaceDeps(
+        teacher_workspace_dir=teacher_workspace_dir,
+        teacher_daily_memory_dir=teacher_daily_memory_dir,
+    )
+
+
+def _teacher_context_deps():
+    return TeacherContextDeps(
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        teacher_read_text=teacher_read_text,
+        teacher_workspace_file=teacher_workspace_file,
+        teacher_memory_context_text=_teacher_memory_context_text,
+        include_session_summary=TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY,
+        session_summary_max_chars=TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
+        teacher_session_summary_text=_teacher_session_summary_text,
+        teacher_memory_log_event=_teacher_memory_log_event,
+    )
+
+
+def _teacher_session_compaction_deps():
+    return TeacherSessionCompactionDeps(
+        compact_enabled=TEACHER_SESSION_COMPACT_ENABLED,
+        compact_main_only=TEACHER_SESSION_COMPACT_MAIN_ONLY,
+        compact_max_messages=TEACHER_SESSION_COMPACT_MAX_MESSAGES,
+        compact_keep_tail=TEACHER_SESSION_COMPACT_KEEP_TAIL,
+        chat_max_messages_teacher=CHAT_MAX_MESSAGES_TEACHER,
+        teacher_compact_allowed=_teacher_compact_allowed,
+        teacher_session_file=teacher_session_file,
+        teacher_compact_summary=_teacher_compact_summary,
+        write_teacher_session_records=_write_teacher_session_records,
+        mark_teacher_session_compacted=_mark_teacher_session_compacted,
+        diag_log=diag_log,
     )
 
 
