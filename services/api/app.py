@@ -31,12 +31,18 @@ from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
+from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+from .teacher_memory_api_service import (
+    TeacherMemoryApiDeps,
+    list_proposals_api as _list_teacher_memory_proposals_api_impl,
+    review_proposal_api as _review_teacher_memory_proposal_api_impl,
+)
 from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
 from .upload_io_service import sanitize_filename_io
 from .llm_agent_tooling_service import parse_tool_json_safe
@@ -9725,8 +9731,7 @@ def process_chat_job(job_id: str) -> None:
     finally:
         _release_lockfile(claim_path)
 
-@app.post("/chat/start")
-async def chat_start(req: ChatStartRequest):
+def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     request_id = (req.request_id or "").strip()
     if not request_id:
         raise HTTPException(status_code=400, detail="request_id is required")
@@ -9835,6 +9840,11 @@ async def chat_start(req: ChatStartRequest):
         "lane_queue_size": queue_info.get("lane_queue_size", 0),
         "lane_active": bool(queue_info.get("lane_active")),
     }
+
+
+@app.post("/chat/start")
+async def chat_start(req: ChatStartRequest):
+    return _start_chat_api_impl(req, deps=_chat_api_deps())
 
 
 @app.get("/chat/status")
@@ -10086,8 +10096,12 @@ async def teacher_history_session(
 
 @app.get("/teacher/memory/proposals")
 async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    result = teacher_memory_list_proposals(teacher_id_final, status=status, limit=limit)
+    result = _list_teacher_memory_proposals_api_impl(
+        teacher_id,
+        status=status,
+        limit=limit,
+        deps=_teacher_memory_api_deps(),
+    )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "invalid_request")
     return result
@@ -10101,8 +10115,12 @@ async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: in
 
 @app.post("/teacher/memory/proposals/{proposal_id}/review")
 async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
-    teacher_id_final = resolve_teacher_id(req.teacher_id)
-    result = teacher_memory_apply(teacher_id_final, proposal_id=str(proposal_id or "").strip(), approve=bool(req.approve))
+    result = _review_teacher_memory_proposal_api_impl(
+        proposal_id,
+        teacher_id=req.teacher_id,
+        approve=bool(req.approve),
+        deps=_teacher_memory_api_deps(),
+    )
     if result.get("error"):
         code = 404 if str(result.get("error")) == "proposal not found" else 400
         raise HTTPException(status_code=code, detail=result.get("error"))
@@ -10225,6 +10243,18 @@ def _teacher_routing_api_deps():
 def _chart_api_deps():
     return ChartApiDeps(
         chart_exec=lambda args: execute_chart_exec(args, app_root=APP_ROOT, uploads_dir=UPLOADS_DIR)
+    )
+
+
+def _chat_api_deps():
+    return ChatApiDeps(start_chat=_chat_start_orchestration)
+
+
+def _teacher_memory_api_deps():
+    return TeacherMemoryApiDeps(
+        resolve_teacher_id=resolve_teacher_id,
+        teacher_memory_list_proposals=teacher_memory_list_proposals,
+        teacher_memory_apply=teacher_memory_apply,
     )
 
 
