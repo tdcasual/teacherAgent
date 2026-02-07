@@ -161,6 +161,14 @@ from .teacher_memory_api_service import (
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
     review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
+from .teacher_memory_insights_service import (
+    TeacherMemoryInsightsDeps,
+    teacher_memory_insights as _teacher_memory_insights_impl,
+)
+from .teacher_memory_search_service import (
+    TeacherMemorySearchDeps,
+    teacher_memory_search as _teacher_memory_search_impl,
+)
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
 from .teacher_session_compaction_service import (
     TeacherSessionCompactionDeps,
@@ -1381,106 +1389,12 @@ def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_char
 
 
 def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[str, Any]:
-    ensure_teacher_workspace(teacher_id)
-    q = (query or "").strip()
-    if not q:
-        return {"matches": []}
-    topk = max(1, int(limit or 5))
-
-    # Prefer semantic retrieval (mem0) when enabled; fall back to keyword scan.
-    try:
-        from .mem0_adapter import teacher_mem0_search
-
-        mem0_res = teacher_mem0_search(teacher_id, q, limit=topk)
-        if mem0_res.get("ok") and mem0_res.get("matches"):
-            raw_matches = list(mem0_res.get("matches") or [])
-            matches: List[Dict[str, Any]] = []
-            dropped_expired = 0
-            for item in raw_matches:
-                if not isinstance(item, dict):
-                    continue
-                if TEACHER_MEMORY_SEARCH_FILTER_EXPIRED:
-                    pid = str(item.get("proposal_id") or "").strip()
-                    if pid:
-                        rec = _teacher_memory_load_record(teacher_id, pid)
-                        if isinstance(rec, dict) and _teacher_memory_is_expired_record(rec):
-                            dropped_expired += 1
-                            continue
-                matches.append(item)
-                if len(matches) >= topk:
-                    break
-            diag_log(
-                "teacher.mem0.search.hit",
-                {"teacher_id": teacher_id, "query_len": len(q), "matches": len(matches), "dropped_expired": dropped_expired},
-            )
-            _teacher_memory_log_event(
-                teacher_id,
-                "search",
-                {
-                    "mode": "mem0",
-                    "query": q[:120],
-                    "hits": len(matches),
-                    "raw_hits": len(raw_matches),
-                    "dropped_expired": dropped_expired,
-                },
-            )
-            if matches:
-                return {"matches": matches, "mode": "mem0"}
-        if mem0_res.get("error"):
-            diag_log(
-                "teacher.mem0.search.error",
-                {"teacher_id": teacher_id, "query_len": len(q), "error": str(mem0_res.get("error"))[:200]},
-            )
-        else:
-            diag_log("teacher.mem0.search.miss", {"teacher_id": teacher_id, "query_len": len(q)})
-    except Exception as exc:
-        diag_log("teacher.mem0.search.crash", {"teacher_id": teacher_id, "error": str(exc)[:200]})
-
-    files: List[Path] = [
-        teacher_workspace_file(teacher_id, "MEMORY.md"),
-        teacher_workspace_file(teacher_id, "USER.md"),
-        teacher_workspace_file(teacher_id, "AGENTS.md"),
-        teacher_workspace_file(teacher_id, "SOUL.md"),
-    ]
-    # Search recent daily logs (last 14 days max) to keep it fast.
-    daily_dir = teacher_daily_memory_dir(teacher_id)
-    if daily_dir.exists():
-        daily_files = sorted(daily_dir.glob("*.md"), key=lambda p: p.name, reverse=True)[:14]
-        files.extend(daily_files)
-
-    matches: List[Dict[str, Any]] = []
-    for path in files:
-        try:
-            lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        except Exception:
-            continue
-        for i, line in enumerate(lines, start=1):
-            if q not in line:
-                continue
-            start = max(0, i - 2)
-            end = min(len(lines), i + 1)
-            snippet = "\n".join(lines[start:end]).strip()
-            matches.append(
-                {
-                    "source": "keyword",
-                    "file": str(path),
-                    "line": i,
-                    "snippet": snippet[:400],
-                }
-            )
-            if len(matches) >= topk:
-                _teacher_memory_log_event(
-                    teacher_id,
-                    "search",
-                    {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
-                )
-                return {"matches": matches, "mode": "keyword"}
-    _teacher_memory_log_event(
+    return _teacher_memory_search_impl(
         teacher_id,
-        "search",
-        {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
+        query,
+        deps=_teacher_memory_search_deps(),
+        limit=limit,
     )
-    return {"matches": matches, "mode": "keyword"}
 
 
 def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
@@ -1550,156 +1464,11 @@ def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict
 
 
 def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
-    ensure_teacher_workspace(teacher_id)
-    window_days = max(1, min(int(days or 14), 90))
-    now = datetime.now()
-    window_start = now - timedelta(days=window_days)
-    proposals = _teacher_memory_recent_proposals(teacher_id, limit=1500)
-
-    applied_total = 0
-    rejected_total = 0
-    active_total = 0
-    expired_total = 0
-    superseded_total = 0
-    by_source: Dict[str, int] = {}
-    by_target: Dict[str, int] = {}
-    rejected_reasons: Dict[str, int] = {}
-    active_priority_sum = 0.0
-    active_priority_count = 0
-    active_items: List[Dict[str, Any]] = []
-
-    for rec in proposals:
-        status = str(rec.get("status") or "").strip().lower()
-        source = str(rec.get("source") or "manual").strip().lower() or "manual"
-        target = str(rec.get("target") or "MEMORY").strip().upper() or "MEMORY"
-        by_source[source] = by_source.get(source, 0) + 1
-        by_target[target] = by_target.get(target, 0) + 1
-
-        if status == "applied":
-            applied_total += 1
-            if rec.get("superseded_by"):
-                superseded_total += 1
-                continue
-            if _teacher_memory_is_expired_record(rec, now=now):
-                expired_total += 1
-                continue
-            active_total += 1
-            pr = rec.get("priority_score")
-            try:
-                p = float(pr)
-            except Exception:
-                p = float(
-                    _teacher_memory_priority_score(
-                        target=target,
-                        title=str(rec.get("title") or ""),
-                        content=str(rec.get("content") or ""),
-                        source=source,
-                        meta=rec.get("meta") if isinstance(rec.get("meta"), dict) else None,
-                    )
-                )
-            active_priority_sum += p
-            active_priority_count += 1
-            active_items.append(
-                {
-                    "proposal_id": str(rec.get("proposal_id") or ""),
-                    "target": target,
-                    "source": source,
-                    "title": str(rec.get("title") or "")[:60],
-                    "content": str(rec.get("content") or "")[:180],
-                    "priority_score": int(round(p)),
-                    "rank_score": round(_teacher_memory_rank_score(rec), 2),
-                    "age_days": _teacher_memory_age_days(rec, now=now),
-                    "expires_at": str(rec.get("expires_at") or ""),
-                }
-            )
-        elif status == "rejected":
-            rejected_total += 1
-            reason = str(rec.get("reject_reason") or "unknown").strip() or "unknown"
-            rejected_reasons[reason] = rejected_reasons.get(reason, 0) + 1
-
-    active_items.sort(key=lambda x: (float(x.get("rank_score") or 0), int(x.get("priority_score") or 0)), reverse=True)
-
-    events = _teacher_memory_load_events(teacher_id, limit=5000)
-    search_calls = 0
-    search_hit_calls = 0
-    context_injected = 0
-    search_mode_breakdown: Dict[str, int] = {}
-    query_stats: Dict[str, Dict[str, Any]] = {}
-    for ev in events:
-        ts = _teacher_memory_parse_dt(ev.get("ts"))
-        if ts is None:
-            continue
-        if ts.tzinfo:
-            now_tz = datetime.now(ts.tzinfo)
-            if ts < now_tz - timedelta(days=window_days):
-                continue
-        else:
-            if ts < window_start:
-                continue
-        et = str(ev.get("event") or "").strip()
-        if et == "context_injected":
-            context_injected += 1
-            continue
-        if et != "search":
-            continue
-        search_calls += 1
-        mode = str(ev.get("mode") or "unknown").strip().lower() or "unknown"
-        search_mode_breakdown[mode] = search_mode_breakdown.get(mode, 0) + 1
-        try:
-            hits = int(ev.get("hits") or 0)
-        except Exception:
-            hits = 0
-        if hits > 0:
-            search_hit_calls += 1
-        query = str(ev.get("query") or "").strip()
-        if not query:
-            continue
-        q = query[:120]
-        st = query_stats.get(q) or {"query": q, "calls": 0, "hit_calls": 0}
-        st["calls"] = int(st.get("calls") or 0) + 1
-        if hits > 0:
-            st["hit_calls"] = int(st.get("hit_calls") or 0) + 1
-        query_stats[q] = st
-
-    top_queries: List[Dict[str, Any]] = []
-    for q in query_stats.values():
-        calls = max(1, int(q.get("calls") or 1))
-        hit_calls = int(q.get("hit_calls") or 0)
-        top_queries.append(
-            {
-                "query": str(q.get("query") or ""),
-                "calls": calls,
-                "hit_calls": hit_calls,
-                "hit_rate": round(hit_calls / calls, 4),
-            }
-        )
-    top_queries.sort(key=lambda x: (int(x.get("hit_calls") or 0), int(x.get("calls") or 0)), reverse=True)
-
-    return {
-        "ok": True,
-        "teacher_id": teacher_id,
-        "window_days": window_days,
-        "summary": {
-            "applied_total": applied_total,
-            "rejected_total": rejected_total,
-            "active_total": active_total,
-            "expired_total": expired_total,
-            "superseded_total": superseded_total,
-            "avg_priority_active": round(active_priority_sum / active_priority_count, 2) if active_priority_count else 0.0,
-            "by_source": by_source,
-            "by_target": by_target,
-            "rejected_reasons": rejected_reasons,
-        },
-        "retrieval": {
-            "search_calls": search_calls,
-            "search_hit_calls": search_hit_calls,
-            "search_hit_rate": round(search_hit_calls / search_calls, 4) if search_calls else 0.0,
-            "search_mode_breakdown": search_mode_breakdown,
-            "context_injected": context_injected,
-        },
-        "top_queries": top_queries[:10],
-        "top_active": active_items[:8],
-    }
+    return _teacher_memory_insights_impl(
+        teacher_id,
+        deps=_teacher_memory_insights_deps(),
+        days=days,
+    )
 
 
 def _teacher_memory_is_sensitive(content: str) -> bool:
@@ -8398,6 +8167,41 @@ def _chat_status_deps():
         chat_job_lock=CHAT_JOB_LOCK,
         chat_lane_load_locked=_chat_lane_load_locked,
         chat_find_position_locked=_chat_find_position_locked,
+    )
+
+
+def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, Any]:
+    try:
+        from .mem0_adapter import teacher_mem0_search
+    except Exception:
+        return {"ok": False, "matches": []}
+    return teacher_mem0_search(teacher_id, query, limit=limit)
+
+
+def _teacher_memory_search_deps():
+    return TeacherMemorySearchDeps(
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        mem0_search=_teacher_mem0_search,
+        search_filter_expired=TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
+        load_record=_teacher_memory_load_record,
+        is_expired_record=lambda rec: _teacher_memory_is_expired_record(rec),
+        diag_log=diag_log,
+        log_event=_teacher_memory_log_event,
+        teacher_workspace_file=teacher_workspace_file,
+        teacher_daily_memory_dir=teacher_daily_memory_dir,
+    )
+
+
+def _teacher_memory_insights_deps():
+    return TeacherMemoryInsightsDeps(
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        recent_proposals=lambda teacher_id, limit: _teacher_memory_recent_proposals(teacher_id, limit=limit),
+        is_expired_record=lambda rec, now: _teacher_memory_is_expired_record(rec, now=now),
+        priority_score=_teacher_memory_priority_score,
+        rank_score=_teacher_memory_rank_score,
+        age_days=lambda rec, now: _teacher_memory_age_days(rec, now=now),
+        load_events=lambda teacher_id, limit: _teacher_memory_load_events(teacher_id, limit=limit),
+        parse_dt=_teacher_memory_parse_dt,
     )
 
 
