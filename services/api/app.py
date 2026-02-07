@@ -13,7 +13,6 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
-from functools import partial
 from datetime import datetime
 from difflib import SequenceMatcher
 import hashlib
@@ -159,7 +158,6 @@ from .chat_job_processing_service import (
     detect_role_hint as _detect_role_hint_impl,
     process_chat_job as _process_chat_job_impl,
 )
-from .chat_preflight import resolve_role_hint as _resolve_role_hint_impl
 from .chat_runtime_service import ChatRuntimeDeps, call_llm_runtime as _call_llm_runtime_impl
 from .chat_session_history_service import load_session_messages as _load_session_messages_impl
 from .chat_session_utils import (
@@ -4300,96 +4298,8 @@ async def health():
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    role_hint = _resolve_role_hint_impl(
-        req.messages,
-        explicit_role=req.role,
-        detect_role=detect_role,
-    )
-    if role_hint == "teacher":
-        diag_log(
-            "teacher_chat.in",
-            {
-                "last_user": next((m.content for m in reversed(req.messages) if m.role == "user"), "")[:500],
-                "skill_id": req.skill_id,
-            },
-        )
-        preflight = await run_in_threadpool(teacher_assignment_preflight, req)
-        if preflight:
-            diag_log("teacher_chat.preflight_reply", {"reply_preview": preflight[:500]})
-            return ChatResponse(reply=preflight, role=role_hint)
-    extra_system = None
-    effective_teacher_id: Optional[str] = None
-    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
-    last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
-
-    if role_hint == "teacher":
-        effective_teacher_id = resolve_teacher_id(req.teacher_id)
-        extra_system = teacher_build_context(effective_teacher_id, query=last_user_text, session_id="main")
-
-    if role_hint == "student":
-        assignment_detail = None
-        extra_parts: List[str] = []
-        study_mode = detect_student_study_trigger(last_user_text) or ("【诊断问题】" in last_assistant_text or "【训练问题】" in last_assistant_text)
-        profile = {}
-        if req.student_id:
-            profile = load_profile_file(DATA_DIR / "student_profiles" / f"{req.student_id}.json")
-            extra_parts.append(build_verified_student_context(req.student_id, profile))
-        if req.assignment_id:
-            folder = DATA_DIR / "assignments" / req.assignment_id
-            if folder.exists():
-                assignment_detail = build_assignment_detail_cached(folder, include_text=False)
-        elif req.student_id:
-            date_str = parse_date_str(req.assignment_date)
-            class_name = profile.get("class_name")
-            found = find_assignment_for_date(date_str, student_id=req.student_id, class_name=class_name)
-            if found:
-                assignment_detail = build_assignment_detail_cached(found["folder"], include_text=False)
-        if assignment_detail and study_mode:
-            extra_parts.append(build_assignment_context(assignment_detail, study_mode=True))
-        if extra_parts:
-            extra_system = "\n\n".join(extra_parts)
-            if len(extra_system) > CHAT_EXTRA_SYSTEM_MAX_CHARS:
-                extra_system = extra_system[:CHAT_EXTRA_SYSTEM_MAX_CHARS] + "…"
-
-    messages = _trim_messages([{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint)
-    if role_hint == "student":
-        with _student_inflight(req.student_id) as allowed:
-            if not allowed:
-                # Fast fail to avoid a single student spamming concurrent generations.
-                return ChatResponse(reply="正在生成上一条回复，请稍候再试。", role=role_hint)
-            result = await run_in_threadpool(
-                partial(
-                    run_agent,
-                    messages,
-                    role_hint,
-                    extra_system=extra_system,
-                    skill_id=req.skill_id,
-                    teacher_id=effective_teacher_id or req.teacher_id,
-                )
-            )
-    else:
-        result = await run_in_threadpool(
-            partial(
-                run_agent,
-                messages,
-                role_hint,
-                extra_system=extra_system,
-                skill_id=req.skill_id,
-                teacher_id=effective_teacher_id or req.teacher_id,
-            )
-        )
-    reply_text = normalize_math_delimiters(result.get("reply", ""))
-    if reply_text != result.get("reply", ""):
-        diag_log(
-            "chat.normalize_math_delimiters",
-            {
-                "role": role_hint or "unknown",
-                "student_id": req.student_id,
-                "assignment_id": req.assignment_id,
-            },
-        )
-    result["reply"] = reply_text
-    if role_hint == "student" and req.student_id:
+    reply_text, role_hint, last_user_text = await run_in_threadpool(_compute_chat_reply_sync, req)
+    if role_hint == "student" and req.student_id and reply_text != "正在生成上一条回复，请稍候再试。":
         try:
             has_math = detect_math_delimiters(reply_text)
             has_latex = detect_latex_tokens(reply_text)
@@ -4403,7 +4313,7 @@ async def chat(req: ChatRequest):
                     "reply_preview": reply_text[:500],
                 },
             )
-            note = build_interaction_note(last_user_text, result.get("reply", ""), assignment_id=req.assignment_id)
+            note = build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
             payload = {"student_id": req.student_id, "interaction_note": note}
             if PROFILE_UPDATE_ASYNC:
                 enqueue_profile_update(payload)
@@ -4411,7 +4321,7 @@ async def chat(req: ChatRequest):
                 await run_in_threadpool(student_profile_update, payload)
         except Exception as exc:
             diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
-    return ChatResponse(reply=result["reply"], role=role_hint)
+    return ChatResponse(reply=reply_text, role=role_hint)
 
 
 def _detect_role_hint(req: ChatRequest) -> Optional[str]:
