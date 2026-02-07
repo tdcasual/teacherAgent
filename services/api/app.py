@@ -242,6 +242,7 @@ from .exam_analysis_charts_service import (
     ExamAnalysisChartsDeps,
     exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
 )
+from .exam_catalog_service import ExamCatalogDeps, list_exams as _list_exams_impl
 from .exam_longform_service import (
     ExamLongformDeps,
     build_exam_longform_context as _build_exam_longform_context_impl,
@@ -2239,30 +2240,7 @@ def count_csv_rows(path: Path) -> int:
         return 0
 
 def list_exams() -> Dict[str, Any]:
-    exams_dir = DATA_DIR / "exams"
-    if not exams_dir.exists():
-        return {"exams": []}
-
-    items = []
-    for folder in exams_dir.iterdir():
-        if not folder.is_dir():
-            continue
-        manifest_path = folder / "manifest.json"
-        data = load_profile_file(manifest_path) if manifest_path.exists() else {}
-        exam_id = data.get("exam_id") or folder.name
-        generated_at = data.get("generated_at")
-        counts = data.get("counts", {})
-        items.append(
-            {
-                "exam_id": exam_id,
-                "generated_at": generated_at,
-                "students": counts.get("students"),
-                "responses": counts.get("responses"),
-            }
-        )
-
-    items.sort(key=lambda x: x.get("generated_at") or "", reverse=True)
-    return {"exams": items}
+    return _list_exams_impl(deps=_exam_catalog_deps())
 
 def load_exam_manifest(exam_id: str) -> Dict[str, Any]:
     exam_id = str(exam_id or "").strip()
@@ -3469,6 +3447,12 @@ def _exam_overview_deps():
         read_questions_csv=read_questions_csv,
         compute_exam_totals=compute_exam_totals,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+def _exam_catalog_deps():
+    return ExamCatalogDeps(
+        data_dir=DATA_DIR,
+        load_profile_file=load_profile_file,
     )
 
 def _assignment_submission_attempt_deps():
