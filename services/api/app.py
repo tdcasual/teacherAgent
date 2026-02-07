@@ -163,6 +163,11 @@ from .teacher_memory_api_service import (
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
     review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
+from .teacher_memory_auto_service import (
+    TeacherMemoryAutoDeps,
+    teacher_memory_auto_flush_from_session as _teacher_memory_auto_flush_from_session_impl,
+    teacher_memory_auto_propose_from_turn as _teacher_memory_auto_propose_from_turn_impl,
+)
 from .teacher_memory_apply_service import (
     TeacherMemoryApplyDeps,
     teacher_memory_apply as _teacher_memory_apply_impl,
@@ -2014,202 +2019,21 @@ def teacher_memory_auto_propose_from_turn(
     user_text: str,
     assistant_text: str,
 ) -> Dict[str, Any]:
-    if not TEACHER_MEMORY_AUTO_ENABLED:
-        return {"ok": False, "reason": "disabled"}
-    text = str(user_text or "").strip()
-    if not text:
-        return {"ok": False, "reason": "empty_user_text"}
-    if len(_teacher_memory_norm_text(text)) < TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS:
-        return {"ok": False, "reason": "too_short"}
-
-    has_intent = any(p.search(text) for p in _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS)
-    inferred = None
-    if not has_intent:
-        inferred = _teacher_memory_auto_infer_candidate(teacher_id, session_id, text)
-        if not inferred:
-            return {"ok": False, "reason": "no_intent"}
-    if _teacher_memory_auto_quota_reached(teacher_id):
-        return {"ok": False, "reason": "daily_quota_reached"}
-
-    if inferred:
-        target = str(inferred.get("target") or "MEMORY").upper()
-        title = str(inferred.get("title") or "自动记忆：老师默认偏好")
-        content = str(inferred.get("content") or text[:1200]).strip()
-        trigger = str(inferred.get("trigger") or "implicit_repeated_preference")
-        source = "auto_infer"
-        dedupe_key = _teacher_memory_stable_hash("auto_infer", teacher_id, target, _teacher_memory_norm_text(content))
-        meta = {
-            "session_id": str(session_id or "main"),
-            "trigger": trigger,
-            "similar_hits": int(inferred.get("similar_hits") or 0),
-            "user_text_preview": text[:160],
-            "assistant_text_preview": str(assistant_text or "")[:160],
-        }
-    else:
-        target = "DAILY" if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS) else "MEMORY"
-        content = text[:1200].strip()
-        source = "auto_intent"
-        title = "自动记忆：老师长期偏好" if target == "MEMORY" else "自动记录：老师临时偏好"
-        dedupe_key = _teacher_memory_stable_hash("auto_intent", teacher_id, target, _teacher_memory_norm_text(content))
-        meta = {
-            "session_id": str(session_id or "main"),
-            "trigger": "explicit_intent",
-            "user_text_preview": text[:160],
-            "assistant_text_preview": str(assistant_text or "")[:160],
-        }
-    priority_score = _teacher_memory_priority_score(
-        target=target,
-        title=title,
-        content=content,
-        source=source,
-        meta=meta,
-    )
-    if source == "auto_infer" and priority_score < TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY:
-        _teacher_memory_log_event(
-            teacher_id,
-            "auto_infer_skipped",
-            {
-                "session_id": str(session_id or "main"),
-                "priority_score": priority_score,
-                "min_priority": TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
-                "query_preview": text[:120],
-            },
-        )
-        return {
-            "ok": False,
-            "created": False,
-            "target": target,
-            "reason": "low_priority",
-            "priority_score": priority_score,
-            "min_priority": TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
-        }
-    dup = _teacher_memory_find_duplicate(teacher_id, target=target, content=content, dedupe_key=dedupe_key)
-    if dup:
-        return {"ok": True, "created": False, "reason": "duplicate", "proposal_id": dup.get("proposal_id")}
-
-    result = teacher_memory_propose(
+    return _teacher_memory_auto_propose_from_turn_impl(
         teacher_id,
-        target=target,
-        title=title,
-        content=content,
-        source=source,
-        meta=meta,
-        dedupe_key=dedupe_key,
+        session_id,
+        user_text,
+        assistant_text,
+        deps=_teacher_memory_auto_deps(),
     )
-    if not result.get("ok"):
-        return {
-            "ok": False,
-            "created": False,
-            "target": target,
-            "proposal_id": result.get("proposal_id"),
-            "reason": str(result.get("error") or "auto_apply_failed"),
-        }
-    return {
-        "ok": True,
-        "created": True,
-        "target": target,
-        "proposal_id": result.get("proposal_id"),
-        "status": str(result.get("status") or "applied"),
-        "priority_score": priority_score,
-    }
 
 
 def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
-    if not TEACHER_MEMORY_AUTO_ENABLED or not TEACHER_MEMORY_FLUSH_ENABLED:
-        return {"ok": False, "reason": "disabled"}
-    if not TEACHER_SESSION_COMPACT_ENABLED:
-        return {"ok": False, "reason": "compaction_disabled"}
-    path = teacher_session_file(teacher_id, session_id)
-    if not path.exists():
-        return {"ok": False, "reason": "session_not_found"}
-
-    records: List[Dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        text = (line or "").strip()
-        if not text:
-            continue
-        try:
-            rec = json.loads(text)
-        except Exception:
-            continue
-        if isinstance(rec, dict):
-            records.append(rec)
-
-    dialog = [r for r in records if str(r.get("role") or "") in {"user", "assistant"} and not bool(r.get("synthetic"))]
-    threshold = max(1, TEACHER_SESSION_COMPACT_MAX_MESSAGES - TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES)
-    if len(dialog) < threshold:
-        return {"ok": False, "reason": "below_threshold", "messages": len(dialog), "threshold": threshold}
-    if _teacher_memory_auto_quota_reached(teacher_id):
-        return {"ok": False, "reason": "daily_quota_reached"}
-
-    cycle_no = _teacher_session_compaction_cycle_no(teacher_id, session_id)
-    idx = _teacher_session_index_item(teacher_id, session_id)
-    try:
-        flushed_cycle = int(idx.get("memory_flush_cycle") or 0)
-    except Exception:
-        flushed_cycle = 0
-    if flushed_cycle >= cycle_no:
-        return {"ok": False, "reason": "already_flushed_cycle", "cycle": cycle_no}
-
-    dedupe_key = _teacher_memory_stable_hash("auto_flush", teacher_id, session_id, f"cycle_{cycle_no}")
-    dup = _teacher_memory_find_duplicate(
+    return _teacher_memory_auto_flush_from_session_impl(
         teacher_id,
-        target="DAILY",
-        content=f"auto_flush:{session_id}:cycle_{cycle_no}",
-        dedupe_key=dedupe_key,
+        session_id,
+        deps=_teacher_memory_auto_deps(),
     )
-    if dup:
-        return {"ok": True, "created": False, "reason": "duplicate", "proposal_id": dup.get("proposal_id")}
-
-    tail = dialog[-min(12, len(dialog)) :]
-    transcript = _teacher_compact_transcript(tail, TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS).strip()
-    if not transcript:
-        return {"ok": False, "reason": "empty_transcript"}
-
-    today = datetime.now().date().isoformat()
-    title = f"自动会话记要 {today}"
-    content = (
-        f"- session_id: {session_id}\n"
-        f"- trigger: near_compaction\n"
-        f"- cycle: {cycle_no}\n"
-        f"- dialog_messages: {len(dialog)}\n"
-        f"- compact_threshold: {TEACHER_SESSION_COMPACT_MAX_MESSAGES}\n\n"
-        "### 近期对话摘录\n"
-        f"{transcript}"
-    )
-    result = teacher_memory_propose(
-        teacher_id,
-        target="DAILY",
-        title=title,
-        content=content[:2400],
-        source="auto_flush",
-        meta={
-            "session_id": str(session_id or "main"),
-            "trigger": "near_compaction",
-            "cycle": cycle_no,
-            "dialog_messages": len(dialog),
-            "compact_threshold": TEACHER_SESSION_COMPACT_MAX_MESSAGES,
-            "soft_margin_messages": TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
-        },
-        dedupe_key=dedupe_key,
-    )
-    if not result.get("ok"):
-        return {
-            "ok": False,
-            "created": False,
-            "target": "DAILY",
-            "proposal_id": result.get("proposal_id"),
-            "reason": str(result.get("error") or "auto_apply_failed"),
-        }
-    _mark_teacher_session_memory_flush(teacher_id, session_id, cycle_no=cycle_no)
-    return {
-        "ok": True,
-        "created": True,
-        "target": "DAILY",
-        "proposal_id": result.get("proposal_id"),
-        "status": str(result.get("status") or "applied"),
-        "cycle": cycle_no,
-    }
 
 app = FastAPI(title="Physics Agent API", version="0.2.0")
 
@@ -7875,6 +7699,34 @@ def _teacher_memory_propose_deps():
             proposal_id,
             approve=approve,
         ),
+    )
+
+
+def _teacher_memory_auto_deps():
+    return TeacherMemoryAutoDeps(
+        auto_enabled=TEACHER_MEMORY_AUTO_ENABLED,
+        auto_min_content_chars=TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
+        auto_infer_min_priority=TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
+        auto_flush_enabled=TEACHER_MEMORY_FLUSH_ENABLED,
+        session_compact_enabled=TEACHER_SESSION_COMPACT_ENABLED,
+        session_compact_max_messages=TEACHER_SESSION_COMPACT_MAX_MESSAGES,
+        memory_flush_margin_messages=TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
+        memory_flush_max_source_chars=TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS,
+        durable_intent_patterns=_TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
+        temporary_hint_patterns=_TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
+        norm_text=_teacher_memory_norm_text,
+        auto_infer_candidate=_teacher_memory_auto_infer_candidate,
+        auto_quota_reached=_teacher_memory_auto_quota_reached,
+        stable_hash=_teacher_memory_stable_hash,
+        priority_score=_teacher_memory_priority_score,
+        log_event=_teacher_memory_log_event,
+        find_duplicate=_teacher_memory_find_duplicate,
+        memory_propose=teacher_memory_propose,
+        session_compaction_cycle_no=_teacher_session_compaction_cycle_no,
+        session_index_item=_teacher_session_index_item,
+        teacher_session_file=teacher_session_file,
+        compact_transcript=_teacher_compact_transcript,
+        mark_session_memory_flush=_mark_teacher_session_memory_flush,
     )
 
 
