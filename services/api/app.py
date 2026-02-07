@@ -113,7 +113,17 @@ from .chat_worker_service import (
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
 )
-from .chart_agent_run_service import ChartAgentRunDeps, chart_agent_run as _chart_agent_run_impl
+from .chart_agent_run_service import (
+    ChartAgentRunDeps,
+    chart_agent_bool as _chart_agent_bool_impl,
+    chart_agent_default_code as _chart_agent_default_code_impl,
+    chart_agent_engine as _chart_agent_engine_impl,
+    chart_agent_generate_candidate as _chart_agent_generate_candidate_impl,
+    chart_agent_generate_candidate_opencode as _chart_agent_generate_candidate_opencode_impl,
+    chart_agent_opencode_overrides as _chart_agent_opencode_overrides_impl,
+    chart_agent_packages as _chart_agent_packages_impl,
+    chart_agent_run as _chart_agent_run_impl,
+)
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
@@ -5909,203 +5919,6 @@ def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
     return _chart_exec_api_impl(args, deps=_chart_api_deps())
 
 
-_CHART_AGENT_PKG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
-
-
-def _chart_agent_bool(value: Any, default: bool = True) -> bool:
-    if value is None:
-        return bool(default)
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "on"}:
-        return True
-    if text in {"0", "false", "no", "off"}:
-        return False
-    return bool(default)
-
-
-def _chart_agent_engine(value: Any) -> str:
-    raw = str(value or "").strip().lower()
-    if not raw:
-        return "opencode"
-    engine = raw
-    if engine in {"auto", "llm", "opencode"}:
-        return engine
-    return "opencode"
-
-
-def _chart_agent_opencode_overrides(args: Dict[str, Any]) -> Dict[str, Any]:
-    overrides: Dict[str, Any] = {}
-    key_map = {
-        "opencode_bin": "bin",
-        "opencode_mode": "mode",
-        "opencode_attach_url": "attach_url",
-        "opencode_agent": "agent",
-        "opencode_model": "model",
-        "opencode_config_path": "config_path",
-        "opencode_timeout_sec": "timeout_sec",
-        "opencode_max_retries": "max_retries",
-    }
-    for src, target in key_map.items():
-        value = args.get(src)
-        if value is None:
-            continue
-        if isinstance(value, str) and not value.strip():
-            continue
-        overrides[target] = value
-    if "opencode_enabled" in args:
-        overrides["enabled"] = _chart_agent_bool(args.get("opencode_enabled"), default=True)
-    return overrides
-
-
-def _chart_agent_packages(value: Any) -> List[str]:
-    raw: List[str] = []
-    if isinstance(value, list):
-        raw = [str(x or "").strip() for x in value]
-    elif isinstance(value, str):
-        raw = [x.strip() for x in re.split(r"[,\s;；，]+", value) if x.strip()]
-    out: List[str] = []
-    seen: set[str] = set()
-    for item in raw:
-        if not item or not _CHART_AGENT_PKG_RE.fullmatch(item):
-            continue
-        key = item.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(item)
-    return out[:24]
-
-
-def _chart_agent_extract_python_code(text: str) -> str:
-    content = str(text or "").strip()
-    if not content:
-        return ""
-    patterns = [
-        r"```python\s*(.*?)```",
-        r"```py\s*(.*?)```",
-        r"```\s*(.*?)```",
-    ]
-    for pat in patterns:
-        match = re.search(pat, content, re.S | re.I)
-        if match:
-            return str(match.group(1) or "").strip()
-    return ""
-
-
-def _chart_agent_default_code() -> str:
-    return (
-        "import matplotlib.pyplot as plt\n"
-        "data = input_data if isinstance(input_data, dict) else {}\n"
-        "numeric = {}\n"
-        "for k, v in data.items():\n"
-        "    try:\n"
-        "        numeric[str(k)] = float(v)\n"
-        "    except Exception:\n"
-        "        continue\n"
-        "plt.figure(figsize=(8, 4.8))\n"
-        "if numeric:\n"
-        "    labels = list(numeric.keys())\n"
-        "    values = list(numeric.values())\n"
-        "    plt.bar(labels, values, color='#3B82F6', alpha=0.9)\n"
-        "    plt.xticks(rotation=20, ha='right')\n"
-        "    plt.ylabel('Value')\n"
-        "else:\n"
-        "    text = str(input_data)[:220]\n"
-        "    plt.axis('off')\n"
-        "    plt.text(0.5, 0.5, text or 'No numeric input_data found', ha='center', va='center', wrap=True)\n"
-        "plt.title('Auto Generated Chart')\n"
-        "plt.tight_layout()\n"
-        "save_chart()\n"
-    )
-
-
-def _chart_agent_generate_candidate(
-    task: str,
-    input_data: Any,
-    last_error: str,
-    previous_code: str,
-    attempt: int,
-    max_retries: int,
-) -> Dict[str, Any]:
-    try:
-        payload_text = json.dumps(input_data, ensure_ascii=False)
-    except Exception:
-        payload_text = str(input_data)
-    if len(payload_text) > 5000:
-        payload_text = payload_text[:5000] + "...[truncated]"
-
-    system = (
-        "你是教师端图表代码生成器。输出必须是JSON对象，不要Markdown。\n"
-        "必须输出字段：python_code（字符串），packages（字符串数组，可空），summary（字符串）。\n"
-        "python_code规则：\n"
-        "- 使用 matplotlib（可选 numpy/pandas/seaborn）。\n"
-        "- 变量 input_data 已可直接使用。\n"
-        "- 必须调用 save_chart('main.png') 或 save_chart()。\n"
-        "- 代码必须可直接运行，禁止解释文字。"
-    )
-    user = (
-        f"任务描述:\n{task}\n\n"
-        f"输入数据(JSON):\n{payload_text}\n\n"
-        f"当前重试: {attempt}/{max_retries}\n"
-        f"上次错误:\n{last_error or '(none)'}\n\n"
-        f"上次代码:\n{previous_code[:3000] if previous_code else '(none)'}\n"
-    )
-    try:
-        resp = call_llm(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            role_hint="teacher",
-            kind="chart.agent.codegen",
-        )
-        content = resp.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
-    except Exception as exc:
-        return {"python_code": "", "packages": [], "summary": "", "raw": f"llm_error: {exc}"}
-
-    parsed = parse_json_from_text(content) or {}
-    python_code = str(parsed.get("python_code") or "").strip()
-    if not python_code:
-        python_code = _chart_agent_extract_python_code(content)
-    packages = _chart_agent_packages(parsed.get("packages"))
-    summary = str(parsed.get("summary") or "").strip()
-    return {"python_code": python_code, "packages": packages, "summary": summary, "raw": content}
-
-
-def _chart_agent_generate_candidate_opencode(
-    task: str,
-    input_data: Any,
-    last_error: str,
-    previous_code: str,
-    attempt: int,
-    max_retries: int,
-    opencode_overrides: Dict[str, Any],
-) -> Dict[str, Any]:
-    result = run_opencode_codegen(
-        app_root=APP_ROOT,
-        task=task,
-        input_data=input_data,
-        last_error=last_error,
-        previous_code=previous_code,
-        attempt=attempt,
-        max_retries=max_retries,
-        overrides=opencode_overrides,
-    )
-    return {
-        "python_code": str(result.get("python_code") or "").strip(),
-        "packages": _chart_agent_packages(result.get("packages")),
-        "summary": str(result.get("summary") or "").strip(),
-        "raw": result.get("raw") or "",
-        "error": result.get("error"),
-        "meta": {
-            "ok": bool(result.get("ok")),
-            "exit_code": result.get("exit_code"),
-            "duration_sec": result.get("duration_sec"),
-            "stderr": str(result.get("stderr") or "")[:800],
-            "command": result.get("command") or [],
-        },
-    }
-
-
 def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
     return _chart_agent_run_impl(args, deps=_chart_agent_run_deps())
 
@@ -7485,17 +7298,36 @@ def _chart_api_deps():
 def _chart_agent_run_deps():
     return ChartAgentRunDeps(
         safe_int_arg=_safe_int_arg,
-        chart_bool=_chart_agent_bool,
-        chart_engine=_chart_agent_engine,
-        chart_packages=_chart_agent_packages,
-        chart_opencode_overrides=_chart_agent_opencode_overrides,
+        chart_bool=_chart_agent_bool_impl,
+        chart_engine=_chart_agent_engine_impl,
+        chart_packages=_chart_agent_packages_impl,
+        chart_opencode_overrides=_chart_agent_opencode_overrides_impl,
         resolve_opencode_status=resolve_opencode_status,
         app_root=APP_ROOT,
         uploads_dir=UPLOADS_DIR,
-        generate_candidate=_chart_agent_generate_candidate,
-        generate_candidate_opencode=_chart_agent_generate_candidate_opencode,
+        generate_candidate=lambda task, input_data, last_error, previous_code, attempt, max_retries: _chart_agent_generate_candidate_impl(
+            task,
+            input_data,
+            last_error,
+            previous_code,
+            attempt,
+            max_retries,
+            call_llm=call_llm,
+            parse_json_from_text=parse_json_from_text,
+        ),
+        generate_candidate_opencode=lambda task, input_data, last_error, previous_code, attempt, max_retries, opencode_overrides: _chart_agent_generate_candidate_opencode_impl(
+            task,
+            input_data,
+            last_error,
+            previous_code,
+            attempt,
+            max_retries,
+            opencode_overrides,
+            app_root=APP_ROOT,
+            run_opencode_codegen=run_opencode_codegen,
+        ),
         execute_chart_exec=execute_chart_exec,
-        default_code=_chart_agent_default_code,
+        default_code=_chart_agent_default_code_impl,
     )
 
 
