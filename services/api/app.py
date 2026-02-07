@@ -241,8 +241,15 @@ from .exam_score_processing_service import (
 )
 from .exam_upload_confirm_service import (
     ExamUploadConfirmDeps,
-    ExamUploadConfirmError,
     confirm_exam_upload as _confirm_exam_upload_impl,
+)
+from .exam_upload_api_service import (
+    ExamUploadApiDeps,
+    ExamUploadApiError,
+    exam_upload_confirm as _exam_upload_confirm_api_impl,
+    exam_upload_draft as _exam_upload_draft_api_impl,
+    exam_upload_draft_save as _exam_upload_draft_save_api_impl,
+    exam_upload_status as _exam_upload_status_api_impl,
 )
 from .exam_upload_draft_service import (
     build_exam_upload_draft as _build_exam_upload_draft_impl,
@@ -4398,6 +4405,26 @@ def _exam_upload_start_deps():
     )
 
 
+def _exam_upload_api_deps():
+    return ExamUploadApiDeps(
+        load_exam_job=load_exam_job,
+        exam_job_path=exam_job_path,
+        load_exam_draft_override=_load_exam_draft_override_impl,
+        save_exam_draft_override=_save_exam_draft_override_impl,
+        build_exam_upload_draft=_build_exam_upload_draft_impl,
+        exam_upload_not_ready_detail=_exam_upload_not_ready_detail_impl,
+        parse_exam_answer_key_text=parse_exam_answer_key_text,
+        read_text_safe=read_text_safe,
+        write_exam_job=lambda job_id, updates: write_exam_job(job_id, updates),
+        confirm_exam_upload=lambda job_id, job, job_dir: _confirm_exam_upload_impl(
+            job_id,
+            job,
+            job_dir,
+            deps=_exam_upload_confirm_deps(),
+        ),
+    )
+
+
 def _exam_overview_deps():
     return ExamOverviewDeps(
         data_dir=DATA_DIR,
@@ -5332,94 +5359,39 @@ async def exam_upload_start(
 @app.get("/exam/upload/status")
 async def exam_upload_status(job_id: str):
     try:
-        job = load_exam_job(job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-    return job
+        return _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps())
+    except ExamUploadApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.get("/exam/upload/draft")
 async def exam_upload_draft(job_id: str):
     try:
-        job = load_exam_job(job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    status = job.get("status")
-    if status not in {"done", "confirmed"}:
-        raise HTTPException(
-            status_code=400,
-            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，暂无法打开草稿。"),
-        )
-
-    job_dir = exam_job_path(job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        raise HTTPException(status_code=400, detail="parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-    override = _load_exam_draft_override_impl(job_dir)
-    try:
-        answer_text_excerpt = read_text_safe(job_dir / "answer_text.txt", limit=6000)
-    except Exception:
-        answer_text_excerpt = ""
-    draft = _build_exam_upload_draft_impl(
-        job_id,
-        job,
-        parsed,
-        override,
-        parse_exam_answer_key_text=parse_exam_answer_key_text,
-        answer_text_excerpt=answer_text_excerpt,
-    )
-    return {"ok": True, "draft": draft}
+        return _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps())
+    except ExamUploadApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/exam/upload/draft/save")
 async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
     try:
-        job = load_exam_job(req.job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    if job.get("status") not in {"done", "confirmed"}:
-        raise HTTPException(
-            status_code=400,
-            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，暂无法保存草稿。"),
+        return _exam_upload_draft_save_api_impl(
+            job_id=req.job_id,
+            meta=req.meta,
+            questions=req.questions,
+            score_schema=req.score_schema,
+            answer_key_text=req.answer_key_text,
+            deps=_exam_upload_api_deps(),
         )
-
-    job_dir = exam_job_path(req.job_id)
-    override = _load_exam_draft_override_impl(job_dir)
-    _save_exam_draft_override_impl(
-        job_dir,
-        override,
-        meta=req.meta,
-        questions=req.questions,
-        score_schema=req.score_schema,
-        answer_key_text=req.answer_key_text,
-    )
-    new_version = int(job.get("draft_version") or 1) + 1
-    write_exam_job(req.job_id, {"draft_version": new_version})
-    return {"ok": True, "job_id": req.job_id, "message": "考试草稿已保存。", "draft_version": new_version}
+    except ExamUploadApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/exam/upload/confirm")
 async def exam_upload_confirm(req: ExamUploadConfirmRequest):
     try:
-        job = load_exam_job(req.job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    status = job.get("status")
-    if status == "confirmed":
-        return {"ok": True, "exam_id": job.get("exam_id"), "status": "confirmed", "message": "考试已创建（已确认）。"}
-    if status != "done":
-        raise HTTPException(
-            status_code=400,
-            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，请稍后再确认创建考试。"),
-        )
-    job_dir = exam_job_path(req.job_id)
-    try:
-        return _confirm_exam_upload_impl(req.job_id, job, job_dir, deps=_exam_upload_confirm_deps())
-    except ExamUploadConfirmError as exc:
+        return _exam_upload_confirm_api_impl(req.job_id, deps=_exam_upload_api_deps())
+    except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
