@@ -10193,6 +10193,14 @@ async def verify_student(req: StudentVerifyRequest):
     return {"ok": True, "student": candidate}
 
 
+def _exam_api_deps():
+    return {}
+
+
+def _assignment_api_deps():
+    return {}
+
+
 @app.get("/exams")
 async def exams():
     return list_exams()
