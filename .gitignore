@@ -48,3 +48,6 @@ uploads/
 
 # Local chart artifacts (generated during development/tests)
 main.png
+
+# Local git worktrees
+.worktrees/
