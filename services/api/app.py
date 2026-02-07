@@ -36,6 +36,7 @@ from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_deta
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
 
 try:
     from mem0_config import load_dotenv
@@ -10216,6 +10217,10 @@ def _student_profile_api_deps():
     return StudentProfileApiDeps(student_profile_get=student_profile_get)
 
 
+def _teacher_routing_api_deps():
+    return TeacherRoutingApiDeps(teacher_llm_routing_get=teacher_llm_routing_get)
+
+
 @app.get("/exams")
 async def exams():
     return list_exams()
@@ -11444,13 +11449,14 @@ async def teacher_llm_routing(
     proposal_limit: int = 20,
     proposal_status: Optional[str] = None,
 ):
-    result = teacher_llm_routing_get(
+    result = _get_routing_api_impl(
         {
             "teacher_id": teacher_id,
             "history_limit": history_limit,
             "proposal_limit": proposal_limit,
             "proposal_status": proposal_status,
-        }
+        },
+        deps=_teacher_routing_api_deps(),
     )
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
