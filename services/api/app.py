@@ -208,6 +208,12 @@ from .session_view_state import (
     save_session_view_state as _save_session_view_state_impl,
 )
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+from .student_import_service import (
+    StudentImportDeps,
+    import_students_from_responses as _import_students_from_responses_impl,
+    resolve_responses_file as _resolve_responses_file_impl,
+    student_import as _student_import_impl,
+)
 from .teacher_memory_api_service import (
     TeacherMemoryApiDeps,
     list_proposals_api as _list_teacher_memory_proposals_api_impl,
@@ -4890,139 +4896,15 @@ def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
-    if file_path:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = APP_ROOT / path
-        return path if path.exists() else None
-
-    if exam_id:
-        manifest_path = DATA_DIR / "exams" / exam_id / "manifest.json"
-        if manifest_path.exists():
-            manifest = load_profile_file(manifest_path)
-            files = manifest.get("files", {})
-            resp_path = files.get("responses") or files.get("responses_scored") or files.get("responses_csv")
-            if resp_path:
-                candidate = Path(resp_path)
-                if not candidate.is_absolute():
-                    if str(resp_path).startswith("data/"):
-                        candidate = APP_ROOT / candidate
-                    else:
-                        candidate = DATA_DIR / candidate
-                return candidate if candidate.exists() else None
-
-    staging_dir = DATA_DIR / "staging"
-    if staging_dir.exists():
-        candidates = list(staging_dir.glob("*responses*scored*.csv"))
-        if not candidates:
-            candidates = list(staging_dir.glob("*responses*.csv"))
-        if candidates:
-            candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-            return candidates[0]
-    return None
+    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps())
 
 
 def import_students_from_responses(path: Path, mode: str = "merge") -> Dict[str, Any]:
-    if not path.exists():
-        return {"error": f"responses file not found: {path}"}
-
-    profiles_dir = DATA_DIR / "student_profiles"
-    profiles_dir.mkdir(parents=True, exist_ok=True)
-
-    students: Dict[str, Dict[str, str]] = {}
-    with path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            student_id = (row.get("student_id") or "").strip()
-            student_name = (row.get("student_name") or "").strip()
-            class_name = (row.get("class_name") or "").strip()
-            exam_id = (row.get("exam_id") or "").strip()
-            if not student_id:
-                if class_name and student_name:
-                    student_id = f"{class_name}_{student_name}"
-                elif student_name:
-                    student_id = student_name
-            if not student_id:
-                continue
-            if student_id not in students:
-                students[student_id] = {
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                    "exam_id": exam_id,
-                }
-
-    created = 0
-    updated = 0
-    skipped = 0
-    sample = []
-
-    for student_id, info in students.items():
-        profile_path = profiles_dir / f"{student_id}.json"
-        profile = load_profile_file(profile_path) if profile_path.exists() else {}
-        is_new = not bool(profile)
-
-        if is_new:
-            created += 1
-        else:
-            updated += 1
-
-        profile.setdefault("student_id", student_id)
-        profile.setdefault("created_at", datetime.now().isoformat(timespec="seconds"))
-        profile["last_updated"] = datetime.now().isoformat(timespec="seconds")
-
-        if info.get("student_name"):
-            if not profile.get("student_name"):
-                profile["student_name"] = info["student_name"]
-            elif profile.get("student_name") != info["student_name"]:
-                aliases = set(profile.get("aliases", []))
-                aliases.add(info["student_name"])
-                profile["aliases"] = sorted(aliases)
-
-        if info.get("class_name") and not profile.get("class_name"):
-            profile["class_name"] = info["class_name"]
-
-        history = profile.get("import_history", [])
-        history.append(
-            {
-                "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "source": "exam_responses",
-                "file": str(path),
-                "exam_id": info.get("exam_id") or "",
-                "mode": mode,
-            }
-        )
-        profile["import_history"] = history[-10:]
-
-        profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
-        if len(sample) < 10:
-            sample.append(student_id)
-
-    total = len(students)
-    if total == 0:
-        skipped = 0
-    return {
-        "ok": True,
-        "source_file": str(path),
-        "total_students": total,
-        "created": created,
-        "updated": updated,
-        "skipped": skipped,
-        "sample": sample,
-    }
+    return _import_students_from_responses_impl(path, deps=_student_import_deps(), mode=mode)
 
 
 def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
-    source = args.get("source") or "responses_scored"
-    exam_id = args.get("exam_id")
-    file_path = args.get("file_path")
-    mode = args.get("mode") or "merge"
-    if source not in {"responses_scored", "responses"}:
-        return {"error": f"unsupported source: {source}"}
-    responses_path = resolve_responses_file(exam_id, file_path)
-    if not responses_path:
-        return {"error": "responses file not found", "exam_id": exam_id, "file_path": file_path}
-    return import_students_from_responses(responses_path, mode=mode)
+    return _student_import_impl(args, deps=_student_import_deps())
 
 
 def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -6092,6 +5974,15 @@ def _assignment_api_deps():
 
 def _student_profile_api_deps():
     return StudentProfileApiDeps(student_profile_get=student_profile_get)
+
+
+def _student_import_deps():
+    return StudentImportDeps(
+        app_root=APP_ROOT,
+        data_dir=DATA_DIR,
+        load_profile_file=load_profile_file,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
 
 
 def _teacher_routing_api_deps():
