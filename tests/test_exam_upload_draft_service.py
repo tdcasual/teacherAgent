@@ -1,0 +1,80 @@
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from services.api.exam_upload_draft_service import (
+    build_exam_upload_draft,
+    exam_upload_not_ready_detail,
+    load_exam_draft_override,
+    save_exam_draft_override,
+)
+
+
+class ExamUploadDraftServiceTest(unittest.TestCase):
+    def test_not_ready_detail_contains_progress(self):
+        detail = exam_upload_not_ready_detail(
+            {"status": "processing", "step": "parse_scores", "progress": 35},
+            "解析尚未完成，暂无法打开草稿。",
+        )
+        self.assertEqual(detail.get("error"), "job_not_ready")
+        self.assertEqual(detail.get("status"), "processing")
+        self.assertEqual(detail.get("step"), "parse_scores")
+        self.assertEqual(detail.get("progress"), 35)
+
+    def test_save_and_load_override_roundtrip(self):
+        with TemporaryDirectory() as td:
+            job_dir = Path(td)
+            saved = save_exam_draft_override(
+                job_dir,
+                {},
+                meta={"class_name": "高二2403班"},
+                questions=[{"question_id": "Q1", "max_score": 5}],
+                score_schema={"mode": "question"},
+                answer_key_text="1 A",
+            )
+            loaded = load_exam_draft_override(job_dir)
+            self.assertEqual(loaded, saved)
+            self.assertEqual(loaded.get("meta", {}).get("class_name"), "高二2403班")
+            self.assertEqual(loaded.get("answer_key_text"), "1 A")
+
+    def test_build_draft_applies_override_answer_key(self):
+        parsed = {
+            "exam_id": "EX1",
+            "meta": {"date": "2026-02-07", "class_name": "高二2403班"},
+            "paper_files": ["paper.pdf"],
+            "score_files": ["scores.xlsx"],
+            "answer_files": [],
+            "counts": {"students": 2},
+            "questions": [{"question_id": "Q1", "max_score": 4}],
+            "warnings": [],
+            "answer_key": {"count": 0},
+            "scoring": {"status": "unscored"},
+            "counts_scored": {"students": 0},
+            "totals_summary": {"avg_total": 0},
+        }
+        job = {"exam_id": "EX1", "date": "2026-02-07", "class_name": "高二2403班", "draft_version": 1}
+        override = {
+            "meta": {"class_name": "高二2404班"},
+            "questions": [{"question_id": "Q1", "max_score": 5}],
+            "answer_key_text": "1 A\n2 C",
+        }
+
+        def parse_answer_key(_text: str):
+            return ([{"question_id": "Q1"}, {"question_id": "Q2"}], [])
+
+        draft = build_exam_upload_draft(
+            "job-1",
+            job,
+            parsed,
+            override,
+            parse_exam_answer_key_text=parse_answer_key,
+            answer_text_excerpt="",
+        )
+        self.assertEqual(draft.get("class_name"), "高二2404班")
+        self.assertEqual(draft.get("answer_key", {}).get("source"), "override")
+        self.assertEqual(draft.get("answer_key", {}).get("count"), 2)
+        self.assertEqual(draft.get("questions"), [{"question_id": "Q1", "max_score": 5}])
+
+
+if __name__ == "__main__":
+    unittest.main()

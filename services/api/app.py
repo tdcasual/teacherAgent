@@ -52,6 +52,19 @@ from .exam_range_service import (
     exam_range_summary_batch as _exam_range_summary_batch_impl,
     exam_range_top_students as _exam_range_top_students_impl,
 )
+from .exam_upload_confirm_service import (
+    ExamUploadConfirmDeps,
+    ExamUploadConfirmError,
+    confirm_exam_upload as _confirm_exam_upload_impl,
+)
+from .exam_upload_draft_service import (
+    build_exam_upload_draft as _build_exam_upload_draft_impl,
+    exam_upload_not_ready_detail as _exam_upload_not_ready_detail_impl,
+    load_exam_draft_override as _load_exam_draft_override_impl,
+    save_exam_draft_override as _save_exam_draft_override_impl,
+)
+from .exam_upload_parse_service import ExamUploadParseDeps, process_exam_upload_job as _process_exam_upload_job_impl
+from .exam_upload_start_service import ExamUploadStartDeps, start_exam_upload as _start_exam_upload_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .session_view_state import (
@@ -2989,6 +3002,21 @@ def resolve_scope(scope: str, student_ids: List[str], class_name: str) -> str:
     return "public"
 
 
+def _ensure_ocr_api_key_aliases() -> None:
+    if not os.getenv("OPENAI_API_KEY"):
+        for alias in ("openai-api-key", "OPENAI-API-KEY", "openai_api_key", "openaiApiKey"):
+            value = os.environ.get(alias)
+            if value:
+                os.environ["OPENAI_API_KEY"] = value.strip()
+                break
+    if not os.getenv("SILICONFLOW_API_KEY"):
+        for alias in ("siliconflow-api-key", "SILICONFLOW-API-KEY", "siliconflow_api_key"):
+            value = os.environ.get(alias)
+            if value:
+                os.environ["SILICONFLOW_API_KEY"] = value.strip()
+                break
+
+
 def load_ocr_utils():
     global _OCR_UTILS
     if _OCR_UTILS is not None:
@@ -2998,6 +3026,7 @@ def load_ocr_utils():
 
         # Load once on first use; repeated file reads can become a hot-path under load.
         load_env_from_dotenv(Path(".env"))
+        _ensure_ocr_api_key_aliases()
         _OCR_UTILS = (load_env_from_dotenv, ocr_with_sdk)
         return _OCR_UTILS
     except Exception:
@@ -4103,392 +4132,32 @@ def apply_answer_key_to_responses_csv(
     return stats
 
 
+def _parse_xlsx_with_script(
+    xlsx_path: Path,
+    out_csv: Path,
+    exam_id: str,
+    class_name_hint: str,
+) -> Optional[List[Dict[str, Any]]]:
+    script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
+    cmd = ["python3", str(script), "--scores", str(xlsx_path), "--exam-id", exam_id, "--out", str(out_csv)]
+    if class_name_hint:
+        cmd += ["--class-name", class_name_hint]
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
+    if proc.returncode != 0 or not out_csv.exists():
+        return None
+    file_rows: List[Dict[str, Any]] = []
+    with out_csv.open(encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            item = dict(row)
+            item["score"] = parse_score_value(row.get("score"))
+            item["is_correct"] = row.get("is_correct") or ""
+            file_rows.append(item)
+    return file_rows
+
+
 def process_exam_upload_job(job_id: str) -> None:
-    job = load_exam_job(job_id)
-    job_dir = exam_job_path(job_id)
-    paper_dir = job_dir / "paper"
-    scores_dir = job_dir / "scores"
-    answers_dir = job_dir / "answers"
-    derived_dir = job_dir / "derived"
-
-    exam_id = str(job.get("exam_id") or "").strip()
-    if not exam_id:
-        exam_id = f"EX{datetime.now().date().isoformat().replace('-', '')}_{job_id[-6:]}"
-    language = job.get("language") or "zh"
-    ocr_mode = job.get("ocr_mode") or "FREE_OCR"
-
-    paper_files = job.get("paper_files") or []
-    score_files = job.get("score_files") or []
-    answer_files = job.get("answer_files") or []
-
-    write_exam_job(job_id, {"status": "processing", "step": "extract_paper", "progress": 10, "error": ""})
-
-    if not paper_files:
-        write_exam_job(job_id, {"status": "failed", "error": "no_paper_files", "progress": 100})
-        return
-    if not score_files:
-        write_exam_job(job_id, {"status": "failed", "error": "no_score_files", "progress": 100})
-        return
-
-    ocr_hints = [
-        "如果是图片/PDF 扫描件，请确保 OCR 可用，并上传清晰的 JPG/PNG/PDF（避免 HEIC）。",
-        "如果是成绩表（PDF/图片），尽量上传原始 Excel（xls/xlsx）可获得更稳定解析。",
-    ]
-
-    # Extract paper text (best-effort; allow empty but warn)
-    paper_text_parts: List[str] = []
-    for fname in paper_files:
-        path = paper_dir / fname
-        try:
-            paper_text_parts.append(extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
-        except Exception as exc:
-            write_exam_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "step": "extract_paper",
-                    "progress": 100,
-                    "error": "paper_extract_failed",
-                    "error_detail": str(exc)[:200],
-                    "hints": ocr_hints,
-                },
-            )
-            return
-    paper_text = "\n\n".join([t for t in paper_text_parts if t])
-    (job_dir / "paper_text.txt").write_text(paper_text or "", encoding="utf-8")
-
-    write_exam_job(job_id, {"step": "parse_scores", "progress": 35})
-
-    # Parse scores (supports multiple files; prefer deterministic spreadsheet parser, fallback to LLM)
-    all_rows: List[Dict[str, Any]] = []
-    warnings: List[str] = []
-    class_name_hint = str(job.get("class_name") or "").strip()
-
-    def _parse_xlsx_with_script(xlsx_path: Path, out_csv: Path) -> Optional[List[Dict[str, Any]]]:
-        script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
-        cmd = ["python3", str(script), "--scores", str(xlsx_path), "--exam-id", exam_id, "--out", str(out_csv)]
-        if class_name_hint:
-            cmd += ["--class-name", class_name_hint]
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
-        if proc.returncode != 0 or not out_csv.exists():
-            return None
-        file_rows: List[Dict[str, Any]] = []
-        with out_csv.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for r in reader:
-                r_out = dict(r)
-                r_out["score"] = parse_score_value(r.get("score"))
-                r_out["is_correct"] = r.get("is_correct") or ""
-                file_rows.append(r_out)
-        return file_rows
-
-    for idx, fname in enumerate(score_files):
-        score_path = scores_dir / str(fname)
-        file_rows: List[Dict[str, Any]] = []
-        try:
-            if score_path.suffix.lower() == ".xlsx":
-                tmp_csv = derived_dir / f"responses_part_{idx}.csv"
-                file_rows = _parse_xlsx_with_script(score_path, tmp_csv) or []
-                if not file_rows:
-                    table_preview = xlsx_to_table_preview(score_path)
-                    if table_preview.strip():
-                        parsed_scores = llm_parse_exam_scores(table_preview)
-                        if parsed_scores.get("error"):
-                            warnings.append(f"成绩文件 {fname} LLM解析失败：{parsed_scores.get('error')}")
-                        else:
-                            file_rows, _, file_warnings = build_exam_rows_from_parsed_scores(exam_id, parsed_scores)
-                            warnings.extend(file_warnings)
-            elif score_path.suffix.lower() == ".xls":
-                table_preview = xls_to_table_preview(score_path)
-                if table_preview.strip():
-                    parsed_scores = llm_parse_exam_scores(table_preview)
-                    if parsed_scores.get("error"):
-                        warnings.append(f"成绩文件 {fname} LLM解析失败：{parsed_scores.get('error')}")
-                    else:
-                        file_rows, _, file_warnings = build_exam_rows_from_parsed_scores(exam_id, parsed_scores)
-                        warnings.extend(file_warnings)
-            else:
-                # PDF/image: OCR -> text -> LLM
-                score_text_parts: List[str] = []
-                if score_path.suffix.lower() == ".pdf":
-                    score_text_parts.append(extract_text_from_pdf(score_path, language=language, ocr_mode=ocr_mode))
-                else:
-                    score_text_parts.append(extract_text_from_image(score_path, language=language, ocr_mode=ocr_mode))
-                table_preview = "\n\n".join([t for t in score_text_parts if t])
-                if table_preview.strip():
-                    parsed_scores = llm_parse_exam_scores(table_preview)
-                    if parsed_scores.get("error"):
-                        warnings.append(f"成绩文件 {fname} LLM解析失败：{parsed_scores.get('error')}")
-                    else:
-                        file_rows, _, file_warnings = build_exam_rows_from_parsed_scores(exam_id, parsed_scores)
-                        warnings.extend(file_warnings)
-        except Exception as exc:
-            warnings.append(f"成绩文件 {fname} 解析异常：{str(exc)[:120]}")
-            continue
-
-        if file_rows:
-            all_rows.extend(file_rows)
-
-    if not all_rows:
-        write_exam_job(
-            job_id,
-            {
-                "status": "failed",
-                "step": "parse_scores",
-                "progress": 100,
-                "error": "scores_parsed_empty",
-                "hints": ["未能从成绩文件解析出有效得分行。请优先上传 xlsx/xls，或更清晰的 PDF/图片。"] + ocr_hints,
-            },
-        )
-        return
-
-    # Deduplicate by (student_id, question_id), keep the higher score if duplicated.
-    dedup: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    for r in all_rows:
-        sid = str(r.get("student_id") or "").strip()
-        qid = str(r.get("question_id") or "").strip()
-        if not sid or not qid:
-            continue
-        key = (sid, qid)
-        try:
-            score_val = float(r.get("score")) if r.get("score") is not None else None
-        except Exception:
-            score_val = None
-        prev = dedup.get(key)
-        if not prev:
-            dedup[key] = r
-            continue
-        try:
-            prev_score = float(prev.get("score")) if prev.get("score") is not None else None
-        except Exception:
-            prev_score = None
-        if score_val is not None and (prev_score is None or score_val > prev_score):
-            dedup[key] = r
-
-    rows = list(dedup.values())
-
-    # Build questions list from merged rows
-    q_map: Dict[str, Dict[str, Any]] = {}
-    for r in rows:
-        qid = str(r.get("question_id") or "").strip()
-        if not qid:
-            continue
-        if qid not in q_map:
-            q_map[qid] = {
-                "question_id": qid,
-                "question_no": str(r.get("question_no") or "").strip(),
-                "sub_no": str(r.get("sub_no") or "").strip(),
-            }
-    questions = list(q_map.values())
-    questions.sort(key=lambda q: int(q.get("question_no") or "0") if str(q.get("question_no") or "").isdigit() else 9999)
-
-    derived_dir.mkdir(parents=True, exist_ok=True)
-    responses_unscored_csv = derived_dir / "responses_unscored.csv"
-    responses_scored_csv = derived_dir / "responses_scored.csv"
-    write_exam_responses_csv(responses_unscored_csv, rows)
-
-    # Parse answer key if provided (optional); can be used to score raw_answer rows.
-    answer_text = ""
-    answers: List[Dict[str, Any]] = []
-    answer_parse_warnings: List[str] = []
-    if answer_files:
-        write_exam_job(job_id, {"step": "extract_answers", "progress": 45})
-        answer_ocr_prompt = "请做OCR，只返回题号与选择题答案，不要解释。推荐每行一个：`1 A`、`2 C`、`12(1) B`。"
-        answer_text_parts: List[str] = []
-        for fname in answer_files:
-            path = answers_dir / str(fname)
-            if not path.exists():
-                continue
-            try:
-                answer_text_parts.append(
-                    extract_text_from_file(path, language=language, ocr_mode=ocr_mode, prompt=answer_ocr_prompt)
-                )
-            except Exception as exc:
-                warnings.append(f"答案文件 {fname} 解析失败：{str(exc)[:120]}")
-        answer_text = "\n\n".join([t for t in answer_text_parts if t])
-        (job_dir / "answer_text.txt").write_text(answer_text or "", encoding="utf-8")
-        answers, answer_parse_warnings = parse_exam_answer_key_text(answer_text)
-        if answer_parse_warnings:
-            warnings.extend([f"答案解析提示：{w}" for w in answer_parse_warnings])
-
-    answers_csv = derived_dir / "answers.csv"
-    if answers:
-        write_exam_answers_csv(answers_csv, answers)
-
-    # Ensure questions.csv exists with best-effort max scores.
-    # If we need to score raw answers, default max_score=1 for those questions unless teacher edits later.
-    max_scores = compute_max_scores_from_rows(rows)
-    needs_answer_scoring = any((r.get("score") is None) and str(r.get("raw_answer") or "").strip() for r in rows)
-    qids_need: set[str] = set()
-    defaulted_max_score_qids: List[str] = []
-    if needs_answer_scoring and answers:
-        qids_need = {
-            str(r.get("question_id") or "").strip()
-            for r in rows
-            if (r.get("score") is None) and str(r.get("raw_answer") or "").strip()
-        }
-        for qid in sorted(qids_need):
-            if not qid:
-                continue
-            if qid not in max_scores:
-                max_scores[qid] = 1.0
-                defaulted_max_score_qids.append(qid)
-
-    questions_csv = derived_dir / "questions.csv"
-    write_exam_questions_csv(questions_csv, questions, max_scores=max_scores)
-
-    # Apply answer key -> produce responses_scored.csv (best-effort).
-    answer_apply_stats: Dict[str, Any] = {}
-    if needs_answer_scoring and answers and answers_csv.exists():
-        try:
-            answer_apply_stats = apply_answer_key_to_responses_csv(
-                responses_unscored_csv,
-                answers_csv,
-                questions_csv,
-                responses_scored_csv,
-            )
-            if answer_apply_stats.get("updated_rows"):
-                diag_log(
-                    "exam_upload.answer_key.applied",
-                    {
-                        "job_id": job_id,
-                        "updated_rows": answer_apply_stats.get("updated_rows"),
-                        "total_rows": answer_apply_stats.get("total_rows"),
-                    },
-                )
-            missing_ans = answer_apply_stats.get("missing_answer_qids") or []
-            missing_max = answer_apply_stats.get("missing_max_score_qids") or []
-            if missing_ans:
-                preview = "，".join(missing_ans[:8])
-                more = f" 等{len(missing_ans)}题" if len(missing_ans) > 8 else ""
-                warnings.append(f"标准答案缺少题号：{preview}{more}（这些题无法自动评分）")
-            if missing_max:
-                preview = "，".join(missing_max[:8])
-                more = f" 等{len(missing_max)}题" if len(missing_max) > 8 else ""
-                warnings.append(f"题目满分缺失：{preview}{more}（这些题无法自动评分）")
-        except Exception as exc:
-            warnings.append(f"未能根据标准答案自动补齐客观题得分：{str(exc)[:120]}")
-            shutil.copy2(responses_unscored_csv, responses_scored_csv)
-    else:
-        shutil.copy2(responses_unscored_csv, responses_scored_csv)
-
-    # Compute raw/scored counts for UI (avoid relying on "totals", which requires numeric scores).
-    raw_students: set[str] = set()
-    scored_students: set[str] = set()
-    responses_total = 0
-    responses_scored = 0
-    try:
-        with responses_scored_csv.open(encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                responses_total += 1
-                sid = str(row.get("student_id") or row.get("student_name") or "").strip()
-                if sid:
-                    raw_students.add(sid)
-                if parse_score_value(row.get("score")) is not None:
-                    responses_scored += 1
-                    if sid:
-                        scored_students.add(sid)
-    except Exception:
-        pass
-
-    scoring_status = "unscored"
-    if responses_scored <= 0:
-        scoring_status = "unscored"
-    elif responses_total and responses_scored >= responses_total:
-        scoring_status = "scored"
-    else:
-        scoring_status = "partial"
-
-    # Draft payload
-    totals_result = compute_exam_totals(responses_scored_csv)
-    totals = sorted(totals_result["totals"].values())
-    avg_total = sum(totals) / len(totals) if totals else 0.0
-    median_total = totals[len(totals) // 2] if totals else 0.0
-
-    questions_for_draft: List[Dict[str, Any]] = []
-    for q in questions:
-        qid = str(q.get("question_id") or "").strip()
-        if not qid:
-            continue
-        questions_for_draft.append(
-            {
-                "question_id": qid,
-                "question_no": str(q.get("question_no") or "").strip(),
-                "sub_no": str(q.get("sub_no") or "").strip(),
-                "max_score": max_scores.get(qid),
-            }
-        )
-    score_mode = "total" if (len(questions_for_draft) == 1 and questions_for_draft[0].get("question_id") == "TOTAL") else "question"
-
-    parsed_payload = {
-        "exam_id": exam_id,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "meta": {
-            "date": parse_date_str(job.get("date")),
-            "class_name": str(job.get("class_name") or ""),
-            "language": language,
-            "score_mode": score_mode,
-        },
-        "paper_files": paper_files,
-        "score_files": score_files,
-        "answer_files": answer_files,
-        "derived": {
-            "responses_unscored": "derived/responses_unscored.csv",
-            "responses_scored": "derived/responses_scored.csv",
-            "questions": "derived/questions.csv",
-            "answers": "derived/answers.csv" if answers else "",
-        },
-        "questions": questions_for_draft,
-        "answer_key": {
-            "count": len(answers),
-            "source_files": answer_files,
-        }
-        if answers
-        else {"count": 0, "source_files": answer_files},
-        "scoring": {
-            "status": scoring_status,
-            "responses_total": responses_total,
-            "responses_scored": responses_scored,
-            "students_total": len(raw_students),
-            "students_scored": len(scored_students),
-            "default_max_score_qids": defaulted_max_score_qids,
-        },
-        "counts": {
-            "students": len(raw_students),
-            "responses": responses_total or len(rows),
-            "questions": len(questions),
-        },
-        "counts_scored": {
-            "students": len(scored_students),
-            "responses": responses_scored,
-        },
-        "totals_summary": {
-            "avg_total": round(avg_total, 3),
-            "median_total": round(median_total, 3),
-            "max_total_observed": max(totals) if totals else 0.0,
-        },
-        "warnings": warnings,
-        "notes": "paper_text_empty" if not paper_text.strip() else "",
-    }
-    (job_dir / "parsed.json").write_text(json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    write_exam_job(
-        job_id,
-        {
-            "status": "done",
-            "step": "done",
-            "progress": 100,
-            "exam_id": exam_id,
-            "counts": parsed_payload.get("counts"),
-            "counts_scored": parsed_payload.get("counts_scored"),
-            "totals_summary": parsed_payload.get("totals_summary"),
-            "scoring": parsed_payload.get("scoring"),
-            "answer_key": parsed_payload.get("answer_key"),
-            "warnings": warnings,
-            "draft_version": 1,
-        },
-    )
+    _process_exam_upload_job_impl(job_id, deps=_exam_upload_parse_deps())
 
 
 def write_uploaded_questions(out_dir: Path, assignment_id: str, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -9614,6 +9283,69 @@ def _exam_longform_deps():
     )
 
 
+def _exam_upload_parse_deps():
+    return ExamUploadParseDeps(
+        app_root=APP_ROOT,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        now_date_compact=lambda: datetime.now().date().isoformat().replace("-", ""),
+        load_exam_job=load_exam_job,
+        exam_job_path=exam_job_path,
+        write_exam_job=write_exam_job,
+        extract_text_from_file=extract_text_from_file,
+        extract_text_from_pdf=extract_text_from_pdf,
+        extract_text_from_image=extract_text_from_image,
+        parse_xlsx_with_script=_parse_xlsx_with_script,
+        xlsx_to_table_preview=xlsx_to_table_preview,
+        xls_to_table_preview=xls_to_table_preview,
+        llm_parse_exam_scores=llm_parse_exam_scores,
+        build_exam_rows_from_parsed_scores=build_exam_rows_from_parsed_scores,
+        parse_score_value=parse_score_value,
+        write_exam_responses_csv=write_exam_responses_csv,
+        parse_exam_answer_key_text=parse_exam_answer_key_text,
+        write_exam_answers_csv=write_exam_answers_csv,
+        compute_max_scores_from_rows=compute_max_scores_from_rows,
+        write_exam_questions_csv=write_exam_questions_csv,
+        apply_answer_key_to_responses_csv=apply_answer_key_to_responses_csv,
+        compute_exam_totals=compute_exam_totals,
+        copy2=shutil.copy2,
+        diag_log=diag_log,
+        parse_date_str=parse_date_str,
+    )
+
+
+def _exam_upload_confirm_deps():
+    return ExamUploadConfirmDeps(
+        app_root=APP_ROOT,
+        data_dir=DATA_DIR,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        write_exam_job=write_exam_job,
+        load_exam_draft_override=_load_exam_draft_override_impl,
+        parse_exam_answer_key_text=parse_exam_answer_key_text,
+        write_exam_questions_csv=write_exam_questions_csv,
+        write_exam_answers_csv=write_exam_answers_csv,
+        load_exam_answer_key_from_csv=load_exam_answer_key_from_csv,
+        ensure_questions_max_score=ensure_questions_max_score,
+        apply_answer_key_to_responses_csv=apply_answer_key_to_responses_csv,
+        run_script=run_script,
+        diag_log=diag_log,
+        copy2=shutil.copy2,
+    )
+
+
+def _exam_upload_start_deps():
+    return ExamUploadStartDeps(
+        parse_date_str=parse_date_str,
+        exam_job_path=exam_job_path,
+        sanitize_filename=sanitize_filename,
+        save_upload_file=save_upload_file,
+        write_exam_job=lambda job_id, updates, overwrite=False: write_exam_job(job_id, updates, overwrite=overwrite),
+        enqueue_exam_job=enqueue_exam_job,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        diag_log=diag_log,
+        uuid_hex=lambda: uuid.uuid4().hex,
+    )
+
+
 def _exam_api_deps():
     return ExamApiDeps(exam_get=exam_get)
 
@@ -9941,69 +9673,20 @@ async def exam_upload_start(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    date_str = parse_date_str(date)
-    job_id = f"job_{uuid.uuid4().hex[:12]}"
-    job_dir = exam_job_path(job_id)
-    paper_dir = job_dir / "paper"
-    scores_dir = job_dir / "scores"
-    answers_dir = job_dir / "answers"
-    paper_dir.mkdir(parents=True, exist_ok=True)
-    scores_dir.mkdir(parents=True, exist_ok=True)
-    answers_dir.mkdir(parents=True, exist_ok=True)
-
-    saved_paper: List[str] = []
-    for f in paper_files:
-        fname = sanitize_filename(f.filename)
-        if not fname:
-            continue
-        dest = paper_dir / fname
-        await save_upload_file(f, dest)
-        saved_paper.append(fname)
-
-    saved_scores: List[str] = []
-    for f in score_files:
-        fname = sanitize_filename(f.filename)
-        if not fname:
-            continue
-        dest = scores_dir / fname
-        await save_upload_file(f, dest)
-        saved_scores.append(fname)
-
-    saved_answers: List[str] = []
-    if answer_files:
-        for f in answer_files:
-            fname = sanitize_filename(f.filename)
-            if not fname:
-                continue
-            dest = answers_dir / fname
-            await save_upload_file(f, dest)
-            saved_answers.append(fname)
-
-    if not saved_paper:
-        raise HTTPException(status_code=400, detail="No exam paper files uploaded")
-    if not saved_scores:
-        raise HTTPException(status_code=400, detail="No score files uploaded")
-
-    record = {
-        "job_id": job_id,
-        "exam_id": str(exam_id or "").strip(),
-        "date": date_str,
-        "class_name": class_name or "",
-        "paper_files": saved_paper,
-        "score_files": saved_scores,
-        "answer_files": saved_answers,
-        "language": language or "zh",
-        "ocr_mode": ocr_mode or "FREE_OCR",
-        "status": "queued",
-        "progress": 0,
-        "step": "queued",
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    write_exam_job(job_id, record, overwrite=True)
-    enqueue_exam_job(job_id)
-    diag_log("exam_upload.job.created", {"job_id": job_id, "exam_id": record.get("exam_id")})
-
-    return {"ok": True, "job_id": job_id, "exam_id": record.get("exam_id") or None, "status": "queued", "message": "考试解析任务已创建，后台处理中。"}
+    try:
+        return await _start_exam_upload_impl(
+            exam_id,
+            date,
+            class_name,
+            paper_files,
+            score_files,
+            answer_files,
+            ocr_mode,
+            language,
+            deps=_exam_upload_start_deps(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/exam/upload/status")
@@ -10026,13 +9709,7 @@ async def exam_upload_draft(job_id: str):
     if status not in {"done", "confirmed"}:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，暂无法打开草稿。",
-                "status": status,
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
+            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，暂无法打开草稿。"),
         )
 
     job_dir = exam_job_path(job_id)
@@ -10040,70 +9717,19 @@ async def exam_upload_draft(job_id: str):
     if not parsed_path.exists():
         raise HTTPException(status_code=400, detail="parsed result missing")
     parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-
-    override_path = job_dir / "draft_override.json"
-    override: Dict[str, Any] = {}
-    if override_path.exists():
-        try:
-            override = json.loads(override_path.read_text(encoding="utf-8"))
-        except Exception:
-            override = {}
-
-    meta = parsed.get("meta") or {}
-    questions = parsed.get("questions") or []
-    score_schema = parsed.get("score_schema") or {}
-    warnings = parsed.get("warnings") or []
-    answer_key = parsed.get("answer_key") or {}
-    scoring = parsed.get("scoring") or {}
-    counts_scored = parsed.get("counts_scored") or {}
-
-    if isinstance(override.get("meta"), dict) and override.get("meta"):
-        meta = {**meta, **override.get("meta")}
-    if isinstance(override.get("questions"), list) and override.get("questions"):
-        questions = override.get("questions")
-    if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):
-        score_schema = {**score_schema, **override.get("score_schema")}
-
-    # Answer key override (text-based) - used during confirm scoring.
-    answer_key_text = str(override.get("answer_key_text") or "").strip()
-    if answer_key_text:
-        override_answers, override_ans_warnings = parse_exam_answer_key_text(answer_key_text)
-        answer_key = {
-            "count": len(override_answers),
-            "source": "override",
-            "warnings": override_ans_warnings,
-        }
-    elif isinstance(answer_key, dict) and answer_key:
-        answer_key = {**answer_key, "source": "ocr" if answer_key.get("count") else "none"}
-
-    answer_text_excerpt = ""
+    override = _load_exam_draft_override_impl(job_dir)
     try:
         answer_text_excerpt = read_text_safe(job_dir / "answer_text.txt", limit=6000)
     except Exception:
         answer_text_excerpt = ""
-
-    draft = {
-        "job_id": job_id,
-        "exam_id": parsed.get("exam_id") or job.get("exam_id"),
-        "date": meta.get("date") or job.get("date"),
-        "class_name": meta.get("class_name") or job.get("class_name"),
-        "paper_files": parsed.get("paper_files") or job.get("paper_files") or [],
-        "score_files": parsed.get("score_files") or job.get("score_files") or [],
-        "answer_files": parsed.get("answer_files") or job.get("answer_files") or [],
-        "counts": parsed.get("counts") or {},
-        "counts_scored": counts_scored,
-        "totals_summary": parsed.get("totals_summary") or {},
-        "scoring": scoring,
-        "meta": meta,
-        "questions": questions,
-        "score_schema": score_schema,
-        "answer_key": answer_key,
-        "answer_key_text": answer_key_text,
-        "answer_text_excerpt": answer_text_excerpt,
-        "warnings": warnings,
-        "draft_saved": bool(override),
-        "draft_version": int(job.get("draft_version") or 1),
-    }
+    draft = _build_exam_upload_draft_impl(
+        job_id,
+        job,
+        parsed,
+        override,
+        parse_exam_answer_key_text=parse_exam_answer_key_text,
+        answer_text_excerpt=answer_text_excerpt,
+    )
     return {"ok": True, "draft": draft}
 
 
@@ -10117,32 +9743,19 @@ async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
     if job.get("status") not in {"done", "confirmed"}:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，暂无法保存草稿。",
-                "status": job.get("status"),
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
+            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，暂无法保存草稿。"),
         )
 
     job_dir = exam_job_path(req.job_id)
-    override_path = job_dir / "draft_override.json"
-    override: Dict[str, Any] = {}
-    if override_path.exists():
-        try:
-            override = json.loads(override_path.read_text(encoding="utf-8"))
-        except Exception:
-            override = {}
-    if req.meta is not None:
-        override["meta"] = req.meta
-    if req.questions is not None:
-        override["questions"] = req.questions
-    if req.score_schema is not None:
-        override["score_schema"] = req.score_schema
-    if req.answer_key_text is not None:
-        override["answer_key_text"] = str(req.answer_key_text or "")
-    override_path.write_text(json.dumps(override, ensure_ascii=False, indent=2), encoding="utf-8")
+    override = _load_exam_draft_override_impl(job_dir)
+    _save_exam_draft_override_impl(
+        job_dir,
+        override,
+        meta=req.meta,
+        questions=req.questions,
+        score_schema=req.score_schema,
+        answer_key_text=req.answer_key_text,
+    )
     new_version = int(job.get("draft_version") or 1) + 1
     write_exam_job(req.job_id, {"draft_version": new_version})
     return {"ok": True, "job_id": req.job_id, "message": "考试草稿已保存。", "draft_version": new_version}
@@ -10161,196 +9774,13 @@ async def exam_upload_confirm(req: ExamUploadConfirmRequest):
     if status != "done":
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，请稍后再确认创建考试。",
-                "status": status,
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
+            detail=_exam_upload_not_ready_detail_impl(job, "解析尚未完成，请稍后再确认创建考试。"),
         )
-
-    write_exam_job(req.job_id, {"status": "confirming", "step": "start", "progress": 5})
-
     job_dir = exam_job_path(req.job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        write_exam_job(req.job_id, {"status": "failed", "error": "parsed result missing", "step": "failed"})
-        raise HTTPException(status_code=400, detail="parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-
-    override_path = job_dir / "draft_override.json"
-    override: Dict[str, Any] = {}
-    if override_path.exists():
-        try:
-            override = json.loads(override_path.read_text(encoding="utf-8"))
-        except Exception:
-            override = {}
-
-    exam_id = str(parsed.get("exam_id") or job.get("exam_id") or "").strip()
-    if not exam_id:
-        raise HTTPException(status_code=400, detail="exam_id missing")
-
-    # Merge overrides
-    meta = parsed.get("meta") or {}
-    if isinstance(override.get("meta"), dict) and override.get("meta"):
-        meta = {**meta, **override.get("meta")}
-    questions_override = override.get("questions") if isinstance(override.get("questions"), list) else None
-
-    # Destination
-    exam_dir = DATA_DIR / "exams" / exam_id
-    manifest_path = exam_dir / "manifest.json"
-    if manifest_path.exists():
-        write_exam_job(req.job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
-        raise HTTPException(status_code=409, detail="exam already exists")
-    exam_dir.mkdir(parents=True, exist_ok=True)
-
-    # Copy raw files
-    write_exam_job(req.job_id, {"step": "copy_files", "progress": 25})
-    dest_paper_dir = exam_dir / "paper"
-    dest_scores_dir = exam_dir / "scores"
-    dest_answers_dir = exam_dir / "answers"
-    dest_derived_dir = exam_dir / "derived"
-    dest_paper_dir.mkdir(parents=True, exist_ok=True)
-    dest_scores_dir.mkdir(parents=True, exist_ok=True)
-    dest_answers_dir.mkdir(parents=True, exist_ok=True)
-    dest_derived_dir.mkdir(parents=True, exist_ok=True)
-    for fname in job.get("paper_files") or []:
-        src = job_dir / "paper" / fname
-        if src.exists():
-            shutil.copy2(src, dest_paper_dir / fname)
-    for fname in job.get("score_files") or []:
-        src = job_dir / "scores" / fname
-        if src.exists():
-            shutil.copy2(src, dest_scores_dir / fname)
-    for fname in job.get("answer_files") or []:
-        src = job_dir / "answers" / fname
-        if src.exists():
-            shutil.copy2(src, dest_answers_dir / fname)
-
-    # Copy derived files (allow override questions to rewrite questions.csv)
-    write_exam_job(req.job_id, {"step": "write_derived", "progress": 50})
-    src_unscored = job_dir / "derived" / "responses_unscored.csv"
-    src_responses = job_dir / "derived" / "responses_scored.csv"
-    src_questions = job_dir / "derived" / "questions.csv"
-    src_answers = job_dir / "derived" / "answers.csv"
-    if not src_responses.exists():
-        write_exam_job(req.job_id, {"status": "failed", "error": "responses missing", "step": "failed"})
-        raise HTTPException(status_code=400, detail="responses missing")
-    # Always keep a copy of the unscored responses if available (useful for re-scoring with updated max_score).
-    # Back-compat: if missing, fall back to the scored csv as "unscored".
-    if src_unscored.exists():
-        shutil.copy2(src_unscored, dest_derived_dir / "responses_unscored.csv")
-    else:
-        shutil.copy2(src_responses, dest_derived_dir / "responses_unscored.csv")
-    if src_questions.exists():
-        shutil.copy2(src_questions, dest_derived_dir / "questions.csv")
-    if src_answers.exists():
-        shutil.copy2(src_answers, dest_derived_dir / "answers.csv")
-    if questions_override:
-        # Rewrite questions.csv with teacher overrides (max_score etc)
-        max_scores = None
-        try:
-            max_scores = {str(q.get("question_id")): float(q.get("max_score")) for q in questions_override if q.get("max_score") is not None}
-        except Exception:
-            max_scores = None
-        write_exam_questions_csv(dest_derived_dir / "questions.csv", questions_override, max_scores=max_scores)
-
-    # If teacher provided an answer key override (text), rebuild answers.csv now.
-    answer_key_text = str(override.get("answer_key_text") or "").strip()
-    dest_unscored = dest_derived_dir / "responses_unscored.csv"
-    dest_answers = dest_derived_dir / "answers.csv"
-    dest_questions = dest_derived_dir / "questions.csv"
-    dest_scored = dest_derived_dir / "responses_scored.csv"
-    if answer_key_text:
-        try:
-            override_answers, _override_warnings = parse_exam_answer_key_text(answer_key_text)
-            if override_answers:
-                write_exam_answers_csv(dest_answers, override_answers)
-            else:
-                # Teacher override is empty/invalid: remove stale answers so we don't silently score with old key.
-                try:
-                    if dest_answers.exists():
-                        dest_answers.unlink()
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    # Apply answer key + unscored responses, so the final exam uses the teacher-edited max_score and latest answer key.
-    if dest_unscored.exists() and dest_answers.exists() and dest_questions.exists():
-        try:
-            # If answers were provided late (via override), questions.csv may not have max_score yet.
-            try:
-                ans_map = load_exam_answer_key_from_csv(dest_answers)
-                ensure_questions_max_score(dest_questions, ans_map.keys(), default_score=1.0)
-            except Exception:
-                pass
-            apply_answer_key_to_responses_csv(dest_unscored, dest_answers, dest_questions, dest_scored)
-        except Exception:
-            # Fallback: keep the job's scored version if present, otherwise keep unscored.
-            if src_responses.exists():
-                shutil.copy2(src_responses, dest_scored)
-            else:
-                shutil.copy2(dest_unscored, dest_scored)
-    else:
-        # Default: just use the scored file produced during parsing.
-        shutil.copy2(src_responses, dest_scored)
-
-    # Compute analysis draft (best-effort)
-    write_exam_job(req.job_id, {"step": "analysis", "progress": 70})
-    analysis_dir = DATA_DIR / "analysis" / exam_id
-    analysis_dir.mkdir(parents=True, exist_ok=True)
-    draft_json = analysis_dir / "draft.json"
-    draft_md = analysis_dir / "draft.md"
     try:
-        script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "compute_exam_metrics.py"
-        cmd = [
-            "python3",
-            str(script),
-            "--exam-id",
-            exam_id,
-            "--responses",
-            str(dest_derived_dir / "responses_scored.csv"),
-            "--questions",
-            str(dest_derived_dir / "questions.csv"),
-            "--out-json",
-            str(draft_json),
-            "--out-md",
-            str(draft_md),
-        ]
-        run_script(cmd)
-    except Exception as exc:
-        diag_log("exam_upload.analysis_failed", {"exam_id": exam_id, "error": str(exc)[:200]})
-
-    # Write manifest
-    write_exam_job(req.job_id, {"step": "manifest", "progress": 90})
-    def _to_rel(p: Path) -> str:
-        try:
-            return str(p.resolve().relative_to(APP_ROOT.resolve()))
-        except Exception:
-            return str(p.resolve())
-
-    manifest = {
-        "exam_id": exam_id,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "meta": meta,
-        "files": {
-            "responses_scored": _to_rel(dest_derived_dir / "responses_scored.csv"),
-            "responses_unscored": _to_rel(dest_derived_dir / "responses_unscored.csv")
-            if (dest_derived_dir / "responses_unscored.csv").exists()
-            else "",
-            "questions": _to_rel(dest_derived_dir / "questions.csv"),
-            "answers": _to_rel(dest_derived_dir / "answers.csv") if (dest_derived_dir / "answers.csv").exists() else "",
-            "analysis_draft_json": _to_rel(draft_json) if draft_json.exists() else "",
-            "analysis_draft_md": _to_rel(draft_md) if draft_md.exists() else "",
-        },
-        "counts": parsed.get("counts") or {},
-    }
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    write_exam_job(req.job_id, {"status": "confirmed", "step": "confirmed", "progress": 100, "exam_id": exam_id})
-    return {"ok": True, "exam_id": exam_id, "status": "confirmed", "message": "考试已创建。"}
+        return _confirm_exam_upload_impl(req.job_id, job, job_dir, deps=_exam_upload_confirm_deps())
+    except ExamUploadConfirmError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/assignment/upload/start")
