@@ -110,6 +110,7 @@ from .chat_job_processing_service import (
 )
 from .chat_preflight import resolve_role_hint as _resolve_role_hint_impl
 from .chat_runtime_service import ChatRuntimeDeps, call_llm_runtime as _call_llm_runtime_impl
+from .chat_session_history_service import load_session_messages as _load_session_messages_impl
 from .chat_session_utils import (
     paginate_session_items as _paginate_session_items_impl,
     resolve_student_session_id as _resolve_student_session_id_impl,
@@ -6471,57 +6472,9 @@ async def student_history_session(
     if not student_id or not session_id:
         raise HTTPException(status_code=400, detail="student_id and session_id are required")
     path = student_session_file(student_id, session_id)
-    if not path.exists():
-        return {"ok": True, "student_id": student_id, "session_id": session_id, "messages": [], "next_cursor": cursor}
-
-    take = max(1, min(int(limit), 200))
-    mode = (direction or "backward").strip().lower()
-    if mode not in {"forward", "backward"}:
-        mode = "backward"
-
-    if mode == "forward":
-        start = max(0, int(cursor))
-        messages: List[Dict[str, Any]] = []
-        next_cursor = start
-        with path.open("r", encoding="utf-8") as f:
-            for idx, line in enumerate(f):
-                if idx < start:
-                    continue
-                if len(messages) >= take:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                if isinstance(obj, dict):
-                    messages.append(obj)
-                next_cursor = idx + 1
-        return {"ok": True, "student_id": student_id, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
-
-    # Backward pagination: return the latest messages first.
-    lines = path.read_text(encoding="utf-8").splitlines()
-    total = len(lines)
-    end = total if int(cursor) < 0 else max(0, min(int(cursor), total))
-    messages_rev: List[Dict[str, Any]] = []
-    min_idx = end
-    for idx in range(end - 1, -1, -1):
-        if len(messages_rev) >= take:
-            break
-        line = (lines[idx] or "").strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            messages_rev.append(obj)
-            min_idx = idx
-    messages = list(reversed(messages_rev))
-    next_cursor = max(0, int(min_idx))
+    page = _load_session_messages_impl(path, cursor=cursor, limit=limit, direction=direction)
+    messages = page.get("messages") or []
+    next_cursor = page.get("next_cursor")
     return {"ok": True, "student_id": student_id, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
 
 
@@ -6574,56 +6527,9 @@ async def teacher_history_session(
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id is required")
     path = teacher_session_file(teacher_id_final, session_id)
-    if not path.exists():
-        return {"ok": True, "teacher_id": teacher_id_final, "session_id": session_id, "messages": [], "next_cursor": cursor}
-
-    take = max(1, min(int(limit), 200))
-    mode = (direction or "backward").strip().lower()
-    if mode not in {"forward", "backward"}:
-        mode = "backward"
-
-    if mode == "forward":
-        start = max(0, int(cursor))
-        messages: List[Dict[str, Any]] = []
-        next_cursor = start
-        with path.open("r", encoding="utf-8") as f:
-            for idx, line in enumerate(f):
-                if idx < start:
-                    continue
-                if len(messages) >= take:
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                if isinstance(obj, dict):
-                    messages.append(obj)
-                next_cursor = idx + 1
-        return {"ok": True, "teacher_id": teacher_id_final, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
-
-    lines = path.read_text(encoding="utf-8").splitlines()
-    total = len(lines)
-    end = total if int(cursor) < 0 else max(0, min(int(cursor), total))
-    messages_rev: List[Dict[str, Any]] = []
-    min_idx = end
-    for idx in range(end - 1, -1, -1):
-        if len(messages_rev) >= take:
-            break
-        line = (lines[idx] or "").strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            messages_rev.append(obj)
-            min_idx = idx
-    messages = list(reversed(messages_rev))
-    next_cursor = max(0, int(min_idx))
+    page = _load_session_messages_impl(path, cursor=cursor, limit=limit, direction=direction)
+    messages = page.get("messages") or []
+    next_cursor = page.get("next_cursor")
     return {"ok": True, "teacher_id": teacher_id_final, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
 
 
