@@ -31,6 +31,62 @@ from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
+from .assignment_intent_service import (
+    detect_assignment_intent as _detect_assignment_intent_impl,
+    extract_assignment_id as _extract_assignment_id_impl,
+    extract_date as _extract_date_impl,
+    extract_kp_list as _extract_kp_list_impl,
+    extract_per_kp as _extract_per_kp_impl,
+    extract_question_ids as _extract_question_ids_impl,
+    extract_requirements_from_text as _extract_requirements_from_text_impl,
+)
+from .assignment_requirements_service import (
+    AssignmentRequirementsDeps,
+    compute_requirements_missing as _compute_requirements_missing_impl,
+    ensure_requirements_for_assignment as _ensure_requirements_for_assignment_impl,
+    format_requirements_prompt as _format_requirements_prompt_impl,
+    merge_requirements as _merge_requirements_impl,
+    normalize_class_level as _normalize_class_level_impl,
+    normalize_difficulty as _normalize_difficulty_impl,
+    normalize_preferences as _normalize_preferences_impl,
+    parse_duration as _parse_duration_impl,
+    parse_list_value as _parse_list_value_impl,
+    save_assignment_requirements as _save_assignment_requirements_impl,
+    validate_requirements as _validate_requirements_impl,
+)
+from .assignment_upload_confirm_gate_service import (
+    AssignmentUploadConfirmGateError,
+    ensure_assignment_upload_confirm_ready as _ensure_assignment_upload_confirm_ready_impl,
+)
+from .assignment_upload_confirm_service import (
+    AssignmentUploadConfirmDeps,
+    AssignmentUploadConfirmError,
+    confirm_assignment_upload as _confirm_assignment_upload_impl,
+)
+from .assignment_upload_draft_save_service import (
+    AssignmentUploadDraftSaveDeps,
+    AssignmentUploadDraftSaveError,
+    save_assignment_upload_draft as _save_assignment_upload_draft_impl,
+)
+from .assignment_upload_draft_service import (
+    assignment_upload_not_ready_detail as _assignment_upload_not_ready_detail_impl,
+    build_assignment_upload_draft as _build_assignment_upload_draft_impl,
+    clean_assignment_draft_questions as _clean_assignment_draft_questions_impl,
+    load_assignment_draft_override as _load_assignment_draft_override_impl,
+    save_assignment_draft_override as _save_assignment_draft_override_impl,
+)
+from .assignment_upload_parse_service import AssignmentUploadParseDeps, process_upload_job as _process_upload_job_impl
+from .assignment_upload_query_service import (
+    AssignmentUploadQueryDeps,
+    AssignmentUploadQueryError,
+    get_assignment_upload_draft as _get_assignment_upload_draft_impl,
+    get_assignment_upload_status as _get_assignment_upload_status_impl,
+)
+from .assignment_upload_start_service import (
+    AssignmentUploadStartDeps,
+    AssignmentUploadStartError,
+    start_assignment_upload as _start_assignment_upload_impl,
+)
 from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
@@ -3217,56 +3273,11 @@ def summarize_questions_for_prompt(questions: List[Dict[str, Any]], limit: int =
 
 
 def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
-    missing: List[str] = []
-    if not str(requirements.get("subject", "")).strip():
-        missing.append("subject")
-    if not str(requirements.get("topic", "")).strip():
-        missing.append("topic")
-    if not str(requirements.get("grade_level", "")).strip():
-        missing.append("grade_level")
-    class_level = normalize_class_level(str(requirements.get("class_level", "")).strip() or "")
-    if not class_level:
-        missing.append("class_level")
-    core_concepts = parse_list_value(requirements.get("core_concepts"))
-    if len(core_concepts) < 3:
-        missing.append("core_concepts")
-    if not str(requirements.get("typical_problem", "")).strip():
-        missing.append("typical_problem")
-    misconceptions = parse_list_value(requirements.get("misconceptions"))
-    if len(misconceptions) < 4:
-        missing.append("misconceptions")
-    duration = parse_duration(requirements.get("duration_minutes") or requirements.get("duration"))
-    if duration not in {20, 40, 60}:
-        missing.append("duration_minutes")
-    preferences_raw = parse_list_value(requirements.get("preferences"))
-    preferences, _ = normalize_preferences(preferences_raw)
-    if not preferences:
-        missing.append("preferences")
-    return missing
+    return _compute_requirements_missing_impl(requirements)
 
 
 def merge_requirements(base: Dict[str, Any], update: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
-    merged = dict(base or {})
-    for key, val in (update or {}).items():
-        if val in (None, "", [], {}):
-            continue
-        if overwrite:
-            if isinstance(val, list):
-                merged[key] = parse_list_value(val)
-            else:
-                merged[key] = val
-            continue
-        if isinstance(val, list):
-            base_list = parse_list_value(merged.get(key))
-            update_list = parse_list_value(val)
-            if not base_list:
-                merged[key] = update_list
-            elif len(base_list) < 3:
-                merged[key] = base_list + [item for item in update_list if item not in base_list]
-            continue
-        if not merged.get(key):
-            merged[key] = val
-    return merged
+    return _merge_requirements_impl(base, update, overwrite=overwrite)
 
 
 def llm_autofill_requirements(
@@ -3331,175 +3342,7 @@ def llm_autofill_requirements(
 
 
 def process_upload_job(job_id: str) -> None:
-    job = load_upload_job(job_id)
-    job_dir = upload_job_path(job_id)
-    source_dir = job_dir / "source"
-    answers_dir = job_dir / "answer_source"
-    source_files = job.get("source_files") or []
-    answer_files = job.get("answer_files") or []
-    language = job.get("language") or "zh"
-    ocr_mode = job.get("ocr_mode") or "FREE_OCR"
-    delivery_mode = job.get("delivery_mode") or "image"
-
-    write_upload_job(
-        job_id,
-        {"status": "processing", "step": "extract", "progress": 10, "error": ""},
-    )
-
-    if not source_files:
-        write_upload_job(
-            job_id,
-            {"status": "failed", "error": "no source files", "progress": 100},
-        )
-        return
-
-    source_text_parts: List[str] = []
-    ocr_hints = [
-        "图片上传需要 OCR 支持。请确保已配置 OCR API Key（OPENAI_API_KEY/SILICONFLOW_API_KEY）并可访问对应服务。",
-        "建议优先上传包含可复制文字的 PDF；若为扫描件/照片，请使用清晰的 JPG/PNG（避免 HEIC）。",
-    ]
-    t_extract = time.monotonic()
-    for fname in source_files:
-        path = source_dir / fname
-        try:
-            source_text_parts.append(extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
-        except Exception as exc:
-            msg = str(exc)[:200]
-            err_code = "extract_failed"
-            if "OCR unavailable" in msg:
-                err_code = "ocr_unavailable"
-            elif "OCR request failed" in msg or "OCR" in msg:
-                err_code = "ocr_failed"
-            write_upload_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "step": "extract",
-                    "progress": 100,
-                    "error": err_code,
-                    "error_detail": msg,
-                    "hints": ocr_hints,
-                },
-            )
-            return
-    source_text = "\n\n".join([t for t in source_text_parts if t])
-    (job_dir / "source_text.txt").write_text(source_text or "", encoding="utf-8")
-    diag_log(
-        "upload.extract.done",
-        {
-            "job_id": job_id,
-            "duration_ms": int((time.monotonic() - t_extract) * 1000),
-            "chars": len(source_text),
-        },
-    )
-
-    if not source_text.strip():
-        write_upload_job(
-            job_id,
-            {
-                "status": "failed",
-                "error": "source_text_empty",
-                "hints": ocr_hints,
-                "progress": 100,
-            },
-        )
-        return
-
-    answer_text_parts: List[str] = []
-    for fname in answer_files:
-        path = answers_dir / fname
-        try:
-            answer_text_parts.append(extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
-        except Exception:
-            continue
-    answer_text = "\n\n".join([t for t in answer_text_parts if t])
-    if answer_text:
-        (job_dir / "answer_text.txt").write_text(answer_text, encoding="utf-8")
-
-    write_upload_job(job_id, {"step": "parse", "progress": 55})
-
-    t_parse = time.monotonic()
-    parsed = llm_parse_assignment_payload(source_text, answer_text)
-    diag_log(
-        "upload.parse.done",
-        {
-            "job_id": job_id,
-            "duration_ms": int((time.monotonic() - t_parse) * 1000),
-        },
-    )
-    if parsed.get("error"):
-        write_upload_job(
-            job_id,
-            {
-                "status": "failed",
-                "error": parsed.get("error"),
-                "progress": 100,
-            },
-        )
-        return
-
-    questions = parsed.get("questions") or []
-    if not isinstance(questions, list) or not questions:
-        write_upload_job(
-            job_id,
-            {
-                "status": "failed",
-                "error": "no questions parsed",
-                "progress": 100,
-            },
-        )
-        return
-
-    requirements = parsed.get("requirements") or {}
-    missing = compute_requirements_missing(requirements)
-    warnings: List[str] = []
-    if len(source_text.strip()) < 200:
-        warnings.append("解析文本较少，作业要求可能不完整。")
-
-    autofilled = False
-    if missing:
-        requirements, missing, autofilled = llm_autofill_requirements(
-            source_text,
-            answer_text,
-            questions,
-            requirements,
-            missing,
-        )
-        if autofilled and missing:
-            warnings.append("已自动补全部分要求，请核对并补充缺失项。")
-
-    parsed_payload = {
-        "questions": questions,
-        "requirements": requirements,
-        "missing": missing,
-        "warnings": warnings,
-        "delivery_mode": delivery_mode,
-        "question_count": len(questions),
-        "autofilled": autofilled,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    (job_dir / "parsed.json").write_text(json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    preview_items: List[Dict[str, Any]] = []
-    for idx, q in enumerate(questions[:3], start=1):
-        preview_items.append({"id": idx, "stem": str(q.get("stem") or "")[:160]})
-
-    write_upload_job(
-        job_id,
-        {
-            "status": "done",
-            "step": "done",
-            "progress": 100,
-            "question_count": len(questions),
-            "requirements_missing": missing,
-            "requirements": requirements,
-            "warnings": warnings,
-            "delivery_mode": delivery_mode,
-            "questions_preview": preview_items,
-            "autofilled": autofilled,
-            "draft_version": 1,
-        },
-    )
+    _process_upload_job_impl(job_id, deps=_assignment_upload_parse_deps())
 
 
 def normalize_student_id_for_exam(class_name: str, student_name: str) -> str:
@@ -5434,183 +5277,27 @@ def load_assignment_requirements(folder: Path) -> Dict[str, Any]:
 
 
 def parse_list_value(value: Any) -> List[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(v).strip() for v in value if str(v).strip()]
-    if isinstance(value, str):
-        parts = [p.strip() for p in value.replace("，", ",").replace(";", ",").split(",")]
-        return [p for p in parts if p]
-    return []
+    return _parse_list_value_impl(value)
 
 
 def normalize_preferences(values: List[str]) -> Tuple[List[str], List[str]]:
-    pref_map = {
-        "A": "A基础",
-        "基础": "A基础",
-        "A基础": "A基础",
-        "B": "B提升",
-        "提升": "B提升",
-        "B提升": "B提升",
-        "C": "C生活应用",
-        "生活应用": "C生活应用",
-        "C生活应用": "C生活应用",
-        "D": "D探究",
-        "探究": "D探究",
-        "D探究": "D探究",
-        "E": "E小测验",
-        "小测验": "E小测验",
-        "E小测验": "E小测验",
-        "F": "F错题反思",
-        "错题反思": "F错题反思",
-        "F错题反思": "F错题反思",
-    }
-    normalized = []
-    invalid = []
-    for val in values:
-        key = str(val).strip()
-        if not key:
-            continue
-        mapped = pref_map.get(key)
-        if not mapped:
-            invalid.append(key)
-            continue
-        if mapped not in normalized:
-            normalized.append(mapped)
-    return normalized, invalid
+    return _normalize_preferences_impl(values)
 
 
 def normalize_class_level(value: str) -> Optional[str]:
-    if not value:
-        return None
-    mapping = {
-        "偏弱": "偏弱",
-        "弱": "偏弱",
-        "中等": "中等",
-        "一般": "中等",
-        "较强": "较强",
-        "强": "较强",
-        "混合": "混合",
-    }
-    return mapping.get(value.strip())
+    return _normalize_class_level_impl(value)
 
 
 def parse_duration(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, int):
-        return value
-    text = str(value)
-    match = re.search(r"\d+", text)
-    if not match:
-        return None
-    try:
-        return int(match.group(0))
-    except Exception:
-        return None
+    return _parse_duration_impl(value)
 
 
 def normalize_difficulty(value: Any) -> str:
-    raw = str(value or "").strip()
-    if not raw:
-        return "basic"
-    v = raw.lower()
-    mapping = {
-        # canonical
-        "basic": "basic",
-        "medium": "medium",
-        "advanced": "advanced",
-        "challenge": "challenge",
-        # common English aliases
-        "easy": "basic",
-        "intermediate": "medium",
-        "hard": "advanced",
-        "expert": "challenge",
-        "very hard": "challenge",
-        "very_hard": "challenge",
-        # Chinese aliases
-        "入门": "basic",
-        "简单": "basic",
-        "基础": "basic",
-        "中等": "medium",
-        "一般": "medium",
-        "提高": "medium",
-        "较难": "advanced",
-        "困难": "advanced",
-        "拔高": "advanced",
-        "压轴": "challenge",
-        "挑战": "challenge",
-    }
-    if v in mapping:
-        return mapping[v]
-    # Sometimes model outputs e.g. "较难/挑战"
-    for key, norm in mapping.items():
-        if key and key in raw:
-            return norm
-    return "basic"
+    return _normalize_difficulty_impl(value)
 
 
 def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-    errors: List[str] = []
-
-    subject = str(payload.get("subject", "")).strip()
-    if not subject:
-        errors.append("1) 学科 必填")
-
-    topic = str(payload.get("topic", "")).strip()
-    if not topic:
-        errors.append("1) 本节课主题 必填")
-
-    grade_level = str(payload.get("grade_level", "")).strip()
-    if not grade_level:
-        errors.append("2) 学生学段/年级 必填")
-
-    class_level_raw = str(payload.get("class_level", "")).strip()
-    class_level = normalize_class_level(class_level_raw)
-    if not class_level:
-        errors.append("2) 班级整体水平 必须是 偏弱/中等/较强/混合")
-
-    core_concepts = parse_list_value(payload.get("core_concepts"))
-    if len(core_concepts) < 3 or len(core_concepts) > 8:
-        errors.append("3) 核心概念/公式/规律 需要 3-8 个关键词")
-
-    typical_problem = str(payload.get("typical_problem", "")).strip()
-    if not typical_problem:
-        errors.append("4) 课堂典型题型/例题 必填")
-
-    misconceptions = parse_list_value(payload.get("misconceptions"))
-    if len(misconceptions) < 4:
-        errors.append("5) 易错点/易混点 至少 4 条")
-
-    duration = parse_duration(payload.get("duration_minutes") or payload.get("duration"))
-    if duration not in {20, 40, 60}:
-        errors.append("6) 作业时间 仅可选 20/40/60 分钟")
-
-    preferences_raw = parse_list_value(payload.get("preferences"))
-    preferences, invalid = normalize_preferences(preferences_raw)
-    if invalid:
-        errors.append(f"7) 作业偏好 无效项: {', '.join(invalid)}")
-    if not preferences:
-        errors.append("7) 作业偏好 至少选择 1 项")
-
-    extra_constraints = str(payload.get("extra_constraints", "") or "").strip()
-
-    if errors:
-        return None, errors
-
-    normalized = {
-        "subject": subject,
-        "topic": topic,
-        "grade_level": grade_level,
-        "class_level": class_level,
-        "core_concepts": core_concepts,
-        "typical_problem": typical_problem,
-        "misconceptions": misconceptions,
-        "duration_minutes": duration,
-        "preferences": preferences,
-        "extra_constraints": extra_constraints,
-    }
-    return normalized, []
+    return _validate_requirements_impl(payload)
 
 
 def save_assignment_requirements(
@@ -5620,24 +5307,14 @@ def save_assignment_requirements(
     created_by: str = "teacher",
     validate: bool = True,
 ) -> Dict[str, Any]:
-    payload = requirements
-    if validate:
-        normalized, errors = validate_requirements(requirements)
-        if errors:
-            return {"error": "invalid_requirements", "errors": errors}
-        payload = normalized or {}
-    out_dir = DATA_DIR / "assignments" / assignment_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    record = {
-        "assignment_id": assignment_id,
-        "date": date_str,
-        "created_by": created_by,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        **(payload or {}),
-    }
-    req_path = out_dir / "requirements.json"
-    req_path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "path": str(req_path), "requirements": record}
+    return _save_assignment_requirements_impl(
+        assignment_id,
+        requirements,
+        date_str,
+        deps=_assignment_requirements_deps(),
+        created_by=created_by,
+        validate=validate,
+    )
 
 
 def ensure_requirements_for_assignment(
@@ -5646,36 +5323,17 @@ def ensure_requirements_for_assignment(
     requirements: Optional[Dict[str, Any]],
     source: str,
 ) -> Optional[Dict[str, Any]]:
-    if source == "auto":
-        return None
-    if requirements:
-        return save_assignment_requirements(assignment_id, requirements, date_str, created_by="teacher")
-    req_path = DATA_DIR / "assignments" / assignment_id / "requirements.json"
-    if not req_path.exists():
-        return {"error": "requirements_missing", "detail": "请先提交作业要求（8项）。"}
-    return None
+    return _ensure_requirements_for_assignment_impl(
+        assignment_id,
+        date_str,
+        requirements,
+        source,
+        deps=_assignment_requirements_deps(),
+    )
 
 
 def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
-    lines = []
-    if errors:
-        lines.append("作业要求不完整或不规范，请补充/修正以下内容：")
-        for err in errors:
-            lines.append(f"- {err}")
-        lines.append("")
-    if include_assignment_id:
-        lines.append("请先提供作业ID（建议包含日期，如 A2403_2026-02-04），然后补全作业要求。")
-        lines.append("")
-    lines.append("请按以下格式补全作业要求（8项）：")
-    lines.append("1）学科 + 本节课主题：")
-    lines.append("2）学生学段/年级 & 班级整体水平（偏弱/中等/较强/混合）：")
-    lines.append("3）本节课核心概念/公式/规律（3–8个关键词）：")
-    lines.append("4）课堂典型题型/例题（给1题题干或描述题型特征即可）：")
-    lines.append("5）本节课易错点/易混点清单（至少4条，写清“错在哪里/混在哪里”）：")
-    lines.append("6）作业时间：20/40/60分钟（选一个）：")
-    lines.append("7）作业偏好（可多选）：A基础 B提升 C生活应用 D探究 E小测验 F错题反思：")
-    lines.append("8）额外限制（可选）：是否允许画图/用计算器/步骤规范/拓展点等")
-    return "\n".join(lines)
+    return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
 
 
 def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
@@ -5806,111 +5464,31 @@ def parse_grade_and_level(text: str) -> Tuple[str, str]:
 
 
 def extract_requirements_from_text(text: str) -> Dict[str, Any]:
-    if not text:
-        return {}
-    normalized = normalize_numbered_block(text)
-    items = {}
-    for idx in range(1, 9):
-        items[idx] = extract_numbered_item(normalized, idx)
-    if not any(items.values()):
-        return {}
-    req: Dict[str, Any] = {}
-    subject, topic = parse_subject_topic(items.get(1) or "")
-    if subject:
-        req["subject"] = subject
-    if topic:
-        req["topic"] = topic
-    grade_level, class_level = parse_grade_and_level(items.get(2) or "")
-    if grade_level:
-        req["grade_level"] = grade_level
-    if class_level:
-        req["class_level"] = class_level
-    if items.get(3):
-        req["core_concepts"] = parse_list_value(items.get(3))
-    if items.get(4):
-        req["typical_problem"] = items.get(4)
-    if items.get(5):
-        req["misconceptions"] = parse_list_value(items.get(5))
-    if items.get(6):
-        req["duration_minutes"] = parse_duration(items.get(6))
-    if items.get(7):
-        req["preferences"] = parse_list_value(items.get(7))
-    if items.get(8):
-        req["extra_constraints"] = items.get(8)
-    return req
+    return _extract_requirements_from_text_impl(text)
 
 
 def detect_assignment_intent(text: str) -> bool:
-    if not text:
-        return False
-    keywords = [
-        "生成作业",
-        "布置作业",
-        "作业生成",
-        "@physics-homework-generator",
-        "作业ID",
-        "作业 ID",
-    ]
-    if any(key in text for key in keywords):
-        return True
-    if re.search(r"(创建|新建|新增|安排|布置|生成|发)\S{0,6}作业", text):
-        return True
-    if "作业" in text and ("新" in text or "创建" in text or "安排" in text or "布置" in text or "生成" in text):
-        return True
-    if "作业" in text and re.search(r"\d{4}-\d{2}-\d{2}", text):
-        return True
-    return False
+    return _detect_assignment_intent_impl(text)
 
 
 def extract_assignment_id(text: str) -> Optional[str]:
-    if not text:
-        return None
-    match = re.search(
-        r"(?:作业ID|作业Id|作业id|ID|Id|id)\s*[:：]?\s*([\w\u4e00-\u9fff-]+_\d{4}-\d{2}-\d{2})",
-        text,
-    )
-    if match:
-        return match.group(1)
-    match = re.search(r"[\w\u4e00-\u9fff-]+_\d{4}-\d{2}-\d{2}", text)
-    if match:
-        return match.group(0)
-    return None
+    return _extract_assignment_id_impl(text)
 
 
 def extract_date(text: str) -> Optional[str]:
-    if not text:
-        return None
-    match = re.search(r"\d{4}-\d{2}-\d{2}", text)
-    if match:
-        return match.group(0)
-    return None
+    return _extract_date_impl(text)
 
 
 def extract_kp_list(text: str) -> List[str]:
-    if not text:
-        return []
-    match = re.search(r"知识点[:：\s]*([^\n]+)", text)
-    if not match:
-        return []
-    return parse_list_value(match.group(1))
+    return _extract_kp_list_impl(text)
 
 
 def extract_question_ids(text: str) -> List[str]:
-    if not text:
-        return []
-    return list(dict.fromkeys(re.findall(r"\bQ\d+\b", text)))
+    return _extract_question_ids_impl(text)
 
 
 def extract_per_kp(text: str) -> Optional[int]:
-    if not text:
-        return None
-    match = re.search(r"(?:每个|每)\s*(\d+)\s*题", text)
-    if not match:
-        return None
-    try:
-        return int(match.group(1))
-    except Exception:
-        return None
+    return _extract_per_kp_impl(text)
 
 
 def teacher_assignment_preflight(req: ChatRequest) -> Optional[str]:
@@ -9346,6 +8924,92 @@ def _exam_upload_start_deps():
     )
 
 
+def _assignment_requirements_deps():
+    return AssignmentRequirementsDeps(
+        data_dir=DATA_DIR,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
+def _assignment_upload_parse_deps():
+    return AssignmentUploadParseDeps(
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        now_monotonic=time.monotonic,
+        load_upload_job=load_upload_job,
+        upload_job_path=upload_job_path,
+        write_upload_job=write_upload_job,
+        extract_text_from_file=extract_text_from_file,
+        llm_parse_assignment_payload=llm_parse_assignment_payload,
+        compute_requirements_missing=compute_requirements_missing,
+        llm_autofill_requirements=llm_autofill_requirements,
+        diag_log=diag_log,
+    )
+
+
+def _assignment_upload_start_deps():
+    return AssignmentUploadStartDeps(
+        new_job_id=lambda: f"job_{uuid.uuid4().hex[:12]}",
+        parse_date_str=parse_date_str,
+        upload_job_path=upload_job_path,
+        sanitize_filename=sanitize_filename,
+        save_upload_file=save_upload_file,
+        parse_ids_value=parse_ids_value,
+        resolve_scope=resolve_scope,
+        normalize_due_at=normalize_due_at,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        write_upload_job=lambda job_id, updates, overwrite=False: write_upload_job(job_id, updates, overwrite=overwrite),
+        enqueue_upload_job=enqueue_upload_job,
+        diag_log=diag_log,
+    )
+
+
+def _assignment_upload_query_deps():
+    return AssignmentUploadQueryDeps(
+        load_upload_job=load_upload_job,
+        upload_job_path=upload_job_path,
+        assignment_upload_not_ready_detail=_assignment_upload_not_ready_detail_impl,
+        load_assignment_draft_override=_load_assignment_draft_override_impl,
+        build_assignment_upload_draft=_build_assignment_upload_draft_impl,
+        merge_requirements=merge_requirements,
+        compute_requirements_missing=compute_requirements_missing,
+        parse_list_value=parse_list_value,
+    )
+
+
+def _assignment_upload_draft_save_deps():
+    return AssignmentUploadDraftSaveDeps(
+        load_upload_job=load_upload_job,
+        upload_job_path=upload_job_path,
+        assignment_upload_not_ready_detail=_assignment_upload_not_ready_detail_impl,
+        clean_assignment_draft_questions=_clean_assignment_draft_questions_impl,
+        save_assignment_draft_override=_save_assignment_draft_override_impl,
+        merge_requirements=merge_requirements,
+        compute_requirements_missing=compute_requirements_missing,
+        write_upload_job=write_upload_job,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
+def _assignment_upload_confirm_deps():
+    return AssignmentUploadConfirmDeps(
+        data_dir=DATA_DIR,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        discussion_complete_marker=DISCUSSION_COMPLETE_MARKER,
+        write_upload_job=write_upload_job,
+        merge_requirements=merge_requirements,
+        compute_requirements_missing=compute_requirements_missing,
+        write_uploaded_questions=write_uploaded_questions,
+        parse_date_str=parse_date_str,
+        save_assignment_requirements=save_assignment_requirements,
+        parse_ids_value=parse_ids_value,
+        resolve_scope=resolve_scope,
+        normalize_due_at=normalize_due_at,
+        compute_expected_students=compute_expected_students,
+        atomic_write_json=_atomic_write_json,
+        copy2=shutil.copy2,
+    )
+
+
 def _exam_api_deps():
     return ExamApiDeps(exam_get=exam_get)
 
@@ -9796,232 +9460,51 @@ async def assignment_upload_start(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    date_str = parse_date_str(date)
-    job_id = f"job_{uuid.uuid4().hex[:12]}"
-    job_dir = upload_job_path(job_id)
-    source_dir = job_dir / "source"
-    answers_dir = job_dir / "answer_source"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    answers_dir.mkdir(parents=True, exist_ok=True)
-
-    saved_sources = []
-    delivery_mode = "image"
-    for f in files:
-        fname = sanitize_filename(f.filename)
-        if not fname:
-            continue
-        dest = source_dir / fname
-        await save_upload_file(f, dest)
-        saved_sources.append(fname)
-        if dest.suffix.lower() == ".pdf":
-            delivery_mode = "pdf"
-
-    saved_answers = []
-    if answer_files:
-        for f in answer_files:
-            fname = sanitize_filename(f.filename)
-            if not fname:
-                continue
-            dest = answers_dir / fname
-            await save_upload_file(f, dest)
-            saved_answers.append(fname)
-
-    if not saved_sources:
-        raise HTTPException(status_code=400, detail="No source files uploaded")
-
-    student_ids_list = parse_ids_value(student_ids)
-    scope_val = resolve_scope(scope or "", student_ids_list, class_name or "")
-    if scope_val == "student" and not student_ids_list:
-        raise HTTPException(status_code=400, detail="student scope requires student_ids")
-    if scope_val == "class" and not class_name:
-        raise HTTPException(status_code=400, detail="class scope requires class_name")
-
-    record = {
-        "job_id": job_id,
-        "assignment_id": assignment_id,
-        "date": date_str,
-        "due_at": normalize_due_at(due_at),
-        "scope": scope_val,
-        "class_name": class_name or "",
-        "student_ids": student_ids_list,
-        "source_files": saved_sources,
-        "answer_files": saved_answers,
-        "delivery_mode": delivery_mode,
-        "language": language or "zh",
-        "ocr_mode": ocr_mode or "FREE_OCR",
-        "status": "queued",
-        "progress": 0,
-        "step": "queued",
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    write_upload_job(job_id, record, overwrite=True)
-    enqueue_upload_job(job_id)
-    diag_log("upload.job.created", {"job_id": job_id, "assignment_id": assignment_id})
-
-    return {
-        "ok": True,
-        "job_id": job_id,
-        "assignment_id": assignment_id,
-        "status": "queued",
-        "message": "解析任务已创建，后台处理中。",
-    }
+    try:
+        return await _start_assignment_upload_impl(
+            assignment_id=assignment_id,
+            date=date,
+            due_at=due_at,
+            scope=scope,
+            class_name=class_name,
+            student_ids=student_ids,
+            files=files,
+            answer_files=answer_files,
+            ocr_mode=ocr_mode,
+            language=language,
+            deps=_assignment_upload_start_deps(),
+        )
+    except AssignmentUploadStartError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.get("/assignment/upload/status")
 async def assignment_upload_status(job_id: str):
     try:
-        job = load_upload_job(job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-    return job
+        return _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps())
+    except AssignmentUploadQueryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.get("/assignment/upload/draft")
 async def assignment_upload_draft(job_id: str):
     try:
-        job = load_upload_job(job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    status = job.get("status")
-    if status not in {"done", "confirmed"}:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，暂无法打开草稿。",
-                "status": status,
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
-        )
-
-    job_dir = upload_job_path(job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        raise HTTPException(status_code=400, detail="parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-
-    override_path = job_dir / "draft_override.json"
-    override: Dict[str, Any] = {}
-    if override_path.exists():
-        try:
-            override = json.loads(override_path.read_text(encoding="utf-8"))
-        except Exception:
-            override = {}
-
-    base_questions = parsed.get("questions") or []
-    base_requirements = parsed.get("requirements") or {}
-    missing = parsed.get("missing") or []
-    warnings = parsed.get("warnings") or []
-
-    questions = base_questions
-    if isinstance(override.get("questions"), list) and override.get("questions"):
-        questions = override.get("questions") or base_questions
-
-    requirements = base_requirements
-    if isinstance(override.get("requirements"), dict) and override.get("requirements"):
-        requirements = merge_requirements(base_requirements, override.get("requirements") or {}, overwrite=True)
-
-    missing = compute_requirements_missing(requirements)
-    if override.get("requirements_missing"):
-        # Allow override to keep extra missing markers (e.g. uncertain)
-        try:
-            missing = sorted(set(missing + parse_list_value(override.get("requirements_missing"))))
-        except Exception:
-            pass
-
-    draft = {
-        "job_id": job_id,
-        "assignment_id": job.get("assignment_id"),
-        "date": job.get("date"),
-        "due_at": job.get("due_at") or "",
-        "scope": job.get("scope"),
-        "class_name": job.get("class_name"),
-        "student_ids": job.get("student_ids") or [],
-        "delivery_mode": parsed.get("delivery_mode") or job.get("delivery_mode") or "image",
-        "source_files": job.get("source_files") or [],
-        "answer_files": job.get("answer_files") or [],
-        "question_count": len(questions) if isinstance(questions, list) else 0,
-        "requirements": requirements,
-        "requirements_missing": missing,
-        "warnings": warnings,
-        "questions": questions,
-        "autofilled": parsed.get("autofilled") or False,
-        "draft_saved": bool(override),
-        "draft_version": int(job.get("draft_version") or 1),
-    }
-    return {"ok": True, "draft": draft}
+        return _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps())
+    except AssignmentUploadQueryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/assignment/upload/draft/save")
 async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
     try:
-        job = load_upload_job(req.job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    if job.get("status") not in {"done", "confirmed"}:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，暂无法保存草稿。",
-                "status": job.get("status"),
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
+        return _save_assignment_upload_draft_impl(
+            req.job_id,
+            req.requirements,
+            req.questions,
+            deps=_assignment_upload_draft_save_deps(),
         )
-
-    job_dir = upload_job_path(req.job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        raise HTTPException(status_code=400, detail="parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-
-    override: Dict[str, Any] = {}
-    if req.requirements is not None:
-        if not isinstance(req.requirements, dict):
-            raise HTTPException(status_code=400, detail="requirements must be an object")
-        override["requirements"] = req.requirements
-    if req.questions is not None:
-        if not isinstance(req.questions, list):
-            raise HTTPException(status_code=400, detail="questions must be an array")
-        # Basic validation: require stems to exist (can be empty, but warn)
-        cleaned = []
-        for q in req.questions:
-            if not isinstance(q, dict):
-                continue
-            stem = str(q.get("stem") or "").strip()
-            cleaned.append({**q, "stem": stem})
-        override["questions"] = cleaned
-
-    base_requirements = parsed.get("requirements") or {}
-    # Draft override represents teacher edits and should replace invalid/autofilled values.
-    merged_requirements = merge_requirements(base_requirements, override.get("requirements") or {}, overwrite=True)
-    missing = compute_requirements_missing(merged_requirements)
-
-    override["requirements_missing"] = missing
-    override["saved_at"] = datetime.now().isoformat(timespec="seconds")
-    override_path = job_dir / "draft_override.json"
-    override_path.write_text(json.dumps(override, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    write_upload_job(
-        req.job_id,
-        {
-            "requirements": merged_requirements,
-            "requirements_missing": missing,
-            "question_count": len(override.get("questions") or parsed.get("questions") or []),
-            "draft_saved": True,
-        },
-    )
-
-    return {
-        "ok": True,
-        "job_id": req.job_id,
-        "requirements_missing": missing,
-        "message": "草稿已保存，将用于创建作业。",
-    }
+    except AssignmentUploadDraftSaveError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.post("/assignment/upload/confirm")
@@ -10031,179 +9514,26 @@ async def assignment_upload_confirm(req: UploadConfirmRequest):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job not found")
 
-    status = job.get("status")
-    if status == "confirmed":
-        # Idempotency: if already confirmed, return the existing status so the UI can recover after refresh.
-        return {
-            "ok": True,
-            "assignment_id": job.get("assignment_id"),
-            "status": "confirmed",
-            "message": "作业已创建（已确认）。",
-        }
-    if status != "done":
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "job_not_ready",
-                "message": "解析尚未完成，请稍后再创建作业。",
-                "status": status,
-                "step": job.get("step"),
-                "progress": job.get("progress"),
-            },
-        )
-
-    # Mark as confirming early so the UI can show progress even if this request is slow.
-    write_upload_job(
-        req.job_id,
-        {
-            "status": "confirming",
-            "step": "start",
-            "progress": 5,
-            "confirm_started_at": datetime.now().isoformat(timespec="seconds"),
-        },
-    )
-
-    job_dir = upload_job_path(req.job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        write_upload_job(req.job_id, {"status": "failed", "error": "parsed result missing", "step": "failed"})
-        raise HTTPException(status_code=400, detail="parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
-
-    override_path = job_dir / "draft_override.json"
-    override: Dict[str, Any] = {}
-    if override_path.exists():
-        try:
-            override = json.loads(override_path.read_text(encoding="utf-8"))
-        except Exception:
-            override = {}
-
-    questions = parsed.get("questions") or []
-    if isinstance(override.get("questions"), list) and override.get("questions"):
-        questions = override.get("questions") or questions
-
-    requirements = parsed.get("requirements") or {}
-    if isinstance(override.get("requirements"), dict) and override.get("requirements"):
-        requirements = merge_requirements(requirements, override.get("requirements") or {}, overwrite=True)
-    missing = parsed.get("missing") or []
-    warnings = parsed.get("warnings") or []
-    delivery_mode = parsed.get("delivery_mode") or job.get("delivery_mode") or "image"
-    autofilled = parsed.get("autofilled") or False
-
-    if req.requirements_override:
-        requirements = merge_requirements(requirements, req.requirements_override, overwrite=True)
-        missing = compute_requirements_missing(requirements)
-    else:
-        missing = compute_requirements_missing(requirements)
+    try:
+        ready = _ensure_assignment_upload_confirm_ready_impl(job)
+    except AssignmentUploadConfirmGateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if ready is not None:
+        return ready
 
     strict = True if req.strict_requirements is None else bool(req.strict_requirements)
-    if strict and missing:
-        write_upload_job(
+    job_dir = upload_job_path(req.job_id)
+    try:
+        return _confirm_assignment_upload_impl(
             req.job_id,
-            {
-                "status": "done",
-                "step": "await_requirements",
-                "progress": 100,
-                "requirements_missing": missing,
-            },
+            job,
+            job_dir,
+            requirements_override=req.requirements_override,
+            strict_requirements=strict,
+            deps=_assignment_upload_confirm_deps(),
         )
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "requirements_missing", "missing": missing, "message": "作业要求未补全，无法创建作业。"},
-        )
-
-    assignment_id = str(job.get("assignment_id") or "").strip()
-    if not assignment_id:
-        write_upload_job(req.job_id, {"status": "failed", "error": "assignment_id missing", "step": "failed"})
-        raise HTTPException(status_code=400, detail="assignment_id missing")
-    out_dir = DATA_DIR / "assignments" / assignment_id
-    meta_path = out_dir / "meta.json"
-    if meta_path.exists():
-        write_upload_job(req.job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
-        raise HTTPException(status_code=409, detail="assignment already exists")
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # copy sources
-    write_upload_job(req.job_id, {"step": "copy_files", "progress": 20})
-    source_dir = out_dir / "source"
-    answer_dir = out_dir / "answer_source"
-    source_dir.mkdir(parents=True, exist_ok=True)
-    answer_dir.mkdir(parents=True, exist_ok=True)
-    for fname in job.get("source_files") or []:
-        src = (job_dir / "source" / fname)
-        if src.exists():
-            shutil.copy2(src, source_dir / fname)
-    for fname in job.get("answer_files") or []:
-        src = (job_dir / "answer_source" / fname)
-        if src.exists():
-            shutil.copy2(src, answer_dir / fname)
-
-    write_upload_job(req.job_id, {"step": "write_questions", "progress": 55})
-    rows = write_uploaded_questions(out_dir, assignment_id, questions)
-    date_str = parse_date_str(job.get("date"))
-    write_upload_job(req.job_id, {"step": "save_requirements", "progress": 70})
-    save_assignment_requirements(
-        assignment_id,
-        requirements,
-        date_str,
-        created_by="teacher_upload",
-        validate=False,
-    )
-
-    student_ids_list = parse_ids_value(job.get("student_ids") or [])
-    scope_val = resolve_scope(job.get("scope") or "", student_ids_list, job.get("class_name") or "")
-    if scope_val == "student" and not student_ids_list:
-        raise HTTPException(status_code=400, detail="student scope requires student_ids")
-
-    meta = {
-        "assignment_id": assignment_id,
-        "date": date_str,
-        "due_at": normalize_due_at(job.get("due_at")) or "",
-        "mode": "upload",
-        "target_kp": requirements.get("core_concepts") or [],
-        "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
-        "class_name": job.get("class_name") or "",
-        "student_ids": student_ids_list,
-        "scope": scope_val,
-        "expected_students": compute_expected_students(scope_val, job.get("class_name") or "", student_ids_list),
-        "expected_students_generated_at": datetime.now().isoformat(timespec="seconds"),
-        "completion_policy": {
-            "requires_discussion": True,
-            "discussion_marker": DISCUSSION_COMPLETE_MARKER,
-            "requires_submission": True,
-            "min_graded_total": 1,
-            "best_attempt": "score_earned_then_correct_then_graded_total",
-            "version": 1,
-        },
-        "source": "teacher",
-        "delivery_mode": delivery_mode,
-        "source_files": job.get("source_files") or [],
-        "answer_files": job.get("answer_files") or [],
-        "requirements_missing": missing,
-        "requirements_autofilled": autofilled,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "job_id": req.job_id,
-    }
-    _atomic_write_json(meta_path, meta)
-
-    write_upload_job(
-        req.job_id,
-        {
-            "status": "confirmed",
-            "step": "confirmed",
-            "progress": 100,
-            "confirmed_at": datetime.now().isoformat(timespec="seconds"),
-        },
-    )
-
-    return {
-        "ok": True,
-        "assignment_id": assignment_id,
-        "question_count": len(rows),
-        "requirements_missing": missing,
-        "warnings": warnings,
-        "status": "confirmed",
-    }
+    except AssignmentUploadConfirmError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 @app.get("/assignment/{assignment_id}/download")
