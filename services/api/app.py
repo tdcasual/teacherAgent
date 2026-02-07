@@ -204,6 +204,19 @@ from .teacher_memory_insights_service import (
     TeacherMemoryInsightsDeps,
     teacher_memory_insights as _teacher_memory_insights_impl,
 )
+from .teacher_memory_record_service import (
+    TeacherMemoryRecordDeps,
+    mark_teacher_session_memory_flush as _mark_teacher_session_memory_flush_impl,
+    teacher_memory_auto_infer_candidate as _teacher_memory_auto_infer_candidate_impl,
+    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
+    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
+    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
+    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
+    teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
+    teacher_memory_recent_user_turns as _teacher_memory_recent_user_turns_impl,
+    teacher_session_compaction_cycle_no as _teacher_session_compaction_cycle_no_impl,
+    teacher_session_index_item as _teacher_session_index_item_impl,
+)
 from .teacher_memory_rules_service import (
     teacher_memory_age_days as _teacher_memory_age_days_impl,
     teacher_memory_conflicts as _teacher_memory_conflicts_impl,
@@ -1662,34 +1675,7 @@ def _teacher_memory_active_applied_records(
 
 
 def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: int = 24) -> List[str]:
-    path = teacher_session_file(teacher_id, session_id)
-    if not path.exists():
-        return []
-    take = max(1, min(int(limit or 24), 120))
-    out: List[str] = []
-    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    for line in reversed(lines):
-        text = str(line or "").strip()
-        if not text:
-            continue
-        try:
-            rec = json.loads(text)
-        except Exception:
-            continue
-        if not isinstance(rec, dict):
-            continue
-        if str(rec.get("role") or "") != "user":
-            continue
-        if bool(rec.get("synthetic")):
-            continue
-        content = str(rec.get("content") or "").strip()
-        if not content:
-            continue
-        out.append(content[:400])
-        if len(out) >= take:
-            break
-    out.reverse()
-    return out
+    return _teacher_memory_recent_user_turns_impl(teacher_id, session_id, deps=_teacher_memory_record_deps(), limit=limit)
 
 
 def _teacher_memory_loose_match(a: str, b: str) -> bool:
@@ -1697,61 +1683,15 @@ def _teacher_memory_loose_match(a: str, b: str) -> bool:
 
 
 def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str) -> Optional[Dict[str, Any]]:
-    if not TEACHER_MEMORY_AUTO_INFER_ENABLED:
-        return None
-    text = str(user_text or "").strip()
-    norm = _teacher_memory_norm_text(text)
-    if len(norm) < TEACHER_MEMORY_AUTO_INFER_MIN_CHARS:
-        return None
-    if any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS):
-        return None
-    if any(p.search(text) for p in _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS):
-        return None
-    if not any(p.search(text) for p in _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS):
-        return None
-    history = _teacher_memory_recent_user_turns(
-        teacher_id,
-        session_id,
-        limit=TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
-    )
-    similar_hits = 0
-    for prior in history:
-        if _teacher_memory_loose_match(text, prior):
-            similar_hits += 1
-    if similar_hits < TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS:
-        return None
-    return {
-        "target": "MEMORY",
-        "title": "自动记忆：老师默认偏好",
-        "content": text[:1200].strip(),
-        "trigger": "implicit_repeated_preference",
-        "similar_hits": similar_hits,
-    }
+    return _teacher_memory_auto_infer_candidate_impl(teacher_id, session_id, user_text, deps=_teacher_memory_record_deps())
 
 
 def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, Any]:
-    for item in load_teacher_sessions_index(teacher_id):
-        if str(item.get("session_id") or "") == str(session_id):
-            return item
-    return {}
+    return _teacher_session_index_item_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
 
 
 def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_no: int) -> None:
-    items = load_teacher_sessions_index(teacher_id)
-    now = datetime.now().isoformat(timespec="seconds")
-    found: Optional[Dict[str, Any]] = None
-    for item in items:
-        if item.get("session_id") == session_id:
-            found = item
-            break
-    if found is None:
-        found = {"session_id": session_id, "message_count": 0}
-        items.append(found)
-    found["updated_at"] = now
-    found["memory_flush_at"] = now
-    found["memory_flush_cycle"] = max(1, int(cycle_no or 1))
-    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    save_teacher_sessions_index(teacher_id, items[:SESSION_INDEX_MAX_ITEMS])
+    _mark_teacher_session_memory_flush_impl(teacher_id, session_id, cycle_no, deps=_teacher_memory_record_deps())
 
 
 def _teacher_memory_has_term(text: str, terms: Tuple[str, ...]) -> bool:
@@ -1774,42 +1714,17 @@ def _teacher_memory_find_conflicting_applied(
     target: str,
     content: str,
 ) -> List[str]:
-    if str(target or "").upper() != "MEMORY":
-        return []
-    out: List[str] = []
-    for rec in _teacher_memory_recent_proposals(teacher_id, limit=500):
-        rid = str(rec.get("proposal_id") or "").strip()
-        if not rid or rid == proposal_id:
-            continue
-        if str(rec.get("status") or "").strip().lower() != "applied":
-            continue
-        if str(rec.get("target") or "").strip().upper() != "MEMORY":
-            continue
-        if rec.get("superseded_by"):
-            continue
-        old_content = str(rec.get("content") or "")
-        if _teacher_memory_conflicts(content, old_content):
-            out.append(rid)
-    return out
+    return _teacher_memory_find_conflicting_applied_impl(
+        teacher_id,
+        proposal_id=proposal_id,
+        target=target,
+        content=content,
+        deps=_teacher_memory_record_deps(),
+    )
 
 
 def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
-    if not proposal_ids:
-        return
-    stamp = datetime.now().isoformat(timespec="seconds")
-    for pid in proposal_ids:
-        path = _teacher_proposal_path(teacher_id, pid)
-        if not path.exists():
-            continue
-        try:
-            rec = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            rec = {}
-        if not isinstance(rec, dict):
-            continue
-        rec["superseded_at"] = stamp
-        rec["superseded_by"] = str(by_proposal_id or "")
-        _atomic_write_json(path, rec)
+    _teacher_memory_mark_superseded_impl(teacher_id, proposal_ids, by_proposal_id, deps=_teacher_memory_record_deps())
 
 
 def teacher_memory_propose(
@@ -1852,51 +1767,11 @@ def _teacher_memory_stable_hash(*parts: str) -> str:
 
 
 def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
-    ensure_teacher_workspace(teacher_id)
-    proposals_dir = teacher_workspace_dir(teacher_id) / "proposals"
-    if not proposals_dir.exists():
-        return []
-    take = max(1, min(int(limit or 200), 1000))
-    files = sorted(
-        proposals_dir.glob("*.json"),
-        key=lambda p: p.stat().st_mtime if p.exists() else 0,
-        reverse=True,
-    )
-    out: List[Dict[str, Any]] = []
-    for path in files:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if not isinstance(data, dict):
-            continue
-        if "proposal_id" not in data:
-            data["proposal_id"] = path.stem
-        out.append(data)
-        if len(out) >= take:
-            break
-    return out
+    return _teacher_memory_recent_proposals_impl(teacher_id, deps=_teacher_memory_record_deps(), limit=limit)
 
 
 def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
-    if TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY <= 0:
-        return False
-    today = datetime.now().date().isoformat()
-    count = 0
-    for rec in _teacher_memory_recent_proposals(teacher_id, limit=300):
-        created_at = str(rec.get("created_at") or "")
-        if not created_at.startswith(today):
-            continue
-        status = str(rec.get("status") or "").strip().lower()
-        if status not in {"proposed", "applied"}:
-            continue
-        source = str(rec.get("source") or "").strip().lower()
-        if not source.startswith("auto_"):
-            continue
-        count += 1
-        if count >= TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY:
-            return True
-    return False
+    return _teacher_memory_auto_quota_reached_impl(teacher_id, deps=_teacher_memory_record_deps())
 
 
 def _teacher_memory_find_duplicate(
@@ -1906,31 +1781,17 @@ def _teacher_memory_find_duplicate(
     content: str,
     dedupe_key: str,
 ) -> Optional[Dict[str, Any]]:
-    target_norm = str(target or "MEMORY").upper()
-    content_norm = _teacher_memory_norm_text(content)
-    for rec in _teacher_memory_recent_proposals(teacher_id, limit=300):
-        status = str(rec.get("status") or "").strip().lower()
-        if status not in {"proposed", "applied"}:
-            continue
-        rec_key = str(rec.get("dedupe_key") or "").strip()
-        if rec_key and rec_key == dedupe_key:
-            return rec
-        rec_target = str(rec.get("target") or "").upper()
-        if rec_target != target_norm:
-            continue
-        rec_content_norm = _teacher_memory_norm_text(str(rec.get("content") or ""))
-        if content_norm and rec_content_norm and rec_content_norm == content_norm:
-            return rec
-    return None
+    return _teacher_memory_find_duplicate_impl(
+        teacher_id,
+        target=target,
+        content=content,
+        dedupe_key=dedupe_key,
+        deps=_teacher_memory_record_deps(),
+    )
 
 
 def _teacher_session_compaction_cycle_no(teacher_id: str, session_id: str) -> int:
-    item = _teacher_session_index_item(teacher_id, session_id)
-    try:
-        runs = int(item.get("compaction_runs") or 0)
-    except Exception:
-        runs = 0
-    return max(1, runs + 1)
+    return _teacher_session_compaction_cycle_no_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
 
 
 def teacher_memory_auto_propose_from_turn(
@@ -7119,6 +6980,31 @@ def _teacher_memory_propose_deps():
             proposal_id,
             approve=approve,
         ),
+    )
+
+
+def _teacher_memory_record_deps():
+    return TeacherMemoryRecordDeps(
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        teacher_workspace_dir=teacher_workspace_dir,
+        teacher_session_file=teacher_session_file,
+        load_teacher_sessions_index=load_teacher_sessions_index,
+        save_teacher_sessions_index=save_teacher_sessions_index,
+        session_index_max_items=SESSION_INDEX_MAX_ITEMS,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        norm_text=_teacher_memory_norm_text,
+        loose_match=_teacher_memory_loose_match,
+        conflicts=_teacher_memory_conflicts,
+        auto_infer_enabled=TEACHER_MEMORY_AUTO_INFER_ENABLED,
+        auto_infer_min_chars=TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
+        auto_infer_block_patterns=_TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
+        temporary_hint_patterns=_TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
+        auto_infer_stable_patterns=_TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
+        auto_infer_lookback_turns=TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
+        auto_infer_min_repeats=TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS,
+        auto_max_proposals_per_day=TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
+        proposal_path=_teacher_proposal_path,
+        atomic_write_json=_atomic_write_json,
     )
 
 
