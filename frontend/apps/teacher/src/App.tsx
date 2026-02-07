@@ -628,6 +628,7 @@ const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?
 }
 
 type WorkbenchTab = 'skills' | 'memory' | 'workflow'
+type WheelScrollZone = 'chat' | 'session' | 'workbench'
 
 type WorkflowStepState = 'todo' | 'active' | 'done' | 'error'
 type WorkflowIndicatorTone = 'neutral' | 'active' | 'success' | 'error'
@@ -774,8 +775,10 @@ export default function App() {
   const [examDraftActionError, setExamDraftActionError] = useState('')
   const [examConfirming, setExamConfirming] = useState(false)
   const [topbarHeight, setTopbarHeight] = useState(64)
+  const appRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const topbarRef = useRef<HTMLElement | null>(null)
+  const wheelScrollZoneRef = useRef<WheelScrollZone>('chat')
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
   const activeSessionRef = useRef(activeSessionId)
   const historyRequestRef = useRef(0)
@@ -2382,6 +2385,106 @@ export default function App() {
     return window.matchMedia('(max-width: 900px)').matches
   }, [])
 
+  const setWheelScrollZone = useCallback((zone: WheelScrollZone) => {
+    wheelScrollZoneRef.current = zone
+  }, [])
+
+  const resolveWheelScrollTarget = useCallback(
+    (zone: WheelScrollZone) => {
+      const root = appRef.current
+      if (!root) return null
+      if (zone === 'session') {
+        if (!sessionSidebarOpen) return null
+        return root.querySelector('.session-groups') as HTMLElement | null
+      }
+      if (zone === 'workbench') {
+        if (!skillsOpen) return null
+        return (
+          (root.querySelector('.skills-panel.open .skills-body') as HTMLElement | null) ||
+          (root.querySelector('.skills-panel.open .workbench-memory') as HTMLElement | null)
+        )
+      }
+      return root.querySelector('.messages') as HTMLElement | null
+    },
+    [sessionSidebarOpen, skillsOpen],
+  )
+
+  useEffect(() => {
+    if (mainView !== 'chat') {
+      setWheelScrollZone('chat')
+      return
+    }
+    if (wheelScrollZoneRef.current === 'session' && !sessionSidebarOpen) {
+      setWheelScrollZone('chat')
+    }
+    if (wheelScrollZoneRef.current === 'workbench' && !skillsOpen) {
+      setWheelScrollZone('chat')
+    }
+  }, [mainView, sessionSidebarOpen, setWheelScrollZone, skillsOpen])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const enabled = mainView === 'chat' && !isMobileViewport()
+    if (!enabled) {
+      setWheelScrollZone('chat')
+      return
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      const root = appRef.current
+      if (!root || !root.contains(target)) return
+      if (sessionSidebarOpen && target.closest('.session-sidebar')) {
+        setWheelScrollZone('session')
+        return
+      }
+      if (skillsOpen && target.closest('.skills-panel')) {
+        setWheelScrollZone('workbench')
+        return
+      }
+      if (target.closest('.chat-shell')) {
+        setWheelScrollZone('chat')
+      }
+    }
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setWheelScrollZone('chat')
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isMobileViewport, mainView, sessionSidebarOpen, setWheelScrollZone, skillsOpen])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const enabled = mainView === 'chat' && !isMobileViewport()
+    if (!enabled) return
+    const onWheel = (event: WheelEvent) => {
+      if (event.defaultPrevented || event.ctrlKey) return
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      const root = appRef.current
+      if (!root || !root.contains(target)) return
+      if (target.closest('textarea, input, select, [contenteditable="true"]')) return
+
+      let zone = wheelScrollZoneRef.current
+      if (zone === 'session' && !sessionSidebarOpen) zone = 'chat'
+      if (zone === 'workbench' && !skillsOpen) zone = 'chat'
+      const destination = resolveWheelScrollTarget(zone) || resolveWheelScrollTarget('chat')
+      if (!destination) return
+
+      if (event.deltaY) destination.scrollTop += event.deltaY
+      if (event.deltaX) destination.scrollLeft += event.deltaX
+      event.preventDefault()
+    }
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true })
+    return () => {
+      window.removeEventListener('wheel', onWheel, true)
+    }
+  }, [isMobileViewport, mainView, resolveWheelScrollTarget, sessionSidebarOpen, skillsOpen])
+
   const closeSessionSidebarOnMobile = useCallback(() => {
     if (isMobileViewport()) {
       setSessionSidebarOpen(false)
@@ -2781,6 +2884,7 @@ export default function App() {
     const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
+    setWheelScrollZone('chat')
     enableAutoScroll()
     setMessages((prev) => [
       ...prev,
@@ -3328,7 +3432,7 @@ export default function App() {
   }
 
   return (
-    <div className="app teacher" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px` }}>
+    <div ref={appRef} className="app teacher" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px` }}>
       <header ref={topbarRef} className="topbar">
         <div className="top-left">
           <div className="brand">物理教学助手 · 老师端</div>

@@ -19,6 +19,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: "Noto Sans SC", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
@@ -31,6 +37,12 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg);
+}
+
+.app.teacher {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .topbar {
@@ -222,6 +234,7 @@ body {
   flex-direction: column;
   gap: 8px;
   overflow: auto;
+  overscroll-behavior: contain;
   min-height: 0;
   flex: 1;
   padding-right: 4px;
@@ -498,6 +511,8 @@ select:focus {
   grid-template-columns: minmax(0, 1fr);
   position: relative;
   background: var(--surface);
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .teacher-layout.chat-view {
@@ -543,6 +558,7 @@ select:focus {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 10px 0 6px;
   background: var(--surface);
 }
@@ -1212,6 +1228,7 @@ select:focus {
   box-shadow: none;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .workbench-workflow {
@@ -1459,6 +1476,7 @@ select:focus {
   display: grid;
   gap: 12px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
   padding-right: 4px;
@@ -1745,6 +1763,14 @@ select:focus {
   overflow: auto;
   font-size: 12px;
   line-height: 1.45;
+}
+
+@media (min-width: 901px) {
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
 }
 
 @media (max-width: 900px) {

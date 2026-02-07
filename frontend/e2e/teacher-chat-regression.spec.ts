@@ -155,6 +155,16 @@ const buildHistoryMessages = (count: number) => {
   return messages
 }
 
+const buildSkills = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `physics-skill-${index + 1}`,
+    title: `技能-${index + 1}`,
+    desc: `技能描述-${index + 1}`,
+    prompts: ['执行示例'],
+    examples: ['示例问题'],
+    allowed_roles: ['teacher'],
+  }))
+
 test('uses @agent and $skill tokens and sends cleaned payload', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
   const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
@@ -175,6 +185,209 @@ test('uses @agent and $skill tokens and sends cleaned payload', async ({ page })
   expect(payload.messages?.[payload.messages.length - 1]?.content).toBe('生成作业')
 
   await expect(page.getByText('回执：生成作业')).toBeVisible()
+})
+
+test('desktop enforces isolated scroll contract', async ({ page }) => {
+  const denseSkills = buildSkills(60)
+  await setupTeacherState(page)
+  await setupApiMocks(page, { historyMessages: buildHistoryMessages(120) })
+  await page.route('http://localhost:8000/skills', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ skills: denseSkills }),
+    })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: '展开会话' }).click()
+
+  const appOverflow = await page.locator('.app.teacher').evaluate((el) => getComputedStyle(el).overflowY)
+  const bodyOverflow = await page.evaluate(() => getComputedStyle(document.body).overflowY)
+  const messagesOverscroll = await page.locator('.messages').evaluate((el) => getComputedStyle(el).overscrollBehaviorY)
+  const sessionOverscroll = await page.locator('.session-groups').evaluate((el) => getComputedStyle(el).overscrollBehaviorY)
+  const skillsOverscroll = await page.locator('.skills-body').evaluate((el) => getComputedStyle(el).overscrollBehaviorY)
+
+  expect(appOverflow).toBe('hidden')
+  expect(bodyOverflow).toBe('hidden')
+  expect(messagesOverscroll).toBe('contain')
+  expect(sessionOverscroll).toBe('contain')
+  expect(skillsOverscroll).toBe('contain')
+})
+
+test('desktop wheel on chat does not move page or side panel anchors', async ({ page }) => {
+  const { chatStartCalls } = await openTeacherApp(page)
+  await page.getByRole('button', { name: '展开会话' }).click()
+  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const sendBtn = page.getByRole('button', { name: '发送' })
+
+  for (let i = 1; i <= 28; i += 1) {
+    const text = `滚轮锚点回归-${i}`
+    await composer.fill(text)
+    await sendBtn.click()
+    await expect.poll(() => chatStartCalls.length).toBe(i)
+    await expect(page.getByText(`回执：${text}`)).toBeVisible()
+  }
+
+  await page.locator('.messages').evaluate((el) => {
+    el.style.height = '160px'
+    el.style.maxHeight = '160px'
+    el.style.overflow = 'auto'
+    el.scrollTop = el.scrollHeight
+    el.dispatchEvent(new Event('scroll'))
+  })
+
+  const before = await page.evaluate(() => {
+    const left = document.querySelector('.session-sidebar')?.getBoundingClientRect().top ?? -1
+    const right = document.querySelector('.skills-panel')?.getBoundingClientRect().top ?? -1
+    const messages = document.querySelector('.messages')
+    return {
+      winY: window.scrollY,
+      bodyY: document.scrollingElement ? document.scrollingElement.scrollTop : -1,
+      leftTop: left,
+      rightTop: right,
+      msgTop: messages?.scrollTop ?? -1,
+      msgMax: (messages?.scrollHeight ?? 0) - (messages?.clientHeight ?? 0),
+    }
+  })
+  expect(before.msgMax).toBeGreaterThan(0)
+
+  const box = await page.locator('.messages').boundingBox()
+  if (!box) throw new Error('messages box missing')
+  await page.mouse.move(box.x + box.width / 2, box.y + 120)
+  for (let i = 0; i < 14; i += 1) {
+    await page.mouse.wheel(0, -900)
+  }
+  for (let i = 0; i < 20; i += 1) {
+    await page.mouse.wheel(0, -900)
+  }
+
+  const after = await page.evaluate(() => {
+    const left = document.querySelector('.session-sidebar')?.getBoundingClientRect().top ?? -1
+    const right = document.querySelector('.skills-panel')?.getBoundingClientRect().top ?? -1
+    const messages = document.querySelector('.messages')
+    return {
+      winY: window.scrollY,
+      bodyY: document.scrollingElement ? document.scrollingElement.scrollTop : -1,
+      leftTop: left,
+      rightTop: right,
+      msgTop: messages?.scrollTop ?? -1,
+    }
+  })
+
+  expect(after.winY).toBe(0)
+  expect(after.bodyY).toBe(0)
+  expect(after.leftTop).toBeCloseTo(before.leftTop, 1)
+  expect(after.rightTop).toBeCloseTo(before.rightTop, 1)
+  expect(after.msgTop).toBeLessThan(before.msgTop)
+})
+
+test('desktop defaults wheel to chat until side panel is explicitly activated', async ({ page }) => {
+  const denseSkills = buildSkills(60)
+  await setupTeacherState(page)
+  const { chatStartCalls } = await setupApiMocks(page)
+  await page.route('http://localhost:8000/skills', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ skills: denseSkills }),
+    })
+  })
+  await page.goto('/')
+
+  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const sendBtn = page.getByRole('button', { name: '发送' })
+
+  for (let i = 1; i <= 24; i += 1) {
+    const text = `滚轮路由基线-${i}`
+    await composer.fill(text)
+    await sendBtn.click()
+    await expect.poll(() => chatStartCalls.length).toBe(i)
+    await expect(page.getByText(`回执：${text}`)).toBeVisible()
+  }
+
+  const prepared = await page.evaluate(() => {
+    const messages = document.querySelector('.messages') as HTMLElement | null
+    const skills = document.querySelector('.skills-body') as HTMLElement | null
+    if (!messages || !skills) {
+      return { ready: false, msgMax: -1, skMax: -1 }
+    }
+    messages.style.height = '180px'
+    messages.style.maxHeight = '180px'
+    messages.style.overflow = 'auto'
+    skills.style.height = '220px'
+    skills.style.maxHeight = '220px'
+    skills.style.overflow = 'auto'
+    messages.scrollTop = 0
+    skills.scrollTop = 0
+    return {
+      ready: true,
+      msgMax: messages.scrollHeight - messages.clientHeight,
+      skMax: skills.scrollHeight - skills.clientHeight,
+    }
+  })
+  expect(prepared.ready).toBe(true)
+  expect(prepared.msgMax).toBeGreaterThan(0)
+  expect(prepared.skMax).toBeGreaterThan(0)
+
+  const skillsBox = await page.locator('.skills-body').boundingBox()
+  if (!skillsBox) throw new Error('skills box missing')
+
+  await page.mouse.move(skillsBox.x + skillsBox.width / 2, skillsBox.y + 80)
+  for (let i = 0; i < 8; i += 1) {
+    await page.mouse.wheel(0, 900)
+  }
+
+  const afterDefaultWheel = await page.evaluate(() => {
+    const messages = document.querySelector('.messages') as HTMLElement | null
+    const skills = document.querySelector('.skills-body') as HTMLElement | null
+    return {
+      winY: window.scrollY,
+      bodyY: document.scrollingElement ? document.scrollingElement.scrollTop : -1,
+      msgTop: messages?.scrollTop ?? -1,
+      skTop: skills?.scrollTop ?? -1,
+    }
+  })
+  expect(afterDefaultWheel.winY).toBe(0)
+  expect(afterDefaultWheel.bodyY).toBe(0)
+  expect(afterDefaultWheel.msgTop).toBeGreaterThan(0)
+  expect(afterDefaultWheel.skTop).toBe(0)
+
+  await page.locator('.skills-body').click({ position: { x: 12, y: 12 } })
+  for (let i = 0; i < 6; i += 1) {
+    await page.mouse.wheel(0, 900)
+  }
+
+  const afterSkillActivated = await page.evaluate(() => {
+    const messages = document.querySelector('.messages') as HTMLElement | null
+    const skills = document.querySelector('.skills-body') as HTMLElement | null
+    return {
+      msgTop: messages?.scrollTop ?? -1,
+      skTop: skills?.scrollTop ?? -1,
+    }
+  })
+  expect(afterSkillActivated.skTop).toBeGreaterThan(afterDefaultWheel.skTop)
+  expect(afterSkillActivated.msgTop).toBeCloseTo(afterDefaultWheel.msgTop, 1)
+
+  await page.evaluate(() => {
+    const messages = document.querySelector('.messages') as HTMLElement | null
+    if (messages) messages.scrollTop = 0
+  })
+  await page.locator('.messages').click({ position: { x: 20, y: 20 } })
+  await page.mouse.move(skillsBox.x + skillsBox.width / 2, skillsBox.y + 80)
+  for (let i = 0; i < 6; i += 1) {
+    await page.mouse.wheel(0, 900)
+  }
+
+  const afterChatReactivated = await page.evaluate(() => {
+    const messages = document.querySelector('.messages') as HTMLElement | null
+    const skills = document.querySelector('.skills-body') as HTMLElement | null
+    return {
+      msgTop: messages?.scrollTop ?? -1,
+      skTop: skills?.scrollTop ?? -1,
+    }
+  })
+  expect(afterChatReactivated.skTop).toBeCloseTo(afterSkillActivated.skTop, 1)
+  expect(afterChatReactivated.msgTop).toBeGreaterThan(0)
 })
 
 test('auto route mode omits skill_id and warns on unknown $skill', async ({ page }) => {
