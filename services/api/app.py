@@ -37,6 +37,13 @@ from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolv
 from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
+from .session_view_state import (
+    compare_iso_ts as _compare_iso_ts_impl,
+    default_session_view_state as _default_session_view_state_impl,
+    load_session_view_state as _load_session_view_state_impl,
+    normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
+    save_session_view_state as _save_session_view_state_impl,
+)
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
 from .teacher_memory_api_service import (
     TeacherMemoryApiDeps,
@@ -44,6 +51,7 @@ from .teacher_memory_api_service import (
     review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
 from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
+from .tool_dispatch_service import ToolDispatchDeps, tool_dispatch as _tool_dispatch_impl
 from .upload_io_service import sanitize_filename_io
 from .llm_agent_tooling_service import parse_tool_json_safe
 
@@ -914,114 +922,36 @@ def teacher_session_view_state_path(teacher_id: str) -> Path:
     return teacher_sessions_base_dir(teacher_id) / "view_state.json"
 
 
-def _parse_iso_ts(value: Any) -> Optional[datetime]:
-    raw = str(value or "").strip()
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except Exception:
-        return None
-
-
 def _compare_iso_ts(a: Any, b: Any) -> int:
-    da = _parse_iso_ts(a)
-    db = _parse_iso_ts(b)
-    if da and db:
-        if da > db:
-            return 1
-        if da < db:
-            return -1
-        return 0
-    if da and not db:
-        return 1
-    if db and not da:
-        return -1
-    return 0
+    return _compare_iso_ts_impl(a, b)
 
 
 def _default_session_view_state() -> Dict[str, Any]:
-    return {
-        "title_map": {},
-        "hidden_ids": [],
-        "active_session_id": "",
-        "updated_at": "",
-    }
+    return _default_session_view_state_impl()
 
 
 def _normalize_session_view_state_payload(raw: Any) -> Dict[str, Any]:
-    data = raw if isinstance(raw, dict) else {}
-    title_map_raw = data.get("title_map") if isinstance(data.get("title_map"), dict) else {}
-    title_map: Dict[str, str] = {}
-    for key, value in title_map_raw.items():
-        sid = str(key or "").strip()
-        title = str(value or "").strip()
-        if not sid or not title:
-            continue
-        sid = sid[:200]
-        title_map[sid] = title[:120]
-
-    hidden_ids: List[str] = []
-    seen_hidden: set[str] = set()
-    hidden_raw = data.get("hidden_ids") if isinstance(data.get("hidden_ids"), list) else []
-    for item in hidden_raw:
-        sid = str(item or "").strip()
-        if not sid:
-            continue
-        sid = sid[:200]
-        if sid in seen_hidden:
-            continue
-        seen_hidden.add(sid)
-        hidden_ids.append(sid)
-
-    active_session_id = str(data.get("active_session_id") or "").strip()[:200]
-    updated_at_raw = str(data.get("updated_at") or "").strip()
-    updated_at = updated_at_raw if _parse_iso_ts(updated_at_raw) else ""
-
-    return {
-        "title_map": title_map,
-        "hidden_ids": hidden_ids,
-        "active_session_id": active_session_id,
-        "updated_at": updated_at,
-    }
+    return _normalize_session_view_state_payload_impl(raw)
 
 
 def load_student_session_view_state(student_id: str) -> Dict[str, Any]:
     path = student_session_view_state_path(student_id)
-    if not path.exists():
-        return _default_session_view_state()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_session_view_state()
-    return _normalize_session_view_state_payload(data)
+    return _load_session_view_state_impl(path)
 
 
 def save_student_session_view_state(student_id: str, state: Dict[str, Any]) -> None:
     path = student_session_view_state_path(student_id)
-    normalized = _normalize_session_view_state_payload(state)
-    if not normalized.get("updated_at"):
-        normalized["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
-    _atomic_write_json(path, normalized)
+    _save_session_view_state_impl(path, state)
 
 
 def load_teacher_session_view_state(teacher_id: str) -> Dict[str, Any]:
     path = teacher_session_view_state_path(teacher_id)
-    if not path.exists():
-        return _default_session_view_state()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return _default_session_view_state()
-    return _normalize_session_view_state_payload(data)
+    return _load_session_view_state_impl(path)
 
 
 def save_teacher_session_view_state(teacher_id: str, state: Dict[str, Any]) -> None:
     path = teacher_session_view_state_path(teacher_id)
-    normalized = _normalize_session_view_state_payload(state)
-    if not normalized.get("updated_at"):
-        normalized["updated_at"] = datetime.now().isoformat(timespec="milliseconds")
-    _atomic_write_json(path, normalized)
+    _save_session_view_state_impl(path, state)
 
 
 def load_student_sessions_index(student_id: str) -> List[Dict[str, Any]]:
@@ -8402,153 +8332,7 @@ def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
-    if DEFAULT_TOOL_REGISTRY.get(name) is None:
-        return {"error": f"unknown tool: {name}"}
-    issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, args)
-    if issues:
-        return {"error": "invalid_arguments", "tool": name, "issues": issues[:20]}
-
-    if name == "exam.list":
-        return list_exams()
-    if name == "exam.get":
-        return exam_get(args.get("exam_id", ""))
-    if name == "exam.analysis.get":
-        return exam_analysis_get(args.get("exam_id", ""))
-    if name == "exam.analysis.charts.generate":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "exam.analysis.charts.generate requires teacher role"}
-        return exam_analysis_charts_generate(args)
-    if name == "exam.students.list":
-        return exam_students_list(args.get("exam_id", ""), int(args.get("limit", 50) or 50))
-    if name == "exam.student.get":
-        return exam_student_detail(
-            args.get("exam_id", ""),
-            student_id=args.get("student_id"),
-            student_name=args.get("student_name"),
-            class_name=args.get("class_name"),
-        )
-    if name == "exam.question.get":
-        return exam_question_detail(
-            args.get("exam_id", ""),
-            question_id=args.get("question_id"),
-            question_no=args.get("question_no"),
-            top_n=args.get("top_n", 5),
-        )
-    if name == "exam.range.top_students":
-        return exam_range_top_students(
-            args.get("exam_id", ""),
-            start_question_no=args.get("start_question_no"),
-            end_question_no=args.get("end_question_no"),
-            top_n=args.get("top_n", 10),
-        )
-    if name == "exam.range.summary.batch":
-        return exam_range_summary_batch(
-            args.get("exam_id", ""),
-            ranges=args.get("ranges"),
-            top_n=args.get("top_n", 5),
-        )
-    if name == "exam.question.batch.get":
-        return exam_question_batch_detail(
-            args.get("exam_id", ""),
-            question_nos=args.get("question_nos"),
-            top_n=args.get("top_n", 5),
-        )
-    if name == "assignment.list":
-        return list_assignments()
-    if name == "lesson.list":
-        return list_lessons()
-    if name == "lesson.capture":
-        return lesson_capture(args)
-    if name == "student.search":
-        return student_search(args.get("query", ""), int(args.get("limit", 5)))
-    if name == "student.profile.get":
-        return student_profile_get(args.get("student_id", ""))
-    if name == "student.profile.update":
-        return student_profile_update(args)
-    if name == "student.import":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "student.import requires teacher role"}
-        return student_import(args)
-    if name == "assignment.generate":
-        return assignment_generate(args)
-    if name == "assignment.render":
-        return assignment_render(args)
-    if name == "assignment.requirements.save":
-        assignment_id = str(args.get("assignment_id", ""))
-        date_str = parse_date_str(args.get("date"))
-        requirements = args.get("requirements") or {}
-        return save_assignment_requirements(assignment_id, requirements, date_str, created_by="teacher")
-    if name == "core_example.search":
-        return core_example_search(args)
-    if name == "core_example.register":
-        return core_example_register(args)
-    if name == "core_example.render":
-        return core_example_render(args)
-    if name == "chart.agent.run":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "chart.agent.run requires teacher role"}
-        return chart_agent_run(args)
-    if name == "chart.exec":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "chart.exec requires teacher role"}
-        return chart_exec(args)
-    if name == "teacher.workspace.init":
-        teacher_id = resolve_teacher_id(args.get("teacher_id"))
-        base = ensure_teacher_workspace(teacher_id)
-        return {"ok": True, "teacher_id": teacher_id, "workspace": str(base)}
-    if name == "teacher.memory.get":
-        teacher_id = resolve_teacher_id(args.get("teacher_id"))
-        target = str(args.get("file") or "MEMORY.md").strip()
-        date_str = str(args.get("date") or "").strip() or None
-        max_chars = int(args.get("max_chars", 8000) or 8000)
-        if target.upper() == "DAILY":
-            path = teacher_daily_memory_path(teacher_id, date_str)
-        else:
-            # Allow only a small safe set.
-            if target in {"AGENTS.md", "SOUL.md", "USER.md", "MEMORY.md", "HEARTBEAT.md"}:
-                path = teacher_workspace_dir(teacher_id) / target
-            else:
-                path = teacher_workspace_file(teacher_id, "MEMORY.md")
-        return {"ok": True, "teacher_id": teacher_id, "file": str(path), "content": teacher_read_text(path, max_chars=max_chars)}
-    if name == "teacher.memory.search":
-        teacher_id = resolve_teacher_id(args.get("teacher_id"))
-        query = str(args.get("query") or "")
-        limit = int(args.get("limit", 5) or 5)
-        result = teacher_memory_search(teacher_id, query, limit=limit)
-        result.update({"ok": True, "teacher_id": teacher_id, "query": query})
-        return result
-    if name == "teacher.memory.propose":
-        teacher_id = resolve_teacher_id(args.get("teacher_id"))
-        target = str(args.get("target") or "MEMORY")
-        title = str(args.get("title") or "")
-        content = str(args.get("content") or "")
-        return teacher_memory_propose(teacher_id, target=target, title=title, content=content)
-    if name == "teacher.memory.apply":
-        teacher_id = resolve_teacher_id(args.get("teacher_id"))
-        proposal_id = str(args.get("proposal_id") or "")
-        approve = bool(args.get("approve", True))
-        return teacher_memory_apply(teacher_id, proposal_id=proposal_id, approve=approve)
-    if name == "teacher.llm_routing.get":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "teacher.llm_routing.get requires teacher role"}
-        return teacher_llm_routing_get(args)
-    if name == "teacher.llm_routing.simulate":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "teacher.llm_routing.simulate requires teacher role"}
-        return teacher_llm_routing_simulate(args)
-    if name == "teacher.llm_routing.propose":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "teacher.llm_routing.propose requires teacher role"}
-        return teacher_llm_routing_propose(args)
-    if name == "teacher.llm_routing.apply":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "teacher.llm_routing.apply requires teacher role"}
-        return teacher_llm_routing_apply(args)
-    if name == "teacher.llm_routing.rollback":
-        if role != "teacher":
-            return {"error": "permission denied", "detail": "teacher.llm_routing.rollback requires teacher role"}
-        return teacher_llm_routing_rollback(args)
-    return {"error": f"unknown tool: {name}"}
+    return _tool_dispatch_impl(name, args, role, deps=_tool_dispatch_deps())
 
 
 def call_llm(
@@ -10216,6 +10000,52 @@ async def verify_student(req: StudentVerifyRequest):
     candidate = candidates[0]
     diag_log("student.verify.ok", candidate)
     return {"ok": True, "student": candidate}
+
+
+def _tool_dispatch_deps():
+    return ToolDispatchDeps(
+        tool_registry=DEFAULT_TOOL_REGISTRY,
+        list_exams=list_exams,
+        exam_get=exam_get,
+        exam_analysis_get=exam_analysis_get,
+        exam_analysis_charts_generate=exam_analysis_charts_generate,
+        exam_students_list=exam_students_list,
+        exam_student_detail=exam_student_detail,
+        exam_question_detail=exam_question_detail,
+        exam_range_top_students=exam_range_top_students,
+        exam_range_summary_batch=exam_range_summary_batch,
+        exam_question_batch_detail=exam_question_batch_detail,
+        list_assignments=list_assignments,
+        list_lessons=list_lessons,
+        lesson_capture=lesson_capture,
+        student_search=student_search,
+        student_profile_get=student_profile_get,
+        student_profile_update=student_profile_update,
+        student_import=student_import,
+        assignment_generate=assignment_generate,
+        assignment_render=assignment_render,
+        save_assignment_requirements=save_assignment_requirements,
+        parse_date_str=parse_date_str,
+        core_example_search=core_example_search,
+        core_example_register=core_example_register,
+        core_example_render=core_example_render,
+        chart_agent_run=chart_agent_run,
+        chart_exec=chart_exec,
+        resolve_teacher_id=resolve_teacher_id,
+        ensure_teacher_workspace=ensure_teacher_workspace,
+        teacher_workspace_dir=teacher_workspace_dir,
+        teacher_workspace_file=teacher_workspace_file,
+        teacher_daily_memory_path=teacher_daily_memory_path,
+        teacher_read_text=lambda path, max_chars=8000: read_text_safe(path, limit=max_chars),
+        teacher_memory_search=teacher_memory_search,
+        teacher_memory_propose=teacher_memory_propose,
+        teacher_memory_apply=teacher_memory_apply,
+        teacher_llm_routing_get=teacher_llm_routing_get,
+        teacher_llm_routing_simulate=teacher_llm_routing_simulate,
+        teacher_llm_routing_propose=teacher_llm_routing_propose,
+        teacher_llm_routing_apply=teacher_llm_routing_apply,
+        teacher_llm_routing_rollback=teacher_llm_routing_rollback,
+    )
 
 
 def _exam_api_deps():
