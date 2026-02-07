@@ -37,6 +37,9 @@ class SkillsEndpointTest(unittest.TestCase):
             core = by_id["physics-core-examples"]
             self.assertEqual(core.get("schema_version"), 2)
             self.assertIn("agent", core)
+            self.assertIn("routing", core)
+            self.assertIn("keywords", core["routing"])
+            self.assertIn("intents", core["routing"])
             self.assertIn("prompt_modules", core["agent"])
             self.assertIn("tools", core["agent"])
             self.assertIn("budgets", core["agent"])
@@ -44,4 +47,3 @@ class SkillsEndpointTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
