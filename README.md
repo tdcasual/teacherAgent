@@ -251,6 +251,12 @@ npm run e2e:teacher
 2) 各厂商的专用环境变量（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`）  
 3) `config/model_registry.yaml` 的默认值
 
+### 队列与 Worker（必需）
+- API 仅支持 **RQ + Redis**，启动时会校验 Redis 可用性；未配置会直接失败。  
+- 必需：`REDIS_URL`、`JOB_QUEUE_BACKEND=rq`（或 `RQ_BACKEND_ENABLED=1`）。  
+- Worker 启动：`python -m services.api.rq_worker`  
+- 可选：`RQ_QUEUE_NAME`（默认 `default`）、`RQ_SCAN_PENDING_ON_START=1`（启动时扫描并回填排队任务）。  
+
 ### 通用变量（模型网关）
 - `MODEL_REGISTRY_PATH`：自定义 registry 路径（默认 `config/model_registry.yaml`）
 - `LLM_PROVIDER`：目标厂商（如 `openai` / `deepseek` / `kimi` / `gemini` / `siliconflow`）
