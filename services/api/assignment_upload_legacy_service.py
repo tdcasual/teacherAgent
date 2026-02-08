@@ -13,6 +13,17 @@ class AssignmentUploadLegacyError(Exception):
         self.detail = detail
 
 
+def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
+    root = (data_dir / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise AssignmentUploadLegacyError(status_code=400, detail="assignment_id is required")
+    target = (root / aid).resolve()
+    if target != root and root not in target.parents:
+        raise AssignmentUploadLegacyError(status_code=400, detail="invalid assignment_id")
+    return target
+
+
 @dataclass(frozen=True)
 class AssignmentUploadLegacyDeps:
     data_dir: Path
@@ -46,7 +57,7 @@ async def assignment_upload(
     language: Optional[str],
 ) -> Dict[str, Any]:
     date_str = deps.parse_date_str(date)
-    out_dir = deps.data_dir / "assignments" / assignment_id
+    out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
     source_dir = out_dir / "source"
     answers_dir = out_dir / "answer_source"
     source_dir.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +21,17 @@ class AssignmentUploadJobDeps:
     sleep: Callable[[float], None]
 
 
+def _safe_job_component(job_id: str) -> str:
+    raw = str(job_id or "")
+    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
+    if safe:
+        return safe
+    digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return f"job_{digest}"
+
+
 def upload_job_path(job_id: str, deps: AssignmentUploadJobDeps) -> Path:
-    safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
-    return deps.upload_job_dir / (safe or job_id)
+    return deps.upload_job_dir / _safe_job_component(job_id)
 
 
 def load_upload_job(job_id: str, deps: AssignmentUploadJobDeps) -> Dict[str, Any]:

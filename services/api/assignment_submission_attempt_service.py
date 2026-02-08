@@ -14,6 +14,22 @@ class AssignmentSubmissionAttemptDeps:
     grade_count_conf_threshold: float
 
 
+def _resolve_submission_base(
+    student_submissions_dir: Path,
+    assignment_id: str,
+    student_id: str,
+) -> Optional[Path]:
+    root = student_submissions_dir.resolve()
+    aid = str(assignment_id or "").strip()
+    sid = str(student_id or "").strip()
+    if not aid or not sid:
+        return None
+    target = (root / aid / sid).resolve()
+    if target != root and root not in target.parents:
+        return None
+    return target
+
+
 def counted_grade_item(item: Dict[str, Any], *, deps: AssignmentSubmissionAttemptDeps) -> bool:
     try:
         status = str(item.get("status") or "")
@@ -100,7 +116,9 @@ def list_submission_attempts(
     *,
     deps: AssignmentSubmissionAttemptDeps,
 ) -> List[Dict[str, Any]]:
-    base = deps.student_submissions_dir / assignment_id / student_id
+    base = _resolve_submission_base(deps.student_submissions_dir, assignment_id, student_id)
+    if base is None:
+        return []
     if not base.exists():
         return []
     attempts: List[Dict[str, Any]] = []

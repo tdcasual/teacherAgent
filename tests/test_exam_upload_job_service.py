@@ -40,6 +40,9 @@ class ExamUploadJobServiceTest(unittest.TestCase):
             self.assertEqual(data.get("status"), "queued")
             self.assertEqual(data.get("updated_at"), "2026-02-08T12:00:00")
             self.assertEqual(exam_job_path("job/1", deps=deps).name, "job_1")
+            escaped = exam_job_path("..", deps=deps)
+            self.assertEqual(escaped.parent, deps.upload_job_dir)
+            self.assertTrue(escaped.name.startswith("job_"))
 
     def test_scan_pending_enqueues_jobs(self):
         with TemporaryDirectory() as td:

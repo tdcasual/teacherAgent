@@ -750,8 +750,11 @@ def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
         pass
 
 def upload_job_path(job_id: str) -> Path:
-    safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
-    return UPLOAD_JOB_DIR / (safe or job_id)
+    raw = str(job_id or "")
+    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
+    if not safe:
+        safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
+    return UPLOAD_JOB_DIR / safe
 
 def load_upload_job(job_id: str) -> Dict[str, Any]:
     job_dir = upload_job_path(job_id)
@@ -848,8 +851,11 @@ def start_upload_worker() -> None:
     UPLOAD_JOB_WORKER_STARTED = True
 
 def exam_job_path(job_id: str) -> Path:
-    safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
-    return EXAM_UPLOAD_JOB_DIR / (safe or job_id)
+    raw = str(job_id or "")
+    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
+    if not safe:
+        safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
+    return EXAM_UPLOAD_JOB_DIR / safe
 
 def load_exam_job(job_id: str) -> Dict[str, Any]:
     job_dir = exam_job_path(job_id)
@@ -1955,6 +1961,46 @@ def sanitize_filename(name: str) -> str:
 def safe_slug(value: str) -> str:
     return re.sub(r"[^\w-]+", "_", value or "").strip("_") or "assignment"
 
+def resolve_assignment_dir(assignment_id: str) -> Path:
+    assignments_root = (DATA_DIR / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise ValueError("assignment_id is required")
+    folder = (assignments_root / aid).resolve()
+    if folder != assignments_root and assignments_root not in folder.parents:
+        raise ValueError("invalid assignment_id")
+    return folder
+
+def resolve_exam_dir(exam_id: str) -> Path:
+    exams_root = (DATA_DIR / "exams").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        raise ValueError("exam_id is required")
+    folder = (exams_root / eid).resolve()
+    if folder != exams_root and exams_root not in folder.parents:
+        raise ValueError("invalid exam_id")
+    return folder
+
+def resolve_analysis_dir(exam_id: str) -> Path:
+    analysis_root = (DATA_DIR / "analysis").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        raise ValueError("exam_id is required")
+    folder = (analysis_root / eid).resolve()
+    if folder != analysis_root and analysis_root not in folder.parents:
+        raise ValueError("invalid exam_id")
+    return folder
+
+def resolve_student_profile_path(student_id: str) -> Path:
+    profiles_root = (DATA_DIR / "student_profiles").resolve()
+    sid = str(student_id or "").strip()
+    if not sid:
+        raise ValueError("student_id is required")
+    path = (profiles_root / f"{sid}.json").resolve()
+    if path != profiles_root and profiles_root not in path.parents:
+        raise ValueError("invalid student_id")
+    return path
+
 def resolve_scope(scope: str, student_ids: List[str], class_name: str) -> str:
     scope_norm = (scope or "").strip().lower()
     if scope_norm in {"public", "class", "student"}:
@@ -2180,7 +2226,10 @@ def student_search(query: str, limit: int = 5) -> Dict[str, Any]:
     return _student_search_impl(query, limit, _student_directory_deps())
 
 def student_profile_get(student_id: str) -> Dict[str, Any]:
-    profile_path = DATA_DIR / "student_profiles" / f"{student_id}.json"
+    try:
+        profile_path = resolve_student_profile_path(student_id)
+    except ValueError:
+        return {"error": "invalid_student_id", "student_id": student_id}
     if not profile_path.exists():
         return {"error": "profile not found", "student_id": student_id}
     return json.loads(profile_path.read_text(encoding="utf-8"))
@@ -2302,7 +2351,10 @@ def load_exam_manifest(exam_id: str) -> Dict[str, Any]:
     exam_id = str(exam_id or "").strip()
     if not exam_id:
         return {}
-    manifest_path = DATA_DIR / "exams" / exam_id / "manifest.json"
+    try:
+        manifest_path = resolve_exam_dir(exam_id) / "manifest.json"
+    except ValueError:
+        return {}
     return load_profile_file(manifest_path)
 
 def resolve_manifest_path(path_value: Any) -> Optional[Path]:
@@ -2349,7 +2401,10 @@ def exam_analysis_draft_path(manifest: Dict[str, Any]) -> Optional[Path]:
     exam_id = str(manifest.get("exam_id") or "").strip()
     if not exam_id:
         return None
-    fallback = DATA_DIR / "analysis" / exam_id / "draft.json"
+    try:
+        fallback = resolve_analysis_dir(exam_id) / "draft.json"
+    except ValueError:
+        return None
     return fallback if fallback.exists() else None
 
 def parse_score_value(value: Any) -> Optional[float]:
@@ -3750,12 +3805,18 @@ def _exam_detail_deps():
     )
 
 def _assignment_api_deps():
+    def _assignment_exists(assignment_id: str) -> bool:
+        try:
+            return resolve_assignment_dir(str(assignment_id or "")).exists()
+        except ValueError:
+            return False
+
     return AssignmentApiDeps(
         build_assignment_detail=lambda assignment_id, include_text=True: build_assignment_detail(
-            DATA_DIR / "assignments" / str(assignment_id or ""),
+            resolve_assignment_dir(str(assignment_id or "")),
             include_text=include_text,
         ),
-        assignment_exists=lambda assignment_id: (DATA_DIR / "assignments" / str(assignment_id or "")).exists(),
+        assignment_exists=_assignment_exists,
     )
 
 def _student_profile_api_deps():
@@ -4379,7 +4440,10 @@ async def assignment_requirements(req: AssignmentRequirementsRequest):
 
 @app.get("/assignment/{assignment_id}/requirements")
 async def assignment_requirements_get(assignment_id: str):
-    folder = DATA_DIR / "assignments" / assignment_id
+    try:
+        folder = resolve_assignment_dir(assignment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not folder.exists():
         raise HTTPException(status_code=404, detail="assignment not found")
     requirements = load_assignment_requirements(folder)
@@ -4562,14 +4626,20 @@ async def assignment_upload_confirm(req: UploadConfirmRequest):
 
 @app.get("/assignment/{assignment_id}/download")
 async def assignment_download(assignment_id: str, file: str):
-    folder = DATA_DIR / "assignments" / assignment_id / "source"
+    try:
+        assignment_dir = resolve_assignment_dir(assignment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    folder = (assignment_dir / "source").resolve()
+    if assignment_dir not in folder.parents:
+        raise HTTPException(status_code=400, detail="invalid assignment_id path")
     if not folder.exists():
         raise HTTPException(status_code=404, detail="assignment source not found")
     safe_name = sanitize_filename(file)
     if not safe_name:
         raise HTTPException(status_code=400, detail="invalid file")
     path = (folder / safe_name).resolve()
-    if folder not in path.parents:
+    if path != folder and folder not in path.parents:
         raise HTTPException(status_code=400, detail="invalid file path")
     if not path.exists():
         raise HTTPException(status_code=404, detail="file not found")

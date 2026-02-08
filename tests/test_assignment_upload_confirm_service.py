@@ -118,6 +118,30 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             self.assertTrue(meta_path.exists())
             self.assertEqual(writes[-1][1].get("status"), "confirmed")
 
+    def test_rejects_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps({"questions": [{"stem": "x"}], "requirements": {"subject": "物理"}, "missing": [], "warnings": []}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {"assignment_id": "../escape", "status": "done"},
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "invalid assignment_id")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+
 
 if __name__ == "__main__":
     unittest.main()

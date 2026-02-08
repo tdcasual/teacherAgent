@@ -480,6 +480,39 @@ class AssignmentProgressTest(unittest.TestCase):
                 ids = sorted([a.get("assignment_id") for a in data.get("assignments") or []])
                 self.assertEqual(ids, ["A1", "A2"])
 
+    def test_assignment_requirements_get_rejects_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                res = client.get("/assignment/%2e%2e/requirements")
+                self.assertEqual(res.status_code, 400)
+
+    def test_assignment_download_rejects_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                res = client.get("/assignment/%2e%2e/download", params={"file": "q1.png"})
+                self.assertEqual(res.status_code, 400)
+
+    def test_student_profile_rejects_invalid_student_id_path(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                res = client.get("/student/profile/%2e%2e")
+                self.assertEqual(res.status_code, 404)
+
+    def test_exam_endpoints_treat_invalid_exam_id_as_not_found(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            with TestClient(app_mod.app) as client:
+                self.assertEqual(client.get("/exam/%2e%2e").status_code, 404)
+                self.assertEqual(client.get("/exam/%2e%2e/analysis").status_code, 404)
+                self.assertEqual(client.get("/exam/%2e%2e/students").status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()

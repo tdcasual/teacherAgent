@@ -15,6 +15,28 @@ class StudentImportDeps:
     now_iso: Callable[[], str]
 
 
+def _resolve_exam_manifest_path(data_dir: Path, exam_id: str) -> Optional[Path]:
+    root = (data_dir / "exams").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        return None
+    exam_dir = (root / eid).resolve()
+    if exam_dir != root and root not in exam_dir.parents:
+        return None
+    return exam_dir / "manifest.json"
+
+
+def _resolve_profile_path(profiles_dir: Path, student_id: str) -> Optional[Path]:
+    root = profiles_dir.resolve()
+    sid = str(student_id or "").strip()
+    if not sid:
+        return None
+    target = (root / f"{sid}.json").resolve()
+    if target != root and root not in target.parents:
+        return None
+    return target
+
+
 def resolve_responses_file(
     exam_id: Optional[str],
     file_path: Optional[str],
@@ -28,7 +50,9 @@ def resolve_responses_file(
         return path if path.exists() else None
 
     if exam_id:
-        manifest_path = deps.data_dir / "exams" / exam_id / "manifest.json"
+        manifest_path = _resolve_exam_manifest_path(deps.data_dir, str(exam_id or ""))
+        if manifest_path is None:
+            return None
         if manifest_path.exists():
             manifest = deps.load_profile_file(manifest_path)
             files = manifest.get("files", {})
@@ -94,7 +118,10 @@ def import_students_from_responses(
     sample = []
 
     for student_id, info in students.items():
-        profile_path = profiles_dir / f"{student_id}.json"
+        profile_path = _resolve_profile_path(profiles_dir, student_id)
+        if profile_path is None:
+            skipped += 1
+            continue
         profile = deps.load_profile_file(profile_path) if profile_path.exists() else {}
         is_new = not bool(profile)
 

@@ -131,6 +131,16 @@ const timeFromIso = (ts?: string) => {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const pendingStatusTexts = new Set(['正在生成…', '正在恢复上一条回复…'])
+
+const stripTransientPendingBubbles = (messages: Message[]): Message[] => {
+  return messages.filter((msg) => {
+    if (msg.role !== 'assistant') return true
+    if (!pendingStatusTexts.has(String(msg.content || '').trim())) return true
+    return !(msg.id.startsWith('asst_') || msg.id.startsWith('pending_'))
+  })
+}
+
 const formatSessionUpdatedLabel = (ts?: string) => {
   if (!ts) return ''
   const d = new Date(ts)
@@ -720,15 +730,17 @@ export default function App() {
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
-    const alreadyHasPlaceholder = messages.some((m) => m.id === pendingChatJob.placeholder_id)
-    if (alreadyHasPlaceholder) return
-    setMessages((prev) => [
-      ...prev,
-      ...(pendingChatJob.user_text
-        ? [{ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() }]
-        : []),
-      { id: pendingChatJob.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() },
-    ])
+    setMessages((prev) => {
+      const next = stripTransientPendingBubbles(prev)
+      if (next.some((m) => m.id === pendingChatJob.placeholder_id)) return next
+      return [
+        ...next,
+        ...(pendingChatJob.user_text
+          ? [{ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() }]
+          : []),
+        { id: pendingChatJob.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() },
+      ]
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChatJob?.job_id])
 
@@ -1163,11 +1175,14 @@ export default function App() {
     const requestId = `schat_${verifiedStudent.student_id}_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
-    setMessages((prev) => [
-      ...prev,
-      { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
-      { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
-    ])
+    setMessages((prev) => {
+      const next = stripTransientPendingBubbles(prev)
+      return [
+        ...next,
+        { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
+        { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
+      ]
+    })
     setInput('')
 
     const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]

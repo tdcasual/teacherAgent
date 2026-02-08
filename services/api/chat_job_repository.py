@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,9 +15,17 @@ class ChatJobRepositoryDeps:
     now_iso: Callable[[], str]
 
 
+def _safe_job_component(job_id: str) -> str:
+    raw = str(job_id or "")
+    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
+    if safe:
+        return safe
+    digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return f"job_{digest}"
+
+
 def chat_job_path(job_id: str, deps: ChatJobRepositoryDeps) -> Path:
-    safe = re.sub(r"[^\w-]+", "_", job_id or "").strip("_")
-    return deps.chat_job_dir / (safe or job_id)
+    return deps.chat_job_dir / _safe_job_component(job_id)
 
 
 def chat_job_exists(job_id: str, deps: ChatJobRepositoryDeps) -> bool:

@@ -27,6 +27,34 @@ class ComputeChatReplyDeps:
     resolve_effective_skill: Callable[[Optional[str], Optional[str], str], Dict[str, Any]]
 
 
+def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
+    try:
+        root = (data_dir / "assignments").resolve()
+        aid = str(assignment_id or "").strip()
+        if not aid:
+            return None
+        target = (root / aid).resolve()
+        if target != root and root not in target.parents:
+            return None
+        return target
+    except Exception:
+        return None
+
+
+def _resolve_student_profile_path(data_dir: Any, student_id: str) -> Optional[Any]:
+    try:
+        root = (data_dir / "student_profiles").resolve()
+        sid = str(student_id or "").strip()
+        if not sid:
+            return None
+        target = (root / f"{sid}.json").resolve()
+        if target != root and root not in target.parents:
+            return None
+        return target
+    except Exception:
+        return None
+
+
 def detect_role_hint(req: Any, *, detect_role: Callable[[str], Optional[str]]) -> Optional[str]:
     role_hint = req.role
     if not role_hint or role_hint == "unknown":
@@ -117,11 +145,13 @@ def compute_chat_reply_sync(
         )
         profile = {}
         if req.student_id:
-            profile = deps.load_profile_file(deps.data_dir / "student_profiles" / f"{req.student_id}.json")
+            profile_path = _resolve_student_profile_path(deps.data_dir, str(req.student_id or ""))
+            if profile_path is not None:
+                profile = deps.load_profile_file(profile_path)
             extra_parts.append(deps.build_verified_student_context(req.student_id, profile))
         if req.assignment_id:
-            folder = deps.data_dir / "assignments" / req.assignment_id
-            if folder.exists():
+            folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
+            if folder and folder.exists():
                 assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
         elif req.student_id:
             date_str = deps.parse_date_str(req.assignment_date)

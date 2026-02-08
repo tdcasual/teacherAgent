@@ -13,6 +13,17 @@ class AssignmentRequirementsDeps:
     now_iso: Callable[[], str]
 
 
+def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
+    root = (data_dir / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise ValueError("assignment_id is required")
+    target = (root / aid).resolve()
+    if target != root and root not in target.parents:
+        raise ValueError("invalid assignment_id")
+    return target
+
+
 def parse_list_value(value: Any) -> List[str]:
     if value is None:
         return []
@@ -251,13 +262,16 @@ def save_assignment_requirements(
     created_by: str = "teacher",
     validate: bool = True,
 ) -> Dict[str, Any]:
+    try:
+        out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    except ValueError as exc:
+        return {"error": "invalid_assignment_id", "detail": str(exc)}
     payload = requirements
     if validate:
         normalized, errors = validate_requirements(requirements)
         if errors:
             return {"error": "invalid_requirements", "errors": errors}
         payload = normalized or {}
-    out_dir = deps.data_dir / "assignments" / assignment_id
     out_dir.mkdir(parents=True, exist_ok=True)
     record = {
         "assignment_id": assignment_id,
@@ -279,6 +293,10 @@ def ensure_requirements_for_assignment(
     *,
     deps: AssignmentRequirementsDeps,
 ) -> Optional[Dict[str, Any]]:
+    try:
+        out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    except ValueError as exc:
+        return {"error": "invalid_assignment_id", "detail": str(exc)}
     if source == "auto":
         return None
     if requirements:
@@ -289,7 +307,7 @@ def ensure_requirements_for_assignment(
             created_by="teacher",
             deps=deps,
         )
-    req_path = deps.data_dir / "assignments" / assignment_id / "requirements.json"
+    req_path = out_dir / "requirements.json"
     if not req_path.exists():
         return {"error": "requirements_missing", "detail": "请先提交作业要求（8项）。"}
     return None

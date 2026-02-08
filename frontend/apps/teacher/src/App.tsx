@@ -508,12 +508,22 @@ const timeFromIso = (iso?: string) => {
 }
 
 const pendingUserMessageId = (jobId: string) => `pending_user_${jobId}`
+const pendingStatusTexts = new Set(['正在生成…', '正在恢复上一条回复…'])
+
+const stripTransientPendingBubbles = (messages: Message[]): Message[] => {
+  return messages.filter((msg) => {
+    if (msg.role !== 'assistant') return true
+    if (!pendingStatusTexts.has(String(msg.content || '').trim())) return true
+    return !(msg.id.startsWith('asst_') || msg.id.startsWith('pending_'))
+  })
+}
 
 const withPendingChatOverlay = (messages: Message[], pending: PendingChatJob | null, targetSessionId: string): Message[] => {
-  if (!pending?.job_id || pending.session_id !== targetSessionId) return messages
-  if (messages.some((msg) => msg.id === pending.placeholder_id)) return messages
+  const base = stripTransientPendingBubbles(messages)
+  if (!pending?.job_id || pending.session_id !== targetSessionId) return base
+  if (base.some((msg) => msg.id === pending.placeholder_id)) return base
 
-  const next = [...messages]
+  const next = [...base]
   const hasUserText = pending.user_text
     ? next.some((msg) => msg.role === 'user' && msg.content === pending.user_text)
     : true
@@ -2975,11 +2985,14 @@ export default function App() {
 
     setWheelScrollZone('chat')
     enableAutoScroll()
-    setMessages((prev) => [
-      ...prev,
-      { id: makeId(), role: 'user', content: cleanedText, time: nowTime() },
-      { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
-    ])
+    setMessages((prev) => {
+      const next = stripTransientPendingBubbles(prev)
+      return [
+        ...next,
+        { id: makeId(), role: 'user', content: cleanedText, time: nowTime() },
+        { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
+      ]
+    })
     setInput('')
 
     const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]

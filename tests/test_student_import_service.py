@@ -73,6 +73,18 @@ class StudentImportServiceTest(unittest.TestCase):
             resolved = resolve_responses_file("EX1", None, deps=deps)
             self.assertEqual(resolved, target)
 
+    def test_resolve_responses_file_rejects_invalid_exam_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentImportDeps(
+                app_root=root / "app",
+                data_dir=root / "data",
+                load_profile_file=_load_profile_file,
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+            resolved = resolve_responses_file("../escape", None, deps=deps)
+            self.assertIsNone(resolved)
+
     def test_import_students_from_responses_creates_and_updates_aliases(self):
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -121,6 +133,30 @@ class StudentImportServiceTest(unittest.TestCase):
         )
         result = student_import({"source": "unknown"}, deps=deps)
         self.assertEqual(result.get("error"), "unsupported source: unknown")
+
+    def test_import_skips_invalid_student_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentImportDeps(
+                app_root=root / "app",
+                data_dir=root / "data",
+                load_profile_file=_load_profile_file,
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+            source = root / "inputs" / "evil.csv"
+            _write_csv(
+                source,
+                [
+                    {"student_id": "../escape", "student_name": "Evil", "class_name": "C1", "exam_id": "EX1"},
+                    {"student_id": "S1", "student_name": "Bob", "class_name": "C2", "exam_id": "EX1"},
+                ],
+            )
+            result = import_students_from_responses(source, deps=deps, mode="merge")
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(result.get("created"), 1)
+            self.assertEqual(result.get("skipped"), 1)
+            self.assertTrue((root / "data" / "student_profiles" / "S1.json").exists())
+            self.assertFalse((root / "data" / "escape.json").exists())
 
 
 if __name__ == "__main__":

@@ -28,10 +28,12 @@ export const registerMatrixCases = (
       if (implemented) {
         test(`${item.id} [${item.priority}] ${item.title}`, implemented)
       } else {
-        test.skip(
-          `${item.id} [${item.priority}] ${item.title}`,
-          `TODO | Given: ${item.given} | When: ${item.when} | Then: ${item.then}`,
-        )
+        test(`${item.id} [${item.priority}] ${item.title}`, async () => {
+          test.skip(
+            true,
+            `TODO | Given: ${item.given} | When: ${item.when} | Then: ${item.then}`,
+          )
+        })
       }
     }
   })

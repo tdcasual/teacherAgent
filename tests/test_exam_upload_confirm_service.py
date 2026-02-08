@@ -87,6 +87,25 @@ class ExamUploadConfirmServiceTest(unittest.TestCase):
             self.assertTrue(manifest_path.exists())
             self.assertEqual(writes[-1][1].get("status"), "confirmed")
 
+    def test_rejects_invalid_exam_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "exam_jobs" / "job-1"
+            (job_dir / "derived").mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps({"exam_id": "../escape", "meta": {}, "counts": {}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (job_dir / "derived" / "responses_scored.csv").write_text("student_id,question_id,score\ns1,Q1,1\n", encoding="utf-8")
+
+            deps = self._deps(root, writes)
+            with self.assertRaises(ExamUploadConfirmError) as ctx:
+                confirm_exam_upload("job-1", {"exam_id": "../escape"}, job_dir, deps)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "invalid exam_id")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+
 
 if __name__ == "__main__":
     unittest.main()

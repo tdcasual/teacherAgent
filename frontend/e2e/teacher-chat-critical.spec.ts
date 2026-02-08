@@ -345,6 +345,49 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect.poll(() => chatStartCalls.length).toBe(2)
   },
 
+  A006: async ({ page }) => {
+    await openTeacherApp(page, {
+      apiMocks: {
+        onChatStart: () => ({
+          laneQueuePosition: 3,
+          laneQueueSize: 9,
+        }),
+        onChatStatus: ({ jobId }) => ({
+          job_id: jobId,
+          status: 'queued',
+          lane_queue_position: 3,
+          lane_queue_size: 9,
+        }),
+      },
+    })
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('排队提示')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect(page.locator('.composer-hint')).toContainText('前方 3 条（队列 9）')
+  },
+
+  A007: async ({ page }) => {
+    const mocks = await openTeacherApp(page, {
+      apiMocks: {
+        onChatStatus: ({ jobId }) => ({
+          job_id: jobId,
+          status: 'processing',
+        }),
+      },
+    })
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('可见性恢复轮询')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect.poll(() => mocks.getStatusCallCount('job_1')).toBeGreaterThan(0)
+
+    const before = mocks.getStatusCallCount('job_1')
+    await page.evaluate(() => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await expect.poll(() => mocks.getStatusCallCount('job_1'), { timeout: 700 }).toBeGreaterThan(before)
+  },
+
   A008: async ({ page }) => {
     const { chatStartCalls } = await openTeacherApp(page, {
       apiMocks: {
@@ -357,10 +400,62 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await composer.fill('重复点击拦截')
     await sendBtn.click()
-    await sendBtn.click()
-    await sendBtn.click()
+    await expect(sendBtn).toBeDisabled()
+    await composer.press('Enter')
+    await composer.press('Enter')
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
+  },
+
+  A009: async ({ page }) => {
+    const longHistory = Array.from({ length: 120 }).map((_, idx) => ({
+      ts: new Date(Date.now() - (120 - idx) * 1000).toISOString(),
+      role: idx % 2 === 0 ? 'assistant' : 'user',
+      content: `历史消息-${idx + 1} ` + '内容'.repeat(20),
+    }))
+    const { chatStartCalls } = await openTeacherApp(page, {
+      apiMocks: {
+        historyBySession: { main: longHistory },
+      },
+    })
+
+    const longPrompt = '超长输入 ' + '题目分析 '.repeat(120)
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill(longPrompt)
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    expect((chatStartCalls[0].messages || []).length).toBe(40)
+    expect(chatStartCalls[0].messages?.at(-1)?.content?.trim()).toBe(longPrompt.trim())
+  },
+
+  A010: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+
+    await page
+      .getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+      .fill('@default @opencode $physics-teacher-ops $physics-homework-generator 多令牌')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    expect(chatStartCalls[0].agent_id).toBe('opencode')
+    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  },
+
+  A011: async ({ page }) => {
+    await openTeacherApp(page)
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+
+    await composer.fill('alpha beta')
+    await composer.evaluate((node) => {
+      const el = node as HTMLTextAreaElement
+      el.focus()
+      el.setSelectionRange(6, 6)
+    })
+    await composer.type('$')
+    await expect(page.getByText('技能建议（↑↓ 选择 / 回车插入）')).toBeVisible()
+    await composer.press('Enter')
+
+    await expect(composer).toHaveValue(/alpha \$[A-Za-z0-9_-]+ beta/)
   },
 
   A015: async ({ page }) => {
@@ -433,6 +528,55 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(page.locator('.messages').getByText('回执：延迟切会话')).toBeVisible()
   },
 
+  A013: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    await composer.fill('@opencode $physics-homework-generator')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect(page.locator('.messages').getByText('@opencode $physics-homework-generator')).toHaveCount(0)
+    expect(chatStartCalls.length).toBe(0)
+    await expect(composer).toHaveValue('@opencode $physics-homework-generator')
+  },
+
+  A014: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+
+    await composer.fill('第一行')
+    await composer.press('Shift+Enter')
+    await composer.type('第二行')
+    await expect(composer).toHaveValue('第一行\n第二行')
+    await composer.press('Enter')
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    expect(chatStartCalls[0].messages?.at(-1)?.content).toContain('\n')
+  },
+
+  A016: async ({ page }) => {
+    const { getStatusCallCount } = await openTeacherApp(page, {
+      apiMocks: {
+        onChatStatus: ({ jobId, callCount }) =>
+          callCount === 1
+            ? { job_id: jobId, status: 'halted' }
+            : {
+                job_id: jobId,
+                status: 'failed',
+                error_detail: 'unknown terminal status: halted',
+              },
+      },
+    })
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('未知终态容错')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect(page.getByText('抱歉，请求失败：unknown terminal status: halted')).toBeVisible()
+    await expect(page.getByRole('button', { name: '发送' })).toBeEnabled()
+    await expect.poll(() => getStatusCallCount('job_1')).toBeGreaterThan(1)
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob'))).toBeNull()
+  },
+
   B001: async ({ page }) => {
     await openTeacherApp(page, {
       stateOverrides: {
@@ -461,12 +605,127 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     page.once('dialog', async (dialog) => {
       await dialog.accept()
     })
-    await page.locator('.session-menu-trigger').first().click()
-    await page.getByRole('button', { name: '归档', exact: true }).click()
+    const targetSession = page.locator('.session-item').filter({ hasText: targetId }).first()
+    await targetSession.locator('.session-menu-trigger').click()
+    await page.getByRole('menuitem', { name: '归档', exact: true }).click()
 
     await expect(page.locator('.session-id', { hasText: targetId })).toHaveCount(0)
     await page.getByRole('button', { name: '查看归档' }).click()
     await expect(page.locator('.session-id', { hasText: targetId })).toBeVisible()
+  },
+
+  B002: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+      apiMocks: {
+        historyBySession: {
+          main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main-preview' }],
+          s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2-preview' }],
+        },
+      },
+    })
+
+    const renamed = '重命名会话A'
+    page.once('dialog', async (dialog) => {
+      await dialog.accept(renamed)
+    })
+    const targetSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
+    await targetSession.locator('.session-menu-trigger').click()
+    await page.getByRole('menuitem', { name: '重命名' }).click()
+
+    await expect(page.locator('.session-item').filter({ hasText: renamed }).first()).toBeVisible()
+    await page.getByPlaceholder('搜索会话').fill(renamed)
+    await expect(page.locator('.session-item').filter({ hasText: renamed }).first()).toBeVisible()
+    await expect.poll(async () =>
+      page.evaluate(() => {
+        try {
+          const raw = localStorage.getItem('teacherSessionViewState')
+          const parsed = raw ? JSON.parse(raw) : {}
+          return parsed?.title_map?.main || ''
+        } catch {
+          return ''
+        }
+      }),
+    ).toBe(renamed)
+  },
+
+  B004: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    await page.getByRole('button', { name: '新建' }).click()
+    const targetId = (await page.locator('.session-item .session-id').first().textContent())?.trim() || ''
+    expect(targetId.startsWith('session_')).toBe(true)
+
+    page.once('dialog', async (dialog) => {
+      await dialog.dismiss()
+    })
+    const targetSession = page.locator('.session-item').filter({ hasText: targetId }).first()
+    const trigger = targetSession.locator('.session-menu-trigger')
+    await trigger.click()
+    await page.getByRole('menuitem', { name: '归档', exact: true }).click()
+
+    await expect(page.locator('.session-item').filter({ hasText: targetId })).toHaveCount(1)
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  },
+
+  B005: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+      apiMocks: {
+        historyBySession: {
+          main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'preview-main-key' }],
+          s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 'preview-secondary' }],
+        },
+      },
+    })
+
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('标题Alpha')
+    })
+    const mainSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
+    await mainSession.locator('.session-menu-trigger').click()
+    await page.getByRole('menuitem', { name: '重命名' }).click()
+
+    const search = page.getByPlaceholder('搜索会话')
+    await search.fill('s2')
+    await expect(page.locator('.session-item')).toHaveCount(1)
+    await expect(page.locator('.session-item').first()).toContainText('s2')
+
+    await search.fill('标题Alpha')
+    await expect(page.locator('.session-item')).toHaveCount(1)
+    await expect(page.locator('.session-item').first()).toContainText('标题Alpha')
+
+    await search.fill('preview-main-key')
+    await expect(page.locator('.session-item')).toHaveCount(1)
+    await expect(page.locator('.session-item').first()).toContainText('标题Alpha')
+  },
+
+  B006: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    const trigger = page.locator('.session-menu-trigger').first()
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    await page.locator('.messages').click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Escape')
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
   },
 
   B007: async ({ page }) => {
@@ -503,6 +762,56 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const mainSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
     await mainSession.locator('.session-select').click()
     await expect(page.locator('.messages').getByText(`回执：${sourceText}`)).toBeVisible()
+  },
+
+  B008: async ({ page }) => {
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+    await setupBasicTeacherApiMocks(page, {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main 初始化' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2 初始化' }],
+      },
+      onChatStatus: ({ jobId }) => ({
+        job_id: jobId,
+        status: 'failed',
+        error_detail: '仅 main 会话错误',
+      }),
+    })
+
+    await page.goto('/')
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('main 会话失败')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect(page.getByText('抱歉，请求失败：仅 main 会话错误')).toBeVisible()
+
+    const secondSession = page.locator('.session-item').filter({ hasText: 's2' }).first()
+    await secondSession.locator('.session-select').click()
+    await expect(page.getByText('抱歉，请求失败：仅 main 会话错误')).toHaveCount(0)
+  },
+
+  B009: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    const loadMoreBtn = page.getByRole('button', { name: '已显示全部会话' })
+    await expect(loadMoreBtn).toBeDisabled()
+  },
+
+  B010: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    const loadOlderBtn = page.getByRole('button', { name: '没有更早消息' })
+    await expect(loadOlderBtn).toBeDisabled()
   },
 
   B011: async ({ page }) => {

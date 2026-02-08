@@ -13,6 +13,17 @@ class AssignmentUploadConfirmError(Exception):
         self.detail = detail
 
 
+def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
+    root = (data_dir / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise AssignmentUploadConfirmError(400, "assignment_id is required")
+    target = (root / aid).resolve()
+    if target != root and root not in target.parents:
+        raise AssignmentUploadConfirmError(400, "invalid assignment_id")
+    return target
+
+
 @dataclass(frozen=True)
 class AssignmentUploadConfirmDeps:
     data_dir: Path
@@ -111,7 +122,11 @@ def confirm_assignment_upload(
     if not assignment_id:
         deps.write_upload_job(job_id, {"status": "failed", "error": "assignment_id missing", "step": "failed"})
         raise AssignmentUploadConfirmError(400, "assignment_id missing")
-    out_dir = deps.data_dir / "assignments" / assignment_id
+    try:
+        out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    except AssignmentUploadConfirmError as exc:
+        deps.write_upload_job(job_id, {"status": "failed", "error": str(exc.detail), "step": "failed"})
+        raise
     meta_path = out_dir / "meta.json"
     if meta_path.exists():
         deps.write_upload_job(job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})

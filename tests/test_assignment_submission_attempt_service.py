@@ -79,6 +79,16 @@ class AssignmentSubmissionAttemptServiceTest(unittest.TestCase):
         assert best is not None
         self.assertEqual(best["attempt_id"], "a2")
 
+    def test_list_submission_attempts_rejects_traversal_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = AssignmentSubmissionAttemptDeps(
+                student_submissions_dir=root / "student_submissions",
+                grade_count_conf_threshold=0.8,
+            )
+            attempts = list_submission_attempts("../escape", "S1", deps=deps)
+            self.assertEqual(attempts, [])
+
 
 if __name__ == "__main__":
     unittest.main()

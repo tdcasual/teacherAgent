@@ -137,6 +137,37 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
             self.assertEqual(updated.get("expected_students"), ["S1", "S2"])
             self.assertEqual(updated.get("completion_policy", {}).get("discussion_marker"), "[DISCUSS_OK]")
 
+    def test_postprocess_assignment_meta_ignores_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            def _load_profile_file(path: Path):
+                return json.loads(path.read_text(encoding="utf-8"))
+
+            def _atomic_write_json(path: Path, payload):
+                path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            deps = AssignmentMetaPostprocessDeps(
+                data_dir=root / "data",
+                discussion_complete_marker="[DISCUSS_OK]",
+                load_profile_file=_load_profile_file,
+                parse_ids_value=lambda value: [str(x).strip() for x in (value if isinstance(value, list) else []) if str(x).strip()],
+                resolve_scope=lambda scope, _student_ids, class_name: "class" if scope == "class" and class_name else "public",
+                normalize_due_at=lambda value: str(value or "").strip(),
+                compute_expected_students=lambda scope, class_name, _student_ids: ["S1", "S2"] if scope == "class" and class_name else [],
+                atomic_write_json=_atomic_write_json,
+                now_iso=lambda: "2026-02-08T12:00:00",
+            )
+
+            postprocess_assignment_meta(
+                assignment_id="../escape",
+                due_at="2026-02-09T20:00:00",
+                expected_students=None,
+                completion_policy=None,
+                deps=deps,
+            )
+            self.assertFalse((root / "data" / "outside" / "meta.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

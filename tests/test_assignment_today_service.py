@@ -67,6 +67,60 @@ class AssignmentTodayServiceTest(unittest.TestCase):
         self.assertEqual(captured["args"]["class_name"], "高二2403班")
         self.assertEqual(result["assignment"]["include_text"], True)
 
+    def test_ignores_invalid_student_id_profile_path(self):
+        calls = {"load_profile": 0}
+
+        def _load_profile(_path):
+            calls["load_profile"] += 1
+            return {"class_name": "高二2403班"}
+
+        deps = AssignmentTodayDeps(
+            data_dir=Path("/tmp/data"),
+            parse_date_str=lambda value: str(value or "2026-02-08"),
+            has_llm_key=lambda: True,
+            load_profile_file=_load_profile,
+            find_assignment_for_date=lambda *_args, **_kwargs: None,
+            derive_kp_from_profile=lambda _profile: [],
+            safe_assignment_id=lambda student_id, date_str: f"A_{student_id}_{date_str}",
+            assignment_generate=lambda _args: {"ok": True},
+            load_assignment_meta=lambda _folder: {"assignment_id": "A_SAFE_2026-02-08"},
+            build_assignment_detail=lambda folder, include_text=False: {"folder": str(folder), "include_text": include_text},
+        )
+
+        result = assignment_today(
+            student_id="../escape",
+            date="2026-02-08",
+            auto_generate=False,
+            generate=True,
+            per_kp=3,
+            deps=deps,
+        )
+        self.assertEqual(result, {"date": "2026-02-08", "assignment": None})
+        self.assertEqual(calls["load_profile"], 0)
+
+    def test_auto_generate_ignores_invalid_generated_assignment_id_path(self):
+        deps = AssignmentTodayDeps(
+            data_dir=Path("/tmp/data"),
+            parse_date_str=lambda value: str(value or "2026-02-08"),
+            has_llm_key=lambda: True,
+            load_profile_file=lambda _path: {},
+            find_assignment_for_date=lambda *_args, **_kwargs: None,
+            derive_kp_from_profile=lambda _profile: ["力学"],
+            safe_assignment_id=lambda _student_id, _date_str: "../escape",
+            assignment_generate=lambda _args: {"ok": True},
+            load_assignment_meta=lambda _folder: {"assignment_id": "should_not_be_used"},
+            build_assignment_detail=lambda _folder, include_text=False: {"include_text": include_text},
+        )
+        result = assignment_today(
+            student_id="S1",
+            date="2026-02-08",
+            auto_generate=True,
+            generate=True,
+            per_kp=5,
+            deps=deps,
+        )
+        self.assertEqual(result, {"date": "2026-02-08", "assignment": None})
+
 
 if __name__ == "__main__":
     unittest.main()

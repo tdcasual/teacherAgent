@@ -211,6 +211,17 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     expect(chatStartCalls[0].agent_id).toBe('default')
   },
 
+  G003: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'invalid_tab',
+      },
+    })
+
+    await expect(page.locator('.workbench-switch button.active', { hasText: '技能' })).toBeVisible()
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherWorkbenchTab'))).toBe('skills')
+  },
+
   G004: async ({ page }) => {
     const pending = {
       job_id: 'job_restore_g004',
@@ -239,6 +250,280 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(page.locator('.messages').getByText('恢复中的用户消息')).toBeVisible()
     await expect(page.locator('.messages').getByText('恢复完成：最终回复')).toBeVisible()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob'))).toBeNull()
+  },
+
+  G005: async ({ page }) => {
+    const jobId = 'job_restore_upload_g005'
+    let statusCalls = 0
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      statusCalls += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: jobId,
+          status: 'processing',
+          progress: 35,
+          assignment_id: 'A-G005',
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await expect(page.locator('.workflow-chip.active')).toContainText('解析中')
+    await expect.poll(() => statusCalls).toBeGreaterThan(0)
+
+    await page.reload()
+    await expect.poll(() => statusCalls).toBeGreaterThan(1)
+    await expect(page.getByRole('button', { name: '工作流' })).toHaveClass(/active/)
+  },
+
+  G006: async ({ page }) => {
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+        teacherSessionViewState: JSON.stringify({
+          title_map: { main: '本地-main' },
+          hidden_ids: ['s2'],
+          active_session_id: 'main',
+          updated_at: '2026-02-07T00:00:00.000Z',
+        }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page, {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main 初始化' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2 初始化' }],
+      },
+    })
+
+    await page.route('http://localhost:8000/teacher/session/view-state', async (route) => {
+      const method = route.request().method().toUpperCase()
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: { s2: '远端-s2' },
+              hidden_ids: [],
+              active_session_id: 's2',
+              updated_at: '2026-02-08T00:00:00.000Z',
+            },
+          }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          state: {
+            title_map: { s2: '远端-s2' },
+            hidden_ids: [],
+            active_session_id: 's2',
+            updated_at: new Date().toISOString(),
+          },
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await expect(page.locator('.session-item').filter({ hasText: '远端-s2' }).first()).toBeVisible()
+    await page.locator('.session-item').filter({ hasText: '远端-s2' }).first().locator('.session-select').click()
+    await expect(page.locator('.messages').getByText('s2 初始化')).toBeVisible()
+  },
+
+  G007: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSkillFavorites: '{bad-json',
+        teacherSessionTitles: '{bad-json',
+        teacherDeletedSessions: 'not-an-array',
+        teacherSessionViewState: 'bad-json',
+      },
+    })
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('坏本地数据容错')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    await expect(page.locator('.messages').getByText('回执：坏本地数据容错')).toBeVisible()
+  },
+
+  G008: async ({ page }) => {
+    let startCalls = 0
+
+    await page.addInitScript(() => {
+      const rawSetItem = Storage.prototype.setItem
+      Storage.prototype.setItem = function patchedSetItem(key: string, value: string) {
+        if (key === 'teacherActiveUpload') {
+          throw new Error('QuotaExceededError')
+        }
+        return rawSetItem.call(this, key, value)
+      }
+    })
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/start', async (route) => {
+      startCalls += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: 'job_g008', status: 'queued' }),
+      })
+    })
+
+    await page.goto('/')
+    await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-G008')
+    await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles({
+      name: 'g008.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('g008'),
+    })
+    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+
+    await expect.poll(() => startCalls).toBe(1)
+    await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible()
+  },
+
+  G009: async ({ page }) => {
+    const customBase = 'http://127.0.0.1:9001'
+    const startRequestUrls: string[] = []
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        apiBaseTeacher: customBase,
+      },
+    })
+
+    await page.route('http://127.0.0.1:9001/**', async (route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      const method = request.method().toUpperCase()
+      const path = url.pathname
+
+      if (method === 'GET' && path === '/skills') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            skills: [
+              {
+                id: 'physics-teacher-ops',
+                title: '教学运营',
+                desc: '老师运营流程',
+                prompts: ['请总结班级学习情况'],
+                examples: ['查看班级趋势'],
+                allowed_roles: ['teacher'],
+              },
+            ],
+          }),
+        })
+        return
+      }
+
+      if (method === 'GET' && path === '/teacher/history/sessions') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            teacher_id: 'T001',
+            sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 0, preview: '' }],
+            next_cursor: null,
+            total: 1,
+          }),
+        })
+        return
+      }
+
+      if (method === 'GET' && path === '/teacher/history/session') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            teacher_id: 'T001',
+            session_id: 'main',
+            messages: [],
+            next_cursor: -1,
+          }),
+        })
+        return
+      }
+
+      if (path === '/teacher/session/view-state') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'POST' && path === '/chat/start') {
+        startRequestUrls.push(request.url())
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true, job_id: 'job_g009', status: 'queued', lane_queue_position: 0, lane_queue_size: 1 }),
+        })
+        return
+      }
+
+      if (method === 'GET' && path === '/chat/status') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ job_id: 'job_g009', status: 'done', reply: '回执：自定义 API base' }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      })
+    })
+
+    await page.goto('/')
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('自定义 API base')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect(page.locator('.messages').getByText('回执：自定义 API base')).toBeVisible()
+
+    await page.reload()
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('再次发送')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect.poll(() => startRequestUrls.length).toBe(2)
+    expect(startRequestUrls.every((url) => url.startsWith(customBase))).toBe(true)
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('apiBaseTeacher'))).toBe(customBase)
   },
 
   G010: async ({ page }) => {
@@ -323,6 +608,76 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await expect(page.getByRole('button', { name: '展开会话' })).toBeVisible()
     await expect(page.getByRole('button', { name: '打开工作台' })).toBeVisible()
+  },
+
+  H002: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    const trigger = page.locator('.session-menu-trigger').first()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await trigger.click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    await page.locator('.messages').click()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  },
+
+  H003: async ({ page }) => {
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+    })
+
+    const trigger = page.locator('.session-menu-trigger').first()
+    await trigger.focus()
+    await trigger.press('Enter')
+    await expect(page.locator('.session-menu').first()).toBeVisible()
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    await trigger.press('Escape')
+    await expect(page.locator('.session-menu')).toHaveCount(0)
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  },
+
+  H004: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    await composer.fill('@')
+    await expect(page.getByText('Agent 建议（↑↓ 选择 / 回车插入）')).toBeVisible()
+    await composer.press('ArrowDown')
+    await composer.press('Enter')
+
+    await expect(composer).toHaveValue(/@opencode/)
+    await composer.type(' 诊断')
+    await composer.press('Enter')
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    expect(chatStartCalls[0].agent_id).toBe('opencode')
+  },
+
+  H005: async ({ page }) => {
+    await openTeacherApp(page, {
+      apiMocks: {
+        onChatStatus: ({ jobId }) => ({ job_id: jobId, status: 'processing' }),
+      },
+    })
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('pending 状态按钮禁用')
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect(page.getByRole('button', { name: '发送' })).toBeDisabled()
+    await expect(page.locator('.composer-hint')).toContainText('处理中')
+    await expect
+      .poll(async () => page.evaluate(() => Boolean(localStorage.getItem('teacherPendingChatJob'))))
+      .toBe(true)
   },
 }
 

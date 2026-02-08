@@ -298,6 +298,38 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(page.getByRole('heading', { name: 'Provider 管理（共享 + 私有）' })).toBeVisible()
   },
 
+  F002: async ({ page }) => {
+    await openRoutingPageWithMocks(page, {
+      onRequest: async ({ pathname, method }) => {
+        if (method === 'GET' && pathname === '/teacher/provider-registry') {
+          return {
+            status: 503,
+            body: { detail: 'provider registry unavailable' },
+          }
+        }
+      },
+    })
+
+    await expect(page.getByRole('heading', { name: '模型路由配置' })).toBeVisible()
+    await expect(page.getByText('provider registry unavailable')).toBeVisible()
+  },
+
+  F003: async ({ page }) => {
+    await openRoutingPageWithMocks(page, {
+      onRequest: async ({ pathname, method }) => {
+        if (method === 'GET' && pathname === '/teacher/llm-routing') {
+          return {
+            status: 503,
+            body: { detail: 'routing overview unavailable' },
+          }
+        }
+      },
+    })
+
+    await expect(page.getByRole('heading', { name: 'Provider 管理（共享 + 私有）' })).toBeVisible()
+    await expect(page.getByText('routing overview unavailable')).toBeVisible()
+  },
+
   F004: async ({ page }) => {
     let simulateCalls = 0
 
@@ -369,8 +401,8 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.getByRole('button', { name: '提交提案' }).click()
 
-    await expect(page.getByText('提案已提交')).toBeVisible()
-    await expect(page.getByText('prop_new_1')).toBeVisible()
+    await expect(page.getByText('提案已创建：prop_new_1')).toBeVisible()
+    await expect(page.getByText('prop_new_1', { exact: true }).first()).toBeVisible()
   },
 
   F006: async ({ page }) => {
@@ -397,8 +429,37 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.getByRole('button', { name: '生效' }).first().click()
 
-    await expect(page.getByText('提案已生效')).toBeVisible()
+    await expect(page.getByText('提案 prop_review_1 已生效')).toBeVisible()
     await expect(page.getByText('线上版本：8')).toBeVisible()
+  },
+
+  F007: async ({ page }) => {
+    let rejected = false
+    let reviewPayload: Record<string, unknown> | null = null
+
+    await openRoutingPageWithMocks(page, {
+      routing: () => buildRoutingOverview({ version: 7, proposalId: 'prop_reject_1', includePending: !rejected }),
+      onRequest: async ({ pathname, method, bodyText }) => {
+        if (method === 'POST' && pathname === '/teacher/llm-routing/proposals/prop_reject_1/review') {
+          reviewPayload = JSON.parse(bodyText || '{}')
+          rejected = true
+          return {
+            body: {
+              ok: true,
+              proposal_id: 'prop_reject_1',
+              status: 'rejected',
+              reason: '不符合发布窗口',
+            },
+          }
+        }
+      },
+    })
+
+    await page.getByRole('button', { name: '拒绝' }).first().click()
+
+    expect(reviewPayload?.approve).toBe(false)
+    await expect(page.getByText('提案 prop_reject_1 已拒绝')).toBeVisible()
+    await expect(page.getByText('暂无待审核提案。')).toBeVisible()
   },
 
   F008: async ({ page }) => {
@@ -418,7 +479,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByPlaceholder('例如：3').fill('3')
     await page.getByRole('button', { name: '回滚到指定版本' }).click()
 
-    await expect(page.getByText('回滚成功')).toBeVisible()
+    await expect(page.getByText('已回滚到版本 3')).toBeVisible()
     await expect(page.getByText('线上版本：3')).toBeVisible()
   },
 
@@ -481,6 +542,154 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await expect(page.getByText('provider id conflict')).toBeVisible()
     await expect(page.getByText('暂无私有 Provider。')).toBeVisible()
+  },
+
+  F011: async ({ page }) => {
+    let providers: Array<Record<string, unknown>> = [
+      {
+        id: 'tprv_key_rotate',
+        provider: 'tprv_key_rotate',
+        display_name: '待轮换',
+        base_url: 'https://proxy.example.com/v1',
+        api_key_masked: 'sk-***abcd',
+        default_mode: 'openai-chat',
+        default_model: 'gpt-4.1-mini',
+        enabled: true,
+        source: 'private',
+      },
+    ]
+    let patchPayload: Record<string, unknown> | null = null
+
+    await openRoutingPageWithMocks(page, {
+      providers: () => buildProviderOverview(providers),
+      onRequest: async ({ pathname, method, bodyText }) => {
+        if (method === 'PATCH' && pathname === '/teacher/provider-registry/providers/tprv_key_rotate') {
+          patchPayload = JSON.parse(bodyText || '{}')
+          providers = [
+            {
+              ...providers[0],
+              display_name: String(patchPayload?.display_name || '待轮换'),
+              api_key_masked: 'sk-***9999',
+            },
+          ]
+          return { body: { ok: true, provider: providers[0] } }
+        }
+      },
+    })
+
+    const providerRow = page.locator('.routing-item').filter({ hasText: 'tprv_key_rotate' }).first()
+    await providerRow.locator('.routing-field').filter({ hasText: '轮换 API Key（可选）' }).locator('input').fill('sk-live-raw-secret')
+    await providerRow.getByRole('button', { name: '保存' }).click()
+
+    expect(patchPayload?.api_key).toBe('sk-live-raw-secret')
+    await expect(page.getByText('Provider tprv_key_rotate 已更新。')).toBeVisible()
+    await expect(page.getByText('key: sk-***9999')).toBeVisible()
+    await expect(page.getByText('sk-live-raw-secret')).toHaveCount(0)
+  },
+
+  F012: async ({ page }) => {
+    let providers: Array<Record<string, unknown>> = [
+      {
+        id: 'tprv_to_disable',
+        provider: 'tprv_to_disable',
+        display_name: '待禁用',
+        base_url: 'https://proxy.example.com/v1',
+        api_key_masked: 'sk-***8888',
+        default_mode: 'openai-chat',
+        default_model: 'gpt-4.1-mini',
+        enabled: true,
+        source: 'private',
+      },
+    ]
+    let deleteCalls = 0
+
+    await openRoutingPageWithMocks(page, {
+      providers: () => buildProviderOverview(providers),
+      onRequest: async ({ pathname, method }) => {
+        if (method === 'DELETE' && pathname === '/teacher/provider-registry/providers/tprv_to_disable') {
+          deleteCalls += 1
+          providers = []
+          return { body: { ok: true } }
+        }
+      },
+    })
+
+    const providerRow = page.locator('.routing-item').filter({ hasText: 'tprv_to_disable' }).first()
+    await providerRow.getByRole('button', { name: '禁用' }).click()
+
+    await expect.poll(() => deleteCalls).toBe(1)
+    await expect(page.getByText('Provider tprv_to_disable 已禁用。')).toBeVisible()
+    await expect(page.getByText('暂无私有 Provider。')).toBeVisible()
+    await expect(page.locator('.routing-item').filter({ hasText: 'tprv_to_disable' })).toHaveCount(0)
+  },
+
+  F013: async ({ page }) => {
+    await openRoutingPageWithMocks(page, {
+      providers: () =>
+        buildProviderOverview([
+          {
+            id: 'tprv_probe_ok',
+            provider: 'tprv_probe_ok',
+            display_name: '探测成功',
+            base_url: 'https://proxy.example.com/v1',
+            api_key_masked: 'sk-***7777',
+            default_mode: 'openai-chat',
+            default_model: 'gpt-4.1-mini',
+            enabled: true,
+            source: 'private',
+          },
+        ]),
+      onRequest: async ({ pathname, method }) => {
+        if (method === 'POST' && pathname === '/teacher/provider-registry/providers/tprv_probe_ok/probe-models') {
+          return {
+            body: {
+              ok: true,
+              provider: 'tprv_probe_ok',
+              models: ['gpt-4.1-mini', 'gpt-4.1'],
+            },
+          }
+        }
+      },
+    })
+
+    const providerRow = page.locator('.routing-item').filter({ hasText: 'tprv_probe_ok' }).first()
+    await providerRow.getByRole('button', { name: '探测模型' }).click()
+
+    await expect(page.getByText('Provider tprv_probe_ok 探测完成。')).toBeVisible()
+    await expect(page.getByText('探测结果：gpt-4.1-mini，gpt-4.1')).toBeVisible()
+  },
+
+  F014: async ({ page }) => {
+    await openRoutingPageWithMocks(page, {
+      providers: () =>
+        buildProviderOverview([
+          {
+            id: 'tprv_probe_timeout',
+            provider: 'tprv_probe_timeout',
+            display_name: '探测超时',
+            base_url: 'https://proxy.example.com/v1',
+            api_key_masked: 'sk-***6666',
+            default_mode: 'openai-chat',
+            default_model: 'gpt-4.1-mini',
+            enabled: true,
+            source: 'private',
+          },
+        ]),
+      onRequest: async ({ pathname, method }) => {
+        if (method === 'POST' && pathname === '/teacher/provider-registry/providers/tprv_probe_timeout/probe-models') {
+          return {
+            status: 504,
+            body: { detail: 'probe timeout' },
+          }
+        }
+      },
+    })
+
+    const providerRow = page.locator('.routing-item').filter({ hasText: 'tprv_probe_timeout' }).first()
+    await providerRow.getByRole('button', { name: '探测模型' }).click()
+
+    await expect(page.getByText('probe timeout')).toBeVisible()
+    await expect(providerRow.locator('.routing-field').filter({ hasText: '默认模型' }).locator('input')).toBeEnabled()
   },
 }
 

@@ -139,6 +139,34 @@ class AssignmentRequirementsServiceTest(unittest.TestCase):
         self.assertIn("作业ID", prompt)
         self.assertIn("请按以下格式补全作业要求（8项）", prompt)
 
+    def test_rejects_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            payload = {
+                "subject": "物理",
+                "topic": "欧姆定律",
+                "grade_level": "初二",
+                "class_level": "中等",
+                "core_concepts": ["欧姆定律", "串联", "并联"],
+                "typical_problem": "电路计算",
+                "misconceptions": ["错1", "错2", "错3", "错4"],
+                "duration_minutes": 40,
+                "preferences": ["A", "B"],
+                "extra_constraints": "",
+            }
+            save = save_assignment_requirements("../escape", payload, "2026-02-08", deps=deps)
+            self.assertEqual(save.get("error"), "invalid_assignment_id")
+
+            ensured = ensure_requirements_for_assignment(
+                "../escape",
+                "2026-02-08",
+                None,
+                source="manual",
+                deps=deps,
+            )
+            self.assertEqual((ensured or {}).get("error"), "invalid_assignment_id")
+
 
 if __name__ == "__main__":
     unittest.main()

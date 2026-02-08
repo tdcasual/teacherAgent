@@ -31,6 +31,17 @@ class AssignmentMetaPostprocessDeps:
     now_iso: Callable[[], str]
 
 
+def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path]:
+    root = (data_dir / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        return None
+    target = (root / aid).resolve()
+    if target != root and root not in target.parents:
+        return None
+    return target
+
+
 def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]:
     date_val = meta.get("date")
     if date_val:
@@ -215,7 +226,9 @@ def postprocess_assignment_meta(
     completion_policy: Optional[Dict[str, Any]],
     deps: AssignmentMetaPostprocessDeps,
 ) -> None:
-    folder = deps.data_dir / "assignments" / assignment_id
+    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if folder is None:
+        return
     meta_path = folder / "meta.json"
     if not meta_path.exists():
         return

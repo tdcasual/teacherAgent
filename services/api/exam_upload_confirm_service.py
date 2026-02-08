@@ -13,6 +13,28 @@ class ExamUploadConfirmError(Exception):
         self.detail = detail
 
 
+def _resolve_exam_dir(data_dir: Path, exam_id: str) -> Path:
+    root = (data_dir / "exams").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        raise ExamUploadConfirmError(400, "exam_id missing")
+    target = (root / eid).resolve()
+    if target != root and root not in target.parents:
+        raise ExamUploadConfirmError(400, "invalid exam_id")
+    return target
+
+
+def _resolve_analysis_dir(data_dir: Path, exam_id: str) -> Path:
+    root = (data_dir / "analysis").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        raise ExamUploadConfirmError(400, "exam_id missing")
+    target = (root / eid).resolve()
+    if target != root and root not in target.parents:
+        raise ExamUploadConfirmError(400, "invalid exam_id")
+    return target
+
+
 @dataclass(frozen=True)
 class ExamUploadConfirmDeps:
     app_root: Path
@@ -67,7 +89,11 @@ def confirm_exam_upload(
         meta = {**meta, **override.get("meta")}
     questions_override = override.get("questions") if isinstance(override.get("questions"), list) else None
 
-    exam_dir = deps.data_dir / "exams" / exam_id
+    try:
+        exam_dir = _resolve_exam_dir(deps.data_dir, exam_id)
+    except ExamUploadConfirmError as exc:
+        deps.write_exam_job(job_id, {"status": "failed", "error": str(exc.detail), "step": "failed"})
+        raise
     manifest_path = exam_dir / "manifest.json"
     if manifest_path.exists():
         deps.write_exam_job(job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
@@ -150,7 +176,7 @@ def confirm_exam_upload(
         deps.copy2(src_responses, dest_scored)
 
     deps.write_exam_job(job_id, {"step": "analysis", "progress": 70})
-    analysis_dir = deps.data_dir / "analysis" / exam_id
+    analysis_dir = _resolve_analysis_dir(deps.data_dir, exam_id)
     analysis_dir.mkdir(parents=True, exist_ok=True)
     draft_json = analysis_dir / "draft.json"
     draft_md = analysis_dir / "draft.md"

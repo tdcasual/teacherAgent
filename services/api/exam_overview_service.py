@@ -18,6 +18,17 @@ class ExamOverviewDeps:
     now_iso: Callable[[], str]
 
 
+def _resolve_exam_dir(data_dir: Path, exam_id: str) -> Optional[Path]:
+    root = (data_dir / "exams").resolve()
+    eid = str(exam_id or "").strip()
+    if not eid:
+        return None
+    target = (root / eid).resolve()
+    if target != root and root not in target.parents:
+        return None
+    return target
+
+
 def exam_get(exam_id: str, deps: ExamOverviewDeps) -> Dict[str, Any]:
     manifest = deps.load_exam_manifest(exam_id)
     if not manifest:
@@ -37,6 +48,11 @@ def exam_get(exam_id: str, deps: ExamOverviewDeps) -> Dict[str, Any]:
     if not score_mode:
         score_mode = "question" if questions else "unknown"
 
+    manifest_path = None
+    exam_dir = _resolve_exam_dir(deps.data_dir, exam_id)
+    if exam_dir is not None:
+        manifest_path = exam_dir / "manifest.json"
+
     return {
         "ok": True,
         "exam_id": manifest.get("exam_id") or exam_id,
@@ -54,7 +70,7 @@ def exam_get(exam_id: str, deps: ExamOverviewDeps) -> Dict[str, Any]:
         },
         "score_mode": score_mode,
         "files": {
-            "manifest": str((deps.data_dir / "exams" / exam_id / "manifest.json").resolve()),
+            "manifest": str(manifest_path.resolve()) if manifest_path else None,
             "responses": str(responses_path) if responses_path else None,
             "questions": str(questions_path) if questions_path else None,
             "analysis_draft": str(analysis_path) if analysis_path else None,

@@ -27,6 +27,9 @@ class ChatJobRepositoryTest(unittest.TestCase):
             )
             path = chat_job_path("cjob:abc/12", deps)
             self.assertEqual(path.name, "cjob_abc_12")
+            escaped = chat_job_path("..", deps)
+            self.assertEqual(escaped.parent, Path(td))
+            self.assertTrue(escaped.name.startswith("job_"))
 
     def test_load_chat_job_missing_raises(self):
         with TemporaryDirectory() as td:

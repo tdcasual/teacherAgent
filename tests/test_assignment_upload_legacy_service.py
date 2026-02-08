@@ -129,6 +129,42 @@ class AssignmentUploadLegacyServiceTest(unittest.IsolatedAsyncioTestCase):
             meta_path = root / "data" / "assignments" / "A1" / "meta.json"
             self.assertTrue(meta_path.exists())
 
+    async def test_rejects_invalid_assignment_id_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = AssignmentUploadLegacyDeps(
+                data_dir=root / "data",
+                parse_date_str=lambda value: str(value or "2026-02-07"),
+                sanitize_filename=lambda name: str(name or "").strip(),
+                save_upload_file=self._save_upload,
+                extract_text_from_pdf=lambda _p, _l, _o: "x" * 260,
+                extract_text_from_image=lambda _p, _l, _o: "x" * 260,
+                llm_parse_assignment_payload=lambda _s, _a: {"questions": [{"stem": "q1"}], "requirements": {}},
+                write_uploaded_questions=lambda _o, _aid, _q: [{"question_id": "UP-001"}],
+                compute_requirements_missing=lambda _r: [],
+                llm_autofill_requirements=lambda s, a, q, r, m: (r, m, False),
+                save_assignment_requirements=lambda *args, **kwargs: {"ok": True},
+                parse_ids_value=lambda _v: [],
+                resolve_scope=lambda _s, _ids, _c: "public",
+                load_assignment_meta=lambda _o: {},
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+            with self.assertRaises(AssignmentUploadLegacyError) as ctx:
+                await assignment_upload(
+                    deps=deps,
+                    assignment_id="../escape",
+                    date="2026-02-07",
+                    scope="public",
+                    class_name="",
+                    student_ids="",
+                    files=[_Upload(filename="q1.png", content=b"fake")],
+                    answer_files=None,
+                    ocr_mode="FREE_OCR",
+                    language="zh",
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "invalid assignment_id")
+
     async def _save_upload(self, upload: _Upload, dest: Path):
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(upload.content)
