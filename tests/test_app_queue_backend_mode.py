@@ -30,3 +30,31 @@ def test_rq_required_in_api_startup(monkeypatch):
         assert "rq" in str(exc).lower()
     else:
         assert False, "expected RuntimeError when rq not enabled"
+
+
+def test_lifespan_does_not_start_workers(monkeypatch):
+    from services.api import app as app_mod
+
+    monkeypatch.setenv("JOB_QUEUE_BACKEND", "rq")
+    import sys
+    import types
+
+    stub = types.ModuleType("services.api.rq_tasks")
+    stub.require_redis = lambda: None
+    monkeypatch.setitem(sys.modules, "services.api.rq_tasks", stub)
+
+    called = {"start": 0}
+
+    def fake_start():
+        called["start"] += 1
+
+    monkeypatch.setattr(app_mod, "_start_inline_workers", fake_start, raising=False)
+
+    import asyncio
+
+    async def run():
+        async with app_mod._app_lifespan(app_mod.app):
+            pass
+
+    asyncio.run(run())
+    assert called["start"] == 0
