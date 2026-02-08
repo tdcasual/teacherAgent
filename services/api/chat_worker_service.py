@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -11,6 +12,7 @@ class ChatWorkerDeps:
     chat_job_dir: Path
     chat_job_lock: Any
     chat_job_event: Any
+    stop_event: Any
     chat_worker_threads: List[Any]
     chat_worker_pool_size: int
     worker_started_get: Callable[[], bool]
@@ -63,8 +65,10 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> None:
 
 
 def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
-    while True:
-        deps.chat_job_event.wait()
+    while not deps.stop_event.is_set():
+        deps.chat_job_event.wait(timeout=0.1)
+        if deps.stop_event.is_set():
+            break
         job_id = ""
         lane_id = ""
         with deps.chat_job_lock:
@@ -97,6 +101,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
 def start_chat_worker(*, deps: ChatWorkerDeps) -> None:
     if deps.worker_started_get():
         return
+    deps.stop_event.clear()
     scan_pending_chat_jobs(deps=deps)
     for idx in range(max(1, int(deps.chat_worker_pool_size or 1))):
         thread = deps.thread_factory(
@@ -107,3 +112,30 @@ def start_chat_worker(*, deps: ChatWorkerDeps) -> None:
         thread.start()
         deps.chat_worker_threads.append(thread)
     deps.worker_started_set(True)
+
+
+def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
+    """
+    Best-effort stop for in-process multi-tenant unloading.
+
+    Threads exit when `stop_event` is set and are joined up to `timeout_sec` total.
+    """
+    try:
+        deps.stop_event.set()
+    except Exception:
+        return
+    try:
+        deps.chat_job_event.set()
+    except Exception:
+        pass
+
+    deadline = time.monotonic() + max(0.0, float(timeout_sec or 0.0))
+    for thread in list(deps.chat_worker_threads):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            thread.join(remaining)
+        except Exception:
+            pass
+    deps.worker_started_set(False)

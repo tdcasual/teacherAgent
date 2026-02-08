@@ -27,6 +27,7 @@ tmp/
 # Generated analysis & exports
 data/analysis/
 data/exams/
+data/_system/
 
 # Lesson capture (raw materials, OCR, previews)
 data/lessons/

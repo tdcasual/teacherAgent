@@ -197,6 +197,7 @@ from .chat_worker_service import (
     enqueue_chat_job as _enqueue_chat_job_impl,
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
+    stop_chat_worker as _stop_chat_worker_impl,
 )
 from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chat_support_service import (
@@ -498,16 +499,21 @@ UPLOAD_JOB_QUEUE: deque[str] = deque()
 UPLOAD_JOB_LOCK = threading.Lock()
 UPLOAD_JOB_EVENT = threading.Event()
 UPLOAD_JOB_WORKER_STARTED = False
+UPLOAD_JOB_STOP_EVENT = threading.Event()
+UPLOAD_JOB_WORKER_THREAD: Optional[threading.Thread] = None
 
 EXAM_UPLOAD_JOB_DIR = UPLOADS_DIR / "exam_jobs"
 EXAM_JOB_QUEUE: deque[str] = deque()
 EXAM_JOB_LOCK = threading.Lock()
 EXAM_JOB_EVENT = threading.Event()
 EXAM_JOB_WORKER_STARTED = False
+EXAM_JOB_STOP_EVENT = threading.Event()
+EXAM_JOB_WORKER_THREAD: Optional[threading.Thread] = None
 CHAT_JOB_DIR = UPLOADS_DIR / "chat_jobs"
 CHAT_JOB_LOCK = threading.Lock()
 CHAT_JOB_EVENT = threading.Event()
 CHAT_JOB_WORKER_STARTED = False
+CHAT_WORKER_STOP_EVENT = threading.Event()
 CHAT_WORKER_POOL_SIZE = max(1, int(os.getenv("CHAT_WORKER_POOL_SIZE", "4") or "4"))
 CHAT_LANE_MAX_QUEUE = max(1, int(os.getenv("CHAT_LANE_MAX_QUEUE", "6") or "6"))
 CHAT_LANE_DEBOUNCE_MS = max(0, int(os.getenv("CHAT_LANE_DEBOUNCE_MS", "500") or "500"))
@@ -606,6 +612,8 @@ _PROFILE_UPDATE_QUEUE: deque[Dict[str, Any]] = deque()
 _PROFILE_UPDATE_LOCK = threading.Lock()
 _PROFILE_UPDATE_EVENT = threading.Event()
 _PROFILE_UPDATE_WORKER_STARTED = False
+_PROFILE_UPDATE_STOP_EVENT = threading.Event()
+_PROFILE_UPDATE_WORKER_THREAD: Optional[threading.Thread] = None
 
 _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS = [
     re.compile(p, re.I)
@@ -667,12 +675,21 @@ _TEACHER_MEMORY_CONFLICT_GROUPS: List[Tuple[Tuple[str, ...], Tuple[str, ...]]] =
 
 
 @contextmanager
-def _limit(sema: threading.BoundedSemaphore):
-    sema.acquire()
+def _limit(limiter: Any):
+    semas: List[Any]
+    if isinstance(limiter, (list, tuple)):
+        semas = list(limiter)
+    else:
+        semas = [limiter]
+    acquired: List[Any] = []
+    for sema in semas:
+        sema.acquire()
+        acquired.append(sema)
     try:
         yield
     finally:
-        sema.release()
+        for sema in reversed(acquired):
+            sema.release()
 
 def _trim_messages(messages: List[Dict[str, Any]], role_hint: Optional[str] = None) -> List[Dict[str, Any]]:
     if not messages:
@@ -818,8 +835,10 @@ def scan_pending_upload_jobs() -> None:
             enqueue_upload_job(job_id)
 
 def upload_job_worker_loop() -> None:
-    while True:
-        UPLOAD_JOB_EVENT.wait()
+    while not UPLOAD_JOB_STOP_EVENT.is_set():
+        UPLOAD_JOB_EVENT.wait(timeout=0.1)
+        if UPLOAD_JOB_STOP_EVENT.is_set():
+            break
         job_id = ""
         with UPLOAD_JOB_LOCK:
             if UPLOAD_JOB_QUEUE:
@@ -842,13 +861,28 @@ def upload_job_worker_loop() -> None:
             )
 
 def start_upload_worker() -> None:
-    global UPLOAD_JOB_WORKER_STARTED
+    global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
     if UPLOAD_JOB_WORKER_STARTED:
         return
+    UPLOAD_JOB_STOP_EVENT.clear()
     scan_pending_upload_jobs()
-    thread = threading.Thread(target=upload_job_worker_loop, daemon=True)
+    thread = threading.Thread(target=upload_job_worker_loop, daemon=True, name="upload-worker")
     thread.start()
+    UPLOAD_JOB_WORKER_THREAD = thread
     UPLOAD_JOB_WORKER_STARTED = True
+
+def stop_upload_worker(timeout_sec: float = 1.5) -> None:
+    global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
+    UPLOAD_JOB_STOP_EVENT.set()
+    UPLOAD_JOB_EVENT.set()
+    thread = UPLOAD_JOB_WORKER_THREAD
+    if thread is not None:
+        try:
+            thread.join(max(0.0, float(timeout_sec or 0.0)))
+        except Exception:
+            pass
+    UPLOAD_JOB_WORKER_THREAD = None
+    UPLOAD_JOB_WORKER_STARTED = False
 
 def exam_job_path(job_id: str) -> Path:
     raw = str(job_id or "")
@@ -898,8 +932,10 @@ def scan_pending_exam_jobs() -> None:
             enqueue_exam_job(job_id)
 
 def exam_job_worker_loop() -> None:
-    while True:
-        EXAM_JOB_EVENT.wait()
+    while not EXAM_JOB_STOP_EVENT.is_set():
+        EXAM_JOB_EVENT.wait(timeout=0.1)
+        if EXAM_JOB_STOP_EVENT.is_set():
+            break
         job_id = ""
         with EXAM_JOB_LOCK:
             if EXAM_JOB_QUEUE:
@@ -922,13 +958,28 @@ def exam_job_worker_loop() -> None:
             )
 
 def start_exam_upload_worker() -> None:
-    global EXAM_JOB_WORKER_STARTED
+    global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
     if EXAM_JOB_WORKER_STARTED:
         return
+    EXAM_JOB_STOP_EVENT.clear()
     scan_pending_exam_jobs()
-    thread = threading.Thread(target=exam_job_worker_loop, daemon=True)
+    thread = threading.Thread(target=exam_job_worker_loop, daemon=True, name="exam-upload-worker")
     thread.start()
+    EXAM_JOB_WORKER_THREAD = thread
     EXAM_JOB_WORKER_STARTED = True
+
+def stop_exam_upload_worker(timeout_sec: float = 1.5) -> None:
+    global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
+    EXAM_JOB_STOP_EVENT.set()
+    EXAM_JOB_EVENT.set()
+    thread = EXAM_JOB_WORKER_THREAD
+    if thread is not None:
+        try:
+            thread.join(max(0.0, float(timeout_sec or 0.0)))
+        except Exception:
+            pass
+    EXAM_JOB_WORKER_THREAD = None
+    EXAM_JOB_WORKER_STARTED = False
 
 def chat_job_path(job_id: str) -> Path:
     return _chat_job_path_impl(job_id, deps=_chat_job_repo_deps())
@@ -1115,6 +1166,9 @@ def chat_job_worker_loop() -> None:
 
 def start_chat_worker() -> None:
     _start_chat_worker_impl(deps=_chat_worker_deps())
+
+def stop_chat_worker(timeout_sec: float = 1.5) -> None:
+    _stop_chat_worker_impl(deps=_chat_worker_deps(), timeout_sec=timeout_sec)
 
 def load_chat_request_index() -> Dict[str, str]:
     request_index_path = CHAT_IDEMPOTENCY_STATE.request_index_path
@@ -1901,13 +1955,29 @@ def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> 
 
 @asynccontextmanager
 async def _app_lifespan(_app: FastAPI):
+    start_tenant_runtime()
+    try:
+        yield
+    finally:
+        stop_tenant_runtime()
+
+
+def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
     start_upload_worker()
     if PROFILE_UPDATE_ASYNC:
         start_profile_update_worker()
     start_exam_upload_worker()
     start_chat_worker()
-    yield
+
+
+def stop_tenant_runtime() -> None:
+    # Stop in reverse order of startup. Best-effort only.
+    stop_chat_worker()
+    stop_exam_upload_worker()
+    stop_upload_worker()
+    if PROFILE_UPDATE_ASYNC:
+        stop_profile_update_worker()
 
 
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=_app_lifespan)
@@ -2253,8 +2323,10 @@ def enqueue_profile_update(args: Dict[str, Any]) -> None:
         _PROFILE_UPDATE_EVENT.set()
 
 def profile_update_worker_loop() -> None:
-    while True:
-        _PROFILE_UPDATE_EVENT.wait()
+    while not _PROFILE_UPDATE_STOP_EVENT.is_set():
+        _PROFILE_UPDATE_EVENT.wait(timeout=0.1)
+        if _PROFILE_UPDATE_STOP_EVENT.is_set():
+            break
         batch: List[Dict[str, Any]] = []
         with _PROFILE_UPDATE_LOCK:
             while _PROFILE_UPDATE_QUEUE:
@@ -2292,12 +2364,27 @@ def profile_update_worker_loop() -> None:
                 diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
 
 def start_profile_update_worker() -> None:
-    global _PROFILE_UPDATE_WORKER_STARTED
+    global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
     if _PROFILE_UPDATE_WORKER_STARTED:
         return
-    thread = threading.Thread(target=profile_update_worker_loop, daemon=True)
+    _PROFILE_UPDATE_STOP_EVENT.clear()
+    thread = threading.Thread(target=profile_update_worker_loop, daemon=True, name="profile-update-worker")
     thread.start()
+    _PROFILE_UPDATE_WORKER_THREAD = thread
     _PROFILE_UPDATE_WORKER_STARTED = True
+
+def stop_profile_update_worker(timeout_sec: float = 1.5) -> None:
+    global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
+    _PROFILE_UPDATE_STOP_EVENT.set()
+    _PROFILE_UPDATE_EVENT.set()
+    thread = _PROFILE_UPDATE_WORKER_THREAD
+    if thread is not None:
+        try:
+            thread.join(max(0.0, float(timeout_sec or 0.0)))
+        except Exception:
+            pass
+    _PROFILE_UPDATE_WORKER_THREAD = None
+    _PROFILE_UPDATE_WORKER_STARTED = False
 
 def student_candidates_by_name(name: str) -> List[Dict[str, str]]:
     return _student_candidates_by_name_impl(name, _student_directory_deps())
@@ -3542,10 +3629,12 @@ def _upload_llm_deps():
     )
 
 def _upload_text_deps():
+    from .global_limits import GLOBAL_OCR_SEMAPHORE
+
     return UploadTextDeps(
         diag_log=diag_log,
         limit=_limit,
-        ocr_semaphore=_OCR_SEMAPHORE,
+        ocr_semaphore=(_OCR_SEMAPHORE, GLOBAL_OCR_SEMAPHORE),
     )
 
 def _content_catalog_deps():
@@ -3931,12 +4020,32 @@ def _core_example_tool_deps():
     )
 
 def _chat_runtime_deps():
+    from .global_limits import (
+        GLOBAL_LLM_SEMAPHORE,
+        GLOBAL_LLM_SEMAPHORE_STUDENT,
+        GLOBAL_LLM_SEMAPHORE_TEACHER,
+    )
+
     return ChatRuntimeDeps(
         gateway=LLM_GATEWAY,
         limit=_limit,
-        default_limiter=_LLM_SEMAPHORE,
-        student_limiter=_LLM_SEMAPHORE_STUDENT,
-        teacher_limiter=_LLM_SEMAPHORE_TEACHER,
+        # Order is important: tenant -> global, and within each: total -> role.
+        default_limiter=(
+            _LLM_SEMAPHORE,
+            GLOBAL_LLM_SEMAPHORE,
+        ),
+        student_limiter=(
+            _LLM_SEMAPHORE,
+            _LLM_SEMAPHORE_STUDENT,
+            GLOBAL_LLM_SEMAPHORE,
+            GLOBAL_LLM_SEMAPHORE_STUDENT,
+        ),
+        teacher_limiter=(
+            _LLM_SEMAPHORE,
+            _LLM_SEMAPHORE_TEACHER,
+            GLOBAL_LLM_SEMAPHORE,
+            GLOBAL_LLM_SEMAPHORE_TEACHER,
+        ),
         resolve_teacher_id=resolve_teacher_id,
         resolve_teacher_model_registry=lambda teacher_id: _merged_model_registry_impl(teacher_id, deps=_teacher_provider_registry_deps()),
         resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _resolve_provider_target_impl(
@@ -3971,6 +4080,7 @@ def _chat_worker_deps():
         chat_job_dir=CHAT_JOB_DIR,
         chat_job_lock=CHAT_JOB_LOCK,
         chat_job_event=CHAT_JOB_EVENT,
+        stop_event=CHAT_WORKER_STOP_EVENT,
         chat_worker_threads=CHAT_WORKER_THREADS,
         chat_worker_pool_size=CHAT_WORKER_POOL_SIZE,
         worker_started_get=_chat_worker_started_get,
@@ -4877,3 +4987,44 @@ async def submit(
         auto_assignment=auto_assignment,
         deps=_student_submit_deps(),
     )
+
+
+# ---- Dynamic tenants root wiring (in-process multi-tenancy) ----
+#
+# Keep the existing FastAPI instance (with all legacy routes) as the default tenant,
+# and expose a root ASGI dispatcher as the module-level `app`.
+#
+# Important: this MUST only run for the canonical module name. Tenant app instances
+# are loaded as separate module copies (e.g. "services.api._tenant_xxx") and must
+# keep `app` as the tenant FastAPI instance (no recursion to dispatcher).
+if __name__ == "services.api.app":
+    _DEFAULT_APP = app
+
+    TENANT_ADMIN_KEY = str(os.getenv("TENANT_ADMIN_KEY", "") or "").strip()
+    TENANT_DB_PATH = Path(
+        os.getenv(
+            "TENANT_DB_PATH",
+            str(APP_ROOT / "data" / "_system" / "tenants.sqlite3"),
+        )
+    )
+
+    try:
+        from .tenant_admin_api import TenantAdminDeps, create_admin_app
+        from .tenant_config_store import TenantConfigStore
+        from .tenant_dispatcher import MultiTenantDispatcher
+        from .tenant_registry import TenantRegistry
+
+        _TENANT_STORE = TenantConfigStore(TENANT_DB_PATH)
+        _TENANT_REGISTRY = TenantRegistry(_TENANT_STORE)
+        _ADMIN_APP = create_admin_app(
+            deps=TenantAdminDeps(
+                admin_key=TENANT_ADMIN_KEY,
+                store=_TENANT_STORE,
+                registry=_TENANT_REGISTRY,
+            )
+        )
+
+        app = MultiTenantDispatcher(default_app=_DEFAULT_APP, admin_app=_ADMIN_APP, registry=_TENANT_REGISTRY)
+    except Exception:
+        # Fall back to legacy single-tenant behavior if tenant modules fail to load.
+        app = _DEFAULT_APP
