@@ -57,6 +57,7 @@ def _configure_module_for_tenant(mod: types.ModuleType, settings: TenantSettings
     data_dir = settings.data_dir.expanduser().resolve()
     uploads_dir = settings.uploads_dir.expanduser().resolve()
 
+    setattr(mod, "TENANT_ID", settings.tenant_id)
     setattr(mod, "DATA_DIR", data_dir)
     setattr(mod, "UPLOADS_DIR", uploads_dir)
     setattr(mod, "LLM_ROUTING_PATH", data_dir / "llm_routing.json")

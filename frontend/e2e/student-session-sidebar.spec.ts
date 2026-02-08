@@ -50,6 +50,42 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await expect(trigger).toBeFocused()
 })
 
+test('rename dialog escape restores focus to session menu trigger', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  let trigger = page.locator('.session-menu-trigger').first()
+  if ((await trigger.count()) === 0) {
+    await page.getByRole('button', { name: '新会话' }).click()
+    trigger = page.locator('.session-menu-trigger').first()
+  }
+  await trigger.click()
+  await page.getByRole('menuitem', { name: '重命名', exact: true }).click()
+
+  const dialog = page.getByRole('dialog', { name: '重命名会话' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel('会话名称')).toBeFocused()
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
+
 test('restoring pending job keeps only one pending status bubble', async ({ page }) => {
   await setupStudentState(page, {
     stateOverrides: {

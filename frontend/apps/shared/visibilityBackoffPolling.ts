@@ -8,8 +8,17 @@ export type VisibilityBackoffPollingOptions = {
   kickMode?: 'direct' | 'timeout0'
 }
 
+export type VisibilityBackoffPollOutcome =
+  | 'continue'
+  | 'stop'
+  | {
+      action: 'continue'
+      resetDelay?: boolean
+      nextDelayMs?: number
+    }
+
 export function startVisibilityAwareBackoffPolling(
-  poll: () => Promise<'continue' | 'stop'>,
+  poll: () => Promise<VisibilityBackoffPollOutcome>,
   onError: (err: unknown) => void,
   options: VisibilityBackoffPollingOptions = {},
 ): () => void {
@@ -66,6 +75,18 @@ export function startVisibilityAwareBackoffPolling(
       const outcome = await poll()
       if (cancelled) return
       if (outcome === 'stop') return
+      if (typeof outcome === 'object' && outcome.action === 'continue') {
+        if (typeof outcome.nextDelayMs === 'number') {
+          delayMs = Math.min(maxDelayMs, Math.round(outcome.nextDelayMs))
+          schedule(jitter(delayMs))
+          return
+        }
+        if (outcome.resetDelay) {
+          delayMs = initialDelayMs
+          schedule(jitter(delayMs))
+          return
+        }
+      }
       delayMs = Math.min(maxDelayMs, Math.round(delayMs * normalBackoffFactor))
       schedule(jitter(delayMs))
     } catch (err) {
@@ -95,4 +116,3 @@ export function startVisibilityAwareBackoffPolling(
     clearTimer()
   }
 }
-

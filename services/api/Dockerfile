@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY services/api/requirements.txt /app/requirements.txt
+ENV PIP_INDEX_URL=https://pypi.org/simple
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy only what the API needs (keeps image smaller and builds faster).

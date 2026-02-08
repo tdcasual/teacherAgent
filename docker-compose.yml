@@ -12,6 +12,8 @@ services:
     environment:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
+      - JOB_QUEUE_BACKEND=rq
+      - REDIS_URL=redis://redis:6379/0
       - QDRANT_PATH=/app/.qdrant
       - MEM0_DIR=/app/.mem0
       - LLM_MAX_CONCURRENCY_STUDENT=${LLM_MAX_CONCURRENCY_STUDENT:-12}
@@ -27,6 +29,8 @@ services:
       - ./.qdrant:/app/.qdrant
       - ./.mem0:/app/.mem0
       - ./uploads:/app/uploads
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -53,6 +57,31 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    command: ["python3", "-m", "services.api.rq_worker"]
+    env_file: .env
+    environment:
+      - DATA_DIR=/app/data
+      - UPLOADS_DIR=/app/uploads
+      - JOB_QUEUE_BACKEND=rq
+      - REDIS_URL=redis://redis:6379/0
+      - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-0}
+    volumes:
+      - ./data:/app/data
+      - ./.qdrant:/app/.qdrant
+      - ./.mem0:/app/.mem0
+      - ./uploads:/app/uploads
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
   frontend_student:
     build:

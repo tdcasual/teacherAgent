@@ -488,6 +488,17 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
 LLM_ROUTING_PATH = Path(os.getenv("LLM_ROUTING_PATH", DATA_DIR / "llm_routing.json"))
+TENANT_ID = str(os.getenv("TENANT_ID", "") or "").strip()
+JOB_QUEUE_BACKEND = str(os.getenv("JOB_QUEUE_BACKEND", "") or "").strip().lower()
+RQ_BACKEND_ENABLED = os.getenv("RQ_BACKEND_ENABLED", "").lower() in {"1", "true", "yes", "on"}
+REDIS_URL = str(os.getenv("REDIS_URL", "redis://localhost:6379/0") or "redis://localhost:6379/0")
+RQ_QUEUE_NAME = str(os.getenv("RQ_QUEUE_NAME", "default") or "default")
+
+def _rq_enabled() -> bool:
+    if RQ_BACKEND_ENABLED:
+        return True
+    return JOB_QUEUE_BACKEND in {"rq", "redis", "redis-rq"}
+
 OCR_UTILS_DIR = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts"
 if OCR_UTILS_DIR.exists() and str(OCR_UTILS_DIR) not in sys.path:
     sys.path.insert(0, str(OCR_UTILS_DIR))
@@ -526,6 +537,7 @@ CHAT_LANE_CURSOR = 0
 CHAT_WORKER_THREADS: List[threading.Thread] = []
 CHAT_LANE_RECENT: Dict[str, Tuple[float, str, str]] = {}
 CHAT_IDEMPOTENCY_STATE = create_chat_idempotency_store(CHAT_JOB_DIR)
+_CHAT_LANE_STORES: Dict[str, Any] = {}
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
@@ -817,6 +829,11 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
     return slug
 
 def enqueue_upload_job(job_id: str) -> None:
+    if _rq_enabled():
+        from .rq_tasks import enqueue_upload_job as _rq_enqueue_upload_job
+
+        _rq_enqueue_upload_job(job_id, tenant_id=TENANT_ID or None)
+        return
     with UPLOAD_JOB_LOCK:
         if job_id not in UPLOAD_JOB_QUEUE:
             UPLOAD_JOB_QUEUE.append(job_id)
@@ -861,6 +878,8 @@ def upload_job_worker_loop() -> None:
             )
 
 def start_upload_worker() -> None:
+    if _rq_enabled():
+        return
     global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
     if UPLOAD_JOB_WORKER_STARTED:
         return
@@ -872,6 +891,8 @@ def start_upload_worker() -> None:
     UPLOAD_JOB_WORKER_STARTED = True
 
 def stop_upload_worker(timeout_sec: float = 1.5) -> None:
+    if _rq_enabled():
+        return
     global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
     UPLOAD_JOB_STOP_EVENT.set()
     UPLOAD_JOB_EVENT.set()
@@ -914,6 +935,11 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
     return data
 
 def enqueue_exam_job(job_id: str) -> None:
+    if _rq_enabled():
+        from .rq_tasks import enqueue_exam_job as _rq_enqueue_exam_job
+
+        _rq_enqueue_exam_job(job_id, tenant_id=TENANT_ID or None)
+        return
     with EXAM_JOB_LOCK:
         if job_id not in EXAM_JOB_QUEUE:
             EXAM_JOB_QUEUE.append(job_id)
@@ -958,6 +984,8 @@ def exam_job_worker_loop() -> None:
             )
 
 def start_exam_upload_worker() -> None:
+    if _rq_enabled():
+        return
     global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
     if EXAM_JOB_WORKER_STARTED:
         return
@@ -969,6 +997,8 @@ def start_exam_upload_worker() -> None:
     EXAM_JOB_WORKER_STARTED = True
 
 def stop_exam_upload_worker(timeout_sec: float = 1.5) -> None:
+    if _rq_enabled():
+        return
     global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
     EXAM_JOB_STOP_EVENT.set()
     EXAM_JOB_EVENT.set()
@@ -1083,13 +1113,33 @@ def resolve_chat_lane_id_from_job(job: Dict[str, Any]) -> str:
         request_id=request_id,
     )
 
+def _chat_lane_store():
+    tenant_key = str(TENANT_ID or "default").strip() or "default"
+    store = _CHAT_LANE_STORES.get(tenant_key)
+    if store is None:
+        from .chat_redis_lane_store import ChatRedisLaneStore
+        from .redis_clients import get_redis_client
+
+        store = ChatRedisLaneStore(
+            redis_client=get_redis_client(REDIS_URL, decode_responses=True),
+            tenant_id=tenant_key,
+            claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
+            debounce_ms=CHAT_LANE_DEBOUNCE_MS,
+        )
+        _CHAT_LANE_STORES[tenant_key] = store
+    return store
+
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
+    if _rq_enabled():
+        return _chat_lane_store().lane_load(lane_id)
     q = CHAT_JOB_LANES.get(lane_id)
     queued = len(q) if q else 0
     active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
     return {"queued": queued, "active": active, "total": queued + active}
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
+    if _rq_enabled():
+        return _chat_lane_store().find_position(lane_id, job_id)
     q = CHAT_JOB_LANES.get(lane_id)
     if not q:
         return 0
@@ -1099,7 +1149,7 @@ def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
     return 0
 
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
-    if job_id in CHAT_JOB_QUEUED:
+    if job_id in CHAT_JOB_QUEUED or job_id in CHAT_JOB_TO_LANE:
         return _chat_find_position_locked(lane_id, job_id)
     q = CHAT_JOB_LANES.setdefault(lane_id, deque())
     q.append(job_id)
@@ -1140,9 +1190,14 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
         CHAT_JOB_LANES.pop(lane_id, None)
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
+    if _rq_enabled():
+        _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
+        return
     CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
+    if _rq_enabled():
+        return _chat_lane_store().recent_job(lane_id, fingerprint)
     if CHAT_LANE_DEBOUNCE_MS <= 0:
         return None
     info = CHAT_LANE_RECENT.get(lane_id)
@@ -1156,18 +1211,33 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
     return job_id
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
+    if _rq_enabled():
+        from .rq_tasks import enqueue_chat_job as _rq_enqueue_chat_job
+
+        return _rq_enqueue_chat_job(job_id, lane_id=lane_id, tenant_id=TENANT_ID or None)
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
 
 def scan_pending_chat_jobs() -> None:
+    if _rq_enabled():
+        from .rq_tasks import scan_pending_chat_jobs as _rq_scan_pending_chat_jobs
+
+        _rq_scan_pending_chat_jobs(tenant_id=TENANT_ID or None)
+        return
     _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
 
 def chat_job_worker_loop() -> None:
+    if _rq_enabled():
+        return
     _chat_job_worker_loop_impl(deps=_chat_worker_deps())
 
 def start_chat_worker() -> None:
+    if _rq_enabled():
+        return
     _start_chat_worker_impl(deps=_chat_worker_deps())
 
 def stop_chat_worker(timeout_sec: float = 1.5) -> None:
+    if _rq_enabled():
+        return
     _stop_chat_worker_impl(deps=_chat_worker_deps(), timeout_sec=timeout_sec)
 
 def load_chat_request_index() -> Dict[str, str]:
@@ -1964,6 +2034,8 @@ async def _app_lifespan(_app: FastAPI):
 
 def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
+    if _rq_enabled():
+        return
     start_upload_worker()
     if PROFILE_UPDATE_ASYNC:
         start_profile_update_worker()
@@ -1972,6 +2044,8 @@ def start_tenant_runtime() -> None:
 
 
 def stop_tenant_runtime() -> None:
+    if _rq_enabled():
+        return
     # Stop in reverse order of startup. Best-effort only.
     stop_chat_worker()
     stop_exam_upload_worker()
@@ -2314,6 +2388,11 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "output": out}
 
 def enqueue_profile_update(args: Dict[str, Any]) -> None:
+    if _rq_enabled():
+        from .rq_tasks import enqueue_profile_update as _rq_enqueue_profile_update
+
+        _rq_enqueue_profile_update(args, tenant_id=TENANT_ID or None)
+        return
     # Best-effort queue: coalesce on the worker side.
     with _PROFILE_UPDATE_LOCK:
         if len(_PROFILE_UPDATE_QUEUE) >= PROFILE_UPDATE_QUEUE_MAX:
@@ -2364,6 +2443,8 @@ def profile_update_worker_loop() -> None:
                 diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
 
 def start_profile_update_worker() -> None:
+    if _rq_enabled():
+        return
     global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
     if _PROFILE_UPDATE_WORKER_STARTED:
         return
@@ -2374,6 +2455,8 @@ def start_profile_update_worker() -> None:
     _PROFILE_UPDATE_WORKER_STARTED = True
 
 def stop_profile_update_worker(timeout_sec: float = 1.5) -> None:
+    if _rq_enabled():
+        return
     global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
     _PROFILE_UPDATE_STOP_EVENT.set()
     _PROFILE_UPDATE_EVENT.set()

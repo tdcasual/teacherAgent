@@ -673,6 +673,23 @@ test('dismissed archive confirmation closes session action menu', async ({ page 
   await expect(page.locator('.session-menu')).toBeHidden()
 })
 
+test('archive dialog escape restores focus to session menu trigger', async ({ page }) => {
+  await openTeacherApp(page)
+  await page.getByRole('button', { name: '展开会话' }).click()
+  await page.getByRole('button', { name: '新建' }).click()
+
+  const trigger = page.locator('.session-menu-trigger').first()
+  await trigger.click()
+  await page.getByRole('menuitem', { name: '归档', exact: true }).click()
+
+  const dialog = page.getByRole('dialog', { name: '确认归档会话？' })
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
+
 test('keeps pending user message visible when switching sessions before reply finishes', async ({ page }) => {
   await setupTeacherState(page)
 

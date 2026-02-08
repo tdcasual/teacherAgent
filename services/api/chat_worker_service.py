@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -12,7 +13,6 @@ class ChatWorkerDeps:
     chat_job_dir: Path
     chat_job_lock: Any
     chat_job_event: Any
-    stop_event: Any
     chat_worker_threads: List[Any]
     chat_worker_pool_size: int
     worker_started_get: Callable[[], bool]
@@ -29,6 +29,7 @@ class ChatWorkerDeps:
     diag_log: Callable[[str, Dict[str, Any]], None]
     sleep: Callable[[float], None]
     thread_factory: Callable[..., Any]
+    stop_event: Any = field(default_factory=threading.Event)
 
 
 def enqueue_chat_job(job_id: str, *, deps: ChatWorkerDeps, lane_id: Optional[str] = None) -> Dict[str, Any]:
