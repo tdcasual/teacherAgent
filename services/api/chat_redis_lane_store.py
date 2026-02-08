@@ -175,3 +175,6 @@ class ChatRedisLaneStore:
             return None
         job_id = str(data.get("job_id") or "").strip()
         return job_id or None
+
+
+RedisLaneStore = ChatRedisLaneStore

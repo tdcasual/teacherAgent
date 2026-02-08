@@ -1117,10 +1117,10 @@ def _chat_lane_store():
     tenant_key = str(TENANT_ID or "default").strip() or "default"
     store = _CHAT_LANE_STORES.get(tenant_key)
     if store is None:
-        from .chat_redis_lane_store import ChatRedisLaneStore
+        from .chat_redis_lane_store import RedisLaneStore
         from .redis_clients import get_redis_client
 
-        store = ChatRedisLaneStore(
+        store = RedisLaneStore(
             redis_client=get_redis_client(REDIS_URL, decode_responses=True),
             tenant_id=tenant_key,
             claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
