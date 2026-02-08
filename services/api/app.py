@@ -2079,7 +2079,11 @@ def _stop_inline_workers() -> None:
 
 def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
-    _queue_backend().start()
+    backend = _queue_backend()
+    from .rq_tasks import require_redis
+
+    require_redis()
+    backend.start()
 
 
 def stop_tenant_runtime() -> None:

@@ -34,6 +34,4 @@ def get_queue_backend(
 ) -> QueueBackend:
     if rq_enabled():
         return RqQueueBackend(tenant_id=tenant_id)
-    if inline_backend is not None:
-        return inline_backend
-    return InlineQueueBackend()
+    raise RuntimeError("RQ backend required")

@@ -16,15 +16,31 @@ def _queue_name() -> str:
     return str(os.getenv("RQ_QUEUE_NAME", "default") or "default")
 
 
+def _require_redis_client(*, decode_responses: bool) -> Any:
+    redis_url = str(os.getenv("REDIS_URL", "") or "").strip()
+    if not redis_url:
+        raise RuntimeError("Redis required: REDIS_URL not set")
+    client = get_redis_client(redis_url, decode_responses=decode_responses)
+    try:
+        client.ping()
+    except Exception as exc:
+        raise RuntimeError("Redis required: unable to connect") from exc
+    return client
+
+
+def require_redis() -> None:
+    _require_redis_client(decode_responses=False)
+
+
 def _get_queue() -> Queue:
-    redis = get_redis_client(os.getenv("REDIS_URL", ""), decode_responses=False)
+    redis = _require_redis_client(decode_responses=False)
     return Queue(_queue_name(), connection=redis)
 
 
 def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
     tenant_key = str(tenant_id or getattr(mod, "TENANT_ID", "") or "").strip() or "default"
     return ChatRedisLaneStore(
-        redis_client=get_redis_client(os.getenv("REDIS_URL", ""), decode_responses=True),
+        redis_client=_require_redis_client(decode_responses=True),
         tenant_id=tenant_key,
         claim_ttl_sec=int(getattr(mod, "CHAT_JOB_CLAIM_TTL_SEC", 600) or 600),
         debounce_ms=int(getattr(mod, "CHAT_LANE_DEBOUNCE_MS", 500) or 500),
