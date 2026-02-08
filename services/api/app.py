@@ -1160,23 +1160,10 @@ def _queue_backend():
     return _QUEUE_BACKEND
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
-    if _rq_enabled():
-        return _chat_lane_store().lane_load(lane_id)
-    q = CHAT_JOB_LANES.get(lane_id)
-    queued = len(q) if q else 0
-    active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
-    return {"queued": queued, "active": active, "total": queued + active}
+    return _chat_lane_store().lane_load(lane_id)
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
-    if _rq_enabled():
-        return _chat_lane_store().find_position(lane_id, job_id)
-    q = CHAT_JOB_LANES.get(lane_id)
-    if not q:
-        return 0
-    for i, jid in enumerate(q, start=1):
-        if jid == job_id:
-            return i
-    return 0
+    return _chat_lane_store().find_position(lane_id, job_id)
 
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
     if job_id in CHAT_JOB_QUEUED or job_id in CHAT_JOB_TO_LANE:
@@ -1220,25 +1207,10 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
         CHAT_JOB_LANES.pop(lane_id, None)
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
-    if _rq_enabled():
-        _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
-        return
-    CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
+    _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
-    if _rq_enabled():
-        return _chat_lane_store().recent_job(lane_id, fingerprint)
-    if CHAT_LANE_DEBOUNCE_MS <= 0:
-        return None
-    info = CHAT_LANE_RECENT.get(lane_id)
-    if not info:
-        return None
-    ts, fp, job_id = info
-    if fp != fingerprint:
-        return None
-    if (time.time() - ts) * 1000 > CHAT_LANE_DEBOUNCE_MS:
-        return None
-    return job_id
+    return _chat_lane_store().recent_job(lane_id, fingerprint)
 
 def _enqueue_chat_job_inline(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
