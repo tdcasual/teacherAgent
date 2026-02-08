@@ -57,78 +57,86 @@ def _configure_module_for_tenant(mod: types.ModuleType, settings: TenantSettings
     data_dir = settings.data_dir.expanduser().resolve()
     uploads_dir = settings.uploads_dir.expanduser().resolve()
 
-    setattr(mod, "TENANT_ID", settings.tenant_id)
-    setattr(mod, "DATA_DIR", data_dir)
-    setattr(mod, "UPLOADS_DIR", uploads_dir)
-    setattr(mod, "LLM_ROUTING_PATH", data_dir / "llm_routing.json")
+    targets = [mod]
+    core = getattr(mod, "_APP_CORE", None)
+    if core is not None and core is not mod:
+        targets.append(core)
 
-    setattr(mod, "STUDENT_SESSIONS_DIR", data_dir / "student_chat_sessions")
-    setattr(mod, "TEACHER_WORKSPACES_DIR", data_dir / "teacher_workspaces")
-    setattr(mod, "TEACHER_SESSIONS_DIR", data_dir / "teacher_chat_sessions")
-    setattr(mod, "STUDENT_SUBMISSIONS_DIR", data_dir / "student_submissions")
+    def _set(name: str, value: Any) -> None:
+        for target in targets:
+            setattr(target, name, value)
 
-    setattr(mod, "UPLOAD_JOB_DIR", uploads_dir / "assignment_jobs")
-    setattr(mod, "EXAM_UPLOAD_JOB_DIR", uploads_dir / "exam_jobs")
-    setattr(mod, "CHAT_JOB_DIR", uploads_dir / "chat_jobs")
+    _set("TENANT_ID", settings.tenant_id)
+    _set("DATA_DIR", data_dir)
+    _set("UPLOADS_DIR", uploads_dir)
+    _set("LLM_ROUTING_PATH", data_dir / "llm_routing.json")
+
+    _set("STUDENT_SESSIONS_DIR", data_dir / "student_chat_sessions")
+    _set("TEACHER_WORKSPACES_DIR", data_dir / "teacher_workspaces")
+    _set("TEACHER_SESSIONS_DIR", data_dir / "teacher_chat_sessions")
+    _set("STUDENT_SUBMISSIONS_DIR", data_dir / "student_submissions")
+
+    _set("UPLOAD_JOB_DIR", uploads_dir / "assignment_jobs")
+    _set("EXAM_UPLOAD_JOB_DIR", uploads_dir / "exam_jobs")
+    _set("CHAT_JOB_DIR", uploads_dir / "chat_jobs")
 
     # Reset queues/caches/locks for strict per-tenant isolation.
-    setattr(mod, "UPLOAD_JOB_QUEUE", deque())
-    setattr(mod, "UPLOAD_JOB_LOCK", threading.Lock())
-    setattr(mod, "UPLOAD_JOB_EVENT", threading.Event())
-    setattr(mod, "UPLOAD_JOB_WORKER_STARTED", False)
+    _set("UPLOAD_JOB_QUEUE", deque())
+    _set("UPLOAD_JOB_LOCK", threading.Lock())
+    _set("UPLOAD_JOB_EVENT", threading.Event())
+    _set("UPLOAD_JOB_WORKER_STARTED", False)
 
-    setattr(mod, "EXAM_JOB_QUEUE", deque())
-    setattr(mod, "EXAM_JOB_LOCK", threading.Lock())
-    setattr(mod, "EXAM_JOB_EVENT", threading.Event())
-    setattr(mod, "EXAM_JOB_WORKER_STARTED", False)
+    _set("EXAM_JOB_QUEUE", deque())
+    _set("EXAM_JOB_LOCK", threading.Lock())
+    _set("EXAM_JOB_EVENT", threading.Event())
+    _set("EXAM_JOB_WORKER_STARTED", False)
 
-    setattr(mod, "CHAT_JOB_LOCK", threading.Lock())
-    setattr(mod, "CHAT_JOB_EVENT", threading.Event())
-    setattr(mod, "CHAT_JOB_WORKER_STARTED", False)
+    _set("CHAT_JOB_LOCK", threading.Lock())
+    _set("CHAT_JOB_EVENT", threading.Event())
+    _set("CHAT_JOB_WORKER_STARTED", False)
 
-    setattr(mod, "CHAT_JOB_LANES", {})
-    setattr(mod, "CHAT_JOB_ACTIVE_LANES", set())
-    setattr(mod, "CHAT_JOB_QUEUED", set())
-    setattr(mod, "CHAT_JOB_TO_LANE", {})
-    setattr(mod, "CHAT_LANE_CURSOR", 0)
-    setattr(mod, "CHAT_WORKER_THREADS", [])
-    setattr(mod, "CHAT_LANE_RECENT", {})
+    _set("CHAT_JOB_LANES", {})
+    _set("CHAT_JOB_ACTIVE_LANES", set())
+    _set("CHAT_JOB_QUEUED", set())
+    _set("CHAT_JOB_TO_LANE", {})
+    _set("CHAT_LANE_CURSOR", 0)
+    _set("CHAT_WORKER_THREADS", [])
+    _set("CHAT_LANE_RECENT", {})
 
     idempotency_factory = getattr(mod, "create_chat_idempotency_store", None)
     if callable(idempotency_factory):
-        setattr(mod, "CHAT_IDEMPOTENCY_STATE", idempotency_factory(getattr(mod, "CHAT_JOB_DIR")))
+        _set("CHAT_IDEMPOTENCY_STATE", idempotency_factory(getattr(mod, "CHAT_JOB_DIR")))
 
     limits = settings.limits
-    setattr(mod, "OCR_MAX_CONCURRENCY", int(limits.ocr))
-    setattr(mod, "LLM_MAX_CONCURRENCY", int(limits.llm_total))
-    setattr(mod, "LLM_MAX_CONCURRENCY_STUDENT", int(limits.llm_student))
-    setattr(mod, "LLM_MAX_CONCURRENCY_TEACHER", int(limits.llm_teacher))
-    setattr(mod, "_OCR_SEMAPHORE", threading.BoundedSemaphore(int(limits.ocr)))
-    setattr(mod, "_LLM_SEMAPHORE", threading.BoundedSemaphore(int(limits.llm_total)))
-    setattr(mod, "_LLM_SEMAPHORE_STUDENT", threading.BoundedSemaphore(int(limits.llm_student)))
-    setattr(mod, "_LLM_SEMAPHORE_TEACHER", threading.BoundedSemaphore(int(limits.llm_teacher)))
+    _set("OCR_MAX_CONCURRENCY", int(limits.ocr))
+    _set("LLM_MAX_CONCURRENCY", int(limits.llm_total))
+    _set("LLM_MAX_CONCURRENCY_STUDENT", int(limits.llm_student))
+    _set("LLM_MAX_CONCURRENCY_TEACHER", int(limits.llm_teacher))
+    _set("_OCR_SEMAPHORE", threading.BoundedSemaphore(int(limits.ocr)))
+    _set("_LLM_SEMAPHORE", threading.BoundedSemaphore(int(limits.llm_total)))
+    _set("_LLM_SEMAPHORE_STUDENT", threading.BoundedSemaphore(int(limits.llm_student)))
+    _set("_LLM_SEMAPHORE_TEACHER", threading.BoundedSemaphore(int(limits.llm_teacher)))
 
-    setattr(mod, "_STUDENT_INFLIGHT", {})
-    setattr(mod, "_STUDENT_INFLIGHT_LOCK", threading.Lock())
+    _set("_STUDENT_INFLIGHT", {})
+    _set("_STUDENT_INFLIGHT_LOCK", threading.Lock())
 
-    setattr(mod, "_PROFILE_CACHE", {})
-    setattr(mod, "_PROFILE_CACHE_LOCK", threading.Lock())
-    setattr(mod, "_ASSIGNMENT_DETAIL_CACHE", {})
-    setattr(mod, "_ASSIGNMENT_DETAIL_CACHE_LOCK", threading.Lock())
+    _set("_PROFILE_CACHE", {})
+    _set("_PROFILE_CACHE_LOCK", threading.Lock())
+    _set("_ASSIGNMENT_DETAIL_CACHE", {})
+    _set("_ASSIGNMENT_DETAIL_CACHE_LOCK", threading.Lock())
 
-    setattr(mod, "_PROFILE_UPDATE_QUEUE", deque())
-    setattr(mod, "_PROFILE_UPDATE_LOCK", threading.Lock())
-    setattr(mod, "_PROFILE_UPDATE_EVENT", threading.Event())
-    setattr(mod, "_PROFILE_UPDATE_WORKER_STARTED", False)
+    _set("_PROFILE_UPDATE_QUEUE", deque())
+    _set("_PROFILE_UPDATE_LOCK", threading.Lock())
+    _set("_PROFILE_UPDATE_EVENT", threading.Event())
+    _set("_PROFILE_UPDATE_WORKER_STARTED", False)
 
-    setattr(mod, "_TEACHER_SESSION_COMPACT_TS", {})
-    setattr(mod, "_TEACHER_SESSION_COMPACT_LOCK", threading.Lock())
-    setattr(mod, "_SESSION_INDEX_LOCKS", {})
-    setattr(mod, "_SESSION_INDEX_LOCKS_LOCK", threading.Lock())
+    _set("_TEACHER_SESSION_COMPACT_TS", {})
+    _set("_TEACHER_SESSION_COMPACT_LOCK", threading.Lock())
+    _set("_SESSION_INDEX_LOCKS", {})
+    _set("_SESSION_INDEX_LOCKS_LOCK", threading.Lock())
 
-    # Ensure diagnostics can be per-tenant if enabled.
-    setattr(mod, "DIAG_LOG_PATH", uploads_dir / "diagnostics.log")
-    setattr(mod, "_DIAG_LOGGER", None)
+    _set("DIAG_LOG_PATH", uploads_dir / "diagnostics.log")
+    _set("_DIAG_LOGGER", None)
 
 def create_tenant_app(settings: TenantSettings) -> TenantAppInstance:
     module_suffix = uuid.uuid4().hex[:10]

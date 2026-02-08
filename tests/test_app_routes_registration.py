@@ -1,8 +1,13 @@
-def test_register_routes_adds_health_route():
-    from fastapi import FastAPI
-    from services.api.app_routes import register_routes
+def test_health_router_included():
+    from fastapi.testclient import TestClient
+    from services.api import app as app_mod
 
-    app = FastAPI()
-    register_routes(app, mod=None)
-    paths = {route.path for route in app.router.routes}
-    assert "/health" in paths
+    client = TestClient(app_mod.app)
+    res = client.get("/health")
+    assert res.status_code == 200
+
+
+def test_app_core_module_exists():
+    from services.api import app_core
+
+    assert hasattr(app_core, "health")
