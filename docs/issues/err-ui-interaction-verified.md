@@ -80,6 +80,15 @@
 - Student：`rg -c "setTimeout\\(" frontend/apps/student/src/App.tsx` → `4`
 - 统一的可见性 + 退避轮询实现已抽到 shared（轮询核心集中，减少重复）：
   - `frontend/apps/shared/visibilityBackoffPolling.ts`（`rg -c "setTimeout\\(" ...` → `1`）
+- Teacher workbench 轮询已迁移到共享 poller（无手写定时器）：
+  - `rg -n "startVisibilityAwareBackoffPolling" frontend/apps/teacher/src/features/workbench/useAssignmentUploadStatusPolling.ts`
+  - `rg -n "startVisibilityAwareBackoffPolling" frontend/apps/teacher/src/features/workbench/useExamUploadStatusPolling.ts`
+  - `rg -n "setTimeout|visibilitychange|document.visibilityState" frontend/apps/teacher/src/features/workbench/useAssignmentUploadStatusPolling.ts` → **无匹配**
+  - `rg -n "setTimeout|visibilitychange|document.visibilityState" frontend/apps/teacher/src/features/workbench/useExamUploadStatusPolling.ts` → **无匹配**
+- 退避轮询隐藏态最小间隔（12s）已落到 shared 选项：
+  - `frontend/apps/shared/visibilityBackoffPolling.ts`（`hiddenMinDelayMs`）
+- 防回归硬验证：
+  - `tests/test_issue4_polling_refactor.py`
 
 ### 建议
 - 先抽一个内部 hook（不引入三方库也行）：`usePolling(fn, { interval, jitter, backoff, enabled })`
@@ -88,6 +97,9 @@
 ### 验收标准（DoD）
 - 轮询逻辑集中在 1 个 hook（或库），并且每条轮询都有明确的取消条件与退避策略。
 - E2E 覆盖“网络抖动重试/最终成功/最终失败”路径（Teacher 侧已有覆盖样例）。
+
+### 当前状态
+- **已完成**：Teacher workbench 两处轮询改用 `startVisibilityAwareBackoffPolling`，并保留原有 backoff/隐藏态最小间隔语义；新增 guardrail 测试防回归。
 
 ---
 
@@ -124,11 +136,13 @@
 - `cd frontend && npm run typecheck`
 - `cd frontend && npm run e2e:teacher`
 - `cd frontend && npm run e2e:student`
+- `python3 -m pytest tests/test_issue4_polling_refactor.py -v`
 
 ### 最新门禁（硬验证，误撤销后重新跑）
 - 2026-02-08：`npm run typecheck` ✅
-- 2026-02-08：`npm run e2e:teacher` ✅（205 passed）
-- 2026-02-08：`npm run e2e:student` ✅（16 passed）
+- 2026-02-08：`npm run e2e:teacher` ✅（206 passed）
+- 2026-02-08：`npm run e2e:student` ✅（17 passed）
+- 2026-02-08：`python3 -m pytest tests/test_issue4_polling_refactor.py -v` ✅（3 passed）
 
 ### 额外回归修复（E2E 硬证据）
 - 修复：作业确认成功后清理 `teacherActiveUpload`，并处理后端可能返回的终态 `status: "created"`（避免状态卡在“待确认”）。

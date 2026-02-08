@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem } from '../../utils/storage'
 import type { ExamUploadJobStatus } from '../../appTypes'
 
@@ -32,16 +33,9 @@ export function useExamUploadStatusPolling({
     const MAX_DELAY_MS = 30000
 
     let cancelled = false
-    let timeoutId: number | null = null
     let abortController: AbortController | null = null
-    let inFlight = false
     let delayMs = BASE_DELAY_MS
     let lastFingerprint = ''
-
-    const clearTimer = () => {
-      if (timeoutId) window.clearTimeout(timeoutId)
-      timeoutId = null
-    }
 
     const abortInFlight = () => {
       try {
@@ -50,17 +44,6 @@ export function useExamUploadStatusPolling({
         // ignore
       }
       abortController = null
-    }
-
-    const scheduleNext = (ms: number) => {
-      if (cancelled) return
-      clearTimer()
-      timeoutId = window.setTimeout(() => void poll(), ms)
-    }
-
-    const jitter = (ms: number) => {
-      const factor = 0.8 + Math.random() * 0.4
-      return Math.round(ms * factor)
     }
 
     const makeFingerprint = (data: ExamUploadJobStatus) => {
@@ -84,13 +67,7 @@ export function useExamUploadStatusPolling({
     }
 
     const poll = async () => {
-      if (cancelled) return
-      if (inFlight) return
-      if (document.visibilityState === 'hidden') {
-        scheduleNext(jitter(Math.min(MAX_DELAY_MS, Math.max(delayMs, 12000))))
-        return
-      }
-      inFlight = true
+      if (cancelled) return 'stop' as const
       abortInFlight()
       abortController = new AbortController()
       try {
@@ -103,7 +80,7 @@ export function useExamUploadStatusPolling({
           throw new Error(text || `状态码 ${res.status}`)
         }
         const data = (await res.json()) as ExamUploadJobStatus
-        if (cancelled) return
+        if (cancelled) return 'stop' as const
         setExamJobInfo((prev: ExamUploadJobStatus | null) => {
           if (prev && prev.job_id === data.job_id) {
             if ((prev.status === 'confirming' || prev.status === 'confirmed') && data.status === 'done') {
@@ -130,37 +107,37 @@ export function useExamUploadStatusPolling({
           delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.25))
         }
 
-        if (data.status === 'done' || data.status === 'failed' || data.status === 'confirmed') {
-          scheduleNext(jitter(Math.min(MAX_DELAY_MS, Math.max(delayMs, 9000))))
-        } else {
-          scheduleNext(jitter(delayMs))
-        }
+        const nextDelay =
+          data.status === 'done' || data.status === 'failed' || data.status === 'confirmed'
+            ? Math.min(MAX_DELAY_MS, Math.max(delayMs, 9000))
+            : delayMs
+        return { action: 'continue', nextDelayMs: nextDelay } as const
       } catch (err: any) {
-        if (cancelled) return
-        if (err?.name === 'AbortError') return
+        if (cancelled) return 'stop' as const
+        if (err?.name === 'AbortError') return 'stop' as const
         setExamUploadError(err.message || String(err))
         delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.6))
-        scheduleNext(jitter(delayMs))
-      } finally {
-        inFlight = false
+        return { action: 'continue', nextDelayMs: delayMs } as const
       }
     }
 
-    const onVisibilityChange = () => {
-      if (cancelled) return
-      if (document.visibilityState === 'visible') {
-        delayMs = BASE_DELAY_MS
-        if (inFlight) return
-        scheduleNext(0)
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    void poll()
+    const cleanup = startVisibilityAwareBackoffPolling(
+      poll,
+      () => {},
+      {
+        initialDelayMs: BASE_DELAY_MS,
+        maxDelayMs: MAX_DELAY_MS,
+        normalBackoffFactor: 1.25,
+        errorBackoffFactor: 1.6,
+        jitterMin: 0.8,
+        jitterMax: 1.2,
+        hiddenMinDelayMs: 12000,
+      },
+    )
 
     return () => {
       cancelled = true
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      clearTimer()
+      cleanup()
       abortInFlight()
     }
   }, [examJobId, apiBase, examStatusPollNonce, formatExamJobStatus, setExamJobInfo, setExamUploadError, setExamUploadStatus])

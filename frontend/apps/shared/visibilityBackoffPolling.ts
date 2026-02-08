@@ -5,6 +5,7 @@ export type VisibilityBackoffPollingOptions = {
   errorBackoffFactor?: number
   jitterMin?: number
   jitterMax?: number
+  hiddenMinDelayMs?: number
   kickMode?: 'direct' | 'timeout0'
 }
 
@@ -29,6 +30,7 @@ export function startVisibilityAwareBackoffPolling(
     errorBackoffFactor = 1.6,
     jitterMin = 0.85,
     jitterMax = 1.15,
+    hiddenMinDelayMs,
     kickMode = 'timeout0',
   } = options
 
@@ -52,7 +54,8 @@ export function startVisibilityAwareBackoffPolling(
   }
 
   const scheduleHidden = () => {
-    schedule(jitter(Math.min(maxDelayMs, delayMs)))
+    const hiddenMin = typeof hiddenMinDelayMs === 'number' ? hiddenMinDelayMs : 0
+    schedule(jitter(Math.min(maxDelayMs, Math.max(delayMs, hiddenMin))))
   }
 
   const kick = () => {
