@@ -477,6 +477,7 @@ from .upload_text_service import (
     parse_timeout_env as _parse_timeout_env_impl,
     save_upload_file as _save_upload_file_impl,
 )
+from . import settings as _settings
 try:
     from mem0_config import load_dotenv
 
@@ -488,11 +489,11 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
 LLM_ROUTING_PATH = Path(os.getenv("LLM_ROUTING_PATH", DATA_DIR / "llm_routing.json"))
-TENANT_ID = str(os.getenv("TENANT_ID", "") or "").strip()
-JOB_QUEUE_BACKEND = str(os.getenv("JOB_QUEUE_BACKEND", "") or "").strip().lower()
-RQ_BACKEND_ENABLED = os.getenv("RQ_BACKEND_ENABLED", "").lower() in {"1", "true", "yes", "on"}
-REDIS_URL = str(os.getenv("REDIS_URL", "redis://localhost:6379/0") or "redis://localhost:6379/0")
-RQ_QUEUE_NAME = str(os.getenv("RQ_QUEUE_NAME", "default") or "default")
+TENANT_ID = _settings.tenant_id()
+JOB_QUEUE_BACKEND = _settings.job_queue_backend()
+RQ_BACKEND_ENABLED = _settings.rq_backend_enabled()
+REDIS_URL = _settings.redis_url()
+RQ_QUEUE_NAME = _settings.rq_queue_name()
 
 def _rq_enabled() -> bool:
     if RQ_BACKEND_ENABLED:
