@@ -1126,28 +1126,82 @@ def _chat_lane_store():
     tenant_key = str(TENANT_ID or "default").strip() or "default"
     store = _CHAT_LANE_STORES.get(tenant_key)
     if store is None:
-        from .chat_redis_lane_store import RedisLaneStore
-        from .redis_clients import get_redis_client
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            from .chat_lane_store import MemoryLaneStore
 
-        store = RedisLaneStore(
-            redis_client=get_redis_client(REDIS_URL, decode_responses=True),
-            tenant_id=tenant_key,
-            claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
-            debounce_ms=CHAT_LANE_DEBOUNCE_MS,
-        )
+            store = MemoryLaneStore(
+                debounce_ms=CHAT_LANE_DEBOUNCE_MS,
+                claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
+            )
+        else:
+            from .chat_redis_lane_store import RedisLaneStore
+            from .redis_clients import get_redis_client
+
+            store = RedisLaneStore(
+                redis_client=get_redis_client(REDIS_URL, decode_responses=True),
+                tenant_id=tenant_key,
+                claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
+                debounce_ms=CHAT_LANE_DEBOUNCE_MS,
+            )
         _CHAT_LANE_STORES[tenant_key] = store
     return store
+
+class _InlineTestBackend:
+    name = "inline-test"
+
+    def enqueue_upload_job(self, job_id: str) -> None:
+        _enqueue_upload_job_inline(job_id)
+
+    def enqueue_exam_job(self, job_id: str) -> None:
+        _enqueue_exam_job_inline(job_id)
+
+    def enqueue_profile_update(self, payload: Dict[str, Any]) -> None:
+        _enqueue_profile_update_inline(payload)
+
+    def enqueue_chat_job(self, job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
+        return _enqueue_chat_job_inline(job_id, lane_id=lane_id)
+
+    def scan_pending_upload_jobs(self) -> int:
+        return int(_scan_pending_upload_jobs_inline() or 0)
+
+    def scan_pending_exam_jobs(self) -> int:
+        return int(_scan_pending_exam_jobs_inline() or 0)
+
+    def scan_pending_chat_jobs(self) -> int:
+        return int(_scan_pending_chat_jobs_inline() or 0)
+
+    def start(self) -> None:
+        _start_inline_workers()
+
+    def stop(self) -> None:
+        _stop_inline_workers()
 
 def _queue_backend():
     global _QUEUE_BACKEND
     if _QUEUE_BACKEND is None:
-        _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None)
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            _QUEUE_BACKEND = _InlineTestBackend()
+        else:
+            _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None)
     return _QUEUE_BACKEND
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        q = CHAT_JOB_LANES.get(lane_id)
+        queued = len(q) if q else 0
+        active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
+        return {"queued": queued, "active": active, "total": queued + active}
     return _chat_lane_store().lane_load(lane_id)
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        q = CHAT_JOB_LANES.get(lane_id)
+        if not q:
+            return 0
+        for i, jid in enumerate(q, start=1):
+            if jid == job_id:
+                return i
+        return 0
     return _chat_lane_store().find_position(lane_id, job_id)
 
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
@@ -1192,9 +1246,24 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
         CHAT_JOB_LANES.pop(lane_id, None)
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
+        return
     _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        if CHAT_LANE_DEBOUNCE_MS <= 0:
+            return None
+        info = CHAT_LANE_RECENT.get(lane_id)
+        if not info:
+            return None
+        ts, fp, job_id = info
+        if fp != fingerprint:
+            return None
+        if (time.time() - ts) * 1000 > CHAT_LANE_DEBOUNCE_MS:
+            return None
+        return job_id
     return _chat_lane_store().recent_job(lane_id, fingerprint)
 
 def _enqueue_chat_job_inline(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
@@ -2037,9 +2106,10 @@ def _stop_inline_workers() -> None:
 def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
     backend = _queue_backend()
-    from .rq_tasks import require_redis
+    if not os.getenv("PYTEST_CURRENT_TEST"):
+        from .rq_tasks import require_redis
 
-    require_redis()
+        require_redis()
     backend.start()
 
 

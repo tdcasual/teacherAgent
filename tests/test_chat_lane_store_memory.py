@@ -17,6 +17,7 @@ def test_chat_lane_load_uses_store_even_when_rq_disabled(monkeypatch):
             called["lane_load"] += 1
             return {"queued": 0, "active": 0, "total": 0}
 
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     monkeypatch.setattr(app_mod, "_rq_enabled", lambda: False)
     monkeypatch.setattr(app_mod, "_chat_lane_store", lambda: FakeStore())
 

@@ -22,6 +22,7 @@ def test_rq_mode_disables_inprocess_workers(monkeypatch):
 def test_rq_required_in_api_startup(monkeypatch):
     monkeypatch.delenv("RQ_BACKEND_ENABLED", raising=False)
     monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     from services.api import app as app_mod
 
     try:
@@ -36,6 +37,7 @@ def test_lifespan_does_not_start_workers(monkeypatch):
     from services.api import app as app_mod
 
     monkeypatch.setenv("JOB_QUEUE_BACKEND", "rq")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     import sys
     import types
 

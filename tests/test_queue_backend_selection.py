@@ -12,7 +12,7 @@ def test_rq_required_when_no_inline_backend(monkeypatch):
     from services.api import queue_backend
 
     try:
-        queue_backend.get_queue_backend(tenant_id=None, inline_backend=None)
+        queue_backend.get_queue_backend(tenant_id=None)
     except RuntimeError as exc:
         assert "rq" in str(exc).lower()
     else:
