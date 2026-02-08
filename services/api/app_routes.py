@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import typing
 from typing import Any, Iterable, Tuple
 
 from fastapi import FastAPI
@@ -75,9 +76,27 @@ ROUTES: Iterable[RouteDef] = (
 )
 
 
+def _resolve_signature(func: Any, globalns: dict) -> inspect.Signature:
+    signature = inspect.signature(func)
+    try:
+        hints = typing.get_type_hints(func, globalns=globalns, localns=globalns)
+    except Exception:
+        return signature
+
+    parameters = []
+    for param in signature.parameters.values():
+        if param.name in hints:
+            param = param.replace(annotation=hints[param.name])
+        parameters.append(param)
+    return signature.replace(
+        parameters=parameters,
+        return_annotation=hints.get("return", signature.return_annotation),
+    )
+
+
 def _wrap(mod: Any, func_name: str):
     func = getattr(mod, func_name)
-    signature = inspect.signature(func)
+    signature = _resolve_signature(func, getattr(mod, "__dict__", {}))
 
     async def handler(*args, **kwargs):
         target = getattr(mod, func_name)

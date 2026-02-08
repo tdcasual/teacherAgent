@@ -478,7 +478,9 @@ from .upload_text_service import (
     save_upload_file as _save_upload_file_impl,
 )
 from . import settings as _settings
-from .queue_backend import rq_enabled as _rq_enabled_impl
+from .app_routes import register_routes
+from .queue_backend import get_queue_backend, rq_enabled as _rq_enabled_impl
+from .queue_backend_inline import InlineQueueBackend
 try:
     from mem0_config import load_dotenv
 
@@ -538,6 +540,7 @@ CHAT_WORKER_THREADS: List[threading.Thread] = []
 CHAT_LANE_RECENT: Dict[str, Tuple[float, str, str]] = {}
 CHAT_IDEMPOTENCY_STATE = create_chat_idempotency_store(CHAT_JOB_DIR)
 _CHAT_LANE_STORES: Dict[str, Any] = {}
+_QUEUE_BACKEND: Any = None
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
@@ -828,19 +831,18 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
         slug = f"{prefix}_{digest}"
     return slug
 
-def enqueue_upload_job(job_id: str) -> None:
-    if _rq_enabled():
-        from .rq_tasks import enqueue_upload_job as _rq_enqueue_upload_job
-
-        _rq_enqueue_upload_job(job_id, tenant_id=TENANT_ID or None)
-        return
+def _enqueue_upload_job_inline(job_id: str) -> None:
     with UPLOAD_JOB_LOCK:
         if job_id not in UPLOAD_JOB_QUEUE:
             UPLOAD_JOB_QUEUE.append(job_id)
     UPLOAD_JOB_EVENT.set()
 
-def scan_pending_upload_jobs() -> None:
+def scan_pending_upload_jobs() -> int:
+    return int(_queue_backend().scan_pending_upload_jobs() or 0)
+
+def _scan_pending_upload_jobs_inline() -> int:
     UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
+    count = 0
     for job_path in UPLOAD_JOB_DIR.glob("*/job.json"):
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
@@ -849,7 +851,12 @@ def scan_pending_upload_jobs() -> None:
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
-            enqueue_upload_job(job_id)
+            _enqueue_upload_job_inline(job_id)
+            count += 1
+    return count
+
+def enqueue_upload_job(job_id: str) -> None:
+    _queue_backend().enqueue_upload_job(job_id)
 
 def upload_job_worker_loop() -> None:
     while not UPLOAD_JOB_STOP_EVENT.is_set():
@@ -934,19 +941,18 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
     _atomic_write_json(job_path, data)
     return data
 
-def enqueue_exam_job(job_id: str) -> None:
-    if _rq_enabled():
-        from .rq_tasks import enqueue_exam_job as _rq_enqueue_exam_job
-
-        _rq_enqueue_exam_job(job_id, tenant_id=TENANT_ID or None)
-        return
+def _enqueue_exam_job_inline(job_id: str) -> None:
     with EXAM_JOB_LOCK:
         if job_id not in EXAM_JOB_QUEUE:
             EXAM_JOB_QUEUE.append(job_id)
     EXAM_JOB_EVENT.set()
 
-def scan_pending_exam_jobs() -> None:
+def scan_pending_exam_jobs() -> int:
+    return int(_queue_backend().scan_pending_exam_jobs() or 0)
+
+def _scan_pending_exam_jobs_inline() -> int:
     EXAM_UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
+    count = 0
     for job_path in EXAM_UPLOAD_JOB_DIR.glob("*/job.json"):
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
@@ -955,7 +961,12 @@ def scan_pending_exam_jobs() -> None:
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
-            enqueue_exam_job(job_id)
+            _enqueue_exam_job_inline(job_id)
+            count += 1
+    return count
+
+def enqueue_exam_job(job_id: str) -> None:
+    _queue_backend().enqueue_exam_job(job_id)
 
 def exam_job_worker_loop() -> None:
     while not EXAM_JOB_STOP_EVENT.is_set():
@@ -1129,6 +1140,25 @@ def _chat_lane_store():
         _CHAT_LANE_STORES[tenant_key] = store
     return store
 
+def _inline_queue_backend() -> InlineQueueBackend:
+    return InlineQueueBackend(
+        enqueue_upload_job=_enqueue_upload_job_inline,
+        enqueue_exam_job=_enqueue_exam_job_inline,
+        enqueue_profile_update=_enqueue_profile_update_inline,
+        enqueue_chat_job=_enqueue_chat_job_inline,
+        scan_pending_upload_jobs=_scan_pending_upload_jobs_inline,
+        scan_pending_exam_jobs=_scan_pending_exam_jobs_inline,
+        scan_pending_chat_jobs=_scan_pending_chat_jobs_inline,
+        start=_start_inline_workers,
+        stop=_stop_inline_workers,
+    )
+
+def _queue_backend():
+    global _QUEUE_BACKEND
+    if _QUEUE_BACKEND is None:
+        _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None, inline_backend=_inline_queue_backend())
+    return _QUEUE_BACKEND
+
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
     if _rq_enabled():
         return _chat_lane_store().lane_load(lane_id)
@@ -1210,20 +1240,18 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
         return None
     return job_id
 
-def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
-    if _rq_enabled():
-        from .rq_tasks import enqueue_chat_job as _rq_enqueue_chat_job
-
-        return _rq_enqueue_chat_job(job_id, lane_id=lane_id, tenant_id=TENANT_ID or None)
+def _enqueue_chat_job_inline(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
 
-def scan_pending_chat_jobs() -> None:
-    if _rq_enabled():
-        from .rq_tasks import scan_pending_chat_jobs as _rq_scan_pending_chat_jobs
+def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
+    return _queue_backend().enqueue_chat_job(job_id, lane_id=lane_id)
 
-        _rq_scan_pending_chat_jobs(tenant_id=TENANT_ID or None)
-        return
+def scan_pending_chat_jobs() -> int:
+    return int(_queue_backend().scan_pending_chat_jobs() or 0)
+
+def _scan_pending_chat_jobs_inline() -> int:
     _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
+    return 0
 
 def chat_job_worker_loop() -> None:
     if _rq_enabled():
@@ -2032,10 +2060,7 @@ async def _app_lifespan(_app: FastAPI):
         stop_tenant_runtime()
 
 
-def start_tenant_runtime() -> None:
-    _validate_master_key_policy_impl(getenv=os.getenv)
-    if _rq_enabled():
-        return
+def _start_inline_workers() -> None:
     start_upload_worker()
     if PROFILE_UPDATE_ASYNC:
         start_profile_update_worker()
@@ -2043,15 +2068,22 @@ def start_tenant_runtime() -> None:
     start_chat_worker()
 
 
-def stop_tenant_runtime() -> None:
-    if _rq_enabled():
-        return
+def _stop_inline_workers() -> None:
     # Stop in reverse order of startup. Best-effort only.
     stop_chat_worker()
     stop_exam_upload_worker()
     stop_upload_worker()
     if PROFILE_UPDATE_ASYNC:
         stop_profile_update_worker()
+
+
+def start_tenant_runtime() -> None:
+    _validate_master_key_policy_impl(getenv=os.getenv)
+    _queue_backend().start()
+
+
+def stop_tenant_runtime() -> None:
+    _queue_backend().stop()
 
 
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=_app_lifespan)
@@ -2387,12 +2419,7 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     out = run_script(cmd)
     return {"ok": True, "output": out}
 
-def enqueue_profile_update(args: Dict[str, Any]) -> None:
-    if _rq_enabled():
-        from .rq_tasks import enqueue_profile_update as _rq_enqueue_profile_update
-
-        _rq_enqueue_profile_update(args, tenant_id=TENANT_ID or None)
-        return
+def _enqueue_profile_update_inline(args: Dict[str, Any]) -> None:
     # Best-effort queue: coalesce on the worker side.
     with _PROFILE_UPDATE_LOCK:
         if len(_PROFILE_UPDATE_QUEUE) >= PROFILE_UPDATE_QUEUE_MAX:
@@ -2400,6 +2427,9 @@ def enqueue_profile_update(args: Dict[str, Any]) -> None:
             return
         _PROFILE_UPDATE_QUEUE.append(args)
         _PROFILE_UPDATE_EVENT.set()
+
+def enqueue_profile_update(args: Dict[str, Any]) -> None:
+    _queue_backend().enqueue_profile_update(args)
 
 def profile_update_worker_loop() -> None:
     while not _PROFILE_UPDATE_STOP_EVENT.is_set():
@@ -5007,6 +5037,8 @@ async def submit(
         deps=_student_submit_deps(),
     )
 
+
+register_routes(app, sys.modules[__name__])
 
 # ---- Dynamic tenants root wiring (in-process multi-tenancy) ----
 #
