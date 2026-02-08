@@ -548,6 +548,62 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     expect(result.history.items).toHaveLength(1)
     expect(result.history.items[0].submission_id).toBe('sub_retry_1')
   },
+
+  I012: async ({ page }) => {
+    await page.goto('/')
+    const chatStartCalls: any[] = []
+
+    await page.route('http://localhost:8000/chat/start', async (route) => {
+      const payload = JSON.parse(route.request().postData() || '{}')
+      chatStartCalls.push(payload)
+      const latest = String(payload?.messages?.at(-1)?.content || '')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          job_id: `student_long_${chatStartCalls.length}`,
+          status: 'done',
+          reply: `echo:${latest.length}`,
+        }),
+      })
+    })
+
+    const result = await page.evaluate(async () => {
+      const history = Array.from({ length: 80 }).map((_, idx) => ({
+        role: idx % 2 === 0 ? 'assistant' : 'user',
+        content: `历史片段-${idx + 1} ` + '讲解'.repeat(20),
+      }))
+
+      let composer = '滚动输入稳定性'
+      const echoes: number[] = []
+      for (let i = 1; i <= 4; i += 1) {
+        composer += ` #${i}`
+        const res = await fetch('http://localhost:8000/chat/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'student',
+            student_id: 'S001',
+            session_id: 'S001_LONG',
+            messages: [...history, { role: 'user', content: composer }],
+          }),
+        })
+        const data = await res.json()
+        echoes.push(Number(String(data.reply || '').replace('echo:', '')))
+        history.push({ role: 'assistant', content: `assistant-turn-${i}` })
+        history.push({ role: 'user', content: composer })
+      }
+      return { composer, echoes }
+    })
+
+    expect(chatStartCalls).toHaveLength(4)
+    expect(chatStartCalls[0].messages.at(-1).content).toBe('滚动输入稳定性 #1')
+    expect(chatStartCalls[1].messages.at(-1).content).toBe('滚动输入稳定性 #1 #2')
+    expect(chatStartCalls[2].messages.at(-1).content).toBe('滚动输入稳定性 #1 #2 #3')
+    expect(chatStartCalls[3].messages.at(-1).content).toBe('滚动输入稳定性 #1 #2 #3 #4')
+    expect(result.echoes.at(-1)).toBe(result.composer.length)
+  },
 }
 
 registerMatrixCases('Student Learning Loop', studentLoopCases, implementations)

@@ -679,6 +679,92 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       .poll(async () => page.evaluate(() => Boolean(localStorage.getItem('teacherPendingChatJob'))))
       .toBe(true)
   },
+
+  H006: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+
+    await page.evaluate(() => {
+      document.documentElement.style.zoom = '2'
+    })
+
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    const sendBtn = page.getByRole('button', { name: '发送' })
+    await composer.scrollIntoViewIfNeeded()
+    await sendBtn.scrollIntoViewIfNeeded()
+    await expect(composer).toBeVisible()
+    await expect(sendBtn).toBeVisible()
+
+    await composer.fill('高缩放下仍可发送')
+    await sendBtn.click()
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+  },
+
+  H007: async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 })
+    const { chatStartCalls } = await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSkillsOpen: 'false',
+        teacherSessionSidebarOpen: 'false',
+      },
+    })
+
+    await expect(page.getByRole('button', { name: '展开会话' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开工作台' })).toBeVisible()
+    await page.getByRole('button', { name: '打开工作台' }).click()
+    await expect(page.getByRole('button', { name: '收起工作台' })).toBeVisible()
+    await page.getByRole('button', { name: '收起工作台' }).click()
+    await expect(page.getByRole('button', { name: '打开工作台' })).toBeVisible()
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('横屏交互可达')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+  },
+
+  H008: async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    const historyBySession = {
+      main: Array.from({ length: 140 }).map((_, idx) => ({
+        ts: new Date(Date.now() - (140 - idx) * 1000).toISOString(),
+        role: idx % 2 === 0 ? 'assistant' : 'user',
+        content: `touch-scroll-${idx + 1} ` + '内容 '.repeat(10),
+      })),
+    }
+    const { chatStartCalls } = await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSkillsOpen: 'false',
+      },
+      apiMocks: { historyBySession },
+    })
+
+    const messages = page.locator('.messages')
+    const before = await messages.evaluate((el) => {
+      const node = el as HTMLElement
+      return {
+        top: node.scrollTop,
+        max: Math.max(0, node.scrollHeight - node.clientHeight),
+      }
+    })
+    expect(before.max).toBeGreaterThan(0)
+
+    await page.dispatchEvent('.messages', 'pointerdown', {
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 180,
+      clientY: 520,
+      button: 0,
+    })
+    const after = await messages.evaluate((el) => {
+      const node = el as HTMLElement
+      const start = node.scrollTop
+      node.scrollTop = Math.max(0, start - 260)
+      return { start, end: node.scrollTop }
+    })
+    expect(after.end).toBeLessThan(after.start)
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('触摸滚动后继续发送')
+    await page.getByRole('button', { name: '发送' }).click()
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+  },
 }
 
 registerMatrixCases('Teacher Persistence and Recovery', persistenceRecoveryCases, implementations)

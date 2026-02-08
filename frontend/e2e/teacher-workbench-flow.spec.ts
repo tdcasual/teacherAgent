@@ -606,6 +606,27 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(refreshBtn).toBeEnabled()
   },
 
+  C010: async ({ page }) => {
+    await openTeacherApp(page)
+    const switchBar = page.locator('.workbench-switch').first()
+    const workflowTab = switchBar.getByRole('button', { name: '工作流', exact: true })
+    const skillTab = switchBar.getByRole('button', { name: '技能', exact: true })
+
+    await workflowTab.click()
+    await expect(workflowTab).toHaveClass(/active/)
+
+    await page.getByRole('button', { name: '收起工作台' }).click()
+    await expect(page.getByRole('button', { name: '打开工作台' })).toBeVisible()
+    await page.getByRole('button', { name: '打开工作台' }).click()
+    await expect(workflowTab).toHaveClass(/active/)
+
+    await skillTab.click()
+    await expect(skillTab).toHaveClass(/active/)
+    await page.getByRole('button', { name: '收起工作台' }).click()
+    await page.getByRole('button', { name: '打开工作台' }).click()
+    await expect(skillTab).toHaveClass(/active/)
+  },
+
   C011: async ({ page }) => {
     const { chatStartCalls } = await openTeacherApp(page)
 
@@ -1571,6 +1592,97 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await modeSwitch.getByRole('button', { name: '考试', exact: true }).click({ force: true })
     await expect(uploadSection.getByPlaceholder('例如：EX2403_PHY')).toHaveValue('EX-E013')
+  },
+
+  E014: async ({ page }) => {
+    const assignmentJobId = 'job_e014_assignment'
+    const examJobId = 'job_e014_exam'
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'assignment', job_id: assignmentJobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/assignment/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: assignmentJobId,
+          status: 'done',
+          progress: 100,
+          assignment_id: 'HW-E014-A',
+          requirements_missing: [],
+        }),
+      })
+    })
+    await page.route('http://localhost:8000/assignment/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildAssignmentDraft(assignmentJobId, 'HW-E014-A') }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/start', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: examJobId, status: 'queued' }),
+      })
+    })
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      const url = new URL(route.request().url())
+      const jobId = url.searchParams.get('job_id') || examJobId
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-E014' }),
+      })
+    })
+    await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, draft: buildExamDraft(examJobId, 'EX-E014') }),
+      })
+    })
+
+    await page.goto('/')
+    const uploadSection = page.locator('#workflow-upload-section')
+    const uploadHeader = uploadSection.locator('.panel-header')
+    const panelSummary = uploadSection.locator('.panel-summary')
+    const toggleUploadSection = async (collapsed: boolean) => {
+      const toggle = uploadHeader.locator('button.ghost').last()
+      const text = ((await toggle.textContent()) || '').trim()
+      if (collapsed && text === '收起') {
+        await toggle.click()
+        return
+      }
+      if (!collapsed && text === '展开') {
+        await toggle.click()
+      }
+    }
+
+    await expect(uploadSection).toBeVisible()
+    await expect(uploadHeader).toBeVisible()
+    await toggleUploadSection(true)
+    await expect(panelSummary).toContainText('作业编号：HW-E014-A')
+
+    await toggleUploadSection(false)
+    const modeSwitch = page.locator('.workflow-summary-card .segmented').first()
+    await modeSwitch.getByRole('button', { name: '考试', exact: true }).click({ force: true })
+    await uploadSection.locator('input[type="file"]').first().setInputFiles(fakePdfFile)
+    await uploadSection.locator('input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
+    await uploadSection.locator('form.upload-form button[type="submit"]').click()
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload') || '')).toContain(examJobId)
+
+    await toggleUploadSection(true)
+    await expect(panelSummary).toContainText('考试编号：EX-E014')
+    await expect(panelSummary).not.toContainText('作业编号：HW-E014-A')
   },
 }
 

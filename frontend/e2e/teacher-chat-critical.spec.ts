@@ -458,6 +458,19 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(composer).toHaveValue(/alpha \$[A-Za-z0-9_-]+ beta/)
   },
 
+  A012: async ({ page }) => {
+    const { chatStartCalls } = await openTeacherApp(page)
+    const mixedPrompt = '混合标点测试：电场(E-field)，q=1.6e-19C；方向? yes/no! 「αβγ」[A,B;C:D]，请原样返回。'
+
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill(mixedPrompt)
+    await page.getByRole('button', { name: '发送' }).click()
+
+    await expect.poll(() => chatStartCalls.length).toBe(1)
+    const sent = chatStartCalls[0].messages?.at(-1)?.content || ''
+    expect(sent).toBe(mixedPrompt)
+    expect(sent.length).toBe(mixedPrompt.length)
+  },
+
   A015: async ({ page }) => {
     const historyBySession = {
       main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main 初始化' }],
@@ -905,6 +918,68 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.reload()
     await expect(page.locator('.session-id', { hasText: draftId })).toBeVisible()
+  },
+
+  B012: async ({ page }) => {
+    const historyBySession: Record<string, Array<{ ts: string; role: 'assistant' | 'user'; content: string }>> = {
+      main: Array.from({ length: 120 }).map((_, idx) => ({
+        ts: new Date(Date.now() - (120 - idx) * 1000).toISOString(),
+        role: idx % 2 === 0 ? 'assistant' : 'user',
+        content: `main-long-${idx + 1} ` + '内容 '.repeat(12),
+      })),
+    }
+    for (let i = 1; i <= 72; i += 1) {
+      historyBySession[`session_${String(i).padStart(3, '0')}`] = [
+        {
+          ts: new Date(Date.now() - (i + 1) * 60_000).toISOString(),
+          role: 'assistant',
+          content: `preview-${i}`,
+        },
+      ]
+    }
+
+    await openTeacherApp(page, {
+      stateOverrides: {
+        teacherSessionSidebarOpen: 'true',
+      },
+      apiMocks: { historyBySession },
+    })
+
+    const sessionGroups = page.locator('.session-groups')
+    await expect(sessionGroups).toBeVisible()
+    const isScrollable = await sessionGroups.evaluate((el) => el.scrollHeight > el.clientHeight)
+    expect(isScrollable).toBe(true)
+
+    const before = await page.evaluate(() => {
+      const groups = document.querySelector('.session-groups') as HTMLElement | null
+      const messages = document.querySelector('.messages') as HTMLElement | null
+      if (!groups || !messages) return null
+      messages.scrollTop = Math.max(0, Math.floor(messages.scrollHeight / 2))
+      return { sessionTop: groups.scrollTop, messageTop: messages.scrollTop }
+    })
+    expect(before).not.toBeNull()
+    if (!before) return
+
+    const box = await sessionGroups.boundingBox()
+    expect(box).not.toBeNull()
+    if (!box) return
+    await page.mouse.move(box.x + box.width * 0.5, box.y + Math.min(24, box.height * 0.5))
+    await page.mouse.click(box.x + box.width * 0.5, box.y + Math.min(24, box.height * 0.5))
+    await page.mouse.wheel(0, 260)
+    await page.mouse.wheel(0, 260)
+    await page.mouse.wheel(0, 260)
+
+    const after = await page.evaluate(() => {
+      const groups = document.querySelector('.session-groups') as HTMLElement | null
+      const messages = document.querySelector('.messages') as HTMLElement | null
+      if (!groups || !messages) return null
+      return { sessionTop: groups.scrollTop, messageTop: messages.scrollTop }
+    })
+    expect(after).not.toBeNull()
+    if (!after) return
+
+    expect(after.sessionTop).toBeGreaterThan(before.sessionTop + 40)
+    expect(Math.abs(after.messageTop - before.messageTop)).toBeLessThanOrEqual(3)
   },
 }
 
