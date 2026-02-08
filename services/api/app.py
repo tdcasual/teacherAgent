@@ -3319,11 +3319,9 @@ def run_agent(
         teacher_id=teacher_id,
     )
 
-@app.get("/health")
 async def health():
     return {"status": "ok"}
 
-@app.post("/chat")
 async def chat(req: ChatRequest):
     reply_text, role_hint, last_user_text = await run_in_threadpool(_compute_chat_reply_sync, req)
     if role_hint == "student" and req.student_id and reply_text != "正在生成上一条回复，请稍候再试。":
@@ -3378,39 +3376,33 @@ def process_chat_job(job_id: str) -> None:
 def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
 
-@app.post("/chat/start")
 async def chat_start(req: ChatStartRequest):
     return _start_chat_api_impl(req, deps=_chat_api_deps())
 
-@app.get("/chat/status")
 async def chat_status(job_id: str):
     try:
         return _get_chat_status_impl(job_id, deps=_chat_status_deps())
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job not found")
 
-@app.get("/student/history/sessions")
 async def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0):
     try:
         return _student_history_sessions_api_impl(student_id, limit=limit, cursor=cursor, deps=_session_history_api_deps())
     except SessionHistoryApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/student/session/view-state")
 async def student_session_view_state(student_id: str):
     try:
         return _student_session_view_state_api_impl(student_id, deps=_session_history_api_deps())
     except SessionHistoryApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.put("/student/session/view-state")
 async def update_student_session_view_state(req: Dict[str, Any]):
     try:
         return _update_student_session_view_state_api_impl(req, deps=_session_history_api_deps())
     except SessionHistoryApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/student/history/session")
 async def student_history_session(
     student_id: str,
     session_id: str,
@@ -3430,19 +3422,15 @@ async def student_history_session(
     except SessionHistoryApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/teacher/history/sessions")
 async def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0):
     return _teacher_history_sessions_api_impl(teacher_id, limit=limit, cursor=cursor, deps=_session_history_api_deps())
 
-@app.get("/teacher/session/view-state")
 async def teacher_session_view_state(teacher_id: Optional[str] = None):
     return _teacher_session_view_state_api_impl(teacher_id, deps=_session_history_api_deps())
 
-@app.put("/teacher/session/view-state")
 async def update_teacher_session_view_state(req: Dict[str, Any]):
     return _update_teacher_session_view_state_api_impl(req, deps=_session_history_api_deps())
 
-@app.get("/teacher/history/session")
 async def teacher_history_session(
     session_id: str,
     teacher_id: Optional[str] = None,
@@ -3462,7 +3450,6 @@ async def teacher_history_session(
     except SessionHistoryApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/teacher/memory/proposals")
 async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
     result = _list_teacher_memory_proposals_api_impl(
         teacher_id,
@@ -3474,12 +3461,10 @@ async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Opt
         raise HTTPException(status_code=400, detail=result.get("error") or "invalid_request")
     return result
 
-@app.get("/teacher/memory/insights")
 async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14):
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_memory_insights(teacher_id_final, days=days)
 
-@app.post("/teacher/memory/proposals/{proposal_id}/review")
 async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
     result = _review_teacher_memory_proposal_api_impl(
         proposal_id,
@@ -3492,11 +3477,9 @@ async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryPro
         raise HTTPException(status_code=code, detail=result.get("error"))
     return result
 
-@app.post("/upload")
 async def upload(files: list[UploadFile] = File(...)):
     return await _upload_files_api_impl(files, deps=_student_ops_api_deps())
 
-@app.get("/student/profile/{student_id}")
 async def get_profile(student_id: str):
     result = _get_profile_api_impl(student_id, deps=_student_profile_api_deps())
     if result.get("error") in {"profile not found", "profile_not_found"}:
@@ -3505,7 +3488,6 @@ async def get_profile(student_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.post("/student/profile/update")
 async def update_profile(
     student_id: str = Form(...),
     weak_kp: Optional[str] = Form(""),
@@ -3525,14 +3507,12 @@ async def update_profile(
     )
     return JSONResponse(payload)
 
-@app.post("/student/import")
 async def import_students(req: StudentImportRequest):
     result = student_import(req.dict())
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
 
-@app.post("/student/verify")
 async def verify_student(req: StudentVerifyRequest):
     return _verify_student_api_impl(req.name, req.class_name, deps=_student_ops_api_deps())
 
@@ -4538,11 +4518,9 @@ def _teacher_memory_api_deps():
         teacher_memory_apply=teacher_memory_apply,
     )
 
-@app.get("/exams")
 async def exams():
     return list_exams()
 
-@app.get("/exam/{exam_id}")
 async def exam_detail(exam_id: str):
     result = _get_exam_detail_api_impl(exam_id, deps=_exam_api_deps())
     if result.get("error") == "exam_not_found":
@@ -4551,7 +4529,6 @@ async def exam_detail(exam_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/exam/{exam_id}/analysis")
 async def exam_analysis(exam_id: str):
     result = exam_analysis_get(exam_id)
     if result.get("error") == "exam_not_found":
@@ -4560,7 +4537,6 @@ async def exam_analysis(exam_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/exam/{exam_id}/students")
 async def exam_students(exam_id: str, limit: int = 50):
     result = exam_students_list(exam_id, limit=limit)
     if result.get("error") == "exam_not_found":
@@ -4569,7 +4545,6 @@ async def exam_students(exam_id: str, limit: int = 50):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/exam/{exam_id}/student/{student_id}")
 async def exam_student(exam_id: str, student_id: str):
     result = exam_student_detail(exam_id, student_id=student_id)
     if result.get("error") == "exam_not_found":
@@ -4578,7 +4553,6 @@ async def exam_student(exam_id: str, student_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/exam/{exam_id}/question/{question_id}")
 async def exam_question(exam_id: str, question_id: str):
     result = exam_question_detail(exam_id, question_id=question_id)
     if result.get("error") == "exam_not_found":
@@ -4587,11 +4561,9 @@ async def exam_question(exam_id: str, question_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/assignments")
 async def assignments():
     return list_assignments()
 
-@app.get("/teacher/assignment/progress")
 async def teacher_assignment_progress(assignment_id: str, include_students: bool = True):
     assignment_id = (assignment_id or "").strip()
     if not assignment_id:
@@ -4601,7 +4573,6 @@ async def teacher_assignment_progress(assignment_id: str, include_students: bool
         raise HTTPException(status_code=404, detail="assignment not found")
     return result
 
-@app.get("/teacher/assignments/progress")
 async def teacher_assignments_progress(date: Optional[str] = None):
     date_str = parse_date_str(date)
     items = list_assignments().get("assignments") or []
@@ -4618,7 +4589,6 @@ async def teacher_assignments_progress(date: Optional[str] = None):
     out.sort(key=lambda x: (x.get("updated_at") or ""), reverse=True)
     return {"ok": True, "date": date_str, "assignments": out}
 
-@app.post("/assignment/requirements")
 async def assignment_requirements(req: AssignmentRequirementsRequest):
     date_str = parse_date_str(req.date)
     result = save_assignment_requirements(
@@ -4631,7 +4601,6 @@ async def assignment_requirements(req: AssignmentRequirementsRequest):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/assignment/{assignment_id}/requirements")
 async def assignment_requirements_get(assignment_id: str):
     try:
         folder = resolve_assignment_dir(assignment_id)
@@ -4644,7 +4613,6 @@ async def assignment_requirements_get(assignment_id: str):
         return {"assignment_id": assignment_id, "requirements": None}
     return {"assignment_id": assignment_id, "requirements": requirements}
 
-@app.post("/assignment/upload")
 async def assignment_upload(
     assignment_id: str = Form(...),
     date: Optional[str] = Form(""),
@@ -4672,7 +4640,6 @@ async def assignment_upload(
     except AssignmentUploadLegacyError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/exam/upload/start")
 async def exam_upload_start(
     exam_id: Optional[str] = Form(""),
     date: Optional[str] = Form(""),
@@ -4698,21 +4665,18 @@ async def exam_upload_start(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-@app.get("/exam/upload/status")
 async def exam_upload_status(job_id: str):
     try:
         return _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps())
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/exam/upload/draft")
 async def exam_upload_draft(job_id: str):
     try:
         return _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps())
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/exam/upload/draft/save")
 async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
     try:
         return _exam_upload_draft_save_api_impl(
@@ -4726,14 +4690,12 @@ async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/exam/upload/confirm")
 async def exam_upload_confirm(req: ExamUploadConfirmRequest):
     try:
         return _exam_upload_confirm_api_impl(req.job_id, deps=_exam_upload_api_deps())
     except ExamUploadApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/assignment/upload/start")
 async def assignment_upload_start(
     assignment_id: str = Form(...),
     date: Optional[str] = Form(""),
@@ -4763,21 +4725,18 @@ async def assignment_upload_start(
     except AssignmentUploadStartError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/assignment/upload/status")
 async def assignment_upload_status(job_id: str):
     try:
         return _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps())
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/assignment/upload/draft")
 async def assignment_upload_draft(job_id: str):
     try:
         return _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps())
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/assignment/upload/draft/save")
 async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
     try:
         return _save_assignment_upload_draft_impl(
@@ -4789,7 +4748,6 @@ async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
     except AssignmentUploadDraftSaveError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/assignment/upload/confirm")
 async def assignment_upload_confirm(req: UploadConfirmRequest):
     try:
         job = load_upload_job(req.job_id)
@@ -4817,7 +4775,6 @@ async def assignment_upload_confirm(req: UploadConfirmRequest):
     except AssignmentUploadConfirmError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.get("/assignment/{assignment_id}/download")
 async def assignment_download(assignment_id: str, file: str):
     try:
         assignment_dir = resolve_assignment_dir(assignment_id)
@@ -4838,7 +4795,6 @@ async def assignment_download(assignment_id: str, file: str):
         raise HTTPException(status_code=404, detail="file not found")
     return FileResponse(path)
 
-@app.get("/assignment/today")
 async def assignment_today(
     student_id: str,
     date: Optional[str] = None,
@@ -4855,7 +4811,6 @@ async def assignment_today(
         deps=_assignment_today_deps(),
     )
 
-@app.get("/assignment/{assignment_id}")
 async def assignment_detail(assignment_id: str):
     result = _get_assignment_detail_api_impl(assignment_id, deps=_assignment_api_deps())
     if result.get("error") == "assignment_not_found":
@@ -4864,22 +4819,18 @@ async def assignment_detail(assignment_id: str):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/lessons")
 async def lessons():
     return list_lessons()
 
-@app.get("/skills")
 async def skills():
     return list_skills()
 
-@app.get("/charts/{run_id}/{file_name}")
 async def chart_image_file(run_id: str, file_name: str):
     path = resolve_chart_image_path(UPLOADS_DIR, run_id, file_name)
     if not path:
         raise HTTPException(status_code=404, detail="chart file not found")
     return FileResponse(path)
 
-@app.get("/chart-runs/{run_id}/meta")
 async def chart_run_meta(run_id: str):
     path = resolve_chart_run_meta_path(UPLOADS_DIR, run_id)
     if not path:
@@ -4889,7 +4840,6 @@ async def chart_run_meta(run_id: str):
     except Exception:
         raise HTTPException(status_code=500, detail="failed to read chart run meta")
 
-@app.get("/teacher/llm-routing")
 async def teacher_llm_routing(
     teacher_id: Optional[str] = None,
     history_limit: int = 20,
@@ -4909,21 +4859,18 @@ async def teacher_llm_routing(
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.post("/teacher/llm-routing/simulate")
 async def teacher_llm_routing_simulate_api(req: RoutingSimulateRequest):
     result = teacher_llm_routing_simulate(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.post("/teacher/llm-routing/proposals")
 async def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
     result = teacher_llm_routing_propose(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.get("/teacher/llm-routing/proposals/{proposal_id}")
 async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optional[str] = None):
     result = teacher_llm_routing_proposal_get({"proposal_id": proposal_id, "teacher_id": teacher_id})
     if not result.get("ok"):
@@ -4931,7 +4878,6 @@ async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optiona
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.post("/teacher/llm-routing/proposals/{proposal_id}/review")
 async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: RoutingProposalReviewRequest):
     payload = model_dump_compat(req, exclude_none=True)
     payload["proposal_id"] = proposal_id
@@ -4941,7 +4887,6 @@ async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: Routing
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.post("/teacher/llm-routing/rollback")
 async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
     result = teacher_llm_routing_rollback(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
@@ -4949,21 +4894,18 @@ async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.get("/teacher/provider-registry")
 async def teacher_provider_registry_api(teacher_id: Optional[str] = None):
     result = teacher_provider_registry_get({"teacher_id": teacher_id})
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.post("/teacher/provider-registry/providers")
 async def teacher_provider_registry_create_api(req: TeacherProviderRegistryCreateRequest):
     result = teacher_provider_registry_create(model_dump_compat(req, exclude_none=True))
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result
 
-@app.patch("/teacher/provider-registry/providers/{provider_id}")
 async def teacher_provider_registry_update_api(provider_id: str, req: TeacherProviderRegistryUpdateRequest):
     payload = model_dump_compat(req, exclude_none=True)
     payload["provider_id"] = provider_id
@@ -4973,7 +4915,6 @@ async def teacher_provider_registry_update_api(provider_id: str, req: TeacherPro
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.delete("/teacher/provider-registry/providers/{provider_id}")
 async def teacher_provider_registry_delete_api(provider_id: str, req: TeacherProviderRegistryDeleteRequest):
     payload = model_dump_compat(req, exclude_none=True)
     payload["provider_id"] = provider_id
@@ -4983,7 +4924,6 @@ async def teacher_provider_registry_delete_api(provider_id: str, req: TeacherPro
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.post("/teacher/provider-registry/providers/{provider_id}/probe-models")
 async def teacher_provider_registry_probe_models_api(provider_id: str, req: TeacherProviderRegistryProbeRequest):
     payload = model_dump_compat(req, exclude_none=True)
     payload["provider_id"] = provider_id
@@ -4993,7 +4933,6 @@ async def teacher_provider_registry_probe_models_api(provider_id: str, req: Teac
         raise HTTPException(status_code=status_code, detail=result)
     return result
 
-@app.post("/assignment/generate")
 async def generate_assignment(
     assignment_id: str = Form(...),
     kp: str = Form(""),
@@ -5029,13 +4968,11 @@ async def generate_assignment(
     except AssignmentGenerateError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
-@app.post("/assignment/render")
 async def render_assignment(assignment_id: str = Form(...)):
     script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
     out = run_script(["python3", str(script), "--assignment-id", assignment_id])
     return {"ok": True, "output": out}
 
-@app.post("/assignment/questions/ocr")
 async def assignment_questions_ocr(
     assignment_id: str = Form(...),
     files: list[UploadFile] = File(...),
@@ -5056,7 +4993,6 @@ async def assignment_questions_ocr(
         deps=_assignment_questions_ocr_deps(),
     )
 
-@app.post("/student/submit")
 async def submit(
     student_id: str = Form(...),
     files: list[UploadFile] = File(...),
