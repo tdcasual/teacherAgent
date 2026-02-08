@@ -6,7 +6,7 @@ const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['student-session-sidebar.spec.ts'],
+  testMatch: ['student-*.spec.ts', 'storage-resilience.spec.ts', 'security-markdown-sanitize.spec.ts'],
   timeout: 60_000,
   expect: {
     timeout: 8_000,

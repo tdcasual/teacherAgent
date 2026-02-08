@@ -1,412 +1,52 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import remarkRehype from 'remark-rehype'
-import rehypeKatex from 'rehype-katex'
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
-import rehypeStringify from 'rehype-stringify'
-import { visit } from 'unist-util-visit'
+import { makeId } from '../../shared/id'
+import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
 import { getNextMenuIndex } from '../../shared/sessionMenuNavigation'
+import { sessionGroupFromIso, sessionGroupOrder } from '../../shared/sessionGrouping'
+import { startVisibilityAwareBackoffPolling } from '../../shared/visibilityBackoffPolling'
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../shared/storage'
+import { formatSessionUpdatedLabel, nowTime, timeFromIso } from '../../shared/time'
+import {
+  STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX,
+  STUDENT_SESSION_VIEW_STATE_KEY_PREFIX,
+  buildSessionViewStateSignature,
+  compareSessionViewStateUpdatedAt,
+  normalizeSessionViewStatePayload,
+  readStudentLocalDraftSessionIds,
+  readStudentLocalViewState,
+  type SessionViewStatePayload,
+} from './features/chat/viewState'
+import { stripTransientPendingBubbles } from './features/chat/pendingOverlay'
+import StudentSessionSidebar from './features/chat/StudentSessionSidebar'
+import StudentTopbar from './features/layout/StudentTopbar'
+import type {
+  AssignmentDetail,
+  ChatJobStatus,
+  ChatResponse,
+  ChatStartResult,
+  Message,
+  PendingChatJob,
+  RenderedMessage,
+  SessionGroup,
+  StudentHistoryMessage,
+  StudentHistorySession,
+  StudentHistorySessionResponse,
+  StudentHistorySessionsResponse,
+  VerifiedStudent,
+  VerifyResponse,
+} from './appTypes'
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const STUDENT_WELCOME_MESSAGE = '学生端已就绪。请先填写姓名完成验证，然后开始提问或进入作业讨论。'
 const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问，或输入“开始今天作业”。'
-const STUDENT_SESSION_VIEW_STATE_KEY_PREFIX = 'studentSessionViewState:'
-const STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX = 'studentLocalDraftSessionIds:'
 
-type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  time: string
-}
-
-type RenderedMessage = Message & { html: string }
-
-type ChatResponse = {
-  reply: string
-}
-
-type ChatJobStatus = {
-  job_id: string
-  status: 'queued' | 'processing' | 'done' | 'failed' | 'cancelled' | string
-  step?: string
-  reply?: string
-  error?: string
-  error_detail?: string
-  updated_at?: string
-}
-
-type ChatStartResult = {
-  ok: boolean
-  job_id: string
-  status: string
-}
-
-type StudentHistorySession = {
-  session_id: string
-  updated_at?: string
-  message_count?: number
-  preview?: string
-  assignment_id?: string
-  date?: string
-}
-
-type SessionGroup<T> = {
-  key: string
-  label: string
-  items: T[]
-}
-
-type StudentHistorySessionsResponse = {
-  ok: boolean
-  student_id: string
-  sessions: StudentHistorySession[]
-  next_cursor?: number | null
-  total?: number
-}
-
-type SessionViewStatePayload = {
-  title_map: Record<string, string>
-  hidden_ids: string[]
-  active_session_id: string
-  updated_at: string
-}
-
-type StudentHistoryMessage = {
-  ts?: string
-  role?: string
-  content?: string
-  [k: string]: any
-}
-
-type StudentHistorySessionResponse = {
-  ok: boolean
-  student_id: string
-  session_id: string
-  messages: StudentHistoryMessage[]
-  next_cursor: number
-}
-
-type AssignmentQuestion = {
-  question_id?: string
-  kp_id?: string
-  difficulty?: string
-  stem_text?: string
-}
-
-type AssignmentDetail = {
-  assignment_id: string
-  date?: string
-  question_count?: number
-  meta?: { target_kp?: string[] }
-  questions?: AssignmentQuestion[]
-  delivery?: { mode?: string; files?: Array<{ name: string; url: string }> }
-}
-
-type VerifiedStudent = {
-  student_id: string
-  student_name: string
-  class_name?: string
-}
-
-type VerifyResponse = {
-  ok: boolean
-  error?: string
-  message?: string
-  student?: VerifiedStudent
-}
-
-const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`
-
-const nowTime = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 const todayDate = () => new Date().toLocaleDateString('sv-SE')
-const timeFromIso = (ts?: string) => {
-  if (!ts) return nowTime()
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return nowTime()
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
-
-const pendingStatusTexts = new Set(['正在生成…', '正在恢复上一条回复…'])
-
-const stripTransientPendingBubbles = (messages: Message[]): Message[] => {
-  return messages.filter((msg) => {
-    if (msg.role !== 'assistant') return true
-    if (!pendingStatusTexts.has(String(msg.content || '').trim())) return true
-    return !(msg.id.startsWith('asst_') || msg.id.startsWith('pending_'))
-  })
-}
-
-const formatSessionUpdatedLabel = (ts?: string) => {
-  if (!ts) return ''
-  const d = new Date(ts)
-  if (Number.isNaN(d.getTime())) return ''
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / (24 * 60 * 60 * 1000))
-  if (diffDays <= 0) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  if (diffDays === 1) return '昨天'
-  if (diffDays < 7) {
-    const names = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    return names[d.getDay()] || ''
-  }
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace('/', '-')
-}
-
-const sessionGroupFromIso = (updatedAt?: string) => {
-  if (!updatedAt) return { key: 'older', label: '更早' }
-  const date = new Date(updatedAt)
-  if (Number.isNaN(date.getTime())) return { key: 'older', label: '更早' }
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-  const diffDays = Math.floor((today - target) / (24 * 60 * 60 * 1000))
-  if (diffDays <= 0) return { key: 'today', label: '今天' }
-  if (diffDays === 1) return { key: 'yesterday', label: '昨天' }
-  if (diffDays <= 7) return { key: 'week', label: '近 7 天' }
-  return { key: 'older', label: '更早' }
-}
-
-const sessionGroupOrder: Record<string, number> = {
-  today: 0,
-  yesterday: 1,
-  week: 2,
-  older: 3,
-}
-
-const parseOptionalIso = (value?: string) => {
-  const raw = String(value || '').trim()
-  if (!raw) return null
-  const ms = Date.parse(raw)
-  return Number.isNaN(ms) ? null : ms
-}
-
-const compareSessionViewStateUpdatedAt = (a?: string, b?: string) => {
-  const ma = parseOptionalIso(a)
-  const mb = parseOptionalIso(b)
-  if (ma !== null && mb !== null) {
-    if (ma > mb) return 1
-    if (ma < mb) return -1
-    return 0
-  }
-  if (ma !== null) return 1
-  if (mb !== null) return -1
-  return 0
-}
-
-const normalizeSessionViewStatePayload = (raw: any): SessionViewStatePayload => {
-  const titleRaw = raw && typeof raw === 'object' && raw.title_map && typeof raw.title_map === 'object' ? raw.title_map : {}
-  const titleMap: Record<string, string> = {}
-  for (const [key, value] of Object.entries(titleRaw)) {
-    const sid = String(key || '').trim()
-    const title = String(value || '').trim()
-    if (!sid || !title) continue
-    titleMap[sid] = title
-  }
-  const hiddenRaw: unknown[] = Array.isArray(raw?.hidden_ids) ? raw.hidden_ids : []
-  const hiddenIds = Array.from(new Set(hiddenRaw.map((item: unknown) => String(item || '').trim()).filter(Boolean)))
-  const activeSessionId = String(raw?.active_session_id || '').trim()
-  const updatedAt = parseOptionalIso(raw?.updated_at) !== null ? String(raw?.updated_at) : ''
-  return {
-    title_map: titleMap,
-    hidden_ids: hiddenIds,
-    active_session_id: activeSessionId,
-    updated_at: updatedAt,
-  }
-}
-
-const buildSessionViewStateSignature = (state: SessionViewStatePayload) => {
-  const titleEntries = Object.entries(state.title_map).sort((a, b) => a[0].localeCompare(b[0]))
-  const normalized = {
-    title_map: Object.fromEntries(titleEntries),
-    hidden_ids: [...state.hidden_ids],
-    updated_at: state.updated_at || '',
-  }
-  return JSON.stringify(normalized)
-}
-
-const readStudentLocalViewState = (studentId: string): SessionViewStatePayload => {
-  const sid = String(studentId || '').trim()
-  if (!sid) {
-    return normalizeSessionViewStatePayload({
-      title_map: {},
-      hidden_ids: [],
-      active_session_id: '',
-      updated_at: new Date().toISOString(),
-    })
-  }
-  try {
-    const raw = localStorage.getItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`)
-    if (raw) {
-      const parsed = normalizeSessionViewStatePayload(JSON.parse(raw))
-      if (!parsed.active_session_id) {
-        parsed.active_session_id = String(localStorage.getItem(`studentActiveSession:${sid}`) || '').trim()
-      }
-      if (parsed.updated_at) return parsed
-    }
-  } catch {
-    // ignore
-  }
-  let titleMap: Record<string, string> = {}
-  let hiddenIds: string[] = []
-  const activeSessionId = String(localStorage.getItem(`studentActiveSession:${sid}`) || '').trim()
-  try {
-    const parsed = JSON.parse(localStorage.getItem(`studentSessionTitles:${sid}`) || '{}')
-    if (parsed && typeof parsed === 'object') titleMap = parsed
-  } catch {
-    titleMap = {}
-  }
-  try {
-    const parsed = JSON.parse(localStorage.getItem(`studentDeletedSessions:${sid}`) || '[]')
-    if (Array.isArray(parsed)) hiddenIds = parsed.map((item) => String(item || '').trim()).filter(Boolean)
-  } catch {
-    hiddenIds = []
-  }
-  return normalizeSessionViewStatePayload({
-    title_map: titleMap,
-    hidden_ids: hiddenIds,
-    active_session_id: activeSessionId,
-    updated_at: new Date().toISOString(),
-  })
-}
-
-const readStudentLocalDraftSessionIds = (studentId: string): string[] => {
-  const sid = String(studentId || '').trim()
-  if (!sid) return []
-  try {
-    const raw = localStorage.getItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`)
-    const parsed = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(parsed)) return []
-    const cleaned = parsed.map((item) => String(item || '').trim()).filter(Boolean)
-    return Array.from(new Set(cleaned))
-  } catch {
-    return []
-  }
-}
-
-const removeEmptyParagraphs = () => {
-  return (tree: any) => {
-    visit(tree, 'paragraph', (node: any, index: number | null | undefined, parent: any) => {
-      if (!parent || typeof index !== 'number') return
-      if (!node.children || node.children.length === 0) {
-        parent.children.splice(index, 1)
-      }
-    })
-  }
-}
-
-const remarkLatexBrackets = () => {
-  return (tree: any) => {
-    visit(tree, 'text', (node: any, index: number | null | undefined, parent: any) => {
-      if (!parent || typeof index !== 'number') return
-      if (parent.type === 'inlineMath' || parent.type === 'math') return
-
-      const value = String(node.value || '')
-      if (!value.includes('\\[') && !value.includes('\\(')) return
-
-      const nodes: any[] = []
-      let pos = 0
-
-      const findUnescaped = (token: string, start: number) => {
-        let idx = value.indexOf(token, start)
-        while (idx > 0 && value[idx - 1] === '\\') {
-          idx = value.indexOf(token, idx + 1)
-        }
-        return idx
-      }
-
-      while (pos < value.length) {
-        const nextDisplay = findUnescaped('\\[', pos)
-        const nextInline = findUnescaped('\\(', pos)
-        let next = -1
-        let mode: 'display' | 'inline' | '' = ''
-
-        if (nextDisplay !== -1 && (nextInline === -1 || nextDisplay < nextInline)) {
-          next = nextDisplay
-          mode = 'display'
-        } else if (nextInline !== -1) {
-          next = nextInline
-          mode = 'inline'
-        }
-
-        if (next === -1) {
-          nodes.push({ type: 'text', value: value.slice(pos) })
-          break
-        }
-
-        if (next > pos) nodes.push({ type: 'text', value: value.slice(pos, next) })
-
-        const closeToken = mode === 'display' ? '\\]' : '\\)'
-        const end = findUnescaped(closeToken, next + 2)
-        if (end === -1) {
-          nodes.push({ type: 'text', value: value.slice(next) })
-          break
-        }
-
-        const mathValue = value.slice(next + 2, end)
-        nodes.push({ type: mode === 'display' ? 'math' : 'inlineMath', value: mathValue })
-        pos = end + 2
-      }
-
-      if (nodes.length) {
-        parent.children.splice(index, 1, ...nodes)
-        return index + nodes.length
-      }
-    })
-  }
-}
-
-const katexSchema = {
-  ...defaultSchema,
-  attributes: {
-    ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
-    div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
-    code: [...(defaultSchema.attributes?.code || []), 'className'],
-  },
-}
-
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(removeEmptyParagraphs)
-  .use(remarkLatexBrackets)
-  .use(remarkRehype)
-  .use(rehypeKatex)
-  .use(rehypeSanitize, katexSchema)
-  .use(rehypeStringify)
-
-const normalizeMathDelimiters = (content: string) => {
-  if (!content) return ''
-  return content
-    .replace(/\\\[/g, '$$')
-    .replace(/\\\]/g, '$$')
-    .replace(/\\\(/g, '$')
-    .replace(/\\\)/g, '$')
-}
-
-const renderMarkdown = (content: string) => {
-  const normalized = normalizeMathDelimiters(content || '')
-  const result = processor.processSync(normalized)
-  return String(result)
-}
-
-const absolutizeChartImageUrls = (html: string, apiBase: string) => {
-  const base = (apiBase || '').trim().replace(/\/+$/, '')
-  if (!base) return html
-  return html.replace(/(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
-}
 
 const toDomSafeId = (value: string) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_')
 
 export default function App() {
-  const [apiBase, setApiBase] = useState(() => localStorage.getItem('apiBaseStudent') || DEFAULT_API_URL)
+  const [apiBase, setApiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [messages, setMessages] = useState<Message[]>(() => [
     {
@@ -423,7 +63,7 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const [verifiedStudent, setVerifiedStudent] = useState<VerifiedStudent | null>(() => {
-    const raw = localStorage.getItem('verifiedStudent')
+    const raw = safeLocalStorageGetItem('verifiedStudent')
     if (!raw) return null
     try {
       return JSON.parse(raw) as VerifiedStudent
@@ -441,14 +81,7 @@ export default function App() {
   const [assignmentError, setAssignmentError] = useState('')
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
 
-  const [pendingChatJob, setPendingChatJob] = useState<{
-    job_id: string
-    request_id: string
-    placeholder_id: string
-    user_text: string
-    session_id: string
-    created_at: number
-  } | null>(null)
+  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(null)
 
   const [sessions, setSessions] = useState<StudentHistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -461,6 +94,8 @@ export default function App() {
   const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>([])
   const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
   const [openSessionMenuId, setOpenSessionMenuId] = useState('')
+  const [renameDialogSessionId, setRenameDialogSessionId] = useState<string | null>(null)
+  const [archiveDialogSessionId, setArchiveDialogSessionId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState('')
   const [sessionLoading, setSessionLoading] = useState(false)
   const [sessionError, setSessionError] = useState('')
@@ -495,15 +130,15 @@ export default function App() {
   )
 
   useEffect(() => {
-    localStorage.setItem('apiBaseStudent', apiBase)
+    safeLocalStorageSetItem('apiBaseStudent', apiBase)
     markdownCacheRef.current.clear()
   }, [apiBase])
 
   useEffect(() => {
     if (verifiedStudent) {
-      localStorage.setItem('verifiedStudent', JSON.stringify(verifiedStudent))
+      safeLocalStorageSetItem('verifiedStudent', JSON.stringify(verifiedStudent))
     } else {
-      localStorage.removeItem('verifiedStudent')
+      safeLocalStorageRemoveItem('verifiedStudent')
     }
   }, [verifiedStudent])
 
@@ -709,7 +344,7 @@ export default function App() {
     }
     const key = `studentPendingChatJob:${sid}`
     try {
-      const raw = localStorage.getItem(key)
+      const raw = safeLocalStorageGetItem(key)
       setPendingChatJob(raw ? (JSON.parse(raw) as any) : null)
     } catch {
       setPendingChatJob(null)
@@ -721,8 +356,8 @@ export default function App() {
     if (!sid) return
     const key = `studentPendingChatJob:${sid}`
     try {
-      if (pendingChatJob) localStorage.setItem(key, JSON.stringify(pendingChatJob))
-      else localStorage.removeItem(key)
+      if (pendingChatJob) safeLocalStorageSetItem(key, JSON.stringify(pendingChatJob))
+      else safeLocalStorageRemoveItem(key)
     } catch {
       // ignore storage errors
     }
@@ -746,82 +381,86 @@ export default function App() {
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
-    let cancelled = false
-    let timeoutId: number | null = null
-    let inFlight = false
-    let delayMs = 800
-
-    const clearTimer = () => {
-      if (timeoutId) window.clearTimeout(timeoutId)
-      timeoutId = null
-    }
-
-    const jitter = (ms: number) => Math.round(ms * (0.85 + Math.random() * 0.3))
-
-    const abortInFlight = () => {
-      // fetch in this file doesn't pass AbortController (keep simple)
-    }
-
-    const poll = async () => {
-      if (cancelled || inFlight) return
-      if (document.visibilityState === 'hidden') {
-        timeoutId = window.setTimeout(poll, jitter(Math.min(8000, delayMs)))
-        return
-      }
-      inFlight = true
-      try {
+    const cleanup = startVisibilityAwareBackoffPolling(
+      async () => {
         const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
         if (!res.ok) {
           const text = await res.text()
           throw new Error(text || `状态码 ${res.status}`)
         }
         const data = (await res.json()) as ChatJobStatus
-        if (cancelled) return
         if (data.status === 'done') {
-          updateMessage(pendingChatJob.placeholder_id, { content: data.reply || '已收到。', time: nowTime() })
+          setMessages((prev) => {
+            const base = stripTransientPendingBubbles(prev)
+            const hasUserText = pendingChatJob.user_text
+              ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text)
+              : true
+            const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
+            const next = [...base]
+            if (!hasUserText && pendingChatJob.user_text) {
+              next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
+            }
+            if (!hasPlaceholder) {
+              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+            }
+            return next.map((m) =>
+              m.id === pendingChatJob.placeholder_id ? { ...m, content: data.reply || '已收到。', time: nowTime() } : m,
+            )
+          })
           setPendingChatJob(null)
           setSending(false)
           void refreshSessions()
-          return
+          return 'stop'
         }
         if (data.status === 'failed' || data.status === 'cancelled') {
           const msg = data.error_detail || data.error || '请求失败'
-          updateMessage(pendingChatJob.placeholder_id, { content: `抱歉，请求失败：${msg}`, time: nowTime() })
+          setMessages((prev) => {
+            const base = stripTransientPendingBubbles(prev)
+            const hasUserText = pendingChatJob.user_text
+              ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text)
+              : true
+            const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
+            const next = [...base]
+            if (!hasUserText && pendingChatJob.user_text) {
+              next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
+            }
+            if (!hasPlaceholder) {
+              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+            }
+            return next.map((m) =>
+              m.id === pendingChatJob.placeholder_id ? { ...m, content: `抱歉，请求失败：${msg}`, time: nowTime() } : m,
+            )
+          })
           setPendingChatJob(null)
           setSending(false)
-          return
+          return 'stop'
         }
-        delayMs = Math.min(8000, Math.round(delayMs * 1.4))
-        timeoutId = window.setTimeout(poll, jitter(delayMs))
-      } catch (err: any) {
-        if (cancelled) return
-        const msg = err?.message || String(err)
-        updateMessage(pendingChatJob.placeholder_id, { content: `网络波动，正在重试…（${msg}）`, time: nowTime() })
-        delayMs = Math.min(8000, Math.round(delayMs * 1.6))
-        timeoutId = window.setTimeout(poll, jitter(delayMs))
-      } finally {
-        inFlight = false
-      }
-    }
+        return 'continue'
+      },
+      (err) => {
+        const msg = (err as any)?.message || String(err)
+        setMessages((prev) => {
+          const base = stripTransientPendingBubbles(prev)
+          const hasUserText = pendingChatJob.user_text
+            ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text)
+            : true
+          const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
+          const next = [...base]
+          if (!hasUserText && pendingChatJob.user_text) {
+            next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
+          }
+          if (!hasPlaceholder) {
+            next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+          }
+          return next.map((m) =>
+            m.id === pendingChatJob.placeholder_id ? { ...m, content: `网络波动，正在重试…（${msg}）`, time: nowTime() } : m,
+          )
+        })
+      },
+      { kickMode: 'timeout0' },
+    )
 
-    const onVisibilityChange = () => {
-      if (cancelled) return
-      if (document.visibilityState === 'visible') {
-        delayMs = 800
-        if (inFlight) return
-        clearTimer()
-        timeoutId = window.setTimeout(poll, 0)
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    void poll()
-
-    return () => {
-      cancelled = true
-      document.removeEventListener('visibilitychange', onVisibilityChange)
-      clearTimer()
-      abortInFlight()
-    }
+    return cleanup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChatJob?.job_id, apiBase])
 
@@ -1050,18 +689,18 @@ export default function App() {
     const sid = verifiedStudent?.student_id?.trim() || ''
     if (!sid) return
     currentViewStateRef.current = currentViewState
-    localStorage.setItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`, JSON.stringify(currentViewState))
-    localStorage.setItem(`studentSessionTitles:${sid}`, JSON.stringify(currentViewState.title_map))
-    localStorage.setItem(`studentDeletedSessions:${sid}`, JSON.stringify(currentViewState.hidden_ids))
-    if (activeSessionId) localStorage.setItem(`studentActiveSession:${sid}`, activeSessionId)
-    else localStorage.removeItem(`studentActiveSession:${sid}`)
+    safeLocalStorageSetItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`, JSON.stringify(currentViewState))
+    safeLocalStorageSetItem(`studentSessionTitles:${sid}`, JSON.stringify(currentViewState.title_map))
+    safeLocalStorageSetItem(`studentDeletedSessions:${sid}`, JSON.stringify(currentViewState.hidden_ids))
+    if (activeSessionId) safeLocalStorageSetItem(`studentActiveSession:${sid}`, activeSessionId)
+    else safeLocalStorageRemoveItem(`studentActiveSession:${sid}`)
   }, [activeSessionId, currentViewState, verifiedStudent?.student_id])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
     if (!sid) return
     try {
-      localStorage.setItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`, JSON.stringify(localDraftSessionIds))
+      safeLocalStorageSetItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`, JSON.stringify(localDraftSessionIds))
     } catch {
       // ignore localStorage write errors
     }
@@ -1317,6 +956,28 @@ export default function App() {
     }
   }, [])
 
+  const selectStudentSession = useCallback(
+    (sessionId: string) => {
+      const sid = String(sessionId || '').trim()
+      if (!sid) return
+      setActiveSessionId(sid)
+      setSessionCursor(-1)
+      setSessionHasMore(false)
+      setSessionError('')
+      setOpenSessionMenuId('')
+      closeSidebarOnMobile()
+    },
+    [closeSidebarOnMobile],
+  )
+
+  const resetVerification = useCallback(() => {
+    setVerifiedStudent(null)
+    setNameInput('')
+    setClassInput('')
+    setVerifyError('')
+    setVerifyOpen(true)
+  }, [])
+
   const startNewStudentSession = useCallback(() => {
     const next = `general_${todayDate()}_${Math.random().toString(16).slice(2, 6)}`
     sessionRequestRef.current += 1
@@ -1353,317 +1014,110 @@ export default function App() {
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      const nextTitle = window.prompt('输入会话名称', getSessionTitle(sid))
-      if (nextTitle == null) {
-        setOpenSessionMenuId('')
-        return
-      }
-      const title = nextTitle.trim()
-      setSessionTitleMap((prev) => {
-        const next = { ...prev }
-        if (title) next[sid] = title
-        else delete next[sid]
-        return next
-      })
-      setOpenSessionMenuId('')
+      setRenameDialogSessionId(sid)
     },
-    [getSessionTitle],
+    [],
   )
 
   const toggleSessionArchive = useCallback(
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      const isArchived = deletedSessionIds.includes(sid)
-      const action = isArchived ? '恢复' : '归档'
-      if (!window.confirm(`确认${action}会话 ${getSessionTitle(sid)}？`)) return
-      setOpenSessionMenuId('')
-      setDeletedSessionIds((prev) => {
-        if (isArchived) return prev.filter((id) => id !== sid)
-        if (prev.includes(sid)) return prev
-        return [...prev, sid]
-      })
-      if (!isArchived && activeSessionId === sid) {
-        const next = visibleSessions.find((item) => item.session_id !== sid)?.session_id
-        if (next) {
-          setActiveSessionId(next)
-          setSessionCursor(-1)
-          setSessionHasMore(false)
-          setSessionError('')
-        } else {
-          startNewStudentSession()
-        }
-      }
+      setArchiveDialogSessionId(sid)
     },
-    [activeSessionId, deletedSessionIds, getSessionTitle, startNewStudentSession, visibleSessions],
+    [],
   )
+
+  const focusSessionMenuTrigger = useCallback((sessionId: string) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    const domSafe = sid.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const triggerId = `student-session-menu-${domSafe}-trigger`
+    window.setTimeout(() => {
+      const node = document.getElementById(triggerId) as HTMLButtonElement | null
+      node?.focus?.()
+    }, 0)
+  }, [])
+
+  const cancelRenameDialog = useCallback(() => {
+    const sid = renameDialogSessionId
+    setRenameDialogSessionId(null)
+    setOpenSessionMenuId('')
+    if (sid) focusSessionMenuTrigger(sid)
+  }, [focusSessionMenuTrigger, renameDialogSessionId])
+
+  const confirmRenameDialog = useCallback(
+    (nextTitle: string) => {
+      const sid = renameDialogSessionId
+      if (!sid) return
+      const title = String(nextTitle || '').trim()
+      setSessionTitleMap((prev) => {
+        const next = { ...prev }
+        if (title) next[sid] = title
+        else delete next[sid]
+        return next
+      })
+      setRenameDialogSessionId(null)
+      setOpenSessionMenuId('')
+      focusSessionMenuTrigger(sid)
+    },
+    [focusSessionMenuTrigger, renameDialogSessionId],
+  )
+
+  const cancelArchiveDialog = useCallback(() => {
+    setArchiveDialogSessionId(null)
+  }, [])
+
+  const confirmArchiveDialog = useCallback(() => {
+    const sid = archiveDialogSessionId
+    if (!sid) return
+    const isArchived = deletedSessionIds.includes(sid)
+    setArchiveDialogSessionId(null)
+    setOpenSessionMenuId('')
+    setDeletedSessionIds((prev) => {
+      if (isArchived) return prev.filter((id) => id !== sid)
+      if (prev.includes(sid)) return prev
+      return [...prev, sid]
+    })
+    focusSessionMenuTrigger(sid)
+    if (!isArchived && activeSessionId === sid) {
+      const next = visibleSessions.find((item) => item.session_id !== sid)?.session_id
+      if (next) {
+        setActiveSessionId(next)
+        setSessionCursor(-1)
+        setSessionHasMore(false)
+        setSessionError('')
+      } else {
+        startNewStudentSession()
+      }
+    }
+  }, [activeSessionId, archiveDialogSessionId, deletedSessionIds, startNewStudentSession, visibleSessions])
+
+  const archiveDialogIsArchived = archiveDialogSessionId ? deletedSessionIds.includes(archiveDialogSessionId) : false
+  const archiveDialogActionLabel = archiveDialogIsArchived ? '恢复' : '归档'
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="top-left">
-          <div className="brand">物理学习助手 · 学生端</div>
-          <button className="ghost" type="button" onClick={() => setSidebarOpen((prev) => !prev)}>
-            {sidebarOpen ? '收起会话' : '展开会话'}
-          </button>
-          <button className="ghost" onClick={startNewStudentSession}>
-            新会话
-          </button>
-        </div>
-        <div className="top-actions">
-          <div className="role-badge student">身份：学生</div>
-          <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
-            设置
-          </button>
-        </div>
-      </header>
-
-      {settingsOpen && (
-        <section className="settings">
-          <div className="settings-row">
-            <label>接口地址</label>
-            <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="http://localhost:8000" />
-          </div>
-          <div className="settings-hint">
-            修改后立即生效。{verifiedStudent?.student_id ? ` 当前学生：${verifiedStudent.student_id}` : ''}
-          </div>
-        </section>
-      )}
+      <StudentTopbar apiBase={apiBase} setApiBase={setApiBase} verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen} />
 
       <div className={`student-layout ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-        <button
-          type="button"
-          className={`sidebar-overlay ${sidebarOpen ? 'show' : ''}`}
-          aria-label="关闭会话侧栏"
-          onClick={() => setSidebarOpen(false)}
+        <StudentSessionSidebar
+          apiBase={apiBase} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} verifiedStudent={verifiedStudent}
+          historyLoading={historyLoading} historyError={historyError} historyHasMore={historyHasMore} refreshSessions={refreshSessions}
+          showArchivedSessions={showArchivedSessions} setShowArchivedSessions={setShowArchivedSessions} historyQuery={historyQuery} setHistoryQuery={setHistoryQuery}
+          visibleSessionCount={visibleSessions.length} groupedSessions={groupedSessions} deletedSessionIds={deletedSessionIds}
+          activeSessionId={activeSessionId} onSelectSession={selectStudentSession} getSessionTitle={getSessionTitle}
+          openSessionMenuId={openSessionMenuId} toggleSessionMenu={toggleSessionMenu}
+          handleSessionMenuTriggerKeyDown={handleSessionMenuTriggerKeyDown} handleSessionMenuKeyDown={handleSessionMenuKeyDown}
+          setSessionMenuTriggerRef={setSessionMenuTriggerRef} setSessionMenuRef={setSessionMenuRef} renameSession={renameSession} toggleSessionArchive={toggleSessionArchive}
+          sessionHasMore={sessionHasMore} sessionLoading={sessionLoading} sessionCursor={sessionCursor} loadSessionMessages={loadSessionMessages} sessionError={sessionError}
+          verifyOpen={verifyOpen} setVerifyOpen={setVerifyOpen} handleVerify={handleVerify} nameInput={nameInput} setNameInput={setNameInput} classInput={classInput} setClassInput={setClassInput} verifying={verifying} verifyError={verifyError}
+          todayAssignment={todayAssignment} assignmentLoading={assignmentLoading} assignmentError={assignmentError} todayDate={todayDate} resetVerification={resetVerification} startNewStudentSession={startNewStudentSession}
+          renameDialogSessionId={renameDialogSessionId} archiveDialogSessionId={archiveDialogSessionId} archiveDialogActionLabel={archiveDialogActionLabel} archiveDialogIsArchived={archiveDialogIsArchived}
+          cancelRenameDialog={cancelRenameDialog} confirmRenameDialog={confirmRenameDialog} cancelArchiveDialog={cancelArchiveDialog} confirmArchiveDialog={confirmArchiveDialog}
         />
-        <aside className={`session-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
-          <div className="session-sidebar-header">
-            <strong>历史会话</strong>
-            <div className="session-sidebar-actions">
-              <button type="button" className="ghost" onClick={startNewStudentSession}>
-                新建
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                disabled={!verifiedStudent || historyLoading}
-                onClick={() => void refreshSessions()}
-              >
-                {historyLoading ? '刷新中…' : '刷新'}
-              </button>
-              <button type="button" className="ghost" disabled={!verifiedStudent} onClick={() => setShowArchivedSessions((prev) => !prev)}>
-                {showArchivedSessions ? '查看会话' : '查看归档'}
-              </button>
-            </div>
-          </div>
-          <div className="session-search">
-            <input
-              value={historyQuery}
-              onChange={(e) => setHistoryQuery(e.target.value)}
-              placeholder="搜索会话"
-              disabled={!verifiedStudent}
-            />
-          </div>
-          {!verifiedStudent && <div className="history-hint">请先完成姓名验证后查看历史记录。</div>}
-          {historyError && <div className="status err">{historyError}</div>}
-          {verifiedStudent && !historyLoading && visibleSessions.length === 0 && !historyError && (
-            <div className="history-hint">{showArchivedSessions ? '暂无归档会话。' : '暂无历史记录。'}</div>
-          )}
-          <div className="session-groups">
-            {groupedSessions.map((group) => (
-              <div key={group.key} className="session-group">
-                <div className="session-group-title">{group.label}</div>
-                <div className="session-list">
-                  {group.items.map((item) => {
-                    const sid = item.session_id
-                    const isActive = sid === activeSessionId
-                    const isMenuOpen = sid === openSessionMenuId
-                    const isArchived = deletedSessionIds.includes(sid)
-                    const menuDomIdBase = `student-session-menu-${toDomSafeId(sid)}`
-                    const menuId = `${menuDomIdBase}-list`
-                    const triggerId = `${menuDomIdBase}-trigger`
-                    const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
-                    return (
-                      <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
-                        <button
-                          type="button"
-                          className="session-select"
-                          onClick={() => {
-                            setActiveSessionId(sid)
-                            setSessionCursor(-1)
-                            setSessionHasMore(false)
-                            setSessionError('')
-                            setOpenSessionMenuId('')
-                            closeSidebarOnMobile()
-                          }}
-                        >
-                          <div className="session-main">
-                            <div className="session-id">{getSessionTitle(sid)}</div>
-                            <div className="session-meta">
-                              {(item.message_count || 0).toString()} 条{updatedLabel ? ` · ${updatedLabel}` : ''}
-                            </div>
-                          </div>
-                          {item.preview ? <div className="session-preview">{item.preview}</div> : null}
-                        </button>
-                        <div className="session-menu-wrap">
-                          <button
-                            type="button"
-                            id={triggerId}
-                            ref={(node) => setSessionMenuTriggerRef(sid, node)}
-                            className="session-menu-trigger"
-                            aria-haspopup="menu"
-                            aria-expanded={isMenuOpen}
-                            aria-controls={menuId}
-                            aria-label={`会话 ${getSessionTitle(sid)} 操作`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleSessionMenu(sid)
-                            }}
-                            onKeyDown={(event) => handleSessionMenuTriggerKeyDown(sid, isMenuOpen, event)}
-                          >
-                            ⋯
-                          </button>
-                          {isMenuOpen ? (
-                            <div
-                              id={menuId}
-                              ref={(node) => setSessionMenuRef(sid, node)}
-                              className="session-menu"
-                              role="menu"
-                              aria-orientation="vertical"
-                              aria-labelledby={triggerId}
-                              onKeyDown={(event) => handleSessionMenuKeyDown(sid, event)}
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="session-menu-item"
-                                onClick={() => {
-                                  renameSession(sid)
-                                }}
-                              >
-                                重命名
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className={`session-menu-item${isArchived ? '' : ' danger'}`}
-                                onClick={() => {
-                                  toggleSessionArchive(sid)
-                                }}
-                              >
-                                {isArchived ? '恢复' : '归档'}
-                              </button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          {verifiedStudent && (
-            <div className="history-footer">
-              <button type="button" className="ghost" disabled={!historyHasMore || historyLoading} onClick={() => void refreshSessions('more')}>
-                {historyLoading ? '加载中…' : historyHasMore ? '加载更多会话' : '已显示全部会话'}
-              </button>
-            </div>
-          )}
-          {verifiedStudent && activeSessionId && (
-            <div className="history-footer">
-              <button
-                type="button"
-                className="ghost"
-                disabled={!sessionHasMore || sessionLoading}
-                onClick={() => void loadSessionMessages(activeSessionId, sessionCursor, true)}
-              >
-                {sessionLoading ? '加载中…' : sessionHasMore ? '加载更早消息' : '没有更早消息'}
-              </button>
-              {sessionError && <div className="status err">{sessionError}</div>}
-            </div>
-          )}
 
-          <section className="student-side-card">
-            <div className="student-side-header">
-              <strong>学习信息</strong>
-              <button type="button" className="ghost" onClick={() => setVerifyOpen((prev) => !prev)}>
-                {verifyOpen ? '收起' : '展开'}
-              </button>
-            </div>
-            {verifiedStudent ? (
-              <div className="history-hint">
-                已验证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}
-                {verifiedStudent.student_name}
-              </div>
-            ) : (
-              <div className="history-hint">请先完成姓名验证后开始提问。</div>
-            )}
-            {verifyOpen && (
-              <form className="verify-form compact" onSubmit={handleVerify}>
-                <div className="verify-row">
-                  <label>姓名</label>
-                  <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="例如：刘昊然" />
-                </div>
-                <div className="verify-row">
-                  <label>班级（重名时必填）</label>
-                  <input value={classInput} onChange={(e) => setClassInput(e.target.value)} placeholder="例如：高二2403班" />
-                </div>
-                <button type="submit" disabled={verifying}>
-                  {verifying ? '验证中…' : '确认身份'}
-                </button>
-                {verifyError && <div className="status err">{verifyError}</div>}
-              </form>
-            )}
-            {verifiedStudent && (
-              <div className="assignment-compact">
-                <div className="assignment-meta">今日作业（{todayAssignment?.date || todayDate()}）</div>
-                {assignmentLoading && <div className="assignment-status">加载中...</div>}
-                {assignmentError && <div className="assignment-status err">{assignmentError}</div>}
-                {!assignmentLoading && !todayAssignment && !assignmentError && <div className="assignment-empty">今日暂无作业。</div>}
-                {todayAssignment && (
-                  <>
-                    <div className="assignment-meta">
-                      作业编号：{todayAssignment.assignment_id || '-'} · 题数：{todayAssignment.question_count || 0}
-                    </div>
-                    {todayAssignment.meta?.target_kp?.length ? (
-                      <div className="assignment-meta">知识点：{todayAssignment.meta.target_kp.join('，')}</div>
-                    ) : null}
-                    {todayAssignment.delivery?.files?.length ? (
-                      <div className="download-list">
-                        {todayAssignment.delivery.files.map((file) => (
-                          <a key={file.url} className="download-link" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
-                            下载：{file.name}
-                          </a>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="assignment-note">在聊天中输入“开始今天作业”进入讨论。</div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-            {verifiedStudent && (
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => {
-                  setVerifiedStudent(null)
-                  setNameInput('')
-                  setClassInput('')
-                  setVerifyError('')
-                  setVerifyOpen(true)
-                }}
-              >
-                重新验证
-              </button>
-            )}
-          </section>
-        </aside>
-
-      <main className="chat-shell">
+        <main className="chat-shell">
         <div className="messages">
           <div className="messages-inner">
             {renderedMessages.map((msg) => (

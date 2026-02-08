@@ -619,6 +619,9 @@ test('routing page can scroll when channel list is long', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '模型路由', exact: true }).click()
   await expect(page.locator('.routing-page')).toBeVisible()
+  await expect
+    .poll(async () => page.locator('.routing-item').count())
+    .toBeGreaterThan(20)
 
   const before = await page.evaluate(() => {
     const shell = document.querySelector('.chat-shell') as HTMLElement | null
@@ -662,10 +665,10 @@ test('dismissed archive confirmation closes session action menu', async ({ page 
   await trigger.click()
   await expect(page.locator('.session-menu')).toBeVisible()
 
-  page.once('dialog', async (dialog) => {
-    await dialog.dismiss()
-  })
-  await page.getByRole('button', { name: '归档', exact: true }).click()
+  await page.getByRole('menuitem', { name: '归档', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '确认归档会话？' })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole('button', { name: '取消', exact: true }).click()
 
   await expect(page.locator('.session-menu')).toBeHidden()
 })

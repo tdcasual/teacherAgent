@@ -1086,7 +1086,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.goto('/')
     await page.locator('.confirm-btn').click()
 
-    await expect(page.getByText('解析尚未完成（进度 78%）')).toBeVisible()
+    await expect(page.locator('#workflow-assignment-draft-section').getByText('解析尚未完成（进度 78%）')).toBeVisible()
     await expect(page.locator('#workflow-assignment-draft-section')).toBeVisible()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).not.toBeNull()
   },

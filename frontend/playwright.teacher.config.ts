@@ -6,6 +6,7 @@ const configDir = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['**/student-*.spec.ts'],
   timeout: 60_000,
   expect: {
     timeout: 8_000,

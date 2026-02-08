@@ -24,6 +24,7 @@ import type {
   RoutingSimulateResult,
 } from './routingTypes'
 import { emptyRoutingConfig } from './routingTypes'
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../../utils/storage'
 
 type Props = {
   apiBase: string
@@ -98,7 +99,9 @@ const boolMatchFromValue = (value: string): boolean | undefined => {
 }
 
 export default function RoutingPage({ apiBase }: Props) {
-  const [teacherId, setTeacherId] = useState(() => localStorage.getItem('teacherRoutingTeacherId') || '')
+  const [teacherId, setTeacherId] = useState(() => {
+    return safeLocalStorageGetItem('teacherRoutingTeacherId') || ''
+  })
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -134,7 +137,7 @@ export default function RoutingPage({ apiBase }: Props) {
   >({})
 
   useEffect(() => {
-    localStorage.setItem('teacherRoutingTeacherId', teacherId)
+    safeLocalStorageSetItem('teacherRoutingTeacherId', teacherId)
   }, [teacherId])
 
   useEffect(() => {

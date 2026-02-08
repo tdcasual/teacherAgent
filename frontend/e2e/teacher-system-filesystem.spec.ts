@@ -227,7 +227,19 @@ test('assignment confirm remains idempotent in artifact output when clicked repe
     await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
 
     await expect.poll(() => confirmCalls).toBe(1)
-    const manifest = await parseJson(path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json'))
+    await expect(confirmBtn).toHaveText('已创建')
+
+    const manifestPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json')
+    await expect.poll(async () => {
+      try {
+        await access(manifestPath)
+        return true
+      } catch {
+        return false
+      }
+    }).toBe(true)
+
+    const manifest = await parseJson(manifestPath)
     expect(manifest.write_seq).toBe(1)
   } finally {
     await rm(tmpRoot, { recursive: true, force: true })

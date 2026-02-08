@@ -1,0 +1,101 @@
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: saturate(180%) blur(8px);
+}
+
+.app-dialog {
+  width: min(520px, calc(100vw - 36px));
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  border-radius: 16px;
+  box-shadow: var(--shadow, 0 16px 50px rgba(15, 23, 42, 0.2));
+  padding: 16px;
+  outline: none;
+}
+
+.app-dialog-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.app-dialog-desc {
+  margin: 0 0 14px;
+  color: var(--muted, #64748b);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog-form {
+  display: grid;
+  gap: 10px;
+}
+
+.app-dialog-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #64748b);
+}
+
+.app-dialog-form input {
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  background: #fff;
+}
+
+.app-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+
+.app-dialog-btn {
+  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  background: #fff;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #3f4551;
+  font-size: 12px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.app-dialog-btn:hover {
+  background: var(--surface-soft, #f1f5f9);
+  border-color: var(--border-strong, rgba(100, 116, 139, 0.55));
+}
+
+.app-dialog-btn.primary {
+  background: var(--accent, #0ea5e9);
+  border-color: var(--accent, #0ea5e9);
+  color: #fff;
+}
+
+.app-dialog-btn.primary:hover {
+  background: color-mix(in srgb, var(--accent, #0ea5e9) 88%, #000);
+  border-color: color-mix(in srgb, var(--accent, #0ea5e9) 88%, #000);
+}
+
+.app-dialog-btn.danger {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.app-dialog-btn.danger:hover {
+  background: color-mix(in srgb, #ef4444 88%, #000);
+  border-color: color-mix(in srgb, #ef4444 88%, #000);
+}
+

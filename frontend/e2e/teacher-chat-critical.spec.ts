@@ -615,12 +615,12 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const targetId = (await page.locator('.session-item .session-id').first().textContent())?.trim() || ''
     expect(targetId.startsWith('session_')).toBe(true)
 
-    page.once('dialog', async (dialog) => {
-      await dialog.accept()
-    })
     const targetSession = page.locator('.session-item').filter({ hasText: targetId }).first()
     await targetSession.locator('.session-menu-trigger').click()
     await page.getByRole('menuitem', { name: '归档', exact: true }).click()
+    const archiveDialog = page.getByRole('dialog', { name: '确认归档会话？' })
+    await expect(archiveDialog).toBeVisible()
+    await archiveDialog.getByRole('button', { name: '归档', exact: true }).click()
 
     await expect(page.locator('.session-id', { hasText: targetId })).toHaveCount(0)
     await page.getByRole('button', { name: '查看归档' }).click()
@@ -641,12 +641,13 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     const renamed = '重命名会话A'
-    page.once('dialog', async (dialog) => {
-      await dialog.accept(renamed)
-    })
     const targetSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
     await targetSession.locator('.session-menu-trigger').click()
     await page.getByRole('menuitem', { name: '重命名' }).click()
+    const renameDialog = page.getByRole('dialog', { name: '重命名会话' })
+    await expect(renameDialog).toBeVisible()
+    await renameDialog.getByLabel('会话名称').fill(renamed)
+    await renameDialog.getByRole('button', { name: '保存', exact: true }).click()
 
     await expect(page.locator('.session-item').filter({ hasText: renamed }).first()).toBeVisible()
     await page.getByPlaceholder('搜索会话').fill(renamed)
@@ -675,13 +676,13 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const targetId = (await page.locator('.session-item .session-id').first().textContent())?.trim() || ''
     expect(targetId.startsWith('session_')).toBe(true)
 
-    page.once('dialog', async (dialog) => {
-      await dialog.dismiss()
-    })
     const targetSession = page.locator('.session-item').filter({ hasText: targetId }).first()
     const trigger = targetSession.locator('.session-menu-trigger')
     await trigger.click()
     await page.getByRole('menuitem', { name: '归档', exact: true }).click()
+    const cancelDialog = page.getByRole('dialog', { name: '确认归档会话？' })
+    await expect(cancelDialog).toBeVisible()
+    await cancelDialog.getByRole('button', { name: '取消', exact: true }).click()
 
     await expect(page.locator('.session-item').filter({ hasText: targetId })).toHaveCount(1)
     await expect(trigger).toHaveAttribute('aria-expanded', 'false')
@@ -700,12 +701,13 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    page.once('dialog', async (dialog) => {
-      await dialog.accept('标题Alpha')
-    })
     const mainSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
     await mainSession.locator('.session-menu-trigger').click()
     await page.getByRole('menuitem', { name: '重命名' }).click()
+    const renameDialog = page.getByRole('dialog', { name: '重命名会话' })
+    await expect(renameDialog).toBeVisible()
+    await renameDialog.getByLabel('会话名称').fill('标题Alpha')
+    await renameDialog.getByRole('button', { name: '保存', exact: true }).click()
 
     const search = page.getByPlaceholder('搜索会话')
     await search.fill('s2')
