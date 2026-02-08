@@ -479,7 +479,6 @@ from .upload_text_service import (
 )
 from . import settings as _settings
 from .queue_backend import get_queue_backend, rq_enabled as _rq_enabled_impl
-from .queue_backend_inline import InlineQueueBackend
 try:
     from mem0_config import load_dotenv
 
@@ -1139,23 +1138,10 @@ def _chat_lane_store():
         _CHAT_LANE_STORES[tenant_key] = store
     return store
 
-def _inline_queue_backend() -> InlineQueueBackend:
-    return InlineQueueBackend(
-        enqueue_upload_job=_enqueue_upload_job_inline,
-        enqueue_exam_job=_enqueue_exam_job_inline,
-        enqueue_profile_update=_enqueue_profile_update_inline,
-        enqueue_chat_job=_enqueue_chat_job_inline,
-        scan_pending_upload_jobs=_scan_pending_upload_jobs_inline,
-        scan_pending_exam_jobs=_scan_pending_exam_jobs_inline,
-        scan_pending_chat_jobs=_scan_pending_chat_jobs_inline,
-        start=_start_inline_workers,
-        stop=_stop_inline_workers,
-    )
-
 def _queue_backend():
     global _QUEUE_BACKEND
     if _QUEUE_BACKEND is None:
-        _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None, inline_backend=_inline_queue_backend())
+        _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None)
     return _QUEUE_BACKEND
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:

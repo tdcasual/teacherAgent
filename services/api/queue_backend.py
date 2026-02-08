@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Protocol
 
 from . import settings
-from .queue_backend_inline import InlineQueueBackend
 from .queue_backend_rq import RqQueueBackend
 
 
@@ -30,7 +29,6 @@ def rq_enabled() -> bool:
 def get_queue_backend(
     *,
     tenant_id: Optional[str] = None,
-    inline_backend: Optional[QueueBackend] = None,
 ) -> QueueBackend:
     if rq_enabled():
         return RqQueueBackend(tenant_id=tenant_id)
