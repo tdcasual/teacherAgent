@@ -478,6 +478,7 @@ from .upload_text_service import (
     save_upload_file as _save_upload_file_impl,
 )
 from . import settings as _settings
+from .queue_backend import rq_enabled as _rq_enabled_impl
 try:
     from mem0_config import load_dotenv
 
@@ -496,9 +497,7 @@ REDIS_URL = _settings.redis_url()
 RQ_QUEUE_NAME = _settings.rq_queue_name()
 
 def _rq_enabled() -> bool:
-    if RQ_BACKEND_ENABLED:
-        return True
-    return JOB_QUEUE_BACKEND in {"rq", "redis", "redis-rq"}
+    return _rq_enabled_impl()
 
 OCR_UTILS_DIR = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts"
 if OCR_UTILS_DIR.exists() and str(OCR_UTILS_DIR) not in sys.path:
