@@ -228,7 +228,7 @@ from .chart_agent_run_service import (
 )
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
-from .handlers import assignment_upload_handlers, chat_handlers, exam_upload_handlers
+from .handlers import assignment_handlers, assignment_upload_handlers, chat_handlers, exam_upload_handlers
 from .content_catalog_service import (
     ContentCatalogDeps,
     list_lessons as _list_lessons_impl,
@@ -3326,6 +3326,28 @@ def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
         exam_upload_confirm=lambda job_id: _exam_upload_confirm_api_impl(job_id, deps=_exam_upload_api_deps()),
     )
 
+def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
+    return assignment_handlers.AssignmentHandlerDeps(
+        list_assignments=list_assignments,
+        compute_assignment_progress=compute_assignment_progress,
+        parse_date_str=parse_date_str,
+        save_assignment_requirements=save_assignment_requirements,
+        resolve_assignment_dir=resolve_assignment_dir,
+        load_assignment_requirements=load_assignment_requirements,
+        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: _assignment_today_impl(
+            student_id=student_id,
+            date=date,
+            auto_generate=auto_generate,
+            generate=generate,
+            per_kp=per_kp,
+            deps=_assignment_today_deps(),
+        ),
+        get_assignment_detail_api=lambda assignment_id: _get_assignment_detail_api_impl(
+            assignment_id,
+            deps=_assignment_api_deps(),
+        ),
+    )
+
 def _assignment_upload_handlers_deps() -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
     return assignment_upload_handlers.AssignmentUploadHandlerDeps(
         assignment_upload_legacy=lambda **kwargs: _assignment_upload_legacy_impl(
@@ -4568,56 +4590,26 @@ async def exam_question(exam_id: str, question_id: str):
     return result
 
 async def assignments():
-    return list_assignments()
+    return await assignment_handlers.assignments(deps=_assignment_handlers_deps())
 
 async def teacher_assignment_progress(assignment_id: str, include_students: bool = True):
-    assignment_id = (assignment_id or "").strip()
-    if not assignment_id:
-        raise HTTPException(status_code=400, detail="assignment_id is required")
-    result = compute_assignment_progress(assignment_id, include_students=bool(include_students))
-    if not result.get("ok") and result.get("error") == "assignment_not_found":
-        raise HTTPException(status_code=404, detail="assignment not found")
-    return result
+    return await assignment_handlers.teacher_assignment_progress(
+        assignment_id,
+        include_students=include_students,
+        deps=_assignment_handlers_deps(),
+    )
 
 async def teacher_assignments_progress(date: Optional[str] = None):
-    date_str = parse_date_str(date)
-    items = list_assignments().get("assignments") or []
-    out: List[Dict[str, Any]] = []
-    for it in items:
-        if (it.get("date") or "") != date_str:
-            continue
-        aid = str(it.get("assignment_id") or "")
-        if not aid:
-            continue
-        prog = compute_assignment_progress(aid, include_students=False)
-        if prog.get("ok"):
-            out.append(prog)
-    out.sort(key=lambda x: (x.get("updated_at") or ""), reverse=True)
-    return {"ok": True, "date": date_str, "assignments": out}
+    return await assignment_handlers.teacher_assignments_progress(
+        date=date,
+        deps=_assignment_handlers_deps(),
+    )
 
 async def assignment_requirements(req: AssignmentRequirementsRequest):
-    date_str = parse_date_str(req.date)
-    result = save_assignment_requirements(
-        req.assignment_id,
-        req.requirements,
-        date_str,
-        created_by=req.created_by or "teacher",
-    )
-    if result.get("error"):
-        raise HTTPException(status_code=400, detail=result)
-    return result
+    return await assignment_handlers.assignment_requirements(req, deps=_assignment_handlers_deps())
 
 async def assignment_requirements_get(assignment_id: str):
-    try:
-        folder = resolve_assignment_dir(assignment_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    if not folder.exists():
-        raise HTTPException(status_code=404, detail="assignment not found")
-    requirements = load_assignment_requirements(folder)
-    if not requirements:
-        return {"assignment_id": assignment_id, "requirements": None}
-    return {"assignment_id": assignment_id, "requirements": requirements}
+    return await assignment_handlers.assignment_requirements_get(assignment_id, deps=_assignment_handlers_deps())
 
 async def assignment_upload(
     assignment_id: str = Form(...),
@@ -4742,22 +4734,17 @@ async def assignment_today(
     generate: bool = True,
     per_kp: int = 5,
 ):
-    return _assignment_today_impl(
+    return await assignment_handlers.assignment_today(
         student_id=student_id,
         date=date,
         auto_generate=auto_generate,
         generate=generate,
         per_kp=per_kp,
-        deps=_assignment_today_deps(),
+        deps=_assignment_handlers_deps(),
     )
 
 async def assignment_detail(assignment_id: str):
-    result = _get_assignment_detail_api_impl(assignment_id, deps=_assignment_api_deps())
-    if result.get("error") == "assignment_not_found":
-        raise HTTPException(status_code=404, detail="assignment not found")
-    if result.get("error"):
-        raise HTTPException(status_code=400, detail=result)
-    return result
+    return await assignment_handlers.assignment_detail(assignment_id, deps=_assignment_handlers_deps())
 
 async def lessons():
     return list_lessons()
