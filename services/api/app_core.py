@@ -193,7 +193,6 @@ from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_st
 from services.api.workers import exam_worker_service, profile_update_worker_service, upload_worker_service
 from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
-    chat_job_worker_loop as _chat_job_worker_loop_impl,
     enqueue_chat_job as _enqueue_chat_job_impl,
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
     start_chat_worker as _start_chat_worker_impl,
@@ -484,8 +483,8 @@ from .upload_text_service import (
 from . import settings as _settings
 from .chat_lane_store_factory import get_chat_lane_store
 from services.api.queue.queue_backend import rq_enabled as _rq_enabled_impl
-from services.api.queue.queue_backend_factory import get_app_queue_backend
-from services.api.queue.queue_inline_backend import InlineQueueBackend
+from services.api.runtime import queue_runtime
+from services.api.runtime.inline_backend_factory import build_inline_backend
 from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime as _start_tenant_runtime
 from services.api.runtime.runtime_manager import stop_tenant_runtime as _stop_tenant_runtime
 from services.api.runtime.runtime_state import reset_runtime_state as _reset_runtime_state
@@ -791,14 +790,8 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
 def _enqueue_upload_job_inline(job_id: str) -> None:
     upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_worker_deps())
 
-def scan_pending_upload_jobs() -> int:
-    return int(_app_queue_backend().scan_pending_upload_jobs() or 0)
-
 def _scan_pending_upload_jobs_inline() -> int:
     return upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_worker_deps())
-
-def enqueue_upload_job(job_id: str) -> None:
-    _app_queue_backend().enqueue_upload_job(job_id)
 
 def upload_job_worker_loop() -> None:
     upload_worker_service.upload_job_worker_loop(deps=upload_worker_deps())
@@ -841,14 +834,8 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
 def _enqueue_exam_job_inline(job_id: str) -> None:
     exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_worker_deps())
 
-def scan_pending_exam_jobs() -> int:
-    return int(_app_queue_backend().scan_pending_exam_jobs() or 0)
-
 def _scan_pending_exam_jobs_inline() -> int:
     return exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_worker_deps())
-
-def enqueue_exam_job(job_id: str) -> None:
-    _app_queue_backend().enqueue_exam_job(job_id)
 
 def exam_job_worker_loop() -> None:
     exam_worker_service.exam_job_worker_loop(deps=exam_worker_deps())
@@ -971,7 +958,7 @@ def _chat_lane_store():
     )
 
 def _inline_backend_factory():
-    return InlineQueueBackend(
+    return build_inline_backend(
         enqueue_upload_job_fn=_enqueue_upload_job_inline,
         enqueue_exam_job_fn=_enqueue_exam_job_inline,
         enqueue_profile_update_fn=_enqueue_profile_update_inline,
@@ -984,8 +971,8 @@ def _inline_backend_factory():
     )
 
 
-def _app_queue_backend():
-    return get_app_queue_backend(
+def _runtime_queue_backend():
+    return queue_runtime.app_queue_backend(
         tenant_id=TENANT_ID or None,
         is_pytest=_settings.is_pytest(),
         inline_backend_factory=_inline_backend_factory,
@@ -1075,30 +1062,9 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
 def _enqueue_chat_job_inline(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
 
-def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
-    return _app_queue_backend().enqueue_chat_job(job_id, lane_id=lane_id)
-
-def scan_pending_chat_jobs() -> int:
-    return int(_app_queue_backend().scan_pending_chat_jobs() or 0)
-
 def _scan_pending_chat_jobs_inline() -> int:
     _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
     return 0
-
-def chat_job_worker_loop() -> None:
-    if _rq_enabled():
-        return
-    _chat_job_worker_loop_impl(deps=_chat_worker_deps())
-
-def start_chat_worker() -> None:
-    if _rq_enabled():
-        return
-    _start_chat_worker_impl(deps=_chat_worker_deps())
-
-def stop_chat_worker(timeout_sec: float = 1.5) -> None:
-    if _rq_enabled():
-        return
-    _stop_chat_worker_impl(deps=_chat_worker_deps(), timeout_sec=timeout_sec)
 
 def load_chat_request_index() -> Dict[str, str]:
     request_index_path = CHAT_IDEMPOTENCY_STATE.request_index_path
@@ -1897,12 +1863,12 @@ def _start_inline_workers() -> None:
     if PROFILE_UPDATE_ASYNC:
         start_profile_update_worker()
     start_exam_upload_worker()
-    start_chat_worker()
+    _start_chat_worker_impl(deps=chat_worker_deps())
 
 
 def _stop_inline_workers() -> None:
     # Stop in reverse order of startup. Best-effort only.
-    stop_chat_worker()
+    _stop_chat_worker_impl(deps=chat_worker_deps())
     stop_exam_upload_worker()
     stop_upload_worker()
     if PROFILE_UPDATE_ASYNC:
@@ -2254,9 +2220,6 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def _enqueue_profile_update_inline(args: Dict[str, Any]) -> None:
     profile_update_worker_service.enqueue_profile_update_inline(args, deps=profile_update_worker_deps())
-
-def enqueue_profile_update(args: Dict[str, Any]) -> None:
-    _app_queue_backend().enqueue_profile_update(args)
 
 def profile_update_worker_loop() -> None:
     profile_update_worker_service.profile_update_worker_loop(deps=profile_update_worker_deps())
@@ -3124,7 +3087,10 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         detect_latex_tokens=detect_latex_tokens,
         diag_log=diag_log,
         build_interaction_note=build_interaction_note,
-        enqueue_profile_update=enqueue_profile_update,
+        enqueue_profile_update=lambda payload: queue_runtime.enqueue_profile_update(
+            payload,
+            backend=_runtime_queue_backend(),
+        ),
         student_profile_update=student_profile_update,
         profile_update_async=PROFILE_UPDATE_ASYNC,
         run_in_threadpool=run_in_threadpool,
@@ -3383,7 +3349,10 @@ def _exam_upload_start_deps():
         sanitize_filename=sanitize_filename,
         save_upload_file=save_upload_file,
         write_exam_job=lambda job_id, updates, overwrite=False: write_exam_job(job_id, updates, overwrite=overwrite),
-        enqueue_exam_job=enqueue_exam_job,
+        enqueue_exam_job=lambda job_id: queue_runtime.enqueue_exam_job(
+            job_id,
+            backend=_runtime_queue_backend(),
+        ),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         diag_log=diag_log,
         uuid_hex=lambda: uuid.uuid4().hex,
@@ -3627,7 +3596,10 @@ def _assignment_upload_start_deps():
         normalize_due_at=normalize_due_at,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         write_upload_job=lambda job_id, updates, overwrite=False: write_upload_job(job_id, updates, overwrite=overwrite),
-        enqueue_upload_job=enqueue_upload_job,
+        enqueue_upload_job=lambda job_id: queue_runtime.enqueue_upload_job(
+            job_id,
+            backend=_runtime_queue_backend(),
+        ),
         diag_log=diag_log,
     )
 
@@ -4016,7 +3988,11 @@ def _chat_start_deps():
         new_job_id=lambda: f"cjob_{uuid.uuid4().hex[:12]}",
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         write_chat_job=lambda job_id, updates, overwrite=False: write_chat_job(job_id, updates, overwrite=overwrite),
-        enqueue_chat_job=lambda job_id, lane_id=None: enqueue_chat_job(job_id, lane_id=lane_id),
+        enqueue_chat_job=lambda job_id, lane_id=None: queue_runtime.enqueue_chat_job(
+            job_id,
+            lane_id=lane_id,
+            backend=_runtime_queue_backend(),
+        ),
         chat_register_recent_locked=_chat_register_recent_locked,
         append_student_session_message=append_student_session_message,
         update_student_session_index=update_student_session_index,
@@ -4028,7 +4004,11 @@ def _chat_start_deps():
 def _chat_status_deps():
     return ChatStatusDeps(
         load_chat_job=load_chat_job,
-        enqueue_chat_job=lambda job_id, lane_id: enqueue_chat_job(job_id, lane_id=lane_id),
+        enqueue_chat_job=lambda job_id, lane_id: queue_runtime.enqueue_chat_job(
+            job_id,
+            lane_id=lane_id,
+            backend=_runtime_queue_backend(),
+        ),
         resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
         chat_job_lock=CHAT_JOB_LOCK,
         chat_lane_load_locked=_chat_lane_load_locked,
@@ -4103,7 +4083,10 @@ def _chat_job_process_deps():
         monotonic=time.monotonic,
         build_interaction_note=build_interaction_note,
         profile_update_async=PROFILE_UPDATE_ASYNC,
-        enqueue_profile_update=enqueue_profile_update,
+        enqueue_profile_update=lambda payload: queue_runtime.enqueue_profile_update(
+            payload,
+            backend=_runtime_queue_backend(),
+        ),
         student_profile_update=student_profile_update,
         resolve_student_session_id=resolve_student_session_id,
         append_student_session_message=append_student_session_message,

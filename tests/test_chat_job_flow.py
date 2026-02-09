@@ -22,7 +22,9 @@ class ChatJobFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
             app_mod.teacher_assignment_preflight = lambda _req: None  # type: ignore[attr-defined]
             captured = {"skill_id": None}
@@ -70,7 +72,9 @@ class ChatJobFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
             with TestClient(app_mod.app) as client:
                 res = client.get("/chat/status", params={"job_id": "cjob_missing_001"})
@@ -80,7 +84,9 @@ class ChatJobFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             class _FakeGatewayResp:
@@ -162,7 +168,9 @@ class ChatJobFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             captured = {"agent_id": None}

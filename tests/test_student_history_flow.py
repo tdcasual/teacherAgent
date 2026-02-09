@@ -43,7 +43,9 @@ class StudentHistoryFlowTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             app_mod.run_agent = lambda *args, **kwargs: {"reply": "stub-reply"}  # type: ignore[assignment]

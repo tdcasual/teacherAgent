@@ -24,7 +24,9 @@ class ChatLaneQueueTest(unittest.TestCase):
     def test_chat_start_debounce_reuses_recent_job_in_same_lane(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), debounce_ms=3000, lane_max_queue=6)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             payload1 = {
@@ -53,7 +55,9 @@ class ChatLaneQueueTest(unittest.TestCase):
     def test_chat_start_lane_cap_returns_429(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), debounce_ms=0, lane_max_queue=1)
-            app_mod.start_chat_worker = lambda: None  # type: ignore[assignment]
+            from services.api.workers import chat_worker_service
+
+            chat_worker_service.start_chat_worker = lambda **_: None
             app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
@@ -83,4 +87,3 @@ class ChatLaneQueueTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
