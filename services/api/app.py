@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .app_routes import register_routes
+from .runtime.lifecycle import app_lifespan
 
 _CORE_PATH = Path(__file__).resolve().with_name("app_core.py")
 
@@ -34,7 +35,7 @@ def _load_core():
 _core = _load_core()
 _APP_CORE = _core
 
-app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=_core._app_lifespan)
+app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
 
 origins = os.getenv("CORS_ORIGINS", "*")
 origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]

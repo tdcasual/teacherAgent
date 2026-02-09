@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 from pathlib import Path
@@ -439,7 +439,6 @@ from .teacher_provider_registry_service import (
     teacher_provider_registry_get as _teacher_provider_registry_get_impl,
     teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
-    validate_master_key_policy as _validate_master_key_policy_impl,
 )
 from .teacher_context_service import TeacherContextDeps, build_teacher_context as _build_teacher_context_impl
 from .teacher_assignment_preflight_service import (
@@ -485,9 +484,8 @@ from .chat_lane_store_factory import get_chat_lane_store
 from services.api.queue.queue_backend import rq_enabled as _rq_enabled_impl
 from services.api.runtime import queue_runtime
 from services.api.runtime.inline_backend_factory import build_inline_backend
-from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime as _start_tenant_runtime
-from services.api.runtime.runtime_manager import stop_tenant_runtime as _stop_tenant_runtime
 from services.api.runtime.runtime_state import reset_runtime_state as _reset_runtime_state
+from services.api.workers.inline_runtime import start_inline_workers, stop_inline_workers
 try:
     from mem0_config import load_dotenv
 
@@ -958,16 +956,36 @@ def _chat_lane_store():
     )
 
 def _inline_backend_factory():
+    upload_deps = upload_worker_deps()
+    exam_deps = exam_worker_deps()
+    profile_deps = profile_update_worker_deps()
+    chat_deps = chat_worker_deps()
     return build_inline_backend(
-        enqueue_upload_job_fn=_enqueue_upload_job_inline,
-        enqueue_exam_job_fn=_enqueue_exam_job_inline,
-        enqueue_profile_update_fn=_enqueue_profile_update_inline,
-        enqueue_chat_job_fn=_enqueue_chat_job_inline,
-        scan_pending_upload_jobs_fn=_scan_pending_upload_jobs_inline,
-        scan_pending_exam_jobs_fn=_scan_pending_exam_jobs_inline,
-        scan_pending_chat_jobs_fn=_scan_pending_chat_jobs_inline,
-        start_fn=_start_inline_workers,
-        stop_fn=_stop_inline_workers,
+        enqueue_upload_job_fn=lambda job_id: upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_deps),
+        enqueue_exam_job_fn=lambda job_id: exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
+        enqueue_profile_update_fn=lambda payload: profile_update_worker_service.enqueue_profile_update_inline(
+            payload, deps=profile_deps
+        ),
+        enqueue_chat_job_fn=lambda job_id, lane_id=None: _enqueue_chat_job_impl(
+            job_id, deps=chat_deps, lane_id=lane_id
+        ),
+        scan_pending_upload_jobs_fn=lambda: upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_deps),
+        scan_pending_exam_jobs_fn=lambda: exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_deps),
+        scan_pending_chat_jobs_fn=lambda: _scan_pending_chat_jobs_impl(deps=chat_deps),
+        start_fn=lambda: start_inline_workers(
+            upload_deps=upload_deps,
+            exam_deps=exam_deps,
+            profile_deps=profile_deps,
+            chat_deps=chat_deps,
+            profile_update_async=PROFILE_UPDATE_ASYNC,
+        ),
+        stop_fn=lambda: stop_inline_workers(
+            upload_deps=upload_deps,
+            exam_deps=exam_deps,
+            profile_deps=profile_deps,
+            chat_deps=chat_deps,
+            profile_update_async=PROFILE_UPDATE_ASYNC,
+        ),
     )
 
 
@@ -1847,53 +1865,6 @@ def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> 
         teacher_id,
         session_id,
         deps=_teacher_memory_auto_deps(),
-    )
-
-@asynccontextmanager
-async def _app_lifespan(_app: FastAPI):
-    start_tenant_runtime()
-    try:
-        yield
-    finally:
-        stop_tenant_runtime()
-
-
-def _start_inline_workers() -> None:
-    start_upload_worker()
-    if PROFILE_UPDATE_ASYNC:
-        start_profile_update_worker()
-    start_exam_upload_worker()
-    _start_chat_worker_impl(deps=chat_worker_deps())
-
-
-def _stop_inline_workers() -> None:
-    # Stop in reverse order of startup. Best-effort only.
-    _stop_chat_worker_impl(deps=chat_worker_deps())
-    stop_exam_upload_worker()
-    stop_upload_worker()
-    if PROFILE_UPDATE_ASYNC:
-        stop_profile_update_worker()
-
-
-def start_tenant_runtime() -> None:
-    _start_tenant_runtime(
-        deps=RuntimeManagerDeps(
-            tenant_id=TENANT_ID or None,
-            is_pytest=_settings.is_pytest(),
-            validate_master_key_policy=_validate_master_key_policy_impl,
-            inline_backend_factory=_inline_backend_factory,
-        )
-    )
-
-
-def stop_tenant_runtime() -> None:
-    _stop_tenant_runtime(
-        deps=RuntimeManagerDeps(
-            tenant_id=TENANT_ID or None,
-            is_pytest=_settings.is_pytest(),
-            validate_master_key_policy=_validate_master_key_policy_impl,
-            inline_backend_factory=_inline_backend_factory,
-        )
     )
 
 

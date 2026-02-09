@@ -23,10 +23,10 @@ def test_rq_required_in_api_startup(monkeypatch):
     monkeypatch.delenv("RQ_BACKEND_ENABLED", raising=False)
     monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    from services.api import app as app_mod
+    from services.api.runtime import bootstrap
 
     try:
-        app_mod.start_tenant_runtime()
+        bootstrap.start_runtime()
     except RuntimeError as exc:
         assert "rq" in str(exc).lower()
     else:
@@ -35,6 +35,7 @@ def test_rq_required_in_api_startup(monkeypatch):
 
 def test_lifespan_does_not_start_workers(monkeypatch):
     from services.api import app as app_mod
+    from services.api.runtime import bootstrap, lifecycle
 
     monkeypatch.setenv("JOB_QUEUE_BACKEND", "rq")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
@@ -50,12 +51,12 @@ def test_lifespan_does_not_start_workers(monkeypatch):
     def fake_start():
         called["start"] += 1
 
-    monkeypatch.setattr(app_mod, "_start_inline_workers", fake_start, raising=False)
+    monkeypatch.setattr(bootstrap, "start_inline_workers", fake_start, raising=False)
 
     import asyncio
 
     async def run():
-        async with app_mod._app_lifespan(app_mod.app):
+        async with lifecycle.app_lifespan(app_mod.app):
             pass
 
     asyncio.run(run())

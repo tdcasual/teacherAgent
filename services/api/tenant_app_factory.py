@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from fastapi import FastAPI
 
+from services.api.runtime import bootstrap
 from services.api.runtime.runtime_state import reset_runtime_state
 
 @dataclass(frozen=True)
@@ -35,17 +36,13 @@ class TenantAppInstance:
     app: Any
 
     def startup(self) -> None:
-        start = getattr(self.module, "start_tenant_runtime", None)
-        if callable(start):
-            start()
+        bootstrap.start_runtime(app_mod=self.module)
 
     def shutdown(self) -> None:
-        stop = getattr(self.module, "stop_tenant_runtime", None)
-        if callable(stop):
-            try:
-                stop()
-            except Exception:
-                pass
+        try:
+            bootstrap.stop_runtime(app_mod=self.module)
+        except Exception:
+            pass
         sys.modules.pop(self.module_name, None)
 
 _APP_PY_PATH = Path(__file__).resolve().with_name("app.py")
