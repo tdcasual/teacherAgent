@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 from collections import deque
 
-from services.api import runtime_state
-from services.api import queue_backend_factory, chat_lane_store_factory
+from services.api.runtime import runtime_state
+from services.api.queue import queue_backend_factory
+from services.api import chat_lane_store_factory
 
 
 def test_reset_runtime_state_resets_queues_and_caches(tmp_path):

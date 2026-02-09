@@ -482,9 +482,9 @@ from .chat_lane_store_factory import get_chat_lane_store
 from services.api.queue.queue_backend import rq_enabled as _rq_enabled_impl
 from services.api.queue.queue_backend_factory import get_app_queue_backend
 from services.api.queue.queue_inline_backend import InlineQueueBackend
-from .runtime_manager import RuntimeManagerDeps, start_tenant_runtime as _start_tenant_runtime
-from .runtime_manager import stop_tenant_runtime as _stop_tenant_runtime
-from .runtime_state import reset_runtime_state as _reset_runtime_state
+from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime as _start_tenant_runtime
+from services.api.runtime.runtime_manager import stop_tenant_runtime as _stop_tenant_runtime
+from services.api.runtime.runtime_state import reset_runtime_state as _reset_runtime_state
 try:
     from mem0_config import load_dotenv
 

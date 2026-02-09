@@ -4,7 +4,7 @@ from collections import deque
 import threading
 from typing import Any
 
-from . import chat_lane_store_factory
+from services.api import chat_lane_store_factory
 from services.api.queue import queue_backend_factory
 
 

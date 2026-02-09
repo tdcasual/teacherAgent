@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from . import settings
+from services.api import settings
 from services.api.queue.queue_backend import get_queue_backend
 
 
@@ -18,9 +18,9 @@ def start_runtime(
         is_pytest = settings.is_pytest()
     if not is_pytest:
         if require_redis is None:
-            from .rq_tasks import require_redis as _require_redis
+            from services.api import rq_tasks
 
-            require_redis = _require_redis
+            require_redis = rq_tasks.require_redis
         require_redis()
     backend.start()
 

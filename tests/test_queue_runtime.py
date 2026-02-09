@@ -11,7 +11,7 @@ class StubBackend:
 
 
 def test_start_runtime_calls_require_redis_when_not_pytest():
-    from services.api import queue_runtime
+    from services.api.runtime import queue_runtime
 
     backend = StubBackend()
     called = {"redis": 0}
@@ -26,7 +26,7 @@ def test_start_runtime_calls_require_redis_when_not_pytest():
 
 
 def test_start_runtime_skips_require_redis_in_pytest():
-    from services.api import queue_runtime
+    from services.api.runtime import queue_runtime
 
     backend = StubBackend()
     called = {"redis": 0}
@@ -41,7 +41,7 @@ def test_start_runtime_skips_require_redis_in_pytest():
 
 
 def test_stop_runtime_calls_backend_stop():
-    from services.api import queue_runtime
+    from services.api.runtime import queue_runtime
 
     backend = StubBackend()
     queue_runtime.stop_runtime(backend=backend)
