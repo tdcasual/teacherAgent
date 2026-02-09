@@ -190,6 +190,7 @@ from .chat_session_utils import (
 from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
 from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
+from services.api.workers import exam_worker_service, profile_update_worker_service, upload_worker_service
 from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
     chat_job_worker_loop as _chat_job_worker_loop_impl,
@@ -198,6 +199,9 @@ from services.api.workers.chat_worker_service import (
     start_chat_worker as _start_chat_worker_impl,
     stop_chat_worker as _stop_chat_worker_impl,
 )
+from services.api.workers.exam_worker_service import ExamWorkerDeps
+from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
+from services.api.workers.upload_worker_service import UploadWorkerDeps
 from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chat_support_service import (
     ChatSupportDeps,
@@ -785,85 +789,25 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
     return slug
 
 def _enqueue_upload_job_inline(job_id: str) -> None:
-    with UPLOAD_JOB_LOCK:
-        if job_id not in UPLOAD_JOB_QUEUE:
-            UPLOAD_JOB_QUEUE.append(job_id)
-    UPLOAD_JOB_EVENT.set()
+    upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_worker_deps())
 
 def scan_pending_upload_jobs() -> int:
     return int(_app_queue_backend().scan_pending_upload_jobs() or 0)
 
 def _scan_pending_upload_jobs_inline() -> int:
-    UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for job_path in UPLOAD_JOB_DIR.glob("*/job.json"):
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        status = str(data.get("status") or "")
-        job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            _enqueue_upload_job_inline(job_id)
-            count += 1
-    return count
+    return upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_worker_deps())
 
 def enqueue_upload_job(job_id: str) -> None:
     _app_queue_backend().enqueue_upload_job(job_id)
 
 def upload_job_worker_loop() -> None:
-    while not UPLOAD_JOB_STOP_EVENT.is_set():
-        UPLOAD_JOB_EVENT.wait(timeout=0.1)
-        if UPLOAD_JOB_STOP_EVENT.is_set():
-            break
-        job_id = ""
-        with UPLOAD_JOB_LOCK:
-            if UPLOAD_JOB_QUEUE:
-                job_id = UPLOAD_JOB_QUEUE.popleft()
-            if not UPLOAD_JOB_QUEUE:
-                UPLOAD_JOB_EVENT.clear()
-        if not job_id:
-            time.sleep(0.1)
-            continue
-        try:
-            process_upload_job(job_id)
-        except Exception as exc:
-            diag_log("upload.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
-            write_upload_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": str(exc)[:200],
-                },
-            )
+    upload_worker_service.upload_job_worker_loop(deps=upload_worker_deps())
 
 def start_upload_worker() -> None:
-    if _rq_enabled():
-        return
-    global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
-    if UPLOAD_JOB_WORKER_STARTED:
-        return
-    UPLOAD_JOB_STOP_EVENT.clear()
-    scan_pending_upload_jobs()
-    thread = threading.Thread(target=upload_job_worker_loop, daemon=True, name="upload-worker")
-    thread.start()
-    UPLOAD_JOB_WORKER_THREAD = thread
-    UPLOAD_JOB_WORKER_STARTED = True
+    upload_worker_service.start_upload_worker(deps=upload_worker_deps())
 
 def stop_upload_worker(timeout_sec: float = 1.5) -> None:
-    if _rq_enabled():
-        return
-    global UPLOAD_JOB_WORKER_STARTED, UPLOAD_JOB_WORKER_THREAD
-    UPLOAD_JOB_STOP_EVENT.set()
-    UPLOAD_JOB_EVENT.set()
-    thread = UPLOAD_JOB_WORKER_THREAD
-    if thread is not None:
-        try:
-            thread.join(max(0.0, float(timeout_sec or 0.0)))
-        except Exception:
-            pass
-    UPLOAD_JOB_WORKER_THREAD = None
-    UPLOAD_JOB_WORKER_STARTED = False
+    upload_worker_service.stop_upload_worker(deps=upload_worker_deps(), timeout_sec=timeout_sec)
 
 def exam_job_path(job_id: str) -> Path:
     raw = str(job_id or "")
@@ -895,85 +839,25 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
     return data
 
 def _enqueue_exam_job_inline(job_id: str) -> None:
-    with EXAM_JOB_LOCK:
-        if job_id not in EXAM_JOB_QUEUE:
-            EXAM_JOB_QUEUE.append(job_id)
-    EXAM_JOB_EVENT.set()
+    exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_worker_deps())
 
 def scan_pending_exam_jobs() -> int:
     return int(_app_queue_backend().scan_pending_exam_jobs() or 0)
 
 def _scan_pending_exam_jobs_inline() -> int:
-    EXAM_UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for job_path in EXAM_UPLOAD_JOB_DIR.glob("*/job.json"):
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        status = str(data.get("status") or "")
-        job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            _enqueue_exam_job_inline(job_id)
-            count += 1
-    return count
+    return exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_worker_deps())
 
 def enqueue_exam_job(job_id: str) -> None:
     _app_queue_backend().enqueue_exam_job(job_id)
 
 def exam_job_worker_loop() -> None:
-    while not EXAM_JOB_STOP_EVENT.is_set():
-        EXAM_JOB_EVENT.wait(timeout=0.1)
-        if EXAM_JOB_STOP_EVENT.is_set():
-            break
-        job_id = ""
-        with EXAM_JOB_LOCK:
-            if EXAM_JOB_QUEUE:
-                job_id = EXAM_JOB_QUEUE.popleft()
-            if not EXAM_JOB_QUEUE:
-                EXAM_JOB_EVENT.clear()
-        if not job_id:
-            time.sleep(0.1)
-            continue
-        try:
-            process_exam_upload_job(job_id)
-        except Exception as exc:
-            diag_log("exam_upload.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
-            write_exam_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": str(exc)[:200],
-                },
-            )
+    exam_worker_service.exam_job_worker_loop(deps=exam_worker_deps())
 
 def start_exam_upload_worker() -> None:
-    if _rq_enabled():
-        return
-    global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
-    if EXAM_JOB_WORKER_STARTED:
-        return
-    EXAM_JOB_STOP_EVENT.clear()
-    scan_pending_exam_jobs()
-    thread = threading.Thread(target=exam_job_worker_loop, daemon=True, name="exam-upload-worker")
-    thread.start()
-    EXAM_JOB_WORKER_THREAD = thread
-    EXAM_JOB_WORKER_STARTED = True
+    exam_worker_service.start_exam_upload_worker(deps=exam_worker_deps())
 
 def stop_exam_upload_worker(timeout_sec: float = 1.5) -> None:
-    if _rq_enabled():
-        return
-    global EXAM_JOB_WORKER_STARTED, EXAM_JOB_WORKER_THREAD
-    EXAM_JOB_STOP_EVENT.set()
-    EXAM_JOB_EVENT.set()
-    thread = EXAM_JOB_WORKER_THREAD
-    if thread is not None:
-        try:
-            thread.join(max(0.0, float(timeout_sec or 0.0)))
-        except Exception:
-            pass
-    EXAM_JOB_WORKER_THREAD = None
-    EXAM_JOB_WORKER_STARTED = False
+    exam_worker_service.stop_exam_upload_worker(deps=exam_worker_deps(), timeout_sec=timeout_sec)
 
 def chat_job_path(job_id: str) -> Path:
     return _chat_job_path_impl(job_id, deps=_chat_job_repo_deps())
@@ -2369,84 +2253,19 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "output": out}
 
 def _enqueue_profile_update_inline(args: Dict[str, Any]) -> None:
-    # Best-effort queue: coalesce on the worker side.
-    with _PROFILE_UPDATE_LOCK:
-        if len(_PROFILE_UPDATE_QUEUE) >= PROFILE_UPDATE_QUEUE_MAX:
-            diag_log("profile_update.queue_full", {"size": len(_PROFILE_UPDATE_QUEUE)})
-            return
-        _PROFILE_UPDATE_QUEUE.append(args)
-        _PROFILE_UPDATE_EVENT.set()
+    profile_update_worker_service.enqueue_profile_update_inline(args, deps=profile_update_worker_deps())
 
 def enqueue_profile_update(args: Dict[str, Any]) -> None:
     _app_queue_backend().enqueue_profile_update(args)
 
 def profile_update_worker_loop() -> None:
-    while not _PROFILE_UPDATE_STOP_EVENT.is_set():
-        _PROFILE_UPDATE_EVENT.wait(timeout=0.1)
-        if _PROFILE_UPDATE_STOP_EVENT.is_set():
-            break
-        batch: List[Dict[str, Any]] = []
-        with _PROFILE_UPDATE_LOCK:
-            while _PROFILE_UPDATE_QUEUE:
-                batch.append(_PROFILE_UPDATE_QUEUE.popleft())
-            _PROFILE_UPDATE_EVENT.clear()
-        if not batch:
-            time.sleep(0.05)
-            continue
-
-        # Coalesce by student_id to reduce subprocess churn under bursty chat traffic.
-        merged: Dict[str, Dict[str, Any]] = {}
-        for item in batch:
-            student_id = str(item.get("student_id") or "").strip()
-            if not student_id:
-                continue
-            cur = merged.get(student_id) or {"student_id": student_id, "interaction_note": ""}
-            note = str(item.get("interaction_note") or "").strip()
-            if note:
-                if cur.get("interaction_note"):
-                    cur["interaction_note"] = str(cur["interaction_note"]) + "\n" + note
-                else:
-                    cur["interaction_note"] = note
-            merged[student_id] = cur
-
-        for student_id, payload in merged.items():
-            try:
-                t0 = time.monotonic()
-                # Reuse existing implementation (runs update_profile.py) but off the hot path.
-                student_profile_update(payload)
-                diag_log(
-                    "profile_update.async.done",
-                    {"student_id": student_id, "duration_ms": int((time.monotonic() - t0) * 1000)},
-                )
-            except Exception as exc:
-                diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
+    profile_update_worker_service.profile_update_worker_loop(deps=profile_update_worker_deps())
 
 def start_profile_update_worker() -> None:
-    if _rq_enabled():
-        return
-    global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
-    if _PROFILE_UPDATE_WORKER_STARTED:
-        return
-    _PROFILE_UPDATE_STOP_EVENT.clear()
-    thread = threading.Thread(target=profile_update_worker_loop, daemon=True, name="profile-update-worker")
-    thread.start()
-    _PROFILE_UPDATE_WORKER_THREAD = thread
-    _PROFILE_UPDATE_WORKER_STARTED = True
+    profile_update_worker_service.start_profile_update_worker(deps=profile_update_worker_deps())
 
 def stop_profile_update_worker(timeout_sec: float = 1.5) -> None:
-    if _rq_enabled():
-        return
-    global _PROFILE_UPDATE_WORKER_STARTED, _PROFILE_UPDATE_WORKER_THREAD
-    _PROFILE_UPDATE_STOP_EVENT.set()
-    _PROFILE_UPDATE_EVENT.set()
-    thread = _PROFILE_UPDATE_WORKER_THREAD
-    if thread is not None:
-        try:
-            thread.join(max(0.0, float(timeout_sec or 0.0)))
-        except Exception:
-            pass
-    _PROFILE_UPDATE_WORKER_THREAD = None
-    _PROFILE_UPDATE_WORKER_STARTED = False
+    profile_update_worker_service.stop_profile_update_worker(deps=profile_update_worker_deps(), timeout_sec=timeout_sec)
 
 def student_candidates_by_name(name: str) -> List[Dict[str, str]]:
     return _student_candidates_by_name_impl(name, _student_directory_deps())
@@ -4051,6 +3870,105 @@ def _chat_worker_started_set(value: bool) -> None:
     global CHAT_JOB_WORKER_STARTED
     CHAT_JOB_WORKER_STARTED = bool(value)
 
+def _upload_worker_started_get() -> bool:
+    return bool(UPLOAD_JOB_WORKER_STARTED)
+
+def _upload_worker_started_set(value: bool) -> None:
+    global UPLOAD_JOB_WORKER_STARTED
+    UPLOAD_JOB_WORKER_STARTED = bool(value)
+
+def _upload_worker_thread_get():
+    return UPLOAD_JOB_WORKER_THREAD
+
+def _upload_worker_thread_set(value) -> None:
+    global UPLOAD_JOB_WORKER_THREAD
+    UPLOAD_JOB_WORKER_THREAD = value
+
+def upload_worker_deps() -> UploadWorkerDeps:
+    return UploadWorkerDeps(
+        job_queue=UPLOAD_JOB_QUEUE,
+        job_lock=UPLOAD_JOB_LOCK,
+        job_event=UPLOAD_JOB_EVENT,
+        job_dir=UPLOAD_JOB_DIR,
+        stop_event=UPLOAD_JOB_STOP_EVENT,
+        worker_started_get=_upload_worker_started_get,
+        worker_started_set=_upload_worker_started_set,
+        worker_thread_get=_upload_worker_thread_get,
+        worker_thread_set=_upload_worker_thread_set,
+        process_job=process_upload_job,
+        write_job=lambda job_id, updates: write_upload_job(job_id, updates),
+        diag_log=diag_log,
+        sleep=time.sleep,
+        thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
+        rq_enabled=_rq_enabled,
+    )
+
+def _exam_worker_started_get() -> bool:
+    return bool(EXAM_JOB_WORKER_STARTED)
+
+def _exam_worker_started_set(value: bool) -> None:
+    global EXAM_JOB_WORKER_STARTED
+    EXAM_JOB_WORKER_STARTED = bool(value)
+
+def _exam_worker_thread_get():
+    return EXAM_JOB_WORKER_THREAD
+
+def _exam_worker_thread_set(value) -> None:
+    global EXAM_JOB_WORKER_THREAD
+    EXAM_JOB_WORKER_THREAD = value
+
+def exam_worker_deps() -> ExamWorkerDeps:
+    return ExamWorkerDeps(
+        job_queue=EXAM_JOB_QUEUE,
+        job_lock=EXAM_JOB_LOCK,
+        job_event=EXAM_JOB_EVENT,
+        job_dir=EXAM_UPLOAD_JOB_DIR,
+        stop_event=EXAM_JOB_STOP_EVENT,
+        worker_started_get=_exam_worker_started_get,
+        worker_started_set=_exam_worker_started_set,
+        worker_thread_get=_exam_worker_thread_get,
+        worker_thread_set=_exam_worker_thread_set,
+        process_job=process_exam_upload_job,
+        write_job=lambda job_id, updates: write_exam_job(job_id, updates),
+        diag_log=diag_log,
+        sleep=time.sleep,
+        thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
+        rq_enabled=_rq_enabled,
+    )
+
+def _profile_update_worker_started_get() -> bool:
+    return bool(_PROFILE_UPDATE_WORKER_STARTED)
+
+def _profile_update_worker_started_set(value: bool) -> None:
+    global _PROFILE_UPDATE_WORKER_STARTED
+    _PROFILE_UPDATE_WORKER_STARTED = bool(value)
+
+def _profile_update_worker_thread_get():
+    return _PROFILE_UPDATE_WORKER_THREAD
+
+def _profile_update_worker_thread_set(value) -> None:
+    global _PROFILE_UPDATE_WORKER_THREAD
+    _PROFILE_UPDATE_WORKER_THREAD = value
+
+def profile_update_worker_deps() -> ProfileUpdateWorkerDeps:
+    return ProfileUpdateWorkerDeps(
+        update_queue=_PROFILE_UPDATE_QUEUE,
+        update_lock=_PROFILE_UPDATE_LOCK,
+        update_event=_PROFILE_UPDATE_EVENT,
+        stop_event=_PROFILE_UPDATE_STOP_EVENT,
+        worker_started_get=_profile_update_worker_started_get,
+        worker_started_set=_profile_update_worker_started_set,
+        worker_thread_get=_profile_update_worker_thread_get,
+        worker_thread_set=_profile_update_worker_thread_set,
+        queue_max=PROFILE_UPDATE_QUEUE_MAX,
+        student_profile_update=student_profile_update,
+        diag_log=diag_log,
+        sleep=time.sleep,
+        thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
+        rq_enabled=_rq_enabled,
+        monotonic=time.monotonic,
+    )
+
 def _chat_worker_deps():
     return ChatWorkerDeps(
         chat_job_dir=CHAT_JOB_DIR,
@@ -4074,6 +3992,9 @@ def _chat_worker_deps():
         sleep=time.sleep,
         thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
     )
+
+def chat_worker_deps():
+    return _chat_worker_deps()
 
 def _chat_start_deps():
     return ChatStartDeps(
