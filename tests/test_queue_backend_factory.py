@@ -36,6 +36,7 @@ class DummyBackend:
 
 
 def test_get_app_queue_backend_uses_inline_in_pytest():
+    reset_queue_backend()
     created = []
 
     def inline_factory():
@@ -55,6 +56,7 @@ def test_get_app_queue_backend_uses_inline_in_pytest():
 
 
 def test_get_app_queue_backend_caches_and_resets():
+    reset_queue_backend()
     created = []
 
     def inline_factory():
