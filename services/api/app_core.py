@@ -190,7 +190,7 @@ from .chat_session_utils import (
 from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
 from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
-from .chat_worker_service import (
+from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
     chat_job_worker_loop as _chat_job_worker_loop_impl,
     enqueue_chat_job as _enqueue_chat_job_impl,

@@ -18,7 +18,7 @@ def start_runtime(
         is_pytest = settings.is_pytest()
     if not is_pytest:
         if require_redis is None:
-            from services.api import rq_tasks
+            from services.api.workers import rq_tasks
 
             require_redis = rq_tasks.require_redis
         require_redis()

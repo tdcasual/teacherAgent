@@ -62,7 +62,7 @@ services:
     build:
       context: .
       dockerfile: services/api/Dockerfile
-    command: ["python3", "-m", "services.api.rq_worker"]
+    command: ["python3", "-m", "services.api.workers.rq_worker"]
     env_file: .env
     environment:
       - DATA_DIR=/app/data

@@ -41,9 +41,9 @@ def test_lifespan_does_not_start_workers(monkeypatch):
     import sys
     import types
 
-    stub = types.ModuleType("services.api.rq_tasks")
+    stub = types.ModuleType("services.api.workers.rq_tasks")
     stub.require_redis = lambda: None
-    monkeypatch.setitem(sys.modules, "services.api.rq_tasks", stub)
+    monkeypatch.setitem(sys.modules, "services.api.workers.rq_tasks", stub)
 
     called = {"start": 0}
 

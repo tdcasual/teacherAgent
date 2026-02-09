@@ -254,7 +254,7 @@ npm run e2e:teacher
 ### 队列与 Worker（必需）
 - API 仅支持 **RQ + Redis**，启动时会校验 Redis 可用性；未配置会直接失败。  
 - 必需：`REDIS_URL`、`JOB_QUEUE_BACKEND=rq`（或 `RQ_BACKEND_ENABLED=1`）。  
-- Worker 启动：`python -m services.api.rq_worker`  
+- Worker 启动：`python -m services.api.workers.rq_worker`  
 - 可选：`RQ_QUEUE_NAME`（默认 `default`）、`RQ_SCAN_PENDING_ON_START=1`（启动时扫描并回填排队任务）。  
 
 ### 通用变量（模型网关）

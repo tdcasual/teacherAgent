@@ -7,9 +7,9 @@ from typing import Any, Dict, Optional
 
 from rq import Queue
 
-from .chat_redis_lane_store import ChatRedisLaneStore
-from .redis_clients import get_redis_client
-from .rq_tenant_runtime import load_tenant_module
+from services.api.chat_redis_lane_store import ChatRedisLaneStore
+from services.api.redis_clients import get_redis_client
+from services.api.workers.rq_tenant_runtime import load_tenant_module
 
 
 def _queue_name() -> str:

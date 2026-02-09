@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.chat_worker_service import ChatWorkerDeps, enqueue_chat_job, start_chat_worker
+from services.api.workers.chat_worker_service import ChatWorkerDeps, enqueue_chat_job, start_chat_worker
 
 
 class _FakeEvent:

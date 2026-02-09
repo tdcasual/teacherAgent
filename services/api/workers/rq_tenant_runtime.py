@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from .tenant_config_store import TenantConfigStore
-from .tenant_registry import TenantRegistry
+from services.api.tenant_config_store import TenantConfigStore
+from services.api.tenant_registry import TenantRegistry
 
 _TENANT_REGISTRY: Optional[TenantRegistry] = None
 
@@ -17,7 +17,7 @@ def _get_registry() -> TenantRegistry:
         db_path = Path(
             os.getenv(
                 "TENANT_DB_PATH",
-                str(Path(__file__).resolve().parents[2] / "data" / "_system" / "tenants.sqlite3"),
+                str(Path(__file__).resolve().parents[3] / "data" / "_system" / "tenants.sqlite3"),
             )
         )
         store = TenantConfigStore(db_path)
