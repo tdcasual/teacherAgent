@@ -480,6 +480,7 @@ from .upload_text_service import (
 from . import settings as _settings
 from .queue_backend import get_queue_backend, rq_enabled as _rq_enabled_impl
 from .runtime_state import reset_runtime_state as _reset_runtime_state
+from .queue_runtime import start_runtime as _start_runtime, stop_runtime as _stop_runtime
 try:
     from mem0_config import load_dotenv
 
@@ -2055,16 +2056,11 @@ def _stop_inline_workers() -> None:
 
 def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
-    backend = _queue_backend()
-    if not _settings.is_pytest():
-        from .rq_tasks import require_redis
-
-        require_redis()
-    backend.start()
+    _start_runtime(backend=_queue_backend(), is_pytest=_settings.is_pytest())
 
 
 def stop_tenant_runtime() -> None:
-    _queue_backend().stop()
+    _stop_runtime(backend=_queue_backend())
 
 
 def model_dump_compat(model: BaseModel, *, exclude_none: bool = False) -> Dict[str, Any]:
