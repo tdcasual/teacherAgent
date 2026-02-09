@@ -14,11 +14,13 @@ def start_runtime(
 ) -> None:
     if backend is None:
         backend = get_queue_backend(tenant_id=settings.tenant_id() or None)
-    if require_redis is None:
-        from .rq_tasks import require_redis
     if is_pytest is None:
         is_pytest = settings.is_pytest()
     if not is_pytest:
+        if require_redis is None:
+            from .rq_tasks import require_redis as _require_redis
+
+            require_redis = _require_redis
         require_redis()
     backend.start()
 
