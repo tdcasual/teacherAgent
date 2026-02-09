@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from . import settings
-from .queue_backend import get_queue_backend
+from services.api.queue.queue_backend import get_queue_backend
 
 
 def start_runtime(

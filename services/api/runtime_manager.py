@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 import os
 
-from .queue_backend import QueueBackend
-from .queue_backend_factory import get_app_queue_backend
+from services.api.queue.queue_backend import QueueBackend
+from services.api.queue.queue_backend_factory import get_app_queue_backend
 from .queue_runtime import start_runtime as _start_runtime
 from .queue_runtime import stop_runtime as _stop_runtime
 

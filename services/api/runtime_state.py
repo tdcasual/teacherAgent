@@ -4,7 +4,8 @@ from collections import deque
 import threading
 from typing import Any
 
-from . import chat_lane_store_factory, queue_backend_factory
+from . import chat_lane_store_factory
+from services.api.queue import queue_backend_factory
 
 
 def reset_runtime_state(mod: Any, *, create_chat_idempotency_store) -> None:

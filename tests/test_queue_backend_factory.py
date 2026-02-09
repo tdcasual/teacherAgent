@@ -1,4 +1,4 @@
-from services.api.queue_backend_factory import get_app_queue_backend, reset_queue_backend
+from services.api.queue.queue_backend_factory import get_app_queue_backend, reset_queue_backend
 
 
 class DummyBackend:
