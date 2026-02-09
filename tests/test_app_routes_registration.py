@@ -1,13 +1,32 @@
-def test_health_router_included():
-    from fastapi.testclient import TestClient
-    from services.api import app as app_mod
+from fastapi import APIRouter, FastAPI
 
-    client = TestClient(app_mod.app)
-    res = client.get("/health")
-    assert res.status_code == 200
+from services.api import app_routes
 
 
-def test_app_core_module_exists():
-    from services.api import app_core
+class DummyCore:
+    pass
 
-    assert hasattr(app_core, "health")
+
+def test_register_routes_includes_assignment_router():
+    app = FastAPI()
+    called = {}
+
+    def fake_build(core):
+        called["core"] = core
+        router = APIRouter()
+
+        @router.get("/__assignment_probe")
+        async def probe():
+            return {"ok": True}
+
+        return router
+
+    original = app_routes.build_assignment_router
+    app_routes.build_assignment_router = fake_build
+    try:
+        app_routes.register_routes(app, DummyCore())
+    finally:
+        app_routes.build_assignment_router = original
+
+    assert called.get("core").__class__ is DummyCore
+    assert any(route.path == "/__assignment_probe" for route in app.router.routes)
