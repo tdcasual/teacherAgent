@@ -4,6 +4,8 @@ from collections import deque
 import threading
 from typing import Any
 
+from . import chat_lane_store_factory, queue_backend_factory
+
 
 def reset_runtime_state(mod: Any, *, create_chat_idempotency_store) -> None:
     mod.UPLOAD_JOB_QUEUE = deque()
@@ -32,8 +34,8 @@ def reset_runtime_state(mod: Any, *, create_chat_idempotency_store) -> None:
     mod.CHAT_WORKER_THREADS = []
     mod.CHAT_LANE_RECENT = {}
     mod.CHAT_IDEMPOTENCY_STATE = create_chat_idempotency_store(mod.CHAT_JOB_DIR)
-    mod._CHAT_LANE_STORES = {}
-    mod._QUEUE_BACKEND = None
+    chat_lane_store_factory.reset_chat_lane_stores()
+    queue_backend_factory.reset_queue_backend()
 
     mod._OCR_SEMAPHORE = threading.BoundedSemaphore(int(mod.OCR_MAX_CONCURRENCY))
     mod._LLM_SEMAPHORE = threading.BoundedSemaphore(int(mod.LLM_MAX_CONCURRENCY))

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from collections import deque
 
 from services.api import runtime_state
+from services.api import queue_backend_factory, chat_lane_store_factory
 
 
 def test_reset_runtime_state_resets_queues_and_caches(tmp_path):
@@ -19,8 +20,39 @@ def test_reset_runtime_state_resets_queues_and_caches(tmp_path):
     mod.LLM_MAX_CONCURRENCY_TEACHER = 1
 
     mod.UPLOAD_JOB_QUEUE = deque(["old"])
+
+    backend = queue_backend_factory.get_app_queue_backend(
+        tenant_id=None,
+        is_pytest=True,
+        inline_backend_factory=lambda: object(),
+        get_backend=lambda **_kwargs: object(),
+    )
+    store = chat_lane_store_factory.get_chat_lane_store(
+        tenant_id="default",
+        is_pytest=True,
+        redis_url="redis://localhost:6379/0",
+        debounce_ms=0,
+        claim_ttl_sec=600,
+    )
+
     runtime_state.reset_runtime_state(mod, create_chat_idempotency_store=lambda _: object())
 
     assert list(mod.UPLOAD_JOB_QUEUE) == []
-    assert mod._QUEUE_BACKEND is None
     assert mod.CHAT_IDEMPOTENCY_STATE is not None
+
+    backend_after = queue_backend_factory.get_app_queue_backend(
+        tenant_id=None,
+        is_pytest=True,
+        inline_backend_factory=lambda: object(),
+        get_backend=lambda **_kwargs: object(),
+    )
+    store_after = chat_lane_store_factory.get_chat_lane_store(
+        tenant_id="default",
+        is_pytest=True,
+        redis_url="redis://localhost:6379/0",
+        debounce_ms=0,
+        claim_ttl_sec=600,
+    )
+
+    assert backend_after is not backend
+    assert store_after is not store

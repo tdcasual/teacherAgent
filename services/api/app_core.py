@@ -479,9 +479,13 @@ from .upload_text_service import (
     save_upload_file as _save_upload_file_impl,
 )
 from . import settings as _settings
-from .queue_backend import get_queue_backend, rq_enabled as _rq_enabled_impl
+from .chat_lane_store_factory import get_chat_lane_store
+from .queue_backend import rq_enabled as _rq_enabled_impl
+from .queue_backend_factory import get_app_queue_backend
+from .queue_inline_backend import InlineQueueBackend
+from .runtime_manager import RuntimeManagerDeps, start_tenant_runtime as _start_tenant_runtime
+from .runtime_manager import stop_tenant_runtime as _stop_tenant_runtime
 from .runtime_state import reset_runtime_state as _reset_runtime_state
-from .queue_runtime import start_runtime as _start_runtime, stop_runtime as _stop_runtime
 try:
     from mem0_config import load_dotenv
 
@@ -788,7 +792,7 @@ def _enqueue_upload_job_inline(job_id: str) -> None:
     UPLOAD_JOB_EVENT.set()
 
 def scan_pending_upload_jobs() -> int:
-    return int(_queue_backend().scan_pending_upload_jobs() or 0)
+    return int(_app_queue_backend().scan_pending_upload_jobs() or 0)
 
 def _scan_pending_upload_jobs_inline() -> int:
     UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
@@ -806,7 +810,7 @@ def _scan_pending_upload_jobs_inline() -> int:
     return count
 
 def enqueue_upload_job(job_id: str) -> None:
-    _queue_backend().enqueue_upload_job(job_id)
+    _app_queue_backend().enqueue_upload_job(job_id)
 
 def upload_job_worker_loop() -> None:
     while not UPLOAD_JOB_STOP_EVENT.is_set():
@@ -898,7 +902,7 @@ def _enqueue_exam_job_inline(job_id: str) -> None:
     EXAM_JOB_EVENT.set()
 
 def scan_pending_exam_jobs() -> int:
-    return int(_queue_backend().scan_pending_exam_jobs() or 0)
+    return int(_app_queue_backend().scan_pending_exam_jobs() or 0)
 
 def _scan_pending_exam_jobs_inline() -> int:
     EXAM_UPLOAD_JOB_DIR.mkdir(parents=True, exist_ok=True)
@@ -916,7 +920,7 @@ def _scan_pending_exam_jobs_inline() -> int:
     return count
 
 def enqueue_exam_job(job_id: str) -> None:
-    _queue_backend().enqueue_exam_job(job_id)
+    _app_queue_backend().enqueue_exam_job(job_id)
 
 def exam_job_worker_loop() -> None:
     while not EXAM_JOB_STOP_EVENT.is_set():
@@ -1075,67 +1079,34 @@ def resolve_chat_lane_id_from_job(job: Dict[str, Any]) -> str:
     )
 
 def _chat_lane_store():
-    tenant_key = str(TENANT_ID or "default").strip() or "default"
-    store = _CHAT_LANE_STORES.get(tenant_key)
-    if store is None:
-        if _settings.is_pytest():
-            from .chat_lane_store import MemoryLaneStore
+    return get_chat_lane_store(
+        tenant_id=str(TENANT_ID or "default").strip() or "default",
+        is_pytest=_settings.is_pytest(),
+        redis_url=REDIS_URL,
+        debounce_ms=CHAT_LANE_DEBOUNCE_MS,
+        claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
+    )
 
-            store = MemoryLaneStore(
-                debounce_ms=CHAT_LANE_DEBOUNCE_MS,
-                claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
-            )
-        else:
-            from .chat_redis_lane_store import RedisLaneStore
-            from .redis_clients import get_redis_client
+def _inline_backend_factory():
+    return InlineQueueBackend(
+        enqueue_upload_job_fn=_enqueue_upload_job_inline,
+        enqueue_exam_job_fn=_enqueue_exam_job_inline,
+        enqueue_profile_update_fn=_enqueue_profile_update_inline,
+        enqueue_chat_job_fn=_enqueue_chat_job_inline,
+        scan_pending_upload_jobs_fn=_scan_pending_upload_jobs_inline,
+        scan_pending_exam_jobs_fn=_scan_pending_exam_jobs_inline,
+        scan_pending_chat_jobs_fn=_scan_pending_chat_jobs_inline,
+        start_fn=_start_inline_workers,
+        stop_fn=_stop_inline_workers,
+    )
 
-            store = RedisLaneStore(
-                redis_client=get_redis_client(REDIS_URL, decode_responses=True),
-                tenant_id=tenant_key,
-                claim_ttl_sec=CHAT_JOB_CLAIM_TTL_SEC,
-                debounce_ms=CHAT_LANE_DEBOUNCE_MS,
-            )
-        _CHAT_LANE_STORES[tenant_key] = store
-    return store
 
-class _InlineTestBackend:
-    name = "inline-test"
-
-    def enqueue_upload_job(self, job_id: str) -> None:
-        _enqueue_upload_job_inline(job_id)
-
-    def enqueue_exam_job(self, job_id: str) -> None:
-        _enqueue_exam_job_inline(job_id)
-
-    def enqueue_profile_update(self, payload: Dict[str, Any]) -> None:
-        _enqueue_profile_update_inline(payload)
-
-    def enqueue_chat_job(self, job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
-        return _enqueue_chat_job_inline(job_id, lane_id=lane_id)
-
-    def scan_pending_upload_jobs(self) -> int:
-        return int(_scan_pending_upload_jobs_inline() or 0)
-
-    def scan_pending_exam_jobs(self) -> int:
-        return int(_scan_pending_exam_jobs_inline() or 0)
-
-    def scan_pending_chat_jobs(self) -> int:
-        return int(_scan_pending_chat_jobs_inline() or 0)
-
-    def start(self) -> None:
-        _start_inline_workers()
-
-    def stop(self) -> None:
-        _stop_inline_workers()
-
-def _queue_backend():
-    global _QUEUE_BACKEND
-    if _QUEUE_BACKEND is None:
-        if _settings.is_pytest():
-            _QUEUE_BACKEND = _InlineTestBackend()
-        else:
-            _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None)
-    return _QUEUE_BACKEND
+def _app_queue_backend():
+    return get_app_queue_backend(
+        tenant_id=TENANT_ID or None,
+        is_pytest=_settings.is_pytest(),
+        inline_backend_factory=_inline_backend_factory,
+    )
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
     if _settings.is_pytest():
@@ -1222,10 +1193,10 @@ def _enqueue_chat_job_inline(job_id: str, lane_id: Optional[str] = None) -> Dict
     return _enqueue_chat_job_impl(job_id, deps=_chat_worker_deps(), lane_id=lane_id)
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
-    return _queue_backend().enqueue_chat_job(job_id, lane_id=lane_id)
+    return _app_queue_backend().enqueue_chat_job(job_id, lane_id=lane_id)
 
 def scan_pending_chat_jobs() -> int:
-    return int(_queue_backend().scan_pending_chat_jobs() or 0)
+    return int(_app_queue_backend().scan_pending_chat_jobs() or 0)
 
 def _scan_pending_chat_jobs_inline() -> int:
     _scan_pending_chat_jobs_impl(deps=_chat_worker_deps())
@@ -2056,12 +2027,25 @@ def _stop_inline_workers() -> None:
 
 
 def start_tenant_runtime() -> None:
-    _validate_master_key_policy_impl(getenv=os.getenv)
-    _start_runtime(backend=_queue_backend(), is_pytest=_settings.is_pytest())
+    _start_tenant_runtime(
+        deps=RuntimeManagerDeps(
+            tenant_id=TENANT_ID or None,
+            is_pytest=_settings.is_pytest(),
+            validate_master_key_policy=_validate_master_key_policy_impl,
+            inline_backend_factory=_inline_backend_factory,
+        )
+    )
 
 
 def stop_tenant_runtime() -> None:
-    _stop_runtime(backend=_queue_backend())
+    _stop_tenant_runtime(
+        deps=RuntimeManagerDeps(
+            tenant_id=TENANT_ID or None,
+            is_pytest=_settings.is_pytest(),
+            validate_master_key_policy=_validate_master_key_policy_impl,
+            inline_backend_factory=_inline_backend_factory,
+        )
+    )
 
 
 def model_dump_compat(model: BaseModel, *, exclude_none: bool = False) -> Dict[str, Any]:
@@ -2395,7 +2379,7 @@ def _enqueue_profile_update_inline(args: Dict[str, Any]) -> None:
         _PROFILE_UPDATE_EVENT.set()
 
 def enqueue_profile_update(args: Dict[str, Any]) -> None:
-    _queue_backend().enqueue_profile_update(args)
+    _app_queue_backend().enqueue_profile_update(args)
 
 def profile_update_worker_loop() -> None:
     while not _PROFILE_UPDATE_STOP_EVENT.is_set():
