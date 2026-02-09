@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -47,3 +48,43 @@ def list_skills(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
     if loaded.errors:
         payload["errors"] = [e.as_dict() for e in loaded.errors]
     return payload
+
+
+def load_kp_catalog(data_dir: Path) -> Dict[str, Dict[str, str]]:
+    path = data_dir / "knowledge" / "knowledge_points.csv"
+    if not path.exists():
+        return {}
+    out: Dict[str, Dict[str, str]] = {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                kp_id = str(row.get("kp_id") or "").strip()
+                if not kp_id:
+                    continue
+                out[kp_id] = {
+                    "name": str(row.get("name") or "").strip(),
+                    "status": str(row.get("status") or "").strip(),
+                    "notes": str(row.get("notes") or "").strip(),
+                }
+    except Exception:
+        return {}
+    return out
+
+
+def load_question_kp_map(data_dir: Path) -> Dict[str, str]:
+    path = data_dir / "knowledge" / "knowledge_point_map.csv"
+    if not path.exists():
+        return {}
+    out: Dict[str, str] = {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                qid = str(row.get("question_id") or "").strip()
+                kp_id = str(row.get("kp_id") or "").strip()
+                if qid and kp_id:
+                    out[qid] = kp_id
+    except Exception:
+        return {}
+    return out

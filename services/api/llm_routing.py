@@ -1,14 +1,27 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import uuid
 import hashlib
+import importlib as _importlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from . import llm_routing_resolver as _llm_routing_resolver_module
+if os.getenv("PYTEST_CURRENT_TEST"):
+    _importlib.reload(_llm_routing_resolver_module)
+from .llm_routing_resolver import *  # noqa: F401,F403
+from .llm_routing_resolver import CompiledRouting, RoutingContext  # explicit for type hints
+
+from . import llm_routing_proposals as _llm_routing_proposals_module
+if os.getenv("PYTEST_CURRENT_TEST"):
+    _importlib.reload(_llm_routing_proposals_module)
+from .llm_routing_proposals import *  # noqa: F401,F403
 
 
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
@@ -346,67 +359,6 @@ def validate_routing_config(config_payload: Dict[str, Any], model_registry: Dict
     return {"ok": len(errors) == 0, "errors": errors, "warnings": warnings, "normalized": normalized}
 
 
-@dataclass(frozen=True)
-class RoutingContext:
-    role: Optional[str] = None
-    skill_id: Optional[str] = None
-    kind: Optional[str] = None
-    needs_tools: bool = False
-    needs_json: bool = False
-
-
-@dataclass(frozen=True)
-class RouteCandidate:
-    channel_id: str
-    provider: str
-    mode: str
-    model: str
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    capabilities: Dict[str, bool] = field(default_factory=dict)
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {
-            "channel_id": self.channel_id,
-            "provider": self.provider,
-            "mode": self.mode,
-            "model": self.model,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "capabilities": dict(self.capabilities),
-        }
-
-
-@dataclass(frozen=True)
-class RoutingDecision:
-    enabled: bool
-    matched_rule_id: Optional[str]
-    candidates: List[RouteCandidate]
-    reason: str
-
-    @property
-    def selected(self) -> bool:
-        return len(self.candidates) > 0
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {
-            "enabled": self.enabled,
-            "matched_rule_id": self.matched_rule_id,
-            "reason": self.reason,
-            "selected": self.selected,
-            "candidates": [c.as_dict() for c in self.candidates],
-        }
-
-
-@dataclass(frozen=True)
-class CompiledRouting:
-    config: Dict[str, Any]
-    errors: List[str]
-    warnings: List[str]
-    channels_by_id: Dict[str, Dict[str, Any]]
-    rules: List[Dict[str, Any]]
-
-
 def _config_signature(config_path: Path, model_registry: Dict[str, Any]) -> Tuple[int, int, int, str, Tuple[Tuple[str, str], ...]]:
     try:
         stat = config_path.stat()
@@ -458,123 +410,8 @@ def get_compiled_routing(config_path: Path, model_registry: Dict[str, Any]) -> C
     return compiled
 
 
-def _rule_matches(rule: Dict[str, Any], ctx: RoutingContext) -> bool:
-    if not _as_bool(rule.get("enabled"), True):
-        return False
-    match = rule.get("match") if isinstance(rule.get("match"), dict) else {}
-    roles = set(_as_str_list(match.get("roles")))
-    skills = set(_as_str_list(match.get("skills")))
-    kinds = set(_as_str_list(match.get("kinds")))
-    needs_tools = match.get("needs_tools")
-    needs_json = match.get("needs_json")
-
-    if roles and (ctx.role or "") not in roles:
-        return False
-    if skills and (ctx.skill_id or "") not in skills:
-        return False
-    if kinds and (ctx.kind or "") not in kinds:
-        return False
-    if needs_tools is not None and bool(needs_tools) != bool(ctx.needs_tools):
-        return False
-    if needs_json is not None and bool(needs_json) != bool(ctx.needs_json):
-        return False
-    return True
-
-
-def _channel_capable(channel: Dict[str, Any], ctx: RoutingContext) -> bool:
-    cap = channel.get("capabilities") if isinstance(channel.get("capabilities"), dict) else {}
-    tools_ok = _as_bool(cap.get("tools"), True)
-    json_ok = _as_bool(cap.get("json"), True)
-    if ctx.needs_tools and not tools_ok:
-        return False
-    if ctx.needs_json and not json_ok:
-        return False
-    return True
-
-
-def _expand_candidate_chain(
-    channels_by_id: Dict[str, Dict[str, Any]],
-    start_channel_id: str,
-    ctx: RoutingContext,
-) -> List[RouteCandidate]:
-    out: List[RouteCandidate] = []
-    queue: List[str] = [start_channel_id]
-    seen: set[str] = set()
-    while queue:
-        channel_id = queue.pop(0)
-        if channel_id in seen:
-            continue
-        seen.add(channel_id)
-        channel = channels_by_id.get(channel_id)
-        if not channel:
-            continue
-        for fb in channel.get("fallback_channels") or []:
-            if fb not in seen:
-                queue.append(fb)
-        if not _channel_capable(channel, ctx):
-            continue
-        target = channel.get("target") if isinstance(channel.get("target"), dict) else {}
-        params = channel.get("params") if isinstance(channel.get("params"), dict) else {}
-        cap = channel.get("capabilities") if isinstance(channel.get("capabilities"), dict) else {}
-        out.append(
-            RouteCandidate(
-                channel_id=channel_id,
-                provider=_as_str(target.get("provider")),
-                mode=_as_str(target.get("mode")),
-                model=_as_str(target.get("model")),
-                temperature=_as_float_opt(params.get("temperature")),
-                max_tokens=_as_int_opt(params.get("max_tokens")),
-                capabilities={"tools": _as_bool(cap.get("tools"), True), "json": _as_bool(cap.get("json"), True)},
-            )
-        )
-    return out
-
-
-def resolve_routing(compiled: CompiledRouting, ctx: RoutingContext) -> RoutingDecision:
-    enabled = _as_bool(compiled.config.get("enabled"), False)
-    if not enabled:
-        return RoutingDecision(enabled=False, matched_rule_id=None, candidates=[], reason="routing_disabled")
-    if compiled.errors:
-        return RoutingDecision(enabled=True, matched_rule_id=None, candidates=[], reason="routing_invalid")
-
-    matched_rule_id: Optional[str] = None
-    for rule in compiled.rules:
-        if not _rule_matches(rule, ctx):
-            continue
-        matched_rule_id = _as_str(rule.get("id")) or None
-        route = rule.get("route") if isinstance(rule.get("route"), dict) else {}
-        channel_id = _as_str(route.get("channel_id"))
-        if not channel_id:
-            continue
-        candidates = _expand_candidate_chain(compiled.channels_by_id, channel_id, ctx)
-        if candidates:
-            return RoutingDecision(enabled=True, matched_rule_id=matched_rule_id, candidates=candidates, reason="matched")
-    if matched_rule_id:
-        return RoutingDecision(enabled=True, matched_rule_id=matched_rule_id, candidates=[], reason="no_capable_channel")
-    return RoutingDecision(enabled=True, matched_rule_id=None, candidates=[], reason="no_rule_matched")
-
-
-def simulate_routing(compiled: CompiledRouting, ctx: RoutingContext) -> Dict[str, Any]:
-    decision = resolve_routing(compiled, ctx)
-    return {
-        "context": {
-            "role": ctx.role,
-            "skill_id": ctx.skill_id,
-            "kind": ctx.kind,
-            "needs_tools": ctx.needs_tools,
-            "needs_json": ctx.needs_json,
-        },
-        "decision": decision.as_dict(),
-        "validation": {"errors": list(compiled.errors), "warnings": list(compiled.warnings)},
-    }
-
-
 def _history_dir(config_path: Path) -> Path:
     return config_path.parent / "llm_routing_history"
-
-
-def _proposals_dir(config_path: Path) -> Path:
-    return config_path.parent / "llm_routing_proposals"
 
 
 def _write_history(config_path: Path, payload: Dict[str, Any], actor: str, source: str, note: str = "") -> Path:
@@ -661,99 +498,6 @@ def apply_routing_config(
     }
 
 
-def create_routing_proposal(
-    config_path: Path,
-    model_registry: Dict[str, Any],
-    config_payload: Dict[str, Any],
-    actor: str,
-    note: str = "",
-) -> Dict[str, Any]:
-    validation = validate_routing_config(config_payload, model_registry)
-    proposal_id = _safe_id("proposal")
-    proposal = {
-        "proposal_id": proposal_id,
-        "created_at": _now_iso(),
-        "created_by": actor or "unknown",
-        "status": "pending",
-        "note": note or "",
-        "candidate": validation.get("normalized") if validation.get("ok") else (config_payload or {}),
-        "validation": {
-            "ok": bool(validation.get("ok")),
-            "errors": validation.get("errors") or [],
-            "warnings": validation.get("warnings") or [],
-        },
-    }
-    proposals_dir = _proposals_dir(config_path)
-    proposals_dir.mkdir(parents=True, exist_ok=True)
-    path = proposals_dir / f"{proposal_id}.json"
-    _atomic_write_json(path, proposal)
-    return {
-        "ok": True,
-        "proposal_id": proposal_id,
-        "status": "pending",
-        "validation": proposal["validation"],
-        "proposal_path": str(path),
-    }
-
-
-def _proposal_path(config_path: Path, proposal_id: str) -> Path:
-    return _proposals_dir(config_path) / f"{proposal_id}.json"
-
-
-def apply_routing_proposal(
-    config_path: Path,
-    model_registry: Dict[str, Any],
-    proposal_id: str,
-    approve: bool,
-    actor: str,
-) -> Dict[str, Any]:
-    proposal_id = _as_str(proposal_id)
-    if not proposal_id:
-        return {"ok": False, "error": "proposal_id_required"}
-    lock = _config_lock(config_path)
-    with lock:
-        path = _proposal_path(config_path, proposal_id)
-        proposal = _read_json(path)
-        if not proposal:
-            return {"ok": False, "error": "proposal_not_found", "proposal_id": proposal_id}
-        if _as_str(proposal.get("status")) in {"applied", "rejected"}:
-            return {"ok": False, "error": "proposal_already_reviewed", "proposal_id": proposal_id}
-
-        proposal["reviewed_at"] = _now_iso()
-        proposal["reviewed_by"] = actor or "unknown"
-        if not approve:
-            proposal["status"] = "rejected"
-            _atomic_write_json(path, proposal)
-            return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
-
-        candidate = proposal.get("candidate") if isinstance(proposal.get("candidate"), dict) else {}
-        apply_res = apply_routing_config(
-            config_path=config_path,
-            model_registry=model_registry,
-            config_payload=candidate,
-            actor=actor,
-            source=f"proposal:{proposal_id}",
-            note=_as_str(proposal.get("note")),
-        )
-        if not apply_res.get("ok"):
-            proposal["status"] = "failed"
-            proposal["apply_error"] = apply_res
-            _atomic_write_json(path, proposal)
-            return {"ok": False, "proposal_id": proposal_id, "status": "failed", "error": apply_res}
-
-        proposal["status"] = "applied"
-        proposal["applied_version"] = apply_res.get("version")
-        proposal["history_path"] = apply_res.get("history_path")
-        _atomic_write_json(path, proposal)
-        return {
-            "ok": True,
-            "proposal_id": proposal_id,
-            "status": "applied",
-            "version": apply_res.get("version"),
-            "history_path": apply_res.get("history_path"),
-        }
-
-
 def rollback_routing_config(
     config_path: Path,
     model_registry: Dict[str, Any],
@@ -812,35 +556,3 @@ def ensure_routing_file(config_path: Path, actor: str = "system") -> Dict[str, A
     _atomic_write_json(config_path, payload)
     invalidate_routing_cache(config_path)
     return {"ok": True, "created": True, "config_path": str(config_path)}
-
-
-def read_proposal(config_path: Path, proposal_id: str) -> Dict[str, Any]:
-    path = _proposal_path(config_path, _as_str(proposal_id))
-    data = _read_json(path)
-    if not data:
-        return {"ok": False, "error": "proposal_not_found", "proposal_id": proposal_id}
-    return {"ok": True, "proposal": data, "proposal_path": str(path)}
-
-
-def list_proposals(config_path: Path, limit: int = 20, status: Optional[str] = None) -> List[Dict[str, Any]]:
-    base = _proposals_dir(config_path)
-    if not base.exists():
-        return []
-    items: List[Dict[str, Any]] = []
-    for path in base.glob("*.json"):
-        data = _read_json(path)
-        row = {
-            "proposal_id": _as_str(data.get("proposal_id")) or path.stem,
-            "created_at": _as_str(data.get("created_at")),
-            "created_by": _as_str(data.get("created_by")),
-            "status": _as_str(data.get("status")) or "pending",
-            "note": _as_str(data.get("note")),
-            "validation_ok": bool(((data.get("validation") or {}).get("ok"))),
-            "proposal_path": str(path),
-        }
-        if status and row["status"] != status:
-            continue
-        items.append(row)
-    items.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-    take = max(1, min(int(limit), 200))
-    return items[:take]

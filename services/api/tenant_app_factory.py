@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from services.api.runtime import bootstrap
 from services.api.runtime.runtime_state import reset_runtime_state
+from services.api.wiring import CURRENT_CORE
 
 @dataclass(frozen=True)
 class TenantLimits:
@@ -36,14 +37,26 @@ class TenantAppInstance:
     app: Any
 
     def startup(self) -> None:
-        bootstrap.start_runtime(app_mod=self.module)
+        core = getattr(self.module, '_APP_CORE', None)
+        token = CURRENT_CORE.set(core) if core is not None else None
+        try:
+            bootstrap.start_runtime(app_mod=self.module)
+        finally:
+            if token is not None:
+                CURRENT_CORE.reset(token)
 
     def shutdown(self) -> None:
+        core = getattr(self.module, '_APP_CORE', None)
+        token = CURRENT_CORE.set(core) if core is not None else None
         try:
-            bootstrap.stop_runtime(app_mod=self.module)
-        except Exception:
-            pass
-        sys.modules.pop(self.module_name, None)
+            try:
+                bootstrap.stop_runtime(app_mod=self.module)
+            except Exception:
+                pass
+        finally:
+            if token is not None:
+                CURRENT_CORE.reset(token)
+            sys.modules.pop(self.module_name, None)
 
 _APP_PY_PATH = Path(__file__).resolve().with_name("app.py")
 

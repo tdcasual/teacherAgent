@@ -7,10 +7,11 @@ import types
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from .app_routes import register_routes
 from .runtime.lifecycle import app_lifespan
+from .wiring import CURRENT_CORE
 
 _CORE_PATH = Path(__file__).resolve().with_name("app_core.py")
 
@@ -18,8 +19,12 @@ _CORE_PATH = Path(__file__).resolve().with_name("app_core.py")
 def _load_core():
     module_suffix = str(__name__).split(".")[-1]
     module_name = f"services.api._core_{module_suffix}"
+    is_main_app = module_suffix == "app"
+    canonical_name = "services.api.app_core"
     if os.getenv("PYTEST_CURRENT_TEST"):
         sys.modules.pop(module_name, None)
+        if is_main_app:
+            sys.modules.pop(canonical_name, None)
     existing = sys.modules.get(module_name)
     if existing is not None:
         return existing
@@ -28,6 +33,8 @@ def _load_core():
         raise RuntimeError("failed to load app_core")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
+    if is_main_app:
+        sys.modules[canonical_name] = module
     spec.loader.exec_module(module)  # type: ignore[arg-type]
     return module
 
@@ -48,6 +55,15 @@ app.add_middleware(
 )
 
 register_routes(app, _core)
+
+
+@app.middleware("http")
+async def _set_core_context(request: Request, call_next):
+    token = CURRENT_CORE.set(_core)
+    try:
+        return await call_next(request)
+    finally:
+        CURRENT_CORE.reset(token)
 
 if __name__ == "services.api.app":
     _DEFAULT_APP = app
