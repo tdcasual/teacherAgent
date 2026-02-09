@@ -228,6 +228,7 @@ from .chart_agent_run_service import (
 )
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
+from .handlers import chat_handlers
 from .content_catalog_service import (
     ContentCatalogDeps,
     list_lessons as _list_lessons_impl,
@@ -3317,31 +3318,23 @@ def run_agent(
 async def health():
     return {"status": "ok"}
 
+def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
+    return chat_handlers.ChatHandlerDeps(
+        compute_chat_reply_sync=_compute_chat_reply_sync,
+        detect_math_delimiters=detect_math_delimiters,
+        detect_latex_tokens=detect_latex_tokens,
+        diag_log=diag_log,
+        build_interaction_note=build_interaction_note,
+        enqueue_profile_update=enqueue_profile_update,
+        student_profile_update=student_profile_update,
+        profile_update_async=PROFILE_UPDATE_ASYNC,
+        run_in_threadpool=run_in_threadpool,
+        get_chat_status=lambda job_id: _get_chat_status_impl(job_id, deps=_chat_status_deps()),
+        start_chat_api=lambda req: _start_chat_api_impl(req, deps=_chat_api_deps()),
+    )
+
 async def chat(req: ChatRequest):
-    reply_text, role_hint, last_user_text = await run_in_threadpool(_compute_chat_reply_sync, req)
-    if role_hint == "student" and req.student_id and reply_text != "正在生成上一条回复，请稍候再试。":
-        try:
-            has_math = detect_math_delimiters(reply_text)
-            has_latex = detect_latex_tokens(reply_text)
-            diag_log(
-                "student_chat.out",
-                {
-                    "student_id": req.student_id,
-                    "assignment_id": req.assignment_id,
-                    "has_math_delim": has_math,
-                    "has_latex_tokens": has_latex,
-                    "reply_preview": reply_text[:500],
-                },
-            )
-            note = build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
-            payload = {"student_id": req.student_id, "interaction_note": note}
-            if PROFILE_UPDATE_ASYNC:
-                enqueue_profile_update(payload)
-            else:
-                await run_in_threadpool(student_profile_update, payload)
-        except Exception as exc:
-            diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
-    return ChatResponse(reply=reply_text, role=role_hint)
+    return await chat_handlers.chat(req, deps=_chat_handlers_deps())
 
 def _detect_role_hint(req: ChatRequest) -> Optional[str]:
     return _detect_role_hint_impl(req, detect_role=detect_role)
@@ -3372,13 +3365,10 @@ def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
 
 async def chat_start(req: ChatStartRequest):
-    return _start_chat_api_impl(req, deps=_chat_api_deps())
+    return await chat_handlers.chat_start(req, deps=_chat_handlers_deps())
 
 async def chat_status(job_id: str):
-    try:
-        return _get_chat_status_impl(job_id, deps=_chat_status_deps())
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
+    return await chat_handlers.chat_status(job_id, deps=_chat_handlers_deps())
 
 async def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0):
     try:
