@@ -3315,7 +3315,17 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
 
 def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
     return exam_upload_handlers.ExamUploadHandlerDeps(
-        start_exam_upload=lambda *args, **kwargs: _start_exam_upload_impl(*args, **kwargs, deps=_exam_upload_start_deps()),
+        start_exam_upload=lambda exam_id, date, class_name, paper_files, score_files, answer_files, ocr_mode, language, deps=None: _start_exam_upload_impl(
+            exam_id=exam_id,
+            date=date,
+            class_name=class_name,
+            paper_files=paper_files,
+            score_files=score_files,
+            answer_files=answer_files,
+            ocr_mode=ocr_mode,
+            language=language,
+            deps=_exam_upload_start_deps(),
+        ),
         exam_upload_status=lambda job_id: _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps()),
         exam_upload_draft=lambda job_id: _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps()),
         exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_api_impl(**kwargs, deps=_exam_upload_api_deps()),

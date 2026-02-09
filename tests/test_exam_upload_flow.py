@@ -28,9 +28,13 @@ def make_pdf_bytes(text: str) -> bytes:
     from reportlab.pdfgen import canvas
 
     buf = BytesIO()
+    safe_text = (text or "").strip()
+    if len(safe_text) < 60:
+        repeat = max(1, (60 // max(len(safe_text), 1)) + 1)
+        safe_text = " ".join([safe_text] * repeat).strip()
     c = canvas.Canvas(buf, pagesize=letter)
     c.setFont("Helvetica", 12)
-    c.drawString(72, 720, text)
+    c.drawString(72, 720, safe_text)
     c.showPage()
     c.save()
     return buf.getvalue()
