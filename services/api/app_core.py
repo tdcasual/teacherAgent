@@ -64,7 +64,6 @@ from .assignment_catalog_service import (
 )
 from .assignment_generate_service import (
     AssignmentGenerateDeps,
-    AssignmentGenerateError,
     generate_assignment as _generate_assignment_impl,
 )
 from .assignment_generate_tool_service import (
@@ -228,7 +227,7 @@ from .chart_agent_run_service import (
 )
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
-from .handlers import assignment_handlers, assignment_upload_handlers, chat_handlers, exam_upload_handlers
+from .handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers, chat_handlers, exam_upload_handlers
 from .content_catalog_service import (
     ContentCatalogDeps,
     list_lessons as _list_lessons_impl,
@@ -3376,6 +3375,22 @@ def _assignment_upload_handlers_deps() -> assignment_upload_handlers.AssignmentU
         upload_job_path=upload_job_path,
     )
 
+def _assignment_io_handlers_deps() -> assignment_io_handlers.AssignmentIoHandlerDeps:
+    return assignment_io_handlers.AssignmentIoHandlerDeps(
+        resolve_assignment_dir=resolve_assignment_dir,
+        sanitize_filename=sanitize_filename,
+        run_script=run_script,
+        assignment_questions_ocr=lambda **kwargs: _assignment_questions_ocr_impl(
+            deps=_assignment_questions_ocr_deps(),
+            **kwargs,
+        ),
+        generate_assignment=lambda **kwargs: _generate_assignment_impl(
+            deps=_assignment_generate_deps(),
+            **kwargs,
+        ),
+        app_root=APP_ROOT,
+    )
+
 async def chat(req: ChatRequest):
     return await chat_handlers.chat(req, deps=_chat_handlers_deps())
 
@@ -4708,24 +4723,11 @@ async def assignment_upload_confirm(req: UploadConfirmRequest):
     return await assignment_upload_handlers.assignment_upload_confirm(req, deps=_assignment_upload_handlers_deps())
 
 async def assignment_download(assignment_id: str, file: str):
-    try:
-        assignment_dir = resolve_assignment_dir(assignment_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    folder = (assignment_dir / "source").resolve()
-    if assignment_dir not in folder.parents:
-        raise HTTPException(status_code=400, detail="invalid assignment_id path")
-    if not folder.exists():
-        raise HTTPException(status_code=404, detail="assignment source not found")
-    safe_name = sanitize_filename(file)
-    if not safe_name:
-        raise HTTPException(status_code=400, detail="invalid file")
-    path = (folder / safe_name).resolve()
-    if path != folder and folder not in path.parents:
-        raise HTTPException(status_code=400, detail="invalid file path")
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="file not found")
-    return FileResponse(path)
+    return await assignment_io_handlers.assignment_download(
+        assignment_id,
+        file,
+        deps=_assignment_io_handlers_deps(),
+    )
 
 async def assignment_today(
     student_id: str,
@@ -4875,30 +4877,25 @@ async def generate_assignment(
     source: Optional[str] = Form(""),
     requirements_json: Optional[str] = Form(""),
 ):
-    try:
-        return _generate_assignment_impl(
-            assignment_id=assignment_id,
-            kp=kp,
-            question_ids=question_ids,
-            per_kp=per_kp,
-            core_examples=core_examples,
-            generate=generate,
-            mode=mode,
-            date=date,
-            due_at=due_at,
-            class_name=class_name,
-            student_ids=student_ids,
-            source=source,
-            requirements_json=requirements_json,
-            deps=_assignment_generate_deps(),
-        )
-    except AssignmentGenerateError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_io_handlers.generate_assignment(
+        assignment_id=assignment_id,
+        kp=kp,
+        question_ids=question_ids,
+        per_kp=per_kp,
+        core_examples=core_examples,
+        generate=generate,
+        mode=mode,
+        date=date,
+        due_at=due_at,
+        class_name=class_name,
+        student_ids=student_ids,
+        source=source,
+        requirements_json=requirements_json,
+        deps=_assignment_io_handlers_deps(),
+    )
 
 async def render_assignment(assignment_id: str = Form(...)):
-    script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
-    out = run_script(["python3", str(script), "--assignment-id", assignment_id])
-    return {"ok": True, "output": out}
+    return await assignment_io_handlers.render_assignment(assignment_id, deps=_assignment_io_handlers_deps())
 
 async def assignment_questions_ocr(
     assignment_id: str = Form(...),
@@ -4909,7 +4906,7 @@ async def assignment_questions_ocr(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    return await _assignment_questions_ocr_impl(
+    return await assignment_io_handlers.assignment_questions_ocr(
         assignment_id=assignment_id,
         files=files,
         kp_id=kp_id,
@@ -4917,7 +4914,7 @@ async def assignment_questions_ocr(
         tags=tags,
         ocr_mode=ocr_mode,
         language=language,
-        deps=_assignment_questions_ocr_deps(),
+        deps=_assignment_io_handlers_deps(),
     )
 
 async def submit(
