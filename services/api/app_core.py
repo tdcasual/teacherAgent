@@ -479,6 +479,7 @@ from .upload_text_service import (
 )
 from . import settings as _settings
 from .queue_backend import get_queue_backend, rq_enabled as _rq_enabled_impl
+from .runtime_state import reset_runtime_state as _reset_runtime_state
 try:
     from mem0_config import load_dotenv
 
@@ -487,9 +488,9 @@ except Exception:
     pass
 
 APP_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
-UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
-LLM_ROUTING_PATH = Path(os.getenv("LLM_ROUTING_PATH", DATA_DIR / "llm_routing.json"))
+DATA_DIR = Path(_settings.data_dir() or (APP_ROOT / "data"))
+UPLOADS_DIR = Path(_settings.uploads_dir() or (APP_ROOT / "uploads"))
+LLM_ROUTING_PATH = Path(_settings.llm_routing_path() or (DATA_DIR / "llm_routing.json"))
 TENANT_ID = _settings.tenant_id()
 JOB_QUEUE_BACKEND = _settings.job_queue_backend()
 RQ_BACKEND_ENABLED = _settings.rq_backend_enabled()
@@ -503,69 +504,38 @@ OCR_UTILS_DIR = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts"
 if OCR_UTILS_DIR.exists() and str(OCR_UTILS_DIR) not in sys.path:
     sys.path.insert(0, str(OCR_UTILS_DIR))
 
-DIAG_LOG_ENABLED = os.getenv("DIAG_LOG", "").lower() in {"1", "true", "yes", "on"}
-DIAG_LOG_PATH = Path(os.getenv("DIAG_LOG_PATH", APP_ROOT / "tmp" / "diagnostics.log"))
+DIAG_LOG_ENABLED = _settings.diag_log_enabled()
+DIAG_LOG_PATH = Path(_settings.diag_log_path() or (APP_ROOT / "tmp" / "diagnostics.log"))
 UPLOAD_JOB_DIR = UPLOADS_DIR / "assignment_jobs"
-UPLOAD_JOB_QUEUE: deque[str] = deque()
-UPLOAD_JOB_LOCK = threading.Lock()
-UPLOAD_JOB_EVENT = threading.Event()
-UPLOAD_JOB_WORKER_STARTED = False
-UPLOAD_JOB_STOP_EVENT = threading.Event()
-UPLOAD_JOB_WORKER_THREAD: Optional[threading.Thread] = None
-
 EXAM_UPLOAD_JOB_DIR = UPLOADS_DIR / "exam_jobs"
-EXAM_JOB_QUEUE: deque[str] = deque()
-EXAM_JOB_LOCK = threading.Lock()
-EXAM_JOB_EVENT = threading.Event()
-EXAM_JOB_WORKER_STARTED = False
-EXAM_JOB_STOP_EVENT = threading.Event()
-EXAM_JOB_WORKER_THREAD: Optional[threading.Thread] = None
 CHAT_JOB_DIR = UPLOADS_DIR / "chat_jobs"
-CHAT_JOB_LOCK = threading.Lock()
-CHAT_JOB_EVENT = threading.Event()
-CHAT_JOB_WORKER_STARTED = False
-CHAT_WORKER_STOP_EVENT = threading.Event()
-CHAT_WORKER_POOL_SIZE = max(1, int(os.getenv("CHAT_WORKER_POOL_SIZE", "4") or "4"))
-CHAT_LANE_MAX_QUEUE = max(1, int(os.getenv("CHAT_LANE_MAX_QUEUE", "6") or "6"))
-CHAT_LANE_DEBOUNCE_MS = max(0, int(os.getenv("CHAT_LANE_DEBOUNCE_MS", "500") or "500"))
-CHAT_JOB_CLAIM_TTL_SEC = max(10, int(os.getenv("CHAT_JOB_CLAIM_TTL_SEC", "600") or "600"))
-CHAT_JOB_LANES: Dict[str, deque[str]] = {}
-CHAT_JOB_ACTIVE_LANES: set[str] = set()
-CHAT_JOB_QUEUED: set[str] = set()
-CHAT_JOB_TO_LANE: Dict[str, str] = {}
-CHAT_LANE_CURSOR = 0
-CHAT_WORKER_THREADS: List[threading.Thread] = []
-CHAT_LANE_RECENT: Dict[str, Tuple[float, str, str]] = {}
-CHAT_IDEMPOTENCY_STATE = create_chat_idempotency_store(CHAT_JOB_DIR)
-_CHAT_LANE_STORES: Dict[str, Any] = {}
-_QUEUE_BACKEND: Any = None
+CHAT_WORKER_POOL_SIZE = _settings.chat_worker_pool_size()
+CHAT_LANE_MAX_QUEUE = _settings.chat_lane_max_queue()
+CHAT_LANE_DEBOUNCE_MS = _settings.chat_lane_debounce_ms()
+CHAT_JOB_CLAIM_TTL_SEC = _settings.chat_job_claim_ttl_sec()
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
 STUDENT_SUBMISSIONS_DIR = DATA_DIR / "student_submissions"
-SESSION_INDEX_MAX_ITEMS = max(50, int(os.getenv("SESSION_INDEX_MAX_ITEMS", "500") or "500"))
-TEACHER_SESSION_COMPACT_ENABLED = os.getenv("TEACHER_SESSION_COMPACT_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_SESSION_COMPACT_MAIN_ONLY = os.getenv("TEACHER_SESSION_COMPACT_MAIN_ONLY", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_SESSION_COMPACT_MAX_MESSAGES = max(4, int(os.getenv("TEACHER_SESSION_COMPACT_MAX_MESSAGES", "160") or "160"))
-TEACHER_SESSION_COMPACT_KEEP_TAIL = max(1, int(os.getenv("TEACHER_SESSION_COMPACT_KEEP_TAIL", "40") or "40"))
-if TEACHER_SESSION_COMPACT_KEEP_TAIL >= TEACHER_SESSION_COMPACT_MAX_MESSAGES:
-    TEACHER_SESSION_COMPACT_KEEP_TAIL = max(1, TEACHER_SESSION_COMPACT_MAX_MESSAGES // 2)
-TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC = max(0, int(os.getenv("TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC", "60") or "60"))
-TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS = max(2000, int(os.getenv("TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS", "12000") or "12000"))
-_TEACHER_SESSION_COMPACT_TS: Dict[str, float] = {}
-_TEACHER_SESSION_COMPACT_LOCK = threading.Lock()
-_SESSION_INDEX_LOCKS: Dict[str, threading.RLock] = {}
-_SESSION_INDEX_LOCKS_LOCK = threading.Lock()
-TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY = os.getenv("TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS = max(0, int(os.getenv("TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS", "1500") or "1500"))
-TEACHER_MEMORY_AUTO_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS = max(6, int(os.getenv("TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS", "12") or "12"))
-TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY = max(1, int(os.getenv("TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY", "8") or "8"))
-TEACHER_MEMORY_FLUSH_ENABLED = os.getenv("TEACHER_MEMORY_FLUSH_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES = max(1, int(os.getenv("TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES", "24") or "24"))
-TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS = max(500, int(os.getenv("TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS", "2400") or "2400"))
-TEACHER_MEMORY_AUTO_APPLY_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_APPLY_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-_TEACHER_MEMORY_AUTO_APPLY_TARGETS_RAW = str(os.getenv("TEACHER_MEMORY_AUTO_APPLY_TARGETS", "DAILY,MEMORY") or "DAILY,MEMORY")
+SESSION_INDEX_MAX_ITEMS = _settings.session_index_max_items()
+TEACHER_SESSION_COMPACT_ENABLED = _settings.teacher_session_compact_enabled()
+TEACHER_SESSION_COMPACT_MAIN_ONLY = _settings.teacher_session_compact_main_only()
+TEACHER_SESSION_COMPACT_MAX_MESSAGES = _settings.teacher_session_compact_max_messages()
+TEACHER_SESSION_COMPACT_KEEP_TAIL = _settings.teacher_session_compact_keep_tail(
+    TEACHER_SESSION_COMPACT_MAX_MESSAGES
+)
+TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC = _settings.teacher_session_compact_min_interval_sec()
+TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS = _settings.teacher_session_compact_max_source_chars()
+TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY = _settings.teacher_session_context_include_summary()
+TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS = _settings.teacher_session_context_summary_max_chars()
+TEACHER_MEMORY_AUTO_ENABLED = _settings.teacher_memory_auto_enabled()
+TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS = _settings.teacher_memory_auto_min_content_chars()
+TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY = _settings.teacher_memory_auto_max_proposals_per_day()
+TEACHER_MEMORY_FLUSH_ENABLED = _settings.teacher_memory_flush_enabled()
+TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES = _settings.teacher_memory_flush_margin_messages()
+TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS = _settings.teacher_memory_flush_max_source_chars()
+TEACHER_MEMORY_AUTO_APPLY_ENABLED = _settings.teacher_memory_auto_apply_enabled()
+_TEACHER_MEMORY_AUTO_APPLY_TARGETS_RAW = _settings.teacher_memory_auto_apply_targets_raw()
 TEACHER_MEMORY_AUTO_APPLY_TARGETS = {
     p.strip().upper()
     for p in _TEACHER_MEMORY_AUTO_APPLY_TARGETS_RAW.split(",")
@@ -573,60 +543,40 @@ TEACHER_MEMORY_AUTO_APPLY_TARGETS = {
 }
 if not TEACHER_MEMORY_AUTO_APPLY_TARGETS:
     TEACHER_MEMORY_AUTO_APPLY_TARGETS = {"DAILY", "MEMORY"}
-TEACHER_MEMORY_AUTO_APPLY_STRICT = os.getenv("TEACHER_MEMORY_AUTO_APPLY_STRICT", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_MEMORY_AUTO_INFER_ENABLED = os.getenv("TEACHER_MEMORY_AUTO_INFER_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS = max(2, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS", "2") or "2"))
-TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS = max(
-    4,
-    min(80, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS", "24") or "24")),
-)
-TEACHER_MEMORY_AUTO_INFER_MIN_CHARS = max(8, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_CHARS", "16") or "16"))
-TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY = max(
-    0,
-    min(100, int(os.getenv("TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY", "58") or "58")),
-)
-TEACHER_MEMORY_DECAY_ENABLED = os.getenv("TEACHER_MEMORY_DECAY_ENABLED", "1").lower() in {"1", "true", "yes", "on"}
-TEACHER_MEMORY_TTL_DAYS_MEMORY = max(0, int(os.getenv("TEACHER_MEMORY_TTL_DAYS_MEMORY", "180") or "180"))
-TEACHER_MEMORY_TTL_DAYS_DAILY = max(0, int(os.getenv("TEACHER_MEMORY_TTL_DAYS_DAILY", "14") or "14"))
-TEACHER_MEMORY_CONTEXT_MAX_ENTRIES = max(4, int(os.getenv("TEACHER_MEMORY_CONTEXT_MAX_ENTRIES", "18") or "18"))
-TEACHER_MEMORY_SEARCH_FILTER_EXPIRED = os.getenv("TEACHER_MEMORY_SEARCH_FILTER_EXPIRED", "1").lower() in {"1", "true", "yes", "on"}
-DISCUSSION_COMPLETE_MARKER = os.getenv("DISCUSSION_COMPLETE_MARKER", "【个性化作业】")
-GRADE_COUNT_CONF_THRESHOLD = float(os.getenv("GRADE_COUNT_CONF_THRESHOLD", "0.6") or "0.6")
-OCR_MAX_CONCURRENCY = max(1, int(os.getenv("OCR_MAX_CONCURRENCY", "4") or "4"))
-LLM_MAX_CONCURRENCY = max(1, int(os.getenv("LLM_MAX_CONCURRENCY", "8") or "8"))
-LLM_MAX_CONCURRENCY_STUDENT = max(1, int(os.getenv("LLM_MAX_CONCURRENCY_STUDENT", str(LLM_MAX_CONCURRENCY)) or str(LLM_MAX_CONCURRENCY)))
-LLM_MAX_CONCURRENCY_TEACHER = max(1, int(os.getenv("LLM_MAX_CONCURRENCY_TEACHER", str(LLM_MAX_CONCURRENCY)) or str(LLM_MAX_CONCURRENCY)))
-_OCR_SEMAPHORE = threading.BoundedSemaphore(OCR_MAX_CONCURRENCY)
-_LLM_SEMAPHORE = threading.BoundedSemaphore(LLM_MAX_CONCURRENCY)
-_LLM_SEMAPHORE_STUDENT = threading.BoundedSemaphore(LLM_MAX_CONCURRENCY_STUDENT)
-_LLM_SEMAPHORE_TEACHER = threading.BoundedSemaphore(LLM_MAX_CONCURRENCY_TEACHER)
+TEACHER_MEMORY_AUTO_APPLY_STRICT = _settings.teacher_memory_auto_apply_strict()
+TEACHER_MEMORY_AUTO_INFER_ENABLED = _settings.teacher_memory_auto_infer_enabled()
+TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS = _settings.teacher_memory_auto_infer_min_repeats()
+TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS = _settings.teacher_memory_auto_infer_lookback_turns()
+TEACHER_MEMORY_AUTO_INFER_MIN_CHARS = _settings.teacher_memory_auto_infer_min_chars()
+TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY = _settings.teacher_memory_auto_infer_min_priority()
+TEACHER_MEMORY_DECAY_ENABLED = _settings.teacher_memory_decay_enabled()
+TEACHER_MEMORY_TTL_DAYS_MEMORY = _settings.teacher_memory_ttl_days_memory()
+TEACHER_MEMORY_TTL_DAYS_DAILY = _settings.teacher_memory_ttl_days_daily()
+TEACHER_MEMORY_CONTEXT_MAX_ENTRIES = _settings.teacher_memory_context_max_entries()
+TEACHER_MEMORY_SEARCH_FILTER_EXPIRED = _settings.teacher_memory_search_filter_expired()
+DISCUSSION_COMPLETE_MARKER = _settings.discussion_complete_marker()
+GRADE_COUNT_CONF_THRESHOLD = _settings.grade_count_conf_threshold()
+OCR_MAX_CONCURRENCY = _settings.ocr_max_concurrency()
+LLM_MAX_CONCURRENCY = _settings.llm_max_concurrency()
+LLM_MAX_CONCURRENCY_STUDENT = _settings.llm_max_concurrency_student(LLM_MAX_CONCURRENCY)
+LLM_MAX_CONCURRENCY_TEACHER = _settings.llm_max_concurrency_teacher(LLM_MAX_CONCURRENCY)
 
-CHAT_MAX_MESSAGES = max(4, int(os.getenv("CHAT_MAX_MESSAGES", "14") or "14"))
-CHAT_MAX_MESSAGES_STUDENT = max(4, int(os.getenv("CHAT_MAX_MESSAGES_STUDENT", str(max(CHAT_MAX_MESSAGES, 40))) or str(max(CHAT_MAX_MESSAGES, 40))))
-CHAT_MAX_MESSAGES_TEACHER = max(4, int(os.getenv("CHAT_MAX_MESSAGES_TEACHER", str(max(CHAT_MAX_MESSAGES, 40))) or str(max(CHAT_MAX_MESSAGES, 40))))
-CHAT_MAX_MESSAGE_CHARS = max(256, int(os.getenv("CHAT_MAX_MESSAGE_CHARS", "2000") or "2000"))
-CHAT_EXTRA_SYSTEM_MAX_CHARS = max(512, int(os.getenv("CHAT_EXTRA_SYSTEM_MAX_CHARS", "6000") or "6000"))
-CHAT_MAX_TOOL_ROUNDS = max(1, int(os.getenv("CHAT_MAX_TOOL_ROUNDS", "5") or "5"))
-CHAT_MAX_TOOL_CALLS = max(1, int(os.getenv("CHAT_MAX_TOOL_CALLS", "12") or "12"))
-CHAT_STUDENT_INFLIGHT_LIMIT = max(1, int(os.getenv("CHAT_STUDENT_INFLIGHT_LIMIT", "1") or "1"))
-_STUDENT_INFLIGHT: Dict[str, int] = {}
-_STUDENT_INFLIGHT_LOCK = threading.Lock()
+CHAT_MAX_MESSAGES = _settings.chat_max_messages()
+CHAT_MAX_MESSAGES_STUDENT = _settings.chat_max_messages_student(CHAT_MAX_MESSAGES)
+CHAT_MAX_MESSAGES_TEACHER = _settings.chat_max_messages_teacher(CHAT_MAX_MESSAGES)
+CHAT_MAX_MESSAGE_CHARS = _settings.chat_max_message_chars()
+CHAT_EXTRA_SYSTEM_MAX_CHARS = _settings.chat_extra_system_max_chars()
+CHAT_MAX_TOOL_ROUNDS = _settings.chat_max_tool_rounds()
+CHAT_MAX_TOOL_CALLS = _settings.chat_max_tool_calls()
+CHAT_STUDENT_INFLIGHT_LIMIT = _settings.chat_student_inflight_limit()
 
-PROFILE_CACHE_TTL_SEC = max(0, int(os.getenv("PROFILE_CACHE_TTL_SEC", "10") or "10"))
-ASSIGNMENT_DETAIL_CACHE_TTL_SEC = max(0, int(os.getenv("ASSIGNMENT_DETAIL_CACHE_TTL_SEC", "10") or "10"))
-_PROFILE_CACHE: Dict[str, Tuple[float, float, Dict[str, Any]]] = {}
-_PROFILE_CACHE_LOCK = threading.Lock()
-_ASSIGNMENT_DETAIL_CACHE: Dict[Tuple[str, bool], Tuple[float, Tuple[float, float, float], Dict[str, Any]]] = {}
-_ASSIGNMENT_DETAIL_CACHE_LOCK = threading.Lock()
+PROFILE_CACHE_TTL_SEC = _settings.profile_cache_ttl_sec()
+ASSIGNMENT_DETAIL_CACHE_TTL_SEC = _settings.assignment_detail_cache_ttl_sec()
 
-PROFILE_UPDATE_ASYNC = os.getenv("PROFILE_UPDATE_ASYNC", "1").lower() in {"1", "true", "yes", "on"}
-PROFILE_UPDATE_QUEUE_MAX = max(10, int(os.getenv("PROFILE_UPDATE_QUEUE_MAX", "500") or "500"))
-_PROFILE_UPDATE_QUEUE: deque[Dict[str, Any]] = deque()
-_PROFILE_UPDATE_LOCK = threading.Lock()
-_PROFILE_UPDATE_EVENT = threading.Event()
-_PROFILE_UPDATE_WORKER_STARTED = False
-_PROFILE_UPDATE_STOP_EVENT = threading.Event()
-_PROFILE_UPDATE_WORKER_THREAD: Optional[threading.Thread] = None
+PROFILE_UPDATE_ASYNC = _settings.profile_update_async()
+PROFILE_UPDATE_QUEUE_MAX = _settings.profile_update_queue_max()
+
+_reset_runtime_state(sys.modules[__name__], create_chat_idempotency_store=create_chat_idempotency_store)
 
 _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS = [
     re.compile(p, re.I)
@@ -1126,7 +1076,7 @@ def _chat_lane_store():
     tenant_key = str(TENANT_ID or "default").strip() or "default"
     store = _CHAT_LANE_STORES.get(tenant_key)
     if store is None:
-        if os.getenv("PYTEST_CURRENT_TEST"):
+        if _settings.is_pytest():
             from .chat_lane_store import MemoryLaneStore
 
             store = MemoryLaneStore(
@@ -1179,14 +1129,14 @@ class _InlineTestBackend:
 def _queue_backend():
     global _QUEUE_BACKEND
     if _QUEUE_BACKEND is None:
-        if os.getenv("PYTEST_CURRENT_TEST"):
+        if _settings.is_pytest():
             _QUEUE_BACKEND = _InlineTestBackend()
         else:
             _QUEUE_BACKEND = get_queue_backend(tenant_id=TENANT_ID or None)
     return _QUEUE_BACKEND
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    if _settings.is_pytest():
         q = CHAT_JOB_LANES.get(lane_id)
         queued = len(q) if q else 0
         active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
@@ -1194,7 +1144,7 @@ def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
     return _chat_lane_store().lane_load(lane_id)
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    if _settings.is_pytest():
         q = CHAT_JOB_LANES.get(lane_id)
         if not q:
             return 0
@@ -1246,13 +1196,13 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
         CHAT_JOB_LANES.pop(lane_id, None)
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    if _settings.is_pytest():
         CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
         return
     _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    if _settings.is_pytest():
         if CHAT_LANE_DEBOUNCE_MS <= 0:
             return None
         info = CHAT_LANE_RECENT.get(lane_id)
@@ -1517,7 +1467,7 @@ def append_student_session_message(
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 def resolve_teacher_id(teacher_id: Optional[str] = None) -> str:
-    raw = (teacher_id or os.getenv("DEFAULT_TEACHER_ID") or "teacher").strip()
+    raw = (teacher_id or _settings.default_teacher_id() or "teacher").strip()
     # Use a stable filesystem-safe id; keep original value in USER.md if needed.
     return safe_fs_id(raw, prefix="teacher")
 
@@ -2106,7 +2056,7 @@ def _stop_inline_workers() -> None:
 def start_tenant_runtime() -> None:
     _validate_master_key_policy_impl(getenv=os.getenv)
     backend = _queue_backend()
-    if not os.getenv("PYTEST_CURRENT_TEST"):
+    if not _settings.is_pytest():
         from .rq_tasks import require_redis
 
         require_redis()
