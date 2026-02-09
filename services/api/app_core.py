@@ -228,7 +228,7 @@ from .chart_agent_run_service import (
 )
 from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
-from .handlers import chat_handlers
+from .handlers import assignment_upload_handlers, chat_handlers, exam_upload_handlers
 from .content_catalog_service import (
     ContentCatalogDeps,
     list_lessons as _list_lessons_impl,
@@ -3333,6 +3333,43 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         start_chat_api=lambda req: _start_chat_api_impl(req, deps=_chat_api_deps()),
     )
 
+def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
+    return exam_upload_handlers.ExamUploadHandlerDeps(
+        start_exam_upload=lambda *args, **kwargs: _start_exam_upload_impl(*args, **kwargs, deps=_exam_upload_start_deps()),
+        exam_upload_status=lambda job_id: _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps()),
+        exam_upload_draft=lambda job_id: _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps()),
+        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_api_impl(**kwargs, deps=_exam_upload_api_deps()),
+        exam_upload_confirm=lambda job_id: _exam_upload_confirm_api_impl(job_id, deps=_exam_upload_api_deps()),
+    )
+
+def _assignment_upload_handlers_deps() -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
+    return assignment_upload_handlers.AssignmentUploadHandlerDeps(
+        assignment_upload_legacy=lambda **kwargs: _assignment_upload_legacy_impl(
+            deps=_assignment_upload_legacy_deps(),
+            **kwargs,
+        ),
+        start_assignment_upload=lambda **kwargs: _start_assignment_upload_impl(
+            deps=_assignment_upload_start_deps(),
+            **kwargs,
+        ),
+        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps()),
+        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps()),
+        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: _save_assignment_upload_draft_impl(
+            job_id,
+            requirements,
+            questions,
+            deps=_assignment_upload_draft_save_deps(),
+        ),
+        load_upload_job=load_upload_job,
+        ensure_assignment_upload_confirm_ready=_ensure_assignment_upload_confirm_ready_impl,
+        confirm_assignment_upload=lambda *args, **kwargs: _confirm_assignment_upload_impl(
+            *args,
+            **kwargs,
+            deps=_assignment_upload_confirm_deps(),
+        ),
+        upload_job_path=upload_job_path,
+    )
+
 async def chat(req: ChatRequest):
     return await chat_handlers.chat(req, deps=_chat_handlers_deps())
 
@@ -4609,21 +4646,18 @@ async def assignment_upload(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    try:
-        return await _assignment_upload_legacy_impl(
-            deps=_assignment_upload_legacy_deps(),
-            assignment_id=assignment_id,
-            date=date,
-            scope=scope,
-            class_name=class_name,
-            student_ids=student_ids,
-            files=files,
-            answer_files=answer_files,
-            ocr_mode=ocr_mode,
-            language=language,
-        )
-    except AssignmentUploadLegacyError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload(
+        assignment_id=assignment_id,
+        date=date,
+        scope=scope,
+        class_name=class_name,
+        student_ids=student_ids,
+        files=files,
+        answer_files=answer_files,
+        ocr_mode=ocr_mode,
+        language=language,
+        deps=_assignment_upload_handlers_deps(),
+    )
 
 async def exam_upload_start(
     exam_id: Optional[str] = Form(""),
@@ -4635,51 +4669,29 @@ async def exam_upload_start(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    try:
-        return await _start_exam_upload_impl(
-            exam_id,
-            date,
-            class_name,
-            paper_files,
-            score_files,
-            answer_files,
-            ocr_mode,
-            language,
-            deps=_exam_upload_start_deps(),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    return await exam_upload_handlers.exam_upload_start(
+        exam_id=exam_id,
+        date=date,
+        class_name=class_name,
+        paper_files=paper_files,
+        score_files=score_files,
+        answer_files=answer_files,
+        ocr_mode=ocr_mode,
+        language=language,
+        deps=_exam_upload_handlers_deps(),
+    )
 
 async def exam_upload_status(job_id: str):
-    try:
-        return _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps())
-    except ExamUploadApiError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await exam_upload_handlers.exam_upload_status(job_id, deps=_exam_upload_handlers_deps())
 
 async def exam_upload_draft(job_id: str):
-    try:
-        return _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps())
-    except ExamUploadApiError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await exam_upload_handlers.exam_upload_draft(job_id, deps=_exam_upload_handlers_deps())
 
 async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
-    try:
-        return _exam_upload_draft_save_api_impl(
-            job_id=req.job_id,
-            meta=req.meta,
-            questions=req.questions,
-            score_schema=req.score_schema,
-            answer_key_text=req.answer_key_text,
-            deps=_exam_upload_api_deps(),
-        )
-    except ExamUploadApiError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await exam_upload_handlers.exam_upload_draft_save(req, deps=_exam_upload_handlers_deps())
 
 async def exam_upload_confirm(req: ExamUploadConfirmRequest):
-    try:
-        return _exam_upload_confirm_api_impl(req.job_id, deps=_exam_upload_api_deps())
-    except ExamUploadApiError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await exam_upload_handlers.exam_upload_confirm(req, deps=_exam_upload_handlers_deps())
 
 async def assignment_upload_start(
     assignment_id: str = Form(...),
@@ -4693,72 +4705,31 @@ async def assignment_upload_start(
     ocr_mode: Optional[str] = Form("FREE_OCR"),
     language: Optional[str] = Form("zh"),
 ):
-    try:
-        return await _start_assignment_upload_impl(
-            assignment_id=assignment_id,
-            date=date,
-            due_at=due_at,
-            scope=scope,
-            class_name=class_name,
-            student_ids=student_ids,
-            files=files,
-            answer_files=answer_files,
-            ocr_mode=ocr_mode,
-            language=language,
-            deps=_assignment_upload_start_deps(),
-        )
-    except AssignmentUploadStartError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload_start(
+        assignment_id=assignment_id,
+        date=date,
+        due_at=due_at,
+        scope=scope,
+        class_name=class_name,
+        student_ids=student_ids,
+        files=files,
+        answer_files=answer_files,
+        ocr_mode=ocr_mode,
+        language=language,
+        deps=_assignment_upload_handlers_deps(),
+    )
 
 async def assignment_upload_status(job_id: str):
-    try:
-        return _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps())
-    except AssignmentUploadQueryError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload_status(job_id, deps=_assignment_upload_handlers_deps())
 
 async def assignment_upload_draft(job_id: str):
-    try:
-        return _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps())
-    except AssignmentUploadQueryError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload_draft(job_id, deps=_assignment_upload_handlers_deps())
 
 async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
-    try:
-        return _save_assignment_upload_draft_impl(
-            req.job_id,
-            req.requirements,
-            req.questions,
-            deps=_assignment_upload_draft_save_deps(),
-        )
-    except AssignmentUploadDraftSaveError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload_draft_save(req, deps=_assignment_upload_handlers_deps())
 
 async def assignment_upload_confirm(req: UploadConfirmRequest):
-    try:
-        job = load_upload_job(req.job_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="job not found")
-
-    try:
-        ready = _ensure_assignment_upload_confirm_ready_impl(job)
-    except AssignmentUploadConfirmGateError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    if ready is not None:
-        return ready
-
-    strict = True if req.strict_requirements is None else bool(req.strict_requirements)
-    job_dir = upload_job_path(req.job_id)
-    try:
-        return _confirm_assignment_upload_impl(
-            req.job_id,
-            job,
-            job_dir,
-            requirements_override=req.requirements_override,
-            strict_requirements=strict,
-            deps=_assignment_upload_confirm_deps(),
-        )
-    except AssignmentUploadConfirmError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    return await assignment_upload_handlers.assignment_upload_confirm(req, deps=_assignment_upload_handlers_deps())
 
 async def assignment_download(assignment_id: str, file: str):
     try:
