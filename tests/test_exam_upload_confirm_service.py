@@ -106,6 +106,32 @@ class ExamUploadConfirmServiceTest(unittest.TestCase):
             self.assertEqual(ctx.exception.detail, "invalid exam_id")
             self.assertEqual(writes[-1][1].get("status"), "failed")
 
+    def test_requires_score_schema_confirmation_before_confirm(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "exam_jobs" / "job-1"
+            (job_dir / "derived").mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "exam_id": "EX1",
+                        "meta": {"class_name": "高二2403班"},
+                        "counts": {},
+                        "score_schema": {"needs_confirm": True},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "derived" / "responses_scored.csv").write_text("student_id,question_id,score\ns1,Q1,1\n", encoding="utf-8")
+
+            deps = self._deps(root, writes)
+            with self.assertRaises(ExamUploadConfirmError) as ctx:
+                confirm_exam_upload("job-1", {"exam_id": "EX1"}, job_dir, deps)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
+
 
 if __name__ == "__main__":
     unittest.main()

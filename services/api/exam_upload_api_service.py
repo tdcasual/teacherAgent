@@ -110,7 +110,22 @@ def exam_upload_confirm(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, An
             status_code=400,
             detail=deps.exam_upload_not_ready_detail(job, "解析尚未完成，请稍后再确认创建考试。"),
         )
+
     job_dir = deps.exam_job_path(job_id)
+    override = deps.load_exam_draft_override(job_dir)
+    override_score_schema = override.get("score_schema") if isinstance(override.get("score_schema"), dict) else {}
+    confirmed_mapping = bool(override_score_schema.get("confirm"))
+
+    if bool(job.get("needs_confirm")) and not confirmed_mapping:
+        raise ExamUploadApiError(
+            status_code=400,
+            detail={
+                "error": "score_schema_confirm_required",
+                "message": "成绩映射置信度不足，请先在草稿中确认物理分映射后再创建考试。",
+                "needs_confirm": True,
+            },
+        )
+
     try:
         return deps.confirm_exam_upload(job_id, job, job_dir)
     except Exception as exc:

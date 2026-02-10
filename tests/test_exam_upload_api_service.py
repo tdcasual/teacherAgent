@@ -105,6 +105,24 @@ class ExamUploadApiServiceTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual((ctx.exception.detail or {}).get("error"), "exam_id_conflict")
 
+    def test_confirm_requires_score_schema_confirmation_when_needed(self):
+        deps = ExamUploadApiDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "needs_confirm": True},
+            exam_job_path=lambda _job_id: Path("/tmp/job-needs-confirm"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        with self.assertRaises(ExamUploadApiError) as ctx:
+            exam_upload_confirm("job-needs-confirm", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
+
     def test_draft_reads_parsed_and_builds_response(self):
         with TemporaryDirectory() as td:
             root = Path(td)

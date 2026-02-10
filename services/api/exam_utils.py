@@ -10,7 +10,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .paths import resolve_analysis_dir, resolve_exam_dir, resolve_manifest_path
 
@@ -253,15 +253,37 @@ def _parse_xlsx_with_script(
     out_csv: Path,
     exam_id: str,
     class_name_hint: str,
-) -> Optional[List[Dict[str, Any]]]:
+) -> Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]:
     from .config import APP_ROOT
     script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
-    cmd = ["python3", str(script), "--scores", str(xlsx_path), "--exam-id", exam_id, "--out", str(out_csv)]
+    report_path = out_csv.with_suffix(out_csv.suffix + ".report.json")
+    cmd = [
+        "python3",
+        str(script),
+        "--scores",
+        str(xlsx_path),
+        "--exam-id",
+        exam_id,
+        "--out",
+        str(out_csv),
+        "--report",
+        str(report_path),
+    ]
     if class_name_hint:
         cmd += ["--class-name", class_name_hint]
     proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
+    report: Dict[str, Any] = {}
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            if not isinstance(report, dict):
+                report = {}
+        except Exception:
+            report = {}
     if proc.returncode != 0 or not out_csv.exists():
-        return None
+        if proc.returncode != 0:
+            report.setdefault("error", (proc.stderr or proc.stdout or "").strip()[:300])
+        return None, report
     file_rows: List[Dict[str, Any]] = []
     with out_csv.open(encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -270,4 +292,4 @@ def _parse_xlsx_with_script(
             item["score"] = parse_score_value(row.get("score"))
             item["is_correct"] = row.get("is_correct") or ""
             file_rows.append(item)
-    return file_rows
+    return file_rows, report

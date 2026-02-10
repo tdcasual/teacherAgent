@@ -75,6 +75,36 @@ class ExamUploadDraftServiceTest(unittest.TestCase):
         self.assertEqual(draft.get("answer_key", {}).get("count"), 2)
         self.assertEqual(draft.get("questions"), [{"question_id": "Q1", "max_score": 5}])
 
+    def test_build_draft_exposes_needs_confirm_and_override_confirm_flag(self):
+        parsed = {
+            "exam_id": "EX1",
+            "meta": {"date": "2026-02-07", "class_name": "高二2403班"},
+            "paper_files": ["paper.pdf"],
+            "score_files": ["scores.xlsx"],
+            "answer_files": [],
+            "counts": {"students": 2},
+            "questions": [{"question_id": "SUBJECT_PHYSICS", "max_score": 60}],
+            "warnings": [],
+            "answer_key": {"count": 0},
+            "scoring": {"status": "scored"},
+            "counts_scored": {"students": 2},
+            "totals_summary": {"avg_total": 38.5},
+            "score_schema": {"needs_confirm": True, "subject": {"coverage": 0.5}},
+            "needs_confirm": True,
+        }
+        job = {"exam_id": "EX1", "date": "2026-02-07", "class_name": "高二2403班", "draft_version": 1}
+
+        draft = build_exam_upload_draft(
+            "job-1",
+            job,
+            parsed,
+            {"score_schema": {"confirm": True}},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            answer_text_excerpt="",
+        )
+        self.assertFalse(bool(draft.get("needs_confirm")))
+        self.assertTrue(bool((draft.get("score_schema") or {}).get("confirm")))
+
 
 if __name__ == "__main__":
     unittest.main()

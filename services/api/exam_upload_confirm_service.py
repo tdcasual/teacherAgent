@@ -80,6 +80,21 @@ def confirm_exam_upload(
     parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
 
     override = deps.load_exam_draft_override(job_dir)
+    parsed_score_schema = parsed.get("score_schema") if isinstance(parsed.get("score_schema"), dict) else {}
+    override_score_schema = override.get("score_schema") if isinstance(override.get("score_schema"), dict) else {}
+    merged_score_schema = {**parsed_score_schema, **override_score_schema} if isinstance(parsed_score_schema, dict) else override_score_schema
+    needs_confirm = bool(merged_score_schema.get("needs_confirm"))
+    confirmed_mapping = bool(merged_score_schema.get("confirm"))
+    if needs_confirm and not confirmed_mapping:
+        deps.write_exam_job(job_id, {"status": "done", "step": "await_confirm", "progress": 100, "needs_confirm": True})
+        raise ExamUploadConfirmError(
+            400,
+            {
+                "error": "score_schema_confirm_required",
+                "message": "成绩映射置信度不足，请先在草稿中确认物理分映射后再创建考试。",
+                "needs_confirm": True,
+            },
+        )
     exam_id = str(parsed.get("exam_id") or job.get("exam_id") or "").strip()
     if not exam_id:
         raise ExamUploadConfirmError(400, "exam_id missing")

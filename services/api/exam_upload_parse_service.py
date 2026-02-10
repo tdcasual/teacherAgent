@@ -19,7 +19,7 @@ class ExamUploadParseDeps:
     extract_text_from_file: Callable[..., str]
     extract_text_from_pdf: Callable[..., str]
     extract_text_from_image: Callable[..., str]
-    parse_xlsx_with_script: Callable[[Path, Path, str, str], Optional[List[Dict[str, Any]]]]
+    parse_xlsx_with_script: Callable[[Path, Path, str, str], Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]]
     xlsx_to_table_preview: Callable[[Path], str]
     xls_to_table_preview: Callable[[Path], str]
     llm_parse_exam_scores: Callable[[str], Dict[str, Any]]
@@ -94,6 +94,7 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
 
     all_rows: List[Dict[str, Any]] = []
     warnings: List[str] = []
+    score_schema: Dict[str, Any] = {}
     class_name_hint = str(job.get("class_name") or "").strip()
 
     for idx, fname in enumerate(score_files):
@@ -102,7 +103,10 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
         try:
             if score_path.suffix.lower() == ".xlsx":
                 tmp_csv = derived_dir / f"responses_part_{idx}.csv"
-                file_rows = deps.parse_xlsx_with_script(score_path, tmp_csv, exam_id, class_name_hint) or []
+                parsed_rows, parsed_score_schema = deps.parse_xlsx_with_script(score_path, tmp_csv, exam_id, class_name_hint)
+                file_rows = parsed_rows or []
+                if isinstance(parsed_score_schema, dict) and parsed_score_schema:
+                    score_schema = {**score_schema, **parsed_score_schema}
                 if not file_rows:
                     table_preview = deps.xlsx_to_table_preview(score_path)
                     if table_preview.strip():
@@ -328,11 +332,13 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
                 "max_score": max_scores.get(qid),
             }
         )
-    score_mode = (
-        "total"
-        if (len(questions_for_draft) == 1 and questions_for_draft[0].get("question_id") == "TOTAL")
-        else "question"
-    )
+    score_qids = [str(item.get("question_id") or "").strip() for item in questions_for_draft if item.get("question_id")]
+    if len(score_qids) == 1 and score_qids[0] == "TOTAL":
+        score_mode = "total"
+    elif score_qids and all(qid.startswith("SUBJECT_") for qid in score_qids):
+        score_mode = "subject"
+    else:
+        score_mode = "question"
 
     parsed_payload = {
         "exam_id": exam_id,
@@ -378,9 +384,23 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
             "median_total": round(median_total, 3),
             "max_total_observed": max(totals) if totals else 0.0,
         },
+        "score_schema": score_schema,
         "warnings": warnings,
         "notes": "paper_text_empty" if not paper_text.strip() else "",
     }
+
+    needs_confirm = bool(score_schema.get("needs_confirm")) if isinstance(score_schema, dict) else False
+    if needs_confirm:
+        unresolved = ((score_schema.get("subject") or {}).get("unresolved_students") or []) if isinstance(score_schema, dict) else []
+        unresolved_count = len(unresolved) if isinstance(unresolved, list) else 0
+        if unresolved_count > 0:
+            preview = "，".join([str(x) for x in unresolved[:5]])
+            more = f" 等{unresolved_count}人" if unresolved_count > 5 else ""
+            warnings.append(f"物理成绩解析置信度不足：{preview}{more} 未能自动识别，请在草稿中确认物理分映射。")
+        else:
+            warnings.append("物理成绩解析置信度不足，请在草稿中确认物理分映射。")
+        parsed_payload["warnings"] = warnings
+    parsed_payload["needs_confirm"] = needs_confirm
     (job_dir / "parsed.json").write_text(json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     deps.write_exam_job(
@@ -397,5 +417,7 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
             "answer_key": parsed_payload.get("answer_key"),
             "warnings": warnings,
             "draft_version": 1,
+            "needs_confirm": needs_confirm,
+            "score_schema": score_schema,
         },
     )

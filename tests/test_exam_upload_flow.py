@@ -425,6 +425,173 @@ class ExamUploadFlowTest(unittest.TestCase):
                 self.assertEqual(_score_of("李四"), "2")
                 self.assertEqual(_score_of("王五"), "0")
 
+    def test_exam_upload_subject_score_sheet_extracts_physics(self):
+        with TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            app_mod = load_app(tmp_dir)
+            with TestClient(app_mod.app) as client:
+
+                exam_id = "EX_UPLOAD_SUBJECT_PHYSICS"
+                paper_pdf = make_pdf_bytes("Physics Exam Paper")
+                xlsx = make_minimal_xlsx(
+                    headers=[
+                        "考生姓名",
+                        "考号",
+                        "总分",
+                        "班次/校次",
+                        "科目",
+                        "分数",
+                        "班次/校次",
+                        "科目",
+                        "分数",
+                        "班次/校次",
+                        "科目",
+                        "分数",
+                    ],
+                    rows=[
+                        ["平均分", "-", 371.7, "-/-", "语文", 92.1, "-/-", "数学", 85.4, "-/-", "物理", 29.8],
+                        ["张三", "7118210001", 450.0, "2/10", "语文", 96, "4/10", "数学", 90, "1/10", "物理", 42],
+                        ["李四", "7118210002", 430.5, "5/10", "语文", 91, "3/10", "数学", 88, "6/10", "物理", 35],
+                    ],
+                )
+
+                files = [
+                    ("paper_files", ("paper.pdf", paper_pdf, "application/pdf")),
+                    (
+                        "score_files",
+                        ("scores.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                    ),
+                ]
+                data = {"exam_id": exam_id, "date": "2026-02-05"}
+
+                res = client.post("/exam/upload/start", data=data, files=files)
+                self.assertEqual(res.status_code, 200)
+                payload = res.json()
+                self.assertTrue(payload["ok"])
+                job_id = payload["job_id"]
+
+                status = None
+                for _ in range(120):
+                    res = client.get("/exam/upload/status", params={"job_id": job_id})
+                    self.assertEqual(res.status_code, 200)
+                    status_payload = res.json()
+                    status = status_payload.get("status")
+                    if status == "done":
+                        break
+                    if status == "failed":
+                        self.fail(f"exam upload failed: {status_payload}")
+                    time.sleep(0.1)
+                self.assertEqual(status, "done")
+
+                res = client.get("/exam/upload/draft", params={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+                draft = res.json()["draft"]
+                self.assertEqual((draft.get("meta") or {}).get("score_mode"), "subject")
+                questions = draft.get("questions") or []
+                self.assertEqual(len(questions), 1)
+                self.assertEqual(str(questions[0].get("question_id") or "").strip(), "SUBJECT_PHYSICS")
+
+                res = client.post("/exam/upload/confirm", json={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+
+                scored_path = Path(os.environ["DATA_DIR"]) / "exams" / exam_id / "derived" / "responses_scored.csv"
+                self.assertTrue(scored_path.exists())
+                with scored_path.open(encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    rows = [r for r in reader if (r.get("question_id") or "").strip() == "SUBJECT_PHYSICS"]
+
+                self.assertEqual(len(rows), 2)
+
+                def _score_of(name: str) -> str:
+                    for r in rows:
+                        if (r.get("student_name") or "").strip() == name:
+                            return str(r.get("score") or "").strip()
+                    return ""
+
+                self.assertAlmostEqual(float(_score_of("张三") or 0), 42.0)
+                self.assertAlmostEqual(float(_score_of("李四") or 0), 35.0)
+
+    def test_exam_upload_subject_mode_requires_draft_confirmation_when_low_confidence(self):
+        with TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            app_mod = load_app(tmp_dir)
+            with TestClient(app_mod.app) as client:
+
+                exam_id = "EX_UPLOAD_SUBJECT_NEEDS_CONFIRM"
+                paper_pdf = make_pdf_bytes("Physics Exam Paper")
+                xlsx = make_minimal_xlsx(
+                    headers=[
+                        "考生姓名",
+                        "考号",
+                        "总分",
+                        "科目",
+                        "分数",
+                    ],
+                    rows=[
+                        ["张三", "7118210001", 450.0, "物理", 42],
+                        ["李四", "7118210002", 430.5, "化学", 35],
+                    ],
+                )
+
+                files = [
+                    ("paper_files", ("paper.pdf", paper_pdf, "application/pdf")),
+                    (
+                        "score_files",
+                        ("scores.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                    ),
+                ]
+                data = {"exam_id": exam_id, "date": "2026-02-05"}
+
+                res = client.post("/exam/upload/start", data=data, files=files)
+                self.assertEqual(res.status_code, 200)
+                payload = res.json()
+                self.assertTrue(payload["ok"])
+                job_id = payload["job_id"]
+
+                status = None
+                for _ in range(120):
+                    res = client.get("/exam/upload/status", params={"job_id": job_id})
+                    self.assertEqual(res.status_code, 200)
+                    status_payload = res.json()
+                    status = status_payload.get("status")
+                    if status == "done":
+                        break
+                    if status == "failed":
+                        self.fail(f"exam upload failed: {status_payload}")
+                    time.sleep(0.1)
+                self.assertEqual(status, "done")
+
+                res = client.get("/exam/upload/status", params={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+                status_payload = res.json()
+                self.assertTrue(bool(status_payload.get("needs_confirm")))
+
+                res = client.post("/exam/upload/confirm", json={"job_id": job_id})
+                self.assertEqual(res.status_code, 400)
+                detail = res.json().get("detail") or {}
+                self.assertEqual(detail.get("error"), "score_schema_confirm_required")
+
+                res = client.get("/exam/upload/draft", params={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+                draft = res.json().get("draft") or {}
+                self.assertTrue(bool(draft.get("needs_confirm")))
+                score_schema = draft.get("score_schema") or {}
+
+                res = client.post(
+                    "/exam/upload/draft/save",
+                    json={
+                        "job_id": job_id,
+                        "meta": draft.get("meta") or {},
+                        "questions": draft.get("questions") or [],
+                        "score_schema": {**score_schema, "confirm": True},
+                        "answer_key_text": draft.get("answer_key_text") or "",
+                    },
+                )
+                self.assertEqual(res.status_code, 200)
+
+                res = client.post("/exam/upload/confirm", json={"job_id": job_id})
+                self.assertEqual(res.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()

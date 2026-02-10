@@ -138,9 +138,10 @@ class ChatJobFlowTest(unittest.TestCase):
                     )
                     self.assertEqual(review.status_code, 200)
 
-                for teacher_id, request_id, expected_model in (
-                    ("teacher_alpha", "req_teacher_alpha_001", "model-alpha"),
-                    ("teacher_beta", "req_teacher_beta_001", "model-beta"),
+                for teacher_id, request_id, expected_model, agent_id in (
+                    ("teacher_alpha", "req_teacher_alpha_001", "model-alpha", None),
+                    ("teacher_beta", "req_teacher_beta_001", "model-beta", None),
+                    ("teacher_alpha", "req_teacher_alpha_002", "model-alpha", "opencode"),
                 ):
                     start = client.post(
                         "/chat/start",
@@ -148,6 +149,7 @@ class ChatJobFlowTest(unittest.TestCase):
                             "request_id": request_id,
                             "role": "teacher",
                             "teacher_id": teacher_id,
+                            "agent_id": agent_id,
                             "messages": [{"role": "user", "content": f"hello-{teacher_id}"}],
                         },
                     )

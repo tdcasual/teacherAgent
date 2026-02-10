@@ -62,6 +62,8 @@ def build_exam_upload_draft(
     questions = parsed.get("questions") or []
     score_schema = parsed.get("score_schema") or {}
     warnings = parsed.get("warnings") or []
+    score_schema = parsed.get("score_schema") or {}
+    needs_confirm = bool(parsed.get("needs_confirm"))
     answer_key = parsed.get("answer_key") or {}
     scoring = parsed.get("scoring") or {}
     counts_scored = parsed.get("counts_scored") or {}
@@ -72,6 +74,8 @@ def build_exam_upload_draft(
         questions = override.get("questions")
     if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):
         score_schema = {**score_schema, **override.get("score_schema")}
+    if score_schema.get("confirm") is True:
+        needs_confirm = False
 
     answer_key_text = str(override.get("answer_key_text") or "").strip()
     if answer_key_text:
@@ -103,6 +107,7 @@ def build_exam_upload_draft(
         "answer_key_text": answer_key_text,
         "answer_text_excerpt": answer_text_excerpt,
         "warnings": warnings,
+        "needs_confirm": needs_confirm,
         "draft_saved": bool(override),
         "draft_version": int(job.get("draft_version") or 1),
     }
