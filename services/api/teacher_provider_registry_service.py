@@ -193,6 +193,7 @@ def _catalog(registry: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "provider": provider_name,
                 "source": "private" if _as_bool(provider_cfg.get("private_provider"), False) else "shared",
+                "base_url": _as_str(provider_cfg.get("base_url")),
                 "modes": modes,
             }
         )
@@ -350,8 +351,7 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
     if not api_key:
         return {"ok": False, "error": "api_key_required"}
     shared_providers = deps.model_registry.get("providers") if isinstance(deps.model_registry.get("providers"), dict) else {}
-    if provider_id in shared_providers:
-        return {"ok": False, "error": "provider_id_conflicts_shared"}
+    # Allow overriding shared providers — private entry takes precedence in merged registry
 
     path = ensure_teacher_provider_registry(actor, deps=deps)
     with _lock(path):
@@ -397,9 +397,13 @@ def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProvi
         if "display_name" in args:
             current["display_name"] = _as_str(args.get("display_name")) or provider_id
         if "base_url" in args:
-            base_url = _normalize_base_url(args.get("base_url"), allow_http=allow_http)
-            if not base_url:
-                return {"ok": False, "error": "invalid_base_url"}
+            raw_base_url = _as_str(args.get("base_url"))
+            if raw_base_url:
+                base_url = _normalize_base_url(raw_base_url, allow_http=allow_http)
+                if not base_url:
+                    return {"ok": False, "error": "invalid_base_url"}
+            else:
+                base_url = ""
             current["base_url"] = base_url
         if "default_model" in args:
             current["default_model"] = _as_str(args.get("default_model"))
@@ -506,23 +510,84 @@ def resolve_provider_target(
     return resolve_private_provider_target(actor=actor, provider_id=provider_id, mode=mode, model=model, deps=deps)
 
 
+def resolve_shared_provider_target(
+    *,
+    provider_id: str,
+    mode: str = "openai-chat",
+    deps: TeacherProviderRegistryDeps,
+) -> Optional[Dict[str, Any]]:
+    """Resolve base_url + headers for a shared (built-in) provider so we can probe its /models endpoint."""
+    providers_raw = deps.model_registry.get("providers") if isinstance(deps.model_registry.get("providers"), dict) else {}
+    prov_cfg = providers_raw.get(provider_id)
+    if not isinstance(prov_cfg, dict):
+        return None
+    if _as_bool(prov_cfg.get("private_provider"), False):
+        return None
+    mode_val = _as_str(mode) or "openai-chat"
+    modes = prov_cfg.get("modes") if isinstance(prov_cfg.get("modes"), dict) else {}
+    mode_cfg = modes.get(mode_val) if isinstance(modes.get(mode_val), dict) else {}
+
+    # Resolve base_url: mode env → provider env → mode static → provider static
+    base_url = _as_str(deps.getenv(mode_cfg.get("base_url_env", ""), None)) or _as_str(deps.getenv(prov_cfg.get("base_url_env", ""), None))
+    if not base_url:
+        base_url = _as_str(mode_cfg.get("base_url")) or _as_str(prov_cfg.get("base_url"))
+    if not base_url:
+        return None
+
+    # Resolve api_key: LLM_API_KEY → provider api_key_envs
+    api_key = _as_str(deps.getenv("LLM_API_KEY", None))
+    if not api_key:
+        for env_name in (prov_cfg.get("api_key_envs") or []):
+            val = _as_str(deps.getenv(env_name, None))
+            if val:
+                api_key = val
+                break
+    if not api_key:
+        return None
+
+    # Build headers based on auth type
+    auth = prov_cfg.get("auth") if isinstance(prov_cfg.get("auth"), dict) else {}
+    auth_type = _as_str(auth.get("type")) or "bearer"
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+    if auth_type == "bearer":
+        header = _as_str(auth.get("header")) or "Authorization"
+        prefix = auth.get("prefix", "Bearer ")
+        headers[header] = f"{prefix}{api_key}"
+    elif auth_type == "x-goog-api-key":
+        headers["x-goog-api-key"] = api_key
+    else:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    endpoint = _as_str(mode_cfg.get("endpoint")) or "/chat/completions"
+    return {
+        "provider": provider_id,
+        "mode": mode_val,
+        "base_url": base_url.rstrip("/"),
+        "endpoint": endpoint,
+        "headers": headers,
+    }
+
+
 def teacher_provider_registry_probe_models(args: Dict[str, Any], *, deps: TeacherProviderRegistryDeps) -> Dict[str, Any]:
     actor = deps.resolve_teacher_id(args.get("teacher_id"))
     provider_id = _normalize_provider_id(args.get("provider_id") or args.get("id"))
     if not provider_id:
         return {"ok": False, "error": "provider_id_required"}
+    # 1. Try private provider first
     provider = _find_private(actor, provider_id, deps=deps)
-    if not provider:
-        return {"ok": False, "error": "provider_not_found"}
-    target = resolve_private_provider_target(
-        actor=actor,
-        provider_id=provider_id,
-        mode="openai-chat",
-        model=_as_str(provider.get("default_model")) or "gpt-4.1-mini",
-        deps=deps,
-    )
+    if provider:
+        target = resolve_private_provider_target(
+            actor=actor,
+            provider_id=provider_id,
+            mode="openai-chat",
+            model=_as_str(provider.get("default_model")) or "gpt-4.1-mini",
+            deps=deps,
+        )
+    else:
+        # 2. Fallback to shared provider
+        target = resolve_shared_provider_target(provider_id=provider_id, deps=deps)
     if not target:
-        return {"ok": False, "error": "provider_not_ready"}
+        return {"ok": False, "error": "provider_not_found"}
     try:
         resp = requests.get(
             f"{_as_str(target.get('base_url')).rstrip('/')}/models",
@@ -556,5 +621,6 @@ __all__ = [
     "merged_model_registry_for_actor",
     "resolve_provider_target",
     "resolve_private_provider_target",
+    "resolve_shared_provider_target",
     "_catalog",
 ]

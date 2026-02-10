@@ -71,6 +71,20 @@ def _as_int_opt(value: Any) -> Optional[int]:
         return None
 
 
+def _kind_matches(rule_kinds: set[str], context_kind: str) -> bool:
+    if not rule_kinds:
+        return True
+    kind = _as_str(context_kind)
+    if not kind:
+        return False
+    for rule_kind in rule_kinds:
+        if kind == rule_kind:
+            return True
+        if kind.startswith(f"{rule_kind}."):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class RoutingContext:
     role: Optional[str] = None
@@ -146,7 +160,7 @@ def _rule_matches(rule: Dict[str, Any], ctx: RoutingContext) -> bool:
         return False
     if skills and (ctx.skill_id or "") not in skills:
         return False
-    if kinds and (ctx.kind or "") not in kinds:
+    if kinds and not _kind_matches(kinds, ctx.kind or ""):
         return False
     if needs_tools is not None and bool(needs_tools) != bool(ctx.needs_tools):
         return False

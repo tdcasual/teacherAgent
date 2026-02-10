@@ -30,6 +30,7 @@ _CACHE_LOCK = threading.Lock()
 _CACHE: Dict[str, Tuple[Tuple[int, int, int, str, Tuple[Tuple[str, str], ...]], "CompiledRouting"]] = {}
 _CONFIG_LOCKS_LOCK = threading.Lock()
 _CONFIG_LOCKS: Dict[str, threading.RLock] = {}
+_HISTORY_KEEP_LIMIT = 10
 
 
 def _now_iso() -> str:
@@ -414,6 +415,31 @@ def _history_dir(config_path: Path) -> Path:
     return config_path.parent / "llm_routing_history"
 
 
+def _prune_history(config_path: Path, keep: int = _HISTORY_KEEP_LIMIT) -> None:
+    if keep <= 0:
+        return
+    history_dir = _history_dir(config_path)
+    if not history_dir.exists():
+        return
+
+    rows: List[Tuple[int, str, Path]] = []
+    for path in history_dir.glob("*.json"):
+        data = _read_json(path)
+        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+        rows.append((
+            _as_int(cfg.get("version"), 0, min_value=0),
+            _as_str(data.get("saved_at")),
+            path,
+        ))
+
+    rows.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    for _, _, stale_path in rows[keep:]:
+        try:
+            stale_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def _write_history(config_path: Path, payload: Dict[str, Any], actor: str, source: str, note: str = "") -> Path:
     history_dir = _history_dir(config_path)
     history_dir.mkdir(parents=True, exist_ok=True)
@@ -429,7 +455,36 @@ def _write_history(config_path: Path, payload: Dict[str, Any], actor: str, sourc
         "config": cfg,
     }
     _atomic_write_json(history_path, snapshot)
+    _prune_history(config_path)
     return history_path
+
+
+def _build_history_summary(config: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = config if isinstance(config, dict) else {}
+    channels_raw = cfg.get("channels") if isinstance(cfg.get("channels"), list) else []
+    channels = [item for item in channels_raw if isinstance(item, dict)]
+    rules_raw = cfg.get("rules") if isinstance(cfg.get("rules"), list) else []
+    rules = [item for item in rules_raw if isinstance(item, dict)]
+
+    primary_channel = channels[0] if channels else {}
+    target = primary_channel.get("target") if isinstance(primary_channel.get("target"), dict) else {}
+
+    top_rule_id = ""
+    if rules:
+        sorted_rules = sorted(rules, key=lambda item: _as_int(item.get("priority"), 0), reverse=True)
+        top_rule_id = _as_str((sorted_rules[0] or {}).get("id"))
+
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "channel_count": len(channels),
+        "rule_count": len(rules),
+        "primary_channel_id": _as_str(primary_channel.get("id")),
+        "primary_channel_title": _as_str(primary_channel.get("title")),
+        "primary_provider": _as_str(target.get("provider")),
+        "primary_mode": _as_str(target.get("mode")),
+        "primary_model": _as_str(target.get("model")),
+        "top_rule_id": top_rule_id,
+    }
 
 
 def list_routing_history(config_path: Path, limit: int = 20) -> List[Dict[str, Any]]:
@@ -448,6 +503,8 @@ def list_routing_history(config_path: Path, limit: int = 20) -> List[Dict[str, A
                 "saved_by": _as_str(data.get("saved_by")),
                 "source": _as_str(data.get("source")),
                 "note": _as_str(data.get("note")),
+                "summary": _build_history_summary(cfg),
+                "config": cfg,
             }
         )
     rows.sort(key=lambda x: (x.get("version") or 0, x.get("saved_at") or ""), reverse=True)

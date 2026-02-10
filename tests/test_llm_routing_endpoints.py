@@ -173,6 +173,45 @@ class LLMRoutingEndpointsTest(unittest.TestCase):
             rules = (overview.json().get("routing") or {}).get("rules") or []
             self.assertEqual(((rules[0] or {}).get("route") or {}).get("channel_id"), "channel_a")
 
+
+    def test_history_keeps_latest_ten_versions(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            client = TestClient(app_mod.app)
+            target = pick_gateway_target(app_mod)
+
+            for idx in range(12):
+                channel_id = f"channel_{idx}"
+                config = {
+                    "enabled": True,
+                    "channels": [{"id": channel_id, "target": target}],
+                    "rules": [
+                        {
+                            "id": f"rule_{idx}",
+                            "priority": 100,
+                            "match": {"roles": ["teacher"]},
+                            "route": {"channel_id": channel_id},
+                        }
+                    ],
+                }
+                created = client.post("/teacher/llm-routing/proposals", json={"note": f"v{idx + 1}", "config": config})
+                self.assertEqual(created.status_code, 200)
+                proposal_id = created.json().get("proposal_id")
+                self.assertTrue(proposal_id)
+
+                applied = client.post(f"/teacher/llm-routing/proposals/{proposal_id}/review", json={"approve": True})
+                self.assertEqual(applied.status_code, 200)
+
+            overview = client.get("/teacher/llm-routing", params={"history_limit": 50})
+            self.assertEqual(overview.status_code, 200)
+            history = overview.json().get("history") or []
+            self.assertEqual(len(history), 10)
+
+            versions = [int(item.get("version") or 0) for item in history]
+            self.assertTrue(all(v > 0 for v in versions))
+            latest = max(versions)
+            self.assertEqual(min(versions), latest - 9)
+
     def test_proposal_detail_endpoint_and_teacher_isolation(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))

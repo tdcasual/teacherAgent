@@ -79,6 +79,21 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
             self.assertEqual(len(providers), 1)
             self.assertEqual((providers[0] or {}).get("api_key_masked", "")[:4], "sk-t")
 
+            # Verify catalog includes base_url
+            catalog_providers = (overview.get("catalog") or {}).get("providers") or []
+            openai_cat = next((p for p in catalog_providers if p["provider"] == "openai"), None)
+            self.assertIsNotNone(openai_cat)
+            self.assertEqual(openai_cat["base_url"], "https://api.openai.com/v1")
+            private_cat = next((p for p in catalog_providers if p["provider"] == "tprv_proxy_a"), None)
+            self.assertIsNotNone(private_cat)
+            self.assertEqual(private_cat["base_url"], "https://proxy.example.com/v1")
+
+            # Verify shared_catalog also includes base_url
+            shared_cat_providers = (overview.get("shared_catalog") or {}).get("providers") or []
+            shared_openai = next((p for p in shared_cat_providers if p["provider"] == "openai"), None)
+            self.assertIsNotNone(shared_openai)
+            self.assertEqual(shared_openai["base_url"], "https://api.openai.com/v1")
+
             merged = merged_model_registry("t01", deps=deps)
             self.assertIn("tprv_proxy_a", ((merged.get("providers") or {})))
 
@@ -108,7 +123,7 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
             self.assertFalse(result.get("ok"))
             self.assertEqual(result.get("error"), "provider_not_found")
 
-    def test_create_rejects_provider_id_conflict_with_shared_registry(self):
+    def test_create_allows_overriding_shared_provider(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             deps = self._deps(root, {"ENV": "development", "MASTER_KEY_DEV_DEFAULT": "dev-key"})
@@ -122,8 +137,40 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
                 },
                 deps=deps,
             )
-            self.assertFalse(result.get("ok"))
-            self.assertEqual(result.get("error"), "provider_id_conflicts_shared")
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(result["provider"]["provider"], "openai")
+
+    def test_update_allows_clearing_base_url_to_registry_default(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root, {"ENV": "development", "MASTER_KEY_DEV_DEFAULT": "dev-key"})
+
+            created = teacher_provider_registry_create(
+                {
+                    "teacher_id": "t01",
+                    "provider_id": "openai",
+                    "display_name": "OpenAI 覆盖",
+                    "base_url": "https://proxy.example.com/v1",
+                    "api_key": "sk-test-12345678",
+                },
+                deps=deps,
+            )
+            self.assertTrue(created.get("ok"))
+
+            updated = teacher_provider_registry_update(
+                {
+                    "teacher_id": "t01",
+                    "provider_id": "openai",
+                    "base_url": "",
+                },
+                deps=deps,
+            )
+            self.assertTrue(updated.get("ok"))
+            self.assertEqual((updated.get("provider") or {}).get("base_url"), "")
+
+            merged = merged_model_registry("t01", deps=deps)
+            private_cfg = ((merged.get("providers") or {}).get("openai") or {})
+            self.assertEqual(private_cfg.get("base_url"), "https://api.openai.com/v1")
 
 
 if __name__ == "__main__":

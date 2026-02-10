@@ -63,6 +63,44 @@ class LLMRoutingTest(unittest.TestCase):
             self.assertEqual(decision.matched_rule_id, "teacher-agent")
             self.assertEqual([c.channel_id for c in decision.candidates], ["teacher-fast", "teacher-safe"])
 
+    def test_kind_prefix_matching_supports_agent_specific_chat_kind(self):
+        from services.api.llm_routing import RoutingContext, apply_routing_config, get_compiled_routing, resolve_routing
+
+        with TemporaryDirectory() as td:
+            config_path = Path(td) / "llm_routing.json"
+            payload = {
+                "enabled": True,
+                "channels": [
+                    {
+                        "id": "teacher-fast",
+                        "target": {
+                            "provider": "openai",
+                            "mode": "openai-chat",
+                            "model": "gpt-4.1-mini",
+                        },
+                    }
+                ],
+                "rules": [
+                    {
+                        "id": "teacher-agent",
+                        "priority": 200,
+                        "match": {"roles": ["teacher"], "kinds": ["chat.agent"]},
+                        "route": {"channel_id": "teacher-fast"},
+                    }
+                ],
+            }
+            applied = apply_routing_config(config_path, MODEL_REGISTRY, payload, actor="teacher", source="test")
+            self.assertTrue(applied.get("ok"))
+
+            compiled = get_compiled_routing(config_path, MODEL_REGISTRY)
+            decision = resolve_routing(
+                compiled,
+                RoutingContext(role="teacher", kind="chat.agent.opencode", needs_tools=True),
+            )
+            self.assertTrue(decision.selected)
+            self.assertEqual(decision.matched_rule_id, "teacher-agent")
+            self.assertEqual(decision.candidates[0].channel_id, "teacher-fast")
+
     def test_capability_filter_falls_to_next_rule(self):
         from services.api.llm_routing import RoutingContext, apply_routing_config, get_compiled_routing, resolve_routing
 
