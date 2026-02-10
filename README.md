@@ -11,7 +11,7 @@
 - 学生作业拍照 OCR 评分与画像自动更新
 - 核心例题库：标准解法、核心模型、变式模板
 - 老师端高权限图表执行：可通过 `chart.exec` 运行 Python 代码并返回 Markdown 图片
-- 图表智能体支持 `opencode` 链路：`chart.agent.run` 默认走 `engine=opencode`（可切换 `auto|llm`），并可按需覆盖 opencode 的 model/agent/attach 参数
+- 图表智能体采用本地 LLM 代码生成链路：`chart.agent.run` 当前仅支持 `engine=llm|auto`（`auto` 等同 `llm`）
 
 ## API 模块化（app.py）
 `services/api/app.py` 当前作为 FastAPI 组合层，核心路由编排按领域拆分到独立服务：
@@ -188,10 +188,25 @@ docker compose --profile qdrant up -d
 推送 `main` 自动构建并推送：
 - `ghcr.io/<owner>/<repo>/api`
 - `ghcr.io/<owner>/<repo>/mcp`
-- `ghcr.io/<owner>/<repo>/frontend`
+- `ghcr.io/<owner>/<repo>/frontend-student`
+- `ghcr.io/<owner>/<repo>/frontend-teacher`
+
+另外新增统一 CI 门禁：`.github/workflows/ci.yml`  
+在 `pull_request` 与 `push(main)` 上运行：
+- 后端 smoke 测试（路由与核心面回归）
+- 前端 `typecheck`
+- 前端双端构建（teacher/student）
+- PR 上额外执行 Docker build-only 验证（不推送镜像）
 
 另有老师端回归工作流：`.github/workflows/teacher-e2e.yml`  
 在 `pull_request` 与 `push(main)` 上运行 `npm run e2e:teacher`，并上传 `playwright-report` 与 `test-results` 作为构建产物。
+
+可选自动部署到 Coolify：`.github/workflows/deploy-coolify.yml`  
+当镜像发布工作流成功完成后触发。需在仓库 Secrets 中配置：
+- `COOLIFY_WEBHOOK_API`
+- `COOLIFY_WEBHOOK_MCP`
+- `COOLIFY_WEBHOOK_FE_STUDENT`
+- `COOLIFY_WEBHOOK_FE_TEACHER`
 
 ### 5) Frontend（Vite + PWA）
 前端已内置 PWA 支持，可直接“添加到主屏”。  
@@ -238,7 +253,7 @@ npm run e2e:teacher
 ---
 
 ## 前端使用说明（师生分端）
-- **老师端**：支持 `@agent` 与 `$skill` 召唤提示与快捷插入，技能栏可折叠与滚动，支持富文本与 LaTeX。  
+- **老师端**：支持 `$skill` 召唤提示与快捷插入（未指定时自动路由），技能栏可折叠与滚动，支持富文本与 LaTeX。  
 - **学生端**：仅支持提问学科问题与提交作业，支持富文本与 LaTeX。  
 
 ---

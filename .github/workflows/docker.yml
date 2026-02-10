@@ -13,20 +13,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         image:
           - name: api
             dockerfile: services/api/Dockerfile
           - name: mcp
             dockerfile: services/mcp/Dockerfile
-          - name: frontend
-            dockerfile: frontend/Dockerfile
+          - name: frontend-student
+            dockerfile: frontend/Dockerfile.student
+          - name: frontend-teacher
+            dockerfile: frontend/Dockerfile.teacher
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set image repository
         run: echo "IMAGE_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REPO }}/${{ matrix.image.name }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=ref,event=tag
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -47,8 +60,7 @@ jobs:
           context: .
           file: ${{ matrix.image.dockerfile }}
           push: true
-          tags: |
-            ${{ env.IMAGE_REPO }}/${{ matrix.image.name }}:latest
-            ${{ env.IMAGE_REPO }}/${{ matrix.image.name }}:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
