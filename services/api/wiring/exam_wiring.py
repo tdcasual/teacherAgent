@@ -179,6 +179,11 @@ def _exam_upload_start_deps():
 
 def _exam_upload_api_deps():
     _ac = _app_core()
+    backend = queue_runtime.app_queue_backend(
+        tenant_id=_ac.TENANT_ID or None,
+        is_pytest=_ac._settings.is_pytest(),
+        inline_backend_factory=_ac._inline_backend_factory,
+    )
     return ExamUploadApiDeps(
         load_exam_job=_ac.load_exam_job,
         exam_job_path=_ac.exam_job_path,
@@ -189,6 +194,7 @@ def _exam_upload_api_deps():
         parse_exam_answer_key_text=_ac.parse_exam_answer_key_text,
         read_text_safe=_ac.read_text_safe,
         write_exam_job=lambda job_id, updates: _ac.write_exam_job(job_id, updates),
+        enqueue_exam_job=lambda job_id: queue_runtime.enqueue_exam_job(job_id, backend=backend),
         confirm_exam_upload=lambda job_id, job, job_dir: _ac._confirm_exam_upload_impl(
             job_id,
             job,

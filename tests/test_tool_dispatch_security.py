@@ -74,6 +74,14 @@ class ToolDispatchSecurityTest(unittest.TestCase):
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
 
+    def test_chart_agent_run_rejects_opencode_engine_for_teacher(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            result = app_mod.tool_dispatch("chart.agent.run", {"task": "plot", "engine": "opencode"}, role="teacher")
+            self.assertIn("error", result)
+            self.assertEqual(result["error"], "opencode_forbidden")
+            self.assertEqual(result.get("status_code"), 400)
+
     def test_exam_analysis_charts_generate_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))

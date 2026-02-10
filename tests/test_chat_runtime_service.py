@@ -67,7 +67,7 @@ class ChatRuntimeServiceTest(unittest.TestCase):
             deps=deps,
             role_hint="student",
             skill_id="skill_x",
-            kind="chat.agent",
+            kind="chat.skill",
         )
         self.assertEqual(result.get("choices", [{}])[0].get("message", {}).get("content"), "ok")
         self.assertIs(limiter_seen[-1], student_limiter)

@@ -75,6 +75,7 @@ class ExamUploadDraftSaveRequest(BaseModel):
     questions: Optional[List[Dict[str, Any]]] = None
     score_schema: Optional[Dict[str, Any]] = None
     answer_key_text: Optional[str] = None
+    reparse: Optional[bool] = False
 
 
 class RoutingSimulateRequest(BaseModel):

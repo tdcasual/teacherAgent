@@ -38,9 +38,6 @@ def list_lessons(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
 
 def list_skills(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
     skills_dir = deps.app_root / "skills"
-    if not skills_dir.exists():
-        return {"skills": []}
-
     loaded = deps.load_skills(skills_dir)
     items = [spec.as_public_dict() for spec in loaded.skills.values()]
     items.sort(key=lambda x: x.get("id") or "")

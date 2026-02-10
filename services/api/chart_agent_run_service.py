@@ -41,7 +41,7 @@ def chart_agent_engine(value: Any) -> str:
         return text
     if text:
         return "llm"
-    return "opencode"
+    return "llm"
 
 
 def chart_agent_opencode_overrides(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -230,84 +230,36 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
     timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), default=180, minimum=30, maximum=3600)
     max_retries = deps.safe_int_arg(args.get("max_retries"), default=3, minimum=1, maximum=6)
     auto_install = deps.chart_bool(args.get("auto_install"), default=True)
-    explicit_engine = bool(str(args.get("engine") or "").strip())
     requested_engine = deps.chart_engine(args.get("engine"))
+    if requested_engine == "opencode":
+        return {
+            "ok": False,
+            "error": "opencode_forbidden",
+            "detail": "opencode runtime is disabled at system level",
+            "engine_requested": requested_engine,
+            "status_code": 400,
+        }
+
+    effective_engine = "llm"
+    effective_max_retries = max_retries
     chart_hint = str(args.get("chart_hint") or task[:120]).strip()
     save_as = str(args.get("save_as") or "main.png").strip() or "main.png"
     input_data = args.get("input_data")
     requested_packages = deps.chart_packages(args.get("packages"))
-    opencode_overrides = deps.chart_opencode_overrides(args)
-    opencode_status = deps.resolve_opencode_status(deps.app_root, overrides=opencode_overrides)
-    opencode_cfg = opencode_status.get("config") if isinstance(opencode_status.get("config"), dict) else {}
-
-    effective_engine = requested_engine
-    if requested_engine == "opencode" and not opencode_status.get("available") and not explicit_engine:
-        effective_engine = "llm"
-
-    effective_max_retries = max_retries
-    if effective_engine == "opencode" and isinstance(opencode_cfg, dict):
-        effective_max_retries = deps.safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
-    elif effective_engine == "auto" and opencode_status.get("available") and isinstance(opencode_cfg, dict):
-        effective_max_retries = deps.safe_int_arg(opencode_cfg.get("max_retries"), default=max_retries, minimum=1, maximum=6)
-
-    if requested_engine == "opencode" and explicit_engine:
-        if not opencode_status.get("enabled"):
-            return {
-                "ok": False,
-                "error": "opencode_disabled",
-                "detail": "opencode bridge disabled",
-                "engine_requested": requested_engine,
-                "opencode_status": opencode_status,
-            }
-        if not opencode_status.get("available"):
-            return {
-                "ok": False,
-                "error": "opencode_unavailable",
-                "detail": opencode_status.get("reason") or "opencode unavailable",
-                "engine_requested": requested_engine,
-                "opencode_status": opencode_status,
-            }
 
     attempts: List[Dict[str, Any]] = []
     last_error = ""
     previous_code = ""
 
     for attempt in range(1, effective_max_retries + 1):
-        attempt_engine = effective_engine
-        if effective_engine == "auto":
-            attempt_engine = "opencode" if opencode_status.get("available") else "llm"
-
-        if attempt_engine == "opencode":
-            candidate = deps.generate_candidate_opencode(
-                task=task,
-                input_data=input_data,
-                last_error=last_error,
-                previous_code=previous_code,
-                attempt=attempt,
-                max_retries=effective_max_retries,
-                opencode_overrides=opencode_overrides,
-            )
-            if effective_engine == "auto" and not str(candidate.get("python_code") or "").strip():
-                fallback_candidate = deps.generate_candidate(
-                    task=task,
-                    input_data=input_data,
-                    last_error=last_error,
-                    previous_code=previous_code,
-                    attempt=attempt,
-                    max_retries=effective_max_retries,
-                )
-                fallback_candidate["fallback_from"] = "opencode"
-                candidate = fallback_candidate
-                attempt_engine = "llm"
-        else:
-            candidate = deps.generate_candidate(
-                task=task,
-                input_data=input_data,
-                last_error=last_error,
-                previous_code=previous_code,
-                attempt=attempt,
-                max_retries=effective_max_retries,
-            )
+        candidate = deps.generate_candidate(
+            task=task,
+            input_data=input_data,
+            last_error=last_error,
+            previous_code=previous_code,
+            attempt=attempt,
+            max_retries=effective_max_retries,
+        )
 
         python_code = str(candidate.get("python_code") or "").strip() or deps.default_code()
         llm_packages = deps.chart_packages(candidate.get("packages"))
@@ -338,7 +290,7 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
         attempts.append(
             {
                 "attempt": attempt,
-                "engine": attempt_engine,
+                "engine": effective_engine,
                 "packages": merged_packages,
                 "summary": candidate.get("summary") or "",
                 "code_preview": python_code[:1200],
@@ -364,7 +316,7 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                 "task": task,
                 "attempt_used": attempt,
                 "engine_requested": requested_engine,
-                "engine_used": attempt_engine,
+                "engine_used": effective_engine,
                 "image_url": exec_res.get("image_url"),
                 "meta_url": exec_res.get("meta_url"),
                 "run_id": exec_res.get("run_id"),
@@ -373,7 +325,7 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                 "python_executable": exec_res.get("python_executable"),
                 "markdown": markdown,
                 "attempts": attempts,
-                "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
+                "opencode_status": None,
             }
 
         previous_code = python_code
@@ -387,5 +339,5 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
         "engine_requested": requested_engine,
         "last_error": last_error[:1200],
         "attempts": attempts,
-        "opencode_status": opencode_status if requested_engine in {"auto", "opencode"} else None,
+        "opencode_status": None,
     }

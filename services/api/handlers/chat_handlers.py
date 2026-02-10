@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional, Tuple
 from fastapi import HTTPException
 
 from ..api_models import ChatRequest, ChatResponse, ChatStartRequest
+from ..chat_support_service import extract_diagnostic_signals
 
 
 @dataclass
@@ -45,7 +46,15 @@ async def chat(req: ChatRequest, *, deps: ChatHandlerDeps) -> ChatResponse:
                 },
             )
             note = deps.build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
-            payload = {"student_id": req.student_id, "interaction_note": note}
+            payload: dict = {"student_id": req.student_id, "interaction_note": note}
+            # Layer 1: rule-based diagnostic signal extraction.
+            signals = extract_diagnostic_signals(reply_text)
+            if signals.weak_kp:
+                payload["weak_kp"] = ",".join(signals.weak_kp)
+            if signals.strong_kp:
+                payload["strong_kp"] = ",".join(signals.strong_kp)
+            if signals.next_focus:
+                payload["next_focus"] = signals.next_focus
             if deps.profile_update_async:
                 deps.enqueue_profile_update(payload)
             else:

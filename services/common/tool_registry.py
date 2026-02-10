@@ -445,7 +445,7 @@ def build_default_registry() -> ToolRegistry:
                 "task": {"type": "string", "description": "chart requirement in natural language"},
                 "input_data": {"type": "object", "description": "optional structured input data"},
                 "title": {"type": "string", "description": "optional markdown title for rendered image"},
-                "engine": {"type": "string", "description": "opencode(default)|auto|llm"},
+                "engine": {"type": "string", "description": "llm(default)|auto"},
                 "chart_hint": {"type": "string"},
                 "save_as": {"type": "string"},
                 "timeout_sec": {"type": "integer", "default": 180},

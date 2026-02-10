@@ -64,6 +64,7 @@ class ExamLongformServiceTest(unittest.TestCase):
                     "counts": {"students": 2},
                     "totals_summary": {"avg_total": 80},
                     "score_mode": "question_total",
+                    "files": {"manifest": "/tmp/data/exams/EX_OK/manifest.json"},
                     "verbose_unused": {"x": 1},
                 },
                 exam_analysis_get=lambda exam_id: {
@@ -87,6 +88,7 @@ class ExamLongformServiceTest(unittest.TestCase):
             self.assertTrue(overview.get("ok"))
             self.assertEqual(overview.get("exam_id"), "EX_OK")
             self.assertNotIn("verbose_unused", overview)
+            self.assertEqual(overview.get("files"), {"manifest": "/tmp/data/exams/EX_OK/manifest.json"})
 
             kp_catalog = out.get("knowledge_points_catalog") or {}
             self.assertEqual(set(kp_catalog.keys()), {"KP1", "KP2", "KP3"})

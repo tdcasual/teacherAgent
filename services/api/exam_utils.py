@@ -253,6 +253,7 @@ def _parse_xlsx_with_script(
     out_csv: Path,
     exam_id: str,
     class_name_hint: str,
+    subject_candidate_id: Optional[str] = None,
 ) -> Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]:
     from .config import APP_ROOT
     script = APP_ROOT / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
@@ -271,6 +272,8 @@ def _parse_xlsx_with_script(
     ]
     if class_name_hint:
         cmd += ["--class-name", class_name_hint]
+    if subject_candidate_id:
+        cmd += ["--subject-candidate-id", str(subject_candidate_id)]
     proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
     report: Dict[str, Any] = {}
     if report_path.exists():

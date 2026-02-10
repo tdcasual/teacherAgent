@@ -15,7 +15,6 @@ class _Req:
         msgs = payload.get("messages") or []
         self.messages = [_Msg(str(m.get("role") or ""), str(m.get("content") or "")) for m in msgs if isinstance(m, dict)]
         self.role = payload.get("role")
-        self.agent_id = payload.get("agent_id")
         self.skill_id = payload.get("skill_id")
         self.teacher_id = payload.get("teacher_id")
         self.student_id = payload.get("student_id")
@@ -36,7 +35,6 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             "request": {
                 "messages": [{"role": "user", "content": "列出考试"}],
                 "role": "teacher",
-                "agent_id": "default",
                 "skill_id": "",
                 "teacher_id": "teacher",
                 "student_id": None,
@@ -119,7 +117,6 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             "request": {
                 "messages": [{"role": "user", "content": "讲一下牛顿第二定律"}],
                 "role": "student",
-                "agent_id": "default",
                 "skill_id": "",
                 "teacher_id": "",
                 "student_id": "S001",

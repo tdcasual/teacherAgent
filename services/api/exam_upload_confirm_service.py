@@ -84,7 +84,19 @@ def confirm_exam_upload(
     override_score_schema = override.get("score_schema") if isinstance(override.get("score_schema"), dict) else {}
     merged_score_schema = {**parsed_score_schema, **override_score_schema} if isinstance(parsed_score_schema, dict) else override_score_schema
     needs_confirm = bool(merged_score_schema.get("needs_confirm"))
-    confirmed_mapping = bool(merged_score_schema.get("confirm"))
+    selected_candidate_id = str(
+        (
+            ((merged_score_schema.get("subject") or {}).get("selected_candidate_id")
+            if isinstance(merged_score_schema.get("subject"), dict)
+            else merged_score_schema.get("selected_candidate_id"))
+        )
+        or ""
+    ).strip()
+    subject_info = merged_score_schema.get("subject") if isinstance(merged_score_schema.get("subject"), dict) else {}
+    selected_candidate_available = bool(subject_info.get("selected_candidate_available", True))
+    selection_error = str(subject_info.get("selection_error") or "").strip()
+    candidate_selection_valid = bool((not selected_candidate_id) or (selected_candidate_available and not selection_error))
+    confirmed_mapping = bool((selected_candidate_id and candidate_selection_valid) or merged_score_schema.get("confirm"))
     if needs_confirm and not confirmed_mapping:
         deps.write_exam_job(job_id, {"status": "done", "step": "await_confirm", "progress": 100, "needs_confirm": True})
         raise ExamUploadConfirmError(

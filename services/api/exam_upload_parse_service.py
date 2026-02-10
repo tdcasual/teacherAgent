@@ -8,6 +8,19 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
+def _candidate_source_rank(candidate_id: str) -> int:
+    cid = str(candidate_id or "").strip()
+    if cid.startswith("pair:"):
+        return 1
+    if cid.startswith("direct:"):
+        return 2
+    if cid == "chaos:text":
+        return 3
+    if cid == "chaos:sheet_text":
+        return 4
+    return 9
+
+
 @dataclass(frozen=True)
 class ExamUploadParseDeps:
     app_root: Path
@@ -19,7 +32,7 @@ class ExamUploadParseDeps:
     extract_text_from_file: Callable[..., str]
     extract_text_from_pdf: Callable[..., str]
     extract_text_from_image: Callable[..., str]
-    parse_xlsx_with_script: Callable[[Path, Path, str, str], Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]]
+    parse_xlsx_with_script: Callable[[Path, Path, str, str, Optional[str]], Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]]
     xlsx_to_table_preview: Callable[[Path], str]
     xls_to_table_preview: Callable[[Path], str]
     llm_parse_exam_scores: Callable[[str], Dict[str, Any]]
@@ -95,7 +108,15 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
     all_rows: List[Dict[str, Any]] = []
     warnings: List[str] = []
     score_schema: Dict[str, Any] = {}
+    score_schema_sources: List[Dict[str, Any]] = []
     class_name_hint = str(job.get("class_name") or "").strip()
+    score_schema_override = job.get("score_schema") if isinstance(job.get("score_schema"), dict) else {}
+    override_subject = score_schema_override.get("subject") if isinstance(score_schema_override.get("subject"), dict) else {}
+    selected_candidate_id = str(
+        override_subject.get("selected_candidate_id")
+        or score_schema_override.get("selected_candidate_id")
+        or ""
+    ).strip() or None
 
     for idx, fname in enumerate(score_files):
         score_path = scores_dir / str(fname)
@@ -103,10 +124,21 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
         try:
             if score_path.suffix.lower() == ".xlsx":
                 tmp_csv = derived_dir / f"responses_part_{idx}.csv"
-                parsed_rows, parsed_score_schema = deps.parse_xlsx_with_script(score_path, tmp_csv, exam_id, class_name_hint)
+                parsed_rows, parsed_score_schema = deps.parse_xlsx_with_script(
+                    score_path,
+                    tmp_csv,
+                    exam_id,
+                    class_name_hint,
+                    selected_candidate_id,
+                )
                 file_rows = parsed_rows or []
                 if isinstance(parsed_score_schema, dict) and parsed_score_schema:
-                    score_schema = {**score_schema, **parsed_score_schema}
+                    source_item = {
+                        "file": str(fname),
+                        "path": str(score_path),
+                        **parsed_score_schema,
+                    }
+                    score_schema_sources.append(source_item)
                 if not file_rows:
                     table_preview = deps.xlsx_to_table_preview(score_path)
                     if table_preview.strip():
@@ -340,6 +372,161 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
     else:
         score_mode = "question"
 
+    aggregated_data_rows = 0
+    aggregated_parsed_rows = 0
+    aggregated_unresolved: List[str] = []
+    aggregated_candidates: List[Dict[str, Any]] = []
+    confidence_values: List[float] = []
+    selected_candidate_invalid = False
+    for source in score_schema_sources:
+        summary = source.get("summary") if isinstance(source.get("summary"), dict) else {}
+        aggregated_data_rows += int(summary.get("data_rows") or 0)
+        aggregated_parsed_rows += int(summary.get("parsed_rows") or 0)
+        try:
+            confidence_values.append(float(source.get("confidence")))
+        except Exception:
+            pass
+        subject_info = source.get("subject") if isinstance(source.get("subject"), dict) else {}
+        unresolved = subject_info.get("unresolved_students") if isinstance(subject_info.get("unresolved_students"), list) else []
+        aggregated_unresolved.extend([str(x) for x in unresolved if str(x or "").strip()])
+        candidates = subject_info.get("candidate_columns") if isinstance(subject_info.get("candidate_columns"), list) else []
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            candidate_id = str(item.get("candidate_id") or "").strip()
+            if not candidate_id:
+                continue
+            aggregated_candidates.append({"candidate_id": candidate_id, **item, "file": source.get("file")})
+
+    if score_schema_sources:
+        modes = [str(source.get("mode") or "") for source in score_schema_sources if str(source.get("mode") or "")]
+        overall_mode = "question" if "question" in modes else (modes[0] if modes else "")
+        coverage = (aggregated_parsed_rows / aggregated_data_rows) if aggregated_data_rows > 0 else 0.0
+        confidence = (sum(confidence_values) / len(confidence_values)) if confidence_values else 0.0
+        seen_candidate_ids: set[str] = set()
+        dedup_candidates: List[Dict[str, Any]] = []
+        for item in aggregated_candidates:
+            candidate_id = str(item.get("candidate_id") or "").strip()
+            if not candidate_id or candidate_id in seen_candidate_ids:
+                continue
+            seen_candidate_ids.add(candidate_id)
+            dedup_candidates.append(item)
+
+        candidate_stats: Dict[str, Dict[str, Any]] = {}
+        for item in aggregated_candidates:
+            candidate_id = str(item.get("candidate_id") or "").strip()
+            if not candidate_id:
+                continue
+            bucket = candidate_stats.setdefault(
+                candidate_id,
+                {
+                    "candidate_id": candidate_id,
+                    "rows_considered": 0,
+                    "rows_parsed": 0,
+                    "rows_invalid": 0,
+                    "files": set(),
+                    "types": set(),
+                },
+            )
+            bucket["rows_considered"] = int(bucket.get("rows_considered") or 0) + int(item.get("rows_considered") or 0)
+            bucket["rows_parsed"] = int(bucket.get("rows_parsed") or 0) + int(item.get("rows_parsed") or 0)
+            bucket["rows_invalid"] = int(bucket.get("rows_invalid") or 0) + int(item.get("rows_invalid") or 0)
+            file_name = str(item.get("file") or "").strip()
+            if file_name:
+                bucket_files = bucket.get("files")
+                if isinstance(bucket_files, set):
+                    bucket_files.add(file_name)
+            candidate_type = str(item.get("type") or "").strip()
+            if candidate_type:
+                bucket_types = bucket.get("types")
+                if isinstance(bucket_types, set):
+                    bucket_types.add(candidate_type)
+
+        candidate_summaries: List[Dict[str, Any]] = []
+        for candidate_id, bucket in candidate_stats.items():
+            rows_considered = int(bucket.get("rows_considered") or 0)
+            rows_parsed = int(bucket.get("rows_parsed") or 0)
+            rows_invalid = int(bucket.get("rows_invalid") or 0)
+            parsed_rate = (rows_parsed / rows_considered) if rows_considered > 0 else 0.0
+            quality_score = (rows_parsed * 1.0) + (parsed_rate * 100.0) - (rows_invalid * 0.2) - (
+                _candidate_source_rank(candidate_id) * 2.0
+            )
+            files = bucket.get("files") if isinstance(bucket.get("files"), set) else set()
+            types = bucket.get("types") if isinstance(bucket.get("types"), set) else set()
+            candidate_summaries.append(
+                {
+                    "candidate_id": candidate_id,
+                    "rows_considered": rows_considered,
+                    "rows_parsed": rows_parsed,
+                    "rows_invalid": rows_invalid,
+                    "parsed_rate": round(float(parsed_rate), 4),
+                    "source_rank": _candidate_source_rank(candidate_id),
+                    "files": sorted([str(x) for x in files]),
+                    "types": sorted([str(x) for x in types]),
+                    "quality_score": round(float(quality_score), 4),
+                }
+            )
+        candidate_summaries.sort(
+            key=lambda item: (
+                -float(item.get("quality_score") or 0.0),
+                int(item.get("source_rank") or 99),
+                str(item.get("candidate_id") or ""),
+            )
+        )
+        recommended_candidate_id = str((candidate_summaries[0].get("candidate_id") if candidate_summaries else "") or "")
+        recommended_candidate_reason = ""
+        if candidate_summaries:
+            top = candidate_summaries[0]
+            recommended_candidate_reason = (
+                f"rows_parsed={int(top.get('rows_parsed') or 0)}, "
+                f"parsed_rate={float(top.get('parsed_rate') or 0.0):.2f}, "
+                f"source_rank={int(top.get('source_rank') or 99)}"
+            )
+
+        selected_candidate_available = True
+        if overall_mode == "subject" and selected_candidate_id:
+            subject_sources = [
+                source for source in score_schema_sources if str(source.get("mode") or "") == "subject"
+            ]
+            candidate_present = any(
+                str(item.get("candidate_id") or "").strip() == selected_candidate_id for item in dedup_candidates
+            )
+            availability_flags: List[bool] = []
+            for source in subject_sources:
+                subject_info = source.get("subject") if isinstance(source.get("subject"), dict) else {}
+                if "selected_candidate_available" in subject_info:
+                    availability_flags.append(bool(subject_info.get("selected_candidate_available")))
+            selected_candidate_available = bool(candidate_present and (not availability_flags or all(availability_flags)))
+            selected_candidate_invalid = not selected_candidate_available
+
+        needs_confirm = bool((coverage < 0.85) or (confidence < 0.82) or selected_candidate_invalid)
+
+        score_schema = {
+            "mode": overall_mode,
+            "confidence": round(float(confidence), 4),
+            "needs_confirm": needs_confirm,
+            "sources": score_schema_sources,
+            "subject": {
+                "target": "physics",
+                "selected_candidate_id": selected_candidate_id,
+                "selected_candidate_available": selected_candidate_available,
+                "recommended_candidate_id": recommended_candidate_id,
+                "recommended_candidate_reason": recommended_candidate_reason,
+                "candidate_summaries": candidate_summaries,
+                "coverage": round(float(coverage), 4),
+                "data_rows": aggregated_data_rows,
+                "parsed_rows": aggregated_parsed_rows,
+                "unresolved_students": sorted(set(aggregated_unresolved)),
+                "candidate_columns": dedup_candidates,
+                "thresholds": {"coverage": 0.85, "confidence": 0.82},
+            },
+        }
+        if selected_candidate_id and selected_candidate_available:
+            score_schema["confirm"] = True
+            score_schema["needs_confirm"] = False
+        elif selected_candidate_id and selected_candidate_invalid:
+            score_schema["subject"]["selection_error"] = "selected_candidate_not_found"
+
     parsed_payload = {
         "exam_id": exam_id,
         "generated_at": deps.now_iso(),
@@ -391,6 +578,21 @@ def process_exam_upload_job(job_id: str, deps: ExamUploadParseDeps) -> None:
 
     needs_confirm = bool(score_schema.get("needs_confirm")) if isinstance(score_schema, dict) else False
     if needs_confirm:
+        selection_error = ""
+        if isinstance(score_schema, dict):
+            subject_info = score_schema.get("subject") if isinstance(score_schema.get("subject"), dict) else {}
+            selection_error = str(subject_info.get("selection_error") or "").strip()
+        if selection_error == "selected_candidate_not_found":
+            recommended_id = ""
+            if isinstance(score_schema, dict):
+                subject_info = score_schema.get("subject") if isinstance(score_schema.get("subject"), dict) else {}
+                recommended_id = str(subject_info.get("recommended_candidate_id") or "").strip()
+            if recommended_id:
+                warnings.append(
+                    f"所选物理分映射在当前成绩表中不可用，已回退自动匹配，建议改用 {recommended_id} 并重新确认。"
+                )
+            else:
+                warnings.append("所选物理分映射在当前成绩表中不可用，已回退自动匹配，请重新确认映射。")
         unresolved = ((score_schema.get("subject") or {}).get("unresolved_students") or []) if isinstance(score_schema, dict) else []
         unresolved_count = len(unresolved) if isinstance(unresolved, list) else 0
         if unresolved_count > 0:

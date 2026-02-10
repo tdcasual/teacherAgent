@@ -54,6 +54,16 @@
   - 若 `needs_confirm=true` 且草稿 `score_schema.confirm != true`，则阻断确认并返回 `score_schema_confirm_required`
   - 老师在草稿保存 `score_schema.confirm=true` 后可继续 confirm
 
+### 4) 候选映射 ID 与多文件聚合（本轮新增）
+
+- 解析报告中的每个候选映射都带稳定 `candidate_id`（如 `pair:4:5` / `direct:12`）。
+- 草稿确认建议使用 `score_schema.subject.selected_candidate_id`，而不是单纯布尔 `confirm`。
+- 解析阶段支持读取已选 `selected_candidate_id` 回灌解析器，仅使用该候选映射重跑。
+- 多成绩文件时不再简单覆盖：
+  - `score_schema.sources` 保存每个文件的原始报告；
+  - 聚合 `coverage/confidence/unresolved_students/candidate_columns` 生成全局决策；
+  - `selected_candidate_id` 会写入聚合结果并触发确认通过。
+
 ## 测试策略与结果
 
 ### 新增/更新测试
@@ -90,7 +100,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q \
 本次实现优先解决“多科汇总表中的物理分提取”这一主路径问题，并确保不影响已有小题流程。
 尚未在本次代码中完整落地的能力（后续可继续）：
 
-1. 草稿页内更细粒度的“候选列点选 UI”与样本预览交互（当前可通过 `score_schema.confirm=true` 完成确认）
+1. 草稿页内更细粒度的“候选列点选 UI”与样本预览交互（后端已支持 `selected_candidate_id`）
 2. `chaos_fallback`（极端混乱 Excel 的坐标文本化兜底抽取）
 3. 覆盖率阈值（85%）与置信度阈值（0.82）的可配置化（当前为固定阈值）
 

@@ -132,6 +132,79 @@ class ExamUploadConfirmServiceTest(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
 
+    def test_confirm_allows_selected_candidate_mapping(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "exam_jobs" / "job-1"
+            (job_dir / "derived").mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "exam_id": "EX1",
+                        "meta": {"class_name": "高二2403班"},
+                        "counts": {},
+                        "score_schema": {"needs_confirm": True},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "derived" / "responses_scored.csv").write_text("student_id,question_id,score\ns1,Q1,1\n", encoding="utf-8")
+
+            deps = ExamUploadConfirmDeps(
+                app_root=root,
+                data_dir=root / "data",
+                now_iso=lambda: "2026-02-08T12:00:00",
+                write_exam_job=lambda _job_id, _updates: None,
+                load_exam_draft_override=lambda _job_dir: {"score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}}},
+                parse_exam_answer_key_text=lambda _text: ([], []),
+                write_exam_questions_csv=lambda _path, _questions, max_scores=None: None,
+                write_exam_answers_csv=lambda _path, _answers: None,
+                load_exam_answer_key_from_csv=lambda _path: {},
+                ensure_questions_max_score=lambda _path, _qids, default_score=1.0: None,
+                apply_answer_key_to_responses_csv=lambda _a, _b, _c, _d: {},
+                run_script=lambda _cmd: None,
+                diag_log=lambda _event, _payload=None: None,
+                copy2=lambda src, dst: dst.write_bytes(src.read_bytes()),
+            )
+
+            result = confirm_exam_upload("job-1", {"exam_id": "EX1"}, job_dir, deps)
+            self.assertTrue(result.get("ok"))
+
+    def test_rejects_invalid_selected_candidate_mapping_even_if_selected(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "exam_jobs" / "job-1"
+            (job_dir / "derived").mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "exam_id": "EX1",
+                        "meta": {"class_name": "高二2403班"},
+                        "counts": {},
+                        "score_schema": {
+                            "needs_confirm": True,
+                            "subject": {
+                                "selected_candidate_id": "pair:4:5",
+                                "selected_candidate_available": False,
+                                "selection_error": "selected_candidate_not_found",
+                            },
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "derived" / "responses_scored.csv").write_text("student_id,question_id,score\ns1,Q1,1\n", encoding="utf-8")
+
+            deps = self._deps(root, writes)
+            with self.assertRaises(ExamUploadConfirmError) as ctx:
+                confirm_exam_upload("job-1", {"exam_id": "EX1"}, job_dir, deps)
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
+
 
 if __name__ == "__main__":
     unittest.main()

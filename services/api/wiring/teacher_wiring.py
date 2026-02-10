@@ -64,4 +64,6 @@ def _teacher_assignment_preflight_deps():
         format_requirements_prompt=_ac.format_requirements_prompt,
         save_assignment_requirements=_ac.save_assignment_requirements,
         assignment_generate=_ac.assignment_generate,
+        extract_exam_id=_ac.extract_exam_id,
+        exam_get=_ac.exam_get,
     )

@@ -46,7 +46,7 @@ class LLMRoutingTest(unittest.TestCase):
                     {
                         "id": "teacher-agent",
                         "priority": 200,
-                        "match": {"roles": ["teacher"], "kinds": ["chat.agent"]},
+                        "match": {"roles": ["teacher"], "kinds": ["chat.skill"]},
                         "route": {"channel_id": "teacher-fast"},
                     }
                 ],
@@ -57,7 +57,7 @@ class LLMRoutingTest(unittest.TestCase):
             compiled = get_compiled_routing(config_path, MODEL_REGISTRY)
             decision = resolve_routing(
                 compiled,
-                RoutingContext(role="teacher", skill_id="physics-teacher-ops", kind="chat.agent", needs_tools=True),
+                RoutingContext(role="teacher", skill_id="physics-teacher-ops", kind="chat.skill", needs_tools=True),
             )
             self.assertTrue(decision.selected)
             self.assertEqual(decision.matched_rule_id, "teacher-agent")
@@ -84,7 +84,7 @@ class LLMRoutingTest(unittest.TestCase):
                     {
                         "id": "teacher-agent",
                         "priority": 200,
-                        "match": {"roles": ["teacher"], "kinds": ["chat.agent"]},
+                        "match": {"roles": ["teacher"], "kinds": ["chat.skill"]},
                         "route": {"channel_id": "teacher-fast"},
                     }
                 ],
@@ -95,7 +95,7 @@ class LLMRoutingTest(unittest.TestCase):
             compiled = get_compiled_routing(config_path, MODEL_REGISTRY)
             decision = resolve_routing(
                 compiled,
-                RoutingContext(role="teacher", kind="chat.agent.opencode", needs_tools=True),
+                RoutingContext(role="teacher", kind="chat.skill", needs_tools=True),
             )
             self.assertTrue(decision.selected)
             self.assertEqual(decision.matched_rule_id, "teacher-agent")
@@ -148,7 +148,12 @@ class LLMRoutingTest(unittest.TestCase):
             self.assertEqual(decision_tools.matched_rule_id, "tool-fallback-rule")
             self.assertEqual(decision_tools.candidates[0].channel_id, "tool-ready")
 
-            decision_no_tools = resolve_routing(compiled, RoutingContext(role="teacher", kind="chat.agent", needs_tools=False))
+            decision_tools = resolve_routing(compiled, RoutingContext(role="teacher", kind="chat.skill", needs_tools=True))
+            self.assertTrue(decision_tools.selected)
+            self.assertEqual(decision_tools.matched_rule_id, "tool-fallback-rule")
+            self.assertEqual(decision_tools.candidates[0].channel_id, "tool-ready")
+
+            decision_no_tools = resolve_routing(compiled, RoutingContext(role="teacher", kind="chat.skill", needs_tools=False))
             self.assertTrue(decision_no_tools.selected)
             self.assertEqual(decision_no_tools.matched_rule_id, "prefer-text")
             self.assertEqual(decision_no_tools.candidates[0].channel_id, "text-only")

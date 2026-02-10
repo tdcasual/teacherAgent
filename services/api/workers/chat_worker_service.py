@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
+CHAT_PENDING_RESCAN_INTERVAL_SEC = 15.0
+
 @dataclass(frozen=True)
 class ChatWorkerDeps:
     chat_job_dir: Path
@@ -66,7 +68,16 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> None:
 
 
 def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
+    next_rescan_at = 0.0
     while not deps.stop_event.is_set():
+        now = time.monotonic()
+        if now >= next_rescan_at:
+            try:
+                scan_pending_chat_jobs(deps=deps)
+            except Exception as exc:
+                deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
+            next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
+
         deps.chat_job_event.wait(timeout=0.1)
         if deps.stop_event.is_set():
             break
@@ -82,12 +93,14 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
         try:
             deps.process_chat_job(job_id)
         except Exception as exc:  # pragma: no cover - covered by integration tests
-            deps.diag_log("chat.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
+            detail = str(exc)[:200]
+            deps.diag_log("chat.job.failed", {"job_id": job_id, "error": detail})
             deps.write_chat_job(
                 job_id,
                 {
                     "status": "failed",
-                    "error": str(exc)[:200],
+                    "error": "chat_job_failed",
+                    "error_detail": detail,
                 },
             )
         finally:

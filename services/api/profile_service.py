@@ -83,7 +83,8 @@ def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     from .config import APP_ROOT
     script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
     cmd = ["python3", str(script), "--student-id", args.get("student_id", "")]
-    for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note"):
+    for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note",
+                "misconceptions", "mastery_json", "completion_status"):
         if args.get(key) is not None:
             cmd += [f"--{key.replace('_', '-')}", str(args.get(key))]
     out = run_script(cmd)

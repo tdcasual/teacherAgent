@@ -46,6 +46,32 @@ class ChatStartFlowTest(unittest.TestCase):
                 self.assertEqual(captured.get("request_id"), "req_chat_start_001")
                 self.assertIs(captured.get("deps"), sentinel)
 
+    def test_chat_start_rejects_agent_id_and_does_not_create_job_or_request_map(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+            request_id = "req_chat_start_agent_forbidden_001"
+
+            self.assertIsNone(app_mod.get_chat_job_id_by_request(request_id))
+
+            with TestClient(app_mod.app) as client:
+                res = client.post(
+                    "/chat/start",
+                    json={
+                        "request_id": request_id,
+                        "role": "teacher",
+                        "agent_id": "opencode",
+                        "messages": [{"role": "user", "content": "hello"}],
+                    },
+                )
+
+            self.assertEqual(res.status_code, 400)
+            self.assertIsNone(app_mod.get_chat_job_id_by_request(request_id))
+
+            chat_job_dir = tmp / "uploads" / "chat_jobs"
+            if chat_job_dir.exists():
+                self.assertEqual(list(chat_job_dir.glob("*/job.json")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

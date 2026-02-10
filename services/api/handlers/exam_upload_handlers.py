@@ -78,6 +78,7 @@ async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest, *, deps: ExamU
         questions=req.questions,
         score_schema=req.score_schema,
         answer_key_text=req.answer_key_text,
+        reparse=bool(req.reparse),
     )
 
 

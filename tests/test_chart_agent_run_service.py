@@ -12,7 +12,7 @@ class ChartAgentRunServiceTest(unittest.TestCase):
                 minimum, min(maximum, int(default if value is None else value))
             ),
             chart_bool=lambda value, default: default if value is None else bool(value),
-            chart_engine=lambda value: (str(value or "").strip().lower() or "opencode"),
+            chart_engine=lambda value: (str(value or "").strip().lower() or "llm"),
             chart_packages=lambda value: [str(v).strip() for v in (value or []) if str(v).strip()]
             if isinstance(value, list)
             else [],
@@ -69,7 +69,8 @@ class ChartAgentRunServiceTest(unittest.TestCase):
             deps=deps,
         )
         self.assertFalse(result.get("ok"))
-        self.assertEqual(result.get("error"), "opencode_unavailable")
+        self.assertEqual(result.get("error"), "opencode_forbidden")
+        self.assertEqual(result.get("status_code"), 400)
 
 
 if __name__ == "__main__":

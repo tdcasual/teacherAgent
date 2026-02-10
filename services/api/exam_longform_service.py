@@ -177,6 +177,7 @@ def build_exam_longform_context(exam_id: str, deps: ExamLongformDeps) -> Dict[st
             "counts": overview.get("counts"),
             "totals_summary": overview.get("totals_summary"),
             "score_mode": overview.get("score_mode"),
+            "files": overview.get("files"),
         }
 
     analysis_slim: Dict[str, Any] = analysis_res if not analysis_res.get("ok") else {}

@@ -8,6 +8,34 @@ from pathlib import Path
 from typing import Callable
 
 
+def _pid_alive(pid: int) -> bool:
+    if int(pid or 0) <= 0:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return True
+    return True
+
+
+def _read_lock_pid(path: Path) -> int:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        payload = json.loads(raw)
+    except Exception:
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    try:
+        return int(payload.get("pid") or 0)
+    except Exception:
+        return 0
+
+
 @dataclass(frozen=True)
 class ChatLockDeps:
     now_ts: Callable[[], float]
@@ -16,6 +44,7 @@ class ChatLockDeps:
     os_open: Callable[[str, int], int] = os.open
     os_close: Callable[[int], None] = os.close
     os_write: Callable[[int, bytes], int] = os.write
+    is_pid_alive: Callable[[int], bool] = _pid_alive
 
 
 def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
@@ -25,6 +54,13 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
         try:
             fd = deps.os_open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
+            try:
+                pid = _read_lock_pid(path)
+                if pid > 0 and not deps.is_pid_alive(pid):
+                    path.unlink(missing_ok=True)
+                    continue
+            except Exception:
+                pass
             try:
                 age = now - float(path.stat().st_mtime)
                 if ttl_sec > 0 and age > float(ttl_sec):

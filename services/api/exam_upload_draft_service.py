@@ -74,7 +74,15 @@ def build_exam_upload_draft(
         questions = override.get("questions")
     if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):
         score_schema = {**score_schema, **override.get("score_schema")}
-    if score_schema.get("confirm") is True:
+    selected_candidate_id = str(
+        (
+            ((score_schema.get("subject") or {}).get("selected_candidate_id")
+            if isinstance(score_schema.get("subject"), dict)
+            else score_schema.get("selected_candidate_id"))
+        )
+        or ""
+    ).strip()
+    if score_schema.get("confirm") is True or selected_candidate_id:
         needs_confirm = False
 
     answer_key_text = str(override.get("answer_key_text") or "").strip()

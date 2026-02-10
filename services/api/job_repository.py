@@ -92,6 +92,34 @@ def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
 # Cross-process lockfile
 # ---------------------------------------------------------------------------
 
+def _is_pid_alive(pid: int) -> bool:
+    if int(pid or 0) <= 0:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return True
+    return True
+
+
+def _read_lock_pid(path: Path) -> int:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+        payload = json.loads(raw)
+    except Exception:
+        return 0
+    if not isinstance(payload, dict):
+        return 0
+    try:
+        return int(payload.get("pid") or 0)
+    except Exception:
+        return 0
+
+
 def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
     """
     Cross-process lock using O_EXCL lockfile. Used to prevent duplicate job processing
@@ -103,6 +131,13 @@ def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
         try:
             fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
+            try:
+                pid = _read_lock_pid(path)
+                if pid > 0 and not _is_pid_alive(pid):
+                    path.unlink(missing_ok=True)
+                    continue
+            except Exception:
+                pass
             try:
                 age = now - float(path.stat().st_mtime)
                 if ttl_sec > 0 and age > float(ttl_sec):
@@ -123,6 +158,7 @@ def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
                 pass
         return True
     return False
+
 
 def _release_lockfile(path: Path) -> None:
     try:

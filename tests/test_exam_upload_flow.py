@@ -583,7 +583,13 @@ class ExamUploadFlowTest(unittest.TestCase):
                         "job_id": job_id,
                         "meta": draft.get("meta") or {},
                         "questions": draft.get("questions") or [],
-                        "score_schema": {**score_schema, "confirm": True},
+                        "score_schema": {
+                            **score_schema,
+                            "subject": {
+                                **((score_schema.get("subject") or {}) if isinstance(score_schema, dict) else {}),
+                                "selected_candidate_id": "pair:4:5",
+                            },
+                        },
                         "answer_key_text": draft.get("answer_key_text") or "",
                     },
                 )

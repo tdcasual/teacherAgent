@@ -51,6 +51,8 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
             format_requirements_prompt=lambda **kwargs: f"PROMPT:{kwargs.get('errors')}",
             save_assignment_requirements=_save,
             assignment_generate=_gen,
+            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
+            exam_get=lambda _exam_id: {},
         )
         return deps, logs, saved, generated
 
@@ -113,6 +115,97 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         assert isinstance(result, str)
         self.assertIn("未开启作业生成功能", result)
         self.assertEqual(generated, [])
+
+    def test_subject_score_request_on_total_mode_is_guarded(self):
+        deps, logs, _saved, generated = self._deps(analysis=None)
+        deps = TeacherAssignmentPreflightDeps(
+            **{
+                **deps.__dict__,
+                "exam_get": lambda _exam_id: {
+                    "ok": True,
+                    "exam_id": "EX20260209_9b92e1",
+                    "score_mode": "total",
+                    "totals_summary": {
+                        "avg_total": 371.714,
+                        "median_total": 366.5,
+                        "max_total_observed": 511.5,
+                        "min_total_observed": 289.5,
+                    },
+                },
+            }
+        )
+        req = _Req(
+            messages=[
+                _Msg(role="assistant", content="上一轮回复"),
+                _Msg(role="user", content="分析EX20260209_9b92e1的物理成绩"),
+            ],
+            skill_id="default",
+        )
+
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("单科成绩说明", result)
+        self.assertIn("score_mode: \"total\"", result)
+        self.assertIn("不能把总分当作物理单科成绩", result)
+        self.assertEqual(generated, [])
+        self.assertTrue(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
+
+    def test_subject_score_request_not_blocked_for_non_total_mode(self):
+        deps, logs, _saved, generated = self._deps(analysis=None)
+        deps = TeacherAssignmentPreflightDeps(
+            **{
+                **deps.__dict__,
+                "exam_get": lambda _exam_id: {
+                    "ok": True,
+                    "exam_id": "EX20260209_9b92e1",
+                    "score_mode": "subject",
+                },
+            }
+        )
+        req = _Req(
+            messages=[
+                _Msg(role="user", content="分析EX20260209_9b92e1的物理成绩"),
+            ],
+            skill_id="default",
+        )
+
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsNone(result)
+        self.assertEqual(generated, [])
+        self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
+
+    def test_subject_score_request_on_total_mode_allows_matching_single_subject_exam(self):
+        deps, logs, _saved, generated = self._deps(analysis=None)
+        deps = TeacherAssignmentPreflightDeps(
+            **{
+                **deps.__dict__,
+                "exam_get": lambda _exam_id: {
+                    "ok": True,
+                    "exam_id": "EX20260209_9b92e1",
+                    "score_mode": "total",
+                    "meta": {"subject": "physics"},
+                    "totals_summary": {
+                        "avg_total": 371.714,
+                        "median_total": 366.5,
+                        "max_total_observed": 511.5,
+                        "min_total_observed": 289.5,
+                    },
+                },
+            }
+        )
+        req = _Req(
+            messages=[
+                _Msg(role="user", content="分析EX20260209_9b92e1的物理成绩"),
+            ],
+            skill_id="default",
+        )
+
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsNone(result)
+        self.assertEqual(generated, [])
+        self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
+        self.assertTrue(any(event == "teacher_preflight.subject_total_allow_single_subject" for event, _ in logs))
 
 
 if __name__ == "__main__":

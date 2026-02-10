@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Set
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Set
 
 
 @dataclass(frozen=True)
@@ -52,19 +52,165 @@ def detect_student_study_trigger(text: str) -> bool:
     return any(t in text for t in triggers)
 
 
+# ---------------------------------------------------------------------------
+# Diagnostic signal extraction (Layer 1: rule-based, per-turn)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class DiagnosticSignals:
+    weak_kp: List[str] = field(default_factory=list)
+    strong_kp: List[str] = field(default_factory=list)
+    misconceptions: List[str] = field(default_factory=list)
+    next_focus: str = ""
+    topic: str = ""
+
+
+# Patterns that precede a knowledge-point mention in LLM replies.
+_WEAK_PREFIXES = (
+    "薄弱", "需要加强", "建议复习", "掌握不够", "不太熟", "还需巩固",
+    "容易出错", "失分", "错误率较高", "理解不到位", "有待提高",
+)
+_STRONG_PREFIXES = (
+    "掌握得不错", "理解正确", "答对", "很好", "完全正确", "掌握较好",
+    "回答正确", "非常好", "做得好", "理解到位",
+)
+_MISCONCEPTION_PREFIXES = (
+    "常见错误", "容易混淆", "注意区分", "典型错误", "易错点", "误区",
+    "混淆了", "搞混了", "弄错了",
+)
+_NEXT_FOCUS_PREFIXES = (
+    "建议", "下一步", "接下来", "重点复习", "下次重点", "后续",
+    "需要练习", "推荐练习",
+)
+
+# Common physics knowledge-point keywords for extraction.
+_KP_KEYWORDS = (
+    "牛顿", "力学", "运动学", "动量", "能量", "功", "电场", "磁场",
+    "电路", "电磁", "光学", "热学", "波动", "振动", "万有引力",
+    "匀变速", "抛体", "圆周运动", "机械能", "动能", "势能",
+    "库仑", "安培", "法拉第", "楞次", "欧姆", "焦耳",
+    "受力分析", "平衡", "加速度", "速度", "位移", "自由落体",
+    "弹力", "摩擦力", "重力", "浮力", "压强", "密度",
+    "电阻", "电压", "电流", "电功率", "电容", "电感",
+    "折射", "反射", "干涉", "衍射", "偏振",
+    "理想气体", "热力学", "内能", "比热",
+)
+
+
+def _extract_kp_near(text: str, anchor_pos: int, window: int = 40) -> List[str]:
+    """Extract KP keywords within *window* chars around *anchor_pos*."""
+    start = max(0, anchor_pos - window)
+    end = min(len(text), anchor_pos + window)
+    snippet = text[start:end]
+    found = []
+    for kw in _KP_KEYWORDS:
+        if kw in snippet and kw not in found:
+            found.append(kw)
+    return found
+
+
+def extract_diagnostic_signals(reply_text: str) -> DiagnosticSignals:
+    """Rule-based extraction of diagnostic signals from an LLM reply."""
+    if not reply_text:
+        return DiagnosticSignals()
+
+    text = reply_text
+    signals = DiagnosticSignals()
+
+    # --- weak KP ---
+    for prefix in _WEAK_PREFIXES:
+        idx = 0
+        while True:
+            pos = text.find(prefix, idx)
+            if pos < 0:
+                break
+            kps = _extract_kp_near(text, pos + len(prefix))
+            for kp in kps:
+                if kp not in signals.weak_kp:
+                    signals.weak_kp.append(kp)
+            idx = pos + len(prefix)
+
+    # --- strong KP ---
+    for prefix in _STRONG_PREFIXES:
+        idx = 0
+        while True:
+            pos = text.find(prefix, idx)
+            if pos < 0:
+                break
+            kps = _extract_kp_near(text, pos + len(prefix))
+            for kp in kps:
+                if kp not in signals.strong_kp:
+                    signals.strong_kp.append(kp)
+            idx = pos + len(prefix)
+
+    # --- misconceptions ---
+    for prefix in _MISCONCEPTION_PREFIXES:
+        pos = text.find(prefix)
+        if pos >= 0:
+            snippet = text[pos: pos + 60].strip()
+            # Take up to the first sentence boundary.
+            for sep in ("。", "；", "\n", "，"):
+                cut = snippet.find(sep)
+                if cut > 0:
+                    snippet = snippet[:cut]
+                    break
+            if snippet and snippet not in signals.misconceptions:
+                signals.misconceptions.append(snippet)
+
+    # --- next focus ---
+    for prefix in _NEXT_FOCUS_PREFIXES:
+        pos = text.find(prefix)
+        if pos >= 0 and not signals.next_focus:
+            snippet = text[pos: pos + 60].strip()
+            for sep in ("。", "；", "\n"):
+                cut = snippet.find(sep)
+                if cut > 0:
+                    snippet = snippet[:cut]
+                    break
+            signals.next_focus = snippet
+
+    # --- topic (first 【...】 or **...** heading) ---
+    m = re.search(r"【(.+?)】", text)
+    if m:
+        signals.topic = m.group(1)[:30]
+    elif not signals.topic:
+        m = re.search(r"\*\*(.+?)\*\*", text)
+        if m:
+            signals.topic = m.group(1)[:30]
+
+    return signals
+
+
 def build_interaction_note(last_user: str, reply: str, assignment_id: Optional[str] = None) -> str:
     user_text = (last_user or "").strip()
     reply_text = (reply or "").strip()
-    parts = []
+
+    # Extract diagnostic signals for structured note.
+    signals = extract_diagnostic_signals(reply_text)
+
+    parts: List[str] = []
     if assignment_id:
-        parts.append(f"assignment_id={assignment_id}")
+        parts.append(f"作业={assignment_id}")
+    if signals.topic:
+        parts.append(f"[话题] {signals.topic}")
     if user_text:
-        parts.append(f"U:{user_text}")
-    if reply_text:
-        parts.append(f"A:{reply_text}")
+        parts.append(f"[学生] {user_text[:60]}")
+    diag_items: List[str] = []
+    if signals.weak_kp:
+        diag_items.append(f"薄弱:{','.join(signals.weak_kp[:3])}")
+    if signals.strong_kp:
+        diag_items.append(f"掌握:{','.join(signals.strong_kp[:3])}")
+    if signals.misconceptions:
+        diag_items.append(f"易错:{signals.misconceptions[0][:30]}")
+    if diag_items:
+        parts.append(f"[诊断] {'; '.join(diag_items)}")
+    elif reply_text:
+        # Fallback: short preview of reply when no signals extracted.
+        parts.append(f"[回复] {reply_text[:60]}")
+
     note = " | ".join(parts)
-    if len(note) > 900:
-        note = note[:900] + "…"
+    if len(note) > 200:
+        note = note[:200] + "…"
     return note
 
 

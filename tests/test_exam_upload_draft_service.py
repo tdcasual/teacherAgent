@@ -98,12 +98,15 @@ class ExamUploadDraftServiceTest(unittest.TestCase):
             "job-1",
             job,
             parsed,
-            {"score_schema": {"confirm": True}},
+            {"score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}}},
             parse_exam_answer_key_text=lambda _text: ([], []),
             answer_text_excerpt="",
         )
         self.assertFalse(bool(draft.get("needs_confirm")))
-        self.assertTrue(bool((draft.get("score_schema") or {}).get("confirm")))
+        self.assertEqual(
+            str((((draft.get("score_schema") or {}).get("subject") or {}).get("selected_candidate_id") or "")),
+            "pair:4:5",
+        )
 
 
 if __name__ == "__main__":

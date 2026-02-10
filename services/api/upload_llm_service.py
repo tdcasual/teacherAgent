@@ -58,6 +58,8 @@ def llm_parse_assignment_payload(source_text: str, answer_text: str, *, deps: Up
         "\"missing\":[\"缺失字段名\"]"
         "}"
         "若答案文本提供，优先使用答案文本；若无法确定字段，请留空并写入missing。"
+        "注意：题干中如果包含\"如图\"\"见图\"\"下图\"等图引用词，请在该题的tags中加入\"needs_figure\"，"
+        "并尝试根据上下文将图引用改写为文字描述。若无法改写，保留原文并标记。"
     )
     user = f"【试卷文本】\\n{truncate_text(source_text)}\\n\\n【答案文本】\\n{truncate_text(answer_text) if answer_text else '无'}"
     resp = deps.call_llm(
