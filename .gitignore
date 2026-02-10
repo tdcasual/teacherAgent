@@ -54,3 +54,6 @@ main.png
 
 # Local git worktrees
 .worktrees/
+
+# Local Playwright CLI cache
+.playwright-cli/
