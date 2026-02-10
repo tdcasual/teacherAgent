@@ -77,6 +77,9 @@ def main():
     parser.add_argument("--graded", type=int, default=None)
     parser.add_argument("--ungraded", type=int, default=None)
     parser.add_argument("--history-file", help="csv with assignment_id, matched, graded, ungraded, note (optional)")
+    parser.add_argument("--misconceptions", default="", help="semicolon-separated misconception descriptions")
+    parser.add_argument("--mastery-json", default="", help="JSON string: {KP: {accuracy: float, attempts: int}}")
+    parser.add_argument("--completion-status", default="", help="completed|partial|abandoned")
     parser.add_argument("--profile-dir", default="data/student_profiles")
     args = parser.parse_args()
 
@@ -150,6 +153,41 @@ def main():
                         "note": row.get("note") or "",
                     })
             profile["practice_history"] = history[-20:]
+
+        # completion status on latest practice entry
+        if args.completion_status and profile.get("practice_history"):
+            profile["practice_history"][-1]["status"] = args.completion_status
+
+        # misconceptions
+        if args.misconceptions:
+            existing = profile.get("misconceptions", [])
+            for desc in args.misconceptions.replace("；", ";").split(";"):
+                desc = desc.strip()
+                if not desc:
+                    continue
+                existing.append({
+                    "description": desc,
+                    "detected_at": datetime.now().isoformat(timespec="seconds"),
+                })
+            profile["misconceptions"] = existing[-20:]
+
+        # mastery_by_kp incremental update
+        if args.mastery_json:
+            try:
+                updates = json.loads(args.mastery_json)
+                if isinstance(updates, dict):
+                    mastery = profile.get("mastery_by_kp", {})
+                    for kp, entry in updates.items():
+                        if not isinstance(entry, dict):
+                            continue
+                        mastery[kp] = {
+                            "accuracy": entry.get("accuracy", 0),
+                            "attempts": entry.get("attempts", 0),
+                            "last_updated": datetime.now().isoformat(timespec="seconds"),
+                        }
+                    profile["mastery_by_kp"] = mastery
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         # summary
         summary_parts = []
