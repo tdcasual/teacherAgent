@@ -4,7 +4,7 @@
 
 **Goal:** Build a self-improving skill system that observes skill usage, learns from failures, and hardens skills through testing.
 
-**Architecture:** Three-layer observe/learn/improve cycle using personal skills (`~/.claude/skills/`) that shadow superpowers. Session hooks inject tracking. JSONL audit log accumulates data. Improvement skill proposes patches. Test harness validates changes.
+**Architecture:** Three-layer observe/learn/improve cycle using personal skills (`~/.codex/skills/`) that shadow superpowers. Session hooks inject tracking. JSONL audit log accumulates data. Improvement skill proposes patches. Test harness validates changes.
 
 **Tech Stack:** Bash (hooks), Markdown (skills), YAML (test scenarios), JSONL (audit log)
 
@@ -12,41 +12,41 @@
 
 ## Prerequisites
 
-The personal skills directory (`~/.claude/skills/`) does not yet exist. All skills will be created there. The superpowers plugin (v4.2.0) is installed and active.
+The personal skills directory (`~/.codex/skills/`) does not yet exist. All skills will be created there. The superpowers plugin (v4.2.0) is installed and active.
 
 ---
 
 ### Task 1: Create Personal Skills Directory Structure
 
 **Files:**
-- Create: `~/.claude/skills/` (directory)
-- Create: `~/.claude/skills/skill-tracker/` (directory)
-- Create: `~/.claude/skills/skill-improvement/` (directory)
-- Create: `~/.claude/skills/test-skills/` (directory)
-- Create: `~/.claude/skills/tests/` (directory)
+- Create: `~/.codex/skills/` (directory)
+- Create: `~/.codex/skills/skill-tracker/` (directory)
+- Create: `~/.codex/skills/skill-improvement/` (directory)
+- Create: `~/.codex/skills/test-skills/` (directory)
+- Create: `~/.codex/skills/tests/` (directory)
 
 **Step 1: Create all directories**
 
 Run:
 ```bash
-mkdir -p ~/.claude/skills/skill-tracker \
-         ~/.claude/skills/skill-improvement \
-         ~/.claude/skills/test-skills \
-         ~/.claude/skills/tests
+mkdir -p ~/.codex/skills/skill-tracker \
+         ~/.codex/skills/skill-improvement \
+         ~/.codex/skills/test-skills \
+         ~/.codex/skills/tests
 ```
 
 **Step 2: Initialize empty audit log**
 
 Run:
 ```bash
-touch ~/.claude/memory/skill-audit.jsonl
+touch ~/.codex/memory/skill-audit.jsonl
 ```
 
 **Step 3: Verify structure**
 
 Run:
 ```bash
-find ~/.claude/skills -type d && ls ~/.claude/memory/skill-audit.jsonl
+find ~/.codex/skills -type d && ls ~/.codex/memory/skill-audit.jsonl
 ```
 Expected: All 4 directories listed + audit file exists.
 
@@ -63,7 +63,7 @@ Expected: All 4 directories listed + audit file exists.
 This skill instructs Claude to self-report skill usage during sessions.
 
 **Files:**
-- Create: `~/.claude/skills/skill-tracker/SKILL.md`
+- Create: `~/.codex/skills/skill-tracker/SKILL.md`
 
 **Step 1: Run baseline scenario WITHOUT the skill**
 
@@ -84,7 +84,7 @@ Document: Does the agent naturally track and report skill usage? (Expected: No s
 
 **Step 2: Write the skill-tracker SKILL.md**
 
-Create `~/.claude/skills/skill-tracker/SKILL.md` with this content:
+Create `~/.codex/skills/skill-tracker/SKILL.md` with this content:
 
 ```markdown
 ---
@@ -110,7 +110,7 @@ Record a skill usage entry at these natural breakpoints:
 
 ## What to Record
 
-For each breakpoint, append a JSON line to `~/.claude/memory/skill-audit.jsonl`:
+For each breakpoint, append a JSON line to `~/.codex/memory/skill-audit.jsonl`:
 
 ```json
 {"timestamp":"ISO-8601","task":"brief description","events":[{"type":"skill_invoked|skill_missed|wrong_skill|skill_drift","skill":"name","details":"specifics"}],"summary":"one line"}
@@ -130,7 +130,7 @@ For each breakpoint, append a JSON line to `~/.claude/memory/skill-audit.jsonl`:
 Use the Bash tool to append to the audit log:
 
 ```bash
-echo '{"timestamp":"2026-02-10T14:30:00Z","task":"fix score saving bug","events":[{"type":"skill_invoked","skill":"systematic-debugging","details":"followed all 4 phases"},{"type":"skill_missed","skill":"test-driven-development","details":"wrote fix before failing test"}],"summary":"1 correct, 1 missed"}' >> ~/.claude/memory/skill-audit.jsonl
+echo '{"timestamp":"2026-02-10T14:30:00Z","task":"fix score saving bug","events":[{"type":"skill_invoked","skill":"systematic-debugging","details":"followed all 4 phases"},{"type":"skill_missed","skill":"test-driven-development","details":"wrote fix before failing test"}],"summary":"1 correct, 1 missed"}' >> ~/.codex/memory/skill-audit.jsonl
 ```
 
 ## Self-Check Questions
@@ -164,7 +164,7 @@ If the agent doesn't produce a proper JSONL entry, strengthen the instructions. 
 ### Task 3: Create Session Hook for Tracking Reminder
 
 **Files:**
-- Create: `~/.claude/hooks.json` (or update if exists)
+- Create: `~/.codex/hooks.json` (or update if exists)
 
 **Step 1: Understand hook format**
 
@@ -177,11 +177,11 @@ The superpowers plugin uses `hooks.json` with this structure:
 }
 ```
 
-Personal hooks go in `~/.claude/hooks.json`.
+Personal hooks go in `~/.codex/hooks.json`.
 
 **Step 2: Create the hooks file**
 
-Create `~/.claude/hooks.json`:
+Create `~/.codex/hooks.json`:
 
 ```json
 {
@@ -192,7 +192,7 @@ Create `~/.claude/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$TOOL_INPUT\" | grep -q 'git commit'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"REMINDER: Use skill-tracker to record skill usage before this commit. Append to ~/.claude/memory/skill-audit.jsonl\"}}'; fi",
+            "command": "if echo \"$TOOL_INPUT\" | grep -q 'git commit'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"REMINDER: Use skill-tracker to record skill usage before this commit. Append to ~/.codex/memory/skill-audit.jsonl\"}}'; fi",
             "async": true
           }
         ]
@@ -220,17 +220,17 @@ git commit -m "docs: add self-improving skill system design and plan"
 ### Task 4: Create the Skill Improvement Skill (RED phase)
 
 **Files:**
-- Create: `~/.claude/skills/skill-improvement/SKILL.md`
+- Create: `~/.codex/skills/skill-improvement/SKILL.md`
 
 **Step 1: Seed audit log with sample data**
 
-Append 3-5 sample entries to `~/.claude/memory/skill-audit.jsonl` representing realistic sessions with various failure modes.
+Append 3-5 sample entries to `~/.codex/memory/skill-audit.jsonl` representing realistic sessions with various failure modes.
 
 **Step 2: Run baseline scenario WITHOUT the skill**
 
 Spawn a subagent:
 ```
-Read ~/.claude/memory/skill-audit.jsonl. Analyze the skill usage patterns
+Read ~/.codex/memory/skill-audit.jsonl. Analyze the skill usage patterns
 and suggest improvements to the skill system.
 ```
 
@@ -238,7 +238,7 @@ Document: Does the agent produce actionable, structured recommendations? (Expect
 
 **Step 3: Write the skill-improvement SKILL.md**
 
-Create `~/.claude/skills/skill-improvement/SKILL.md`:
+Create `~/.codex/skills/skill-improvement/SKILL.md`:
 
 ```markdown
 ---
@@ -259,7 +259,7 @@ Analyze accumulated skill audit data and propose concrete, testable improvements
 ### Step 1: Read Audit Data
 
 ```bash
-cat ~/.claude/memory/skill-audit.jsonl
+cat ~/.codex/memory/skill-audit.jsonl
 ```
 
 ### Step 2: Aggregate by Failure Mode
@@ -297,7 +297,7 @@ For each problem skill, output a concrete proposal:
 For approved proposals, create personal skill overrides:
 
 ```bash
-mkdir -p ~/.claude/skills/[skill-name]
+mkdir -p ~/.codex/skills/[skill-name]
 # Write patched SKILL.md that shadows the superpowers version
 ```
 
@@ -329,13 +329,13 @@ Strengthen any weak areas based on test results.
 ### Task 5: Create Test Scenario Files
 
 **Files:**
-- Create: `~/.claude/skills/tests/tdd-scenarios.yaml`
-- Create: `~/.claude/skills/tests/debugging-scenarios.yaml`
-- Create: `~/.claude/skills/tests/brainstorming-scenarios.yaml`
+- Create: `~/.codex/skills/tests/tdd-scenarios.yaml`
+- Create: `~/.codex/skills/tests/debugging-scenarios.yaml`
+- Create: `~/.codex/skills/tests/brainstorming-scenarios.yaml`
 
 **Step 1: Write TDD trigger scenarios**
 
-Create `~/.claude/skills/tests/tdd-scenarios.yaml`:
+Create `~/.codex/skills/tests/tdd-scenarios.yaml`:
 
 ```yaml
 skill: test-driven-development
@@ -363,7 +363,7 @@ scenarios:
 
 **Step 2: Write debugging trigger scenarios**
 
-Create `~/.claude/skills/tests/debugging-scenarios.yaml`:
+Create `~/.codex/skills/tests/debugging-scenarios.yaml`:
 
 ```yaml
 skill: systematic-debugging
@@ -387,7 +387,7 @@ scenarios:
 
 **Step 3: Write brainstorming trigger scenarios**
 
-Create `~/.claude/skills/tests/brainstorming-scenarios.yaml`:
+Create `~/.codex/skills/tests/brainstorming-scenarios.yaml`:
 
 ```yaml
 skill: brainstorming
@@ -414,13 +414,13 @@ scenarios:
 ### Task 6: Create the Test Skills Skill
 
 **Files:**
-- Create: `~/.claude/skills/test-skills/SKILL.md`
+- Create: `~/.codex/skills/test-skills/SKILL.md`
 
 **Step 1: Run baseline - test without the skill**
 
 Spawn a subagent:
 ```
-Read the YAML files in ~/.claude/skills/tests/. Run each scenario
+Read the YAML files in ~/.codex/skills/tests/. Run each scenario
 by spawning a subagent and checking if the expected skill was invoked.
 Report results.
 ```
@@ -429,7 +429,7 @@ Document: Does the agent know how to structure the test run? (Expected: ad-hoc, 
 
 **Step 2: Write the test-skills SKILL.md**
 
-Create `~/.claude/skills/test-skills/SKILL.md`:
+Create `~/.codex/skills/test-skills/SKILL.md`:
 
 ```markdown
 ---
@@ -450,7 +450,7 @@ Run scenario-based tests against skills using subagents. Each scenario checks wh
 ### Step 1: Load Scenarios
 
 ```bash
-ls ~/.claude/skills/tests/*.yaml
+ls ~/.codex/skills/tests/*.yaml
 ```
 
 Read each YAML file. Each contains a `skill` name and list of `scenarios`.
@@ -496,10 +496,10 @@ Output a results table:
 
 ### Step 5: Save Results
 
-Append results to `~/.claude/memory/skill-test-results.jsonl`:
+Append results to `~/.codex/memory/skill-test-results.jsonl`:
 
 ```bash
-echo '{"timestamp":"...","skill":"...","pass_rate":"4/5","failures":[...]}' >> ~/.claude/memory/skill-test-results.jsonl
+echo '{"timestamp":"...","skill":"...","pass_rate":"4/5","failures":[...]}' >> ~/.codex/memory/skill-test-results.jsonl
 ```
 
 ## Red Flags
@@ -524,7 +524,7 @@ Verify the agent follows the structured test process.
 Start a new Claude session. Work on a small task. Verify that:
 - The skill-tracker skill is discoverable
 - It produces a valid JSONL entry when invoked
-- The entry is appended to `~/.claude/memory/skill-audit.jsonl`
+- The entry is appended to `~/.codex/memory/skill-audit.jsonl`
 
 **Step 2: Verify skill-improvement works**
 
@@ -539,7 +539,7 @@ Invoke the test-skills skill. Verify:
 - It finds and reads YAML scenario files
 - It spawns subagents for each scenario
 - It produces a pass/fail report
-- Results are saved to `~/.claude/memory/skill-test-results.jsonl`
+- Results are saved to `~/.codex/memory/skill-test-results.jsonl`
 
 **Step 4: Commit all work**
 
@@ -555,11 +555,11 @@ git commit -m "feat: add self-improving skill system (Phase 1-3)"
 
 | File | Purpose |
 |------|---------|
-| `~/.claude/skills/skill-tracker/SKILL.md` | Observability - tracks skill usage per session |
-| `~/.claude/skills/skill-improvement/SKILL.md` | Feedback loop - analyzes audit data, proposes fixes |
-| `~/.claude/skills/test-skills/SKILL.md` | Test harness - validates skills with scenarios |
-| `~/.claude/skills/tests/*.yaml` | Test scenarios for TDD, debugging, brainstorming |
-| `~/.claude/hooks.json` | Hook to remind about tracking before commits |
-| `~/.claude/memory/skill-audit.jsonl` | Persistent audit log |
+| `~/.codex/skills/skill-tracker/SKILL.md` | Observability - tracks skill usage per session |
+| `~/.codex/skills/skill-improvement/SKILL.md` | Feedback loop - analyzes audit data, proposes fixes |
+| `~/.codex/skills/test-skills/SKILL.md` | Test harness - validates skills with scenarios |
+| `~/.codex/skills/tests/*.yaml` | Test scenarios for TDD, debugging, brainstorming |
+| `~/.codex/hooks.json` | Hook to remind about tracking before commits |
+| `~/.codex/memory/skill-audit.jsonl` | Persistent audit log |
 | `docs/plans/2026-02-10-self-improving-skill-system-design.md` | Design document |
 | `docs/plans/2026-02-10-self-improving-skill-system-plan.md` | This plan |

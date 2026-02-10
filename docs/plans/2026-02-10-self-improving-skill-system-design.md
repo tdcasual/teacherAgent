@@ -25,7 +25,7 @@ Three layers forming a continuous improvement cycle:
                    ▼
 ┌─────────────────────────────────────────────┐
 │           LEARN (Skill Audit Memory)         │
-│  ~/.claude/memory/skill-audit.jsonl          │
+│  ~/.codex/memory/skill-audit.jsonl          │
 │  Accumulates patterns across sessions        │
 └──────────────────┬──────────────────────────┘
                    ▼
@@ -33,12 +33,12 @@ Three layers forming a continuous improvement cycle:
 │           IMPROVE (Two Mechanisms)           │
 │  1. skill-improvement skill (manual review)  │
 │  2. test harness (automated hardening)       │
-│  → Outputs: patched skills in ~/.claude/skills/
+│  → Outputs: patched skills in ~/.codex/skills/
 └─────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
-- Personal skills directory (`~/.claude/skills/`) is the output target. Never modify superpowers directly - shadow with improved versions.
+- Personal skills directory (`~/.codex/skills/`) is the output target. Never modify superpowers directly - shadow with improved versions.
 - JSONL audit log - machine-readable, appendable, easy to query.
 - Human-in-the-loop - system proposes changes, user approves. No auto-patching.
 - Hooks do the heavy lifting - session-start hook injects tracking prompt automatically.
@@ -47,7 +47,7 @@ Three layers forming a continuous improvement cycle:
 
 The session-start hook injects a skill tracker prompt that instructs Claude to self-report skill usage at natural breakpoints.
 
-**Audit log format** (`~/.claude/memory/skill-audit.jsonl`):
+**Audit log format** (`~/.codex/memory/skill-audit.jsonl`):
 
 ```jsonl
 {
@@ -83,7 +83,7 @@ The session-start hook injects a skill tracker prompt that instructs Claude to s
 A `skill-improvement` personal skill, invoked periodically (e.g., weekly via `/skill-improvement`).
 
 **Process:**
-1. Reads `~/.claude/memory/skill-audit.jsonl` and aggregates patterns
+1. Reads `~/.codex/memory/skill-audit.jsonl` and aggregates patterns
 2. Identifies top failure modes per skill:
    - Missed most often → trigger/description problem
    - Invoked but not followed → compliance/enforcement problem
@@ -91,13 +91,13 @@ A `skill-improvement` personal skill, invoked periodically (e.g., weekly via `/s
 3. Proposes concrete patches as personal skill overrides (diffs)
 4. User reviews and approves before deployment
 
-**Output target:** Patched skills in `~/.claude/skills/<skill-name>/SKILL.md` which automatically shadow superpowers versions via skills-core.js.
+**Output target:** Patched skills in `~/.codex/skills/<skill-name>/SKILL.md` which automatically shadow superpowers versions via skills-core.js.
 
 ## Layer 3: Test-Driven Hardening
 
 Scenario-based testing using subagents, driven by audit data.
 
-**Test format** (`~/.claude/skills/tests/<skill>-scenarios.yaml`):
+**Test format** (`~/.codex/skills/tests/<skill>-scenarios.yaml`):
 
 ```yaml
 skill: test-driven-development
@@ -121,19 +121,19 @@ scenarios:
 ## Implementation Phases
 
 ### Phase 1: Observability Foundation
-- Create `~/.claude/skills/skill-tracker/SKILL.md`
+- Create `~/.codex/skills/skill-tracker/SKILL.md`
 - Add session-start hook snippet for tracking injection
-- Create `~/.claude/memory/skill-audit.jsonl`
+- Create `~/.codex/memory/skill-audit.jsonl`
 - **Goal:** Real data after 5-10 sessions
 
 ### Phase 2: Skill Improvement Skill
-- Create `~/.claude/skills/skill-improvement/SKILL.md`
+- Create `~/.codex/skills/skill-improvement/SKILL.md`
 - Reads audit JSONL, aggregates, proposes patches
 - **Goal:** Actionable recommendations on demand
 
 ### Phase 3: Test Harness
-- Create `~/.claude/skills/tests/` with YAML scenarios
-- Create `~/.claude/skills/test-skills/SKILL.md`
+- Create `~/.codex/skills/tests/` with YAML scenarios
+- Create `~/.codex/skills/test-skills/SKILL.md`
 - Seed scenarios from Phase 1 audit data
 - **Goal:** Validate skill changes before deploying
 
