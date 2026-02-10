@@ -10,6 +10,7 @@ export type ChatStartPayload = {
   session_id?: string
   messages?: Array<{ role?: string; content?: string }>
   role?: string
+  teacher_id?: string
   agent_id?: string
   skill_id?: string
 }

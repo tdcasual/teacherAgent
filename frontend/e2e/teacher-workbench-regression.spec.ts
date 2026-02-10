@@ -31,6 +31,21 @@ test('skills favorites filter keeps insertion target and sends cleaned payload',
   expect(chatStartCalls[0].messages?.[chatStartCalls[0].messages!.length - 1]?.content).toBe('生成 3 道巩固题')
 })
 
+
+test('chat start payload includes routing teacher id from settings state', async ({ page }) => {
+  const { chatStartCalls } = await openTeacherApp(page, {
+    stateOverrides: {
+      teacherRoutingTeacherId: 'teacherB',
+    },
+  })
+
+  await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('检查 teacher_id 透传')
+  await page.getByRole('button', { name: '发送' }).click()
+
+  await expect.poll(() => chatStartCalls.length).toBe(1)
+  expect(chatStartCalls[0].teacher_id).toBe('teacherB')
+})
+
 test('workflow assignment confirm button enters confirming state and prevents duplicate requests', async ({ page }) => {
   const jobId = 'job_assignment_ready_1'
   let confirmCalls = 0

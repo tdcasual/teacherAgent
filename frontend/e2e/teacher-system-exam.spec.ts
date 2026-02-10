@@ -254,6 +254,7 @@ test('exam upload start uses updated API base from settings', async ({ page }) =
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByPlaceholder('http://localhost:8000').fill('http://127.0.0.1:9101')
+  await page.getByRole('button', { name: '关闭' }).click()
 
   await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
   await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
@@ -491,6 +492,7 @@ test('custom exam API base is persisted to localStorage', async ({ page }) => {
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByPlaceholder('http://localhost:8000').fill('http://127.0.0.1:9494')
+  await page.getByRole('button', { name: '关闭' }).click()
 
   await expect
     .poll(async () => page.evaluate(() => localStorage.getItem('apiBaseTeacher')))

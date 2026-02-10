@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { absolutizeChartImageUrls, renderMarkdown } from './features/chat/markdown'
-import RoutingPage from './features/routing/RoutingPage'
+import RoutingPage, { type RoutingSection } from './features/routing/RoutingPage'
+import SettingsModal from './features/settings/SettingsModal'
 import {
   buildInvocationToken,
   findInvocationTrigger,
@@ -23,6 +24,7 @@ import ChatMessages from './features/chat/ChatMessages'
 import MentionPanel from './features/chat/MentionPanel'
 import SessionSidebar from './features/chat/SessionSidebar'
 import TeacherWorkbench from './features/workbench/TeacherWorkbench'
+import { useWorkbenchResize } from './features/workbench/useWorkbenchResize'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
 import {
@@ -85,10 +87,15 @@ import type {
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const ROUTING_SECTIONS: RoutingSection[] = ['general', 'providers', 'channels', 'rules', 'simulate', 'history']
+
+const isRoutingSection = (value: string | null | undefined): value is RoutingSection =>
+  Boolean(value && ROUTING_SECTIONS.includes(value as RoutingSection))
 
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const workbench = useTeacherWorkbenchState()
+  const { isDragging: isResizeDragging, onResizeMouseDown } = useWorkbenchResize()
   const session = useTeacherSessionState(initialViewStateRef.current)
   const {
     uploadMode, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds, uploadFiles, uploadAnswerFiles,
@@ -131,9 +138,10 @@ export default function App() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [mainView, setMainView] = useState<'chat' | 'routing'>(() => {
-    const raw = safeLocalStorageGetItem('teacherMainView')
-    return raw === 'routing' ? 'routing' : 'chat'
+  const [settingsHasUnsavedDraft, setSettingsHasUnsavedDraft] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<RoutingSection>(() => {
+    const raw = safeLocalStorageGetItem('teacherSettingsSection')
+    return isRoutingSection(raw) ? raw : 'general'
   })
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => safeLocalStorageGetItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => safeLocalStorageGetItem('teacherSkillsOpen') !== 'false')
@@ -218,8 +226,8 @@ export default function App() {
 	  }, [sessionSidebarOpen])
 
 	  useEffect(() => {
-	    safeLocalStorageSetItem('teacherMainView', mainView)
-	  }, [mainView])
+	    safeLocalStorageSetItem('teacherSettingsSection', settingsSection)
+	  }, [settingsSection])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -334,14 +342,6 @@ export default function App() {
       setOpenSessionMenuId('')
     }
   }, [sessionSidebarOpen])
-
-  useEffect(() => {
-    if (mainView !== 'chat') {
-      setOpenSessionMenuId('')
-      setSessionSidebarOpen(false)
-      setSkillsOpen(false)
-    }
-  }, [mainView])
 
   useEffect(() => {
     if (activeSessionId) safeLocalStorageSetItem('teacherActiveSessionId', activeSessionId)
@@ -605,23 +605,20 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (mainView !== 'chat') return
     void refreshTeacherSessions()
-  }, [mainView, refreshTeacherSessions])
+  }, [refreshTeacherSessions])
 
   useEffect(() => {
-    if (mainView !== 'chat') return
     if (!activeSessionId) return
     void loadTeacherSessionMessages(activeSessionId, -1, false)
-  }, [activeSessionId, mainView, loadTeacherSessionMessages])
+  }, [activeSessionId, loadTeacherSessionMessages])
 
   useEffect(() => {
-    if (mainView !== 'chat') return
     const timer = window.setInterval(() => {
       void refreshTeacherSessions()
     }, 30000)
     return () => window.clearInterval(timer)
-  }, [mainView, refreshTeacherSessions])
+  }, [refreshTeacherSessions])
 
   const refreshMemoryProposals = useCallback(async () => {
     setProposalLoading(true)
@@ -1099,21 +1096,17 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (mainView !== 'chat') {
-      setWheelScrollZone('chat')
-      return
-    }
     if (wheelScrollZoneRef.current === 'session' && !sessionSidebarOpen) {
       setWheelScrollZone('chat')
     }
     if (wheelScrollZoneRef.current === 'workbench' && !skillsOpen) {
       setWheelScrollZone('chat')
     }
-  }, [mainView, sessionSidebarOpen, setWheelScrollZone, skillsOpen])
+  }, [sessionSidebarOpen, setWheelScrollZone, skillsOpen])
 
   useEffect(() => {
     if (typeof document === 'undefined') return
-    const enabled = mainView === 'chat' && !isMobileViewport()
+    const enabled = !isMobileViewport()
     if (!enabled) {
       setWheelScrollZone('chat')
       return
@@ -1144,11 +1137,11 @@ export default function App() {
       document.removeEventListener('pointerdown', onPointerDown, true)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [isMobileViewport, mainView, sessionSidebarOpen, setWheelScrollZone, skillsOpen])
+  }, [isMobileViewport, sessionSidebarOpen, setWheelScrollZone, skillsOpen])
 
 	  useEffect(() => {
 	    if (typeof document === 'undefined') return
-	    const enabled = mainView === 'chat' && !isMobileViewport()
+	    const enabled = !isMobileViewport()
 	    if (!enabled) return
 
 	    const onWheel = (event: WheelEvent) => {
@@ -1185,7 +1178,7 @@ export default function App() {
 	    return () => {
 	      document.removeEventListener('wheel', onWheel, true)
 	    }
-	  }, [isMobileViewport, mainView, resolveWheelScrollTarget, sessionSidebarOpen, skillsOpen])
+	  }, [isMobileViewport, resolveWheelScrollTarget, sessionSidebarOpen, skillsOpen])
 
   const closeSessionSidebarOnMobile = useCallback(() => {
     if (isMobileViewport()) {
@@ -1561,6 +1554,7 @@ export default function App() {
     if (!activeSessionId) setActiveSessionId(sessionId)
     const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
     const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const routingTeacherId = (safeLocalStorageGetItem('teacherRoutingTeacherId') || '').trim()
 
     setWheelScrollZone('chat')
     enableAutoScroll()
@@ -1588,6 +1582,7 @@ export default function App() {
           session_id: sessionId,
           messages: contextMessages,
           role: 'teacher',
+          teacher_id: routingTeacherId || undefined,
           agent_id: parsedInvocation.effectiveAgentId || activeAgentId || undefined,
           skill_id: routingDecision.skillIdForRequest,
         }),
@@ -2142,57 +2137,75 @@ export default function App() {
     }
   }
 
+  const requestCloseSettings = useCallback(() => {
+    if (settingsHasUnsavedDraft && typeof window !== 'undefined') {
+      const confirmed = window.confirm('当前有未提交的路由草稿，确认关闭并丢弃吗？')
+      if (!confirmed) return
+    }
+    setSettingsOpen(false)
+    setSettingsHasUnsavedDraft(false)
+  }, [settingsHasUnsavedDraft])
+
+  const toggleSettingsPanel = useCallback(() => {
+    if (settingsOpen) {
+      requestCloseSettings()
+      return
+    }
+    setSettingsOpen(true)
+  }, [requestCloseSettings, settingsOpen])
+
   return (
     <div ref={appRef} className="app teacher" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px` }}>
       <header ref={topbarRef} className="topbar">
         <div className="top-left">
           <div className="brand">物理教学助手 · 老师端</div>
-          {mainView === 'chat' ? (
-            <button className="ghost" type="button" onClick={toggleSessionSidebar}>
-              {sessionSidebarOpen ? '收起会话' : '展开会话'}
-            </button>
-          ) : null}
+          <button className="ghost" type="button" onClick={toggleSessionSidebar}>
+            {sessionSidebarOpen ? '收起会话' : '展开会话'}
+          </button>
         </div>
         <div className="top-actions">
-          <div className="view-switch">
-            <button type="button" className={mainView === 'chat' ? 'active' : ''} onClick={() => setMainView('chat')}>
-              首页工作台
-            </button>
-            <button type="button" className={mainView === 'routing' ? 'active' : ''} onClick={() => setMainView('routing')}>
-              模型路由
-            </button>
-          </div>
           <div className="role-badge teacher">身份：老师</div>
-          {mainView === 'chat' ? (
-            <button
-              className="ghost"
-              type="button"
-              onClick={toggleSkillsWorkbench}
-            >
-              {skillsOpen ? '收起工作台' : '打开工作台'}
-            </button>
-          ) : null}
-          <button className="ghost" onClick={() => setSettingsOpen((prev) => !prev)}>
-            设置
+          <button
+            className="ghost"
+            type="button"
+            onClick={toggleSkillsWorkbench}
+          >
+            {skillsOpen ? '收起工作台' : '打开工作台'}
+          </button>
+          <button className="ghost settings-gear" onClick={toggleSettingsPanel} aria-label="设置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         </div>
       </header>
 
-      {settingsOpen && (
-        <section className="settings">
-          <div className="settings-row">
-            <label>接口地址</label>
-            <input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="http://localhost:8000" />
-          </div>
-          <div className="settings-hint">修改后立即生效。</div>
-        </section>
-      )}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={requestCloseSettings}
+        sections={[
+          { id: 'general', label: '通用' },
+          { id: 'providers', label: 'Provider' },
+          { id: 'channels', label: '渠道' },
+          { id: 'rules', label: '路由规则' },
+          { id: 'simulate', label: '仿真' },
+          { id: 'history', label: '版本历史' },
+        ]}
+        activeSection={settingsSection}
+        onSectionChange={(id) => {
+          if (isRoutingSection(id)) setSettingsSection(id)
+        }}
+      >
+        <RoutingPage
+          apiBase={apiBase}
+          onApiBaseChange={setApiBase}
+          onDirtyChange={setSettingsHasUnsavedDraft}
+          section={settingsSection}
+        />
+      </SettingsModal>
 
       <div
-        className={`teacher-layout ${mainView === 'chat' ? 'chat-view' : ''} ${sessionSidebarOpen ? 'session-open' : 'session-collapsed'} ${skillsOpen ? 'workbench-open' : ''}`}
+        className={`teacher-layout chat-view ${sessionSidebarOpen ? 'session-open' : 'session-collapsed'} ${skillsOpen ? 'workbench-open' : ''}`}
       >
-        {mainView === 'chat' ? (
-          <button
+        <button
             type="button"
             className={`layout-overlay ${sessionSidebarOpen || skillsOpen ? 'show' : ''}`}
             aria-label="关闭侧边栏"
@@ -2201,9 +2214,7 @@ export default function App() {
               setSkillsOpen(false)
             }}
           />
-        ) : null}
-        {mainView === 'chat' ? (
-          <SessionSidebar
+        <SessionSidebar
             open={sessionSidebarOpen}
             historyQuery={historyQuery}
             historyLoading={historyLoading}
@@ -2237,13 +2248,8 @@ export default function App() {
             getSessionTitle={getSessionTitle}
             formatSessionUpdatedLabel={formatSessionUpdatedLabel}
           />
-        ) : null}
 
-        <main className={`chat-shell ${mainView === 'routing' ? 'routing-shell' : ''}`}>
-          {mainView === 'routing' ? (
-            <RoutingPage apiBase={apiBase} />
-          ) : (
-            <>
+        <main className="chat-shell">
 
           <ChatMessages
             renderedMessages={renderedMessages}
@@ -2279,14 +2285,13 @@ export default function App() {
 	          {/* workflow panels moved to right workbench */}
 
           <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={insertMention} />
-            </>
-          )}
         </main>
 
-        {mainView === 'chat' && (
-          <TeacherWorkbench
+        <TeacherWorkbench
             skillsOpen={skillsOpen}
             setSkillsOpen={setSkillsOpen}
+            onResizeMouseDown={onResizeMouseDown}
+            isResizeDragging={isResizeDragging}
             workbenchTab={workbenchTab}
             setWorkbenchTab={setWorkbenchTab}
             activeAgentId={activeAgentId}
@@ -2410,7 +2415,6 @@ export default function App() {
             uploadStudentIds={uploadStudentIds}
             uploading={uploading}
           />
-        )}
       </div>
 
       <PromptDialog

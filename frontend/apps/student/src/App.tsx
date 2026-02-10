@@ -58,7 +58,6 @@ export default function App() {
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -1098,7 +1097,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <StudentTopbar apiBase={apiBase} setApiBase={setApiBase} verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen} />
+      <StudentTopbar verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} />
 
       <div className={`student-layout ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
         <StudentSessionSidebar

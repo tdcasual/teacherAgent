@@ -165,6 +165,7 @@ test('assignment upload request uses updated API base from settings', async ({ p
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByPlaceholder('http://localhost:8000').fill('http://127.0.0.1:9100')
+  await page.getByRole('button', { name: '关闭' }).click()
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-BASE-001')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
@@ -452,6 +453,7 @@ test('settings api base update persists to localStorage', async ({ page }) => {
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByPlaceholder('http://localhost:8000').fill('http://127.0.0.1:9393')
+  await page.getByRole('button', { name: '关闭' }).click()
 
   await expect
     .poll(async () => page.evaluate(() => localStorage.getItem('apiBaseTeacher')))

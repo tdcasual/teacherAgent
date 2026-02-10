@@ -49,6 +49,18 @@ export type RoutingConfig = {
   rules: RoutingRule[]
 }
 
+export type RoutingHistorySummary = {
+  enabled: boolean
+  channel_count: number
+  rule_count: number
+  primary_channel_id: string
+  primary_channel_title: string
+  primary_provider: string
+  primary_mode: string
+  primary_model: string
+  top_rule_id: string
+}
+
 export type RoutingHistoryItem = {
   file: string
   version: number
@@ -56,6 +68,8 @@ export type RoutingHistoryItem = {
   saved_by: string
   source: string
   note: string
+  summary?: RoutingHistorySummary
+  config?: Record<string, unknown>
 }
 
 export type RoutingProposalItem = {
@@ -100,6 +114,7 @@ export type RoutingCatalogMode = {
 export type RoutingCatalogProvider = {
   provider: string
   source?: string
+  base_url?: string
   modes: RoutingCatalogMode[]
 }
 

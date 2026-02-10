@@ -3,6 +3,8 @@ type WorkbenchTab = 'skills' | 'memory' | 'workflow'
 type TeacherWorkbenchProps = {
   skillsOpen: boolean
   setSkillsOpen: any
+  onResizeMouseDown?: (e: React.MouseEvent) => void
+  isResizeDragging?: boolean
   workbenchTab: WorkbenchTab
   setWorkbenchTab: any
   activeAgentId: any
@@ -131,6 +133,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
   const {
     skillsOpen,
     setSkillsOpen,
+    onResizeMouseDown,
+    isResizeDragging,
     workbenchTab,
     setWorkbenchTab,
     activeAgentId,
@@ -257,6 +261,12 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
 
   return (
               <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
+                {onResizeMouseDown && (
+                  <div
+                    className={`workbench-resize-handle ${isResizeDragging ? 'dragging' : ''}`}
+                    onMouseDown={onResizeMouseDown}
+                  />
+                )}
                 <div className="skills-header">
                   <h3>工作台</h3>
                   <div style={{ display: 'flex', gap: 8 }}>
