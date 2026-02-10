@@ -1,4 +1,4 @@
-import type { AgentOption, Skill } from '../../appTypes'
+import type { Skill } from '../../appTypes'
 
 export const fallbackSkills: Skill[] = [
   {
@@ -52,21 +52,8 @@ export const fallbackSkills: Skill[] = [
   },
 ]
 
-export const fallbackAgents: AgentOption[] = [
-  {
-    id: 'default',
-    title: '默认 Agent',
-    desc: '按系统路由自动选择执行链路。',
-  },
-  {
-    id: 'opencode',
-    title: 'OpenCode Agent',
-    desc: '优先按 opencode 路由执行（需后端已配置）。',
-  },
-]
-
 export const TEACHER_GREETING =
-  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n召唤规则：`@agent` 选择执行代理，`$skill` 选择技能。'
+  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$skill` 选择技能（未指定时自动路由）。'
 
 export const buildSkill = (skill: { id: string; title?: string; desc?: string; prompts?: string[]; examples?: string[] }): Skill => {
   const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : []

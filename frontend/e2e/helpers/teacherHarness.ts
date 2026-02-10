@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 
 export const TEACHER_COMPOSER_PLACEHOLDER =
-  '输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行'
+  '输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行'
 
 type LocalStorageState = Record<string, string | null | undefined>
 
@@ -11,7 +11,6 @@ export type ChatStartPayload = {
   messages?: Array<{ role?: string; content?: string }>
   role?: string
   teacher_id?: string
-  agent_id?: string
   skill_id?: string
 }
 
@@ -66,7 +65,6 @@ const defaultLocalStorageState: LocalStorageState = {
   teacherWorkbenchTab: 'skills',
   teacherSkillPinned: 'false',
   teacherActiveSkillId: 'physics-teacher-ops',
-  teacherActiveAgentId: 'default',
   apiBaseTeacher: 'http://localhost:8000',
 }
 

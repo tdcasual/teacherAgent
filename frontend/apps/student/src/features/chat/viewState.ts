@@ -98,7 +98,7 @@ export const readStudentLocalViewState = (studentId: string): SessionViewStatePa
     title_map: titleMap,
     hidden_ids: hiddenIds,
     active_session_id: activeSessionId,
-    updated_at: new Date().toISOString(),
+    updated_at: '',
   })
 }
 

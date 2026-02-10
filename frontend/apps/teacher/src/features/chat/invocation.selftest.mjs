@@ -1,29 +1,22 @@
 import assert from 'node:assert/strict'
 import { parseInvocationInput } from './invocation.ts'
 
-const knownAgents = ['default', 'opencode']
 const knownSkills = ['physics-teacher-ops', 'physics-homework-generator']
 
-const parsed = parseInvocationInput('@opencode $physics-teacher-ops 生成作业', {
-  knownAgentIds: knownAgents,
+const parsed = parseInvocationInput('$physics-teacher-ops 生成作业', {
   knownSkillIds: knownSkills,
-  activeAgentId: 'default',
   activeSkillId: 'physics-teacher-ops',
 })
 
-assert.equal(parsed.effectiveAgentId, 'opencode')
 assert.equal(parsed.effectiveSkillId, 'physics-teacher-ops')
 assert.equal(parsed.cleanedInput, '生成作业')
 assert.equal(parsed.warnings.length, 0)
 
-const unknown = parseInvocationInput('@ghost $unknown 讲解静电场', {
-  knownAgentIds: knownAgents,
+const unknown = parseInvocationInput('$unknown 讲解静电场', {
   knownSkillIds: knownSkills,
-  activeAgentId: 'default',
   activeSkillId: 'physics-teacher-ops',
 })
 
-assert.equal(unknown.effectiveAgentId, 'default')
 assert.equal(unknown.effectiveSkillId, 'physics-teacher-ops')
 assert.ok(unknown.warnings.length >= 1)
 

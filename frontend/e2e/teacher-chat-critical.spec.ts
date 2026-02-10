@@ -85,9 +85,9 @@ const chatCases: MatrixCase[] = [
     id: 'A010',
     priority: 'P1',
     title: 'Last valid invocation token wins',
-    given: 'Composer contains multiple @agent and $skill tokens',
+    given: 'Composer contains multiple $skill tokens',
     when: 'Send message',
-    then: 'Payload uses the last valid agent and skill tokens',
+    then: 'Payload uses the last valid skill token',
   },
   {
     id: 'A011',
@@ -433,11 +433,10 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page
       .getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
-      .fill('@default @opencode $physics-teacher-ops $physics-homework-generator 多令牌')
+      .fill('$physics-teacher-ops $physics-homework-generator 多令牌')
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].agent_id).toBe('opencode')
     expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
   },
 
@@ -545,12 +544,12 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const { chatStartCalls } = await openTeacherApp(page)
 
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
-    await composer.fill('@opencode $physics-homework-generator')
+    await composer.fill('$physics-homework-generator')
     await page.getByRole('button', { name: '发送' }).click()
 
-    await expect(page.locator('.messages').getByText('@opencode $physics-homework-generator')).toHaveCount(0)
+    await expect(page.locator('.messages').getByText('$physics-homework-generator')).toHaveCount(0)
     expect(chatStartCalls.length).toBe(0)
-    await expect(composer).toHaveValue('@opencode $physics-homework-generator')
+    await expect(composer).toHaveValue('$physics-homework-generator')
   },
 
   A014: async ({ page }) => {
@@ -841,7 +840,6 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       localStorage.setItem('teacherWorkbenchTab', 'skills')
       localStorage.setItem('teacherSkillPinned', 'false')
       localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
-      localStorage.setItem('teacherActiveAgentId', 'default')
       localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
     })
 

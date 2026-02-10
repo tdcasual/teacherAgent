@@ -196,6 +196,52 @@ export type AssignmentProgress = {
   updated_at?: string
 }
 
+export type ExamScoreSchemaSubjectCandidate = {
+  candidate_id: string
+  type?: string
+  file?: string
+  subject_col?: number | null
+  subject_header?: string
+  score_col?: number | null
+  score_header?: string
+  rows_considered?: number
+  rows_parsed?: number
+  rows_invalid?: number
+  selected?: boolean
+  sample_rows?: Array<{
+    student_id?: string
+    student_name?: string
+    class_name?: string
+    raw_value?: string
+    score?: number
+    status?: string
+  }>
+}
+
+export type ExamScoreSchemaSubject = {
+  target?: string
+  question_id?: string
+  selected_candidate_id?: string
+  requested_candidate_id?: string
+  selected_candidate_available?: boolean
+  coverage?: number
+  data_rows?: number
+  parsed_rows?: number
+  unresolved_students?: string[]
+  candidate_columns?: ExamScoreSchemaSubjectCandidate[]
+  thresholds?: { coverage?: number; confidence?: number }
+}
+
+export type ExamScoreSchema = {
+  mode?: string
+  confidence?: number
+  needs_confirm?: boolean
+  confirm?: boolean
+  selected_candidate_id?: string
+  sources?: Array<Record<string, any>>
+  subject?: ExamScoreSchemaSubject
+}
+
 export type ExamUploadJobStatus = {
   job_id: string
   status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming' | 'cancelled'
@@ -217,6 +263,8 @@ export type ExamUploadJobStatus = {
   }
   answer_key?: { count?: number; source?: string; warnings?: string[] }
   warnings?: string[]
+  score_schema?: ExamScoreSchema
+  needs_confirm?: boolean
 }
 
 export type ExamUploadDraft = {
@@ -233,11 +281,12 @@ export type ExamUploadDraft = {
   scoring?: Record<string, any>
   meta: Record<string, any>
   questions: Array<Record<string, any>>
-  score_schema?: Record<string, any>
+  score_schema?: ExamScoreSchema
   answer_key?: Record<string, any>
   answer_key_text?: string
   answer_text_excerpt?: string
   warnings?: string[]
+  needs_confirm?: boolean
   draft_version?: string | number
   draft_saved?: boolean
 }
@@ -248,12 +297,6 @@ export type Skill = {
   desc: string
   prompts: string[]
   examples: string[]
-}
-
-export type AgentOption = {
-  id: string
-  title: string
-  desc: string
 }
 
 export type MentionOption = {

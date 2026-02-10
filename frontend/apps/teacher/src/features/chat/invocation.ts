@@ -1,4 +1,4 @@
-export type InvocationTriggerType = 'agent' | 'skill'
+export type InvocationTriggerType = 'skill'
 
 export type InvocationToken = {
   type: InvocationTriggerType
@@ -14,25 +14,20 @@ export type InvocationTrigger = {
 }
 
 export type ParseInvocationOptions = {
-  knownAgentIds: string[]
   knownSkillIds: string[]
-  activeAgentId: string
   activeSkillId: string
-  defaultAgentId?: string
 }
 
 export type ParsedInvocation = {
   cleanedInput: string
-  requestedAgentId: string
   requestedSkillId: string
-  effectiveAgentId: string
   effectiveSkillId: string
   warnings: string[]
   tokens: InvocationToken[]
 }
 
-const TOKEN_REGEX = /(^|\s)([@$])([^\s@$]+)/g
-const TRIGGER_REGEX = /(?:^|\s)([@$])([^\s@$]*)$/
+const TOKEN_REGEX = /(^|\s)(\$)([^\s@$]+)/g
+const TRIGGER_REGEX = /(?:^|\s)(\$)([^\s@$]*)$/
 const INVOCATION_ID_REGEX = /^[A-Za-z0-9_-]{1,80}$/
 
 const normalizeIdList = (ids: string[]) => {
@@ -49,12 +44,11 @@ const ensureInvocationId = (raw: string) => {
   return INVOCATION_ID_REGEX.test(id) ? id : ''
 }
 
-const tokenTypeFromSigil = (sigil: string): InvocationTriggerType => (sigil === '@' ? 'agent' : 'skill')
-
 export const buildInvocationToken = (type: InvocationTriggerType, id: string) => {
+  if (type !== 'skill') return ''
   const clean = ensureInvocationId(id)
   if (!clean) return ''
-  return `${type === 'agent' ? '@' : '$'}${clean}`
+  return `$${clean}`
 }
 
 const removeTokenRanges = (input: string, tokens: InvocationToken[]) => {
@@ -72,7 +66,6 @@ const removeTokenRanges = (input: string, tokens: InvocationToken[]) => {
 
 export const parseInvocationInput = (input: string, options: ParseInvocationOptions): ParsedInvocation => {
   const source = String(input || '')
-  const knownAgents = normalizeIdList(options.knownAgentIds || [])
   const knownSkills = normalizeIdList(options.knownSkillIds || [])
   const warnings: string[] = []
   const tokens: InvocationToken[] = []
@@ -91,21 +84,11 @@ export const parseInvocationInput = (input: string, options: ParseInvocationOpti
       match = TOKEN_REGEX.exec(source)
       continue
     }
-    tokens.push({ type: tokenTypeFromSigil(sigil), id, start, end })
+    tokens.push({ type: 'skill', id, start, end })
     match = TOKEN_REGEX.exec(source)
   }
 
-  const requestedAgentId = [...tokens].reverse().find((token) => token.type === 'agent')?.id || ''
   const requestedSkillId = [...tokens].reverse().find((token) => token.type === 'skill')?.id || ''
-
-  let effectiveAgentId = ensureInvocationId(options.activeAgentId) || ensureInvocationId(options.defaultAgentId || 'default') || 'default'
-  if (requestedAgentId) {
-    if (knownAgents.has(requestedAgentId)) {
-      effectiveAgentId = requestedAgentId
-    } else {
-      warnings.push(`未识别的 Agent：@${requestedAgentId}，已使用 ${effectiveAgentId}`)
-    }
-  }
 
   let effectiveSkillId = ensureInvocationId(options.activeSkillId) || ''
   if (requestedSkillId) {
@@ -118,9 +101,7 @@ export const parseInvocationInput = (input: string, options: ParseInvocationOpti
 
   return {
     cleanedInput: removeTokenRanges(source, tokens),
-    requestedAgentId,
     requestedSkillId,
-    effectiveAgentId,
     effectiveSkillId,
     warnings,
     tokens,
@@ -137,5 +118,5 @@ export const findInvocationTrigger = (input: string, cursorPos: number): Invocat
   const full = match[0] || ''
   const offset = full.lastIndexOf(sigil)
   const start = match.index + Math.max(0, offset)
-  return { type: tokenTypeFromSigil(sigil), start, query }
+  return { type: 'skill', start, query }
 }

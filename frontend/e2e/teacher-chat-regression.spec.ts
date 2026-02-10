@@ -5,7 +5,6 @@ type ChatStartPayload = {
   session_id?: string
   messages?: Array<{ role?: string; content?: string }>
   role?: string
-  agent_id?: string
   skill_id?: string
 }
 
@@ -41,7 +40,6 @@ const setupTeacherState = async (page: Page) => {
     localStorage.setItem('teacherWorkbenchTab', 'skills')
     localStorage.setItem('teacherSkillPinned', 'false')
     localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
-    localStorage.setItem('teacherActiveAgentId', 'default')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
   })
 }
@@ -139,7 +137,7 @@ const openTeacherApp = async (page: Page, options: SetupOptions = {}) => {
   const mocks = await setupApiMocks(page, options)
   await page.goto('/')
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
-  await expect(page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')).toBeVisible()
+  await expect(page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')).toBeVisible()
   return mocks
 }
 
@@ -248,22 +246,21 @@ const buildProviderRegistryOverview = () => ({
   config_path: '/tmp/provider-registry.json',
 })
 
-test('uses @agent and $skill tokens and sends cleaned payload', async ({ page }) => {
+test('uses $skill tokens and sends cleaned payload', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
 
   await composer.click()
-  await composer.fill('@ope')
+  await composer.fill('$')
   await expect(page.locator('.mention-panel')).toBeVisible()
-  await page.getByRole('button', { name: /@opencode/ }).first().click()
-  await expect(composer).toHaveValue(/@opencode/)
+  await page.getByRole('button', { name: /\$physics-homework-generator/ }).first().click()
+  await expect(composer).toHaveValue(/\$physics-homework-generator/)
 
-  await composer.type('$physics-homework-generator 生成作业')
+  await composer.type(' 生成作业')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
   const payload = chatStartCalls[0]
-  expect(payload.agent_id).toBe('opencode')
   expect(payload.skill_id).toBe('physics-homework-generator')
   expect(payload.messages?.[payload.messages.length - 1]?.content).toBe('生成作业')
 
@@ -300,7 +297,7 @@ test('desktop enforces isolated scroll contract', async ({ page }) => {
 test('desktop wheel on chat does not move page or side panel anchors', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   for (let i = 1; i <= 28; i += 1) {
@@ -377,7 +374,7 @@ test('desktop defaults wheel to chat until side panel is explicitly activated', 
   })
   await page.goto('/')
 
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   for (let i = 1; i <= 24; i += 1) {
@@ -475,7 +472,7 @@ test('desktop defaults wheel to chat until side panel is explicitly activated', 
 
 test('auto route mode omits skill_id and warns on unknown $skill', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
 
   await expect(page.getByText('技能: 自动路由')).toBeVisible()
   await composer.fill('$ghost-skill 讲解受力分析')
@@ -484,14 +481,13 @@ test('auto route mode omits skill_id and warns on unknown $skill', async ({ page
   await expect(page.getByText('未识别的技能：$ghost-skill，已使用自动路由')).toBeVisible()
   await expect.poll(() => chatStartCalls.length).toBe(1)
   const payload = chatStartCalls[0] as Record<string, unknown>
-  expect(payload.agent_id).toBe('default')
   expect(Object.prototype.hasOwnProperty.call(payload, 'skill_id')).toBe(false)
   expect((payload.messages as any[])?.[(payload.messages as any[])?.length - 1]?.content).toBe('讲解受力分析')
 })
 
 test('manual skill pin sends skill_id and auto route toggle clears it', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const homeworkSkillCard = page
@@ -814,7 +810,7 @@ test('keeps pending user message visible when switching sessions before reply fi
 
   await page.goto('/')
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const userText = '会话切换期间不应丢失'
@@ -963,7 +959,7 @@ test('restores pending messages when chat/start resolves after session switch', 
 
   await page.goto('/')
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const userText = '延迟建任务时也不能丢消息'
@@ -1134,7 +1130,6 @@ test('keeps draft session in sidebar after page reload before server persists it
     localStorage.setItem('teacherWorkbenchTab', 'skills')
     localStorage.setItem('teacherSkillPinned', 'false')
     localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
-    localStorage.setItem('teacherActiveAgentId', 'default')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
   })
 

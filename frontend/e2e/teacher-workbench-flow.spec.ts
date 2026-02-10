@@ -156,10 +156,10 @@ const skillWorkbenchCases: MatrixCase[] = [
   {
     id: 'C011',
     priority: 'P1',
-    title: 'Agent card insertion sets matching agent_id',
-    given: 'Agent card can insert @ token',
+    title: 'Skill card insertion sets matching skill',
+    given: 'Skill card can insert $ token',
     when: 'Insert and send prompt',
-    then: 'Payload agent_id matches inserted agent token',
+    then: 'Payload skill_id matches inserted skill token',
   },
   {
     id: 'C012',
@@ -167,7 +167,7 @@ const skillWorkbenchCases: MatrixCase[] = [
     title: 'Card insert and manual tokens produce coherent payload',
     given: 'User mixes card insertion and manual typing',
     when: 'Send prompt',
-    then: 'Effective agent and skill selection is deterministic',
+    then: 'Effective skill selection is deterministic',
   },
 ]
 
@@ -630,30 +630,27 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   C011: async ({ page }) => {
     const { chatStartCalls } = await openTeacherApp(page)
 
-    const opencodeAgentCard = page.locator('.agent-card').filter({ hasText: 'OpenCode Agent' }).first()
-    await opencodeAgentCard.getByRole('button', { name: '插入 @' }).click()
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).type(' 触发 agent')
+    const homeworkSkillCard = page.locator('.skill-card').filter({ has: page.getByText('作业生成') }).first()
+    await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
+    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).type(' 触发技能')
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].agent_id).toBe('opencode')
+    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
   },
 
   C012: async ({ page }) => {
     const { chatStartCalls } = await openTeacherApp(page)
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
 
-    const opencodeAgentCard = page.locator('.agent-card').filter({ hasText: 'OpenCode Agent' }).first()
     const homeworkSkillCard = page.locator('.skill-card').filter({ has: page.getByText('作业生成') }).first()
 
-    await opencodeAgentCard.getByRole('button', { name: '插入 @' }).click()
     await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
     const base = (await composer.inputValue()).trim()
-    await composer.fill(`${base} 混合场景 @default $physics-teacher-ops`)
+    await composer.fill(`${base} 混合场景 $physics-teacher-ops`)
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].agent_id).toBe('default')
     expect(chatStartCalls[0].skill_id).toBe('physics-teacher-ops')
   },
 

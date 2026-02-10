@@ -22,9 +22,7 @@ export default function MentionPanel({ mention, mentionIndex, onInsert }: Props)
   if (!mention || mention.items.length === 0) return null
   return (
     <div className="mention-panel">
-      <div className="mention-title">
-        {mention.type === 'agent' ? 'Agent 建议（↑↓ 选择 / 回车插入）' : '技能建议（↑↓ 选择 / 回车插入）'}
-      </div>
+      <div className="mention-title">技能建议（↑↓ 选择 / 回车插入）</div>
       <div className="mention-list">
         {mention.items.map((item, index) => (
           <button
@@ -33,7 +31,7 @@ export default function MentionPanel({ mention, mentionIndex, onInsert }: Props)
             className={index === mentionIndex ? 'active' : ''}
             onClick={() => onInsert(item)}
           >
-            <strong>{item.type === 'agent' ? `@${item.id}` : `$${item.id}`}</strong>
+            <strong>{`$${item.id}`}</strong>
             <span>{item.title}</span>
             {item.desc ? <span className="muted">{item.desc}</span> : null}
           </button>

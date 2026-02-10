@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
 import { absolutizeChartImageUrls, renderMarkdown } from './features/chat/markdown'
 import RoutingPage, { type RoutingSection } from './features/routing/RoutingPage'
 import SettingsModal from './features/settings/SettingsModal'
@@ -18,13 +19,12 @@ import {
 } from './features/chat/viewState'
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
 import { stripTransientPendingBubbles, withPendingChatOverlay } from './features/chat/pendingOverlay'
-import { buildSkill, fallbackAgents, fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
+import { buildSkill, fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
 import ChatComposer from './features/chat/ChatComposer'
 import ChatMessages from './features/chat/ChatMessages'
 import MentionPanel from './features/chat/MentionPanel'
 import SessionSidebar from './features/chat/SessionSidebar'
 import TeacherWorkbench from './features/workbench/TeacherWorkbench'
-import { useWorkbenchResize } from './features/workbench/useWorkbenchResize'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
 import {
@@ -54,7 +54,6 @@ import { formatSessionUpdatedLabel, nowTime, timeFromIso } from './utils/time'
 import { useTeacherWorkbenchState } from './features/state/useTeacherWorkbenchState'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import type {
-  AgentOption,
   AssignmentProgress,
   ChatJobStatus,
   ChatResponse,
@@ -87,16 +86,46 @@ import type {
 import 'katex/dist/katex.min.css'
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const DESKTOP_BREAKPOINT = 900
+const WORKBENCH_DEFAULT_WIDTH = 320
+const WORKBENCH_MIN_WIDTH = 280
+const WORKBENCH_BASE_MAX_WIDTH = 620
+const WORKBENCH_MAX_WIDTH_RATIO = 0.42
+const WORKBENCH_HARD_MAX_WIDTH = 920
 const ROUTING_SECTIONS: RoutingSection[] = ['general', 'providers', 'channels', 'rules', 'simulate', 'history']
 
 const isRoutingSection = (value: string | null | undefined): value is RoutingSection =>
   Boolean(value && ROUTING_SECTIONS.includes(value as RoutingSection))
 
+const workbenchMaxWidthForViewport = (viewportWidth: number) => {
+  const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
+  return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
+}
+
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
+  const workbenchPanelRef = useRef<PanelImperativeHandle | null>(null)
   const workbench = useTeacherWorkbenchState()
-  const { isDragging: isResizeDragging, onResizeMouseDown } = useWorkbenchResize()
   const session = useTeacherSessionState(initialViewStateRef.current)
+  const [isWorkbenchResizing, setIsWorkbenchResizing] = useState(false)
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
+  const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
+  const workbenchMaxWidth = workbenchMaxWidthForViewport(viewportWidth)
+  const [initialWorkbenchWidth] = useState(() => {
+    if (typeof window === 'undefined') return WORKBENCH_DEFAULT_WIDTH
+    const initialViewportWidth = window.innerWidth
+    const initialWorkbenchMaxWidth = workbenchMaxWidthForViewport(initialViewportWidth)
+    try {
+      const raw = window.localStorage.getItem('teacherWorkbenchWidth')
+      const parsed = Number(raw)
+      if (Number.isFinite(parsed)) {
+        return Math.min(initialWorkbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, Math.round(parsed)))
+      }
+    } catch {
+      // ignore
+    }
+    return WORKBENCH_DEFAULT_WIDTH
+  })
   const {
     uploadMode, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds, uploadFiles, uploadAnswerFiles,
     uploading, uploadStatus, uploadError, uploadCardCollapsed, uploadJobId, uploadJobInfo, uploadConfirming, uploadStatusPollNonce,
@@ -149,7 +178,6 @@ export default function App() {
     const raw = safeLocalStorageGetItem('teacherWorkbenchTab')
     return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
   })
-  const [activeAgentId, setActiveAgentId] = useState(() => safeLocalStorageGetItem('teacherActiveAgentId') || 'default')
   const [activeSkillId, setActiveSkillId] = useState(() => safeLocalStorageGetItem('teacherActiveSkillId') || 'physics-teacher-ops')
   const [skillPinned, setSkillPinned] = useState(() => safeLocalStorageGetItem('teacherSkillPinned') === 'true')
   const [cursorPos, setCursorPos] = useState(0)
@@ -235,6 +263,7 @@ export default function App() {
     if (!el) return
     const updateHeight = () => {
       setTopbarHeight(Math.max(56, Math.round(el.getBoundingClientRect().height)))
+      setViewportWidth(window.innerWidth)
     }
     updateHeight()
     let observer: ResizeObserver | null = null
@@ -249,14 +278,9 @@ export default function App() {
     }
   }, [])
 
-	  useEffect(() => {
-	    if (activeAgentId) safeLocalStorageSetItem('teacherActiveAgentId', activeAgentId)
-	    else safeLocalStorageRemoveItem('teacherActiveAgentId')
-	  }, [activeAgentId])
-
-	  useEffect(() => {
-	    if (activeSkillId) safeLocalStorageSetItem('teacherActiveSkillId', activeSkillId)
-	    else safeLocalStorageRemoveItem('teacherActiveSkillId')
+  useEffect(() => {
+    if (activeSkillId) safeLocalStorageSetItem('teacherActiveSkillId', activeSkillId)
+    else safeLocalStorageRemoveItem('teacherActiveSkillId')
 	  }, [activeSkillId])
 
 	  useEffect(() => {
@@ -967,26 +991,16 @@ export default function App() {
     }
   }, [pendingChatJob?.job_id, apiBase, refreshTeacherSessions])
 
-  const agentList = useMemo(() => fallbackAgents, [])
-
   const mention = useMemo(() => {
     const trigger = findInvocationTrigger(input, cursorPos)
     if (!trigger) return null
     const query = trigger.query
-    const source: MentionOption[] =
-      trigger.type === 'skill'
-        ? skillList.map((skill) => ({
-            id: skill.id,
-            title: skill.title,
-            desc: skill.desc,
-            type: 'skill' as const,
-          }))
-        : agentList.map((agent) => ({
-            id: agent.id,
-            title: agent.title,
-            desc: agent.desc,
-            type: 'agent' as const,
-          }))
+    const source: MentionOption[] = skillList.map((skill) => ({
+      id: skill.id,
+      title: skill.title,
+      desc: skill.desc,
+      type: 'skill' as const,
+    }))
 
     const items = source.filter(
       (item) =>
@@ -995,7 +1009,7 @@ export default function App() {
         item.id.toLowerCase().includes(query),
     )
     return { start: trigger.start, query, type: trigger.type, items }
-  }, [agentList, cursorPos, input, skillList])
+  }, [cursorPos, input, skillList])
 
   useEffect(() => {
     if (mention && mention.items.length) {
@@ -1348,16 +1362,6 @@ export default function App() {
     }
   }, [activeSkillId, activeSkill])
 
-  useEffect(() => {
-    if (!activeAgentId) {
-      setActiveAgentId('default')
-      return
-    }
-    if (!agentList.some((item) => item.id === activeAgentId)) {
-      setActiveAgentId('default')
-    }
-  }, [activeAgentId, agentList])
-
   const computeLocalRequirementsMissing = (req: Record<string, any>) => {
     const missing: string[] = []
     const subject = String(req?.subject || '').trim()
@@ -1439,6 +1443,28 @@ export default function App() {
     })
   }
 
+  const updateExamScoreSchemaSelectedCandidate = (candidateId: string) => {
+    const nextCandidateId = String(candidateId || '').trim()
+    setExamDraft((prev) => {
+      if (!prev) return prev
+      const prevSchema = prev.score_schema || {}
+      const prevSubject = prevSchema.subject || {}
+      return {
+        ...prev,
+        needs_confirm: !nextCandidateId,
+        score_schema: {
+          ...prevSchema,
+          confirm: Boolean(nextCandidateId),
+          needs_confirm: !nextCandidateId,
+          subject: {
+            ...prevSubject,
+            selected_candidate_id: nextCandidateId,
+          },
+        },
+      }
+    })
+  }
+
   // Avoid any accidental key handlers interfering with draft editing.
   const stopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => {
     e.stopPropagation()
@@ -1484,17 +1510,13 @@ export default function App() {
     }
   }
 
-	  const insertMention = (item: MentionOption) => {
-	    if (!mention) return
-	    const token = buildInvocationToken(item.type, item.id)
-	    if (!token) return
-	    if (item.type === 'skill') {
-	      chooseSkill(item.id, true)
-	    } else {
-	      setActiveAgentId(item.id)
-	    }
-	    const before = input.slice(0, mention.start)
-	    const after = input.slice(cursorPos)
+  const insertMention = (item: MentionOption) => {
+    if (!mention) return
+    const token = buildInvocationToken(item.type, item.id)
+    if (!token) return
+    chooseSkill(item.id, true)
+    const before = input.slice(0, mention.start)
+    const after = input.slice(cursorPos)
 	    const nextValue = `${before}${token} ${after}`.replace(/\s+$/, ' ')
 	    const nextPos = `${before}${token} `.length
 	    setInput(nextValue)
@@ -1519,15 +1541,12 @@ export default function App() {
 
 	  const submitMessage = async () => {
 	    if (pendingChatJob?.job_id) return
-	    const trimmed = input.trim()
-	    if (!trimmed) return
-	    const parsedInvocation = parseInvocationInput(trimmed, {
-	      knownAgentIds: agentList.map((item) => item.id),
-	      knownSkillIds: skillList.map((item) => item.id),
-	      activeAgentId,
-	      activeSkillId: activeSkillId || 'physics-teacher-ops',
-	      defaultAgentId: 'default',
-	    })
+    const trimmed = input.trim()
+    if (!trimmed) return
+    const parsedInvocation = parseInvocationInput(trimmed, {
+      knownSkillIds: skillList.map((item) => item.id),
+      activeSkillId: activeSkillId || 'physics-teacher-ops',
+    })
     const cleanedText = parsedInvocation.cleanedInput.trim()
     if (!cleanedText) {
       setComposerWarning('请在召唤后补充问题内容。')
@@ -1546,10 +1565,6 @@ export default function App() {
     if (routingDecision.shouldPinEffectiveSkill && parsedInvocation.effectiveSkillId) {
       chooseSkill(parsedInvocation.effectiveSkillId, true)
     }
-    if (parsedInvocation.effectiveAgentId && parsedInvocation.effectiveAgentId !== activeAgentId) {
-      setActiveAgentId(parsedInvocation.effectiveAgentId)
-    }
-
     const sessionId = activeSessionId || 'main'
     if (!activeSessionId) setActiveSessionId(sessionId)
     const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -1583,7 +1598,6 @@ export default function App() {
           messages: contextMessages,
           role: 'teacher',
           teacher_id: routingTeacherId || undefined,
-          agent_id: parsedInvocation.effectiveAgentId || activeAgentId || undefined,
           skill_id: routingDecision.skillIdForRequest,
         }),
       })
@@ -1986,6 +2000,9 @@ export default function App() {
   }
 
   async function saveExamDraft(draft: ExamUploadDraft) {
+    const selectedCandidateId = String((draft.score_schema?.subject?.selected_candidate_id || '').trim())
+    const previousCandidateId = String((examJobInfo?.score_schema?.subject?.selected_candidate_id || '').trim())
+    const shouldReparse = Boolean(selectedCandidateId && selectedCandidateId !== previousCandidateId)
     setExamDraftSaving(true)
     setExamUploadError('')
     setExamDraftActionError('')
@@ -2000,6 +2017,7 @@ export default function App() {
           questions: draft.questions,
           score_schema: draft.score_schema || {},
           answer_key_text: draft.answer_key_text ?? '',
+          reparse: shouldReparse,
         }),
       })
       if (!res.ok) {
@@ -2010,15 +2028,22 @@ export default function App() {
       const msg = data?.message || '考试草稿已保存。'
       setExamDraftActionStatus(msg)
       setExamUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}${msg}`)
+      const reparseExpected = shouldReparse
       setExamDraft((prev) =>
         prev
           ? {
               ...prev,
               draft_saved: true,
               draft_version: data?.draft_version ?? prev.draft_version,
+              ...(reparseExpected ? { needs_confirm: true } : {}),
             }
           : prev
       )
+      if (reparseExpected) {
+        setExamDraftActionStatus('已保存映射选择，正在按新映射重新解析成绩…')
+        setExamUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}已保存映射选择，正在重新解析成绩…`)
+        setExamStatusPollNonce((n) => n + 1)
+      }
       return data
     } catch (err: any) {
       const message = err?.message || String(err)
@@ -2072,6 +2097,11 @@ export default function App() {
           if (detail?.error === 'job_not_ready') {
             const progress = detail?.progress !== undefined ? `（进度 ${detail.progress}%）` : ''
             message = `${detail.message || '解析尚未完成'}${progress}`
+            setExamStatusPollNonce((n) => n + 1)
+          }
+          if (detail?.error === 'score_schema_confirm_required') {
+            message = detail?.message || '成绩映射置信度不足，请先在草稿中选择并保存物理分映射列。'
+            setExamDraftPanelCollapsed(false)
             setExamStatusPollNonce((n) => n + 1)
           }
         } catch {
@@ -2153,6 +2183,42 @@ export default function App() {
     }
     setSettingsOpen(true)
   }, [requestCloseSettings, settingsOpen])
+
+  const handleWorkbenchResizeReset = useCallback(() => {
+    const panel = workbenchPanelRef.current
+    if (!panel) return
+    panel.resize(WORKBENCH_DEFAULT_WIDTH)
+    panel.expand()
+    if (!skillsOpen) setSkillsOpen(true)
+  }, [skillsOpen])
+
+  useEffect(() => {
+    const panel = workbenchPanelRef.current
+    if (!panel) return
+    if (isMobileLayout || !skillsOpen) {
+      panel.collapse()
+      return
+    }
+    panel.expand()
+    const currentWidth = panel.getSize().inPixels
+    if (!Number.isFinite(currentWidth)) return
+    const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, Math.round(currentWidth)))
+    if (Math.abs(clamped - currentWidth) > 1) {
+      panel.resize(clamped)
+    }
+  }, [isMobileLayout, skillsOpen, workbenchMaxWidth])
+
+  useEffect(() => {
+    if (!isWorkbenchResizing || typeof window === 'undefined') return
+    const stop = () => setIsWorkbenchResizing(false)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    return () => {
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+    }
+  }, [isWorkbenchResizing])
+
 
   return (
     <div ref={appRef} className="app teacher" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px` }}>
@@ -2249,172 +2315,207 @@ export default function App() {
             formatSessionUpdatedLabel={formatSessionUpdatedLabel}
           />
 
-        <main className="chat-shell">
+        <div className="chat-workbench-split">
+          <Group
+            orientation="horizontal"
+            disabled={isMobileLayout}
+            className={`chat-workbench-panel-group ${isWorkbenchResizing ? 'dragging' : ''}`}
+          >
+            <Panel
+              className="chat-workbench-panel chat-workbench-panel-main"
+              minSize={isMobileLayout ? 0 : 360}
+            >
+                      <main className="chat-shell">
 
-          <ChatMessages
-            renderedMessages={renderedMessages}
-            sending={sending}
-            hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
-            typingTimeLabel={nowTime()}
-            messagesRef={messagesRef}
-            onMessagesScroll={handleMessagesScroll}
-            showScrollToBottom={showScrollToBottom}
-            onScrollToBottom={() => scrollMessagesToBottom('smooth')}
-          />
+                        <ChatMessages
+                          renderedMessages={renderedMessages}
+                          sending={sending}
+                          hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
+                          typingTimeLabel={nowTime()}
+                          messagesRef={messagesRef}
+                          onMessagesScroll={handleMessagesScroll}
+                          showScrollToBottom={showScrollToBottom}
+                          onScrollToBottom={() => scrollMessagesToBottom('smooth')}
+                        />
 
-          <ChatComposer
-            activeAgentId={activeAgentId || 'default'}
-            activeSkillId={activeSkillId || 'physics-teacher-ops'}
-            skillPinned={skillPinned}
-            input={input}
-            pendingChatJob={Boolean(pendingChatJob?.job_id)}
-            sending={sending}
-            chatQueueHint={chatQueueHint}
-            composerWarning={composerWarning}
-            inputRef={inputRef}
-            onSubmit={handleSend}
-            onInputChange={(value, selectionStart) => {
-              setInput(value)
-              setCursorPos(selectionStart)
-            }}
-            onInputClick={(selectionStart) => setCursorPos(selectionStart)}
-            onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
-            onInputKeyDown={handleKeyDown}
-          />
+                        <ChatComposer
+                          activeSkillId={activeSkillId || 'physics-teacher-ops'}
+                          skillPinned={skillPinned}
+                          input={input}
+                          pendingChatJob={Boolean(pendingChatJob?.job_id)}
+                          sending={sending}
+                          chatQueueHint={chatQueueHint}
+                          composerWarning={composerWarning}
+                          inputRef={inputRef}
+                          onSubmit={handleSend}
+                          onInputChange={(value, selectionStart) => {
+                            setInput(value)
+                            setCursorPos(selectionStart)
+                          }}
+                          onInputClick={(selectionStart) => setCursorPos(selectionStart)}
+                          onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
+                          onInputKeyDown={handleKeyDown}
+                        />
 
-	          {/* workflow panels moved to right workbench */}
+              	          {/* workflow panels moved to right workbench */}
 
-          <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={insertMention} />
-        </main>
-
-        <TeacherWorkbench
-            skillsOpen={skillsOpen}
-            setSkillsOpen={setSkillsOpen}
-            onResizeMouseDown={onResizeMouseDown}
-            isResizeDragging={isResizeDragging}
-            workbenchTab={workbenchTab}
-            setWorkbenchTab={setWorkbenchTab}
-            activeAgentId={activeAgentId}
-            activeSkillId={activeSkillId}
-            activeWorkflowIndicator={activeWorkflowIndicator}
-            agentList={agentList}
-            chooseSkill={chooseSkill}
-            difficultyLabel={difficultyLabel}
-            difficultyOptions={difficultyOptions}
-            draftActionError={draftActionError}
-            draftActionStatus={draftActionStatus}
-            draftError={draftError}
-            draftLoading={draftLoading}
-            draftPanelCollapsed={draftPanelCollapsed}
-            draftSaving={draftSaving}
-            examClassName={examClassName}
-            examConfirming={examConfirming}
-            examDate={examDate}
-            examDraft={examDraft}
-            examDraftActionError={examDraftActionError}
-            examDraftActionStatus={examDraftActionStatus}
-            examDraftError={examDraftError}
-            examDraftLoading={examDraftLoading}
-            examDraftPanelCollapsed={examDraftPanelCollapsed}
-            examDraftSaving={examDraftSaving}
-            examId={examId}
-            examJobInfo={examJobInfo}
-            examUploadError={examUploadError}
-            examUploadStatus={examUploadStatus}
-            examUploading={examUploading}
-            favorites={favorites}
-            fetchAssignmentProgress={fetchAssignmentProgress}
-            fetchSkills={fetchSkills}
-            filteredSkills={filteredSkills}
-            formatDraftSummary={formatDraftSummary}
-            formatExamDraftSummary={formatExamDraftSummary}
-            formatExamJobSummary={formatExamJobSummary}
-            formatMissingRequirements={formatMissingRequirements}
-            formatProgressSummary={formatProgressSummary}
-            formatUploadJobSummary={formatUploadJobSummary}
-            handleConfirmExamUpload={handleConfirmExamUpload}
-            handleConfirmUpload={handleConfirmUpload}
-            handleUploadAssignment={handleUploadAssignment}
-            handleUploadExam={handleUploadExam}
-            insertInvocationTokenAtCursor={insertInvocationTokenAtCursor}
-            insertPrompt={insertPrompt}
-            memoryInsights={memoryInsights}
-            memoryStatusFilter={memoryStatusFilter}
-            misconceptionsText={misconceptionsText}
-            normalizeDifficulty={normalizeDifficulty}
-            parseCommaList={parseCommaList}
-            parseLineList={parseLineList}
-            progressAssignmentId={progressAssignmentId}
-            progressData={progressData}
-            progressError={progressError}
-            progressLoading={progressLoading}
-            progressOnlyIncomplete={progressOnlyIncomplete}
-            progressPanelCollapsed={progressPanelCollapsed}
-            proposalError={proposalError}
-            proposalLoading={proposalLoading}
-            proposals={proposals}
-            questionShowCount={questionShowCount}
-            refreshMemoryInsights={refreshMemoryInsights}
-            refreshMemoryProposals={refreshMemoryProposals}
-            refreshWorkflowWorkbench={refreshWorkflowWorkbench}
-            saveDraft={saveDraft}
-            saveExamDraft={saveExamDraft}
-            scrollToWorkflowSection={scrollToWorkflowSection}
-            setActiveAgentId={setActiveAgentId}
-            setComposerWarning={setComposerWarning}
-            setDraftPanelCollapsed={setDraftPanelCollapsed}
-            setExamAnswerFiles={setExamAnswerFiles}
-            setExamClassName={setExamClassName}
-            setExamDate={setExamDate}
-            setExamDraftPanelCollapsed={setExamDraftPanelCollapsed}
-            setExamId={setExamId}
-            setExamPaperFiles={setExamPaperFiles}
-            setExamScoreFiles={setExamScoreFiles}
-            setMemoryStatusFilter={setMemoryStatusFilter}
-            setMisconceptionsDirty={setMisconceptionsDirty}
-            setMisconceptionsText={setMisconceptionsText}
-            setProgressAssignmentId={setProgressAssignmentId}
-            setProgressOnlyIncomplete={setProgressOnlyIncomplete}
-            setProgressPanelCollapsed={setProgressPanelCollapsed}
-            setQuestionShowCount={setQuestionShowCount}
-            setShowFavoritesOnly={setShowFavoritesOnly}
-            setSkillPinned={setSkillPinned}
-            setSkillQuery={setSkillQuery}
-            setUploadAnswerFiles={setUploadAnswerFiles}
-            setUploadAssignmentId={setUploadAssignmentId}
-            setUploadCardCollapsed={setUploadCardCollapsed}
-            setUploadClassName={setUploadClassName}
-            setUploadDate={setUploadDate}
-            setUploadFiles={setUploadFiles}
-            setUploadMode={setUploadMode}
-            setUploadScope={setUploadScope}
-            setUploadStudentIds={setUploadStudentIds}
-            showFavoritesOnly={showFavoritesOnly}
-            skillPinned={skillPinned}
-            skillQuery={skillQuery}
-            skillsError={skillsError}
-            skillsLoading={skillsLoading}
-            stopKeyPropagation={stopKeyPropagation}
-            toggleFavorite={toggleFavorite}
-            updateDraftQuestion={updateDraftQuestion}
-            updateDraftRequirement={updateDraftRequirement}
-            updateExamAnswerKeyText={updateExamAnswerKeyText}
-            updateExamDraftMeta={updateExamDraftMeta}
-            updateExamQuestionField={updateExamQuestionField}
-            uploadAssignmentId={uploadAssignmentId}
-            uploadCardCollapsed={uploadCardCollapsed}
-            uploadClassName={uploadClassName}
-            uploadConfirming={uploadConfirming}
-            uploadDate={uploadDate}
-            uploadDraft={uploadDraft}
-            uploadError={uploadError}
-            uploadJobInfo={uploadJobInfo}
-            uploadMode={uploadMode}
-            uploadScope={uploadScope}
-            uploadStatus={uploadStatus}
-            uploadStudentIds={uploadStudentIds}
-            uploading={uploading}
-          />
+                        <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={insertMention} />
+                      </main>
+            </Panel>
+            <Separator
+              className={`workbench-panel-resize-handle ${isWorkbenchResizing ? 'dragging' : ''} ${!skillsOpen ? 'collapsed' : ''}`}
+              onPointerDown={() => setIsWorkbenchResizing(true)}
+              onDoubleClick={handleWorkbenchResizeReset}
+            >
+              <span className="workbench-panel-resize-grip" />
+            </Separator>
+            <Panel
+              panelRef={workbenchPanelRef}
+              className="chat-workbench-panel chat-workbench-panel-workbench"
+              minSize={WORKBENCH_MIN_WIDTH}
+              maxSize={workbenchMaxWidth}
+              defaultSize={initialWorkbenchWidth}
+              collapsible
+              collapsedSize={0}
+              onResize={(panelSize) => {
+                if (isMobileLayout) return
+                const width = Math.round(panelSize.inPixels || 0)
+                if (!Number.isFinite(width) || width <= 0) return
+                const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, width))
+                try {
+                  window.localStorage.setItem('teacherWorkbenchWidth', String(clamped))
+                } catch {
+                  // ignore
+                }
+              }}
+            >
+                      <TeacherWorkbench
+                          skillsOpen={skillsOpen}
+                          setSkillsOpen={setSkillsOpen}
+                          workbenchTab={workbenchTab}
+                          setWorkbenchTab={setWorkbenchTab}
+                          activeSkillId={activeSkillId}
+                          activeWorkflowIndicator={activeWorkflowIndicator}
+                          chooseSkill={chooseSkill}
+                          difficultyLabel={difficultyLabel}
+                          difficultyOptions={difficultyOptions}
+                          draftActionError={draftActionError}
+                          draftActionStatus={draftActionStatus}
+                          draftError={draftError}
+                          draftLoading={draftLoading}
+                          draftPanelCollapsed={draftPanelCollapsed}
+                          draftSaving={draftSaving}
+                          examClassName={examClassName}
+                          examConfirming={examConfirming}
+                          examDate={examDate}
+                          examDraft={examDraft}
+                          examDraftActionError={examDraftActionError}
+                          examDraftActionStatus={examDraftActionStatus}
+                          examDraftError={examDraftError}
+                          examDraftLoading={examDraftLoading}
+                          examDraftPanelCollapsed={examDraftPanelCollapsed}
+                          examDraftSaving={examDraftSaving}
+                          examId={examId}
+                          examJobInfo={examJobInfo}
+                          examUploadError={examUploadError}
+                          examUploadStatus={examUploadStatus}
+                          examUploading={examUploading}
+                          favorites={favorites}
+                          fetchAssignmentProgress={fetchAssignmentProgress}
+                          fetchSkills={fetchSkills}
+                          filteredSkills={filteredSkills}
+                          formatDraftSummary={formatDraftSummary}
+                          formatExamDraftSummary={formatExamDraftSummary}
+                          formatExamJobSummary={formatExamJobSummary}
+                          formatMissingRequirements={formatMissingRequirements}
+                          formatProgressSummary={formatProgressSummary}
+                          formatUploadJobSummary={formatUploadJobSummary}
+                          handleConfirmExamUpload={handleConfirmExamUpload}
+                          handleConfirmUpload={handleConfirmUpload}
+                          handleUploadAssignment={handleUploadAssignment}
+                          handleUploadExam={handleUploadExam}
+                          insertInvocationTokenAtCursor={insertInvocationTokenAtCursor}
+                          insertPrompt={insertPrompt}
+                          memoryInsights={memoryInsights}
+                          memoryStatusFilter={memoryStatusFilter}
+                          misconceptionsText={misconceptionsText}
+                          normalizeDifficulty={normalizeDifficulty}
+                          parseCommaList={parseCommaList}
+                          parseLineList={parseLineList}
+                          progressAssignmentId={progressAssignmentId}
+                          progressData={progressData}
+                          progressError={progressError}
+                          progressLoading={progressLoading}
+                          progressOnlyIncomplete={progressOnlyIncomplete}
+                          progressPanelCollapsed={progressPanelCollapsed}
+                          proposalError={proposalError}
+                          proposalLoading={proposalLoading}
+                          proposals={proposals}
+                          questionShowCount={questionShowCount}
+                          refreshMemoryInsights={refreshMemoryInsights}
+                          refreshMemoryProposals={refreshMemoryProposals}
+                          refreshWorkflowWorkbench={refreshWorkflowWorkbench}
+                          saveDraft={saveDraft}
+                          saveExamDraft={saveExamDraft}
+                          scrollToWorkflowSection={scrollToWorkflowSection}
+                          setComposerWarning={setComposerWarning}
+                          setDraftPanelCollapsed={setDraftPanelCollapsed}
+                          setExamAnswerFiles={setExamAnswerFiles}
+                          setExamClassName={setExamClassName}
+                          setExamDate={setExamDate}
+                          setExamDraftPanelCollapsed={setExamDraftPanelCollapsed}
+                          setExamId={setExamId}
+                          setExamPaperFiles={setExamPaperFiles}
+                          setExamScoreFiles={setExamScoreFiles}
+                          setMemoryStatusFilter={setMemoryStatusFilter}
+                          setMisconceptionsDirty={setMisconceptionsDirty}
+                          setMisconceptionsText={setMisconceptionsText}
+                          setProgressAssignmentId={setProgressAssignmentId}
+                          setProgressOnlyIncomplete={setProgressOnlyIncomplete}
+                          setProgressPanelCollapsed={setProgressPanelCollapsed}
+                          setQuestionShowCount={setQuestionShowCount}
+                          setShowFavoritesOnly={setShowFavoritesOnly}
+                          setSkillPinned={setSkillPinned}
+                          setSkillQuery={setSkillQuery}
+                          setUploadAnswerFiles={setUploadAnswerFiles}
+                          setUploadAssignmentId={setUploadAssignmentId}
+                          setUploadCardCollapsed={setUploadCardCollapsed}
+                          setUploadClassName={setUploadClassName}
+                          setUploadDate={setUploadDate}
+                          setUploadFiles={setUploadFiles}
+                          setUploadMode={setUploadMode}
+                          setUploadScope={setUploadScope}
+                          setUploadStudentIds={setUploadStudentIds}
+                          showFavoritesOnly={showFavoritesOnly}
+                          skillPinned={skillPinned}
+                          skillQuery={skillQuery}
+                          skillsError={skillsError}
+                          skillsLoading={skillsLoading}
+                          stopKeyPropagation={stopKeyPropagation}
+                          toggleFavorite={toggleFavorite}
+                          updateDraftQuestion={updateDraftQuestion}
+                          updateDraftRequirement={updateDraftRequirement}
+                          updateExamAnswerKeyText={updateExamAnswerKeyText}
+                          updateExamDraftMeta={updateExamDraftMeta}
+                          updateExamScoreSchemaSelectedCandidate={updateExamScoreSchemaSelectedCandidate}
+                          updateExamQuestionField={updateExamQuestionField}
+                          uploadAssignmentId={uploadAssignmentId}
+                          uploadCardCollapsed={uploadCardCollapsed}
+                          uploadClassName={uploadClassName}
+                          uploadConfirming={uploadConfirming}
+                          uploadDate={uploadDate}
+                          uploadDraft={uploadDraft}
+                          uploadError={uploadError}
+                          uploadJobInfo={uploadJobInfo}
+                          uploadMode={uploadMode}
+                          uploadScope={uploadScope}
+                          uploadStatus={uploadStatus}
+                          uploadStudentIds={uploadStudentIds}
+                          uploading={uploading}
+                        />
+            </Panel>
+          </Group>
+        </div>
       </div>
 
       <PromptDialog

@@ -37,6 +37,86 @@ import type {
 } from './appTypes'
 import 'katex/dist/katex.min.css'
 
+const PENDING_CHAT_KEY_PREFIX = 'studentPendingChatJob:'
+const RECENT_COMPLETION_KEY_PREFIX = 'studentRecentCompletion:'
+const SEND_LOCK_KEY_PREFIX = 'studentSendLock:'
+const FALLBACK_SEND_LOCK_TTL_MS = 5000
+const FALLBACK_SEND_LOCK_SETTLE_MS = 120
+const RECENT_COMPLETION_TTL_MS = 3 * 60 * 1000
+
+type RecentCompletedReply = {
+  session_id: string
+  user_text: string
+  reply_text: string
+  completed_at: number
+}
+
+const recentCompletionKeyOf = (item: RecentCompletedReply) =>
+  `${item.session_id}::${item.completed_at}::${item.user_text}::${item.reply_text}`
+
+const normalizeRecentCompletedReplies = (items: RecentCompletedReply[]) => {
+  const now = Date.now()
+  const sorted = items
+    .map((item) => {
+      const sessionId = String(item?.session_id || '').trim()
+      const replyText = typeof item?.reply_text === 'string' ? item.reply_text : ''
+      const userText = typeof item?.user_text === 'string' ? item.user_text : ''
+      const completedAt = Number(item?.completed_at || 0)
+      const normalized: RecentCompletedReply = {
+        session_id: sessionId,
+        user_text: userText,
+        reply_text: replyText,
+        completed_at: completedAt,
+      }
+      return normalized
+    })
+    .filter((item) => item.session_id && item.reply_text && Number.isFinite(item.completed_at) && item.completed_at > 0)
+    .filter((item) => now - item.completed_at <= RECENT_COMPLETION_TTL_MS)
+    .sort((a, b) => a.completed_at - b.completed_at)
+
+  const seen = new Set<string>()
+  const deduped: RecentCompletedReply[] = []
+  for (const item of sorted) {
+    const key = recentCompletionKeyOf(item)
+    if (seen.has(key)) continue
+    seen.add(key)
+    deduped.push(item)
+  }
+  return deduped.slice(-20)
+}
+
+const parseRecentCompletedReplies = (raw: string | null): RecentCompletedReply[] => {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      const items = parsed
+        .map((entry) => {
+          const candidate = entry as Partial<RecentCompletedReply>
+          return {
+            session_id: String(candidate?.session_id || '').trim(),
+            user_text: typeof candidate?.user_text === 'string' ? candidate.user_text : '',
+            reply_text: typeof candidate?.reply_text === 'string' ? candidate.reply_text : '',
+            completed_at: Number(candidate?.completed_at || 0),
+          }
+        })
+        .filter((entry) => entry.session_id && entry.reply_text && Number.isFinite(entry.completed_at) && entry.completed_at > 0)
+      return normalizeRecentCompletedReplies(items)
+    }
+
+    const candidate = parsed as Partial<RecentCompletedReply>
+    const legacyItem: RecentCompletedReply = {
+      session_id: String(candidate?.session_id || '').trim(),
+      user_text: typeof candidate?.user_text === 'string' ? candidate.user_text : '',
+      reply_text: typeof candidate?.reply_text === 'string' ? candidate.reply_text : '',
+      completed_at: Number(candidate?.completed_at || 0),
+    }
+    return normalizeRecentCompletedReplies([legacyItem])
+  } catch {
+    return []
+  }
+}
+
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const STUDENT_WELCOME_MESSAGE = '学生端已就绪。请先填写姓名完成验证，然后开始提问或进入作业讨论。'
 const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问，或输入“开始今天作业”。'
@@ -47,7 +127,7 @@ const toDomSafeId = (value: string) => String(value || '').replace(/[^a-zA-Z0-9_
 
 export default function App() {
   const [apiBase, setApiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => safeLocalStorageGetItem('studentSidebarOpen') !== 'false')
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: makeId(),
@@ -80,7 +160,32 @@ export default function App() {
   const [assignmentError, setAssignmentError] = useState('')
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
 
-  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(null)
+  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() => {
+    const sidRaw = safeLocalStorageGetItem('verifiedStudent')
+    if (!sidRaw) return null
+    try {
+      const parsed = JSON.parse(sidRaw) as { student_id?: string }
+      const sid = String(parsed?.student_id || '').trim()
+      if (!sid) return null
+      const raw = safeLocalStorageGetItem(`${PENDING_CHAT_KEY_PREFIX}${sid}`)
+      return raw ? (JSON.parse(raw) as PendingChatJob) : null
+    } catch {
+      return null
+    }
+  })
+
+  const [recentCompletedReplies, setRecentCompletedReplies] = useState<RecentCompletedReply[]>(() => {
+    const sidRaw = safeLocalStorageGetItem('verifiedStudent')
+    if (!sidRaw) return []
+    try {
+      const parsed = JSON.parse(sidRaw) as { student_id?: string }
+      const sid = String(parsed?.student_id || '').trim()
+      if (!sid) return []
+      return parseRecentCompletedReplies(safeLocalStorageGetItem(`${RECENT_COMPLETION_KEY_PREFIX}${sid}`))
+    } catch {
+      return []
+    }
+  })
 
   const [sessions, setSessions] = useState<StudentHistorySession[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -102,7 +207,12 @@ export default function App() {
   const [sessionHasMore, setSessionHasMore] = useState(false)
   const [viewStateUpdatedAt, setViewStateUpdatedAt] = useState(() => new Date().toISOString())
   const [viewStateSyncReady, setViewStateSyncReady] = useState(false)
+  const [forceSessionLoadToken, setForceSessionLoadToken] = useState(0)
   const activeSessionRef = useRef('')
+  const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
+  const recentCompletedRepliesRef = useRef<RecentCompletedReply[]>(recentCompletedReplies)
+  const pendingRecoveredFromStorageRef = useRef(false)
+  const skipAutoSessionLoadIdRef = useRef('')
   const sessionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const sessionMenuTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const historyRequestRef = useRef(0)
@@ -127,6 +237,12 @@ export default function App() {
       }),
     [deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
   )
+
+  const setActiveSession = useCallback((sessionId: string) => {
+    const sid = String(sessionId || '').trim()
+    activeSessionRef.current = sid
+    setActiveSessionId(sid)
+  }, [])
 
   useEffect(() => {
     safeLocalStorageSetItem('apiBaseStudent', apiBase)
@@ -272,6 +388,10 @@ export default function App() {
     }
   }, [sidebarOpen])
 
+  useEffect(() => {
+    safeLocalStorageSetItem('studentSidebarOpen', sidebarOpen ? 'true' : 'false')
+  }, [sidebarOpen])
+
   const renderedMessages = useMemo(() => {
     const cache = markdownCacheRef.current
     return messages.map((msg): RenderedMessage => {
@@ -338,22 +458,47 @@ export default function App() {
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
     if (!sid) {
+      pendingRecoveredFromStorageRef.current = false
       setPendingChatJob(null)
       return
     }
-    const key = `studentPendingChatJob:${sid}`
+    const key = `${PENDING_CHAT_KEY_PREFIX}${sid}`
     try {
       const raw = safeLocalStorageGetItem(key)
-      setPendingChatJob(raw ? (JSON.parse(raw) as any) : null)
+      if (!raw) {
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(null)
+        return
+      }
+      const parsed = JSON.parse(raw) as PendingChatJob
+      pendingRecoveredFromStorageRef.current = Boolean(parsed?.job_id)
+      setPendingChatJob(parsed)
     } catch {
+      pendingRecoveredFromStorageRef.current = false
       setPendingChatJob(null)
     }
   }, [verifiedStudent?.student_id])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
+    if (!sid) {
+      setRecentCompletedReplies([])
+      return
+    }
+    const key = `${RECENT_COMPLETION_KEY_PREFIX}${sid}`
+    const recentReplies = parseRecentCompletedReplies(safeLocalStorageGetItem(key))
+    if (!recentReplies.length) {
+      safeLocalStorageRemoveItem(key)
+      setRecentCompletedReplies([])
+      return
+    }
+    setRecentCompletedReplies(recentReplies)
+  }, [verifiedStudent?.student_id])
+
+  useEffect(() => {
+    const sid = verifiedStudent?.student_id?.trim() || ''
     if (!sid) return
-    const key = `studentPendingChatJob:${sid}`
+    const key = `${PENDING_CHAT_KEY_PREFIX}${sid}`
     try {
       if (pendingChatJob) safeLocalStorageSetItem(key, JSON.stringify(pendingChatJob))
       else safeLocalStorageRemoveItem(key)
@@ -363,25 +508,124 @@ export default function App() {
   }, [pendingChatJob, verifiedStudent?.student_id])
 
   useEffect(() => {
+    const sid = verifiedStudent?.student_id?.trim() || ''
+    if (!sid) return
+    const key = `${RECENT_COMPLETION_KEY_PREFIX}${sid}`
+    try {
+      if (recentCompletedReplies.length) {
+        safeLocalStorageSetItem(key, JSON.stringify(recentCompletedReplies))
+      } else {
+        safeLocalStorageRemoveItem(key)
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [recentCompletedReplies, verifiedStudent?.student_id])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sid = verifiedStudent?.student_id?.trim() || ''
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea && event.storageArea !== window.localStorage) return
+
+      if (event.key === 'verifiedStudent' || event.key === null) {
+        const rawVerified = safeLocalStorageGetItem('verifiedStudent')
+        if (!rawVerified) {
+          setVerifiedStudent(null)
+          setVerifyOpen(true)
+          pendingRecoveredFromStorageRef.current = false
+          setPendingChatJob(null)
+          setRecentCompletedReplies([])
+          setSending(false)
+          return
+        }
+        try {
+          const parsedVerified = JSON.parse(rawVerified) as VerifiedStudent
+          const nextSid = String(parsedVerified?.student_id || '').trim()
+          if (!nextSid) throw new Error('invalid verifiedStudent payload')
+          if (nextSid !== sid) {
+            setVerifiedStudent(parsedVerified)
+          }
+        } catch {
+          setVerifiedStudent(null)
+          setVerifyOpen(true)
+          pendingRecoveredFromStorageRef.current = false
+          setPendingChatJob(null)
+          setRecentCompletedReplies([])
+          setSending(false)
+          return
+        }
+      }
+
+      if (!sid) return
+
+      const pendingKey = `${PENDING_CHAT_KEY_PREFIX}${sid}`
+      if (event.key === pendingKey || event.key === null) {
+        try {
+          const rawPending = safeLocalStorageGetItem(pendingKey)
+          if (!rawPending) {
+            pendingRecoveredFromStorageRef.current = false
+            setPendingChatJob(null)
+            setSending(false)
+          } else {
+            const parsedPending = JSON.parse(rawPending) as PendingChatJob
+            pendingRecoveredFromStorageRef.current = false
+            setPendingChatJob(parsedPending)
+          }
+        } catch {
+          pendingRecoveredFromStorageRef.current = false
+          setPendingChatJob(null)
+          setSending(false)
+        }
+      }
+
+      const recentCompletionKey = `${RECENT_COMPLETION_KEY_PREFIX}${sid}`
+      if (event.key === recentCompletionKey || event.key === null) {
+        const recentReplies = parseRecentCompletedReplies(safeLocalStorageGetItem(recentCompletionKey))
+        if (!recentReplies.length) {
+          safeLocalStorageRemoveItem(recentCompletionKey)
+          setRecentCompletedReplies([])
+        } else {
+          setRecentCompletedReplies(recentReplies)
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorage)
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+    }
+  }, [verifiedStudent?.student_id])
+
+  useEffect(() => {
     if (!pendingChatJob?.job_id) return
+    if (!activeSessionId || pendingChatJob.session_id !== activeSessionId) return
     setMessages((prev) => {
-      const next = stripTransientPendingBubbles(prev)
-      if (next.some((m) => m.id === pendingChatJob.placeholder_id)) return next
-      return [
-        ...next,
-        ...(pendingChatJob.user_text
-          ? [{ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() }]
-          : []),
-        { id: pendingChatJob.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() },
-      ]
+      const base = stripTransientPendingBubbles(prev)
+      const hasUserText = pendingChatJob.user_text
+        ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text)
+        : true
+      const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
+      const next = [...base]
+      if (!hasUserText && pendingChatJob.user_text) {
+        next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
+      }
+      if (!hasPlaceholder) {
+        next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+      }
+      return next
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChatJob?.job_id])
+  }, [activeSessionId, pendingChatJob?.job_id, pendingChatJob?.session_id])
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
     const cleanup = startVisibilityAwareBackoffPolling(
       async () => {
+        if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
+          return 'continue'
+        }
         const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
         if (!res.ok) {
           const text = await res.text()
@@ -389,6 +633,7 @@ export default function App() {
         }
         const data = (await res.json()) as ChatJobStatus
         if (data.status === 'done') {
+          const resolvedReply = data.reply || '已收到。'
           setMessages((prev) => {
             const base = stripTransientPendingBubbles(prev)
             const hasUserText = pendingChatJob.user_text
@@ -403,9 +648,19 @@ export default function App() {
               next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
             }
             return next.map((m) =>
-              m.id === pendingChatJob.placeholder_id ? { ...m, content: data.reply || '已收到。', time: nowTime() } : m,
+              m.id === pendingChatJob.placeholder_id ? { ...m, content: resolvedReply, time: nowTime() } : m,
             )
           })
+          if (pendingChatJob.session_id) {
+            const nextRecent: RecentCompletedReply = {
+              session_id: pendingChatJob.session_id,
+              user_text: pendingChatJob.user_text || '',
+              reply_text: resolvedReply,
+              completed_at: Date.now(),
+            }
+            setRecentCompletedReplies((prev) => normalizeRecentCompletedReplies([...prev, nextRecent]))
+          }
+          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
           setPendingChatJob(null)
           setSending(false)
           void refreshSessions()
@@ -430,6 +685,7 @@ export default function App() {
               m.id === pendingChatJob.placeholder_id ? { ...m, content: `抱歉，请求失败：${msg}`, time: nowTime() } : m,
             )
           })
+          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
           setPendingChatJob(null)
           setSending(false)
           return 'stop'
@@ -456,12 +712,12 @@ export default function App() {
           )
         })
       },
-      { kickMode: 'timeout0' },
+      { kickMode: 'direct' },
     )
 
     return cleanup
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChatJob?.job_id, apiBase])
+  }, [pendingChatJob?.job_id, activeSessionId, apiBase])
 
   const refreshSessions = async (mode: 'reset' | 'more' = 'reset') => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -544,7 +800,7 @@ export default function App() {
         throw new Error(text || `状态码 ${res.status}`)
       }
       const data = (await res.json()) as StudentHistorySessionResponse
-      if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+      if (requestNo !== sessionRequestRef.current) return
       const raw = Array.isArray(data.messages) ? data.messages : []
       const mapped: Message[] = raw
         .map((m, idx) => {
@@ -560,15 +816,109 @@ export default function App() {
           } as Message
         })
         .filter(Boolean) as Message[]
+      const pending = pendingChatJobRef.current
+      const mergedPending: Message[] =
+        pending?.job_id && pending.session_id === targetSessionId
+          ? (() => {
+              const base = stripTransientPendingBubbles(mapped)
+              const hasUserText = pending.user_text ? base.some((item) => item.role === 'user' && item.content === pending.user_text) : true
+              const hasPlaceholder = base.some((item) => item.id === pending.placeholder_id)
+              const next = [...base]
+              if (!hasUserText && pending.user_text) {
+                next.push({ id: makeId(), role: 'user', content: pending.user_text, time: nowTime() })
+              }
+              if (!hasPlaceholder) {
+                next.push({ id: pending.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() })
+              }
+              return next
+            })()
+          : mapped
+
+      const recentReplies = recentCompletedRepliesRef.current
+      const merged: Message[] =
+        recentReplies.length && !(pending?.job_id && pending.session_id === targetSessionId)
+          ? (() => {
+              const now = Date.now()
+              const assistantHistoryCandidates = raw
+                .map((item) => {
+                  const roleRaw = String(item.role || '').toLowerCase()
+                  const content = typeof item.content === 'string' ? item.content : ''
+                  if (roleRaw !== 'assistant' || !content) return null
+                  const parsedTs = typeof item.ts === 'string' ? Date.parse(item.ts) : Number.NaN
+                  return {
+                    content,
+                    ts_ms: Number.isFinite(parsedTs) ? parsedTs : Number.NaN,
+                    used: false,
+                  }
+                })
+                .filter(Boolean) as Array<{ content: string; ts_ms: number; used: boolean }>
+
+              const userHistoryCounts = raw.reduce<Record<string, number>>((acc, item) => {
+                const roleRaw = String(item.role || '').toLowerCase()
+                const content = typeof item.content === 'string' ? item.content : ''
+                if (roleRaw !== 'user' || !content) return acc
+                acc[content] = (acc[content] || 0) + 1
+                return acc
+              }, {})
+
+              const removableKeys = new Set<string>()
+              const unresolvedRecent: RecentCompletedReply[] = []
+
+              for (const recent of [...recentReplies].sort((a, b) => a.completed_at - b.completed_at)) {
+                const recentKey = recentCompletionKeyOf(recent)
+                if (now - recent.completed_at > RECENT_COMPLETION_TTL_MS) {
+                  removableKeys.add(recentKey)
+                  continue
+                }
+                if (recent.session_id !== targetSessionId) continue
+
+                let matchedIndex = assistantHistoryCandidates.findIndex((candidate) => {
+                  if (candidate.used) return false
+                  if (candidate.content !== recent.reply_text) return false
+                  if (!Number.isFinite(candidate.ts_ms)) return false
+                  return candidate.ts_ms >= recent.completed_at - RECENT_COMPLETION_TTL_MS
+                })
+
+                if (matchedIndex < 0 && recent.user_text && (userHistoryCounts[recent.user_text] || 0) > 0) {
+                  matchedIndex = assistantHistoryCandidates.findIndex((candidate) => {
+                    if (candidate.used) return false
+                    if (candidate.content !== recent.reply_text) return false
+                    return !Number.isFinite(candidate.ts_ms)
+                  })
+                }
+
+                if (matchedIndex >= 0) {
+                  assistantHistoryCandidates[matchedIndex].used = true
+                  removableKeys.add(recentKey)
+                  continue
+                }
+
+                unresolvedRecent.push(recent)
+              }
+
+              const patched = [...mergedPending]
+              for (const recent of unresolvedRecent) {
+                if (recent.user_text) {
+                  patched.push({ id: makeId(), role: 'user', content: recent.user_text, time: nowTime() })
+                }
+                patched.push({ id: makeId(), role: 'assistant', content: recent.reply_text, time: nowTime() })
+              }
+
+              if (removableKeys.size > 0) {
+                setRecentCompletedReplies((prev) => prev.filter((item) => !removableKeys.has(recentCompletionKeyOf(item))))
+              }
+              return patched
+            })()
+          : mergedPending
       const next = typeof data.next_cursor === 'number' ? data.next_cursor : 0
       setSessionCursor(next)
-      setSessionHasMore(mapped.length >= 1 && next > 0)
+      setSessionHasMore(merged.length >= 1 && next > 0)
       if (append) {
-        setMessages((prev) => [...mapped, ...prev])
+        setMessages((prev) => [...merged, ...prev])
       } else {
         setMessages(
-          mapped.length
-            ? mapped
+          merged.length
+            ? merged
             : [
                 {
                   id: makeId(),
@@ -580,10 +930,10 @@ export default function App() {
         )
       }
     } catch (err: any) {
-      if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+      if (requestNo !== sessionRequestRef.current) return
       setSessionError(err.message || String(err))
     } finally {
-      if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+      if (requestNo !== sessionRequestRef.current) return
       setSessionLoading(false)
     }
   }
@@ -626,8 +976,8 @@ export default function App() {
     setSessionTitleMap(localState.title_map)
     setDeletedSessionIds(localState.hidden_ids)
     setLocalDraftSessionIds(localDraftSessionIds)
-    setActiveSessionId(localState.active_session_id || '')
-    setViewStateUpdatedAt(localState.updated_at || new Date().toISOString())
+    setActiveSession(localState.active_session_id || '')
+    setViewStateUpdatedAt(localState.updated_at || '')
     lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(localState)
     setViewStateSyncReady(false)
 
@@ -647,6 +997,9 @@ export default function App() {
           applyingViewStateRef.current = true
           setSessionTitleMap(remoteState.title_map)
           setDeletedSessionIds(remoteState.hidden_ids)
+          if (remoteState.active_session_id) {
+            setActiveSession(remoteState.active_session_id)
+          }
           setViewStateUpdatedAt(remoteState.updated_at || new Date().toISOString())
           lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(remoteState)
           return
@@ -686,14 +1039,14 @@ export default function App() {
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid) return
+    if (!sid || !viewStateSyncReady) return
     currentViewStateRef.current = currentViewState
     safeLocalStorageSetItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`, JSON.stringify(currentViewState))
     safeLocalStorageSetItem(`studentSessionTitles:${sid}`, JSON.stringify(currentViewState.title_map))
     safeLocalStorageSetItem(`studentDeletedSessions:${sid}`, JSON.stringify(currentViewState.hidden_ids))
     if (activeSessionId) safeLocalStorageSetItem(`studentActiveSession:${sid}`, activeSessionId)
     else safeLocalStorageRemoveItem(`studentActiveSession:${sid}`)
-  }, [activeSessionId, currentViewState, verifiedStudent?.student_id])
+  }, [activeSessionId, currentViewState, verifiedStudent?.student_id, viewStateSyncReady])
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -754,22 +1107,48 @@ export default function App() {
   }, [activeSessionId])
 
   useEffect(() => {
+    pendingChatJobRef.current = pendingChatJob
+  }, [pendingChatJob])
+
+  useEffect(() => {
+    recentCompletedRepliesRef.current = recentCompletedReplies
+  }, [recentCompletedReplies])
+
+  useEffect(() => {
+    if (!pendingChatJob?.job_id) return
+    if (!pendingRecoveredFromStorageRef.current) return
+    pendingRecoveredFromStorageRef.current = false
+    if (pendingChatJob.session_id && pendingChatJob.session_id !== activeSessionId) {
+      setActiveSession(pendingChatJob.session_id)
+    }
+  }, [activeSessionId, pendingChatJob?.job_id, pendingChatJob?.session_id, setActiveSession])
+
+  useEffect(() => {
     if (!verifiedStudent?.student_id) return
     if (!viewStateSyncReady) return
     if (pendingChatJob?.job_id) return
     if (activeSessionId) return
     const next = todayAssignment?.assignment_id || `general_${todayDate()}`
-    setActiveSessionId(next)
-  }, [verifiedStudent?.student_id, todayAssignment?.assignment_id, pendingChatJob?.job_id, activeSessionId, viewStateSyncReady])
+    setActiveSession(next)
+  }, [verifiedStudent?.student_id, todayAssignment?.assignment_id, pendingChatJob?.job_id, activeSessionId, viewStateSyncReady, setActiveSession])
 
   useEffect(() => {
     if (!verifiedStudent?.student_id) return
     if (!activeSessionId) return
-    if (pendingChatJob?.job_id) return
+    if (skipAutoSessionLoadIdRef.current) {
+      const skippedSessionId = skipAutoSessionLoadIdRef.current
+      skipAutoSessionLoadIdRef.current = ''
+      if (skippedSessionId === activeSessionId) return
+    }
+    if (pendingChatJob?.job_id) {
+      if (pendingChatJob.session_id === activeSessionId) return
+      void loadSessionMessages(activeSessionId, -1, false)
+      return
+    }
     if (sending) return
     void loadSessionMessages(activeSessionId, -1, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, verifiedStudent?.student_id, apiBase])
+  }, [activeSessionId, verifiedStudent?.student_id, apiBase, pendingChatJob?.job_id, pendingChatJob?.session_id, forceSessionLoadToken])
 
   const appendMessage = (roleType: 'user' | 'assistant', content: string) => {
     setMessages((prev) => [...prev, { id: makeId(), role: roleType, content, time: nowTime() }])
@@ -797,6 +1176,84 @@ export default function App() {
     event.currentTarget.form?.requestSubmit()
   }
 
+  const withStudentSendLock = useCallback(
+    async (studentId: string, task: () => Promise<void>) => {
+      const sid = String(studentId || '').trim()
+      if (!sid) return false
+      const lockManager = typeof navigator !== 'undefined' ? (navigator as any).locks : null
+      if (lockManager?.request) {
+        const acquired = await lockManager.request(
+          `student-send-lock:${sid}`,
+          { ifAvailable: true, mode: 'exclusive' },
+          async (lock: any) => {
+            if (!lock) return false
+            await task()
+            return true
+          },
+        )
+        return Boolean(acquired)
+      }
+
+      const lockKey = `${SEND_LOCK_KEY_PREFIX}${sid}`
+      const owner = `slock_${Date.now()}_${Math.random().toString(16).slice(2)}`
+      const parseFallbackLock = (raw: string | null): { owner: string; expires_at: number } | null => {
+        if (!raw) return null
+        try {
+          const parsed = JSON.parse(raw) as { owner?: string; expires_at?: number }
+          const parsedOwner = String(parsed?.owner || '').trim()
+          const parsedExpiresAt = Number(parsed?.expires_at || 0)
+          if (!parsedOwner || !Number.isFinite(parsedExpiresAt)) return null
+          return { owner: parsedOwner, expires_at: parsedExpiresAt }
+        } catch {
+          return null
+        }
+      }
+
+      const now = Date.now()
+      const existing = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+      if (existing && existing.expires_at > now) {
+        return false
+      }
+      if (existing && existing.expires_at <= now) {
+        safeLocalStorageRemoveItem(lockKey)
+      }
+
+      const wrote = safeLocalStorageSetItem(
+        lockKey,
+        JSON.stringify({
+          owner,
+          expires_at: now + FALLBACK_SEND_LOCK_TTL_MS,
+        }),
+      )
+      if (!wrote) return false
+
+      const settleStartedAt = Date.now()
+      while (Date.now() - settleStartedAt < FALLBACK_SEND_LOCK_SETTLE_MS) {
+        await new Promise((resolve) => window.setTimeout(resolve, 24))
+        const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+        if (!observed || observed.owner !== owner || observed.expires_at <= Date.now()) {
+          return false
+        }
+      }
+
+      const latest = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+      if (!latest || latest.owner !== owner || latest.expires_at <= Date.now()) {
+        return false
+      }
+
+      try {
+        await task()
+        return true
+      } finally {
+        const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+        if (current?.owner === owner) {
+          safeLocalStorageRemoveItem(lockKey)
+        }
+      }
+    },
+    [],
+  )
+
   const handleSend = async (event: FormEvent) => {
     event.preventDefault()
     if (!verifiedStudent) {
@@ -808,64 +1265,121 @@ export default function App() {
     const trimmed = input.trim()
     if (!trimmed) return
 
-    const sessionId = activeSessionId || todayAssignment?.assignment_id || `general_${todayDate()}`
-    if (!activeSessionId) setActiveSessionId(sessionId)
-    const requestId = `schat_${verifiedStudent.student_id}_${Date.now()}_${Math.random().toString(16).slice(2)}`
-    const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
+    const studentId = verifiedStudent.student_id
+    const pendingKey = `${PENDING_CHAT_KEY_PREFIX}${studentId}`
 
-    setMessages((prev) => {
-      const next = stripTransientPendingBubbles(prev)
-      return [
-        ...next,
-        { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
-        { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
-      ]
-    })
-    setInput('')
-
-    const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
-      .slice(-40)
-      .map((msg) => ({ role: msg.role, content: msg.content }))
-
-    setSending(true)
-    try {
-      const inferredAssignmentId =
-        sessionId && !sessionId.startsWith('general_')
-          ? sessionId
-          : todayAssignment?.assignment_id && sessionId === todayAssignment.assignment_id
-            ? todayAssignment.assignment_id
-            : undefined
-      const res = await fetch(`${apiBase}/chat/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          request_id: requestId,
-          session_id: sessionId,
-          messages: contextMessages,
-          role: 'student',
-          student_id: verifiedStudent.student_id,
-          assignment_id: inferredAssignmentId,
-          assignment_date: todayDate(),
-        }),
-      })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `状态码 ${res.status}`)
+    const syncPendingFromStorage = () => {
+      try {
+        const raw = safeLocalStorageGetItem(pendingKey)
+        if (!raw) {
+          pendingRecoveredFromStorageRef.current = false
+          setPendingChatJob(null)
+          setSending(false)
+          return false
+        }
+        const parsed = JSON.parse(raw) as PendingChatJob
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(parsed)
+        setSending(false)
+        return true
+      } catch {
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(null)
+        setSending(false)
+        return false
       }
-      const data = (await res.json()) as ChatStartResult
-      if (!data?.job_id) throw new Error('任务编号缺失')
-      setPendingChatJob({
-        job_id: data.job_id,
-        request_id: requestId,
-        placeholder_id: placeholderId,
-        user_text: trimmed,
-        session_id: sessionId,
-        created_at: Date.now(),
-      })
-    } catch (err: any) {
-      updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
+    }
+
+    const waitPendingSync = async (timeoutMs = 2500) => {
+      setSending(true)
+      const started = Date.now()
+      while (Date.now() - started < timeoutMs) {
+        if (syncPendingFromStorage()) return true
+        await new Promise((resolve) => window.setTimeout(resolve, 80))
+      }
       setSending(false)
-      setPendingChatJob(null)
+      return false
+    }
+
+    let startedSubmission = false
+
+    const lockAcquired = await withStudentSendLock(studentId, async () => {
+      if (syncPendingFromStorage()) return
+
+      startedSubmission = true
+      const sessionId = activeSessionId || todayAssignment?.assignment_id || `general_${todayDate()}`
+      if (!activeSessionId) setActiveSession(sessionId)
+      const requestId = `schat_${studentId}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+      const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+      setMessages((prev) => {
+        const next = stripTransientPendingBubbles(prev)
+        return [
+          ...next,
+          { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
+          { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
+        ]
+      })
+      setInput('')
+
+      const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
+        .slice(-40)
+        .map((msg) => ({ role: msg.role, content: msg.content }))
+
+      setSending(true)
+      try {
+        const inferredAssignmentId =
+          sessionId && !sessionId.startsWith('general_')
+            ? sessionId
+            : todayAssignment?.assignment_id && sessionId === todayAssignment.assignment_id
+              ? todayAssignment.assignment_id
+              : undefined
+        const res = await fetch(`${apiBase}/chat/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_id: requestId,
+            session_id: sessionId,
+            messages: contextMessages,
+            role: 'student',
+            student_id: studentId,
+            assignment_id: inferredAssignmentId,
+            assignment_date: todayDate(),
+          }),
+        })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        const data = (await res.json()) as ChatStartResult
+        if (!data?.job_id) throw new Error('任务编号缺失')
+        const nextPending: PendingChatJob = {
+          job_id: data.job_id,
+          request_id: requestId,
+          placeholder_id: placeholderId,
+          user_text: trimmed,
+          session_id: sessionId,
+          created_at: Date.now(),
+        }
+        pendingRecoveredFromStorageRef.current = false
+        safeLocalStorageSetItem(pendingKey, JSON.stringify(nextPending))
+        setPendingChatJob(nextPending)
+      } catch (err: any) {
+        updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
+        setSending(false)
+        skipAutoSessionLoadIdRef.current = sessionId
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(null)
+      }
+    })
+
+    if (!lockAcquired) {
+      await waitPendingSync()
+      return
+    }
+
+    if (!startedSubmission) {
+      syncPendingFromStorage()
     }
   }
 
@@ -959,14 +1473,15 @@ export default function App() {
     (sessionId: string) => {
       const sid = String(sessionId || '').trim()
       if (!sid) return
-      setActiveSessionId(sid)
+      setForceSessionLoadToken((prev) => prev + 1)
+      setActiveSession(sid)
       setSessionCursor(-1)
       setSessionHasMore(false)
       setSessionError('')
       setOpenSessionMenuId('')
       closeSidebarOnMobile()
     },
-    [closeSidebarOnMobile],
+    [closeSidebarOnMobile, setActiveSession],
   )
 
   const resetVerification = useCallback(() => {
@@ -982,7 +1497,7 @@ export default function App() {
     sessionRequestRef.current += 1
     setLocalDraftSessionIds((prev) => (prev.includes(next) ? prev : [next, ...prev]))
     setShowArchivedSessions(false)
-    setActiveSessionId(next)
+    setActiveSession(next)
     setSessionCursor(-1)
     setSessionHasMore(false)
     setSessionError('')
@@ -1007,7 +1522,7 @@ export default function App() {
       },
     ])
     closeSidebarOnMobile()
-  }, [closeSidebarOnMobile])
+  }, [closeSidebarOnMobile, setActiveSession])
 
   const renameSession = useCallback(
     (sessionId: string) => {
@@ -1082,7 +1597,7 @@ export default function App() {
     if (!isArchived && activeSessionId === sid) {
       const next = visibleSessions.find((item) => item.session_id !== sid)?.session_id
       if (next) {
-        setActiveSessionId(next)
+        setActiveSession(next)
         setSessionCursor(-1)
         setSessionHasMore(false)
         setSessionError('')
@@ -1090,7 +1605,7 @@ export default function App() {
         startNewStudentSession()
       }
     }
-  }, [activeSessionId, archiveDialogSessionId, deletedSessionIds, startNewStudentSession, visibleSessions])
+  }, [activeSessionId, archiveDialogSessionId, deletedSessionIds, startNewStudentSession, visibleSessions, setActiveSession])
 
   const archiveDialogIsArchived = archiveDialogSessionId ? deletedSessionIds.includes(archiveDialogSessionId) : false
   const archiveDialogActionLabel = archiveDialogIsArchived ? '恢复' : '归档'

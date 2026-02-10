@@ -29,17 +29,16 @@ test('IME composing Enter does not submit chat until composition ends', async ({
   await expect.poll(() => chatStartCalls.length).toBe(1)
 })
 
-test('cleans multiple invocation tokens and keeps last valid @agent/$skill', async ({ page }) => {
+test('cleans multiple invocation tokens and keeps last valid $skill', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
   const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
 
-  await composer.fill('@default $physics-teacher-ops 先说A @opencode 再说B $physics-homework-generator 最终题目')
+  await composer.fill('$physics-teacher-ops 先说A $physics-homework-generator 再说B $physics-teacher-ops 最终题目')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
   const payload = chatStartCalls[0]
-  expect(payload.agent_id).toBe('opencode')
-  expect(payload.skill_id).toBe('physics-homework-generator')
+  expect(payload.skill_id).toBe('physics-teacher-ops')
   expect(payload.messages?.[payload.messages.length - 1]?.content).toBe('先说A 再说B 最终题目')
 })
 

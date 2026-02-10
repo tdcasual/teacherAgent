@@ -42,10 +42,10 @@ const persistenceRecoveryCases: MatrixCase[] = [
   {
     id: 'G002',
     priority: 'P0',
-    title: 'Missing active agent falls back to default',
-    given: 'teacherActiveAgentId is missing in local storage',
+    title: 'Missing active skill falls back to default',
+    given: 'teacherActiveSkillId is missing in local storage',
     when: 'Open teacher app and send chat',
-    then: 'Payload uses default agent id',
+    then: 'Payload uses default skill fallback behavior',
   },
   {
     id: 'G003',
@@ -200,7 +200,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   G002: async ({ page }) => {
     const { chatStartCalls } = await openTeacherApp(page, {
       stateOverrides: {
-        teacherActiveAgentId: null,
+        teacherActiveSkillId: null,
       },
     })
 
@@ -208,7 +208,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].agent_id).toBe('default')
+    expect(Object.prototype.hasOwnProperty.call(chatStartCalls[0] as Record<string, unknown>, 'skill_id')).toBe(false)
   },
 
   G003: async ({ page }) => {
@@ -650,17 +650,17 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.setViewportSize({ width: 390, height: 844 })
 
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
-    await composer.fill('@')
-    await expect(page.getByText('Agent 建议（↑↓ 选择 / 回车插入）')).toBeVisible()
+    await composer.fill('$')
+    await expect(page.getByText('技能建议（↑↓ 选择 / 回车插入）')).toBeVisible()
     await composer.press('ArrowDown')
     await composer.press('Enter')
 
-    await expect(composer).toHaveValue(/@opencode/)
+    await expect(composer).toHaveValue(/\$physics-homework-generator/)
     await composer.type(' 诊断')
     await composer.press('Enter')
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].agent_id).toBe('opencode')
+    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
   },
 
   H005: async ({ page }) => {

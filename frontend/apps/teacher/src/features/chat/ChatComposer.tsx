@@ -1,7 +1,6 @@
 import type { FormEvent, KeyboardEvent, MutableRefObject } from 'react'
 
 type Props = {
-  activeAgentId: string
   activeSkillId: string
   skillPinned: boolean
   input: string
@@ -18,7 +17,6 @@ type Props = {
 }
 
 export default function ChatComposer({
-  activeAgentId,
   activeSkillId,
   skillPinned,
   input,
@@ -37,7 +35,6 @@ export default function ChatComposer({
     <form className="composer" onSubmit={onSubmit}>
       <div className="composer-inner">
         <div className="composer-context">
-          <span className="chip">{`Agent: @${activeAgentId || 'default'}`}</span>
           <span className="chip">
             {skillPinned ? `技能: $${activeSkillId || 'physics-teacher-ops'}` : '技能: 自动路由'}
           </span>
@@ -49,12 +46,12 @@ export default function ChatComposer({
           onClick={(e) => onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)}
           onKeyUp={(e) => onInputKeyUp((e.target as HTMLTextAreaElement).selectionStart || input.length)}
           onKeyDown={onInputKeyDown}
-          placeholder="输入指令或问题，使用 @ 查看 Agent、$ 查看技能。回车发送，上档键+回车换行"
+          placeholder="输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行"
           rows={3}
           disabled={pendingChatJob}
         />
         <div className="composer-actions">
-          <span className="composer-hint">{chatQueueHint || '@ Agent | $ 技能 | 回车发送'}</span>
+          <span className="composer-hint">{chatQueueHint || '$ 技能 | 回车发送'}</span>
           <button type="submit" className="send-btn" disabled={sending || pendingChatJob}>
             发送
           </button>

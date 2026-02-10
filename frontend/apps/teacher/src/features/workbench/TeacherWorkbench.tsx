@@ -1,16 +1,15 @@
+import { useState } from 'react'
+
 type WorkbenchTab = 'skills' | 'memory' | 'workflow'
+type ExamConflictLevel = 'strict' | 'standard' | 'lenient'
 
 type TeacherWorkbenchProps = {
   skillsOpen: boolean
   setSkillsOpen: any
-  onResizeMouseDown?: (e: React.MouseEvent) => void
-  isResizeDragging?: boolean
   workbenchTab: WorkbenchTab
   setWorkbenchTab: any
-  activeAgentId: any
   activeSkillId: any
   activeWorkflowIndicator: any
-  agentList: any[]
   chooseSkill: any
   difficultyLabel: any
   difficultyOptions: readonly any[]
@@ -73,7 +72,6 @@ type TeacherWorkbenchProps = {
   saveDraft: any
   saveExamDraft: any
   scrollToWorkflowSection: any
-  setActiveAgentId: any
   setComposerWarning: any
   setDraftPanelCollapsed: any
   setExamAnswerFiles: any
@@ -113,6 +111,7 @@ type TeacherWorkbenchProps = {
   updateDraftRequirement: any
   updateExamAnswerKeyText: any
   updateExamDraftMeta: any
+  updateExamScoreSchemaSelectedCandidate: any
   updateExamQuestionField: any
   uploadAssignmentId: any
   uploadCardCollapsed: any
@@ -130,17 +129,15 @@ type TeacherWorkbenchProps = {
 }
 
 export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
+  const [examConflictLevel, setExamConflictLevel] = useState<ExamConflictLevel>('standard')
+
   const {
     skillsOpen,
     setSkillsOpen,
-    onResizeMouseDown,
-    isResizeDragging,
     workbenchTab,
     setWorkbenchTab,
-    activeAgentId,
     activeSkillId,
     activeWorkflowIndicator,
-    agentList,
     chooseSkill,
     difficultyLabel,
     difficultyOptions,
@@ -203,7 +200,6 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     saveDraft,
     saveExamDraft,
     scrollToWorkflowSection,
-    setActiveAgentId,
     setComposerWarning,
     setDraftPanelCollapsed,
     setExamAnswerFiles,
@@ -243,6 +239,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     updateDraftRequirement,
     updateExamAnswerKeyText,
     updateExamDraftMeta,
+    updateExamScoreSchemaSelectedCandidate,
     updateExamQuestionField,
     uploadAssignmentId,
     uploadCardCollapsed,
@@ -259,14 +256,113 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     uploading,
   } = props
 
+  const examConflictThreshold =
+    examConflictLevel === 'strict'
+      ? 25
+      : examConflictLevel === 'lenient'
+        ? 8
+        : 15
+  const examConflictLevelLabel =
+    examConflictLevel === 'strict'
+      ? '严格'
+      : examConflictLevel === 'lenient'
+        ? '宽松'
+        : '标准'
+
+  const examNeedsConfirm = Boolean(examDraft?.needs_confirm || examDraft?.score_schema?.needs_confirm)
+  const examSubjectSchema = examDraft?.score_schema?.subject || {}
+  const examCandidateColumns = Array.isArray(examSubjectSchema?.candidate_columns) ? examSubjectSchema.candidate_columns : []
+  const examSelectedCandidateId = String(examSubjectSchema?.selected_candidate_id || '')
+  const examRequestedCandidateId = String(examSubjectSchema?.requested_candidate_id || '')
+  const examSelectedCandidateAvailable = examSubjectSchema?.selected_candidate_available !== false
+  const showExamCandidateCard = Boolean(examNeedsConfirm || examCandidateColumns.length)
+  const examRecommendedCandidate = (() => {
+    if (!examCandidateColumns.length) return null
+    const typeWeight = (value: string) => {
+      if (value === 'subject_pair') return 30
+      if (value === 'direct_physics') return 20
+      if (value === 'chaos_text_scan') return 6
+      return 0
+    }
+    const sorted = [...examCandidateColumns]
+      .map((candidate: any) => {
+        const rowsConsidered = Number(candidate?.rows_considered || 0)
+        const rowsParsed = Number(candidate?.rows_parsed || 0)
+        const rowsInvalid = Number(candidate?.rows_invalid || 0)
+        const parseRate = rowsConsidered > 0 ? rowsParsed / rowsConsidered : 0
+        const candidateType = String(candidate?.type || '')
+        const score = (rowsParsed * 100) + (parseRate * 40) - (rowsInvalid * 12) + typeWeight(candidateType)
+        return {
+          candidate,
+          candidateId: String(candidate?.candidate_id || ''),
+          rowsConsidered,
+          rowsParsed,
+          rowsInvalid,
+          parseRate,
+          candidateType,
+          score,
+        }
+      })
+      .filter((item) => item.candidateId)
+      .sort((a, b) => b.score - a.score || b.rowsParsed - a.rowsParsed || a.rowsInvalid - b.rowsInvalid)
+    return sorted[0] || null
+  })()
+  const examConflictStudents = (() => {
+    if (!examCandidateColumns.length) return []
+    const byStudent = new Map<string, { studentId: string; studentName: string; entries: Array<{ candidateId: string; score: number }> }>()
+    for (const candidate of examCandidateColumns) {
+      const candidateId = String(candidate?.candidate_id || '')
+      if (!candidateId) continue
+      const samples = Array.isArray(candidate?.sample_rows) ? candidate.sample_rows : []
+      for (const row of samples) {
+        if (!row || row?.status !== 'parsed') continue
+        const scoreRaw = Number(row?.score)
+        if (!Number.isFinite(scoreRaw)) continue
+        const studentId = String(row?.student_id || '').trim()
+        const studentName = String(row?.student_name || '').trim()
+        const key = studentId || studentName
+        if (!key) continue
+        const bucket = byStudent.get(key) || { studentId, studentName, entries: [] }
+        bucket.entries.push({ candidateId, score: scoreRaw })
+        byStudent.set(key, bucket)
+      }
+    }
+    const conflicts: Array<{
+      studentId: string
+      studentName: string
+      minScore: number
+      maxScore: number
+      spread: number
+      entries: Array<{ candidateId: string; score: number }>
+    }> = []
+    for (const item of byStudent.values()) {
+      const uniqueEntries: Array<{ candidateId: string; score: number }> = []
+      const seenCandidates = new Set<string>()
+      for (const entry of item.entries) {
+        if (!entry.candidateId || seenCandidates.has(entry.candidateId)) continue
+        seenCandidates.add(entry.candidateId)
+        uniqueEntries.push(entry)
+      }
+      if (uniqueEntries.length < 2) continue
+      const scores = uniqueEntries.map((entry) => entry.score)
+      const minScore = Math.min(...scores)
+      const maxScore = Math.max(...scores)
+      const spread = maxScore - minScore
+      if (spread < examConflictThreshold) continue
+      conflicts.push({
+        studentId: item.studentId,
+        studentName: item.studentName,
+        minScore,
+        maxScore,
+        spread,
+        entries: uniqueEntries.sort((a, b) => b.score - a.score),
+      })
+    }
+    return conflicts.sort((a, b) => b.spread - a.spread).slice(0, 8)
+  })()
+
   return (
               <aside className={`skills-panel ${skillsOpen ? 'open' : ''}`}>
-                {onResizeMouseDown && (
-                  <div
-                    className={`workbench-resize-handle ${isResizeDragging ? 'dragging' : ''}`}
-                    onMouseDown={onResizeMouseDown}
-                  />
-                )}
                 <div className="skills-header">
                   <h3>工作台</h3>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -310,68 +406,35 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 </div>
                 {workbenchTab === 'skills' ? (
                   <>
-                    <section className="agent-panel">
-                      <div className="agent-panel-header">
-                        <strong>执行 Agent</strong>
-                        <span className="muted">`@agent` 召唤</span>
-                      </div>
-                      <div className="agent-list">
-                        {agentList.map((agent) => (
-                          <div key={agent.id} className={`agent-card ${agent.id === activeAgentId ? 'active' : ''}`}>
-                            <div className="agent-title">
-                              <strong>@{agent.id}</strong>
-                              <span>{agent.title}</span>
-                            </div>
-                            <p>{agent.desc}</p>
-                            <div className="agent-actions">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveAgentId(agent.id)
-                                  setComposerWarning('')
-                                }}
-                              >
-                                设为当前
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveAgentId(agent.id)
-                                  insertInvocationTokenAtCursor('agent', agent.id)
-                                }}
-                              >
-                                插入 @
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
                     <div className="skills-tools">
-                      <input
-                        value={skillQuery}
-                        onChange={(e) => setSkillQuery(e.target.value)}
-                        placeholder="搜索技能"
-                      />
-                      <button
-                        type="button"
-                        className="ghost"
-                        disabled={!skillPinned}
-                        onClick={() => {
-                          setSkillPinned(false)
-                          setComposerWarning('已切换到自动技能路由（未显式指定时由后端自动选择）。')
-                        }}
-                      >
-                        使用自动路由
-                      </button>
-                      <label className="toggle">
+                      <div className="skills-tools-search">
                         <input
-                          type="checkbox"
-                          checked={showFavoritesOnly}
-                          onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+                          value={skillQuery}
+                          onChange={(e) => setSkillQuery(e.target.value)}
+                          placeholder="搜索技能"
                         />
-                        只看收藏
-                      </label>
+                      </div>
+                      <div className="skills-tools-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          disabled={!skillPinned}
+                          onClick={() => {
+                            setSkillPinned(false)
+                            setComposerWarning('已切换到自动技能路由（未显式指定时由后端自动选择）。')
+                          }}
+                        >
+                          使用自动路由
+                        </button>
+                        <label className="toggle">
+                          <input
+                            type="checkbox"
+                            checked={showFavoritesOnly}
+                            onChange={(e) => setShowFavoritesOnly(e.target.checked)}
+                          />
+                          只看收藏
+                        </label>
+                      </div>
                     </div>
                     {skillsLoading && <div className="skills-status">正在加载技能...</div>}
                     {skillsError && <div className="skills-status err">{skillsError}</div>}
@@ -835,8 +898,14 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     	                    ) : null}
     	                  </div>
     
-    	                  {examDraftActionError && <div className="status err">{examDraftActionError}</div>}
-    	                  {examDraftActionStatus && <pre className="status ok">{examDraftActionStatus}</pre>}
+	                  {examDraftActionError && <div className="status err">{examDraftActionError}</div>}
+	                  {examDraftActionStatus && <pre className="status ok">{examDraftActionStatus}</pre>}
+
+	                  {examNeedsConfirm ? (
+	                    <div className="status err">
+	                      当前成绩映射置信度不足，请先在“物理分映射确认”里选择映射列并保存草稿，等待重新解析完成后再创建考试。
+	                    </div>
+	                  ) : null}
     
     	                  <div className="draft-actions">
     	                    <button
@@ -850,12 +919,18 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     	                    >
     	                      {examDraftSaving ? '保存中…' : '保存草稿'}
     	                    </button>
-    	                    <button
-    	                      type="button"
-    	                      onClick={handleConfirmExamUpload}
-    	                      disabled={examConfirming || examDraftSaving || !examJobInfo || examJobInfo.status !== 'done'}
-    	                      title={examJobInfo && examJobInfo.status !== 'done' ? '解析未完成，暂不可创建' : ''}
-    	                    >
+	                    <button
+	                      type="button"
+	                      onClick={handleConfirmExamUpload}
+	                      disabled={examConfirming || examDraftSaving || examNeedsConfirm || !examJobInfo || examJobInfo.status !== 'done'}
+	                      title={
+	                        examNeedsConfirm
+	                          ? '请先确认物理分映射并保存草稿'
+	                          : examJobInfo && examJobInfo.status !== 'done'
+	                            ? '解析未完成，暂不可创建'
+	                            : ''
+	                      }
+	                    >
     	                      {examConfirming
     	                        ? examJobInfo && (examJobInfo.status as any) === 'confirming'
     	                          ? `创建中…${examJobInfo.progress ?? 0}%`
@@ -866,9 +941,170 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     	                    </button>
     	                  </div>
     
-    	                  <div className="draft-grid">
-    	                    <div className="draft-card">
-    	                      <h4>考试信息（可编辑）</h4>
+	                  <div className="draft-grid">
+	                    {showExamCandidateCard ? (
+	                      <div className="draft-card">
+	                        <h4>物理分映射确认</h4>
+	                        <div className="draft-form">
+	                          <label>映射候选列</label>
+	                          {examCandidateColumns.length ? (
+	                            <>
+	                              <select
+	                                value={examSelectedCandidateId}
+	                                onChange={(e) => updateExamScoreSchemaSelectedCandidate(e.target.value)}
+	                                onKeyDown={stopKeyPropagation}
+	                              >
+	                                <option value="">请选择物理分映射列</option>
+	                                {examCandidateColumns.map((candidate: any, idx: number) => {
+	                                  const candidateId = String(candidate?.candidate_id || '')
+	                                  if (!candidateId) return null
+	                                  const kindLabel =
+	                                    candidate?.type === 'subject_pair'
+	                                      ? '科目+分数列'
+	                                      : candidate?.type === 'direct_physics'
+	                                        ? '物理分列'
+	                                        : candidate?.type === 'chaos_text_scan'
+	                                          ? '混乱文本兜底'
+	                                          : String(candidate?.type || '未知类型')
+	                                  const locationLabel = [
+	                                    candidate?.file ? `文件 ${candidate.file}` : '',
+	                                    candidate?.subject_header ? `科目列 ${candidate.subject_header}` : '',
+	                                    candidate?.score_header ? `分数列 ${candidate.score_header}` : '',
+	                                    (candidate?.rows_parsed !== undefined || candidate?.rows_considered !== undefined)
+	                                      ? `命中 ${candidate?.rows_parsed ?? 0}/${candidate?.rows_considered ?? 0}`
+	                                      : '',
+	                                  ]
+	                                    .filter(Boolean)
+	                                    .join(' · ')
+	                                  return (
+	                                    <option key={`${candidateId}-${idx}`} value={candidateId}>
+	                                      {`${candidateId}｜${kindLabel}${locationLabel ? `｜${locationLabel}` : ''}`}
+	                                    </option>
+	                                  )
+	                                })}
+	                              </select>
+	                              {examRecommendedCandidate ? (
+	                                <div className="draft-actions" style={{ marginTop: 8 }}>
+	                                  <button
+	                                    type="button"
+	                                    className="secondary-btn"
+	                                    onClick={() => updateExamScoreSchemaSelectedCandidate(examRecommendedCandidate.candidateId)}
+	                                    disabled={examSelectedCandidateId === examRecommendedCandidate.candidateId}
+	                                  >
+	                                    {examSelectedCandidateId === examRecommendedCandidate.candidateId
+	                                      ? '已使用推荐映射'
+	                                      : '一键使用推荐映射'}
+	                                  </button>
+	                                </div>
+	                              ) : null}
+	                            </>
+	                          ) : (
+	                            <div className="status err">未检测到可确认的物理分映射列。建议更换更规范的成绩表后重试。</div>
+	                          )}
+	                        </div>
+                        {examRecommendedCandidate ? (
+                          <div className="status ok">
+                            推荐映射：{examRecommendedCandidate.candidateId}（命中 {examRecommendedCandidate.rowsParsed}/
+                            {examRecommendedCandidate.rowsConsidered}，无效 {examRecommendedCandidate.rowsInvalid}）
+                          </div>
+                        ) : null}
+                        {examCandidateColumns.length > 1 ? (
+                          <div className="draft-form" style={{ marginTop: 8 }}>
+                            <label>冲突筛选强度</label>
+                            <select
+                              value={examConflictLevel}
+                              onChange={(e) => {
+                                const raw = String(e.target.value || '')
+                                const nextLevel: ExamConflictLevel =
+                                  raw === 'strict' || raw === 'lenient' ? raw : 'standard'
+                                setExamConflictLevel(nextLevel)
+                              }}
+                              onKeyDown={stopKeyPropagation}
+                            >
+                              <option value="strict">严格（分差≥25 才提示）</option>
+                              <option value="standard">标准（分差≥15 提示）</option>
+                              <option value="lenient">宽松（分差≥8 提示）</option>
+                            </select>
+                            <div className="muted">当前模式：{examConflictLevelLabel}（阈值 {examConflictThreshold} 分）</div>
+                          </div>
+                        ) : null}
+                        {examConflictStudents.length ? (
+                          <details style={{ marginTop: 8 }}>
+                            <summary className="muted">查看样本冲突学生（候选列分差较大）</summary>
+	                            <div className="exam-candidate-conflicts">
+	                              {examConflictStudents.map((item, idx) => {
+	                                const studentLabel = [item.studentName, item.studentId ? `(${item.studentId})` : '']
+	                                  .filter(Boolean)
+	                                  .join(' ')
+	                                const detailLabel = item.entries.map((entry) => `${entry.candidateId}=${entry.score}`).join('；')
+	                                return (
+	                                  <div key={`conflict-${idx}-${item.studentId || item.studentName}`} className="exam-candidate-conflict-row">
+	                                    <strong>{studentLabel || `样本学生 ${idx + 1}`}</strong>
+	                                    <span className="status-tag err">分差 {item.spread.toFixed(1)}</span>
+	                                    <span className="muted">{detailLabel}</span>
+	                                  </div>
+	                                )
+	                              })}
+	                            </div>
+	                          </details>
+	                        ) : null}
+	                        {examRequestedCandidateId && !examSelectedCandidateAvailable ? (
+	                          <div className="status err">上次选择的映射列在当前文件中不可用，已回退自动匹配，请重新选择。</div>
+	                        ) : null}
+	                        {examSelectedCandidateId ? (
+	                          <div className="status ok">当前已选映射：{examSelectedCandidateId}</div>
+	                        ) : null}
+	                        <div className="muted" style={{ marginTop: 8 }}>
+	                          选择后点击“保存草稿”，系统会按所选映射重跑解析；重跑完成后可创建考试。
+	                        </div>
+	                        {Array.isArray(examSubjectSchema?.unresolved_students) && examSubjectSchema.unresolved_students.length ? (
+	                          <div className="muted" style={{ marginTop: 4 }}>
+	                            未解析到物理分学生：{examSubjectSchema.unresolved_students.length} 人（将按高置信结果保留）。
+	                          </div>
+	                        ) : null}
+	                        {examSelectedCandidateId ? (
+	                          <details style={{ marginTop: 8 }}>
+	                            <summary className="muted">查看当前映射样本预览（最多 5 行）</summary>
+	                            {(() => {
+	                              const selected = examCandidateColumns.find(
+	                                (candidate: any) => String(candidate?.candidate_id || '') === examSelectedCandidateId,
+	                              )
+	                              const rows = Array.isArray(selected?.sample_rows) ? selected.sample_rows : []
+	                              if (!rows.length) return <div className="muted">当前映射暂无样本行。</div>
+	                              return (
+	                                <div className="exam-candidate-samples">
+	                                  {rows.map((row: any, rowIdx: number) => {
+	                                    const label = [
+	                                      row?.class_name ? String(row.class_name) : '',
+	                                      row?.student_name ? String(row.student_name) : '',
+	                                      row?.student_id ? `(${String(row.student_id)})` : '',
+	                                    ]
+	                                      .filter(Boolean)
+	                                      .join(' ')
+	                                    const statusLabel = row?.status === 'parsed' ? '可解析' : '无效'
+	                                    const scoreLabel = row?.score !== undefined && row?.score !== null ? ` → ${row.score}` : ''
+	                                    return (
+	                                      <div key={`${examSelectedCandidateId}-sample-${rowIdx}`} className="exam-candidate-sample-row">
+	                                        <strong>{label || `样本 ${rowIdx + 1}`}</strong>
+	                                        <span className={row?.status === 'parsed' ? 'status-tag ok' : 'status-tag err'}>{statusLabel}</span>
+	                                        <span className="muted">原始值：{String(row?.raw_value || '（空）')}{scoreLabel}</span>
+	                                      </div>
+	                                    )
+	                                  })}
+	                                </div>
+	                              )
+	                            })()}
+	                          </details>
+	                        ) : null}
+	                        {(examSubjectSchema?.coverage !== undefined || examDraft?.score_schema?.confidence !== undefined) ? (
+	                          <div className="muted" style={{ marginTop: 4 }}>
+	                            当前覆盖率：{examSubjectSchema?.coverage ?? '-'}；置信度：{examDraft?.score_schema?.confidence ?? '-'}。
+	                          </div>
+	                        ) : null}
+	                      </div>
+	                    ) : null}
+	                    <div className="draft-card">
+	                      <h4>考试信息（可编辑）</h4>
     	                      <div className="draft-form">
     	                        <label>日期（YYYY-MM-DD）</label>
     	                        <input

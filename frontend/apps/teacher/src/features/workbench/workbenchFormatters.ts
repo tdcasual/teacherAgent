@@ -96,6 +96,7 @@ export const formatExamJobStatus = (job: ExamUploadJobStatus) => {
   if (extra.error_detail) lines.push(`详情：${extra.error_detail}`)
   if (Array.isArray(extra.hints) && extra.hints.length) lines.push(`建议：${extra.hints.join('；')}`)
   if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
+  if (job.needs_confirm) lines.push('提示：成绩映射置信度不足，请先在草稿中确认物理分映射列。')
   return lines.join('\n')
 }
 
@@ -120,6 +121,7 @@ export const formatExamJobSummary = (job: ExamUploadJobStatus | null, fallbackEx
     const scoreMap: Record<string, string> = { scored: '已评分', partial: '部分已评分', unscored: '未评分' }
     parts.push(`评分：${scoreMap[job.scoring.status] || job.scoring.status}`)
   }
+  if (job.needs_confirm) parts.push('待确认映射')
   if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
   return parts.join(' · ')
 }
@@ -132,6 +134,7 @@ export const formatExamDraftSummary = (draft: ExamUploadDraft | null, jobInfo: E
   if (draft.meta?.class_name) parts.push(String(draft.meta.class_name))
   if (draft.counts?.students !== undefined) parts.push(`学生：${draft.counts.students}`)
   if (draft.counts?.questions !== undefined) parts.push(`题目：${draft.counts.questions}`)
+  if (draft.needs_confirm || draft.score_schema?.needs_confirm) parts.push('待确认映射')
   if (jobInfo?.status === 'confirmed') parts.push('已创建')
   else if (jobInfo?.status === 'done') parts.push('待创建')
   return parts.join(' · ')
@@ -194,4 +197,3 @@ export const describeConfirmMissing = (missing: unknown) => {
   if (!keys.length) return ''
   return formatMissingRequirements(keys)
 }
-
