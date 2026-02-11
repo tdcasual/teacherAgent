@@ -103,10 +103,84 @@ class ExamUploadDraftServiceTest(unittest.TestCase):
             answer_text_excerpt="",
         )
         self.assertFalse(bool(draft.get("needs_confirm")))
+        self.assertEqual(float((((draft.get("score_schema") or {}).get("subject") or {}).get("coverage") or 0.0)), 0.5)
         self.assertEqual(
             str((((draft.get("score_schema") or {}).get("subject") or {}).get("selected_candidate_id") or "")),
             "pair:4:5",
         )
+
+    def test_build_draft_sets_suggested_candidate_when_missing_selection(self):
+        parsed = {
+            "exam_id": "EX1",
+            "meta": {"date": "2026-02-07", "class_name": "高二2403班"},
+            "paper_files": ["paper.pdf"],
+            "score_files": ["scores.xlsx"],
+            "answer_files": [],
+            "counts": {"students": 2},
+            "questions": [{"question_id": "SUBJECT_PHYSICS", "max_score": 60}],
+            "warnings": [],
+            "answer_key": {"count": 0},
+            "scoring": {"status": "scored"},
+            "counts_scored": {"students": 2},
+            "totals_summary": {"avg_total": 38.5},
+            "score_schema": {
+                "needs_confirm": True,
+                "subject": {
+                    "coverage": 0.7,
+                    "recommended_candidate_id": "pair:4:5",
+                },
+            },
+            "needs_confirm": True,
+        }
+        job = {"exam_id": "EX1", "date": "2026-02-07", "class_name": "高二2403班", "draft_version": 1}
+
+        draft = build_exam_upload_draft(
+            "job-1",
+            job,
+            parsed,
+            {},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            answer_text_excerpt="",
+        )
+        subject_info = ((draft.get("score_schema") or {}).get("subject") or {})
+        self.assertEqual(str(subject_info.get("suggested_selected_candidate_id") or ""), "pair:4:5")
+        self.assertTrue(bool(draft.get("needs_confirm")))
+
+    def test_build_draft_invalid_selected_candidate_keeps_needs_confirm(self):
+        parsed = {
+            "exam_id": "EX1",
+            "meta": {"date": "2026-02-07", "class_name": "高二2403班"},
+            "paper_files": ["paper.pdf"],
+            "score_files": ["scores.xlsx"],
+            "answer_files": [],
+            "counts": {"students": 2},
+            "questions": [{"question_id": "SUBJECT_PHYSICS", "max_score": 60}],
+            "warnings": [],
+            "answer_key": {"count": 0},
+            "scoring": {"status": "scored"},
+            "counts_scored": {"students": 2},
+            "totals_summary": {"avg_total": 38.5},
+            "score_schema": {
+                "needs_confirm": True,
+                "subject": {
+                    "coverage": 0.6,
+                    "selected_candidate_available": False,
+                    "selection_error": "selected_candidate_not_found",
+                },
+            },
+            "needs_confirm": True,
+        }
+        job = {"exam_id": "EX1", "date": "2026-02-07", "class_name": "高二2403班", "draft_version": 1}
+
+        draft = build_exam_upload_draft(
+            "job-1",
+            job,
+            parsed,
+            {"score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}}},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            answer_text_excerpt="",
+        )
+        self.assertTrue(bool(draft.get("needs_confirm")))
 
 
 if __name__ == "__main__":

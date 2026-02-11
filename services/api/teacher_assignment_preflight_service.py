@@ -123,7 +123,21 @@ def _subject_score_total_mode_preflight(
 
     should_guard, requested_subject, inferred_subject = should_guard_total_mode_subject_request(last_user_text, overview)
     if not should_guard:
-        if str(overview.get("score_mode") or "").strip().lower() == "total":
+        score_mode = str(overview.get("score_mode") or "").strip().lower()
+        score_mode_source = str(overview.get("score_mode_source") or "").strip().lower()
+        if score_mode_source == "subject_from_scores_file":
+            deps.diag_log(
+                "teacher_preflight.subject_total_auto_extract_subject",
+                {
+                    "exam_id": exam_id,
+                    "score_mode": score_mode,
+                    "score_mode_source": score_mode_source,
+                    "requested_subject": requested_subject or "",
+                    "inferred_subject": inferred_subject or "",
+                    "last_user": last_user_text[:200],
+                },
+            )
+        elif score_mode == "total":
             deps.diag_log(
                 "teacher_preflight.subject_total_allow_single_subject",
                 {

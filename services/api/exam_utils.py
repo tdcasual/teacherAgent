@@ -12,7 +12,11 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import logging
+
 from .paths import resolve_analysis_dir, resolve_exam_dir, resolve_manifest_path
+
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "parse_score_value",
@@ -63,6 +67,7 @@ def read_questions_csv(path: Path) -> Dict[str, Dict[str, Any]]:
                     "max_score": max_score,
                 }
     except Exception:
+        _log.warning("failed to read questions CSV at %s", path, exc_info=True)
         return questions
     return questions
 
@@ -95,8 +100,8 @@ def _load_json_file(path: Path) -> Dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to load JSON at %s", path, exc_info=True)
         return {}
-
 
 def load_exam_manifest(exam_id: str) -> Dict[str, Any]:
     exam_id = str(exam_id or "").strip()

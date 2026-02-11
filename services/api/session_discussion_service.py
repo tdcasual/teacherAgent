@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,7 +29,7 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
             if sid and sid not in session_ids:
                 session_ids.append(sid)
     except Exception:
-        pass
+        _log.warning("failed to load session index for student=%s", student_id, exc_info=True)
 
     best = {"status": "not_started", "pass": False, "session_id": assignment_id, "message_count": 0}
     for sid in session_ids:
@@ -72,6 +75,7 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
             elif bool(cur["pass"]) == bool(best.get("pass")) and int(cur["message_count"]) > int(best.get("message_count") or 0):
                 best = cur
         except Exception:
+            _log.warning("failed to read session file %s for student=%s", path, student_id, exc_info=True)
             continue
 
     return best

@@ -5,12 +5,15 @@ Pure functions for text normalization, path resolution, scoring helpers, etc.
 from __future__ import annotations
 
 import csv
+import logging
 import os
 import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 from fastapi import HTTPException
 
@@ -98,6 +101,7 @@ def count_csv_rows(path: Path) -> int:
                 pass
         return max(count, 0)
     except Exception:
+        _log.warning("failed to count CSV rows at %s", path, exc_info=True)
         return 0
 
 

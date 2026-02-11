@@ -42,7 +42,7 @@ def _contains_token(text: str, lowered: str, token: str) -> bool:
     if not token_norm:
         return False
     if any(ord(ch) > 127 for ch in token_norm):
-        return token_norm in text
+        return token_norm in lowered
     searchable = re.sub(r"[_\-/]+", " ", lowered)
     return re.search(rf"\b{re.escape(token_norm)}\b", searchable) is not None
 
@@ -138,7 +138,4 @@ def should_guard_total_mode_subject_request(
 
     requested_subject = extract_requested_subject(last_user_text)
     inferred_subject = infer_exam_subject_from_overview(overview)
-    if requested_subject and inferred_subject and requested_subject == inferred_subject:
-        return False, requested_subject, inferred_subject
-
     return True, requested_subject, inferred_subject

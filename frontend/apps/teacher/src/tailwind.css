@@ -36,7 +36,23 @@ body {
 }
 
 /* ── Global form elements ── */
-input, textarea, select {
+:where(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="password"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"],
+  input[type="week"],
+  textarea,
+  select
+) {
   width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
@@ -46,7 +62,23 @@ input, textarea, select {
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-input:focus, textarea:focus, select:focus {
+:where(
+  input:not([type]),
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="password"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="time"],
+  input[type="week"],
+  textarea,
+  select
+):focus {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.12);
 }

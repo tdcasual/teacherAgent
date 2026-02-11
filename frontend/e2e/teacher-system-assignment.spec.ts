@@ -547,6 +547,7 @@ test('assignment confirm server error keeps create button available for retry', 
   await assignmentSection.getByRole('button', { name: '创建作业' }).click()
   await expect(assignmentSection.getByText('confirm assignment failed')).toBeVisible()
   await expect(assignmentSection.getByRole('button', { name: '创建作业' })).toBeVisible()
+  await expect(assignmentSection.getByRole('button', { name: '创建作业' })).toBeEnabled()
 })
 
 test('assignment confirm request payload includes job_id and strict_requirements', async ({ page }) => {

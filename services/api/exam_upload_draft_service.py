@@ -5,6 +5,18 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
 
+def _merge_score_schema(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            nested = dict(merged.get(key) or {})
+            nested.update(value)
+            merged[key] = nested
+            continue
+        merged[key] = value
+    return merged
+
+
 def exam_upload_not_ready_detail(job: Dict[str, Any], message: str) -> Dict[str, Any]:
     return {
         "error": "job_not_ready",
@@ -73,16 +85,29 @@ def build_exam_upload_draft(
     if isinstance(override.get("questions"), list) and override.get("questions"):
         questions = override.get("questions")
     if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):
-        score_schema = {**score_schema, **override.get("score_schema")}
+        score_schema = _merge_score_schema(score_schema, override.get("score_schema") or {})
+
+    subject_info = score_schema.get("subject") if isinstance(score_schema.get("subject"), dict) else {}
     selected_candidate_id = str(
         (
-            ((score_schema.get("subject") or {}).get("selected_candidate_id")
-            if isinstance(score_schema.get("subject"), dict)
+            ((subject_info or {}).get("selected_candidate_id")
+            if isinstance(subject_info, dict)
             else score_schema.get("selected_candidate_id"))
         )
         or ""
     ).strip()
-    if score_schema.get("confirm") is True or selected_candidate_id:
+    selected_candidate_available = bool(subject_info.get("selected_candidate_available", True)) if isinstance(subject_info, dict) else True
+    selection_error = str(subject_info.get("selection_error") or "").strip() if isinstance(subject_info, dict) else ""
+    candidate_selection_valid = bool((not selected_candidate_id) or (selected_candidate_available and not selection_error))
+
+    recommended_candidate_id = str(subject_info.get("recommended_candidate_id") or "").strip() if isinstance(subject_info, dict) else ""
+    if isinstance(subject_info, dict) and (not selected_candidate_id) and recommended_candidate_id:
+        next_subject = dict(subject_info)
+        next_subject["suggested_selected_candidate_id"] = recommended_candidate_id
+        score_schema = dict(score_schema)
+        score_schema["subject"] = next_subject
+
+    if score_schema.get("confirm") is True or (selected_candidate_id and candidate_selection_valid):
         needs_confirm = False
 
     answer_key_text = str(override.get("answer_key_text") or "").strip()

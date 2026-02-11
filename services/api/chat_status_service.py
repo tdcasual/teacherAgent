@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from .auth_service import enforce_chat_job_access
+
 
 @dataclass(frozen=True)
 class ChatStatusDeps:
@@ -16,6 +18,7 @@ class ChatStatusDeps:
 
 def get_chat_status(job_id: str, *, deps: ChatStatusDeps) -> Dict[str, Any]:
     job = deps.load_chat_job(job_id)
+    enforce_chat_job_access(job)
     try:
         status = str(job.get("status") or "")
         lane_hint = str(job.get("lane_id") or "").strip()
@@ -31,4 +34,6 @@ def get_chat_status(job_id: str, *, deps: ChatStatusDeps) -> Dict[str, Any]:
         job["lane_queue_position"] = lane_pos
         job["lane_queue_size"] = lane_load["queued"]
         job["lane_active"] = bool(lane_load["active"])
+    if isinstance(job, dict):
+        job.pop("request", None)
     return job

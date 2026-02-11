@@ -15,6 +15,7 @@ from .config import (
     LLM_ROUTING_PATH,
     STUDENT_SESSIONS_DIR,
     TEACHER_SESSIONS_DIR,
+    TEACHER_SKILLS_DIR,
     TEACHER_WORKSPACES_DIR,
     UPLOAD_JOB_DIR,
 )
@@ -48,6 +49,11 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
         digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:10] if raw else uuid.uuid4().hex[:10]
         slug = f"{prefix}_{digest}"
     return slug
+
+
+def teacher_skill_dir(skill_id: str) -> Path:
+    safe_id = safe_fs_id(skill_id, prefix="skill")
+    return TEACHER_SKILLS_DIR / safe_id
 
 
 # ---------------------------------------------------------------------------

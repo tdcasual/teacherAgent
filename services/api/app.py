@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import os
 import sys
 import types
@@ -9,7 +10,16 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
 from .app_routes import register_routes
+from .auth_service import (
+    AuthError,
+    get_current_principal,
+    reset_current_principal,
+    resolve_principal_from_headers,
+    set_current_principal,
+)
 from .runtime.lifecycle import app_lifespan
 from .wiring import CURRENT_CORE
 
@@ -59,11 +69,26 @@ register_routes(app, _core)
 
 @app.middleware("http")
 async def _set_core_context(request: Request, call_next):
-    token = CURRENT_CORE.set(_core)
+    core_token = CURRENT_CORE.set(_core)
+    principal_token = None
     try:
+        principal = get_current_principal()
+        if principal is None:
+            principal = resolve_principal_from_headers(
+                request.headers,
+                path=str(request.url.path),
+                method=request.method,
+                allow_exempt=True,
+            )
+            if principal is not None:
+                principal_token = set_current_principal(principal)
         return await call_next(request)
+    except AuthError as exc:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     finally:
-        CURRENT_CORE.reset(token)
+        if principal_token is not None:
+            reset_current_principal(principal_token)
+        CURRENT_CORE.reset(core_token)
 
 if __name__ == "services.api.app":
     _DEFAULT_APP = app
@@ -94,6 +119,10 @@ if __name__ == "services.api.app":
 
         app = MultiTenantDispatcher(default_app=_DEFAULT_APP, admin_app=_ADMIN_APP, registry=_TENANT_REGISTRY)
     except Exception:
+        logging.getLogger(__name__).error(
+            "Multi-tenant initialization failed; falling back to single-tenant mode",
+            exc_info=True,
+        )
         app = _DEFAULT_APP
 
 
@@ -107,7 +136,7 @@ class _AppModule(types.ModuleType):
         try:
             setattr(_core, name, value)
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("setattr(%s) on _core failed", name, exc_info=True)
         if name in self.__dict__:
             try:
                 del self.__dict__[name]

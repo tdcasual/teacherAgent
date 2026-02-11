@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatMessage(BaseModel):
@@ -135,3 +135,23 @@ class TeacherProviderRegistryProbeRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
+
+
+class TeacherSkillCreateRequest(BaseModel):
+    title: str = Field(..., max_length=200)
+    description: str = Field(..., max_length=50000)
+    keywords: List[str] = Field(default=[], max_length=30)
+    examples: List[str] = Field(default=[], max_length=20)
+    allowed_roles: List[str] = Field(default=["teacher"], max_length=10)
+
+
+class TeacherSkillUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=50000)
+    keywords: Optional[List[str]] = Field(default=None, max_length=30)
+    examples: Optional[List[str]] = Field(default=None, max_length=20)
+    allowed_roles: Optional[List[str]] = Field(default=None, max_length=10)
+
+
+class TeacherSkillImportRequest(BaseModel):
+    github_url: str = Field(..., max_length=2000)

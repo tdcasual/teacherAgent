@@ -157,6 +157,8 @@ class SkillSpec:
     routing: SkillRoutingSpec
     agent: SkillAgentSpec
     source_path: str
+    instructions: str = ""
+    source_type: str = "system"
 
     def as_public_dict(self) -> Dict[str, Any]:
         default_target = None
@@ -189,12 +191,13 @@ class SkillSpec:
                     },
                 }
             )
-        return {
+        d: Dict[str, Any] = {
             "id": self.skill_id,
             "schema_version": self.schema_version,
             "title": self.title,
             "desc": self.desc,
             "allowed_roles": self.allowed_roles,
+            "source_type": self.source_type,
             "prompts": self.ui.prompts,
             "examples": self.ui.examples,
             "routing": {
@@ -222,6 +225,9 @@ class SkillSpec:
                 },
             },
         }
+        if self.instructions:
+            d["instructions"] = self.instructions
+        return d
 
 
 def _parse_model_target(raw: Any) -> Optional[SkillModelTarget]:
@@ -360,4 +366,6 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
         routing=routing,
         agent=agent,
         source_path=source_path,
+        instructions=str(raw.get("instructions") or "").strip(),
+        source_type=str(raw.get("source_type") or "system").strip(),
     )

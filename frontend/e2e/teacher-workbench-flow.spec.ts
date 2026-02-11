@@ -399,6 +399,14 @@ const examWorkflowCases: MatrixCase[] = [
     when: 'Switch active jobs and collapse panel',
     then: 'Summary always shows latest active job metadata',
   },
+  {
+    id: 'E015',
+    priority: 'P1',
+    title: 'Recommended candidate auto-fills selection and shows reason',
+    given: 'Exam draft includes recommended candidate and candidate summaries',
+    when: 'Draft panel is loaded in workflow mode',
+    then: 'Selection defaults to recommendation and reason panel is visible',
+  },
 ]
 
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {
@@ -1680,6 +1688,123 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await toggleUploadSection(true)
     await expect(panelSummary).toContainText('考试编号：EX-E014')
     await expect(panelSummary).not.toContainText('作业编号：HW-E014-A')
+  },
+
+  E015: async ({ page }) => {
+    const jobId = 'job_exam_recommend_p1'
+    let savePayload: any = null
+
+    await setupTeacherState(page, {
+      stateOverrides: {
+        teacherWorkbenchTab: 'workflow',
+        teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: jobId }),
+      },
+    })
+    await setupBasicTeacherApiMocks(page)
+
+    await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: jobId, status: 'done', progress: 100, exam_id: 'EX-E015' }),
+      })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft**', async (route) => {
+      const draft = {
+        ...buildExamDraft(jobId, 'EX-E015'),
+        needs_confirm: true,
+        score_schema: {
+          mode: 'subject',
+          confidence: 0.81,
+          needs_confirm: true,
+          subject: {
+            target: 'physics',
+            recommended_candidate_id: 'pair:4:5',
+            recommended_candidate_reason: 'rows_parsed=42, parsed_rate=0.95, source_rank=1',
+            suggested_selected_candidate_id: 'pair:4:5',
+            selected_candidate_id: '',
+            selected_candidate_available: true,
+            candidate_columns: [
+              {
+                candidate_id: 'pair:4:5',
+                type: 'subject_pair',
+                rows_considered: 44,
+                rows_parsed: 42,
+                rows_invalid: 2,
+                sample_rows: [
+                  { student_name: '张三', student_id: 'S1', raw_value: '78', score: 78, status: 'parsed' },
+                ],
+              },
+              {
+                candidate_id: 'chaos:text',
+                type: 'chaos_text_scan',
+                rows_considered: 44,
+                rows_parsed: 30,
+                rows_invalid: 14,
+              },
+            ],
+            candidate_summaries: [
+              {
+                candidate_id: 'pair:4:5',
+                rows_considered: 44,
+                rows_parsed: 42,
+                rows_invalid: 2,
+                parsed_rate: 0.9545,
+                source_rank: 1,
+                quality_score: 135.4,
+                files: ['scores.xlsx'],
+                types: ['subject_pair'],
+              },
+              {
+                candidate_id: 'chaos:text',
+                rows_considered: 44,
+                rows_parsed: 30,
+                rows_invalid: 14,
+                parsed_rate: 0.6818,
+                source_rank: 3,
+                quality_score: 94.2,
+                files: ['scores.xlsx'],
+                types: ['chaos_text_scan'],
+              },
+            ],
+          },
+        },
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, draft }) })
+    })
+
+    await page.route('http://localhost:8000/exam/upload/draft/save', async (route) => {
+      savePayload = JSON.parse(route.request().postData() || '{}')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, message: '考试草稿已保存。', draft_version: 2 }),
+      })
+    })
+
+    await page.goto('/')
+
+    const examSection = page.locator('#workflow-exam-draft-section')
+    await expect(examSection.getByText('系统推荐：pair:4:5')).toBeVisible()
+    await expect(examSection.getByText('rows_parsed=42, parsed_rate=0.95, source_rank=1')).toBeVisible()
+    await expect(examSection.getByText('当前已选映射：pair:4:5')).toBeVisible()
+
+    const summaryToggle = examSection.locator('summary').filter({ hasText: '查看候选映射评分详情' })
+    await expect(summaryToggle).toBeVisible()
+    await summaryToggle.click()
+    const sortSelect = examSection.locator('.exam-candidate-summary-tools select').first()
+    await expect(sortSelect).toBeVisible()
+    await expect(examSection.locator('.exam-candidate-summary-row', { hasText: 'pair:4:5' })).toBeVisible()
+    await expect(examSection.locator('.exam-candidate-summary-row', { hasText: 'chaos:text' })).toBeVisible()
+
+    await sortSelect.selectOption('parsed_rate')
+    await examSection.locator('.exam-candidate-summary-top-toggle input[type="checkbox"]').check()
+    await expect(examSection.locator('.exam-candidate-summary-row')).toHaveCount(2)
+
+    await examSection.getByRole('button', { name: '保存草稿' }).click()
+    await expect.poll(() => savePayload).not.toBeNull()
+    expect(String(savePayload?.score_schema?.subject?.selected_candidate_id || '')).toBe('pair:4:5')
   },
 }
 

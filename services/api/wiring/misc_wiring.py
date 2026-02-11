@@ -120,6 +120,7 @@ def _content_catalog_deps():
         app_root=_ac.APP_ROOT,
         load_profile_file=_ac.load_profile_file,
         load_skills=load_skills,
+        teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
     )
 
 
@@ -194,7 +195,7 @@ def _agent_runtime_deps():
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
         diag_log=_ac.diag_log,
-        load_skill_runtime=lambda role_hint, skill_id: _ac._default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        load_skill_runtime=lambda role_hint, skill_id: _ac._default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id, teacher_skills_dir=_ac.TEACHER_SKILLS_DIR),
         allowed_tools=_ac.allowed_tools,
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,

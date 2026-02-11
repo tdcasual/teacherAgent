@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,6 +11,17 @@ from pydantic import BaseModel, Field
 
 from .tenant_config_store import TenantConfig, TenantConfigStore
 from .tenant_registry import TenantRegistry, validate_tenant_id
+
+
+def _validate_tenant_path(raw: str, label: str) -> str:
+    """Resolve and validate that a tenant path is within the allowed base, if configured."""
+    resolved = Path(raw).expanduser().resolve()
+    allowed_base = os.getenv("TENANT_DATA_BASE_DIR", "").strip()
+    if allowed_base:
+        base = Path(allowed_base).resolve()
+        if not str(resolved).startswith(str(base) + os.sep) and resolved != base:
+            raise HTTPException(status_code=400, detail=f"{label} must be under {base}")
+    return str(resolved)
 
 
 class TenantUpsertRequest(BaseModel):
@@ -75,8 +87,8 @@ def create_admin_app(*, deps: TenantAdminDeps) -> FastAPI:
         cfg = deps.store.upsert(
             TenantConfig(
                 tenant_id=tid,
-                data_dir=str(Path(req.data_dir).expanduser()),
-                uploads_dir=str(Path(req.uploads_dir).expanduser()),
+                data_dir=_validate_tenant_path(req.data_dir, "data_dir"),
+                uploads_dir=_validate_tenant_path(req.uploads_dir, "uploads_dir"),
                 enabled=bool(req.enabled),
                 extra=dict(req.extra or {}),
             )

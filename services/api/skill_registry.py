@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -8,6 +9,8 @@ try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
     yaml = None
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to parse skill YAML at %s", path, exc_info=True)
         return {}
     return raw if isinstance(raw, dict) else {}
 

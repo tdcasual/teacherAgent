@@ -23,6 +23,13 @@ _ASSIGNMENT_DETAIL_CACHE: Dict[Any, Any] = {}
 _ASSIGNMENT_DETAIL_CACHE_LOCK = threading.Lock()
 
 
+def reset_assignment_cache() -> None:
+    """Reset assignment detail cache. Called by runtime_state on tenant init."""
+    global _ASSIGNMENT_DETAIL_CACHE, _ASSIGNMENT_DETAIL_CACHE_LOCK
+    _ASSIGNMENT_DETAIL_CACHE = {}
+    _ASSIGNMENT_DETAIL_CACHE_LOCK = threading.Lock()
+
+
 def load_assignment_meta(folder: Path) -> Dict[str, Any]:
     meta_path = folder / "meta.json"
     if meta_path.exists():

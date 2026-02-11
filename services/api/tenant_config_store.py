@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,7 @@ class TenantConfigStore:
             try:
                 conn.execute("PRAGMA journal_mode=WAL;")
             except Exception:
-                pass
+                _log.warning("WAL journal mode not available for %s", self.db_path, exc_info=True)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tenants (
@@ -75,6 +78,7 @@ class TenantConfigStore:
         try:
             extra = json.loads(row["extra_json"] or "{}")
         except Exception:
+            _log.warning("corrupt extra_json for tenant %s", tid, exc_info=True)
             extra = {}
         return TenantConfig(
             tenant_id=str(row["tenant_id"] or ""),
@@ -130,6 +134,7 @@ class TenantConfigStore:
             try:
                 extra = json.loads(row["extra_json"] or "{}")
             except Exception:
+                _log.warning("corrupt extra_json for tenant %s in list", row["tenant_id"], exc_info=True)
                 extra = {}
             out.append(
                 TenantConfig(

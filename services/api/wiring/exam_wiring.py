@@ -215,6 +215,7 @@ def _exam_overview_deps():
         read_questions_csv=_ac.read_questions_csv,
         compute_exam_totals=_ac.compute_exam_totals,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        parse_xlsx_with_script=_ac._parse_xlsx_with_script,
     )
 
 

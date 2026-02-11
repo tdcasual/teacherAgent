@@ -84,8 +84,8 @@ __all__ = [
 
 
 def _app_core():
-    from services.api import app_core as _mod
-    return _mod
+    from .wiring import get_app_core
+    return get_app_core()
 
 
 def _tmc():

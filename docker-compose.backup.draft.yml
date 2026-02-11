@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+  backup_scheduler:
+    image: alpine:3.20
+    profiles: ["backup"]
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        chmod +x scripts/backup/*.sh
+        while true; do
+          bash scripts/backup/run_backup.sh --snapshot-type incremental --target "${BACKUP_TARGET_DEFAULT:-s3}"
+          sleep "${BACKUP_INCREMENTAL_INTERVAL_SEC:-300}"
+        done
+    environment:
+      - BACKUP_NAMESPACE=${BACKUP_NAMESPACE:-prod}
+      - BACKUP_TARGET_DEFAULT=${BACKUP_TARGET_DEFAULT:-s3}
+      - BACKUP_HOT_DAYS=${BACKUP_HOT_DAYS:-30}
+      - BACKUP_COLD_DAYS=${BACKUP_COLD_DAYS:-180}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID:-}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}
+      - OSS_ENDPOINT=${OSS_ENDPOINT:-}
+      - OSS_BUCKET=${OSS_BUCKET:-}
+    volumes:
+      - ./:/workspace
+      - ./data:/workspace/data:ro
+      - ./uploads:/workspace/uploads:ro
+      - ./output:/workspace/output
+
+  backup_daily_full:
+    image: alpine:3.20
+    profiles: ["backup"]
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        chmod +x scripts/backup/*.sh
+        while true; do
+          sleep "${BACKUP_DAILY_FULL_INTERVAL_SEC:-86400}"
+          bash scripts/backup/run_backup.sh --snapshot-type full --target "${BACKUP_TARGET_DEFAULT:-s3}"
+        done
+    environment:
+      - BACKUP_NAMESPACE=${BACKUP_NAMESPACE:-prod}
+      - BACKUP_TARGET_DEFAULT=${BACKUP_TARGET_DEFAULT:-s3}
+      - BACKUP_HOT_DAYS=${BACKUP_HOT_DAYS:-30}
+      - BACKUP_COLD_DAYS=${BACKUP_COLD_DAYS:-180}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID:-}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}
+      - OSS_ENDPOINT=${OSS_ENDPOINT:-}
+      - OSS_BUCKET=${OSS_BUCKET:-}
+    volumes:
+      - ./:/workspace
+      - ./data:/workspace/data:ro
+      - ./uploads:/workspace/uploads:ro
+      - ./output:/workspace/output
+
+  backup_verify_weekly:
+    image: alpine:3.20
+    profiles: ["backup"]
+    working_dir: /workspace
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        chmod +x scripts/backup/*.sh
+        while true; do
+          sleep "${BACKUP_VERIFY_INTERVAL_SEC:-604800}"
+          bash scripts/backup/verify_restore.sh --target "${BACKUP_TARGET_DEFAULT:-s3}"
+        done
+    environment:
+      - BACKUP_NAMESPACE=${BACKUP_NAMESPACE:-prod}
+      - BACKUP_TARGET_DEFAULT=${BACKUP_TARGET_DEFAULT:-s3}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID:-}
+      - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET:-}
+      - OSS_ENDPOINT=${OSS_ENDPOINT:-}
+      - OSS_BUCKET=${OSS_BUCKET:-}
+    volumes:
+      - ./:/workspace
+      - ./output:/workspace/output
+

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
-from fastapi import HTTPException
+from .auth_service import AuthError, principal_can_access_tenant, resolve_principal_from_scope
 
 from .tenant_registry import TenantRegistry
+from .wiring import CURRENT_CORE
 
 
-_TENANT_PATH_RE = re.compile(r"^/t/([^/]+)(/.*)?$")
+_log = logging.getLogger(__name__)
+_TENANT_PATH_RE = re.compile(r"^/t/([A-Za-z0-9][A-Za-z0-9_-]{0,63})(/.*)?$")
 
 ASGIApp = Callable[[Dict[str, Any], Callable[[], Awaitable[Dict[str, Any]]], Callable[[Dict[str, Any]], Awaitable[None]]], Awaitable[None]]
 
@@ -49,14 +52,26 @@ class MultiTenantDispatcher:
 
         tenant_id, rest_path = split
         try:
+            principal = resolve_principal_from_scope(scope, allow_exempt=False)
+        except AuthError as exc:
+            return await self._send_simple(send, status=exc.status_code, body=exc.detail.encode("utf-8", errors="ignore"))
+        if not principal_can_access_tenant(principal, tenant_id):
+            return await self._send_simple(send, status=403, body=b"forbidden_tenant_scope")
+        try:
             handle = self.registry.get_or_create(tenant_id)
         except Exception:
-            # Avoid importing FastAPI Request/Response types here; simplest 404.
             return await self._send_simple(send, status=404, body=b"tenant not found")
 
         new_scope = dict(scope)
         new_scope["path"] = rest_path
-        return await handle.app(new_scope, receive, send)
+        # Explicitly set CURRENT_CORE so tenant-aware code sees the right module
+        core = getattr(handle.instance.module, '_APP_CORE', None)
+        token = CURRENT_CORE.set(core) if core is not None else None
+        try:
+            return await handle.app(new_scope, receive, send)
+        finally:
+            if token is not None:
+                CURRENT_CORE.reset(token)
 
     async def _send_simple(self, send, *, status: int, body: bytes) -> None:
         await send(
@@ -67,4 +82,3 @@ class MultiTenantDispatcher:
             }
         )
         await send({"type": "http.response.body", "body": body or b""})
-

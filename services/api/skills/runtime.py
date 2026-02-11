@@ -134,8 +134,9 @@ def compile_skill_runtime(
 
     header = f"激活技能：{skill.skill_id}（{skill.title}）"
     parts.append(header)
-    if skill.desc:
-        parts.append(f"技能说明：{skill.desc}")
+    body_text = skill.instructions if skill.instructions else skill.desc
+    if body_text:
+        parts.append(f"技能说明：{body_text}")
 
     used_modules: List[str] = []
     for mod in skill.agent.prompt_modules:

@@ -228,7 +228,21 @@ def run_agent_runtime(
                                 inferred_subject=inferred_subject,
                             )
                         }
-                    if str(overview.get("score_mode") or "").strip().lower() == "total":
+                    score_mode = str(overview.get("score_mode") or "").strip().lower()
+                    score_mode_source = str(overview.get("score_mode_source") or "").strip().lower()
+                    if score_mode_source == "subject_from_scores_file":
+                        deps.diag_log(
+                            "teacher.subject_total_auto_extract_subject",
+                            {
+                                "exam_id": exam_id,
+                                "score_mode": score_mode,
+                                "score_mode_source": score_mode_source,
+                                "requested_subject": requested_subject or "",
+                                "inferred_subject": inferred_subject or "",
+                                "last_user": last_user_text[:200],
+                            },
+                        )
+                    elif score_mode == "total":
                         deps.diag_log(
                             "teacher.subject_total_allow_single_subject",
                             {
@@ -326,7 +340,10 @@ def run_agent_runtime(
                     args_dict = json.loads(args)
                 except Exception:
                     args_dict = {}
-                result = deps.tool_dispatch(name, args_dict, role_hint)
+                try:
+                    result = deps.tool_dispatch(name, args_dict, role_hint)
+                except Exception as exc:
+                    result = {"error": f"tool_dispatch failed: {exc}"}
                 convo.append(
                     {
                         "role": "tool",
@@ -365,7 +382,10 @@ def run_agent_runtime(
                 )
                 continue
             args_dict = tool_request.get("arguments") or {}
-            result = deps.tool_dispatch(name, args_dict, role_hint)
+            try:
+                result = deps.tool_dispatch(name, args_dict, role_hint)
+            except Exception as exc:
+                result = {"error": f"tool_dispatch failed: {exc}"}
             convo.append({"role": "assistant", "content": content or ""})
             tool_payload = json.dumps(result, ensure_ascii=False)
             convo.append(
@@ -420,12 +440,13 @@ def default_load_skill_runtime(
     app_root: Path,
     role_hint: Optional[str],
     skill_id: Optional[str],
+    teacher_skills_dir: Optional[Path] = None,
 ) -> Tuple[Optional[Any], Optional[str]]:
     from .skills.loader import load_skills
     from .skills.router import resolve_skill
     from .skills.runtime import compile_skill_runtime
 
-    loaded = load_skills(app_root / "skills")
+    loaded = load_skills(app_root / "skills", teacher_skills_dir=teacher_skills_dir)
     selection = resolve_skill(loaded, skill_id, role_hint)
     warning = selection.warning
     runtime = None

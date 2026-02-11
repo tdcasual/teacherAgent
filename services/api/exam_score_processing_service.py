@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import csv
+import logging
+import math
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+
+_log = logging.getLogger(__name__)
 
 
 def parse_score_value(value: Any) -> Optional[float]:
@@ -377,15 +382,18 @@ def load_exam_answer_key_from_csv(path: Path) -> Dict[str, str]:
     answers: Dict[str, str] = {}
     if not path.exists():
         return answers
-    with path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            qid = str(row.get("question_id") or row.get("question_no") or "").strip()
-            if not qid:
-                continue
-            correct = normalize_objective_answer(str(row.get("correct_answer") or ""))
-            if correct:
-                answers[qid] = correct
+    try:
+        with path.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                qid = str(row.get("question_id") or row.get("question_no") or "").strip()
+                if not qid:
+                    continue
+                correct = normalize_objective_answer(str(row.get("correct_answer") or ""))
+                if correct:
+                    answers[qid] = correct
+    except Exception:
+        _log.exception("failed to load answer key from %s", path)
     return answers
 
 
@@ -393,19 +401,22 @@ def load_exam_max_scores_from_questions_csv(path: Path) -> Dict[str, float]:
     scores: Dict[str, float] = {}
     if not path.exists():
         return scores
-    with path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            qid = str(row.get("question_id") or "").strip()
-            if not qid:
-                continue
-            raw = row.get("max_score")
-            if raw is None or raw == "":
-                continue
-            try:
-                scores[qid] = float(raw)
-            except Exception:
-                continue
+    try:
+        with path.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                qid = str(row.get("question_id") or "").strip()
+                if not qid:
+                    continue
+                raw = row.get("max_score")
+                if raw is None or raw == "":
+                    continue
+                try:
+                    scores[qid] = float(raw)
+                except (ValueError, TypeError):
+                    continue
+    except Exception:
+        _log.exception("failed to load max scores from %s", path)
     return scores
 
 
@@ -434,6 +445,7 @@ def ensure_questions_max_score(
                         defaulted.append(qid)
                 rows.append(out)
     except Exception:
+        _log.exception("failed to read questions CSV: %s", questions_csv)
         return []
 
     if not defaulted:
@@ -445,12 +457,15 @@ def ensure_questions_max_score(
             for row in rows:
                 writer.writerow(row)
     except Exception:
+        _log.exception("failed to write questions CSV: %s", questions_csv)
         return []
     return defaulted
 
 
 def score_objective_answer(raw_answer: str, correct: str, max_score: float) -> Tuple[float, int]:
     if not raw_answer:
+        return 0.0, 0
+    if not math.isfinite(max_score) or max_score <= 0:
         return 0.0, 0
     raw = normalize_objective_answer(raw_answer)
     if not raw:

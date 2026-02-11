@@ -4,6 +4,7 @@ import base64
 import copy
 import hashlib
 import hmac
+import ipaddress
 import json
 import re
 import secrets
@@ -154,6 +155,30 @@ def _normalize_base_url(value: Any, *, allow_http: bool) -> str:
     if parsed.scheme == "http" and not allow_http:
         return ""
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path or ''}".rstrip("/")
+
+
+def _is_private_host(hostname: str) -> bool:
+    host = _as_str(hostname).strip("[]").strip().lower()
+    if not host:
+        return True
+    if host in {"localhost", "localhost.localdomain"}:
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        return bool(addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast)
+    except Exception:
+        return False
+
+
+def _is_base_url_safe_for_probe(base_url: str) -> bool:
+    text = _as_str(base_url)
+    parsed = urlparse(text)
+    host = _as_str(parsed.hostname)
+    if not host:
+        return False
+    if _is_private_host(host):
+        return False
+    return True
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -588,11 +613,15 @@ def teacher_provider_registry_probe_models(args: Dict[str, Any], *, deps: Teache
         target = resolve_shared_provider_target(provider_id=provider_id, deps=deps)
     if not target:
         return {"ok": False, "error": "provider_not_found"}
+    base_url = _as_str(target.get("base_url"))
+    if not _is_base_url_safe_for_probe(base_url):
+        return {"ok": False, "error": "unsafe_probe_target"}
     try:
         resp = requests.get(
-            f"{_as_str(target.get('base_url')).rstrip('/')}/models",
+            f"{base_url.rstrip('/')}/models",
             headers=target.get("headers") if isinstance(target.get("headers"), dict) else {},
             timeout=10,
+            allow_redirects=False,
         )
         if resp.status_code >= 400:
             return {"ok": False, "error": "probe_failed", "status_code": resp.status_code, "detail": (resp.text or "")[:400]}

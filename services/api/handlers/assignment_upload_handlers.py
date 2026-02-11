@@ -69,7 +69,6 @@ async def assignment_upload_start(
                 answer_files=answer_files,
                 ocr_mode=ocr_mode,
                 language=language,
-                deps=None,
             )
         )
     except AssignmentUploadStartError as exc:

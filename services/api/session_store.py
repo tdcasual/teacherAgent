@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import threading
+import weakref
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -31,8 +34,18 @@ from .session_view_state import (
 # Module-level mutable state for per-path reentrant locks
 # ---------------------------------------------------------------------------
 
-_SESSION_INDEX_LOCKS: Dict[str, threading.RLock] = {}
+_SESSION_INDEX_LOCKS: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 _SESSION_INDEX_LOCKS_LOCK = threading.Lock()
+_log = logging.getLogger(__name__)
+
+
+def reset_session_locks() -> None:
+    """Reset per-path lock state. Called by runtime_state on tenant init."""
+    global _SESSION_INDEX_LOCKS, _SESSION_INDEX_LOCKS_LOCK
+    _SESSION_INDEX_LOCKS = weakref.WeakValueDictionary()
+    _SESSION_INDEX_LOCKS_LOCK = threading.Lock()
+
+_RESERVED_META_KEYS = {"ts", "role", "content"}
 
 
 # ---------------------------------------------------------------------------
@@ -95,11 +108,12 @@ def save_teacher_session_view_state(teacher_id: str, state: Dict[str, Any]) -> N
 
 def load_student_sessions_index(student_id: str) -> List[Dict[str, Any]]:
     path = student_sessions_index_path(student_id)
-    if not path.exists():
-        return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except FileNotFoundError:
+        return []
+    except (json.JSONDecodeError, ValueError) as exc:
+        _log.warning("corrupt student session index %s: %s", path, exc)
         return []
     return data if isinstance(data, list) else []
 
@@ -164,9 +178,15 @@ def append_student_session_message(
         "content": content,
     }
     if meta:
-        record.update(meta)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        record.update({k: v for k, v in meta.items() if k not in _RESERVED_META_KEYS})
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    data = line.encode("utf-8")
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -175,11 +195,12 @@ def append_student_session_message(
 
 def load_teacher_sessions_index(teacher_id: str) -> List[Dict[str, Any]]:
     path = teacher_sessions_index_path(teacher_id)
-    if not path.exists():
-        return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except FileNotFoundError:
+        return []
+    except (json.JSONDecodeError, ValueError) as exc:
+        _log.warning("corrupt teacher session index %s: %s", path, exc)
         return []
     return data if isinstance(data, list) else []
 
@@ -238,6 +259,12 @@ def append_teacher_session_message(
         "content": content,
     }
     if meta:
-        record.update(meta)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        record.update({k: v for k, v in meta.items() if k not in _RESERVED_META_KEYS})
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    data = line.encode("utf-8")
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)

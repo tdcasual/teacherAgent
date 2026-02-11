@@ -1400,3 +1400,440 @@ test('recent completion should not duplicate when history reply has no ts', asyn
     return count
   }).toBe(1)
 })
+
+
+test('same-tab localStorage clear forces re-verification before sending', async ({ page }) => {
+  await setupStudentState(page, {
+    stateOverrides: {
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  let chatStartCount = 0
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, assignment: null }) })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = String(url.searchParams.get('session_id') || 'main')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      chatStartCount += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: `student_same_tab_clear_${chatStartCount}`, status: 'queued' }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_same_tab_clear_1', status: 'done', reply: '不会发送成功' }),
+      })
+      return
+    }
+
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.composer-hint')).toContainText('Enter 发送')
+
+  await page.evaluate(() => {
+    localStorage.clear()
+  })
+
+  await expect(page.locator('.composer-hint')).toContainText('请先完成身份验证')
+
+  await expect(page.locator('textarea')).toBeDisabled()
+  await expect(page.getByRole('button', { name: '发送' })).toBeDisabled()
+
+  await expect.poll(() => chatStartCount).toBe(0)
+})
+
+
+test('fallback send lock should not expire during very slow chat/start in same tab', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window.navigator, 'locks', {
+      configurable: true,
+      value: undefined,
+    })
+  })
+
+  await setupStudentState(page, {
+    stateOverrides: {
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  const startBodies: Array<{ session_id?: string; request_id?: string; messages?: Array<{ role?: string; content?: string }> }> = []
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, assignment: null }) })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = String(url.searchParams.get('session_id') || 'main')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      const body = JSON.parse(request.postData() || '{}')
+      startBodies.push({ session_id: body.session_id, request_id: body.request_id, messages: body.messages })
+      if (startBodies.length === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 6800))
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: `student_slow_same_tab_${startBodies.length}`, status: 'queued' }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_slow_same_tab_1', status: 'processing' }),
+      })
+      return
+    }
+
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/')
+  const startedAt = Date.now()
+
+  await page.locator('textarea').fill('慢请求第一条')
+  await page.locator('textarea').press('Enter')
+
+  await page.waitForTimeout(5400)
+
+  await page.locator('textarea').fill('慢请求第二条')
+  await page.locator('textarea').press('Enter')
+
+  const settleWaitMs = 7600 - (Date.now() - startedAt)
+  if (settleWaitMs > 0) {
+    await page.waitForTimeout(settleWaitMs)
+  }
+
+  await expect.poll(() => startBodies.length).toBeGreaterThan(0)
+  expect(startBodies.length).toBe(1)
+})
+
+
+test('cross-tab fallback lock should hold while first tab chat/start is very slow', async ({ page }) => {
+  const context = page.context()
+  await context.addInitScript(() => {
+    try {
+      Object.defineProperty(window.navigator, 'locks', {
+        configurable: true,
+        value: undefined,
+      })
+    } catch {
+      // ignore
+    }
+  })
+
+  await setupStudentState(page, {
+    stateOverrides: {
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  const startBodies: Array<{ session_id?: string; request_id?: string; student_id?: string }> = []
+
+  await context.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, assignment: null }) })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = String(url.searchParams.get('session_id') || 'main')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      const body = JSON.parse(request.postData() || '{}')
+      startBodies.push({ session_id: body.session_id, request_id: body.request_id, student_id: body.student_id })
+      if (startBodies.length === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 12000))
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: `student_slow_cross_${startBodies.length}`, status: 'queued' }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_slow_cross_1', status: 'processing' }),
+      })
+      return
+    }
+
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await page.goto('/')
+  const pageB = await context.newPage()
+  await pageB.goto('/')
+  const startedAt = Date.now()
+
+  await page.locator('textarea').fill('A页超慢请求')
+  await page.locator('textarea').press('Enter')
+
+  await page.waitForTimeout(7600)
+
+  await pageB.locator('textarea').fill('B页过期后发送')
+  await pageB.locator('textarea').press('Enter')
+
+  const settleWaitMs = 13200 - (Date.now() - startedAt)
+  if (settleWaitMs > 0) {
+    await page.waitForTimeout(settleWaitMs)
+  }
+
+  await expect.poll(() => startBodies.length).toBeGreaterThan(0)
+  expect(startBodies.length).toBe(1)
+
+  await pageB.close()
+})

@@ -293,6 +293,7 @@ def _compute_chat_reply_deps():
             requested_skill_id=requested_skill_id,
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
+            teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
         ),
     )
 

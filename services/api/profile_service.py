@@ -5,11 +5,14 @@ Contains profile loading with caching, role detection, and student helpers.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 from .config import PROFILE_CACHE_TTL_SEC
 
@@ -24,6 +27,13 @@ __all__ = [
 
 _PROFILE_CACHE: Dict[str, Any] = {}
 _PROFILE_CACHE_LOCK = threading.Lock()
+
+
+def reset_profile_cache() -> None:
+    """Reset profile cache state. Called by runtime_state on tenant init."""
+    global _PROFILE_CACHE, _PROFILE_CACHE_LOCK
+    _PROFILE_CACHE = {}
+    _PROFILE_CACHE_LOCK = threading.Lock()
 
 
 def detect_role(text: str) -> Optional[str]:
@@ -64,8 +74,8 @@ def load_profile_file(path: Path) -> Dict[str, Any]:
                 _PROFILE_CACHE[key] = (now, mtime, data)
         return data
     except Exception:
+        _log.warning("failed to load profile at %s", path, exc_info=True)
         return {}
-
 
 def student_profile_get(student_id: str) -> Dict[str, Any]:
     from .paths import resolve_student_profile_path

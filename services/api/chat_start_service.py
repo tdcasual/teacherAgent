@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         try:
             job = deps.load_chat_job(existing_job_id)
         except Exception:
+            _log.warning("load_chat_job failed for %s, fabricating queued stub", existing_job_id, exc_info=True)
             job = {"job_id": existing_job_id, "status": "queued"}
         return {"ok": True, "job_id": existing_job_id, "status": job.get("status", "queued")}
 
@@ -79,6 +83,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
+            str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
         ]
     )
@@ -90,6 +95,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         try:
             recent_job = deps.load_chat_job(recent_job_id)
         except Exception:
+            _log.warning("load_chat_job failed for dedup %s, fabricating queued stub", recent_job_id, exc_info=True)
             recent_job = {"job_id": recent_job_id, "status": "queued"}
         status = str(recent_job.get("status") or "queued")
         if status in {"queued", "processing"}:
@@ -108,6 +114,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
             try:
                 job = deps.load_chat_job(existing)
             except Exception:
+                _log.warning("load_chat_job failed for race %s, fabricating queued stub", existing, exc_info=True)
                 job = {"job_id": existing, "status": "queued"}
             return {"ok": True, "job_id": existing, "status": job.get("status", "queued")}
         raise deps.http_error(409, "request_id already claimed")
@@ -179,7 +186,22 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
                 "lane_id": lane_id,
             }
 
-    queue_info = deps.enqueue_chat_job(job_id, lane_id)
+    try:
+        queue_info = deps.enqueue_chat_job(job_id, lane_id)
+    except Exception as exc:
+        detail = str(exc)[:200]
+        _log.error("enqueue_chat_job failed for %s: %s", job_id, detail, exc_info=True)
+        deps.write_chat_job(
+            job_id,
+            {"status": "failed", "error": "enqueue_failed", "error_detail": detail},
+            False,
+        )
+        return {
+            "ok": True,
+            "job_id": job_id,
+            "status": "failed",
+            "lane_id": lane_id,
+        }
     with deps.chat_job_lock:
         deps.chat_register_recent_locked(lane_id, fingerprint, job_id)
     deps.write_chat_job(

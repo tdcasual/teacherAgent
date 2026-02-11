@@ -85,8 +85,6 @@ from .teacher_session_compaction_helpers import (
     _teacher_compact_summary,
     _write_teacher_session_records,
     _mark_teacher_session_compacted,
-    _TEACHER_SESSION_COMPACT_TS,
-    _TEACHER_SESSION_COMPACT_LOCK,
 )
 
 # ---------------------------------------------------------------------------
@@ -193,9 +191,9 @@ from .teacher_memory_store_service import (
 # Lazy accessor for app_core functions that would cause circular imports
 # ---------------------------------------------------------------------------
 def _app_core():
-    """Lazy import of app_core to avoid circular dependency."""
-    from . import app_core as _ac
-    return _ac
+    """Lazy import of app_core to avoid circular dependency (tenant-aware)."""
+    from .wiring import get_app_core
+    return get_app_core()
 
 
 # ---------------------------------------------------------------------------
@@ -232,8 +230,6 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
         path = teacher_session_file(teacher_id, session_id)
     except Exception:
         return ""
-    if not path.exists():
-        return ""
     try:
         with path.open("r", encoding="utf-8") as f:
             for _idx, line in zip(range(5), f):
@@ -255,6 +251,8 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
 
 
 def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
+    if max_chars <= 0:
+        return ""
     active = _teacher_memory_active_applied_records(
         teacher_id,
         target="MEMORY",
@@ -322,9 +320,16 @@ def teacher_memory_list_proposals(
         return {"ok": False, "error": "invalid_status", "teacher_id": teacher_id}
 
     take = max(1, min(int(limit or 20), 200))
+
+    def _safe_mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+
     files = sorted(
         proposals_dir.glob("*.json"),
-        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        key=_safe_mtime,
         reverse=True,
     )
     items: List[Dict[str, Any]] = []
@@ -636,6 +641,8 @@ def _teacher_mem0_should_index_target(target: str) -> bool:
 
 
 def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
-    from .mem0_adapter import teacher_mem0_index_entry
-
+    try:
+        from .mem0_adapter import teacher_mem0_index_entry
+    except Exception:
+        return {"ok": False, "error": "mem0_unavailable"}
     return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)

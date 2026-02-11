@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable
@@ -14,7 +15,12 @@ def atomic_write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = _atomic_tmp_path(path)
     try:
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        try:
+            os.write(fd, json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         tmp.replace(path)
     finally:
         try:
@@ -30,6 +36,8 @@ def atomic_write_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
         with tmp.open("w", encoding="utf-8") as file_obj:
             for record in records:
                 file_obj.write(json.dumps(record, ensure_ascii=False) + "\n")
+            file_obj.flush()
+            os.fsync(file_obj.fileno())
         tmp.replace(path)
     finally:
         try:

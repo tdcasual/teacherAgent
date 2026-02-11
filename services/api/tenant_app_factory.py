@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import logging
 import sys
 import types
 import uuid
@@ -13,6 +14,8 @@ from fastapi import FastAPI
 from services.api.runtime import bootstrap
 from services.api.runtime.runtime_state import reset_runtime_state
 from services.api.wiring import CURRENT_CORE
+
+_log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class TenantLimits:
@@ -52,7 +55,7 @@ class TenantAppInstance:
             try:
                 bootstrap.stop_runtime(app_mod=self.module)
             except Exception:
-                pass
+                _log.warning("shutdown failed for tenant module %s", self.module_name, exc_info=True)
         finally:
             if token is not None:
                 CURRENT_CORE.reset(token)

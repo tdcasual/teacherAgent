@@ -175,7 +175,7 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertEqual(generated, [])
         self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
 
-    def test_subject_score_request_on_total_mode_allows_matching_single_subject_exam(self):
+    def test_subject_score_request_on_total_mode_still_guarded_for_matching_subject_exam(self):
         deps, logs, _saved, generated = self._deps(analysis=None)
         deps = TeacherAssignmentPreflightDeps(
             **{
@@ -202,10 +202,41 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         )
 
         result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("单科成绩说明", result)
+        self.assertIn("score_mode: \"total\"", result)
+        self.assertIn("不能把总分当作物理单科成绩", result)
+        self.assertEqual(generated, [])
+        self.assertTrue(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
+        self.assertFalse(any(event == "teacher_preflight.subject_total_allow_single_subject" for event, _ in logs))
+
+
+    def test_subject_score_request_on_total_mode_with_auto_extracted_subject_is_not_guarded(self):
+        deps, logs, _saved, generated = self._deps(analysis=None)
+        deps = TeacherAssignmentPreflightDeps(
+            **{
+                **deps.__dict__,
+                "exam_get": lambda _exam_id: {
+                    "ok": True,
+                    "exam_id": "EX20260209_9b92e1",
+                    "score_mode": "subject",
+                    "score_mode_source": "subject_from_scores_file",
+                },
+            }
+        )
+        req = _Req(
+            messages=[
+                _Msg(role="user", content="分析EX20260209_9b92e1的物理成绩"),
+            ],
+            skill_id="default",
+        )
+
+        result = teacher_assignment_preflight(req, deps=deps)
         self.assertIsNone(result)
         self.assertEqual(generated, [])
+        self.assertTrue(any(event == "teacher_preflight.subject_total_auto_extract_subject" for event, _ in logs))
         self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
-        self.assertTrue(any(event == "teacher_preflight.subject_total_allow_single_subject" for event, _ in logs))
 
 
 if __name__ == "__main__":

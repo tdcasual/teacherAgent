@@ -500,8 +500,6 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_core_module)
 from .teacher_memory_core import *  # noqa: F401,F403 — re-export all teacher memory functions
 from .teacher_memory_core import (
-    _TEACHER_SESSION_COMPACT_TS,
-    _TEACHER_SESSION_COMPACT_LOCK,
     _teacher_compact_key,
     _teacher_compact_allowed,
     _teacher_compact_transcript,
@@ -569,6 +567,7 @@ from .wiring import student_wiring as _student_wiring_module
 from .wiring import teacher_wiring as _teacher_wiring_module
 from .wiring import worker_wiring as _worker_wiring_module
 from .wiring import misc_wiring as _misc_wiring_module
+from .wiring import skill_wiring as _skill_wiring_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_chat_wiring_module)
     _importlib.reload(_assignment_wiring_module)
@@ -577,6 +576,7 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_wiring_module)
     _importlib.reload(_worker_wiring_module)
     _importlib.reload(_misc_wiring_module)
+    _importlib.reload(_skill_wiring_module)
 from .wiring.chat_wiring import *  # noqa: F401,F403
 from .wiring.assignment_wiring import *  # noqa: F401,F403
 from .wiring.exam_wiring import *  # noqa: F401,F403
@@ -584,6 +584,7 @@ from .wiring.student_wiring import *  # noqa: F401,F403
 from .wiring.teacher_wiring import *  # noqa: F401,F403
 from .wiring.worker_wiring import *  # noqa: F401,F403
 from .wiring.misc_wiring import *  # noqa: F401,F403
+from .wiring.skill_wiring import *  # noqa: F401,F403
 
 
 @contextmanager

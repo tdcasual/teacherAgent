@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -23,17 +24,18 @@ from .paths import resolve_teacher_id, safe_fs_id
 
 
 # ---------------------------------------------------------------------------
-# Module-level mutable state (reset by runtime_state.reset_runtime_state)
+# Module-level mutable state — removed.
+# All mutable chat-lane state now lives on the per-tenant app_core module
+# and is accessed dynamically via _get_state().
 # ---------------------------------------------------------------------------
 
-CHAT_JOB_LOCK = None          # threading.Lock – set by runtime_state
-CHAT_JOB_LANES: Dict[str, Any] = {}
-CHAT_JOB_ACTIVE_LANES: set = set()
-CHAT_JOB_QUEUED: set = set()
-CHAT_JOB_TO_LANE: Dict[str, str] = {}
-CHAT_LANE_CURSOR: int = 0
-CHAT_LANE_RECENT: Dict[str, Any] = {}
-CHAT_IDEMPOTENCY_STATE = None  # ChatIdempotencyStore – set by runtime_state
+_log = logging.getLogger(__name__)
+
+
+def _get_state():
+    """Return the current tenant's app_core module (holds all mutable lane state)."""
+    from .wiring import get_app_core
+    return get_app_core()
 
 
 # ---------------------------------------------------------------------------
@@ -130,17 +132,19 @@ def _chat_lane_store():
 # ---------------------------------------------------------------------------
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
+    _ac = _get_state()
     if _settings.is_pytest():
-        q = CHAT_JOB_LANES.get(lane_id)
+        q = _ac.CHAT_JOB_LANES.get(lane_id)
         queued = len(q) if q else 0
-        active = 1 if lane_id in CHAT_JOB_ACTIVE_LANES else 0
+        active = 1 if lane_id in _ac.CHAT_JOB_ACTIVE_LANES else 0
         return {"queued": queued, "active": active, "total": queued + active}
     return _chat_lane_store().lane_load(lane_id)
 
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
+    _ac = _get_state()
     if _settings.is_pytest():
-        q = CHAT_JOB_LANES.get(lane_id)
+        q = _ac.CHAT_JOB_LANES.get(lane_id)
         if not q:
             return 0
         for i, jid in enumerate(q, start=1):
@@ -151,48 +155,51 @@ def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
 
 
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
-    if job_id in CHAT_JOB_QUEUED or job_id in CHAT_JOB_TO_LANE:
+    _ac = _get_state()
+    if job_id in _ac.CHAT_JOB_QUEUED or job_id in _ac.CHAT_JOB_TO_LANE:
         return _chat_find_position_locked(lane_id, job_id)
-    q = CHAT_JOB_LANES.setdefault(lane_id, deque())
+    q = _ac.CHAT_JOB_LANES.setdefault(lane_id, deque())
     q.append(job_id)
-    CHAT_JOB_QUEUED.add(job_id)
-    CHAT_JOB_TO_LANE[job_id] = lane_id
+    _ac.CHAT_JOB_QUEUED.add(job_id)
+    _ac.CHAT_JOB_TO_LANE[job_id] = lane_id
     return len(q)
 
 
 def _chat_has_pending_locked() -> bool:
-    return any(len(q) > 0 for q in CHAT_JOB_LANES.values())
+    _ac = _get_state()
+    return any(len(q) > 0 for q in _ac.CHAT_JOB_LANES.values())
 
 
 def _chat_pick_next_locked() -> Tuple[str, str]:
-    global CHAT_LANE_CURSOR
-    lanes = [lane for lane, q in CHAT_JOB_LANES.items() if q]
+    _ac = _get_state()
+    lanes = [lane for lane, q in _ac.CHAT_JOB_LANES.items() if q]
     if not lanes:
         return "", ""
     total = len(lanes)
-    start = CHAT_LANE_CURSOR % total
+    start = _ac.CHAT_LANE_CURSOR[0] % total
     for offset in range(total):
         lane_id = lanes[(start + offset) % total]
-        if lane_id in CHAT_JOB_ACTIVE_LANES:
+        if lane_id in _ac.CHAT_JOB_ACTIVE_LANES:
             continue
-        q = CHAT_JOB_LANES.get(lane_id)
+        q = _ac.CHAT_JOB_LANES.get(lane_id)
         if not q:
             continue
         job_id = q.popleft()
-        CHAT_JOB_QUEUED.discard(job_id)
-        CHAT_JOB_ACTIVE_LANES.add(lane_id)
-        CHAT_JOB_TO_LANE[job_id] = lane_id
-        CHAT_LANE_CURSOR = (start + offset + 1) % max(1, total)
+        _ac.CHAT_JOB_QUEUED.discard(job_id)
+        _ac.CHAT_JOB_ACTIVE_LANES.add(lane_id)
+        _ac.CHAT_JOB_TO_LANE[job_id] = lane_id
+        _ac.CHAT_LANE_CURSOR[0] = (start + offset + 1) % max(1, total)
         return job_id, lane_id
     return "", ""
 
 
 def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
-    CHAT_JOB_ACTIVE_LANES.discard(lane_id)
-    CHAT_JOB_TO_LANE.pop(job_id, None)
-    q = CHAT_JOB_LANES.get(lane_id)
+    _ac = _get_state()
+    _ac.CHAT_JOB_ACTIVE_LANES.discard(lane_id)
+    _ac.CHAT_JOB_TO_LANE.pop(job_id, None)
+    q = _ac.CHAT_JOB_LANES.get(lane_id)
     if q is not None and len(q) == 0:
-        CHAT_JOB_LANES.pop(lane_id, None)
+        _ac.CHAT_JOB_LANES.pop(lane_id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -200,17 +207,19 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
+    _ac = _get_state()
     if _settings.is_pytest():
-        CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
+        _ac.CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
         return
     _chat_lane_store().register_recent(lane_id, fingerprint, job_id)
 
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
+    _ac = _get_state()
     if _settings.is_pytest():
         if CHAT_LANE_DEBOUNCE_MS <= 0:
             return None
-        info = CHAT_LANE_RECENT.get(lane_id)
+        info = _ac.CHAT_LANE_RECENT.get(lane_id)
         if not info:
             return None
         ts, fp, job_id = info
@@ -227,12 +236,16 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def load_chat_request_index() -> Dict[str, str]:
-    request_index_path = CHAT_IDEMPOTENCY_STATE.request_index_path
-    if not request_index_path.exists():
+    _ac = _get_state()
+    if _ac.CHAT_IDEMPOTENCY_STATE is None:
         return {}
+    request_index_path = _ac.CHAT_IDEMPOTENCY_STATE.request_index_path
     try:
         data = json.loads(request_index_path.read_text(encoding="utf-8"))
-    except Exception:
+    except FileNotFoundError:
+        return {}
+    except Exception as exc:
+        _log.warning("load_chat_request_index: corrupt JSON at %s: %s", request_index_path, exc)
         return {}
     if not isinstance(data, dict):
         return {}
@@ -243,8 +256,11 @@ def load_chat_request_index() -> Dict[str, str]:
     return out
 
 
-def _chat_request_map_path(request_id: str) -> Path:
-    return CHAT_IDEMPOTENCY_STATE.request_map_dir / f"{safe_fs_id(request_id, prefix='req')}.txt"
+def _chat_request_map_path(request_id: str) -> Optional[Path]:
+    _ac = _get_state()
+    if _ac.CHAT_IDEMPOTENCY_STATE is None:
+        return None
+    return _ac.CHAT_IDEMPOTENCY_STATE.request_map_dir / f"{safe_fs_id(request_id, prefix='req')}.txt"
 
 
 def _chat_request_map_get(request_id: str) -> Optional[str]:
@@ -252,11 +268,11 @@ def _chat_request_map_get(request_id: str) -> Optional[str]:
     if not request_id:
         return None
     path = _chat_request_map_path(request_id)
-    if not path.exists():
+    if path is None:
         return None
     try:
         job_id = (path.read_text(encoding="utf-8", errors="ignore") or "").strip()
-    except Exception:
+    except (FileNotFoundError, OSError):
         return None
     if not job_id:
         return None
@@ -277,6 +293,8 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
     if not request_id or not job_id:
         return False
     path = _chat_request_map_path(request_id)
+    if path is None:
+        return False
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -286,6 +304,7 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
         return False
     try:
         os.write(fd, job_id.encode("utf-8", errors="ignore"))
+        os.fsync(fd)
     finally:
         try:
             os.close(fd)
@@ -300,13 +319,16 @@ def upsert_chat_request_index(request_id: str, job_id: str) -> None:
     request_index.json is kept as legacy/debug only.
     """
     _chat_request_map_set_if_absent(request_id, job_id)
+    _ac = _get_state()
+    if _ac.CHAT_IDEMPOTENCY_STATE is None:
+        return
     try:
-        with CHAT_IDEMPOTENCY_STATE.request_index_lock:
+        with _ac.CHAT_IDEMPOTENCY_STATE.request_index_lock:
             idx = load_chat_request_index()
             idx[str(request_id)] = str(job_id)
-            _atomic_write_json(CHAT_IDEMPOTENCY_STATE.request_index_path, idx)
+            _atomic_write_json(_ac.CHAT_IDEMPOTENCY_STATE.request_index_path, idx)
     except Exception:
-        pass
+        _log.debug("upsert_chat_request_index: legacy index write failed for request_id=%s", request_id, exc_info=True)
 
 
 def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
@@ -314,8 +336,11 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
     if job_id:
         return job_id
     # Fallback to legacy json index (e.g., old jobs created before request map existed).
+    _ac = _get_state()
+    if _ac.CHAT_IDEMPOTENCY_STATE is None:
+        return None
     try:
-        with CHAT_IDEMPOTENCY_STATE.request_index_lock:
+        with _ac.CHAT_IDEMPOTENCY_STATE.request_index_lock:
             idx = load_chat_request_index()
             legacy = idx.get(str(request_id))
     except Exception:

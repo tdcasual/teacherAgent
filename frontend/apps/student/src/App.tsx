@@ -42,6 +42,7 @@ const RECENT_COMPLETION_KEY_PREFIX = 'studentRecentCompletion:'
 const SEND_LOCK_KEY_PREFIX = 'studentSendLock:'
 const FALLBACK_SEND_LOCK_TTL_MS = 5000
 const FALLBACK_SEND_LOCK_SETTLE_MS = 120
+const FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS = 1000
 const RECENT_COMPLETION_TTL_MS = 3 * 60 * 1000
 
 type RecentCompletedReply = {
@@ -526,75 +527,125 @@ export default function App() {
     if (typeof window === 'undefined') return
     const sid = verifiedStudent?.student_id?.trim() || ''
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.storageArea && event.storageArea !== window.localStorage) return
+    const samePendingJob = (a: PendingChatJob | null, b: PendingChatJob | null) => {
+      if (!a && !b) return true
+      if (!a || !b) return false
+      return (
+        a.job_id === b.job_id &&
+        a.request_id === b.request_id &&
+        a.placeholder_id === b.placeholder_id &&
+        a.user_text === b.user_text &&
+        a.session_id === b.session_id &&
+        Number(a.created_at) === Number(b.created_at)
+      )
+    }
 
-      if (event.key === 'verifiedStudent' || event.key === null) {
-        const rawVerified = safeLocalStorageGetItem('verifiedStudent')
-        if (!rawVerified) {
-          setVerifiedStudent(null)
-          setVerifyOpen(true)
-          pendingRecoveredFromStorageRef.current = false
-          setPendingChatJob(null)
-          setRecentCompletedReplies([])
-          setSending(false)
-          return
-        }
-        try {
-          const parsedVerified = JSON.parse(rawVerified) as VerifiedStudent
-          const nextSid = String(parsedVerified?.student_id || '').trim()
-          if (!nextSid) throw new Error('invalid verifiedStudent payload')
-          if (nextSid !== sid) {
-            setVerifiedStudent(parsedVerified)
-          }
-        } catch {
-          setVerifiedStudent(null)
-          setVerifyOpen(true)
-          pendingRecoveredFromStorageRef.current = false
-          setPendingChatJob(null)
-          setRecentCompletedReplies([])
-          setSending(false)
-          return
-        }
+    const sameRecentReplies = (a: RecentCompletedReply[], b: RecentCompletedReply[]) => {
+      if (a.length !== b.length) return false
+      for (let index = 0; index < a.length; index += 1) {
+        if (recentCompletionKeyOf(a[index]) !== recentCompletionKeyOf(b[index])) return false
+      }
+      return true
+    }
+
+    const clearVerifiedState = () => {
+      setVerifiedStudent((prev) => (prev ? null : prev))
+      setVerifyOpen(true)
+      pendingRecoveredFromStorageRef.current = false
+      if (pendingChatJobRef.current) {
+        setPendingChatJob(null)
+      }
+      if (recentCompletedRepliesRef.current.length) {
+        setRecentCompletedReplies([])
+      }
+      setSending(false)
+    }
+
+    const syncFromStorageSnapshot = () => {
+      const rawVerified = safeLocalStorageGetItem('verifiedStudent')
+      if (!rawVerified) {
+        clearVerifiedState()
+        return
       }
 
-      if (!sid) return
+      let parsedVerified: VerifiedStudent
+      try {
+        parsedVerified = JSON.parse(rawVerified) as VerifiedStudent
+      } catch {
+        clearVerifiedState()
+        return
+      }
+
+      const nextSid = String(parsedVerified?.student_id || '').trim()
+      if (!nextSid) {
+        clearVerifiedState()
+        return
+      }
+
+      if (nextSid !== sid) {
+        setVerifiedStudent((prev) => {
+          const prevSid = String(prev?.student_id || '').trim()
+          if (prevSid === nextSid) return prev
+          return parsedVerified
+        })
+        return
+      }
 
       const pendingKey = `${PENDING_CHAT_KEY_PREFIX}${sid}`
-      if (event.key === pendingKey || event.key === null) {
-        try {
-          const rawPending = safeLocalStorageGetItem(pendingKey)
-          if (!rawPending) {
-            pendingRecoveredFromStorageRef.current = false
-            setPendingChatJob(null)
-            setSending(false)
-          } else {
-            const parsedPending = JSON.parse(rawPending) as PendingChatJob
-            pendingRecoveredFromStorageRef.current = false
-            setPendingChatJob(parsedPending)
+      let nextPending: PendingChatJob | null = null
+      try {
+        const rawPending = safeLocalStorageGetItem(pendingKey)
+        if (rawPending) {
+          const parsedPending = JSON.parse(rawPending) as PendingChatJob
+          if (String(parsedPending?.job_id || '').trim()) {
+            nextPending = parsedPending
           }
-        } catch {
-          pendingRecoveredFromStorageRef.current = false
-          setPendingChatJob(null)
-          setSending(false)
         }
+      } catch {
+        nextPending = null
+      }
+
+      if (!samePendingJob(pendingChatJobRef.current, nextPending)) {
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(nextPending)
+        if (!nextPending) setSending(false)
       }
 
       const recentCompletionKey = `${RECENT_COMPLETION_KEY_PREFIX}${sid}`
-      if (event.key === recentCompletionKey || event.key === null) {
-        const recentReplies = parseRecentCompletedReplies(safeLocalStorageGetItem(recentCompletionKey))
-        if (!recentReplies.length) {
-          safeLocalStorageRemoveItem(recentCompletionKey)
-          setRecentCompletedReplies([])
-        } else {
-          setRecentCompletedReplies(recentReplies)
-        }
+      const nextRecentReplies = parseRecentCompletedReplies(safeLocalStorageGetItem(recentCompletionKey))
+      if (!nextRecentReplies.length) {
+        safeLocalStorageRemoveItem(recentCompletionKey)
+      }
+      if (!sameRecentReplies(recentCompletedRepliesRef.current, nextRecentReplies)) {
+        setRecentCompletedReplies(nextRecentReplies)
       }
     }
 
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea && event.storageArea !== window.localStorage) return
+      const pendingKey = sid ? `${PENDING_CHAT_KEY_PREFIX}${sid}` : ''
+      const recentCompletionKey = sid ? `${RECENT_COMPLETION_KEY_PREFIX}${sid}` : ''
+      if (event.key && event.key !== 'verifiedStudent' && event.key !== pendingKey && event.key !== recentCompletionKey) {
+        return
+      }
+      syncFromStorageSnapshot()
+    }
+
+    const handleFocusOrVisibility = () => {
+      syncFromStorageSnapshot()
+    }
+
+    syncFromStorageSnapshot()
     window.addEventListener('storage', handleStorage)
+    window.addEventListener('focus', handleFocusOrVisibility)
+    document.addEventListener('visibilitychange', handleFocusOrVisibility)
+    const syncTimer = window.setInterval(syncFromStorageSnapshot, 1200)
+
     return () => {
       window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('focus', handleFocusOrVisibility)
+      document.removeEventListener('visibilitychange', handleFocusOrVisibility)
+      window.clearInterval(syncTimer)
     }
   }, [verifiedStudent?.student_id])
 
@@ -1241,10 +1292,41 @@ export default function App() {
         return false
       }
 
+      const extendFallbackLock = () => {
+        const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+        if (!current || current.owner !== owner) return false
+        const renewed = safeLocalStorageSetItem(
+          lockKey,
+          JSON.stringify({
+            owner,
+            expires_at: Date.now() + FALLBACK_SEND_LOCK_TTL_MS,
+          }),
+        )
+        if (!renewed) return false
+        const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+        return Boolean(observed && observed.owner === owner && observed.expires_at > Date.now())
+      }
+
+      if (!extendFallbackLock()) {
+        return false
+      }
+
+      let renewTimer: number | null = window.setInterval(() => {
+        if (extendFallbackLock()) return
+        if (renewTimer !== null) {
+          window.clearInterval(renewTimer)
+          renewTimer = null
+        }
+      }, FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS)
+
       try {
         await task()
         return true
       } finally {
+        if (renewTimer !== null) {
+          window.clearInterval(renewTimer)
+          renewTimer = null
+        }
         const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
         if (current?.owner === owner) {
           safeLocalStorageRemoveItem(lockKey)

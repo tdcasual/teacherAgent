@@ -31,6 +31,7 @@ CHAT_LANE_MAX_QUEUE = _settings.chat_lane_max_queue()
 CHAT_LANE_DEBOUNCE_MS = _settings.chat_lane_debounce_ms()
 CHAT_JOB_CLAIM_TTL_SEC = _settings.chat_job_claim_ttl_sec()
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
+TEACHER_SKILLS_DIR = DATA_DIR / "teacher_skills"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
 STUDENT_SUBMISSIONS_DIR = DATA_DIR / "student_submissions"

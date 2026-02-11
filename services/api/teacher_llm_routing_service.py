@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from .teacher_provider_registry_service import _catalog as _provider_catalog_from_registry
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,6 +26,7 @@ def _registry_for_actor(actor: str, *, deps: TeacherLlmRoutingDeps) -> Dict[str,
     try:
         merged = deps.resolve_model_registry(actor)
     except Exception:
+        _log.debug("resolve_model_registry failed for actor=%s", actor, exc_info=True)
         merged = None
     if isinstance(merged, dict):
         return merged
@@ -53,7 +57,7 @@ def ensure_teacher_routing_file(actor: str, *, deps: TeacherLlmRoutingDeps) -> P
                 legacy["updated_by"] = actor
                 deps.atomic_write_json(config_path, legacy)
         except Exception:
-            pass
+            _log.warning("legacy routing migration failed for actor=%s", actor, exc_info=True)
     ensure_routing_file(config_path, actor=actor)
     return config_path
 
@@ -65,8 +69,13 @@ def teacher_llm_routing_get(args: Dict[str, Any], *, deps: TeacherLlmRoutingDeps
     config_path = ensure_teacher_routing_file(actor, deps=deps)
     registry = _registry_for_actor(actor, deps=deps)
     overview = get_active_routing(config_path, registry)
-    history_limit = max(1, min(int(args.get("history_limit", 20) or 20), 200))
-    proposal_limit = max(1, min(int(args.get("proposal_limit", 20) or 20), 200))
+    def _safe_int(val: Any, default: int) -> int:
+        try:
+            return int(val or default)
+        except (ValueError, TypeError):
+            return default
+    history_limit = max(1, min(_safe_int(args.get("history_limit", 20), 20), 200))
+    proposal_limit = max(1, min(_safe_int(args.get("proposal_limit", 20), 20), 200))
     proposal_status = str(args.get("proposal_status") or "").strip() or None
     history = overview.get("history") or []
     proposals = list_proposals(config_path, limit=proposal_limit, status=proposal_status)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,9 @@ class AssignmentProgressDeps:
     atomic_write_json: Callable[[Any, Any], None]
     time_time: Callable[[], float]
     now_iso: Callable[[], str]
+
+
+_log = logging.getLogger(__name__)
 
 
 def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path]:
@@ -141,6 +145,6 @@ def compute_assignment_progress(
     try:
         deps.atomic_write_json(folder / "progress.json", result)
     except Exception:
-        pass
+        _log.warning("failed to write progress.json for assignment %s", assignment_id, exc_info=True)
 
     return result

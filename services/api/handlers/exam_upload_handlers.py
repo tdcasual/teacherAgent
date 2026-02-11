@@ -55,7 +55,6 @@ async def exam_upload_start(
                 answer_files,
                 ocr_mode,
                 language,
-                deps=None,
             )
         )
     except ValueError as exc:

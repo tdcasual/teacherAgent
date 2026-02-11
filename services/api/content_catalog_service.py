@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -11,7 +12,11 @@ class ContentCatalogDeps:
     data_dir: Path
     app_root: Path
     load_profile_file: Callable[[Path], Dict[str, Any]]
-    load_skills: Callable[[Path], Any]
+    load_skills: Callable[..., Any]
+    teacher_skills_dir: Path = Path(".")
+
+
+_log = logging.getLogger(__name__)
 
 
 def list_lessons(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
@@ -38,7 +43,7 @@ def list_lessons(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
 
 def list_skills(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
     skills_dir = deps.app_root / "skills"
-    loaded = deps.load_skills(skills_dir)
+    loaded = deps.load_skills(skills_dir, teacher_skills_dir=deps.teacher_skills_dir)
     items = [spec.as_public_dict() for spec in loaded.skills.values()]
     items.sort(key=lambda x: x.get("id") or "")
     payload: Dict[str, Any] = {"skills": items}
@@ -65,6 +70,7 @@ def load_kp_catalog(data_dir: Path) -> Dict[str, Dict[str, str]]:
                     "notes": str(row.get("notes") or "").strip(),
                 }
     except Exception:
+        _log.exception("failed to parse knowledge_points.csv at %s", path)
         return {}
     return out
 
@@ -83,5 +89,6 @@ def load_question_kp_map(data_dir: Path) -> Dict[str, str]:
                 if qid and kp_id:
                     out[qid] = kp_id
     except Exception:
+        _log.exception("failed to parse knowledge_point_map.csv at %s", path)
         return {}
     return out

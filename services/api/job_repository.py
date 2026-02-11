@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import logging
 import os
 import time
 import uuid
@@ -11,9 +13,16 @@ from typing import Any, Dict
 from fastapi import UploadFile
 from starlette.concurrency import run_in_threadpool
 
+from .chat_lock_service import (
+    ChatLockDeps,
+    release_lockfile as _release_lockfile_impl,
+    try_acquire_lockfile as _try_acquire_lockfile_impl,
+)
 from .paths import exam_job_path, upload_job_path
 from .upload_io_service import sanitize_filename_io
 from .upload_text_service import save_upload_file as _save_upload_file_impl
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +34,12 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
     # Use unique temp names so concurrent writers don't contend on one *.tmp file.
     tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
     try:
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        try:
+            os.write(fd, json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         tmp.replace(path)
     finally:
         try:
@@ -41,24 +55,38 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
 def load_upload_job(job_id: str) -> Dict[str, Any]:
     job_dir = upload_job_path(job_id)
     job_path = job_dir / "job.json"
-    if not job_path.exists():
+    try:
+        data = json.loads(job_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         raise FileNotFoundError(f"job not found: {job_id}")
-    return json.loads(job_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"job data for {job_id} is not a JSON object")
+    return data
 
 def write_upload_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     job_dir = upload_job_path(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
     job_path = job_dir / "job.json"
-    data: Dict[str, Any] = {}
-    if job_path.exists() and not overwrite:
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
+    lock_path = job_dir / ".job.lock"
+    lock_fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        data: Dict[str, Any] = {}
+        if job_path.exists() and not overwrite:
+            try:
+                data = json.loads(job_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                _log.warning("corrupt job.json for %s, resetting: %s", job_id, exc)
+                data = {}
+        if not isinstance(data, dict):
             data = {}
-    data.update(updates)
-    data["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    _atomic_write_json(job_path, data)
-    return data
+        data.update(updates)
+        data["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        _atomic_write_json(job_path, data)
+        return data
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 # ---------------------------------------------------------------------------
@@ -68,28 +96,42 @@ def write_upload_job(job_id: str, updates: Dict[str, Any], overwrite: bool = Fal
 def load_exam_job(job_id: str) -> Dict[str, Any]:
     job_dir = exam_job_path(job_id)
     job_path = job_dir / "job.json"
-    if not job_path.exists():
+    try:
+        data = json.loads(job_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         raise FileNotFoundError(f"exam job not found: {job_id}")
-    return json.loads(job_path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"exam job data for {job_id} is not a JSON object")
+    return data
 
 def write_exam_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     job_dir = exam_job_path(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
     job_path = job_dir / "job.json"
-    data: Dict[str, Any] = {}
-    if job_path.exists() and not overwrite:
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
+    lock_path = job_dir / ".job.lock"
+    lock_fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        data: Dict[str, Any] = {}
+        if job_path.exists() and not overwrite:
+            try:
+                data = json.loads(job_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                _log.warning("corrupt exam job.json for %s, resetting: %s", job_id, exc)
+                data = {}
+        if not isinstance(data, dict):
             data = {}
-    data.update(updates)
-    data["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    _atomic_write_json(job_path, data)
-    return data
+        data.update(updates)
+        data["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        _atomic_write_json(job_path, data)
+        return data
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 # ---------------------------------------------------------------------------
-# Cross-process lockfile
+# Cross-process lockfile (shared implementation)
 # ---------------------------------------------------------------------------
 
 def _is_pid_alive(pid: int) -> bool:
@@ -106,65 +148,21 @@ def _is_pid_alive(pid: int) -> bool:
     return True
 
 
-def _read_lock_pid(path: Path) -> int:
-    try:
-        raw = path.read_text(encoding="utf-8", errors="ignore")
-        payload = json.loads(raw)
-    except Exception:
-        return 0
-    if not isinstance(payload, dict):
-        return 0
-    try:
-        return int(payload.get("pid") or 0)
-    except Exception:
-        return 0
-
-
 def _try_acquire_lockfile(path: Path, ttl_sec: int) -> bool:
-    """
-    Cross-process lock using O_EXCL lockfile. Used to prevent duplicate job processing
-    under uvicorn multi-worker mode.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    now = time.time()
-    for _attempt in range(2):
-        try:
-            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                pid = _read_lock_pid(path)
-                if pid > 0 and not _is_pid_alive(pid):
-                    path.unlink(missing_ok=True)
-                    continue
-            except Exception:
-                pass
-            try:
-                age = now - float(path.stat().st_mtime)
-                if ttl_sec > 0 and age > float(ttl_sec):
-                    path.unlink(missing_ok=True)
-                    continue
-            except Exception:
-                pass
-            return False
-        except Exception:
-            return False
-        try:
-            payload = {"pid": os.getpid(), "ts": datetime.now().isoformat(timespec="seconds")}
-            os.write(fd, json.dumps(payload, ensure_ascii=False).encode("utf-8", errors="ignore"))
-        finally:
-            try:
-                os.close(fd)
-            except Exception:
-                pass
-        return True
-    return False
+    return _try_acquire_lockfile_impl(
+        path,
+        ttl_sec,
+        ChatLockDeps(
+            now_ts=time.time,
+            now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+            get_pid=os.getpid,
+            is_pid_alive=_is_pid_alive,
+        ),
+    )
 
 
 def _release_lockfile(path: Path) -> None:
-    try:
-        path.unlink(missing_ok=True)
-    except Exception:
-        pass
+    _release_lockfile_impl(path)
 
 
 # ---------------------------------------------------------------------------
