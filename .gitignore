@@ -57,3 +57,12 @@ main.png
 
 # Local Playwright CLI cache
 .playwright-cli/
+
+# Local tooling caches and environments
+.claude/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
