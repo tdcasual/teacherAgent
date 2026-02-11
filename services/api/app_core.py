@@ -511,7 +511,6 @@ from .teacher_memory_core import (
     _teacher_proposal_path,
     _teacher_memory_load_events,
     _teacher_memory_is_sensitive,
-    _teacher_memory_event_log_path,
     _teacher_memory_log_event,
     _teacher_memory_parse_dt,
     _teacher_memory_record_ttl_days,
@@ -522,12 +521,10 @@ from .teacher_memory_core import (
     _teacher_memory_rank_score,
     _teacher_memory_load_record,
     _teacher_memory_active_applied_records,
-    _teacher_memory_recent_user_turns,
     _teacher_memory_loose_match,
     _teacher_memory_auto_infer_candidate,
     _teacher_session_index_item,
     _mark_teacher_session_memory_flush,
-    _teacher_memory_has_term,
     _teacher_memory_conflicts,
     _teacher_memory_find_conflicting_applied,
     _teacher_memory_mark_superseded,
@@ -1366,5 +1363,4 @@ def process_chat_job(job_id: str) -> None:
     _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
 def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
     return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
-
 

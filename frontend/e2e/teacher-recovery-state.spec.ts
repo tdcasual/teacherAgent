@@ -7,6 +7,11 @@ import {
   setupBasicTeacherApiMocks,
   setupTeacherState,
 } from './helpers/teacherHarness'
+import {
+  assignmentConfirmButton,
+  workflowStatusChip,
+  workflowUploadSubmitButton,
+} from './helpers/workflowLocators'
 
 const buildAssignmentDraft = (jobId: string, assignmentId: string) => ({
   job_id: jobId,
@@ -218,7 +223,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    await expect(page.locator('.workbench-switch button.active', { hasText: '技能' })).toBeVisible()
+    await expect(page.getByPlaceholder('搜索技能')).toBeVisible()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherWorkbenchTab'))).toBe('skills')
   },
 
@@ -279,7 +284,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.goto('/')
-    await expect(page.locator('.workflow-chip.active')).toContainText('解析中')
+    await expect(workflowStatusChip(page)).toContainText('解析中')
     await expect.poll(() => statusCalls).toBeGreaterThan(0)
 
     await page.reload()
@@ -398,7 +403,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       mimeType: 'application/pdf',
       buffer: Buffer.from('g008'),
     })
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect.poll(() => startCalls).toBe(1)
     await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible()
@@ -581,7 +586,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    await page.locator('.confirm-btn').click()
+    await assignmentConfirmButton(page).click()
     await expect.poll(() => confirmCalls).toBe(1)
 
     await page.reload()

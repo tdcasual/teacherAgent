@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { openTeacherApp, setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
+import {
+  assignmentConfirmButton,
+  workflowAssignmentScopeSelect,
+  workflowUploadSubmitButton,
+} from './helpers/workflowLocators'
 
 const fakePdfFile = {
   name: 'sample.pdf',
@@ -20,7 +25,7 @@ test('assignment upload validation requires assignment id before request', async
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, job_id: 'x' }) })
   })
 
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请填写作业编号')).toBeVisible()
   expect(uploadCalls).toBe(0)
@@ -41,7 +46,7 @@ test('assignment upload validation requires files after assignment id', async ({
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-VAL-001')
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份作业文件（文档或图片）')).toBeVisible()
   expect(uploadCalls).toBe(0)
@@ -61,9 +66,9 @@ test('assignment class scope requires class name when file is provided', async (
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-VAL-002')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('class')
+  await workflowAssignmentScopeSelect(page).selectOption('class')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('班级作业请填写班级')).toBeVisible()
   expect(uploadCalls).toBe(0)
@@ -83,9 +88,9 @@ test('assignment student scope requires student ids when file is provided', asyn
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-VAL-003')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('student')
+  await workflowAssignmentScopeSelect(page).selectOption('student')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('私人作业请填写学生编号')).toBeVisible()
   expect(uploadCalls).toBe(0)
@@ -106,7 +111,7 @@ test('exam upload validation requires score file after paper file exists', async
 
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
   expect(examUploadCalls).toBe(0)
@@ -180,7 +185,7 @@ test('assignment confirm stays disabled when requirements are missing', async ({
 
   await page.goto('/')
 
-  const confirmBtn = page.locator('.confirm-btn')
+  const confirmBtn = assignmentConfirmButton(page)
   await expect(confirmBtn).toBeVisible()
   await expect(confirmBtn).toBeDisabled()
   await expect(confirmBtn).toHaveAttribute('title', /请先补全/) 

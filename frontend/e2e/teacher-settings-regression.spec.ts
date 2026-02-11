@@ -122,7 +122,7 @@ test('invalid saved settings section falls back to general panel', async ({ page
 
   await page.getByRole('button', { name: '设置' }).click()
 
-  await expect(page.locator('.settings-nav button.active')).toHaveText('通用')
+  await expect(page.getByRole('button', { name: '通用', exact: true })).toBeVisible()
   await expect(page.getByPlaceholder('默认 teacher')).toBeVisible()
 })
 
@@ -330,10 +330,10 @@ test('model dropdown shows total count and full model names', async ({ page }) =
 
   await page.getByRole('button', { name: '设置' }).click()
   await page.getByRole('button', { name: '渠道' }).click()
-  await page.locator('.model-combobox-input').first().click()
+  await page.getByPlaceholder('选择或输入模型 ID').first().click()
 
   await expect(page.getByText('共 3 个模型')).toBeVisible()
-  await expect(page.locator('.model-combobox-option', { hasText: longModel }).first()).toHaveAttribute('title', longModel)
+  await expect(page.getByRole('button', { name: longModel }).first()).toHaveAttribute('title', longModel)
 })
 
 

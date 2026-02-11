@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { openTeacherApp, setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
+import {
+  workflowAssignmentScopeSelect,
+  workflowStatusChip,
+  workflowUploadSubmitButton,
+} from './helpers/workflowLocators'
 
 const fakePdfFile = {
   name: 'sample.pdf',
@@ -37,7 +42,7 @@ test('assignment upload success writes teacherActiveUpload and displays status m
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-UP-001')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(async () =>
     page.evaluate(() => {
@@ -74,7 +79,7 @@ test('exam upload success writes teacherActiveUpload and displays status message
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
   await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
   await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(async () =>
     page.evaluate(() => {
@@ -171,7 +176,7 @@ test('exam active upload marker is cleared when status becomes failed', async ({
 
   await page.goto('/')
 
-  await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+  await expect(workflowStatusChip(page)).toHaveText('解析失败')
   await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
 })
 
@@ -194,7 +199,7 @@ test('exam upload validation requires paper file before start request', async ({
   })
 
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
   expect(examUploadCalls).toBe(0)
@@ -222,11 +227,11 @@ test('assignment class scope with complete fields sends exactly one upload reque
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-UP-CLASS-1')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('class')
+  await workflowAssignmentScopeSelect(page).selectOption('class')
   await page.locator("#workflow-upload-section input[placeholder='例如：高二2403班']").fill('高二2403班')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
 
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(() => uploadCalls).toBe(1)
 })

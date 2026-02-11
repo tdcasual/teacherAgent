@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { openTeacherApp, setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
+import {
+  assignmentConfirmButton,
+  workflowAssignmentScopeSelect,
+  workflowUploadSubmitButton,
+} from './helpers/workflowLocators'
 
 const fakePdfFile = {
   name: 'assignment.pdf',
@@ -169,7 +174,7 @@ test('assignment upload request uses updated API base from settings', async ({ p
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-BASE-001')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(() => customBaseUploadCalls).toBe(1)
 })
@@ -254,7 +259,7 @@ test('assignment confirm success triggers progress fetch with returned assignmen
 
   await page.goto('/')
 
-  const confirmBtn = page.locator('.confirm-btn')
+  const confirmBtn = assignmentConfirmButton(page)
   await expect(confirmBtn).toBeVisible()
   await expect(confirmBtn).toBeEnabled()
   await confirmBtn.click()
@@ -402,7 +407,7 @@ test('progress row shows overdue tag when student is overdue', async ({ page }) 
   await progressSection.getByPlaceholder('例如：A2403_2026-02-04').fill('A-SYS-OVERDUE-001')
   await progressSection.getByRole('button', { name: '刷新' }).click()
 
-  const overdueRow = progressSection.locator('.progress-row').filter({ hasText: 'S-OVERDUE' })
+  const overdueRow = progressSection.locator('div').filter({ hasText: 'S-OVERDUE' }).first()
   await expect(overdueRow).toBeVisible()
   await expect(overdueRow).toContainText('逾期')
 })
@@ -426,12 +431,12 @@ test('assignment student scope upload succeeds when student ids are provided', a
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-STUDENT-001')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('student')
+  await workflowAssignmentScopeSelect(page).selectOption('student')
   await page
     .locator("#workflow-upload-section input[placeholder='例如：高二2403班_刘昊然']")
     .fill('高二2403班_张三')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(() => uploadCalls).toBe(1)
   await expect
@@ -665,7 +670,7 @@ test('assignment upload validates missing files before request', async ({ page }
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-EMPTYFILE-001')
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份作业文件（文档或图片）')).toBeVisible()
 })
@@ -678,9 +683,9 @@ test('assignment upload validates student scope requires student id list', async
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-STUDENT-EMPTY-001')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('student')
+  await workflowAssignmentScopeSelect(page).selectOption('student')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('私人作业请填写学生编号')).toBeVisible()
 })
@@ -693,9 +698,9 @@ test('assignment upload validates class scope requires class name', async ({ pag
   })
 
   await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-SYS-CLASS-EMPTY-001')
-  await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('class')
+  await workflowAssignmentScopeSelect(page).selectOption('class')
   await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('班级作业请填写班级')).toBeVisible()
 })

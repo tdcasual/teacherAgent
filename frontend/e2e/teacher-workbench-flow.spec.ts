@@ -7,6 +7,14 @@ import {
   setupBasicTeacherApiMocks,
   setupTeacherState,
 } from './helpers/teacherHarness'
+import {
+  assignmentConfirmButton,
+  workflowAssignmentScopeSelect,
+  workflowStatusChip,
+  workflowUploadModeButton,
+  workflowUploadSection,
+  workflowUploadSubmitButton,
+} from './helpers/workflowLocators'
 
 const fakePdfFile = {
   name: 'sample.pdf',
@@ -616,9 +624,8 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
   C010: async ({ page }) => {
     await openTeacherApp(page)
-    const switchBar = page.locator('.workbench-switch').first()
-    const workflowTab = switchBar.getByRole('button', { name: '工作流', exact: true })
-    const skillTab = switchBar.getByRole('button', { name: '技能', exact: true })
+    const workflowTab = page.getByRole('button', { name: '工作流', exact: true }).first()
+    const skillTab = page.getByRole('button', { name: '技能', exact: true }).first()
 
     await workflowTab.click()
     await expect(workflowTab).toHaveClass(/active/)
@@ -671,7 +678,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
     })
 
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
     await expect(page.getByText('请填写作业编号')).toBeVisible()
     expect(uploadCalls).toBe(0)
   },
@@ -686,7 +693,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-002')
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.getByText('请至少上传一份作业文件（文档或图片）')).toBeVisible()
     expect(uploadCalls).toBe(0)
@@ -702,9 +709,9 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-003')
-    await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('class')
+    await workflowAssignmentScopeSelect(page).selectOption('class')
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.getByText('班级作业请填写班级')).toBeVisible()
     expect(uploadCalls).toBe(0)
@@ -720,9 +727,9 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-P0-004')
-    await page.locator('#workflow-upload-section form.upload-form select').first().selectOption('student')
+    await workflowAssignmentScopeSelect(page).selectOption('student')
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.getByText('私人作业请填写学生编号')).toBeVisible()
     expect(uploadCalls).toBe(0)
@@ -741,7 +748,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-D005')
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect.poll(async () =>
       page.evaluate(() => {
@@ -796,7 +803,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.goto('/')
     await page.getByRole('button', { name: '刷新状态' }).click()
     await page.getByRole('button', { name: '刷新状态' }).click()
-    await expect(page.locator('.workflow-chip.active')).toContainText('待审核')
+    await expect(workflowStatusChip(page)).toContainText('待审核')
     expect(seenStatuses).toContain('queued')
     expect(seenStatuses).toContain('processing')
     expect(seenStatuses).toContain('done')
@@ -822,7 +829,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.goto('/')
-    await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+    await expect(workflowStatusChip(page)).toHaveText('解析失败')
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
   },
 
@@ -922,7 +929,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    const confirmBtn = page.locator('.confirm-btn')
+    const confirmBtn = assignmentConfirmButton(page)
     await expect(confirmBtn).toBeDisabled()
     await expect(confirmBtn).toHaveAttribute('title', /请先补全/)
     await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
@@ -979,7 +986,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    const confirmBtn = page.locator('.confirm-btn')
+    const confirmBtn = assignmentConfirmButton(page)
     await confirmBtn.click()
     await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
 
@@ -1033,7 +1040,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    const confirmBtn = page.locator('.confirm-btn')
+    const confirmBtn = assignmentConfirmButton(page)
     await confirmBtn.click()
 
     await expect(confirmBtn).toHaveText('已创建')
@@ -1089,7 +1096,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.goto('/')
-    await page.locator('.confirm-btn').click()
+    await assignmentConfirmButton(page).click()
 
     await expect(page.locator('#workflow-assignment-draft-section').getByText('解析尚未完成（进度 78%）')).toBeVisible()
     await expect(page.locator('#workflow-assignment-draft-section')).toBeVisible()
@@ -1162,7 +1169,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       mimeType: 'application/pdf',
       buffer: Buffer.from('answer'),
     })
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect.poll(() => startBodyText.length).toBeGreaterThan(0)
     expect(startBodyText).toContain('name="files"')
@@ -1181,7 +1188,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.getByRole('button', { name: '考试', exact: true }).first().click()
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
     expect(calls).toBe(0)
@@ -1198,7 +1205,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.getByRole('button', { name: '考试', exact: true }).first().click()
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
     expect(calls).toBe(0)
@@ -1218,7 +1225,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '考试', exact: true }).first().click()
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
     await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect.poll(async () =>
       page.evaluate(() => {
@@ -1430,7 +1437,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+    await expect(workflowStatusChip(page)).toHaveText('解析失败')
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
   },
 
@@ -1462,7 +1469,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '考试', exact: true }).first().click()
     await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
     await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect(page.locator('#workflow-exam-draft-section').getByText('考试编号：EX-SERVER-009', { exact: true })).toBeVisible()
   },
@@ -1490,7 +1497,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         buffer: Buffer.from('score-img'),
       },
     ])
-    await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
 
     await expect.poll(() => startBodyText.length).toBeGreaterThan(0)
     expect(startBodyText).toContain('name="score_files"')
@@ -1582,21 +1589,21 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
   E013: async ({ page }) => {
     await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
-    const modeSwitch = page.locator('.workflow-summary-card .segmented').first()
-    const uploadSection = page.locator('#workflow-upload-section')
+    const uploadSection = workflowUploadSection(page)
 
     await page.getByPlaceholder('例如：HW-2026-02-05').fill('HW-E013')
     await expect(page.getByPlaceholder('例如：HW-2026-02-05')).toHaveValue('HW-E013')
 
-    await modeSwitch.getByRole('button', { name: '考试', exact: true }).click({ force: true })
-    await expect(uploadSection.getByPlaceholder('例如：EX2403_PHY')).toBeVisible()
-    await uploadSection.getByPlaceholder('例如：EX2403_PHY').fill('EX-E013')
+    await page.getByRole('button', { name: '考试', exact: true }).first().click({ force: true })
+    const examIdInput = uploadSection.locator('input[placeholder="例如：EX2403_PHY"]').first()
+    await expect(examIdInput).toBeVisible()
+    await examIdInput.fill('EX-E013')
 
-    await modeSwitch.getByRole('button', { name: '作业', exact: true }).click({ force: true })
+    await page.getByRole('button', { name: '作业', exact: true }).first().click({ force: true })
     await expect(page.getByPlaceholder('例如：HW-2026-02-05')).toHaveValue('HW-E013')
 
-    await modeSwitch.getByRole('button', { name: '考试', exact: true }).click({ force: true })
-    await expect(uploadSection.getByPlaceholder('例如：EX2403_PHY')).toHaveValue('EX-E013')
+    await page.getByRole('button', { name: '考试', exact: true }).first().click({ force: true })
+    await expect(examIdInput).toHaveValue('EX-E013')
   },
 
   E014: async ({ page }) => {
@@ -1657,37 +1664,23 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.goto('/')
-    const uploadSection = page.locator('#workflow-upload-section')
-    const uploadHeader = uploadSection.locator('.panel-header')
-    const panelSummary = uploadSection.locator('.panel-summary')
-    const toggleUploadSection = async (collapsed: boolean) => {
-      const toggle = uploadHeader.locator('button.ghost').last()
-      const text = ((await toggle.textContent()) || '').trim()
-      if (collapsed && text === '收起') {
-        await toggle.click()
-        return
-      }
-      if (!collapsed && text === '展开') {
-        await toggle.click()
-      }
+    const uploadSection = workflowUploadSection(page)
+
+    await expect(uploadSection).toContainText('作业编号：HW-E014-A')
+
+    await page.getByRole('button', { name: '考试', exact: true }).first().click({ force: true })
+    const expandUploadBtn = uploadSection.getByRole('button', { name: '展开', exact: true }).first()
+    if (await expandUploadBtn.isVisible().catch(() => false)) {
+      await expandUploadBtn.click()
     }
-
-    await expect(uploadSection).toBeVisible()
-    await expect(uploadHeader).toBeVisible()
-    await toggleUploadSection(true)
-    await expect(panelSummary).toContainText('作业编号：HW-E014-A')
-
-    await toggleUploadSection(false)
-    const modeSwitch = page.locator('.workflow-summary-card .segmented').first()
-    await modeSwitch.getByRole('button', { name: '考试', exact: true }).click({ force: true })
+    await expect(uploadSection.locator('input[type="file"]').first()).toBeVisible()
     await uploadSection.locator('input[type="file"]').first().setInputFiles(fakePdfFile)
     await uploadSection.locator('input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-    await uploadSection.locator('form.upload-form button[type="submit"]').click()
+    await workflowUploadSubmitButton(page).click()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload') || '')).toContain(examJobId)
 
-    await toggleUploadSection(true)
-    await expect(panelSummary).toContainText('考试编号：EX-E014')
-    await expect(panelSummary).not.toContainText('作业编号：HW-E014-A')
+    await expect(uploadSection).toContainText('考试编号：EX-E014')
+    await expect(uploadSection).not.toContainText('作业编号：HW-E014-A')
   },
 
   E015: async ({ page }) => {
@@ -1793,14 +1786,15 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const summaryToggle = examSection.locator('summary').filter({ hasText: '查看候选映射评分详情' })
     await expect(summaryToggle).toBeVisible()
     await summaryToggle.click()
-    const sortSelect = examSection.locator('.exam-candidate-summary-tools select').first()
+    const summaryDetails = examSection.locator('details', { hasText: '查看候选映射评分详情' }).first()
+    const sortSelect = summaryDetails.locator('label:has-text("排序方式") + select').first()
     await expect(sortSelect).toBeVisible()
-    await expect(examSection.locator('.exam-candidate-summary-row', { hasText: 'pair:4:5' })).toBeVisible()
-    await expect(examSection.locator('.exam-candidate-summary-row', { hasText: 'chaos:text' })).toBeVisible()
+    await expect(summaryDetails.getByText('pair:4:5')).toBeVisible()
+    await expect(summaryDetails.getByText('chaos:text')).toBeVisible()
 
     await sortSelect.selectOption('parsed_rate')
-    await examSection.locator('.exam-candidate-summary-top-toggle input[type="checkbox"]').check()
-    await expect(examSection.locator('.exam-candidate-summary-row')).toHaveCount(2)
+    await summaryDetails.getByLabel('只看 Top 3').check()
+    await expect(summaryDetails.getByText(/命中 \d+\/\d+；无效/)).toHaveCount(2)
 
     await examSection.getByRole('button', { name: '保存草稿' }).click()
     await expect.poll(() => savePayload).not.toBeNull()

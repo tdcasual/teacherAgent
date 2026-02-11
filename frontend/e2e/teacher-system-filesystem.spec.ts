@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
 import { setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
+import { assignmentConfirmButton, workflowStatusChip } from './helpers/workflowLocators'
 
 const parseJson = async (filePath: string) => JSON.parse(await readFile(filePath, 'utf-8'))
 
@@ -101,8 +102,9 @@ test('assignment confirm writes manifest and question artifacts consistently', a
     })
 
     await page.goto('/')
-    await page.locator('.confirm-btn').click()
-    await expect(page.locator('.confirm-btn')).toHaveText('已创建')
+    const confirmBtn = assignmentConfirmButton(page)
+    await confirmBtn.click()
+    await expect(confirmBtn).toHaveText('已创建')
 
     const manifestPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json')
     const questionsPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'questions.json')
@@ -157,7 +159,7 @@ test('assignment confirm failure does not produce filesystem artifacts', async (
     })
 
     await page.goto('/')
-    await page.locator('.confirm-btn').click()
+    await assignmentConfirmButton(page).click()
     await expect(page.locator('#workflow-assignment-draft-section').getByText('confirm assignment failed')).toBeVisible()
 
     const manifestPath = path.join(tmpRoot, 'data', 'assignments', assignmentId, 'manifest.json')
@@ -222,7 +224,7 @@ test('assignment confirm remains idempotent in artifact output when clicked repe
     })
 
     await page.goto('/')
-    const confirmBtn = page.locator('.confirm-btn')
+    const confirmBtn = assignmentConfirmButton(page)
     await confirmBtn.click()
     await confirmBtn.evaluate((node) => (node as HTMLButtonElement).click())
 
@@ -389,7 +391,7 @@ test('failed exam status without confirm keeps artifact directories absent', asy
     })
 
     await page.goto('/')
-    await expect(page.locator('.workflow-chip.error')).toHaveText('解析失败')
+    await expect(workflowStatusChip(page)).toHaveText('解析失败')
     await expect(access(path.join(tmpRoot, 'data', 'exams', examId))).rejects.toThrow()
     await expect(access(path.join(tmpRoot, 'data', 'analysis', examId))).rejects.toThrow()
   } finally {

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { openTeacherApp, setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
+import { workflowUploadSubmitButton } from './helpers/workflowLocators'
 
 const fakePdfFile = {
   name: 'paper.pdf',
@@ -258,7 +259,7 @@ test('exam upload start uses updated API base from settings', async ({ page }) =
 
   await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
   await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect.poll(() => customBaseUploadCalls).toBe(1)
 })
@@ -649,7 +650,7 @@ test('exam upload validates missing paper file before request', async ({ page })
 
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
   await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
 })
@@ -663,7 +664,7 @@ test('exam upload validates missing score file before request', async ({ page })
 
   await page.getByRole('button', { name: '考试', exact: true }).first().click()
   await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section form.upload-form button[type="submit"]').click()
+  await workflowUploadSubmitButton(page).click()
 
   await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
 })
