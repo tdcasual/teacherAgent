@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import type { Skill } from '../../../appTypes'
 
-const API_BASE = (window as any).__API_BASE__ || ''
-
 export type SkillsTabProps = {
+  apiBase: string
   filteredSkills: Skill[]
   favorites: string[]
   activeSkillId: string | null
@@ -26,6 +25,7 @@ export type SkillsTabProps = {
 
 export default function SkillsTab(props: SkillsTabProps) {
   const {
+    apiBase,
     filteredSkills,
     favorites,
     activeSkillId,
@@ -69,7 +69,7 @@ export default function SkillsTab(props: SkillsTabProps) {
     if (!createTitle.trim() || !createDesc.trim()) { setCreateError('标题和描述为必填项'); return }
     setCreateSaving(true); setCreateError('')
     try {
-      const res = await fetch(`${API_BASE}/teacher/skills`, {
+      const res = await fetch(`${apiBase}/teacher/skills`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: createTitle.trim(), description: createDesc.trim(),
@@ -88,7 +88,7 @@ export default function SkillsTab(props: SkillsTabProps) {
     if (!importUrl.trim()) return
     setImportLoading(true); setImportError(''); setImportPreview(null)
     try {
-      const res = await fetch(`${API_BASE}/teacher/skills/preview`, {
+      const res = await fetch(`${apiBase}/teacher/skills/preview`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_url: importUrl.trim() }),
       })
@@ -102,7 +102,7 @@ export default function SkillsTab(props: SkillsTabProps) {
     if (!importUrl.trim()) return
     setImportLoading(true); setImportError('')
     try {
-      const res = await fetch(`${API_BASE}/teacher/skills/import`, {
+      const res = await fetch(`${apiBase}/teacher/skills/import`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_url: importUrl.trim() }),
       })
@@ -116,7 +116,7 @@ export default function SkillsTab(props: SkillsTabProps) {
   const handleDeleteSkill = async (skillId: string) => {
     if (!confirm('确定删除该技能？')) return
     try {
-      const res = await fetch(`${API_BASE}/teacher/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' })
+      const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' })
       const data = await res.json()
       if (!data.ok) { alert(data.error || '删除失败'); return }
       void fetchSkills()
@@ -142,7 +142,7 @@ export default function SkillsTab(props: SkillsTabProps) {
       // Always send keywords and examples so they can be cleared to empty
       body.keywords = editKeywords.trim() ? editKeywords.split(/[,，]/).map(s => s.trim()).filter(Boolean) : []
       body.examples = editExamples.trim() ? editExamples.split('\n').map(s => s.trim()).filter(Boolean) : []
-      const res = await fetch(`${API_BASE}/teacher/skills/${encodeURIComponent(editingSkillId)}`, {
+      const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(editingSkillId)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const data = await res.json()
@@ -233,9 +233,9 @@ export default function SkillsTab(props: SkillsTabProps) {
       )}
       {skillsLoading && <div className="text-[12px] text-muted mb-[8px]">正在加载技能...</div>}
       {skillsError && <div className="text-[12px] text-[#8a1f1f] mb-[8px]">{skillsError}</div>}
-      <div className="grid gap-[12px] overflow-y-auto flex-1 min-h-0 pr-[4px]" style={{ overscrollBehavior: 'contain' }}>
+      <div className="skills-body grid gap-[12px] overflow-y-auto flex-1 min-h-0 pr-[4px]" style={{ overscrollBehavior: 'contain' }}>
         {filteredSkills.map((skill) => (
-          <div key={skill.id} className={`border rounded-[14px] p-[12px] bg-white ${skillPinned && skill.id === activeSkillId ? 'border-accent shadow-[0_10px_20px_rgba(47,109,107,0.14)]' : 'border-border'}`}>
+          <div key={skill.id} className={`skill-card border rounded-[14px] p-[12px] bg-white ${skillPinned && skill.id === activeSkillId ? 'border-accent shadow-[0_10px_20px_rgba(47,109,107,0.14)]' : 'border-border'}`}>
             <div className="flex justify-between items-baseline gap-[8px] mb-[6px]">
               <div>
                 <strong>{skill.title}</strong>

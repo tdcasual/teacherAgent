@@ -25,12 +25,23 @@ import threading
 import time
 from typing import Any
 
+from services.api.runtime import queue_runtime
 from services.api.workers.upload_worker_service import UploadWorkerDeps
 from services.api.workers.exam_worker_service import ExamWorkerDeps
 from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
 
 
 from . import get_app_core as _app_core
+
+
+def _runtime_backend_is_rq() -> bool:
+    _ac = _app_core()
+    backend = queue_runtime.app_queue_backend(
+        tenant_id=_ac.TENANT_ID or None,
+        is_pytest=_ac._settings.is_pytest(),
+        inline_backend_factory=_ac._inline_backend_factory,
+    )
+    return str(getattr(backend, "name", "")).startswith("rq")
 
 
 def _upload_worker_started_get() -> bool:
@@ -68,7 +79,7 @@ def upload_worker_deps() -> UploadWorkerDeps:
         diag_log=_ac.diag_log,
         sleep=time.sleep,
         thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
-        rq_enabled=_ac._rq_enabled,
+        rq_enabled=_runtime_backend_is_rq,
     )
 
 
@@ -107,7 +118,7 @@ def exam_worker_deps() -> ExamWorkerDeps:
         diag_log=_ac.diag_log,
         sleep=time.sleep,
         thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
-        rq_enabled=_ac._rq_enabled,
+        rq_enabled=_runtime_backend_is_rq,
     )
 
 
@@ -145,7 +156,7 @@ def profile_update_worker_deps() -> ProfileUpdateWorkerDeps:
         diag_log=_ac.diag_log,
         sleep=time.sleep,
         thread_factory=lambda *args, **kwargs: threading.Thread(*args, **kwargs),
-        rq_enabled=_ac._rq_enabled,
+        rq_enabled=_runtime_backend_is_rq,
         monotonic=time.monotonic,
     )
 

@@ -213,7 +213,7 @@ export default function App() {
     updateExamScoreSchemaSelectedCandidate,
   } = useDraftMutations({ uploadDraft, setUploadDraft: workbench.setUploadDraft, examDraft, setExamDraft: workbench.setExamDraft })
 
-  const { wheelScrollZoneRef, setWheelScrollZone, resolveWheelScrollTarget } = useWheelScrollZone({
+  const { setWheelScrollZone } = useWheelScrollZone({
     appRef, sessionSidebarOpen, skillsOpen, inlineRoutingOpen,
   })
 
@@ -226,12 +226,11 @@ export default function App() {
     refreshTeacherSessions, loadTeacherSessionMessages,
     refreshMemoryProposals, refreshMemoryInsights,
     submitMessage, fetchSkills, renderedMessages,
-    appendMessage, updateMessage,
     activeSessionRef, sessionRequestRef,
     historyCursorRef, historyHasMoreRef, localDraftSessionIdsRef,
     pendingChatJobRef, markdownCacheRef,
   } = useTeacherChatApi({
-    apiBase, activeSessionId, messages, sending, activeSkillId, skillPinned, skillList,
+    apiBase, activeSessionId, messages, activeSkillId, skillPinned, skillList,
     pendingChatJob, memoryStatusFilter, skillsOpen, workbenchTab,
     setMessages, setSending, setActiveSessionId, setPendingChatJob, setChatQueueHint,
     setComposerWarning, setInput,
@@ -262,8 +261,7 @@ export default function App() {
   const {
     handleUploadAssignment, saveDraft, handleConfirmUpload,
     fetchAssignmentProgress, refreshWorkflowWorkbench, scrollToWorkflowSection,
-    assignmentWorkflowIndicator, assignmentWorkflowAutoState,
-    computeLocalRequirementsMissing, updateDraftRequirement, updateDraftQuestion,
+    assignmentWorkflowIndicator, updateDraftRequirement, updateDraftQuestion,
   } = useAssignmentWorkflow({
     apiBase,
     uploadMode, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds,
@@ -440,11 +438,12 @@ export default function App() {
     return { start: trigger.start, query, type: trigger.type, items }
   }, [cursorPos, input, skillList])
 
+  const mentionItemIds = mention?.items.map((i) => i.id).join(',') ?? ''
   useEffect(() => {
     if (mention && mention.items.length) {
       setMentionIndex(0)
     }
-  }, [mention?.items.length])
+  }, [mentionItemIds])
 
   const filteredSkills = useMemo(() => {
     const query = skillQuery.trim().toLowerCase()
@@ -516,7 +515,7 @@ export default function App() {
 
   const {
     startNewTeacherSession, renameSession, toggleSessionMenu,
-    toggleSessionArchive, focusSessionMenuTrigger,
+    toggleSessionArchive,
     cancelRenameDialog, confirmRenameDialog,
     cancelArchiveDialog, confirmArchiveDialog,
     closeSessionSidebarOnMobile, toggleSessionSidebar,
@@ -728,7 +727,7 @@ export default function App() {
 
 
   return (
-    <div ref={appRef} className="h-dvh flex flex-col bg-bg overflow-hidden" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px`, overscrollBehavior: 'none' }}>
+    <div ref={appRef} className="app teacher h-dvh flex flex-col bg-bg overflow-hidden" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px`, overscrollBehavior: 'none' }}>
       <header ref={topbarRef} className="flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25]" style={{ backdropFilter: 'saturate(180%) blur(8px)' }}>
         <div className="flex items-center gap-[10px] flex-wrap">
           <div className="font-bold text-[16px] tracking-[0.2px]">物理教学助手 · 老师端</div>
@@ -780,7 +779,7 @@ export default function App() {
       </SettingsModal>
 
       <div
-        className={`flex-1 min-h-0 grid relative bg-surface overflow-hidden ${sessionSidebarOpen ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]' : 'grid-cols-[0_minmax(0,1fr)]'}`}
+        className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${sessionSidebarOpen ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]' : 'grid-cols-[0_minmax(0,1fr)]'}`}
         style={{ overscrollBehavior: 'none' }}
       >
         <button
@@ -837,7 +836,7 @@ export default function App() {
               className="min-w-0 min-h-0 overflow-hidden flex"
               minSize={isMobileLayout ? 0 : 360}
             >
-                      <main className={`flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 overflow-hidden bg-surface ${inlineRoutingOpen ? 'overflow-auto' : ''}`} style={inlineRoutingOpen ? { overscrollBehavior: 'contain' } : undefined}>
+                      <main className={`chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 overflow-hidden bg-surface ${inlineRoutingOpen ? 'overflow-auto' : ''}`} style={inlineRoutingOpen ? { overscrollBehavior: 'contain' } : undefined}>
                         {inlineRoutingOpen ? (
                           <RoutingPage
                             apiBase={apiBase}
@@ -886,7 +885,7 @@ export default function App() {
                       </main>
             </Panel>
             <Separator
-              className={`w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[rgba(16,163,127,0.08)] ${isWorkbenchResizing ? 'bg-[rgba(16,163,127,0.08)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
+              className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[rgba(16,163,127,0.08)] ${isWorkbenchResizing ? 'bg-[rgba(16,163,127,0.08)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
               onPointerDown={() => setIsWorkbenchResizing(true)}
               onDoubleClick={handleWorkbenchResizeReset}
             >
@@ -913,6 +912,7 @@ export default function App() {
               }}
             >
                       <TeacherWorkbench
+                          apiBase={apiBase}
                           skillsOpen={skillsOpen}
                           setSkillsOpen={setSkillsOpen}
                           workbenchTab={workbenchTab}

@@ -53,27 +53,27 @@ export default function UploadSection(props: UploadSectionProps) {
 
   return (
               <section id="workflow-upload-section" className={`bg-surface border border-border rounded-[14px] shadow-sm ${uploadCardCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
-    	            <div className={`flex items-start gap-2 flex-wrap ${uploadCardCollapsed ? 'mb-0' : 'mb-2'}`}>
+    	            <div className={`panel-header flex items-start gap-2 flex-wrap ${uploadCardCollapsed ? 'mb-0' : 'mb-2'}`}>
     	              <div className="flex items-center gap-3 min-w-0 flex-1">
     	                <h3 className="m-0 whitespace-nowrap shrink-0">{uploadMode === 'assignment' ? '上传作业文件（文档 / 图片）' : '上传考试文件（试卷 + 成绩表）'}</h3>
     	                <div className="inline-flex border border-border rounded-lg overflow-hidden bg-white shrink-0">
     	                  <button
     	                    type="button"
-    	                    className={`border-none bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted ${uploadMode === 'assignment' ? 'bg-accent-soft text-accent font-semibold' : ''}`}
+    	                    className={`border-0 bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted ${uploadMode === 'assignment' ? 'active bg-accent-soft text-accent font-semibold' : ''}`}
     	                    onClick={() => setUploadMode('assignment')}
     	                  >
     	                    作业
     	                  </button>
-    	                  <button type="button" className={`border-none bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted border-l border-border ${uploadMode === 'exam' ? 'bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('exam')}>
+    	                  <button type="button" className={`border-0 bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted border-l border-border ${uploadMode === 'exam' ? 'active bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('exam')}>
     	                    考试
     	                  </button>
     	                </div>
     	              </div>
     	              {uploadCardCollapsed ? (
-    	                <div
-    	                  className="flex-1 min-w-0 text-muted text-[12px] whitespace-nowrap overflow-hidden text-ellipsis"
-    	                  title={
-    	                    uploadMode === 'assignment'
+    	                  <div
+    	                    className="panel-summary flex-1 min-w-0 text-muted text-[12px] whitespace-nowrap overflow-hidden text-ellipsis"
+    	                    title={
+    	                      uploadMode === 'assignment'
     	                      ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId.trim())
     	                      : formatExamJobSummary(examJobInfo, examId.trim())
     	                  }
@@ -92,7 +92,7 @@ export default function UploadSection(props: UploadSectionProps) {
     	                {uploadMode === 'assignment' ? (
     	                  <>
     	                    <p className="m-0 mb-3 text-muted">上传后将在后台解析题目与答案，并生成作业 8 点描述。解析完成后需确认创建作业。</p>
-    	                    <form className="grid gap-[10px]" onSubmit={handleUploadAssignment}>
+    	                    <form className="upload-form grid gap-[10px]" onSubmit={handleUploadAssignment}>
     	                      <div className="grid gap-[10px] grid-cols-1">
     	                        <div className="grid gap-1.5">
     	                          <label>作业编号</label>
@@ -159,7 +159,7 @@ export default function UploadSection(props: UploadSectionProps) {
     	                ) : (
     	                  <>
     	                    <p className="m-0 mb-3 text-muted">上传考试试卷、标准答案（可选）与成绩表后，系统将生成考试数据与分析草稿。成绩表推荐电子表格（最稳）。</p>
-    	                    <form className="grid gap-[10px]" onSubmit={handleUploadExam}>
+    	                    <form className="upload-form grid gap-[10px]" onSubmit={handleUploadExam}>
     	                      <div className="grid gap-[10px] grid-cols-1">
     	                        <div className="grid gap-1.5">
     	                          <label>考试编号（可选）</label>

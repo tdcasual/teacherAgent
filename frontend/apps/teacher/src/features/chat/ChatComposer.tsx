@@ -52,7 +52,7 @@ export default function ChatComposer({
           disabled={pendingChatJob}
         />
         <div className="flex justify-between items-center gap-3">
-          <span className="text-[12px] text-muted">{chatQueueHint || '$ 技能 | 回车发送'}</span>
+          <span className="composer-hint text-[12px] text-muted">{chatQueueHint || '$ 技能 | 回车发送'}</span>
           <button
             type="submit"
             className="border-none rounded-[12px] px-4 py-[10px] text-[14px] cursor-pointer bg-accent text-white disabled:opacity-60 disabled:cursor-not-allowed"

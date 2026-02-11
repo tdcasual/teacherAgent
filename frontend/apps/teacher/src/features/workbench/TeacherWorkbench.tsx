@@ -5,6 +5,7 @@ import MemoryTab from './tabs/MemoryTab'
 type WorkbenchTab = 'skills' | 'memory' | 'workflow'
 
 type TeacherWorkbenchProps = {
+  apiBase: string
   skillsOpen: boolean
   setSkillsOpen: any
   workbenchTab: WorkbenchTab
@@ -137,8 +138,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
   } = props
 
   return (
-    <aside className={`border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'flex' : 'hidden'}`}>
-      <div className="flex justify-between items-center mb-[10px]">
+    <aside className={`skills-panel border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
+      <div className="skills-header flex justify-between items-center mb-[10px]">
         <h3 className="m-0">工作台</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -168,19 +169,20 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </button>
         </div>
       </div>
-      <div className="inline-flex border border-border rounded-[12px] overflow-hidden bg-white self-start flex-none">
-        <button type="button" className={`border-none bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
+      <div className="workbench-switch inline-flex border border-border rounded-[12px] overflow-hidden bg-white self-start flex-none">
+        <button type="button" className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
           技能
         </button>
-        <button type="button" className={`border-none bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer border-l border-border ${workbenchTab === 'memory' ? 'bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
+        <button type="button" className={`border-0 border-l border-border bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
           自动记忆
         </button>
-        <button type="button" className={`border-none bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer border-l border-border ${workbenchTab === 'workflow' ? 'bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
+        <button type="button" className={`border-0 border-l border-border bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
           工作流
         </button>
       </div>
       {workbenchTab === 'skills' ? (
         <SkillsTab
+          apiBase={props.apiBase}
           filteredSkills={props.filteredSkills}
           favorites={props.favorites}
           activeSkillId={props.activeSkillId}

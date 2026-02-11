@@ -33,6 +33,8 @@ export default function ModelCombobox({
   valueRef.current = value
   hasTypedRef.current = hasTyped
 
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+
   const activeFilter = hasTyped ? filter : ''
   const filtered = models.filter((model) => model.toLowerCase().includes(activeFilter.toLowerCase()))
 
@@ -45,6 +47,7 @@ export default function ModelCombobox({
     setOpen(false)
     setFilter('')
     setHasTyped(false)
+    setHighlightIndex(-1)
   }
 
   const openDropdown = () => {
@@ -54,6 +57,7 @@ export default function ModelCombobox({
     setOpen(true)
     setFilter(value)
     setHasTyped(false)
+    setHighlightIndex(-1)
     onFocus?.()
   }
 
@@ -91,7 +95,7 @@ export default function ModelCombobox({
       <div className="flex items-stretch">
         <input
           ref={inputRef}
-          className="flex-1 !rounded-tr-none !rounded-br-none min-w-0"
+          className="model-combobox-input flex-1 !rounded-tr-none !rounded-br-none min-w-0"
           value={open ? filter : value}
           onChange={(e) => {
             if (!open) {
@@ -105,6 +109,27 @@ export default function ModelCombobox({
           }}
           onFocus={() => {
             if (!openRef.current) openDropdown()
+          }}
+          onKeyDown={(e) => {
+            if (!open) return
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setHighlightIndex((prev) => (prev + 1 < filtered.length ? prev + 1 : 0))
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              setHighlightIndex((prev) => (prev - 1 >= 0 ? prev - 1 : filtered.length - 1))
+            } else if (e.key === 'Enter') {
+              e.preventDefault()
+              if (highlightIndex >= 0 && highlightIndex < filtered.length) {
+                handleSelect(filtered[highlightIndex])
+              } else {
+                commitTypedIfNeeded()
+                closeDropdown()
+              }
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              closeDropdown()
+            }
           }}
           placeholder={loading ? '正在拉取模型列表…' : placeholder || '选择或输入模型 ID'}
         />
@@ -135,11 +160,11 @@ export default function ModelCombobox({
           {!loading && filtered.length === 0 && (
             <div className="px-[10px] py-[7px] text-[12px] text-muted">无匹配模型，可直接输入</div>
           )}
-          {filtered.map((model) => (
+          {filtered.map((model, idx) => (
             <button
               key={model}
               type="button"
-              className={`border-none bg-transparent text-left px-[10px] py-[8px] text-[13px] cursor-pointer text-ink leading-[1.35] whitespace-normal break-all hover:bg-surface-soft ${model === value ? 'bg-accent-soft text-accent font-semibold' : ''}`}
+              className={`model-combobox-option border-none bg-transparent text-left px-[10px] py-[8px] text-[13px] cursor-pointer text-ink leading-[1.35] whitespace-normal break-all hover:bg-surface-soft ${model === value ? 'bg-accent-soft text-accent font-semibold' : ''} ${idx === highlightIndex ? 'bg-surface-soft' : ''}`}
               title={model}
               onMouseDown={(e) => {
                 e.preventDefault()

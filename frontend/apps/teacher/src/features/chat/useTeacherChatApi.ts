@@ -29,7 +29,6 @@ export type UseTeacherChatApiParams = {
   apiBase: string
   activeSessionId: string
   messages: Message[]
-  sending: boolean
   activeSkillId: string
   skillPinned: boolean
   skillList: Skill[]
@@ -80,7 +79,6 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     apiBase,
     activeSessionId,
     messages,
-    sending,
     activeSkillId,
     skillPinned,
     skillList,
@@ -153,21 +151,6 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       return { ...msg, html }
     })
   }, [messages, apiBase])
-
-  // ── appendMessage / updateMessage helpers ─────────────────────────────
-  const appendMessage = useCallback(
-    (roleType: 'user' | 'assistant', content: string) => {
-      setMessages((prev) => [...prev, { id: makeId(), role: roleType, content, time: nowTime() }])
-    },
-    [setMessages],
-  )
-
-  const updateMessage = useCallback(
-    (id: string, patch: Partial<Message>) => {
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
-    },
-    [setMessages],
-  )
 
   // ── refreshTeacherSessions ────────────────────────────────────────────
   const refreshTeacherSessions = useCallback(
@@ -277,18 +260,22 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         if (append) {
           setMessages((prev) => [...mapped, ...prev])
         } else {
-          setMessages(
-            mappedWithPending.length
-              ? mappedWithPending
-              : [
-                  {
-                    id: makeId(),
-                    role: 'assistant',
-                    content: TEACHER_GREETING,
-                    time: nowTime(),
-                  },
-                ],
-          )
+          setMessages((prev) => {
+            if (mappedWithPending.length) return mappedWithPending
+            // Guard against startup races during pending-job restore:
+            // keep recovered pending bubbles if current payload is empty.
+            if (prev.some((item) => String(item.id || '').startsWith('pending_user_'))) {
+              return prev
+            }
+            return [
+              {
+                id: makeId(),
+                role: 'assistant',
+                content: TEACHER_GREETING,
+                time: nowTime(),
+              },
+            ]
+          })
         }
       } catch (err: any) {
         if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
@@ -588,8 +575,6 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     refreshMemoryProposals,
     refreshMemoryInsights,
     submitMessage,
-    appendMessage,
-    updateMessage,
     fetchSkills,
     renderedMessages,
     // Expose ref sync helpers so the parent can keep refs in sync

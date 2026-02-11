@@ -39,24 +39,24 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
 
   return (
     <>
-                    <div className="border border-border rounded-[14px] bg-white p-[10px] grid gap-2">
-                      <div className="inline-flex border border-border rounded-lg overflow-hidden bg-white shrink-0">
-                        <button type="button" className={`border-none bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted ${uploadMode === 'assignment' ? 'bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('assignment')}>
+                    <div className="workflow-summary-card border border-border rounded-[14px] bg-white p-[10px] grid gap-2">
+                      <div className="segmented inline-flex border border-border rounded-lg overflow-hidden bg-white shrink-0">
+                        <button type="button" className={`border-0 bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted ${uploadMode === 'assignment' ? 'active bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('assignment')}>
                           作业
                         </button>
-                        <button type="button" className={`border-none bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted border-l border-border ${uploadMode === 'exam' ? 'bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('exam')}>
+                        <button type="button" className={`border-0 bg-transparent py-1.5 px-3 cursor-pointer text-[12px] text-muted border-l border-border ${uploadMode === 'exam' ? 'active bg-accent-soft text-accent font-semibold' : ''}`} onClick={() => setUploadMode('exam')}>
                           考试
                         </button>
                       </div>
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-muted text-[12px]">当前流程状态</div>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[12px] font-semibold border ${
+                        <span className={`workflow-chip inline-flex items-center px-2 py-0.5 rounded-lg text-[12px] font-semibold border ${
                           activeWorkflowIndicator.tone === 'active'
-                            ? 'text-[#0f766e] border-[#bfe7dc] bg-[#eaf9f4]'
+                            ? 'active text-[#0f766e] border-[#bfe7dc] bg-[#eaf9f4]'
                             : activeWorkflowIndicator.tone === 'success'
-                              ? 'text-[#166534] border-[#bae6c3] bg-[#ecfdf0]'
+                              ? 'success text-[#166534] border-[#bae6c3] bg-[#ecfdf0]'
                               : activeWorkflowIndicator.tone === 'error'
-                                ? 'text-[#991b1b] border-[#fecaca] bg-[#fef2f2]'
+                                ? 'error text-[#991b1b] border-[#fecaca] bg-[#fef2f2]'
                                 : 'text-[#5b6473] border-border bg-[#f7f8fa]'
                         }`}>{activeWorkflowIndicator.label}</span>
                       </div>

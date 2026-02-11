@@ -100,7 +100,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	                        const overdue = s.overdue ? ' · 逾期' : ''
     	                        const name = [s.class_name, s.student_name].filter(Boolean).join(' ')
     	                        return (
-    	                          <div key={s.student_id} className={`border rounded-[14px] py-[10px] px-3 bg-white flex justify-between gap-3 items-start ${s.complete ? 'border-[#b8d8d6] bg-[#f3fbfa]' : 'border-[#e2b6b6] bg-[#fff8f8]'}`}>
+    	                          <div key={s.student_id} className={`progress-row border rounded-[14px] py-[10px] px-3 bg-white flex justify-between gap-3 items-start ${s.complete ? 'border-[#b8d8d6] bg-[#f3fbfa]' : 'border-[#e2b6b6] bg-[#fff8f8]'}`}>
     	                            <div className="text-[13px]">
     	                              <strong>{s.student_id}</strong>
     	                              {name ? <span className="text-muted text-[12px]"> {name}</span> : null}

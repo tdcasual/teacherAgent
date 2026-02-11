@@ -101,7 +101,7 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                         </button>
                         <button
                           type="button"
-                          className="border-none rounded-xl py-[10px] px-[14px] bg-[#2f6d6b] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-[#2f6d6b] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           onClick={handleConfirmUpload}
                           disabled={
                             uploadConfirming ||
@@ -129,7 +129,7 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                       </div>
 
                       <div className="mt-3 grid gap-3 grid-cols-1">
-                    <div className="border border-border rounded-[16px] p-3 bg-white">
+                    <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                       <h4 className="m-0 mb-[10px]">作业 8 点要求（可编辑）</h4>
                       <div className="grid gap-2">
                         <label>1) 学科</label>
@@ -201,7 +201,7 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                       </div>
                     </div>
 
-                    <div className="border border-border rounded-[16px] p-3 bg-white">
+                    <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                       <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
                       <div className="text-muted text-[12px] mb-[10px]">题目较多时可先修改关键题，点击"保存草稿"后再创建。</div>
 	                      {(uploadDraft.questions || []).slice(0, questionShowCount).map((q: any, idx: number) => (

@@ -31,14 +31,14 @@ export default function ChatMessages({
   return (
     <>
       <div
-        className="flex-1 min-h-0 overflow-auto bg-surface pt-[10px] pb-[6px]"
+        className="messages flex-1 min-h-0 overflow-auto bg-surface pt-[10px] pb-[6px]"
         style={{ overscrollBehavior: 'contain' }}
         ref={messagesRef}
         onScroll={onMessagesScroll}
       >
         <div className="w-full max-w-[var(--chat-content-max-width)] px-5 pb-[14px] grid gap-[14px]">
           {renderedMessages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : ''}`}>
+            <div key={msg.id} className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : ''}`}>
               <div
                 className={
                   msg.role === 'assistant'
@@ -49,7 +49,7 @@ export default function ChatMessages({
                 <div className="text-[11px] text-muted mb-1">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="leading-[1.42] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div className="text leading-[1.42] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}

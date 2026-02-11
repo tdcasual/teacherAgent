@@ -2,9 +2,6 @@ import { useState } from 'react'
 import type {
   ExamConflictLevel,
   CandidateSummarySort,
-  ParsedCandidateSummary,
-  RecommendedCandidate,
-  ConflictStudent,
 } from './examCandidateAnalysis'
 import {
   getExamConflictThreshold,
@@ -164,6 +161,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
             </button>
             <button
               type="button"
+              className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-[#2f6d6b] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleConfirmExamUpload}
               disabled={examConfirming || examDraftSaving || examNeedsConfirm || !examJobInfo || examJobInfo.status !== 'done'}
               title={
@@ -186,7 +184,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
 
           <div className="mt-3 grid gap-3 grid-cols-1">
             {showExamCandidateCard ? (
-              <div className="border border-border rounded-[16px] p-3 bg-white">
+              <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                 <h4 className="m-0 mb-[10px]">物理分映射确认</h4>
                 <div className="grid gap-2">
                   <label>映射候选列</label>
@@ -263,7 +261,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                 {examCandidateSummaries.length ? (
                   <details style={{ marginTop: 8 }}>
                     <summary className="text-muted text-[12px]">查看候选映射评分详情</summary>
-                    <div className="grid gap-2 mt-2">
+                    <div className="exam-candidate-summary-tools grid gap-2 mt-2">
                       <label>排序方式</label>
                       <select
                         value={candidateSummarySort}
@@ -279,7 +277,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                         <option value="parsed_rate">按解析率</option>
                         <option value="source_rank">按来源等级</option>
                       </select>
-                      <label className="toggle inline-flex items-center gap-1.5">
+                      <label className="exam-candidate-summary-top-toggle toggle inline-flex items-center gap-1.5">
                         <input
                           type="checkbox"
                           checked={candidateSummaryTopOnly}
@@ -304,7 +302,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                         return (
                           <div
                             key={`${cid}-${idx}`}
-                            className={`border rounded-[10px] py-2 px-[10px] flex gap-2 flex-wrap items-center ${
+                            className={`exam-candidate-summary-row border rounded-[10px] py-2 px-[10px] flex gap-2 flex-wrap items-center ${
                               cid === examRecommendedCandidateId
                                 ? 'border-[#8bd7c7] bg-[#f0fbf7]'
                                 : 'border-border bg-[#fbfaf7]'
@@ -425,7 +423,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                 ) : null}
               </div>
             ) : null}
-            <div className="border border-border rounded-[16px] p-3 bg-white">
+            <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
               <h4 className="m-0 mb-[10px]">考试信息（可编辑）</h4>
               <div className="grid gap-2">
                 <label>日期（YYYY-MM-DD）</label>
@@ -440,7 +438,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                 />
               </div>
             </div>
-            <div className="border border-border rounded-[16px] p-3 bg-white">
+            <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
               <h4 className="m-0 mb-[10px]">题目满分（可编辑）</h4>
               <div className="grid gap-2">
                 {(examDraft.questions || []).map((q: any, idx: number) => (
@@ -462,7 +460,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                 ))}
               </div>
             </div>
-            <div className="border border-border rounded-[16px] p-3 bg-white">
+            <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
               <h4 className="m-0 mb-[10px]">标准答案（可编辑）</h4>
               <div className="grid gap-2">
                 <label>答案文本（每行一个，示例：1 A）</label>

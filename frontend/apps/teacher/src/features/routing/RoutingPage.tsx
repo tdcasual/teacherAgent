@@ -261,7 +261,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
       setError('')
       try {
         let nextError = ''
-        let routingLoaded = false
 
         try {
           const data = await fetchRoutingOverview(apiBase, {
@@ -269,7 +268,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
             history_limit: 40,
             proposal_limit: 40,
           })
-          routingLoaded = true
           setOverview(data)
           if (forceReplaceDraft || !hasLocalEditsRef.current) {
             setDraft(cloneConfig(data.routing || emptyRoutingConfig()))
@@ -729,12 +727,12 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     .join(' -> ')
 
   return (
-    <div className="grid gap-3">
+    <div className="routing-page grid gap-3">
       {isLegacyFlat && <h2>模型路由配置</h2>}
       {status && <div className="status ok">{status}</div>}
       {error && <div className="status err">{error}</div>}
 
-      <div className="border border-[#d9e8e2] rounded-[14px] p-3 grid gap-[10px]" style={{ background: 'linear-gradient(135deg, #fcfffe 0%, #f4fbf8 100%)' }}>
+      <div className="routing-current-card border border-[#d9e8e2] rounded-[14px] p-3 grid gap-[10px]" style={{ background: 'linear-gradient(135deg, #fcfffe 0%, #f4fbf8 100%)' }}>
         <div className="flex items-start justify-between gap-[10px] flex-wrap">
           <div className="grid gap-[2px]">
             <h3 className="m-0">当前生效配置</h3>
@@ -842,7 +840,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
               default_model: item.default_model || '',
             }
             return (
-              <details key={item.provider} open={isLegacyFlat} className={isLegacyFlat ? 'border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm provider-row' : 'provider-row'}>
+              <details key={item.provider} open={isLegacyFlat} className={isLegacyFlat ? 'routing-item border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm provider-row' : 'routing-item provider-row'}>
                 <summary className="flex items-center gap-2 px-[14px] py-3 cursor-pointer text-[13px] list-none select-none [&::-webkit-details-marker]:hidden">
                   <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#22c55e]" />
                   <span className="font-semibold whitespace-nowrap">{item.display_name || item.provider}</span>
@@ -856,19 +854,19 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                 </summary>
                 <div className="px-[14px] pb-[14px] flex flex-col gap-[10px]">
                   <div className={isLegacyFlat ? 'border border-border rounded-[12px] p-3 bg-white shadow-sm grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]' : 'grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]'}>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>显示名称</label>
                       <input value={edit.display_name} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, display_name: e.target.value } }))} placeholder={item.provider} />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>Base URL</label>
                       <input value={edit.base_url} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, base_url: e.target.value } }))} placeholder="留空使用系统默认" />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>轮换 API Key（可选）</label>
                       <input type="password" autoComplete="new-password" value={edit.api_key} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, api_key: e.target.value } }))} placeholder="轮换 API Key（可选）" />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>默认模型</label>
                       <input
                         value={edit.default_model}
@@ -876,7 +874,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="例如：gpt-4.1-mini"
                       />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label className="toggle">
                         <input type="checkbox" checked={edit.enabled} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, enabled: e.target.checked } }))} />
                         启用
@@ -1080,7 +1078,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           {draft.channels.map((channel, index) => {
             const modeOptions = providerModeMap.get(channel.target.provider) || []
             return (
-              <div key={`${channel.id}_${index}`} className="border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm">
+              <div key={`${channel.id}_${index}`} className="routing-item border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm">
                 <div className="flex justify-between items-center gap-[10px]">
                   <strong>{channel.title || channel.id || `渠道${index + 1}`}</strong>
                   <button type="button" className="ghost" onClick={() => removeChannel(index)} disabled={busy}>
@@ -1088,7 +1086,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                   </button>
                 </div>
                 <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                  <div className="grid gap-[6px]">
+                  <div className="routing-field grid gap-[6px]">
                     <label>名称</label>
                     <input
                       value={channel.title}
@@ -1096,7 +1094,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：教师快速"
                     />
                   </div>
-                  <div className="grid gap-[6px]">
+                  <div className="routing-field grid gap-[6px]">
                     <label>Provider</label>
                     <select
                       value={channel.target.provider}
@@ -1119,7 +1117,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       ))}
                     </select>
                   </div>
-                  <div className="grid gap-[6px]">
+                  <div className="routing-field grid gap-[6px]">
                     <label>模型</label>
                     <ModelCombobox
                       value={channel.target.model}
@@ -1139,7 +1137,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                 <details>
                   <summary>高级设置</summary>
                   <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>渠道 ID</label>
                       <input
                         value={channel.id}
@@ -1147,7 +1145,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="例如：teacher_fast"
                       />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>Mode</label>
                       <select
                         value={channel.target.mode}
@@ -1166,7 +1164,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         ))}
                       </select>
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>temperature</label>
                       <input
                         value={channel.params.temperature ?? ''}
@@ -1179,7 +1177,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="留空表示默认"
                       />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>max_tokens</label>
                       <input
                         value={channel.params.max_tokens ?? ''}
@@ -1192,7 +1190,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="留空表示默认"
                       />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>回退渠道（逗号分隔）</label>
                       <input
                         value={formatList(channel.fallback_channels || [])}
@@ -1205,7 +1203,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="例如：teacher_safe,teacher_backup"
                       />
                     </div>
-                    <div className="grid gap-[6px]">
+                    <div className="routing-field grid gap-[6px]">
                       <label>能力</label>
                       <div className="flex flex-col gap-[6px]">
                         <label className="toggle">
@@ -1257,7 +1255,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           {draft.rules.map((rule, index) => {
             const channelTitle = draft.channels.find((c) => c.id === rule.route.channel_id)?.title || rule.route.channel_id || '未指定'
             return (
-            <div key={`${rule.id}_${index}`} className={`rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
+            <div key={`${rule.id}_${index}`} className={`routing-item rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
               <div className="flex items-center gap-2 px-3 py-[10px] text-[13px]">
                 <label className="toggle flex-shrink-0">
                   <input
@@ -1396,7 +1394,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {(activeTab === 'simulate' || isLegacyFlat) && <div className="settings-section">
+      {(activeTab === 'simulate' || isLegacyFlat) && <div className="settings-section routing-sim-panel">
         <h3>仿真验证（基于当前草稿）</h3>
         <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
           <div className="grid gap-[6px]">
@@ -1530,7 +1528,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           </button>
         </div>
 
-        <div className="grid gap-2">
+        <div className="routing-subsection grid gap-2">
           <div className="flex items-center justify-between gap-[10px] flex-wrap">
             <h4 className="m-0">待审核提案（高级）</h4>
             {!isLegacyFlat && (
@@ -1602,7 +1600,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           )}
         </div>
 
-        <div className="grid gap-2">
+        <div className="routing-subsection grid gap-2">
           <div className="flex items-center justify-between gap-[10px] flex-wrap">
             <h4 className="m-0">历史版本（最近10次）</h4>
             <button type="button" className="ghost" onClick={() => setShowHistoryVersions((prev) => !prev)} disabled={busy}>
