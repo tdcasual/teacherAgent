@@ -37,6 +37,8 @@ type Props = {
   onDirtyChange?: (dirty: boolean) => void
   /** When provided, only render this section (no tab bar, no page chrome) */
   section?: RoutingSection
+  /** Legacy compatibility mode: render all routing/provider panels in one page */
+  legacyFlat?: boolean
 }
 
 const makeId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
@@ -178,7 +180,8 @@ const buildHistoryChangeSummary = (current: RoutingHistorySummary | null, previo
   return changes
 }
 
-export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, section }: Props) {
+export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, section, legacyFlat }: Props) {
+  const isLegacyFlat = Boolean(legacyFlat)
   const activeTab = section || 'general'
   const [teacherId, setTeacherId] = useState(() => {
     return safeLocalStorageGetItem('teacherRoutingTeacherId') || ''
@@ -212,10 +215,11 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     display_name: '',
     base_url: '',
     api_key: '',
+    default_model: '',
     enabled: true,
   })
   const [providerEditMap, setProviderEditMap] = useState<
-    Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string }>
+    Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string; default_model: string }>
   >({})
   const [providerAddMode, setProviderAddMode] = useState<'' | 'preset' | 'custom'>('')
   const [providerAddPreset, setProviderAddPreset] = useState('')
@@ -305,13 +309,14 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   }, [loadOverview])
 
   useEffect(() => {
-    const next: Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string }> = {}
+    const next: Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string; default_model: string }> = {}
     ;(providerOverview?.providers || []).forEach((item) => {
       next[item.provider] = {
         display_name: item.display_name || '',
         base_url: item.base_url || '',
         enabled: item.enabled !== false,
         api_key: '',
+        default_model: item.default_model || '',
       }
     })
     setProviderEditMap(next)
@@ -446,6 +451,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         display_name: providerCreateForm.display_name.trim() || undefined,
         base_url: effectiveBaseUrl,
         api_key: formApiKey,
+        default_model: providerCreateForm.default_model.trim() || undefined,
         enabled: providerCreateForm.enabled,
       })
       if (!result.ok) throw new Error(result.error ? String(result.error) : '新增失败')
@@ -454,6 +460,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         display_name: '',
         base_url: '',
         api_key: '',
+        default_model: '',
         enabled: true,
       })
       setProviderAddMode('')
@@ -480,12 +487,14 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         base_url?: string
         enabled?: boolean
         api_key?: string
+        default_model?: string
       } = {
         teacher_id: teacherId || undefined,
         display_name: draftForm.display_name.trim() || undefined,
         enabled: Boolean(draftForm.enabled),
       }
       payload.base_url = draftForm.base_url.trim()
+      payload.default_model = draftForm.default_model.trim() || undefined
       if (draftForm.api_key.trim()) payload.api_key = draftForm.api_key.trim()
       const result = await updateProviderRegistryItem(apiBase, providerId, payload)
       if (!result.ok) throw new Error(result.error ? String(result.error) : '更新失败')
@@ -576,6 +585,14 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
 
       const proposalId = String(created.proposal_id || '').trim()
       if (!proposalId) throw new Error('提案创建成功但未返回 proposal_id')
+
+      if (isLegacyFlat) {
+        setStatus(`提案已创建：${proposalId}`)
+        setProposalNote('')
+        setShowManualReview(true)
+        await loadOverview({ silent: true })
+        return
+      }
 
       const applied = await reviewRoutingProposal(apiBase, proposalId, {
         teacher_id: teacherId || undefined,
@@ -712,30 +729,31 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     .join(' -> ')
 
   return (
-    <div className="routing-page">
+    <div className="grid gap-3">
+      {isLegacyFlat && <h2>模型路由配置</h2>}
       {status && <div className="status ok">{status}</div>}
       {error && <div className="status err">{error}</div>}
 
-      <div className="routing-current-card">
-        <div className="routing-current-header">
-          <div className="routing-current-title-wrap">
-            <h3>当前生效配置</h3>
-            <span className="routing-current-subtitle">先看结论：当前实际生效的规则、渠道与模型</span>
+      <div className="border border-[#d9e8e2] rounded-[14px] p-3 grid gap-[10px]" style={{ background: 'linear-gradient(135deg, #fcfffe 0%, #f4fbf8 100%)' }}>
+        <div className="flex items-start justify-between gap-[10px] flex-wrap">
+          <div className="grid gap-[2px]">
+            <h3 className="m-0">当前生效配置</h3>
+            <span className="text-[12px] text-muted">先看结论：当前实际生效的规则、渠道与模型</span>
           </div>
-          <span className={`routing-chip routing-chip-${liveStatusTone}`}>{loading ? '加载中' : liveStatusText}</span>
+          <span className={`inline-flex items-center px-2 py-[3px] rounded-full text-[12px] font-semibold border ${liveStatusTone === 'ok' ? 'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' : liveStatusTone === 'warn' ? 'bg-[#fff7ed] text-[#9a3412] border-[#fed7aa]' : 'bg-[#fef2f2] text-[#b91c1c] border-[#fecaca]'}`}>{loading ? '加载中' : liveStatusText}</span>
         </div>
-        <div className="routing-current-grid">
-          <div className="routing-current-item">
-            <span>生效规则</span>
-            <strong>{livePrimaryRule?.id || '默认回退'}</strong>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
+          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
+            <span className="text-[12px] text-muted">生效规则</span>
+            <strong className="text-[13px] leading-[1.35] break-words">{livePrimaryRule?.id || '默认回退'}</strong>
           </div>
-          <div className="routing-current-item">
-            <span>主渠道</span>
-            <strong>{livePrimaryChannel?.title || livePrimaryChannel?.id || '未配置'}</strong>
+          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
+            <span className="text-[12px] text-muted">主渠道</span>
+            <strong className="text-[13px] leading-[1.35] break-words">{livePrimaryChannel?.title || livePrimaryChannel?.id || '未配置'}</strong>
           </div>
-          <div className="routing-current-item">
-            <span>目标模型</span>
-            <strong>
+          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
+            <span className="text-[12px] text-muted">目标模型</span>
+            <strong className="text-[13px] leading-[1.35] break-words">
               {formatTargetLabel(
                 livePrimaryChannel?.target?.provider,
                 livePrimaryChannel?.target?.mode,
@@ -743,19 +761,19 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
               )}
             </strong>
           </div>
-          <div className="routing-current-item">
-            <span>版本 / 更新时间</span>
-            <strong>
+          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
+            <span className="text-[12px] text-muted">版本 / 更新时间</span>
+            <strong className="text-[13px] leading-[1.35] break-words">
               v{liveRouting?.version || '-'} / {liveRouting?.updated_at || '—'}
             </strong>
           </div>
         </div>
       </div>
 
-      {activeTab === 'general' && (
+      {(activeTab === 'general' || isLegacyFlat) && (
         <div className="settings-section">
-          <div className="routing-meta-grid">
-            <div className="routing-field">
+          <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+            <div className="grid gap-[6px]">
               <label>API Base</label>
               <input
                 value={apiBase}
@@ -763,11 +781,11 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                 placeholder="http://localhost:8000"
               />
             </div>
-            <div className="routing-field">
+            <div className="grid gap-[6px]">
               <label>教师标识（可选）</label>
               <input value={teacherId} onChange={(e) => handleTeacherIdChange(e.target.value)} placeholder="默认 teacher" />
             </div>
-            <div className="routing-field">
+            <div className="grid gap-[6px]">
               <label>启用自定义路由</label>
               <label className="toggle">
                 <input
@@ -779,7 +797,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
               </label>
             </div>
           </div>
-          <div className="routing-stats-row">
+          <div className="flex gap-4 flex-wrap text-[12px] text-muted">
             <span>线上版本：{overview?.routing?.version ?? '-'}</span>
             <span>草稿规则：{draft.rules.length} 条</span>
             <span>草稿渠道：{draft.channels.length} 个</span>
@@ -792,7 +810,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           {overview?.validation?.warnings?.length ? (
             <div className="status ok">线上配置提示：{overview.validation.warnings.join('；')}</div>
           ) : null}
-          <div className="routing-actions">
+          <div className="flex gap-2 flex-wrap">
             <button type="button" className="secondary-btn" onClick={() => void loadOverview()} disabled={loading || busy}>
               {loading ? '刷新中…' : '刷新'}
             </button>
@@ -800,13 +818,17 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       )}
 
-      {activeTab === 'providers' && <div className="settings-section">
-        <div className="routing-section-header">
-          <h3>Provider 管理</h3>
+      {(activeTab === 'providers' || isLegacyFlat) && <div className="settings-section">
+        <div className="flex items-center justify-between gap-[10px] flex-wrap">
+          <h3 className="m-0">{isLegacyFlat ? 'Provider 管理（共享 + 私有）' : 'Provider 管理'}</h3>
         </div>
 
+        {isLegacyFlat && (providerOverview?.providers || []).length === 0 && (
+          <div className="muted">暂无私有 Provider。</div>
+        )}
+
         {/* Configured providers only */}
-        <div className="provider-list">
+        <div className="flex flex-col gap-2">
           {(providerOverview?.providers || []).length === 0 && (
             <div className="muted" style={{ padding: '12px 0' }}>尚未配置任何 Provider，请在下方添加。</div>
           )}
@@ -817,46 +839,56 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
               base_url: item.base_url || '',
               enabled: item.enabled !== false,
               api_key: '',
+              default_model: item.default_model || '',
             }
             return (
-              <details key={item.provider} className="provider-row">
-                <summary className="provider-summary">
-                  <span className="provider-dot configured" />
-                  <span className="provider-name">{item.display_name || item.provider}</span>
-                  <span className="provider-meta">
+              <details key={item.provider} open={isLegacyFlat} className={isLegacyFlat ? 'border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm provider-row' : 'provider-row'}>
+                <summary className="flex items-center gap-2 px-[14px] py-3 cursor-pointer text-[13px] list-none select-none [&::-webkit-details-marker]:hidden">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#22c55e]" />
+                  <span className="font-semibold whitespace-nowrap">{item.display_name || item.provider}</span>
+                  <span className="muted">{item.provider}</span>
+                  <span className="text-muted text-[12px] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
                     {(cp?.modes || []).map((m) => m.mode).join(', ')}
                     {cp?.modes?.[0]?.default_model ? ` · ${cp.modes[0].default_model}` : ''}
                   </span>
-                  <span className="provider-badge">已配置</span>
-                  {item.api_key_masked && <span className="provider-key muted">{item.api_key_masked}</span>}
+                  <span className="text-[11px] px-[6px] py-[1px] rounded bg-[#dcfce7] text-[#166534] whitespace-nowrap">已配置</span>
+                  {item.api_key_masked && <span className="text-[11px] font-mono whitespace-nowrap text-muted">key: {item.api_key_masked}</span>}
                 </summary>
-                <div className="provider-edit">
-                  <div className="routing-grid">
-                    <div className="routing-field">
+                <div className="px-[14px] pb-[14px] flex flex-col gap-[10px]">
+                  <div className={isLegacyFlat ? 'border border-border rounded-[12px] p-3 bg-white shadow-sm grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]' : 'grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]'}>
+                    <div className="grid gap-[6px]">
                       <label>显示名称</label>
                       <input value={edit.display_name} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, display_name: e.target.value } }))} placeholder={item.provider} />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>Base URL</label>
                       <input value={edit.base_url} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, base_url: e.target.value } }))} placeholder="留空使用系统默认" />
                     </div>
-                    <div className="routing-field">
-                      <label>API Key</label>
-                      <input type="password" autoComplete="new-password" value={edit.api_key} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, api_key: e.target.value } }))} placeholder="留空不变更" />
+                    <div className="grid gap-[6px]">
+                      <label>轮换 API Key（可选）</label>
+                      <input type="password" autoComplete="new-password" value={edit.api_key} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, api_key: e.target.value } }))} placeholder="轮换 API Key（可选）" />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
+                      <label>默认模型</label>
+                      <input
+                        value={edit.default_model}
+                        onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, default_model: e.target.value } }))}
+                        placeholder="例如：gpt-4.1-mini"
+                      />
+                    </div>
+                    <div className="grid gap-[6px]">
                       <label className="toggle">
                         <input type="checkbox" checked={edit.enabled} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, enabled: e.target.checked } }))} />
                         启用
                       </label>
                     </div>
                   </div>
-                  <div className="provider-actions">
+                  <div className="flex gap-[6px] flex-wrap">
                     <button type="button" className="secondary-btn" onClick={() => void handleUpdateProvider(item.provider)} disabled={providerBusy || busy}>保存</button>
                     <button type="button" className="secondary-btn" onClick={() => void handleProbeProviderModels(item.provider)} disabled={providerBusy || busy}>探测模型</button>
-                    <button type="button" className="ghost" onClick={() => void handleDisableProvider(item.provider)} disabled={providerBusy || busy}>删除配置</button>
+                    <button type="button" className="ghost" onClick={() => void handleDisableProvider(item.provider)} disabled={providerBusy || busy}>禁用</button>
                   </div>
-                  {providerProbeMap[item.provider] ? <div className="probe-result"><span className="muted" style={{ fontSize: 12 }}>探测结果：</span><span className="probe-chips">{providerProbeMap[item.provider].split('，').map((m, i) => <span key={i} className="probe-chip">{m}</span>)}</span></div> : null}
+                  {providerProbeMap[item.provider] ? <div className="flex items-baseline gap-[6px] flex-wrap text-[12px]">探测结果：{providerProbeMap[item.provider]}</div> : null}
                 </div>
               </details>
             )
@@ -864,10 +896,10 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
 
         {/* Add provider section */}
-        <div className="provider-add-section">
-          <div className="provider-add-header">添加 Provider</div>
+        <div className="mt-4 border border-dashed border-[#c9d7d2] rounded-[12px] p-[14px] bg-[#fcfffe]">
+          <div className="font-semibold text-[13px] mb-[10px]">添加 Provider</div>
           {providerAddMode === '' && (
-            <div className="provider-preset-group">
+            <div className="flex flex-wrap gap-2">
               {(() => {
                 const configuredIds = new Set((providerOverview?.providers || []).map((p) => p.provider))
                 const presets = (providerOverview?.shared_catalog?.providers || []).filter(
@@ -879,25 +911,26 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       <button
                         key={p.provider}
                         type="button"
-                        className="provider-preset-btn"
+                        className="px-[14px] py-2 border border-border rounded-[12px] bg-white text-[13px] cursor-pointer font-medium transition-all duration-150 hover:border-accent hover:bg-accent-soft hover:text-accent"
                         onClick={() => {
                           setProviderAddMode('preset')
                           setProviderAddPreset(p.provider)
-                          setProviderCreateForm({
-                            provider_id: p.provider,
-                            display_name: p.provider,
-                            base_url: '',
-                            api_key: '',
-                            enabled: true,
-                          })
+                        setProviderCreateForm({
+                          provider_id: p.provider,
+                          display_name: p.provider,
+                          base_url: '',
+                          api_key: '',
+                          default_model: '',
+                          enabled: true,
+                        })
                         }}
                       >
                         {p.provider}
                       </button>
                     ))}
-                    <button
+                    {!isLegacyFlat && <button
                       type="button"
-                      className="provider-preset-btn provider-preset-custom"
+                      className="px-[14px] py-2 border border-dashed border-border rounded-[12px] bg-white text-[13px] cursor-pointer font-medium text-muted transition-all duration-150 hover:border-accent hover:bg-accent-soft hover:text-accent"
                       onClick={() => {
                         setProviderAddMode('custom')
                         setProviderAddPreset('')
@@ -906,30 +939,66 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                           display_name: '',
                           base_url: '',
                           api_key: '',
+                          default_model: '',
                           enabled: true,
                         })
                       }}
                     >
                       OpenAI 兼容（自定义）
-                    </button>
+                    </button>}
                   </>
                 )
               })()}
             </div>
           )}
 
+          {isLegacyFlat && providerAddMode === '' && (
+            <div className="flex flex-col gap-[10px]">
+              <div className="flex items-center justify-between font-semibold text-[13px]">新增私有 Provider</div>
+              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                <div className="grid gap-[6px]">
+                  <label>Provider ID（必填）</label>
+                  <input value={providerCreateForm.provider_id} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, provider_id: e.target.value }))} placeholder="例如：tprv_proxy_main" />
+                </div>
+                <div className="grid gap-[6px]">
+                  <label>显示名称（可选）</label>
+                  <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder="例如：主中转" />
+                </div>
+                <div className="grid gap-[6px]">
+                  <label>Base URL（必填）</label>
+                  <input value={providerCreateForm.base_url} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))} placeholder="例如：https://proxy.example.com/v1" />
+                </div>
+                <div className="grid gap-[6px]">
+                  <label>API Key（必填）</label>
+                  <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} placeholder="仅提交时可见，后续仅显示掩码" />
+                </div>
+                <div className="grid gap-[6px]">
+                  <label>默认模型（可选）</label>
+                  <input
+                    value={providerCreateForm.default_model}
+                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
+                    placeholder="例如：gpt-4.1-mini"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-[6px] flex-wrap">
+                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
+              </div>
+            </div>
+          )}
+
           {providerAddMode === 'preset' && (
-            <div className="provider-add-form">
-              <div className="provider-add-form-title">
+            <div className="flex flex-col gap-[10px]">
+              <div className="flex items-center justify-between font-semibold text-[13px]">
                 配置 {providerAddPreset}
                 <button type="button" className="ghost" onClick={() => { setProviderAddMode(''); setProviderAddPreset('') }}>取消</button>
               </div>
-              <div className="routing-grid">
-                <div className="routing-field">
+              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                <div className="grid gap-[6px]">
                   <label>API Key（必填）</label>
                   <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} placeholder="输入 API Key" />
                 </div>
-                <div className="routing-field">
+                <div className="grid gap-[6px]">
                   <label>Base URL（可选）</label>
                   <input
                     value={providerCreateForm.base_url}
@@ -940,70 +1009,86 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                     })()}
                   />
                 </div>
-                <div className="routing-field">
+                <div className="grid gap-[6px]">
                   <label>显示名称（可选）</label>
                   <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder={providerAddPreset} />
                 </div>
+                <div className="grid gap-[6px]">
+                  <label>默认模型（可选）</label>
+                  <input
+                    value={providerCreateForm.default_model}
+                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
+                    placeholder="例如：gpt-4.1-mini"
+                  />
+                </div>
               </div>
-              <div className="provider-actions">
-                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '添加'}</button>
+              <div className="flex gap-[6px] flex-wrap">
+                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
               </div>
             </div>
           )}
 
           {providerAddMode === 'custom' && (
-            <div className="provider-add-form">
-              <div className="provider-add-form-title">
+            <div className="flex flex-col gap-[10px]">
+              <div className="flex items-center justify-between font-semibold text-[13px]">
                 自定义 Provider
                 <button type="button" className="ghost" onClick={() => { setProviderAddMode(''); setProviderAddPreset('') }}>取消</button>
               </div>
-              <div className="routing-grid">
-                <div className="routing-field">
+              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                <div className="grid gap-[6px]">
                   <label>Provider ID（必填）</label>
                   <input value={providerCreateForm.provider_id} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, provider_id: e.target.value }))} placeholder="例如：my_proxy" />
                 </div>
-                <div className="routing-field">
+                <div className="grid gap-[6px]">
                   <label>Base URL（必填）</label>
                   <input value={providerCreateForm.base_url} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))} placeholder="https://api.example.com/v1" />
                 </div>
-                <div className="routing-field">
+                <div className="grid gap-[6px]">
                   <label>API Key（必填）</label>
                   <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} />
                 </div>
-                <div className="routing-field">
+                <div className="grid gap-[6px]">
                   <label>显示名称（可选）</label>
                   <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder="例如：主中转" />
                 </div>
+                <div className="grid gap-[6px]">
+                  <label>默认模型（可选）</label>
+                  <input
+                    value={providerCreateForm.default_model}
+                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
+                    placeholder="例如：gpt-4.1-mini"
+                  />
+                </div>
               </div>
-              <div className="provider-actions">
-                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '添加'}</button>
+              <div className="flex gap-[6px] flex-wrap">
+                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
               </div>
             </div>
           )}
         </div>
       </div>}
 
-      {activeTab === 'channels' && <div className="settings-section">
-        <div className="routing-section-header">
-          <h3>渠道配置</h3>
+      {(activeTab === 'channels' || isLegacyFlat) && <div className="settings-section">
+        <div className="flex items-center justify-between gap-[10px] flex-wrap">
+          <h3 className="m-0">渠道配置</h3>
           <button type="button" className="secondary-btn" onClick={addChannel} disabled={busy}>
             新增渠道
           </button>
         </div>
         {draft.channels.length === 0 && <div className="muted">暂无渠道，请先新增。</div>}
-        <div className="routing-list">
+        <div className="grid gap-[10px]">
           {draft.channels.map((channel, index) => {
             const modeOptions = providerModeMap.get(channel.target.provider) || []
             return (
-              <div key={`${channel.id}_${index}`} className="routing-item">
-                <div className="routing-item-head">
+              <div key={`${channel.id}_${index}`} className="border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm">
+                <div className="flex justify-between items-center gap-[10px]">
                   <strong>{channel.title || channel.id || `渠道${index + 1}`}</strong>
                   <button type="button" className="ghost" onClick={() => removeChannel(index)} disabled={busy}>
                     删除
                   </button>
                 </div>
-                <div className="routing-grid">
-                  <div className="routing-field">
+                <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                  <div className="grid gap-[6px]">
                     <label>名称</label>
                     <input
                       value={channel.title}
@@ -1011,7 +1096,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：教师快速"
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>Provider</label>
                     <select
                       value={channel.target.provider}
@@ -1034,7 +1119,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       ))}
                     </select>
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>模型</label>
                     <ModelCombobox
                       value={channel.target.model}
@@ -1053,8 +1138,8 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                 </div>
                 <details>
                   <summary>高级设置</summary>
-                  <div className="routing-grid">
-                    <div className="routing-field">
+                  <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                    <div className="grid gap-[6px]">
                       <label>渠道 ID</label>
                       <input
                         value={channel.id}
@@ -1062,7 +1147,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="例如：teacher_fast"
                       />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>Mode</label>
                       <select
                         value={channel.target.mode}
@@ -1081,7 +1166,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         ))}
                       </select>
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>temperature</label>
                       <input
                         value={channel.params.temperature ?? ''}
@@ -1094,7 +1179,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="留空表示默认"
                       />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>max_tokens</label>
                       <input
                         value={channel.params.max_tokens ?? ''}
@@ -1107,7 +1192,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="留空表示默认"
                       />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>回退渠道（逗号分隔）</label>
                       <input
                         value={formatList(channel.fallback_channels || [])}
@@ -1120,9 +1205,9 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                         placeholder="例如：teacher_safe,teacher_backup"
                       />
                     </div>
-                    <div className="routing-field">
+                    <div className="grid gap-[6px]">
                       <label>能力</label>
-                      <div className="routing-switches">
+                      <div className="flex flex-col gap-[6px]">
                         <label className="toggle">
                           <input
                             type="checkbox"
@@ -1159,41 +1244,41 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {activeTab === 'rules' && <div className="settings-section">
-        <div className="routing-section-header">
-          <h3>规则配置</h3>
+      {(activeTab === 'rules' || isLegacyFlat) && <div className="settings-section">
+        <div className="flex items-center justify-between gap-[10px] flex-wrap">
+          <h3 className="m-0">规则配置</h3>
           <button type="button" className="secondary-btn" onClick={addRule} disabled={busy}>
             新增规则
           </button>
         </div>
-        <div className="routing-order">命中顺序（按优先级）：{ruleOrderHint || '暂无规则'}</div>
+        <div className="text-[12px] text-muted">命中顺序（按优先级）：{ruleOrderHint || '暂无规则'}</div>
         {draft.rules.length === 0 && <div className="muted">暂无规则，请先新增。</div>}
-        <div className="routing-list">
+        <div className="grid gap-[10px]">
           {draft.rules.map((rule, index) => {
             const channelTitle = draft.channels.find((c) => c.id === rule.route.channel_id)?.title || rule.route.channel_id || '未指定'
             return (
             <div key={`${rule.id}_${index}`} className={`rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
-              <div className="rule-summary">
-                <label className="toggle rule-toggle">
+              <div className="flex items-center gap-2 px-3 py-[10px] text-[13px]">
+                <label className="toggle flex-shrink-0">
                   <input
                     type="checkbox"
                     checked={rule.enabled !== false}
                     onChange={(e) => updateRule(index, (prev) => ({ ...prev, enabled: e.target.checked }))}
                   />
                 </label>
-                <span className="rule-name">{rule.id || `规则${index + 1}`}</span>
-                <span className="rule-arrow">
+                <span className="font-semibold text-ink whitespace-nowrap">{rule.id || `规则${index + 1}`}</span>
+                <span className="text-muted flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
                   {formatList(rule.match.roles || []) || '所有角色'} → {channelTitle}
                 </span>
-                <span className="rule-priority">P{rule.priority}</span>
+                <span className="text-[11px] text-muted bg-surface-soft px-[6px] py-[2px] rounded flex-shrink-0">P{rule.priority}</span>
                 <button type="button" className="ghost" onClick={() => removeRule(index)} disabled={busy}>
                   删除
                 </button>
               </div>
               <details>
                 <summary>编辑规则</summary>
-                <div className="routing-grid">
-                  <div className="routing-field">
+                <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+                  <div className="grid gap-[6px]">
                     <label>规则 ID</label>
                     <input
                       value={rule.id}
@@ -1201,7 +1286,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：teacher_agent"
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>优先级</label>
                     <input
                       value={rule.priority}
@@ -1213,7 +1298,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       }
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>角色（逗号分隔）</label>
                     <input
                       value={formatList(rule.match.roles || [])}
@@ -1226,7 +1311,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：teacher,student"
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>目标渠道</label>
                     <select
                       value={rule.route.channel_id || ''}
@@ -1245,7 +1330,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       ))}
                     </select>
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>技能 ID（逗号分隔）</label>
                     <input
                       value={formatList(rule.match.skills || [])}
@@ -1258,7 +1343,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：physics-homework-generator"
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>任务类型 kind（逗号分隔）</label>
                     <input
                       value={formatList(rule.match.kinds || [])}
@@ -1271,7 +1356,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       placeholder="例如：chat.agent,upload.assignment_parse"
                     />
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>是否必须工具调用</label>
                     <select
                       value={boolMatchValue(rule.match.needs_tools)}
@@ -1287,7 +1372,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       <option value="false">否</option>
                     </select>
                   </div>
-                  <div className="routing-field">
+                  <div className="grid gap-[6px]">
                     <label>是否必须 JSON</label>
                     <select
                       value={boolMatchValue(rule.match.needs_json)}
@@ -1311,75 +1396,85 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {activeTab === 'simulate' && <div className="settings-section">
+      {(activeTab === 'simulate' || isLegacyFlat) && <div className="settings-section">
         <h3>仿真验证（基于当前草稿）</h3>
-        <div className="routing-grid">
-          <div className="routing-field">
+        <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+          <div className="grid gap-[6px]">
             <label>角色</label>
             <input value={simRole} onChange={(e) => setSimRole(e.target.value)} placeholder="teacher" />
           </div>
-          <div className="routing-field">
+          <div className="grid gap-[6px]">
             <label>技能 ID</label>
             <input value={simSkillId} onChange={(e) => setSimSkillId(e.target.value)} placeholder="physics-teacher-ops" />
           </div>
-          <div className="routing-field">
+          <div className="grid gap-[6px]">
             <label>任务类型 kind</label>
             <input value={simKind} onChange={(e) => setSimKind(e.target.value)} placeholder="chat.agent" />
           </div>
-          <div className="routing-field">
+          <div className="grid gap-[6px]">
             <label className="toggle">
               <input type="checkbox" checked={simNeedsTools} onChange={(e) => setSimNeedsTools(e.target.checked)} />
               需要工具调用
             </label>
           </div>
-          <div className="routing-field">
+          <div className="grid gap-[6px]">
             <label className="toggle">
               <input type="checkbox" checked={simNeedsJson} onChange={(e) => setSimNeedsJson(e.target.checked)} />
               需要 JSON
             </label>
           </div>
         </div>
-        <div className="routing-actions">
+        <div className="flex gap-2 flex-wrap">
           <button type="button" className="secondary-btn" onClick={handleSimulate} disabled={busy}>
             {busy ? '仿真中…' : '运行仿真'}
           </button>
         </div>
         {simResult && (
-          <div className="routing-sim-panel">
-            <div className="routing-sim-grid">
-              <div className="routing-sim-card routing-sim-conclusion-card">
-                <h4>仿真结论</h4>
-                <div className="routing-sim-kv">
-                  <span>命中规则</span>
-                  <strong>{simResult.decision?.matched_rule_id || '未命中，走默认回退'}</strong>
+          <div className="grid gap-[10px]">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[10px]">
+              <div className="border border-[#cde5de] rounded-[12px] p-[10px] bg-[#fcfffe] grid gap-2">
+                <h4 className="m-0 text-[13px]">仿真结论</h4>
+                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
+                  <span className="text-muted">命中规则</span>
+                  <strong className="text-right break-words">{simResult.decision?.matched_rule_id || '未命中，走默认回退'}</strong>
                 </div>
-                <div className="routing-sim-kv">
-                  <span>目标模型</span>
-                  <strong>
+                {isLegacyFlat && (
+                  <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
+                    <span className="text-muted">{`命中规则：${simResult.decision?.matched_rule_id || '未命中，走默认回退'}`}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
+                  <span className="text-muted">目标模型</span>
+                  <strong className="text-right break-words">
                     {formatTargetLabel(simPrimaryCandidate?.provider, simPrimaryCandidate?.mode, simPrimaryCandidate?.model)}
                   </strong>
                 </div>
-                <div className="routing-sim-kv">
-                  <span>决策状态</span>
-                  <strong>{simResult.decision?.selected ? '已选出候选链路' : '未选出候选链路'}</strong>
+                {isLegacyFlat && (
+                  <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
+                    <span className="text-muted">{`候选渠道：${simPrimaryCandidate?.channel_id || '无'}`}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
+                  <span className="text-muted">决策状态</span>
+                  <strong className="text-right break-words">{simResult.decision?.selected ? '已选出候选链路' : '未选出候选链路'}</strong>
                 </div>
               </div>
-              <div className="routing-sim-card">
-                <h4>决策原因</h4>
-                <p className="routing-sim-reason">{simResult.decision?.reason || '无可用原因信息'}</p>
+              <div className="border border-border rounded-[12px] p-[10px] bg-white grid gap-2">
+                <h4 className="m-0 text-[13px]">决策原因</h4>
+                <p className="m-0 text-[13px] text-ink leading-[1.45]">{simResult.decision?.reason || '无可用原因信息'}</p>
               </div>
             </div>
 
-            <details className="routing-sim-card routing-sim-candidates">
+            <details className="border border-border rounded-[12px] p-[10px] bg-white grid gap-2 [&>summary]:cursor-pointer [&>summary]:text-accent [&>summary]:select-none">
               <summary>候选链路（{simCandidates.length}）</summary>
               {simCandidates.length === 0 ? (
                 <div className="muted">无候选渠道。</div>
               ) : (
-                <div className="routing-sim-candidate-list">
+                <div className="grid gap-2">
                   {simCandidates.map((candidate, index) => (
-                    <div key={`${candidate.channel_id}_${index}`} className="routing-sim-candidate-item">
-                      <div className="routing-sim-candidate-head">#{index + 1} · {candidate.channel_id || '未命名渠道'}</div>
-                      <div className="routing-sim-candidate-target">
+                    <div key={`${candidate.channel_id}_${index}`} className="border border-dashed border-border rounded-[10px] p-2 grid gap-1">
+                      <div className="text-[12px] text-muted">#{index + 1} · {candidate.channel_id || '未命名渠道'}</div>
+                      <div className="text-[13px] text-ink break-words">
                         {formatTargetLabel(candidate.provider, candidate.mode, candidate.model)}
                       </div>
                     </div>
@@ -1409,19 +1504,19 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         )}
       </div>}
 
-      {activeTab === 'history' && <div className="settings-section">
+      {(activeTab === 'history' || isLegacyFlat) && <div className="settings-section">
         <h3>提案与回滚</h3>
-        <div className="routing-grid">
-          <div className="routing-field">
+        <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+          <div className="grid gap-[6px]">
             <label>回滚目标版本</label>
             <input value={rollbackVersion} onChange={(e) => setRollbackVersion(e.target.value)} placeholder="例如：3" />
           </div>
-          <div className="routing-field">
+          <div className="grid gap-[6px]">
             <label>回滚备注（可选）</label>
             <input value={rollbackNote} onChange={(e) => setRollbackNote(e.target.value)} placeholder="例如：线上效果退化，先回退" />
           </div>
         </div>
-        <div className="routing-actions">
+        <div className="flex gap-2 flex-wrap">
           <button
             type="button"
             className="secondary-btn"
@@ -1435,14 +1530,16 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           </button>
         </div>
 
-        <div className="routing-subsection">
-          <div className="routing-section-header">
-            <h4>待审核提案（高级）</h4>
-            <button type="button" className="ghost" onClick={() => setShowManualReview((prev) => !prev)} disabled={busy}>
-              {showManualReview ? '收起' : `展开${pendingProposals.length ? `（${pendingProposals.length}）` : ''}`}
-            </button>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-[10px] flex-wrap">
+            <h4 className="m-0">待审核提案（高级）</h4>
+            {!isLegacyFlat && (
+              <button type="button" className="ghost" onClick={() => setShowManualReview((prev) => !prev)} disabled={busy}>
+                {showManualReview ? '收起' : `展开${pendingProposals.length ? `（${pendingProposals.length}）` : ''}`}
+              </button>
+            )}
           </div>
-          {!showManualReview ? (
+          {(!showManualReview && !isLegacyFlat) ? (
             <div className="muted">
               单管理员模式默认自动生效，仅在需要处理历史遗留提案时再展开手动审核。
               {pendingProposals.length ? ` 当前有 ${pendingProposals.length} 条待审核提案。` : ''}
@@ -1459,14 +1556,14 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                 const errors = Array.isArray(validation?.errors) ? validation?.errors : []
                 const warnings = Array.isArray(validation?.warnings) ? validation?.warnings : []
                 return (
-                  <div key={proposalId} className="routing-proposal-block">
-                    <div className="routing-row">
-                      <div className="routing-row-main">
+                  <div key={proposalId} className="grid gap-2">
+                    <div className="border border-border rounded-[12px] bg-white p-[10px] flex justify-between gap-[10px] items-center max-[900px]:flex-col max-[900px]:items-start">
+                      <div className="grid gap-1 text-[13px]">
                         <strong>{proposalId}</strong>
                         <span className="muted"> {proposal.created_at}</span>
                         {proposal.note ? <div className="muted">{proposal.note}</div> : null}
                       </div>
-                      <div className="routing-row-actions">
+                      <div className="flex gap-2 flex-wrap">
                         <button type="button" className="secondary-btn" onClick={() => void handleToggleProposalDetail(proposalId)} disabled={busy}>
                           {expanded ? '收起详情' : '展开详情'}
                         </button>
@@ -1479,11 +1576,11 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
                       </div>
                     </div>
                     {expanded ? (
-                      <div className="routing-proposal-detail">
+                      <div className="border border-dashed border-border rounded-[12px] bg-white p-[10px] grid gap-2">
                         {loadingDetail ? <div className="muted">正在加载提案详情…</div> : null}
                         {!loadingDetail && detail?.ok ? (
                           <>
-                            <div className="routing-proposal-meta">
+                            <div className="text-[12px] text-muted">
                               状态：{String(detail.proposal?.status || proposal.status || 'pending')}
                               {detail.proposal?.created_by ? ` ｜ 创建人：${detail.proposal.created_by}` : ''}
                               {detail.proposal?.reviewed_by ? ` ｜ 审核人：${detail.proposal.reviewed_by}` : ''}
@@ -1505,9 +1602,9 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
           )}
         </div>
 
-        <div className="routing-subsection">
-          <div className="routing-section-header">
-            <h4>历史版本（最近10次）</h4>
+        <div className="grid gap-2">
+          <div className="flex items-center justify-between gap-[10px] flex-wrap">
+            <h4 className="m-0">历史版本（最近10次）</h4>
             <button type="button" className="ghost" onClick={() => setShowHistoryVersions((prev) => !prev)} disabled={busy}>
               {showHistoryVersions ? '收起' : `展开${history.length ? `（${history.length}）` : ''}`}
             </button>
@@ -1521,27 +1618,27 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
             <>
               {history.length === 0 ? <div className="muted">暂无历史。</div> : null}
               {historyRows.map(({ item, summary, changes }) => (
-                <div key={item.file} className="routing-history-card">
-                  <div className="routing-row">
-                    <div className="routing-row-main">
+                <div key={item.file} className="grid gap-2">
+                  <div className="border border-border rounded-[12px] bg-white p-[10px] flex justify-between gap-[10px] items-center max-[900px]:flex-col max-[900px]:items-start">
+                    <div className="grid gap-1 text-[13px]">
                       <strong>v{item.version}</strong>
                       <span className="muted"> {item.saved_at}</span>
-                      <div className="routing-history-meta">
+                      <div className="flex gap-3 flex-wrap text-[12px] text-muted">
                         <span>
                           主模型：
                           {formatTargetLabel(summary?.primary_provider, summary?.primary_mode, summary?.primary_model)}
                         </span>
                         <span>规则 {summary?.rule_count ?? '-'} · 渠道 {summary?.channel_count ?? '-'}</span>
                       </div>
-                      <div className="routing-change-title">变更摘要</div>
-                      <div className="routing-change-list">
+                      <div className="text-[12px] text-ink font-semibold">变更摘要</div>
+                      <div className="grid gap-1">
                         {changes.map((change, index) => (
-                          <div key={`${item.file}_${index}`} className="routing-change-item">{change}</div>
+                          <div key={`${item.file}_${index}`} className="text-[12px] text-muted">{change}</div>
                         ))}
                       </div>
                       {item.note ? <div className="muted">备注：{item.note}</div> : null}
                     </div>
-                    <div className="routing-row-actions">
+                    <div className="flex gap-2 flex-wrap">
                       <button type="button" className="secondary-btn" onClick={() => void handleRollback(item.version)} disabled={busy}>
                         回滚到此版本
                       </button>
@@ -1558,23 +1655,42 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {['general', 'providers', 'channels', 'rules'].includes(activeTab) && (
-        <div className="routing-action-bar">
-          <div className="routing-action-bar-left">
-            {hasLocalEdits && <span className="routing-draft-indicator">草稿已修改</span>}
+      {(!isLegacyFlat && ['general', 'providers', 'channels', 'rules'].includes(activeTab)) && (
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-border rounded-[12px] z-[5]" style={{ background: 'rgba(255,255,255,0.94)', backdropFilter: 'saturate(180%) blur(8px)' }}>
+          <div className="flex items-center gap-[10px] flex-1 min-w-0">
+            {hasLocalEdits && <span className="text-[12px] text-accent font-semibold whitespace-nowrap">草稿已修改</span>}
             <input
-              className="routing-proposal-note"
+              className="max-w-[280px] px-[10px] py-[7px] text-[13px]"
               value={proposalNote}
               onChange={(e) => setProposalNote(e.target.value)}
               placeholder="变更备注（可选）"
             />
           </div>
-          <div className="routing-action-bar-right">
+          <div className="flex gap-2 flex-shrink-0">
             <button type="button" className="secondary-btn" onClick={handleResetDraft} disabled={!hasLocalEdits || busy}>
               重置草稿
             </button>
             <button type="button" className="secondary-btn" onClick={handlePropose} disabled={busy}>
               {busy ? '处理中…' : '保存并生效'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLegacyFlat && (
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-border rounded-[12px] z-[5]" style={{ background: 'rgba(255,255,255,0.94)', backdropFilter: 'saturate(180%) blur(8px)' }}>
+          <div className="flex items-center gap-[10px] flex-1 min-w-0">
+            {hasLocalEdits && <span className="text-[12px] text-accent font-semibold whitespace-nowrap">草稿已修改</span>}
+            <input
+              className="max-w-[280px] px-[10px] py-[7px] text-[13px]"
+              value={proposalNote}
+              onChange={(e) => setProposalNote(e.target.value)}
+              placeholder="变更备注（可选）"
+            />
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button type="button" className="secondary-btn" onClick={handlePropose} disabled={busy}>
+              {busy ? '处理中…' : '提交提案'}
             </button>
           </div>
         </div>

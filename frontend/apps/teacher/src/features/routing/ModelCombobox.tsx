@@ -87,11 +87,11 @@ export default function ModelCombobox({
   }
 
   return (
-    <div className="model-combobox" ref={wrapRef}>
-      <div className="model-combobox-input-wrap">
+    <div className="relative" ref={wrapRef}>
+      <div className="flex items-stretch">
         <input
           ref={inputRef}
-          className="model-combobox-input"
+          className="flex-1 !rounded-tr-none !rounded-br-none min-w-0"
           value={open ? filter : value}
           onChange={(e) => {
             if (!open) {
@@ -110,7 +110,7 @@ export default function ModelCombobox({
         />
         <button
           type="button"
-          className="model-combobox-toggle"
+          className="border border-border border-l-0 bg-surface-soft px-[10px] cursor-pointer text-[12px] text-muted rounded-r-[12px] flex-shrink-0 transition-colors duration-150 hover:bg-surface-hover"
           tabIndex={-1}
           onMouseDown={(e) => {
             e.preventDefault()
@@ -128,18 +128,18 @@ export default function ModelCombobox({
         </button>
       </div>
       {open && (
-        <div className="model-combobox-dropdown">
-          {modelCountLabel ? <div className="model-combobox-count">{modelCountLabel}</div> : null}
-          {loading && <div className="model-combobox-status">加载中…</div>}
-          {error && <div className="model-combobox-status model-combobox-error">{error}</div>}
+        <div className="absolute top-full left-0 right-0 z-10 mt-[2px] max-h-[min(340px,52vh)] overflow-y-auto bg-white border border-border rounded-[12px] shadow-md flex flex-col">
+          {modelCountLabel ? <div className="sticky top-0 z-[1] px-[10px] py-[6px] text-[12px] text-muted bg-[#f8fafb] border-b border-border">{modelCountLabel}</div> : null}
+          {loading && <div className="px-[10px] py-[7px] text-[12px] text-muted">加载中…</div>}
+          {error && <div className="px-[10px] py-[7px] text-[12px] text-danger">{error}</div>}
           {!loading && filtered.length === 0 && (
-            <div className="model-combobox-status">无匹配模型，可直接输入</div>
+            <div className="px-[10px] py-[7px] text-[12px] text-muted">无匹配模型，可直接输入</div>
           )}
           {filtered.map((model) => (
             <button
               key={model}
               type="button"
-              className={`model-combobox-option ${model === value ? 'selected' : ''}`}
+              className={`border-none bg-transparent text-left px-[10px] py-[8px] text-[13px] cursor-pointer text-ink leading-[1.35] whitespace-normal break-all hover:bg-surface-soft ${model === value ? 'bg-accent-soft text-accent font-semibold' : ''}`}
               title={model}
               onMouseDown={(e) => {
                 e.preventDefault()

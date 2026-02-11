@@ -1,0 +1,235 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-bg: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f3f4f6;
+  --color-surface-hover: #eceff3;
+  --color-ink: #202123;
+  --color-muted: #6b7280;
+  --color-accent: #10a37f;
+  --color-accent-soft: #e8f7f2;
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-danger-soft: #fdecec;
+  --color-danger: #9f1239;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  --font-sans: "Noto Sans SC", "PingFang SC", "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+/* ── Global resets ── */
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-bg);
+}
+
+@media (min-width: 901px) {
+  html, body, #root { overflow: hidden; }
+}
+
+/* ── Global form elements ── */
+input, textarea, select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.12);
+}
+
+/* ── Shared component classes ── */
+@layer components {
+  .ghost {
+    border: 1px solid var(--color-border);
+    background: #fff;
+    padding: 6px 11px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #3f4551;
+    font-size: 12px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .ghost:hover {
+    background: var(--color-surface-soft);
+    border-color: var(--color-border-strong);
+  }
+
+  .view-switch {
+    display: inline-flex;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .view-switch button {
+    border: none;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 12px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .view-switch button + button {
+    border-left: 1px solid var(--color-border);
+  }
+  .view-switch button.active {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .role-badge {
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    background: var(--color-accent-soft);
+    color: #0f766e;
+    border: 1px solid #c7ebe1;
+  }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-muted);
+    white-space: nowrap;
+  }
+
+  .status {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  .status.ok { background: #e8f7f2; color: #0f766e; }
+  .status.err { background: var(--color-danger-soft); color: var(--color-danger); }
+
+  .muted { color: var(--color-muted); font-size: 12px; }
+
+  .settings-section { display: grid; gap: 12px; }
+
+  .secondary-btn {
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    background: #fff;
+    color: var(--color-ink);
+    cursor: pointer;
+  }
+  .secondary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+}
+
+/* ── Rule card ── */
+.rule-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+  border-left: 3px solid #cde5de;
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.rule-card.rule-disabled { border-left-color: #d6dbe2; opacity: 0.7; }
+.rule-card details { border-top: 1px solid var(--color-border); }
+.rule-card details summary {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.rule-card details[open] summary { color: var(--color-accent); }
+.rule-card details .routing-grid { padding: 8px 10px 10px; }
+
+/* ── Provider row ── */
+.provider-row {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: var(--shadow-md);
+}
+.provider-row:hover { box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); }
+.provider-row[open] {
+  box-shadow: 0 5px 16px rgba(15, 23, 42, 0.1);
+  border-color: #cde5de;
+}
+
+/* ── Routing proposal JSON ── */
+.routing-proposal-json summary {
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 13px;
+}
+.routing-proposal-json pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8f6f2;
+  border: 1px solid var(--color-border);
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ── Markdown rich text ── */
+.markdown p { margin: 0 0 3px; }
+.markdown p:last-child { margin-bottom: 0; }
+.markdown ul, .markdown ol { margin: 0 0 2px 16px; padding: 0; }
+.markdown li { margin: 0; padding: 0; }
+.markdown li + li { margin-top: 1px; }
+.markdown li p { margin: 0; }
+.markdown h1, .markdown h2, .markdown h3,
+.markdown h4, .markdown h5, .markdown h6 {
+  margin: 6px 0 4px;
+  line-height: 1.25;
+}
+.markdown code {
+  font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #f3ece1;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.markdown pre {
+  background: #f3ece1;
+  padding: 8px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 2px 0 6px;
+}
+.markdown blockquote {
+  margin: 2px 0 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--color-accent);
+  color: var(--color-muted);
+}
+
+/* ── Settings modal animations ── */
+.settings-overlay { animation: fadeIn 0.15s ease; }
+.settings-dialog { animation: slideUp 0.2s ease; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}

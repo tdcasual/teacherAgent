@@ -28,7 +28,7 @@ export type ParsedInvocation = {
 
 const TOKEN_REGEX = /(^|\s)(\$)([^\s@$]+)/g
 const TRIGGER_REGEX = /(?:^|\s)(\$)([^\s@$]*)$/
-const INVOCATION_ID_REGEX = /^[A-Za-z0-9_-]{1,80}$/
+const INVOCATION_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$/
 
 const normalizeIdList = (ids: string[]) => {
   const next = new Set<string>()

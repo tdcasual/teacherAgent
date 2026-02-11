@@ -16,10 +16,12 @@
     "preview:teacher": "vite preview --config vite.teacher.config.ts"
   },
   "dependencies": {
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.18",
     "katex": "^0.16.11",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-resizable-panels": "^4.2.2",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-resizable-panels": "^4.6.2",
     "rehype-katex": "^7.0.1",
     "rehype-sanitize": "^6.0.0",
     "rehype-stringify": "^10.0.0",
@@ -27,16 +29,17 @@
     "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.0",
+    "tailwindcss": "^4.1.18",
     "unified": "^11.0.4",
     "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@types/react": "^18.3.4",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "vite-plugin-pwa": "^0.21.1"
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }

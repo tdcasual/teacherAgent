@@ -218,17 +218,34 @@ export type ExamScoreSchemaSubjectCandidate = {
   }>
 }
 
+export type ExamScoreSchemaSubjectCandidateSummary = {
+  candidate_id: string
+  rows_considered?: number
+  rows_parsed?: number
+  rows_invalid?: number
+  parsed_rate?: number
+  source_rank?: number
+  files?: string[]
+  types?: string[]
+  quality_score?: number
+}
+
 export type ExamScoreSchemaSubject = {
   target?: string
   question_id?: string
   selected_candidate_id?: string
+  suggested_selected_candidate_id?: string
   requested_candidate_id?: string
   selected_candidate_available?: boolean
+  recommended_candidate_id?: string
+  recommended_candidate_reason?: string
+  selection_error?: string
   coverage?: number
   data_rows?: number
   parsed_rows?: number
   unresolved_students?: string[]
   candidate_columns?: ExamScoreSchemaSubjectCandidate[]
+  candidate_summaries?: ExamScoreSchemaSubjectCandidateSummary[]
   thresholds?: { coverage?: number; confidence?: number }
 }
 
@@ -295,8 +312,11 @@ export type Skill = {
   id: string
   title: string
   desc: string
+  instructions: string
   prompts: string[]
   examples: string[]
+  keywords: string[]
+  source_type: 'system' | 'teacher' | 'claude'
 }
 
 export type MentionOption = {
@@ -311,9 +331,12 @@ export type SkillResponse = {
     id: string
     title?: string
     desc?: string
+    instructions?: string
     prompts?: string[]
     examples?: string[]
     allowed_roles?: string[]
+    source_type?: string
+    routing?: { keywords?: string[] }
   }>
 }
 
