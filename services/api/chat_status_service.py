@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from .auth_service import enforce_chat_job_access
+from .chat_job_state_machine import can_requeue_chat_job, normalize_chat_job_status
 
 
 @dataclass(frozen=True)
@@ -19,10 +20,11 @@ class ChatStatusDeps:
 def get_chat_status(job_id: str, *, deps: ChatStatusDeps) -> Dict[str, Any]:
     job = deps.load_chat_job(job_id)
     enforce_chat_job_access(job)
+    status = normalize_chat_job_status(job.get("status"))
+    job["status"] = status
     try:
-        status = str(job.get("status") or "")
         lane_hint = str(job.get("lane_id") or "").strip()
-        if status in {"queued", "processing"}:
+        if can_requeue_chat_job(status):
             deps.enqueue_chat_job(job_id, lane_hint or deps.resolve_chat_lane_id_from_job(job))
     except Exception:
         pass

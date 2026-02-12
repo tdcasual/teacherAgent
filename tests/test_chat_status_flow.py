@@ -12,7 +12,11 @@ class ChatStatusServiceTest(unittest.TestCase):
         lock = threading.Lock()
 
         deps = ChatStatusDeps(
-            load_chat_job=lambda job_id: {"job_id": job_id, "status": "queued", "lane_id": "lane:teacher:main"},
+            load_chat_job=lambda job_id: {
+                "job_id": job_id,
+                "status": "queued",
+                "lane_id": "lane:teacher:main",
+            },
             enqueue_chat_job=lambda job_id, lane_id: enqueue_calls.append((job_id, lane_id)) or {},
             resolve_chat_lane_id_from_job=lambda job: "lane:fallback",
             chat_job_lock=lock,
@@ -38,6 +42,25 @@ class ChatStatusServiceTest(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             get_chat_status("missing", deps=deps)
+
+    def test_get_chat_status_normalizes_empty_status_and_reenqueues(self):
+        enqueue_calls = []
+        deps = ChatStatusDeps(
+            load_chat_job=lambda job_id: {
+                "job_id": job_id,
+                "status": "",
+                "lane_id": "lane:teacher:main",
+            },
+            enqueue_chat_job=lambda job_id, lane_id: enqueue_calls.append((job_id, lane_id)) or {},
+            resolve_chat_lane_id_from_job=lambda job: "lane:fallback",
+            chat_job_lock=threading.Lock(),
+            chat_lane_load_locked=lambda lane_id: {"queued": 1, "active": 0, "total": 1},
+            chat_find_position_locked=lambda lane_id, job_id: 1,
+        )
+
+        result = get_chat_status("cjob_002", deps=deps)
+        self.assertEqual(result["status"], "queued")
+        self.assertEqual(enqueue_calls, [("cjob_002", "lane:teacher:main")])
 
 
 if __name__ == "__main__":
