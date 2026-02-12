@@ -5,37 +5,42 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, UploadFile
 
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
+from ..assignment import application as assignment_application
+from ..assignment import deps as assignment_deps
 
 
 def build_router(core) -> APIRouter:
     router = APIRouter()
+    app_deps = assignment_deps.build_assignment_application_deps(core)
 
     @router.get("/assignments")
     async def assignments():
-        return await core.assignment_handlers.assignments(deps=core._assignment_handlers_deps())
+        return await assignment_application.list_assignments(deps=app_deps)
 
     @router.get("/teacher/assignment/progress")
     async def teacher_assignment_progress(assignment_id: str, include_students: bool = True):
-        return await core.assignment_handlers.teacher_assignment_progress(
+        return await assignment_application.get_teacher_assignment_progress(
             assignment_id,
             include_students=include_students,
-            deps=core._assignment_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.get("/teacher/assignments/progress")
     async def teacher_assignments_progress(date: Optional[str] = None):
-        return await core.assignment_handlers.teacher_assignments_progress(
+        return await assignment_application.get_teacher_assignments_progress(
             date=date,
-            deps=core._assignment_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.post("/assignment/requirements")
     async def assignment_requirements(req: AssignmentRequirementsRequest):
-        return await core.assignment_handlers.assignment_requirements(req, deps=core._assignment_handlers_deps())
+        return await assignment_application.post_assignment_requirements(req, deps=app_deps)
 
     @router.get("/assignment/{assignment_id}/requirements")
     async def assignment_requirements_get(assignment_id: str):
-        return await core.assignment_handlers.assignment_requirements_get(assignment_id, deps=core._assignment_handlers_deps())
+        return await assignment_application.get_assignment_requirements(
+            assignment_id, deps=app_deps
+        )
 
     @router.post("/assignment/upload")
     async def assignment_upload(
@@ -49,7 +54,7 @@ def build_router(core) -> APIRouter:
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ):
-        return await core.assignment_upload_handlers.assignment_upload(
+        return await assignment_application.upload_assignment_legacy(
             assignment_id=assignment_id,
             date=date,
             scope=scope,
@@ -59,7 +64,7 @@ def build_router(core) -> APIRouter:
             answer_files=answer_files,
             ocr_mode=ocr_mode,
             language=language,
-            deps=core._assignment_upload_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.post("/assignment/upload/start")
@@ -75,7 +80,7 @@ def build_router(core) -> APIRouter:
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ):
-        return await core.assignment_upload_handlers.assignment_upload_start(
+        return await assignment_application.upload_assignment_start(
             assignment_id=assignment_id,
             date=date,
             due_at=due_at,
@@ -86,31 +91,31 @@ def build_router(core) -> APIRouter:
             answer_files=answer_files,
             ocr_mode=ocr_mode,
             language=language,
-            deps=core._assignment_upload_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.get("/assignment/upload/status")
     async def assignment_upload_status(job_id: str):
-        return await core.assignment_upload_handlers.assignment_upload_status(job_id, deps=core._assignment_upload_handlers_deps())
+        return await assignment_application.get_assignment_upload_status(job_id, deps=app_deps)
 
     @router.get("/assignment/upload/draft")
     async def assignment_upload_draft(job_id: str):
-        return await core.assignment_upload_handlers.assignment_upload_draft(job_id, deps=core._assignment_upload_handlers_deps())
+        return await assignment_application.get_assignment_upload_draft(job_id, deps=app_deps)
 
     @router.post("/assignment/upload/draft/save")
     async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
-        return await core.assignment_upload_handlers.assignment_upload_draft_save(req, deps=core._assignment_upload_handlers_deps())
+        return await assignment_application.save_assignment_upload_draft(req, deps=app_deps)
 
     @router.post("/assignment/upload/confirm")
     async def assignment_upload_confirm(req: UploadConfirmRequest):
-        return await core.assignment_upload_handlers.assignment_upload_confirm(req, deps=core._assignment_upload_handlers_deps())
+        return await assignment_application.confirm_assignment_upload(req, deps=app_deps)
 
     @router.get("/assignment/{assignment_id}/download")
     async def assignment_download(assignment_id: str, file: str):
-        return await core.assignment_io_handlers.assignment_download(
+        return await assignment_application.download_assignment_file(
             assignment_id,
             file,
-            deps=core._assignment_io_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.get("/assignment/today")
@@ -121,18 +126,18 @@ def build_router(core) -> APIRouter:
         generate: bool = True,
         per_kp: int = 5,
     ):
-        return await core.assignment_handlers.assignment_today(
+        return await assignment_application.get_assignment_today(
             student_id=student_id,
             date=date,
             auto_generate=auto_generate,
             generate=generate,
             per_kp=per_kp,
-            deps=core._assignment_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.get("/assignment/{assignment_id}")
     async def assignment_detail(assignment_id: str):
-        return await core.assignment_handlers.assignment_detail(assignment_id, deps=core._assignment_handlers_deps())
+        return await assignment_application.get_assignment_detail(assignment_id, deps=app_deps)
 
     @router.post("/assignment/generate")
     async def generate_assignment(
@@ -150,7 +155,7 @@ def build_router(core) -> APIRouter:
         source: Optional[str] = Form(""),
         requirements_json: Optional[str] = Form(""),
     ):
-        return await core.assignment_io_handlers.generate_assignment(
+        return await assignment_application.post_generate_assignment(
             assignment_id=assignment_id,
             kp=kp,
             question_ids=question_ids,
@@ -164,12 +169,12 @@ def build_router(core) -> APIRouter:
             student_ids=student_ids,
             source=source,
             requirements_json=requirements_json,
-            deps=core._assignment_io_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.post("/assignment/render")
     async def render_assignment(assignment_id: str = Form(...)):
-        return await core.assignment_io_handlers.render_assignment(assignment_id, deps=core._assignment_io_handlers_deps())
+        return await assignment_application.post_render_assignment(assignment_id, deps=app_deps)
 
     @router.post("/assignment/questions/ocr")
     async def assignment_questions_ocr(
@@ -181,7 +186,7 @@ def build_router(core) -> APIRouter:
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ):
-        return await core.assignment_io_handlers.assignment_questions_ocr(
+        return await assignment_application.post_assignment_questions_ocr(
             assignment_id=assignment_id,
             files=files,
             kp_id=kp_id,
@@ -189,7 +194,7 @@ def build_router(core) -> APIRouter:
             tags=tags,
             ocr_mode=ocr_mode,
             language=language,
-            deps=core._assignment_io_handlers_deps(),
+            deps=app_deps,
         )
 
     return router
