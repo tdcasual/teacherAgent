@@ -5,18 +5,21 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
+from ..exam import application as exam_application
+from ..exam import deps as exam_deps
 
 
 def build_router(core) -> APIRouter:
     router = APIRouter()
+    app_deps = exam_deps.build_exam_application_deps(core)
 
     @router.get("/exams")
-    def exams():
-        return core.list_exams()
+    async def exams():
+        return exam_application.list_exams(deps=app_deps)
 
     @router.get("/exam/{exam_id}")
-    def exam_detail(exam_id: str):
-        result = core._get_exam_detail_api_impl(exam_id, deps=core._exam_api_deps())
+    async def exam_detail(exam_id: str):
+        result = exam_application.get_exam_detail(exam_id, deps=app_deps)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
         if result.get("error"):
@@ -24,8 +27,8 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/analysis")
-    def exam_analysis(exam_id: str):
-        result = core.exam_analysis_get(exam_id)
+    async def exam_analysis(exam_id: str):
+        result = exam_application.get_exam_analysis(exam_id, deps=app_deps)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
         if result.get("error"):
@@ -33,8 +36,8 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/students")
-    def exam_students(exam_id: str, limit: int = 50):
-        result = core.exam_students_list(exam_id, limit=limit)
+    async def exam_students(exam_id: str, limit: int = 50):
+        result = exam_application.list_exam_students(exam_id, limit=limit, deps=app_deps)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
         if result.get("error"):
@@ -42,8 +45,10 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/student/{student_id}")
-    def exam_student(exam_id: str, student_id: str):
-        result = core.exam_student_detail(exam_id, student_id=student_id)
+    async def exam_student(exam_id: str, student_id: str):
+        result = exam_application.get_exam_student_detail(
+            exam_id, student_id=student_id, deps=app_deps
+        )
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
         if result.get("error"):
@@ -51,8 +56,10 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/question/{question_id}")
-    def exam_question(exam_id: str, question_id: str):
-        result = core.exam_question_detail(exam_id, question_id=question_id)
+    async def exam_question(exam_id: str, question_id: str):
+        result = exam_application.get_exam_question_detail(
+            exam_id, question_id=question_id, deps=app_deps
+        )
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
         if result.get("error"):
@@ -70,7 +77,7 @@ def build_router(core) -> APIRouter:
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ):
-        return await core.exam_upload_handlers.exam_upload_start(
+        return await exam_application.start_exam_upload(
             exam_id=exam_id,
             date=date,
             class_name=class_name,
@@ -79,23 +86,23 @@ def build_router(core) -> APIRouter:
             answer_files=answer_files,
             ocr_mode=ocr_mode,
             language=language,
-            deps=core._exam_upload_handlers_deps(),
+            deps=app_deps,
         )
 
     @router.get("/exam/upload/status")
     async def exam_upload_status(job_id: str):
-        return await core.exam_upload_handlers.exam_upload_status(job_id, deps=core._exam_upload_handlers_deps())
+        return await exam_application.get_exam_upload_status(job_id, deps=app_deps)
 
     @router.get("/exam/upload/draft")
     async def exam_upload_draft(job_id: str):
-        return await core.exam_upload_handlers.exam_upload_draft(job_id, deps=core._exam_upload_handlers_deps())
+        return await exam_application.get_exam_upload_draft(job_id, deps=app_deps)
 
     @router.post("/exam/upload/draft/save")
     async def exam_upload_draft_save(req: ExamUploadDraftSaveRequest):
-        return await core.exam_upload_handlers.exam_upload_draft_save(req, deps=core._exam_upload_handlers_deps())
+        return await exam_application.save_exam_upload_draft(req, deps=app_deps)
 
     @router.post("/exam/upload/confirm")
     async def exam_upload_confirm(req: ExamUploadConfirmRequest):
-        return await core.exam_upload_handlers.exam_upload_confirm(req, deps=core._exam_upload_handlers_deps())
+        return await exam_application.confirm_exam_upload(req, deps=app_deps)
 
     return router

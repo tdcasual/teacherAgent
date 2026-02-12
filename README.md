@@ -46,6 +46,8 @@ README 保持“轻量介绍”，具体配置与接口文档请查阅：
 
 - HTTP API：`docs/http_api.md`
 - MCP API：`docs/mcp_api.md`
+- 模块边界：`docs/architecture/module-boundaries.md`
+- 责任归属图：`docs/architecture/ownership-map.md`
 - 设计与演进文档：`docs/plans/`
 - 提示词与安全测试说明：`tests/prompt_injection_README.md`
 
@@ -63,6 +65,20 @@ uvicorn services.api.app:app --reload --port 8000
 cd frontend
 npm install
 npm run dev:teacher
+```
+
+## 代码质量检查（推荐）
+提交前建议先执行一轮质量检查，减少 CI 返工：
+
+```bash
+# 后端
+python3 -m ruff check services/api/settings.py services/api/runtime/runtime_manager.py tests/test_ci_workflow_quality.py
+python3 -m black --check services/api/settings.py services/api/runtime/runtime_manager.py tests/test_ci_workflow_quality.py
+python3 -m mypy --follow-imports=skip services/api/settings.py services/api/runtime/runtime_manager.py
+
+# 前端
+cd frontend
+npm run typecheck
 ```
 
 ---

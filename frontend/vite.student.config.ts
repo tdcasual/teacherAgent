@@ -33,6 +33,24 @@ export default defineConfig({
   build: {
     outDir: '../../dist-student',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('/react/') || id.includes('/react-dom/')) return 'react-vendor'
+          if (
+            id.includes('/remark-') ||
+            id.includes('/rehype-') ||
+            id.includes('/unified/') ||
+            id.includes('/unist-util-visit/')
+          ) {
+            return 'markdown-vendor'
+          }
+          if (id.includes('/katex/')) return 'katex-vendor'
+          return undefined
+        },
+      },
+    },
   },
   server: {
     port: 3001,

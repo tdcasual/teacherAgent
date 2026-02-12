@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .chat_job_state_machine import (
+    is_terminal_chat_job_status,
+    normalize_chat_job_status,
+    transition_chat_job_status,
+)
+
 
 @dataclass(frozen=True)
 class ComputeChatReplyDeps:
@@ -81,7 +87,9 @@ def compute_chat_reply_sync(
 
     resolve_payload: Dict[str, Any] = {}
     try:
-        resolve_payload = deps.resolve_effective_skill(role_hint, requested_skill_id, last_user_text) or {}
+        resolve_payload = (
+            deps.resolve_effective_skill(role_hint, requested_skill_id, last_user_text) or {}
+        )
         resolved = str(resolve_payload.get("effective_skill_id") or "").strip()
         if resolved and resolved != requested_skill_id:
             req.skill_id = resolved
@@ -128,12 +136,16 @@ def compute_chat_reply_sync(
             return preflight, role_hint, last_user_text
 
     extra_system = None
-    last_assistant_text = next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
+    last_assistant_text = (
+        next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
+    )
 
     effective_teacher_id: Optional[str] = None
     if role_hint == "teacher":
         effective_teacher_id = deps.resolve_teacher_id(teacher_id_override or req.teacher_id)
-        extra_system = deps.teacher_build_context(effective_teacher_id, last_user_text, 6000, str(session_id or "main"))
+        extra_system = deps.teacher_build_context(
+            effective_teacher_id, last_user_text, 6000, str(session_id or "main")
+        )
 
     if role_hint == "student":
         assignment_detail = None
@@ -154,9 +166,13 @@ def compute_chat_reply_sync(
         elif req.student_id:
             date_str = deps.parse_date_str(req.assignment_date)
             class_name = profile.get("class_name")
-            found = deps.find_assignment_for_date(date_str, student_id=req.student_id, class_name=class_name)
+            found = deps.find_assignment_for_date(
+                date_str, student_id=req.student_id, class_name=class_name
+            )
             if found:
-                assignment_detail = deps.build_assignment_detail_cached(found["folder"], include_text=False)
+                assignment_detail = deps.build_assignment_detail_cached(
+                    found["folder"], include_text=False
+                )
         if assignment_detail and study_mode:
             extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))
         if extra_parts:
@@ -164,7 +180,9 @@ def compute_chat_reply_sync(
             if len(extra_system) > deps.chat_extra_system_max_chars:
                 extra_system = extra_system[: deps.chat_extra_system_max_chars] + "…"
 
-    messages = deps.trim_messages([{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint)
+    messages = deps.trim_messages(
+        [{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint
+    )
     if role_hint == "student":
         with deps.student_inflight(req.student_id) as allowed:
             if not allowed:
@@ -225,25 +243,50 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
         return
     try:
         job = deps.load_chat_job(job_id)
-        status = str(job.get("status") or "")
-        if status in {"done", "failed", "cancelled"}:
+        status = normalize_chat_job_status(job.get("status"))
+        if is_terminal_chat_job_status(status):
             return
+
+        def _write_status(next_status: str, updates: Dict[str, Any]) -> bool:
+            nonlocal status
+            try:
+                resolved = transition_chat_job_status(status, next_status)
+            except ValueError:
+                deps.write_chat_job(
+                    job_id,
+                    {
+                        "status": "failed",
+                        "error": "invalid_status_transition",
+                        "error_detail": f"{status}->{normalize_chat_job_status(next_status)}",
+                    },
+                )
+                status = "failed"
+                return False
+            payload = dict(updates or {})
+            payload["status"] = resolved
+            deps.write_chat_job(job_id, payload)
+            status = resolved
+            return True
 
         req_payload = job.get("request") or {}
         if not isinstance(req_payload, dict):
             req_payload = {}
         messages_payload = req_payload.get("messages") or []
         if not isinstance(messages_payload, list) or not messages_payload:
-            deps.write_chat_job(job_id, {"status": "failed", "error": "missing_messages"})
+            _write_status("failed", {"error": "missing_messages"})
             return
 
         try:
             req = deps.chat_request_model(**req_payload)
         except Exception as exc:
-            deps.write_chat_job(job_id, {"status": "failed", "error": "invalid_request", "error_detail": str(exc)[:200]})
+            _write_status(
+                "failed",
+                {"error": "invalid_request", "error_detail": str(exc)[:200]},
+            )
             return
 
-        deps.write_chat_job(job_id, {"status": "processing", "step": "agent", "error": ""})
+        if not _write_status("processing", {"step": "agent", "error": ""}):
+            return
         t0 = deps.monotonic()
         reply_text, role_hint, last_user_text = deps.compute_chat_reply_sync(
             req,
@@ -256,7 +299,9 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
         teacher_id = ""
         session_id = ""
         if role_hint == "teacher":
-            teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
+            teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(
+                req.teacher_id
+            )
             session_id = str(job.get("session_id") or "").strip() or "main"
             try:
                 if not user_turn_persisted:
@@ -297,22 +342,27 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     "teacher.history.append_failed",
                     {"teacher_id": str(job.get("teacher_id") or ""), "error": detail},
                 )
-                deps.write_chat_job(
-                    job_id,
-                    {"status": "failed", "error": "history_persist_failed", "error_detail": detail},
+                _write_status(
+                    "failed",
+                    {"error": "history_persist_failed", "error_detail": detail},
                 )
                 return
 
         if role_hint == "student" and req.student_id:
             try:
-                note = deps.build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
+                note = deps.build_interaction_note(
+                    last_user_text, reply_text, assignment_id=req.assignment_id
+                )
                 payload = {"student_id": req.student_id, "interaction_note": note}
                 if deps.profile_update_async:
                     deps.enqueue_profile_update(payload)
                 else:
                     deps.student_profile_update(payload)
             except Exception as exc:
-                deps.diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
+                deps.diag_log(
+                    "student.profile.update_failed",
+                    {"student_id": req.student_id, "error": str(exc)[:200]},
+                )
 
             try:
                 session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
@@ -343,17 +393,18 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                 )
             except Exception as exc:
                 detail = str(exc)[:200]
-                deps.diag_log("student.history.append_failed", {"student_id": req.student_id, "error": detail})
-                deps.write_chat_job(
-                    job_id,
-                    {"status": "failed", "error": "history_persist_failed", "error_detail": detail},
+                deps.diag_log(
+                    "student.history.append_failed", {"student_id": req.student_id, "error": detail}
+                )
+                _write_status(
+                    "failed",
+                    {"error": "history_persist_failed", "error_detail": detail},
                 )
                 return
 
-        deps.write_chat_job(
-            job_id,
+        if not _write_status(
+            "done",
             {
-                "status": "done",
                 "step": "done",
                 "duration_ms": duration_ms,
                 "reply": reply_text,
@@ -361,7 +412,8 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                 "skill_id_requested": str(job.get("skill_id") or ""),
                 "skill_id_effective": str(getattr(req, "skill_id", "") or ""),
             },
-        )
+        ):
+            return
 
         if role_hint == "teacher":
             try:
@@ -394,7 +446,9 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
                     {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
                 )
             try:
-                auto_flush = deps.teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
+                auto_flush = deps.teacher_memory_auto_flush_from_session(
+                    teacher_id, session_id=session_id
+                )
                 if auto_flush.get("created"):
                     deps.diag_log(
                         "teacher.memory.auto_flush.proposed",

@@ -69,7 +69,9 @@
   cursor: pointer;
   color: #3f4551;
   font-size: 12px;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .app-dialog-btn:hover {
@@ -98,4 +100,3 @@
   background: color-mix(in srgb, #ef4444 88%, #000);
   border-color: color-mix(in srgb, #ef4444 88%, #000);
 }
-

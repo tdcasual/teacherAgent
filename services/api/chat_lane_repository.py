@@ -127,12 +127,32 @@ def _chat_lane_store():
     )
 
 
+def _ensure_lane_state(state: Any) -> Any:
+    """Best-effort self-healing for chat lane mutable state on core reload races."""
+    if not hasattr(state, "CHAT_JOB_LANES") or not isinstance(getattr(state, "CHAT_JOB_LANES"), dict):
+        state.CHAT_JOB_LANES = {}
+    if not hasattr(state, "CHAT_JOB_ACTIVE_LANES") or not isinstance(
+        getattr(state, "CHAT_JOB_ACTIVE_LANES"), set
+    ):
+        state.CHAT_JOB_ACTIVE_LANES = set()
+    if not hasattr(state, "CHAT_JOB_QUEUED") or not isinstance(getattr(state, "CHAT_JOB_QUEUED"), set):
+        state.CHAT_JOB_QUEUED = set()
+    if not hasattr(state, "CHAT_JOB_TO_LANE") or not isinstance(getattr(state, "CHAT_JOB_TO_LANE"), dict):
+        state.CHAT_JOB_TO_LANE = {}
+    cursor = getattr(state, "CHAT_LANE_CURSOR", None)
+    if not isinstance(cursor, list) or len(cursor) != 1:
+        state.CHAT_LANE_CURSOR = [0]
+    if not hasattr(state, "CHAT_LANE_RECENT") or not isinstance(getattr(state, "CHAT_LANE_RECENT"), dict):
+        state.CHAT_LANE_RECENT = {}
+    return state
+
+
 # ---------------------------------------------------------------------------
 # Lane queue operations (all assume caller holds CHAT_JOB_LOCK)
 # ---------------------------------------------------------------------------
 
 def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     if _settings.is_pytest():
         q = _ac.CHAT_JOB_LANES.get(lane_id)
         queued = len(q) if q else 0
@@ -142,7 +162,7 @@ def _chat_lane_load_locked(lane_id: str) -> Dict[str, int]:
 
 
 def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     if _settings.is_pytest():
         q = _ac.CHAT_JOB_LANES.get(lane_id)
         if not q:
@@ -155,7 +175,7 @@ def _chat_find_position_locked(lane_id: str, job_id: str) -> int:
 
 
 def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     if job_id in _ac.CHAT_JOB_QUEUED or job_id in _ac.CHAT_JOB_TO_LANE:
         return _chat_find_position_locked(lane_id, job_id)
     q = _ac.CHAT_JOB_LANES.setdefault(lane_id, deque())
@@ -166,12 +186,12 @@ def _chat_enqueue_locked(job_id: str, lane_id: str) -> int:
 
 
 def _chat_has_pending_locked() -> bool:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     return any(len(q) > 0 for q in _ac.CHAT_JOB_LANES.values())
 
 
 def _chat_pick_next_locked() -> Tuple[str, str]:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     lanes = [lane for lane, q in _ac.CHAT_JOB_LANES.items() if q]
     if not lanes:
         return "", ""
@@ -194,7 +214,7 @@ def _chat_pick_next_locked() -> Tuple[str, str]:
 
 
 def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     _ac.CHAT_JOB_ACTIVE_LANES.discard(lane_id)
     _ac.CHAT_JOB_TO_LANE.pop(job_id, None)
     q = _ac.CHAT_JOB_LANES.get(lane_id)
@@ -207,7 +227,7 @@ def _chat_mark_done_locked(job_id: str, lane_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) -> None:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     if _settings.is_pytest():
         _ac.CHAT_LANE_RECENT[lane_id] = (time.time(), fingerprint, job_id)
         return
@@ -215,7 +235,7 @@ def _chat_register_recent_locked(lane_id: str, fingerprint: str, job_id: str) ->
 
 
 def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
-    _ac = _get_state()
+    _ac = _ensure_lane_state(_get_state())
     if _settings.is_pytest():
         if CHAT_LANE_DEBOUNCE_MS <= 0:
             return None

@@ -18,6 +18,15 @@
 - `services/api/upload_io_service.py`
 - `services/api/llm_agent_tooling_service.py`
 
+## 架构边界约束（2026-02 更新）
+- 模块边界规范：`docs/architecture/module-boundaries.md`
+- Ownership 映射：`docs/architecture/ownership-map.md`
+
+当前 API 目录遵循以下边界：
+- `routes/*`：仅做 HTTP 协议转换，不做业务编排
+- `exam/application.py`、`assignment/application.py`：承载 context 用例编排
+- `app.py` + `container.py`：组合根与依赖注入入口
+
 ---
 
 ## Health

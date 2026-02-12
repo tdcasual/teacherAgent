@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+from services.api.container import build_app_container
 from services.api.logging_config import configure_logging
 from services.api.runtime import bootstrap
 
@@ -11,6 +12,10 @@ _log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def app_lifespan(_app):
+    state = getattr(_app, "state", None)
+    if state is not None and not hasattr(state, "container"):
+        core = getattr(state, "core", None)
+        state.container = build_app_container(core=core)
     configure_logging()
     try:
         bootstrap.start_runtime()

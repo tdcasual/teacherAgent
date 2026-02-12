@@ -47,33 +47,31 @@ def _make_minimal_xlsx(headers, rows) -> bytes:
     sheet_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<sheetData>'
-        + ''.join(sheet_rows)
-        + '</sheetData>'
-        '</worksheet>'
+        "<sheetData>" + "".join(sheet_rows) + "</sheetData>"
+        "</worksheet>"
     )
     workbook_xml = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-        '<sheets>'
+        "<sheets>"
         '<sheet name="Sheet1" sheetId="1" r:id="rId1"/>'
-        '</sheets>'
-        '</workbook>'
+        "</sheets>"
+        "</workbook>"
     )
     workbook_rels = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
         'Target="worksheets/sheet1.xml"/>'
-        '</Relationships>'
+        "</Relationships>"
     )
     root_rels = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
         'Target="xl/workbook.xml"/>'
-        '</Relationships>'
+        "</Relationships>"
     )
     content_types = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -84,7 +82,7 @@ def _make_minimal_xlsx(headers, rows) -> bytes:
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
         '<Override PartName="/xl/worksheets/sheet1.xml" '
         'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
-        '</Types>'
+        "</Types>"
     )
 
     out = BytesIO()
@@ -139,14 +137,21 @@ class ChatJobFlowTest(unittest.TestCase):
         manifest = {
             "exam_id": exam_id,
             "generated_at": "2026-02-10T22:24:17",
-            "meta": {"date": "2026-01-03", "class_name": "2403,2404", "language": "zh", "score_mode": score_mode},
+            "meta": {
+                "date": "2026-01-03",
+                "class_name": "2403,2404",
+                "language": "zh",
+                "score_mode": score_mode,
+            },
             "files": {
                 "responses_scored": str(responses_path.resolve()),
                 "questions": str(questions_path.resolve()),
             },
             "counts": {"students": 2, "responses": 2, "questions": 1},
         }
-        (exam_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        (exam_dir / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def _seed_total_mode_exam_with_subject_scores_file(
         self,
@@ -166,7 +171,6 @@ class ChatJobFlowTest(unittest.TestCase):
         )
         (scores_dir / "scores.xlsx").write_bytes(xlsx)
 
-
     def test_chat_start_is_idempotent_and_status_eventually_done(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
@@ -178,7 +182,14 @@ class ChatJobFlowTest(unittest.TestCase):
             app_mod.teacher_assignment_preflight = lambda _req: None  # type: ignore[attr-defined]
             captured = {"skill_id": None}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 last_user = ""
                 for m in reversed(messages or []):
                     if m.get("role") == "user":
@@ -193,7 +204,12 @@ class ChatJobFlowTest(unittest.TestCase):
                 payload = {
                     "request_id": "req_test_001",
                     "role": "teacher",
-                    "messages": [{"role": "user", "content": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题"}],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
+                        }
+                    ],
                 }
                 res1 = client.post("/chat/start", json=payload)
                 self.assertEqual(res1.status_code, 200)
@@ -261,22 +277,38 @@ class ChatJobFlowTest(unittest.TestCase):
             app_mod.LLM_GATEWAY.generate = fake_generate  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
-                for teacher_id, model_name in (("teacher_alpha", "model-alpha"), ("teacher_beta", "model-beta")):
+                for teacher_id, model_name in (
+                    ("teacher_alpha", "model-alpha"),
+                    ("teacher_beta", "model-beta"),
+                ):
                     config = {
                         "enabled": True,
-                        "channels": [{"id": "chat_main", "target": {"provider": "openai", "mode": "openai-chat", "model": model_name}}],
+                        "channels": [
+                            {
+                                "id": "chat_main",
+                                "target": {
+                                    "provider": "openai",
+                                    "mode": "openai-chat",
+                                    "model": model_name,
+                                },
+                            }
+                        ],
                         "rules": [
-                    {
-                        "id": "chat_rule",
-                        "priority": 100,
-                        "match": {"roles": ["teacher"], "kinds": ["chat.skill"]},
-                        "route": {"channel_id": "chat_main"},
+                            {
+                                "id": "chat_rule",
+                                "priority": 100,
+                                "match": {"roles": ["teacher"], "kinds": ["chat.skill"]},
+                                "route": {"channel_id": "chat_main"},
+                            }
+                        ],
                     }
-                ],
-            }
                     create = client.post(
                         "/teacher/llm-routing/proposals",
-                        json={"teacher_id": teacher_id, "note": f"seed-{teacher_id}", "config": config},
+                        json={
+                            "teacher_id": teacher_id,
+                            "note": f"seed-{teacher_id}",
+                            "config": config,
+                        },
                     )
                     self.assertEqual(create.status_code, 200)
                     proposal_id = create.json().get("proposal_id")
@@ -309,7 +341,11 @@ class ChatJobFlowTest(unittest.TestCase):
                     self.assertEqual(payload.get("status"), "done")
                     self.assertIn(expected_model, payload.get("reply") or "")
 
-            routed_models = [str(item.get("model") or "") for item in calls if item.get("allow_fallback") is False]
+            routed_models = [
+                str(item.get("model") or "")
+                for item in calls
+                if item.get("allow_fallback") is False
+            ]
             self.assertIn("model-alpha", routed_models)
             self.assertIn("model-beta", routed_models)
 
@@ -332,6 +368,41 @@ class ChatJobFlowTest(unittest.TestCase):
                 res = client.post("/chat/start", json=payload)
                 self.assertEqual(res.status_code, 400)
 
+
+class ChatJobStateMachineTest(unittest.TestCase):
+    def _seed_total_mode_exam(
+        self,
+        tmp: Path,
+        exam_id: str = "EX20260209_9b92e1",
+        score_mode: str = "total",
+        paper_filename: str = "",
+    ) -> None:
+        return ChatJobFlowTest._seed_total_mode_exam(
+            self,
+            tmp,
+            exam_id=exam_id,
+            score_mode=score_mode,
+            paper_filename=paper_filename,
+        )
+
+    def _seed_total_mode_exam_with_subject_scores_file(
+        self,
+        tmp: Path,
+        exam_id: str = "EX20260209_9b92e1",
+    ) -> None:
+        return ChatJobFlowTest._seed_total_mode_exam_with_subject_scores_file(
+            self,
+            tmp,
+            exam_id=exam_id,
+        )
+
+    def test_state_machine_rejects_invalid_transition(self):
+        from services.api.chat_job_state_machine import ChatJobStateMachine
+
+        sm = ChatJobStateMachine("done")
+        with self.assertRaises(ValueError):
+            sm.transition("processing")
+
     def test_chat_job_total_mode_subject_request_is_guarded_end_to_end(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
@@ -344,7 +415,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
@@ -357,7 +435,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_guard_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
+                        "messages": [
+                            {"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -372,7 +452,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
                 self.assertIn("单科成绩说明", reply_text)
-                self.assertIn("score_mode: \"total\"", reply_text)
+                self.assertIn('score_mode: "total"', reply_text)
                 self.assertIn("不能把总分当作物理单科成绩", reply_text)
                 self.assertEqual(calls["run_agent"], 0)
 
@@ -393,7 +473,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_total_mode_analysis"}
 
@@ -406,7 +493,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_allow_single_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
+                        "messages": [
+                            {"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -421,7 +510,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
                 self.assertIn("单科成绩说明", reply_text)
-                self.assertIn("score_mode: \"total\"", reply_text)
+                self.assertIn('score_mode: "total"', reply_text)
                 self.assertIn("不能把总分当作物理单科成绩", reply_text)
                 self.assertEqual(calls["run_agent"], 0)
 
@@ -442,7 +531,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
@@ -455,7 +551,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_guard_with_logs_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
+                        "messages": [
+                            {"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -470,7 +568,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
                 self.assertIn("单科成绩说明", reply_text)
-                self.assertIn("score_mode: \"total\"", reply_text)
+                self.assertIn('score_mode: "total"', reply_text)
                 self.assertEqual(calls["run_agent"], 0)
 
             log_path = tmp / "tmp" / "diagnostics.log"
@@ -479,7 +577,9 @@ class ChatJobFlowTest(unittest.TestCase):
             self.assertIn('"event": "skill.resolve"', log_text)
             self.assertIn('"event": "teacher_chat.in"', log_text)
             self.assertIn('"event": "teacher_preflight.subject_total_guard"', log_text)
-            self.assertNotIn('"event": "teacher_preflight.subject_total_allow_single_subject"', log_text)
+            self.assertNotIn(
+                '"event": "teacher_preflight.subject_total_allow_single_subject"', log_text
+            )
 
     def test_chat_job_total_mode_with_subject_scores_file_allows_agent_and_logs_auto_extract(self):
         with TemporaryDirectory() as td:
@@ -506,7 +606,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_subject_score_reply"}
 
@@ -519,7 +626,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_auto_extract_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
+                        "messages": [
+                            {"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -553,7 +662,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
@@ -566,7 +682,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_guard_chem_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "分析EX20260209_9b92e1的化学成绩"}],
+                        "messages": [
+                            {"role": "user", "content": "分析EX20260209_9b92e1的化学成绩"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -581,7 +699,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
                 self.assertIn("单科成绩说明", reply_text)
-                self.assertIn("score_mode: \"total\"", reply_text)
+                self.assertIn('score_mode: "total"', reply_text)
                 self.assertIn("不能把总分", reply_text)
                 self.assertEqual(calls["run_agent"], 0)
 
@@ -597,7 +715,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
@@ -610,7 +735,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_total_subject_guard_en_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "Analyze EX20260209_9b92e1 subject score"}],
+                        "messages": [
+                            {"role": "user", "content": "Analyze EX20260209_9b92e1 subject score"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)
@@ -625,7 +752,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
                 self.assertIn("单科成绩说明", reply_text)
-                self.assertIn("score_mode: \"total\"", reply_text)
+                self.assertIn('score_mode: "total"', reply_text)
                 self.assertIn("不能把总分", reply_text)
                 self.assertEqual(calls["run_agent"], 0)
 
@@ -641,7 +768,14 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = {"run_agent": 0}
 
-            def fake_run_agent(messages, role_hint=None, extra_system=None, skill_id=None, teacher_id=None, agent_id=None):
+            def fake_run_agent(
+                messages,
+                role_hint=None,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                agent_id=None,
+            ):
                 calls["run_agent"] += 1
                 return {"reply": "normal_subject_mode_reply"}
 
@@ -654,7 +788,9 @@ class ChatJobFlowTest(unittest.TestCase):
                         "request_id": "req_subject_mode_allow_en_001",
                         "role": "teacher",
                         "teacher_id": "teacher",
-                        "messages": [{"role": "user", "content": "Analyze EX20260209_9b92e1 subject score"}],
+                        "messages": [
+                            {"role": "user", "content": "Analyze EX20260209_9b92e1 subject score"}
+                        ],
                     },
                 )
                 self.assertEqual(start.status_code, 200)

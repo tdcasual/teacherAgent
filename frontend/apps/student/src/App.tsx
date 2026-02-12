@@ -17,8 +17,11 @@ import {
   type SessionViewStatePayload,
 } from './features/chat/viewState'
 import { stripTransientPendingBubbles } from './features/chat/pendingOverlay'
+import StudentChatPanel from './features/chat/StudentChatPanel'
 import StudentSessionSidebar from './features/chat/StudentSessionSidebar'
 import StudentTopbar from './features/layout/StudentTopbar'
+import StudentSessionShell from './features/session/StudentSessionShell'
+import StudentWorkbench from './features/workbench/StudentWorkbench'
 import type {
   AssignmentDetail,
   ChatJobStatus,
@@ -1687,73 +1690,84 @@ export default function App() {
   return (
     <div className="app">
       <StudentTopbar verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} />
-
-      <div className={`student-layout ${sidebarOpen ? 'sidebar-open' : 'sidebar-collapsed'}`}>
-        <StudentSessionSidebar
-          apiBase={apiBase} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} verifiedStudent={verifiedStudent}
-          historyLoading={historyLoading} historyError={historyError} historyHasMore={historyHasMore} refreshSessions={refreshSessions}
-          showArchivedSessions={showArchivedSessions} setShowArchivedSessions={setShowArchivedSessions} historyQuery={historyQuery} setHistoryQuery={setHistoryQuery}
-          visibleSessionCount={visibleSessions.length} groupedSessions={groupedSessions} deletedSessionIds={deletedSessionIds}
-          activeSessionId={activeSessionId} onSelectSession={selectStudentSession} getSessionTitle={getSessionTitle}
-          openSessionMenuId={openSessionMenuId} toggleSessionMenu={toggleSessionMenu}
-          handleSessionMenuTriggerKeyDown={handleSessionMenuTriggerKeyDown} handleSessionMenuKeyDown={handleSessionMenuKeyDown}
-          setSessionMenuTriggerRef={setSessionMenuTriggerRef} setSessionMenuRef={setSessionMenuRef} renameSession={renameSession} toggleSessionArchive={toggleSessionArchive}
-          sessionHasMore={sessionHasMore} sessionLoading={sessionLoading} sessionCursor={sessionCursor} loadSessionMessages={loadSessionMessages} sessionError={sessionError}
-          verifyOpen={verifyOpen} setVerifyOpen={setVerifyOpen} handleVerify={handleVerify} nameInput={nameInput} setNameInput={setNameInput} classInput={classInput} setClassInput={setClassInput} verifying={verifying} verifyError={verifyError}
-          todayAssignment={todayAssignment} assignmentLoading={assignmentLoading} assignmentError={assignmentError} todayDate={todayDate} resetVerification={resetVerification} startNewStudentSession={startNewStudentSession}
-          renameDialogSessionId={renameDialogSessionId} archiveDialogSessionId={archiveDialogSessionId} archiveDialogActionLabel={archiveDialogActionLabel} archiveDialogIsArchived={archiveDialogIsArchived}
-          cancelRenameDialog={cancelRenameDialog} confirmRenameDialog={confirmRenameDialog} cancelArchiveDialog={cancelArchiveDialog} confirmArchiveDialog={confirmArchiveDialog}
-        />
-
-        <main className="chat-shell">
-        <div className="messages">
-          <div className="messages-inner">
-            {renderedMessages.map((msg) => (
-              <div key={msg.id} className={`message ${msg.role}`}>
-                <div className="bubble">
-                  <div className="meta">
-                    {msg.role === 'user' ? '我' : '助手'} · {msg.time}
-                  </div>
-                  <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
-                </div>
-              </div>
-            ))}
-            {sending && !pendingChatJob?.job_id && (
-              <div className="message assistant">
-                <div className="bubble typing">
-                  <div className="meta">助手 · {nowTime()}</div>
-                  <div className="text">正在思考…</div>
-                </div>
-              </div>
-            )}
-            <div ref={endRef} />
-          </div>
-        </div>
-
-        <form
-          className={`composer ${!verifiedStudent || pendingChatJob?.job_id ? 'disabled' : ''}`}
-          onSubmit={handleSend}
-        >
-          <div className="composer-inner">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleInputKeyDown}
-              placeholder={verifiedStudent ? '输入问题，例如：牛顿第三定律是什么' : '请先填写姓名完成验证'}
-              rows={1}
-              disabled={!verifiedStudent || Boolean(pendingChatJob?.job_id)}
+      <StudentSessionShell
+        sidebarOpen={sidebarOpen}
+        workbench={
+          <StudentWorkbench>
+            <StudentSessionSidebar
+              apiBase={apiBase}
+              sidebarOpen={sidebarOpen}
+              setSidebarOpen={setSidebarOpen}
+              verifiedStudent={verifiedStudent}
+              historyLoading={historyLoading}
+              historyError={historyError}
+              historyHasMore={historyHasMore}
+              refreshSessions={refreshSessions}
+              showArchivedSessions={showArchivedSessions}
+              setShowArchivedSessions={setShowArchivedSessions}
+              historyQuery={historyQuery}
+              setHistoryQuery={setHistoryQuery}
+              visibleSessionCount={visibleSessions.length}
+              groupedSessions={groupedSessions}
+              deletedSessionIds={deletedSessionIds}
+              activeSessionId={activeSessionId}
+              onSelectSession={selectStudentSession}
+              getSessionTitle={getSessionTitle}
+              openSessionMenuId={openSessionMenuId}
+              toggleSessionMenu={toggleSessionMenu}
+              handleSessionMenuTriggerKeyDown={handleSessionMenuTriggerKeyDown}
+              handleSessionMenuKeyDown={handleSessionMenuKeyDown}
+              setSessionMenuTriggerRef={setSessionMenuTriggerRef}
+              setSessionMenuRef={setSessionMenuRef}
+              renameSession={renameSession}
+              toggleSessionArchive={toggleSessionArchive}
+              sessionHasMore={sessionHasMore}
+              sessionLoading={sessionLoading}
+              sessionCursor={sessionCursor}
+              loadSessionMessages={loadSessionMessages}
+              sessionError={sessionError}
+              verifyOpen={verifyOpen}
+              setVerifyOpen={setVerifyOpen}
+              handleVerify={handleVerify}
+              nameInput={nameInput}
+              setNameInput={setNameInput}
+              classInput={classInput}
+              setClassInput={setClassInput}
+              verifying={verifying}
+              verifyError={verifyError}
+              todayAssignment={todayAssignment}
+              assignmentLoading={assignmentLoading}
+              assignmentError={assignmentError}
+              todayDate={todayDate}
+              resetVerification={resetVerification}
+              startNewStudentSession={startNewStudentSession}
+              renameDialogSessionId={renameDialogSessionId}
+              archiveDialogSessionId={archiveDialogSessionId}
+              archiveDialogActionLabel={archiveDialogActionLabel}
+              archiveDialogIsArchived={archiveDialogIsArchived}
+              cancelRenameDialog={cancelRenameDialog}
+              confirmRenameDialog={confirmRenameDialog}
+              cancelArchiveDialog={cancelArchiveDialog}
+              confirmArchiveDialog={confirmArchiveDialog}
             />
-            <div className="composer-actions">
-              <span className="composer-hint">{composerHint}</span>
-              <button type="submit" className="send-btn" disabled={sending || !verifiedStudent || Boolean(pendingChatJob?.job_id)}>
-                发送
-              </button>
-            </div>
-          </div>
-        </form>
-      </main>
-      </div>
+          </StudentWorkbench>
+        }
+        chatPanel={
+          <StudentChatPanel
+            renderedMessages={renderedMessages}
+            sending={sending}
+            pendingChatJobId={pendingChatJob?.job_id || ''}
+            verifiedStudent={verifiedStudent}
+            endRef={endRef}
+            inputRef={inputRef}
+            input={input}
+            setInput={setInput}
+            handleInputKeyDown={handleInputKeyDown}
+            handleSend={handleSend}
+            composerHint={composerHint}
+          />
+        }
+      />
     </div>
   )
 }

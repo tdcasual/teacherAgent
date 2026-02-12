@@ -78,9 +78,14 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
                 deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
             next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
 
-        deps.chat_job_event.wait(timeout=0.1)
+        try:
+            event_set = deps.chat_job_event.wait(timeout=0.1)
+        except TypeError:  # pragma: no cover - backward-compatible fakes in tests
+            event_set = deps.chat_job_event.wait()
         if deps.stop_event.is_set():
             break
+        if not event_set:
+            continue
         job_id = ""
         lane_id = ""
         with deps.chat_job_lock:
