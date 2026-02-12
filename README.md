@@ -46,6 +46,8 @@ README 保持“轻量介绍”，具体配置与接口文档请查阅：
 
 - HTTP API：`docs/http_api.md`
 - MCP API：`docs/mcp_api.md`
+- 模块边界：`docs/architecture/module-boundaries.md`
+- 责任归属图：`docs/architecture/ownership-map.md`
 - 设计与演进文档：`docs/plans/`
 - 提示词与安全测试说明：`tests/prompt_injection_README.md`
 
