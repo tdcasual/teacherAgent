@@ -7,9 +7,9 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 
 | Metric | Baseline | Current | Delta | Reduction |
 | --- | ---: | ---: | ---: | ---: |
-| Ruff errors (`ruff check services/api --statistics`) | 745 | 661 | -84 | 11.3% |
-| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 163 | -319 | 66.2% |
-| `services/api/app_core.py` line count | 700 | 595 | -105 | 15.0% |
+| Ruff errors (`ruff check services/api --statistics`) | 745 | 338 | -407 | 54.6% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 145 | -337 | 69.9% |
+| `services/api/app_core.py` line count | 700 | 261 | -439 | 62.7% |
 
 ## 2) Completed Changes
 
@@ -45,6 +45,10 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 28. Normalized correctness parsing and positional `safe_int_arg` call in `services/api/exam_detail_service.py`, and added a focused type gate.
 29. Added return annotations for `services/api/routes/student_profile_routes.py` handlers and added a focused type gate.
 30. Added return annotations for `services/api/routes/student_history_routes.py` handlers and added a focused type gate.
+31. Added return annotations for `services/api/routes/misc_general_routes.py` and `services/api/routes/misc_chart_routes.py`, and added focused type gates.
+32. Added return annotations for `services/api/routes/assignment_generation_routes.py` and `services/api/routes/assignment_delivery_routes.py`, and added focused type gates.
+33. Tightened numeric/query-stat typing in `services/api/teacher_memory_insights_service.py` and added a focused type gate.
+34. Extracted service import fan-out from `services/api/app_core.py` into `services/api/app_core_service_imports.py`, reducing facade size and preserving runtime behavior.
 
 ## 3) Validation Evidence
 
@@ -66,6 +70,8 @@ Executed and passed (representative list):
 - `python3 -m pytest -q tests/test_exam_longform_service.py tests/test_exam_longform_types.py`
 - `python3 -m pytest -q tests/test_exam_detail_service.py tests/test_exam_detail_types.py`
 - `python3 -m pytest -q tests/test_student_routes.py tests/test_student_profile_routes_types.py tests/test_student_history_routes_types.py`
+- `python3 -m pytest -q tests/test_misc_general_routes_types.py tests/test_misc_chart_routes_types.py tests/test_assignment_generation_routes_types.py tests/test_assignment_delivery_routes_types.py tests/test_teacher_memory_insights_service_types.py tests/test_teacher_memory_insights_service.py`
+- `python3 -m pytest -q tests/test_app_core_structure.py tests/test_app_core_decomposition.py tests/test_app_core_import_fanout.py tests/test_app_core_surface.py tests/test_app_routes_registration.py`
 - `python3 -m ruff check services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py tests/test_queue_backend_factory.py tests/test_security_auth_hardening.py`
 - `python3 -m ruff check services/api/llm_routing.py tests/test_llm_routing_types.py tests/test_app_core_structure.py`
 - `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py services/api/llm_routing.py`
@@ -80,20 +86,20 @@ Metric collection commands:
 
 Criteria from the 2-week plan are partially met:
 
-1. Ruff reduction >=30%: **Not met** (current 11.3%).
-2. Mypy reduction >=35%: **Met** (current 66.2%).
-3. `app_core.py` <=500 lines: **Not met** (current 595).
+1. Ruff reduction >=30%: **Met** (current 54.6%).
+2. Mypy reduction >=35%: **Met** (current 69.9%).
+3. `app_core.py` <=500 lines: **Met** (current 261).
 4. CI backend-quality guardrails integrated: **Met**.
 5. Newly added guardrail tests pass locally: **Met**.
 
 ## 5) Remaining Risks
 
-1. `services/api/app_core.py` still carries high coupling and static debt.
-2. Global Ruff debt remains high in `services/api` and limits stricter CI adoption.
-3. Mypy debt is reduced but still concentrated in older modules not yet isolated.
+1. `services/api/app_core.py` is smaller but still carries compatibility-facade star-import coupling.
+2. Global Ruff debt remains concentrated in `app_core` compatibility exports and import-order constraints.
+3. Remaining mypy debt is concentrated in route handler annotation gaps and legacy wiring signatures.
 
 ## 6) Next-Phase Focus
 
-1. Continue extracting cohesive slices from `app_core` (runtime wiring vs route handlers).
-2. Target top Ruff hotspots by file-level error density; enforce per-file budgets.
-3. Expand mypy scope in CI with module allowlist rotation and hard fail for touched files.
+1. Continue extracting `app_core` compatibility exports into typed facades to retire star-import based lookups.
+2. Target remaining Ruff hotspots (`F401`/`E402`/`F405`) in `app_core` and wiring modules with compatibility-preserving refactors.
+3. Continue route/handler `no-untyped-def` cleanup in batches and expand touched-file mypy gates.
