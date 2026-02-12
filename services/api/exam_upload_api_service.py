@@ -28,6 +28,15 @@ class ExamUploadApiDeps:
     confirm_exam_upload: Callable[[str, Dict[str, Any], Path], Dict[str, Any]]
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _selected_candidate_id_from_schema(schema: Dict[str, Any]) -> str:
+    subject = _as_dict(schema.get("subject"))
+    return str(subject.get("selected_candidate_id") or schema.get("selected_candidate_id") or "").strip()
+
+
 def _load_job_or_raise(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, Any]:
     try:
         return deps.load_exam_job(job_id)
@@ -99,21 +108,9 @@ def exam_upload_draft_save(
     )
     new_version = int(job.get("draft_version") or 1) + 1
 
-    previous_score_schema = job.get("score_schema") if isinstance(job.get("score_schema"), dict) else {}
-    previous_selected_candidate_id = str(
-        ((previous_score_schema.get("subject") or {}).get("selected_candidate_id")
-        if isinstance(previous_score_schema.get("subject"), dict)
-        else previous_score_schema.get("selected_candidate_id"))
-        or ""
-    ).strip()
-    selected_candidate_id = str(
-        (
-            ((score_schema or {}).get("subject") or {}).get("selected_candidate_id")
-            if isinstance((score_schema or {}).get("subject"), dict)
-            else (score_schema or {}).get("selected_candidate_id")
-        )
-        or ""
-    ).strip()
+    previous_score_schema = _as_dict(job.get("score_schema"))
+    previous_selected_candidate_id = _selected_candidate_id_from_schema(previous_score_schema)
+    selected_candidate_id = _selected_candidate_id_from_schema(score_schema or {})
 
     reparse_needed = bool(reparse and selected_candidate_id and selected_candidate_id != previous_selected_candidate_id)
     updates: Dict[str, Any] = {"draft_version": new_version}
@@ -147,18 +144,11 @@ def exam_upload_confirm(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, An
 
     job_dir = deps.exam_job_path(job_id)
     override = deps.load_exam_draft_override(job_dir)
-    override_score_schema = override.get("score_schema") if isinstance(override.get("score_schema"), dict) else {}
-    job_score_schema = job.get("score_schema") if isinstance(job.get("score_schema"), dict) else {}
+    override_score_schema = _as_dict(override.get("score_schema"))
+    job_score_schema = _as_dict(job.get("score_schema"))
     effective_score_schema = {**job_score_schema, **override_score_schema}
-    selected_candidate_id = str(
-        (
-            ((effective_score_schema.get("subject") or {}).get("selected_candidate_id")
-            if isinstance(effective_score_schema.get("subject"), dict)
-            else effective_score_schema.get("selected_candidate_id"))
-        )
-        or ""
-    ).strip()
-    subject_info = effective_score_schema.get("subject") if isinstance(effective_score_schema.get("subject"), dict) else {}
+    selected_candidate_id = _selected_candidate_id_from_schema(effective_score_schema)
+    subject_info = _as_dict(effective_score_schema.get("subject"))
     selected_candidate_available = bool(subject_info.get("selected_candidate_available", True))
     selection_error = str(subject_info.get("selection_error") or "").strip()
     candidate_selection_valid = bool((not selected_candidate_id) or (selected_candidate_available and not selection_error))
