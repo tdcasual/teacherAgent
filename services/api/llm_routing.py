@@ -139,6 +139,18 @@ def _as_str_list(value: Any) -> List[str]:
     return out
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
+def _as_dict_list(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
@@ -177,12 +189,10 @@ def default_routing_config() -> Dict[str, Any]:
 
 
 def _model_registry_signature(model_registry: Dict[str, Any]) -> Tuple[Tuple[str, str], ...]:
-    providers = model_registry.get("providers") if isinstance(model_registry.get("providers"), dict) else {}
+    providers = _as_dict(model_registry.get("providers"))
     pairs: List[Tuple[str, str]] = []
     for provider, provider_cfg in providers.items():
-        if not isinstance(provider_cfg, dict):
-            continue
-        modes = provider_cfg.get("modes") if isinstance(provider_cfg.get("modes"), dict) else {}
+        modes = _as_dict(_as_dict(provider_cfg).get("modes"))
         for mode in modes.keys():
             pairs.append((str(provider), str(mode)))
     return tuple(sorted(pairs))
@@ -223,7 +233,7 @@ def _normalize_channels(
             errors.append(f"channel id duplicated: {channel_id}")
             continue
 
-        target_raw = item.get("target") if isinstance(item.get("target"), dict) else {}
+        target_raw = _as_dict(item.get("target"))
         provider = _as_str(target_raw.get("provider"))
         mode = _as_str(target_raw.get("mode"))
         model = _as_str(target_raw.get("model"))
@@ -237,7 +247,7 @@ def _normalize_channels(
             errors.append(f"channel {channel_id}: target.model required")
             continue
 
-        params_raw = item.get("params") if isinstance(item.get("params"), dict) else {}
+        params_raw = _as_dict(item.get("params"))
         temperature = _as_float_opt(params_raw.get("temperature"))
         max_tokens = _as_int_opt(params_raw.get("max_tokens"))
         if temperature is not None:
@@ -248,7 +258,7 @@ def _normalize_channels(
             errors.append(f"channel {channel_id}: params.max_tokens must be > 0")
             continue
 
-        capabilities_raw = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
+        capabilities_raw = _as_dict(item.get("capabilities"))
         capabilities = {
             "tools": _as_bool(capabilities_raw.get("tools"), True),
             "json": _as_bool(capabilities_raw.get("json"), True),
@@ -334,7 +344,7 @@ def _normalize_rules(
             continue
         seen_ids.add(rule_id)
 
-        route_raw = item.get("route") if isinstance(item.get("route"), dict) else {}
+        route_raw = _as_dict(item.get("route"))
         channel_id = _as_str(route_raw.get("channel_id"))
         if not channel_id:
             errors.append(f"rule {rule_id}: route.channel_id required")
@@ -343,7 +353,7 @@ def _normalize_rules(
             errors.append(f"rule {rule_id}: route.channel_id not found: {channel_id}")
             continue
 
-        match_raw = item.get("match") if isinstance(item.get("match"), dict) else {}
+        match_raw = _as_dict(item.get("match"))
         roles = [x for x in _as_str_list(match_raw.get("roles")) if _ID_RE.match(x)]
         skills = [x for x in _as_str_list(match_raw.get("skills")) if _ID_RE.match(x)]
         kinds = [x for x in _as_str_list(match_raw.get("kinds")) if _KIND_RE.match(x)]
@@ -419,8 +429,13 @@ def _compile_raw_config(config_path: Path, model_registry: Dict[str, Any]) -> Co
         raw = default_routing_config()
     result = validate_routing_config(raw, model_registry)
     normalized = result["normalized"]
-    channels_by_id: Dict[str, Dict[str, Any]] = {c["id"]: c for c in normalized.get("channels") or []}
-    rules: List[Dict[str, Any]] = normalized.get("rules") or []
+    channels_by_id: Dict[str, Dict[str, Any]] = {
+        channel_id: channel
+        for channel in _as_dict_list(normalized.get("channels"))
+        for channel_id in [_as_str(channel.get("id"))]
+        if channel_id
+    }
+    rules: List[Dict[str, Any]] = _as_dict_list(normalized.get("rules"))
     return CompiledRouting(
         config=normalized,
         errors=list(result.get("errors") or []),
@@ -463,7 +478,7 @@ def _prune_history(config_path: Path, keep: int = _HISTORY_KEEP_LIMIT) -> None:
     rows: List[Tuple[int, str, Path]] = []
     for path in history_dir.glob("*.json"):
         data = _read_json(path)
-        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+        cfg = _as_dict(data.get("config"))
         rows.append((
             _as_int(cfg.get("version"), 0, min_value=0),
             _as_str(data.get("saved_at")),
@@ -499,14 +514,12 @@ def _write_history(config_path: Path, payload: Dict[str, Any], actor: str, sourc
 
 
 def _build_history_summary(config: Dict[str, Any]) -> Dict[str, Any]:
-    cfg = config if isinstance(config, dict) else {}
-    channels_raw = cfg.get("channels") if isinstance(cfg.get("channels"), list) else []
-    channels = [item for item in channels_raw if isinstance(item, dict)]
-    rules_raw = cfg.get("rules") if isinstance(cfg.get("rules"), list) else []
-    rules = [item for item in rules_raw if isinstance(item, dict)]
+    cfg = _as_dict(config)
+    channels = _as_dict_list(cfg.get("channels"))
+    rules = _as_dict_list(cfg.get("rules"))
 
     primary_channel = channels[0] if channels else {}
-    target = primary_channel.get("target") if isinstance(primary_channel.get("target"), dict) else {}
+    target = _as_dict(primary_channel.get("target"))
 
     top_rule_id = ""
     if rules:
@@ -533,7 +546,7 @@ def list_routing_history(config_path: Path, limit: int = 20) -> List[Dict[str, A
     rows: List[Dict[str, Any]] = []
     for path in base.glob("*.json"):
         data = _read_json(path)
-        cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+        cfg = _as_dict(data.get("config"))
         rows.append(
             {
                 "file": str(path),
@@ -576,8 +589,8 @@ def apply_routing_config(
     lock = _config_lock(config_path)
     with lock:
         existing = _read_json(config_path)
-        current_version = _as_int(existing.get("version"), 0, min_value=0)
-        normalized = dict(result.get("normalized") or {})
+        current_version = _as_int(_as_dict(existing).get("version"), 0, min_value=0)
+        normalized = dict(_as_dict(result.get("normalized")))
         normalized["version"] = current_version + 1
         normalized["updated_at"] = _now_iso()
         normalized["updated_by"] = actor or "unknown"
@@ -615,23 +628,23 @@ def rollback_routing_config(
         if not history_dir.exists():
             return {"ok": False, "error": "history_not_found"}
 
-        chosen: Optional[Dict[str, Any]] = None
+        chosen_data: Optional[Dict[str, Any]] = None
         for path in history_dir.glob("*.json"):
             data = _read_json(path)
-            cfg = data.get("config") if isinstance(data.get("config"), dict) else {}
+            cfg = _as_dict(data.get("config"))
             ver = _as_int(cfg.get("version"), 0, min_value=0)
             if ver == target:
-                if chosen is None:
-                    chosen = {"path": path, "data": data}
+                if chosen_data is None:
+                    chosen_data = data
                     continue
-                prev_time = _as_str((chosen.get("data") or {}).get("saved_at"))
+                prev_time = _as_str(chosen_data.get("saved_at"))
                 cur_time = _as_str(data.get("saved_at"))
                 if cur_time > prev_time:
-                    chosen = {"path": path, "data": data}
-        if not chosen:
+                    chosen_data = data
+        if chosen_data is None:
             return {"ok": False, "error": "target_version_not_found", "target_version": target}
 
-        cfg = chosen["data"].get("config") if isinstance(chosen["data"].get("config"), dict) else {}
+        cfg = _as_dict(chosen_data.get("config"))
         restored = dict(cfg)
         restored["restored_from_version"] = target
         restore_note = note or f"rollback to version {target}"
