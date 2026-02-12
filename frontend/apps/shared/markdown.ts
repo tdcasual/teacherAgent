@@ -119,6 +119,8 @@ export const renderMarkdown = (content: string) => {
 export const absolutizeChartImageUrls = (html: string, apiBase: string) => {
   const base = (apiBase || '').trim().replace(/\/+$/, '')
   if (!base) return html
-  return html.replace(/(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
+  return html
+    .replace(/(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
+    .replace(/(<a\b[^>]*\bhref=["'])(\/charts\/[^"']+)(["'])/gi, (_, p1, p2, p3) => `${p1}${base}${p2}${p3}`)
 }
 

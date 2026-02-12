@@ -64,6 +64,26 @@ def _safe_any_file_name(value: Any) -> Optional[str]:
     return name
 
 
+_PREVIEWABLE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp"}
+
+
+def _format_artifacts_markdown(artifacts: List[Dict[str, Any]]) -> str:
+    """Generate markdown for artifacts: inline preview for images, download link for others."""
+    lines: List[str] = []
+    for art in artifacts:
+        name = str(art.get("name") or "")
+        url = str(art.get("url") or "")
+        if not name or not url:
+            continue
+        ext = Path(name).suffix.lower()
+        if ext in _PREVIEWABLE_EXTS:
+            lines.append(f"![{name}]({url})")
+            lines.append(f"[下载 {name}]({url})")
+        else:
+            lines.append(f"[下载 {name}]({url})")
+    return "\n\n".join(lines)
+
+
 def _clip_text(value: str) -> str:
     if len(value) <= _MAX_STD_CHARS:
         return value
@@ -628,6 +648,21 @@ def _build_runner_source(python_code: str, input_payload: Any, output_dir: Path,
         "    if target not in ARTIFACTS:\n"
         "        ARTIFACTS.append(target)\n"
         "    return target\n"
+        "def save_file(src_or_name, content=None):\n"
+        "    import shutil as _shutil\n"
+        "    if content is not None:\n"
+        "        target = os.path.join(OUTPUT_DIR, os.path.basename(str(src_or_name)))\n"
+        "        mode = 'wb' if isinstance(content, (bytes, bytearray)) else 'w'\n"
+        "        with open(target, mode) as f:\n"
+        "            f.write(content)\n"
+        "    elif os.path.isfile(src_or_name):\n"
+        "        target = os.path.join(OUTPUT_DIR, os.path.basename(str(src_or_name)))\n"
+        "        _shutil.copy2(src_or_name, target)\n"
+        "    else:\n"
+        "        return None\n"
+        "    if target not in ARTIFACTS:\n"
+        "        ARTIFACTS.append(target)\n"
+        "    return target\n"
         "ENV = {\n"
         "    'input_data': INPUT_DATA,\n"
         "    'plt': plt,\n"
@@ -636,6 +671,7 @@ def _build_runner_source(python_code: str, input_payload: Any, output_dir: Path,
         "    'sns': sns,\n"
         "    'save_chart': save_chart,\n"
         "    'save_text': save_text,\n"
+        "    'save_file': save_file,\n"
         "    'OUTPUT_DIR': OUTPUT_DIR,\n"
         "    'MAIN_IMAGE': MAIN_IMAGE,\n"
         "}\n"
@@ -742,6 +778,13 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
                 if pre_install.get("ok"):
                     installed_packages.extend(requested_packages)
 
+        # Snapshot cwd files before execution to detect new outputs
+        _cwd_before: set[str] = set()
+        try:
+            _cwd_before = {e.name for e in os.scandir(str(app_root)) if e.is_file(follow_symlinks=False)}
+        except Exception:
+            _log.debug("failed to snapshot cwd before execution")
+
         auto_installed_missing: set[str] = set()
         for attempt in range(1, exec_retries + 1):
             cur_timed_out = False
@@ -815,6 +858,22 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
                 _log.debug("failed to mark chart env used in finally for scope %s", env_scope)
                 pass
 
+    # Capture new files from cwd that weren't there before execution
+    try:
+        _cwd_after = {e.name for e in os.scandir(str(app_root)) if e.is_file(follow_symlinks=False)}
+        _new_files = _cwd_after - _cwd_before
+        for fname in sorted(_new_files):
+            src = Path(app_root) / fname
+            dst = output_dir / fname
+            if not dst.exists():
+                try:
+                    shutil.copy2(str(src), str(dst))
+                    _log.debug("captured new cwd file %s → %s", fname, dst)
+                except Exception:
+                    _log.debug("failed to capture cwd file %s", fname)
+    except Exception:
+        _log.debug("failed to scan cwd for new files after execution")
+
     stdout_path.write_text(stdout, encoding="utf-8")
     stderr_path.write_text(stderr, encoding="utf-8")
 
@@ -829,7 +888,8 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
             if image_url is None and path.name.lower().endswith(".png"):
                 image_url = url
 
-    ok = (exit_code == 0) and bool(image_url)
+    ok = (exit_code == 0) and (bool(image_url) or bool(artifacts))
+    artifacts_markdown = _format_artifacts_markdown(artifacts)
     finished_at = _iso_now()
 
     meta = {
@@ -856,6 +916,7 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
         "stderr_file": str(stderr_path),
         "image_url": image_url,
         "artifacts": artifacts,
+        "artifacts_markdown": artifacts_markdown,
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -867,6 +928,7 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
         "exit_code": exit_code,
         "image_url": image_url,
         "artifacts": artifacts,
+        "artifacts_markdown": artifacts_markdown,
         "stdout": stdout,
         "stderr": stderr,
         "python_executable": python_exec,

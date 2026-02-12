@@ -419,15 +419,22 @@ def build_default_registry() -> ToolRegistry:
         parameters=_schema_object({"example_id": {"type": "string"}, "out": {"type": "string"}}, required=["example_id"]),
     )
 
-    # Charts (teacher-only in API role gate)
+    # Charts / code execution (teacher-only in API role gate)
     tools["chart.exec"] = ToolDef(
         name="chart.exec",
-        description="Execute Python chart code and return generated image URL/artifacts",
+        description=(
+            "Execute Python code and return generated artifacts. "
+            "Helpers available in code: save_chart(name), save_text(name, content), "
+            "save_file(path_or_name, content=None) — copies/creates file in OUTPUT_DIR. "
+            "Files written to cwd are also auto-captured. "
+            "Result includes artifacts_markdown — paste it directly into your reply "
+            "to show image previews and download links to the user."
+        ),
         parameters=_schema_object(
             {
-                "python_code": {"type": "string", "description": "Python code to execute"},
+                "python_code": {"type": "string", "description": "Python code to execute. Use save_file(path) to save output files."},
                 "input_data": {"type": "object", "description": "optional JSON object passed to python as input_data"},
-                "chart_hint": {"type": "string", "description": "optional chart intent/notes"},
+                "chart_hint": {"type": "string", "description": "optional intent/notes"},
                 "timeout_sec": {"type": "integer", "default": 120},
                 "save_as": {"type": "string", "description": "optional PNG filename, e.g. main.png"},
                 "auto_install": {"type": "boolean", "default": False},

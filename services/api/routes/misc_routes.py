@@ -64,12 +64,17 @@ def build_router(core) -> APIRouter:
     def skills():
         return core.list_skills()
 
+    _INLINE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp"}
+
     @router.get("/charts/{run_id}/{file_name}")
     def chart_image_file(run_id: str, file_name: str):
         path = core.resolve_chart_image_path(core.UPLOADS_DIR, run_id, file_name)
         if not path:
             raise HTTPException(status_code=404, detail="chart file not found")
-        return FileResponse(path)
+        ext = path.suffix.lower()
+        if ext in _INLINE_EXTS:
+            return FileResponse(path)
+        return FileResponse(path, filename=path.name)
 
     @router.get("/chart-runs/{run_id}/meta")
     def chart_run_meta(run_id: str):

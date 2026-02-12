@@ -57,6 +57,7 @@ export default function SkillsTab(props: SkillsTabProps) {
   const [importPreview, setImportPreview] = useState<any>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState('')
+  const [depsInfo, setDepsInfo] = useState<{ skillId: string; missing: string[]; installing: boolean } | null>(null)
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editDesc, setEditDesc] = useState('')
@@ -98,16 +99,32 @@ export default function SkillsTab(props: SkillsTabProps) {
     } catch (e: any) { setImportError(e.message || '网络错误') } finally { setImportLoading(false) }
   }
 
-  const handleImportConfirm = async () => {
+  const handleImportConfirm = async (overwrite = false) => {
     if (!importUrl.trim()) return
     setImportLoading(true); setImportError('')
     try {
       const res = await fetch(`${apiBase}/teacher/skills/import`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ github_url: importUrl.trim() }),
+        body: JSON.stringify({ github_url: importUrl.trim(), overwrite }),
       })
       const data = await res.json()
-      if (!data.ok) { setImportError(data.error || data.detail || '导入失败'); return }
+      if (!data.ok) {
+        if (data.exists && !overwrite) {
+          setImportError(`${data.error}`)
+          return
+        }
+        setImportError(data.error || data.detail || '导入失败')
+        return
+      }
+      // Check dependencies after successful import
+      const skillId = data.skill_id
+      try {
+        const depsRes = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(skillId)}/deps`)
+        const depsData = await depsRes.json()
+        if (depsData.ok && depsData.missing?.length > 0) {
+          setDepsInfo({ skillId, missing: depsData.missing, installing: false })
+        }
+      } catch { /* ignore dep check failure */ }
       setShowImportDialog(false); setImportUrl(''); setImportPreview(null)
       void fetchSkills()
     } catch (e: any) { setImportError(e.message || '网络错误') } finally { setImportLoading(false) }
@@ -217,10 +234,19 @@ export default function SkillsTab(props: SkillsTabProps) {
           <input className="w-full py-[6px] px-[8px] border border-border rounded-[6px] text-[13px] bg-surface" value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="https://github.com/user/repo/tree/main/skill-name" />
           <div className="flex gap-[8px] mt-[8px]">
             <button type="button" className="ghost" onClick={handleImportPreview} disabled={importLoading}>预览</button>
-            <button type="button" onClick={handleImportConfirm} disabled={importLoading || !importUrl.trim()}>{importLoading ? '导入中…' : '确认导入'}</button>
+            <button type="button" onClick={() => handleImportConfirm(false)} disabled={importLoading || !importUrl.trim()}>{importLoading ? '导入中…' : '确认导入'}</button>
             <button type="button" className="ghost" onClick={() => setShowImportDialog(false)}>取消</button>
           </div>
-          {importError && <div className="status err">{importError}</div>}
+          {importError && (
+            <div className="flex items-center gap-[8px] mt-[6px]">
+              <div className="status err flex-1">{importError}</div>
+              {importError.includes('已存在') && (
+                <button type="button" onClick={() => handleImportConfirm(true)} disabled={importLoading} className="whitespace-nowrap">
+                  强制覆盖
+                </button>
+              )}
+            </div>
+          )}
           {importPreview && (
             <div className="mt-[8px] p-[8px] bg-surface rounded-[6px] text-[13px]">
               <strong>{importPreview.title}</strong>
@@ -229,6 +255,37 @@ export default function SkillsTab(props: SkillsTabProps) {
               {importPreview.preview && <pre className="status ok">{importPreview.preview}</pre>}
             </div>
           )}
+        </div>
+      )}
+      {depsInfo && depsInfo.missing.length > 0 && (
+        <div className="bg-[#fff8e6] border border-[#e6c84a] rounded-[8px] p-[12px] mb-[12px]">
+          <div className="text-[13px] font-medium mb-[6px]">技能需要安装以下依赖：</div>
+          <div className="text-[12px] text-muted mb-[8px]">{depsInfo.missing.join('、')}</div>
+          <div className="flex gap-[8px]">
+            <button
+              type="button"
+              disabled={depsInfo.installing}
+              onClick={async () => {
+                setDepsInfo(prev => prev ? { ...prev, installing: true } : null)
+                try {
+                  const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(depsInfo.skillId)}/install-deps`, { method: 'POST' })
+                  const data = await res.json()
+                  if (data.ok) {
+                    setDepsInfo(null)
+                  } else {
+                    alert(data.error || '安装失败')
+                    setDepsInfo(prev => prev ? { ...prev, installing: false } : null)
+                  }
+                } catch (e: any) {
+                  alert(e.message || '安装失败')
+                  setDepsInfo(prev => prev ? { ...prev, installing: false } : null)
+                }
+              }}
+            >
+              {depsInfo.installing ? '安装中…' : '一键安装'}
+            </button>
+            <button type="button" className="ghost" onClick={() => setDepsInfo(null)}>忽略</button>
+          </div>
         </div>
       )}
       {skillsLoading && <div className="text-[12px] text-muted mb-[8px]">正在加载技能...</div>}

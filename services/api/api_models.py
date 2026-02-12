@@ -155,3 +155,4 @@ class TeacherSkillUpdateRequest(BaseModel):
 
 class TeacherSkillImportRequest(BaseModel):
     github_url: str = Field(..., max_length=2000)
+    overwrite: bool = False

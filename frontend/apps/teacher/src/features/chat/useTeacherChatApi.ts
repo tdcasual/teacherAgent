@@ -340,7 +340,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       const raw = Array.isArray(data.skills) ? data.skills : []
       const teacherSkills = raw.filter((skill) => {
         const roles = skill.allowed_roles
-        return !Array.isArray(roles) || roles.includes('teacher')
+        return !Array.isArray(roles) || roles.length === 0 || roles.includes('teacher')
       })
       if (teacherSkills.length === 0) {
         setSkillList(fallbackSkills)

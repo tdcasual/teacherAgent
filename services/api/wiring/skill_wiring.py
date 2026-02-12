@@ -7,6 +7,8 @@ __all__ = [
     "delete_teacher_skill",
     "import_skill_from_github",
     "preview_github_skill",
+    "check_skill_dependencies",
+    "install_skill_dependencies",
 ]
 
 from typing import Any, Dict, List, Optional
@@ -18,6 +20,8 @@ from ..teacher_skill_service import (
     delete_teacher_skill as _delete_impl,
     import_skill_from_github as _import_impl,
     preview_github_skill as _preview_impl,
+    check_skill_dependencies as _check_deps_impl,
+    install_skill_dependencies as _install_deps_impl,
 )
 
 from . import get_app_core as _app_core
@@ -61,9 +65,17 @@ def delete_teacher_skill(*, skill_id: str) -> Dict[str, Any]:
     return _delete_impl(_teacher_skill_deps(), skill_id=skill_id)
 
 
-def import_skill_from_github(*, github_url: str) -> Dict[str, Any]:
-    return _import_impl(_teacher_skill_deps(), github_url=github_url)
+def import_skill_from_github(*, github_url: str, overwrite: bool = False) -> Dict[str, Any]:
+    return _import_impl(_teacher_skill_deps(), github_url=github_url, overwrite=overwrite)
 
 
 def preview_github_skill(*, github_url: str) -> Dict[str, Any]:
     return _preview_impl(_teacher_skill_deps(), github_url=github_url)
+
+
+def check_skill_dependencies(*, skill_id: str) -> Dict[str, Any]:
+    return _check_deps_impl(_teacher_skill_deps(), skill_id=skill_id)
+
+
+def install_skill_dependencies(*, skill_id: str, packages=None) -> Dict[str, Any]:
+    return _install_deps_impl(_teacher_skill_deps(), skill_id=skill_id, packages=packages)
