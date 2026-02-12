@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, Optional
 def resolve_chat_lane_id(
     role_hint: Optional[str],
     *,
-    safe_fs_id: Callable[[str, str], str],
+    safe_fs_id: Callable[..., str],
     resolve_teacher_id: Callable[[Optional[str]], str],
     session_id: Optional[str] = None,
     student_id: Optional[str] = None,
@@ -28,13 +28,14 @@ def resolve_chat_lane_id(
 def resolve_chat_lane_id_from_job(
     job: Dict[str, Any],
     *,
-    safe_fs_id: Callable[[str, str], str],
+    safe_fs_id: Callable[..., str],
     resolve_teacher_id: Callable[[Optional[str]], str],
 ) -> str:
     lane_id = str(job.get("lane_id") or "").strip()
     if lane_id:
         return lane_id
-    request = job.get("request") if isinstance(job.get("request"), dict) else {}
+    request_raw = job.get("request")
+    request: Dict[str, Any] = request_raw if isinstance(request_raw, dict) else {}
     role = str(job.get("role") or request.get("role") or "unknown")
     session_id = str(job.get("session_id") or "").strip() or None
     student_id = str(job.get("student_id") or request.get("student_id") or "").strip() or None
