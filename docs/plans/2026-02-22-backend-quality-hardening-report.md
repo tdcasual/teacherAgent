@@ -1,0 +1,62 @@
+# Backend Quality Hardening Report (Interim)
+
+Date: 2026-02-12
+Scope: Week 1 + Week 2 Task 7 implementation snapshot
+
+## 1) Baseline vs Current
+
+| Metric | Baseline | Current | Delta | Reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Ruff errors (`ruff check services/api --statistics`) | 745 | 731 | -14 | 1.9% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 381 | -101 | 21.0% |
+| `services/api/app_core.py` line count | 700 | 666 | -34 | 4.9% |
+
+## 2) Completed Changes
+
+1. Added quality baseline + budget artifacts and collector script.
+2. Added guardrail tests for star imports and duplicate route files.
+3. Removed star imports from `services/api/llm_routing.py` with explicit exports.
+4. Hardened malformed nested config handling in `services/api/teacher_provider_registry_service.py`.
+5. Extracted chat limiter/concurrency helpers from `services/api/app_core.py` to `services/api/chat_limits.py`.
+6. Expanded CI static scope (`.github/workflows/ci.yml`) and added `tests/test_ci_backend_scope.py`.
+7. Hardened production runtime policy:
+   - `AUTH_REQUIRED=1` + missing `AUTH_TOKEN_SECRET` now fails fast in production lifecycle startup.
+   - Queue backend no longer silently falls back to inline in production unless explicitly allowed.
+
+## 3) Validation Evidence
+
+Executed and passed (representative list):
+
+- `python3 -m pytest -q tests/test_chat_limits.py tests/test_chat_route_flow.py tests/test_chat_start_flow.py tests/test_app_core_surface.py`
+- `python3 -m pytest -q tests/test_ci_backend_scope.py tests/test_ci_workflow_quality.py`
+- `python3 -m pytest -q tests/test_security_auth_hardening.py tests/test_queue_backend_factory.py tests/test_tenant_admin_and_dispatcher.py`
+- `python3 -m ruff check services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py tests/test_queue_backend_factory.py tests/test_security_auth_hardening.py`
+- `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py`
+
+Metric collection commands:
+
+- `python3 -m ruff check services/api --statistics`
+- `python3 -m mypy --follow-imports=skip services/api`
+- `wc -l services/api/app_core.py`
+
+## 4) Exit Criteria Status
+
+Criteria from the 2-week plan are partially met:
+
+1. Ruff reduction >=30%: **Not met** (current 1.9%).
+2. Mypy reduction >=35%: **Not met** (current 21.0%).
+3. `app_core.py` <=500 lines: **Not met** (current 666).
+4. CI backend-quality guardrails integrated: **Met**.
+5. Newly added guardrail tests pass locally: **Met**.
+
+## 5) Remaining Risks
+
+1. `services/api/app_core.py` still carries high coupling and static debt.
+2. Global Ruff debt remains high in `services/api` and limits stricter CI adoption.
+3. Mypy debt is reduced but still concentrated in older modules not yet isolated.
+
+## 6) Next-Phase Focus
+
+1. Continue extracting cohesive slices from `app_core` (runtime wiring vs route handlers).
+2. Target top Ruff hotspots by file-level error density; enforce per-file budgets.
+3. Expand mypy scope in CI with module allowlist rotation and hard fail for touched files.
