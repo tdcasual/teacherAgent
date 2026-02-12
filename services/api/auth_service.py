@@ -8,8 +8,7 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, Set
-
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set
 
 _CURRENT_PRINCIPAL: contextvars.ContextVar[Optional["AuthPrincipal"]] = contextvars.ContextVar(
     "CURRENT_PRINCIPAL",
@@ -71,6 +70,20 @@ def _b64url_decode(text: str) -> bytes:
 
 def _secret() -> str:
     return str(os.getenv("AUTH_TOKEN_SECRET", "") or "").strip()
+
+
+def _is_production(getenv: Callable[[str, Optional[str]], Optional[str]] = os.getenv) -> bool:
+    env = str(getenv("APP_ENV", None) or getenv("ENV", None) or "development").strip().lower()
+    return env in {"prod", "production"}
+
+
+def validate_auth_secret_policy(*, getenv: Callable[[str, Optional[str]], Optional[str]] = os.getenv) -> None:
+    if not _truthy(getenv("AUTH_REQUIRED", None)):
+        return
+    if str(getenv("AUTH_TOKEN_SECRET", None) or "").strip():
+        return
+    if _is_production(getenv):
+        raise RuntimeError("AUTH_TOKEN_SECRET is required when AUTH_REQUIRED is enabled in production")
 
 
 def _normalize_role(value: Any) -> str:
@@ -176,7 +189,7 @@ def resolve_principal_from_scope(scope: Dict[str, Any], *, allow_exempt: bool = 
     return resolve_principal_from_headers(headers_map, path=str(path), method=str(method), allow_exempt=allow_exempt)
 
 
-def set_current_principal(principal: Optional[AuthPrincipal]):
+def set_current_principal(principal: Optional[AuthPrincipal]) -> contextvars.Token:
     return _CURRENT_PRINCIPAL.set(principal)
 
 

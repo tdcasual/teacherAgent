@@ -276,5 +276,18 @@ def default_teacher_id() -> str:
     return env_str("DEFAULT_TEACHER_ID", "teacher")
 
 
+def app_env() -> str:
+    env = env_str("APP_ENV", "").strip() or env_str("ENV", "development").strip() or "development"
+    return env.lower()
+
+
+def is_production() -> bool:
+    return app_env() in {"prod", "production"}
+
+
+def allow_inline_fallback_in_prod() -> bool:
+    return env_bool("ALLOW_INLINE_FALLBACK_IN_PROD", "0")
+
+
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))

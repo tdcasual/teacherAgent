@@ -1,3 +1,5 @@
+import pytest
+
 from services.api.queue.queue_backend_factory import get_app_queue_backend, reset_queue_backend
 
 
@@ -89,3 +91,46 @@ def test_get_app_queue_backend_caches_and_resets():
     )
 
     assert backend_3 is not backend_1
+
+
+def test_prod_mode_does_not_fallback_to_inline_backend(monkeypatch):
+    reset_queue_backend()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ALLOW_INLINE_FALLBACK_IN_PROD", raising=False)
+
+    created = []
+
+    def inline_factory():
+        backend = DummyBackend("inline")
+        created.append(backend)
+        return backend
+
+    def failing_backend(**_kwargs):
+        raise RuntimeError("rq unavailable")
+
+    with pytest.raises(RuntimeError, match="inline fallback disabled"):
+        get_app_queue_backend(
+            tenant_id="prod-tenant",
+            is_pytest=False,
+            inline_backend_factory=inline_factory,
+            get_backend=failing_backend,
+        )
+    assert created == []
+
+
+def test_prod_mode_can_enable_inline_fallback_explicitly(monkeypatch):
+    reset_queue_backend()
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ALLOW_INLINE_FALLBACK_IN_PROD", "1")
+
+    def failing_backend(**_kwargs):
+        raise RuntimeError("rq unavailable")
+
+    backend = get_app_queue_backend(
+        tenant_id="prod-tenant",
+        is_pytest=False,
+        inline_backend_factory=lambda: DummyBackend("inline"),
+        get_backend=failing_backend,
+    )
+
+    assert backend.label == "inline"

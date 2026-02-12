@@ -4,6 +4,8 @@ import logging
 import threading
 from typing import Callable, Dict, Optional
 
+from services.api import settings
+
 from .queue_backend import QueueBackend, get_queue_backend
 
 _log = logging.getLogger(__name__)
@@ -11,6 +13,14 @@ _log = logging.getLogger(__name__)
 
 _QUEUE_BACKENDS: Dict[str, QueueBackend] = {}
 _BACKEND_LOCK = threading.Lock()
+
+
+def _inline_fallback_allowed(*, is_pytest: bool) -> bool:
+    if is_pytest:
+        return True
+    if not settings.is_production():
+        return True
+    return settings.allow_inline_fallback_in_prod()
 
 
 def get_app_queue_backend(
@@ -29,7 +39,11 @@ def get_app_queue_backend(
             else:
                 try:
                     backend = get_backend(tenant_id=tenant_id)
-                except RuntimeError:
+                except RuntimeError as exc:
+                    if not _inline_fallback_allowed(is_pytest=is_pytest):
+                        raise RuntimeError(
+                            "RQ/Redis backend unavailable; inline fallback disabled in production"
+                        ) from exc
                     _log.warning(
                         "RQ/Redis backend unavailable; falling back to inline backend (dev mode)"
                     )

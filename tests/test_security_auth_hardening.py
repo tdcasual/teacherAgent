@@ -11,9 +11,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
 from fastapi.testclient import TestClient
 
-from services.api.auth_service import mint_test_token
+from services.api.auth_service import mint_test_token, validate_auth_secret_policy
 
 
 def _auth_headers(actor_id: str, role: str, *, secret: str, tenant_id: str = ""):
@@ -40,6 +41,15 @@ def load_app(tmp_dir: Path, *, secret: str = "test-secret"):
 
     importlib.reload(app_mod)
     return app_mod
+
+
+def test_auth_required_true_without_secret_raises_startup_error(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_REQUIRED", "1")
+    monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    with pytest.raises(RuntimeError, match="AUTH_TOKEN_SECRET"):
+        validate_auth_secret_policy()
 
 
 class _ProbeHandler(BaseHTTPRequestHandler):
