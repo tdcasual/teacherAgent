@@ -229,7 +229,7 @@ test('restoring pending job keeps only one pending status bubble', async ({ page
 
   const pendingStatusCount = async () =>
     page.evaluate(() => {
-      const targets = new Set(['正在生成…', '正在恢复上一条回复…'])
+      const targets = new Set(['正在生成…', '正在回复中…', '正在恢复上一条回复…'])
       return Array.from(document.querySelectorAll('.message.assistant .text')).filter((el) =>
         targets.has(String((el as HTMLElement).innerText || '').trim()),
       ).length
@@ -240,6 +240,7 @@ test('restoring pending job keeps only one pending status bubble', async ({ page
 
   await page.goto('/')
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '正在回复中' }).first()).toBeVisible()
 
   let maxPendingStatusCount = 0
   for (let i = 0; i < 16; i += 1) {

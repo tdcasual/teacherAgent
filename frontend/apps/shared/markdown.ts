@@ -7,28 +7,52 @@ import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { visit } from 'unist-util-visit';
+import type { Node } from 'unist';
+
+type MarkdownNode = {
+  type?: string
+  value?: unknown
+  children?: MarkdownNode[]
+}
+
+const asMarkdownNode = (value: unknown): MarkdownNode | null => {
+  if (!value || typeof value !== 'object') return null;
+  return value as MarkdownNode;
+};
+
+const asMarkdownParent = (
+  value: unknown,
+): (MarkdownNode & { children: MarkdownNode[] }) | null => {
+  const node = asMarkdownNode(value);
+  if (!node || !Array.isArray(node.children)) return null;
+  return node as MarkdownNode & { children: MarkdownNode[] };
+};
 
 const removeEmptyParagraphs = () => {
-  return (tree: any) => {
-    visit(tree, 'paragraph', (node: any, index: number | null | undefined, parent: any) => {
-      if (!parent || typeof index !== 'number') return;
-      if (!node.children || node.children.length === 0) {
-        parent.children.splice(index, 1);
+  return (tree: Node) => {
+    visit(tree, 'paragraph', (node: unknown, index: number | null | undefined, parent: unknown) => {
+      const parentNode = asMarkdownParent(parent);
+      const paragraph = asMarkdownNode(node);
+      if (!parentNode || !paragraph || typeof index !== 'number') return;
+      if (!Array.isArray(paragraph.children) || paragraph.children.length === 0) {
+        parentNode.children.splice(index, 1);
       }
     });
   };
 };
 
 const remarkLatexBrackets = () => {
-  return (tree: any) => {
-    visit(tree, 'text', (node: any, index: number | null | undefined, parent: any) => {
-      if (!parent || typeof index !== 'number') return;
-      if (parent.type === 'inlineMath' || parent.type === 'math') return;
+  return (tree: Node) => {
+    visit(tree, 'text', (node: unknown, index: number | null | undefined, parent: unknown) => {
+      const parentNode = asMarkdownParent(parent);
+      const textNode = asMarkdownNode(node);
+      if (!parentNode || !textNode || typeof index !== 'number') return;
+      if (parentNode.type === 'inlineMath' || parentNode.type === 'math') return;
 
-      const value = String(node.value || '');
+      const value = String(textNode.value || '');
       if (!value.includes('\\[') && !value.includes('\\(')) return;
 
-      const nodes: any[] = [];
+      const nodes: MarkdownNode[] = [];
       let pos = 0;
 
       const findUnescaped = (token: string, start: number) => {
@@ -73,7 +97,7 @@ const remarkLatexBrackets = () => {
       }
 
       if (nodes.length) {
-        parent.children.splice(index, 1, ...nodes);
+        parentNode.children.splice(index, 1, ...nodes);
         return index + nodes.length;
       }
     });
@@ -101,13 +125,52 @@ const processor = unified()
   .use(rehypeSanitize, katexSchema)
   .use(rehypeStringify);
 
+const findUnescapedToken = (value: string, token: string, start: number) => {
+  let idx = value.indexOf(token, start);
+  while (idx > 0 && value[idx - 1] === '\\') {
+    idx = value.indexOf(token, idx + 1);
+  }
+  return idx;
+};
+
 const normalizeMathDelimiters = (content: string) => {
   if (!content) return '';
-  return content
-    .replace(/\\\[/g, '$$')
-    .replace(/\\\]/g, '$$')
-    .replace(/\\\(/g, '$')
-    .replace(/\\\)/g, '$');
+  let pos = 0;
+  let output = '';
+
+  while (pos < content.length) {
+    const nextDisplay = findUnescapedToken(content, '\\[', pos);
+    const nextInline = findUnescapedToken(content, '\\(', pos);
+    let next = -1;
+    let mode: 'display' | 'inline' | '' = '';
+
+    if (nextDisplay !== -1 && (nextInline === -1 || nextDisplay < nextInline)) {
+      next = nextDisplay;
+      mode = 'display';
+    } else if (nextInline !== -1) {
+      next = nextInline;
+      mode = 'inline';
+    }
+
+    if (next === -1) {
+      output += content.slice(pos);
+      break;
+    }
+
+    output += content.slice(pos, next);
+    const closeToken = mode === 'display' ? '\\]' : '\\)';
+    const end = findUnescapedToken(content, closeToken, next + 2);
+    if (end === -1) {
+      output += content.slice(next);
+      break;
+    }
+
+    const mathValue = content.slice(next + 2, end);
+    output += mode === 'display' ? `\n$$\n${mathValue}\n$$\n` : `$${mathValue}$`;
+    pos = end + 2;
+  }
+
+  return output;
 };
 
 export const renderMarkdown = (content: string) => {

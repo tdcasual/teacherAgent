@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
 import logging
+from typing import Any, Dict, List
+
 _log = logging.getLogger(__name__)
 
 

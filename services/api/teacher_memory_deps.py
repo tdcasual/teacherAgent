@@ -7,66 +7,59 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 from .config import (
-    TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
-    TEACHER_MEMORY_TTL_DAYS_DAILY,
-    TEACHER_MEMORY_TTL_DAYS_MEMORY,
-    TEACHER_MEMORY_DECAY_ENABLED,
-    TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
-    TEACHER_MEMORY_AUTO_APPLY_STRICT,
-    TEACHER_MEMORY_AUTO_APPLY_ENABLED,
-    TEACHER_MEMORY_AUTO_APPLY_TARGETS,
-    TEACHER_MEMORY_AUTO_INFER_ENABLED,
-    TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
-    TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
-    TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS,
-    TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
-    TEACHER_MEMORY_AUTO_ENABLED,
-    TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
-    TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
-    TEACHER_MEMORY_FLUSH_ENABLED,
-    TEACHER_SESSION_COMPACT_ENABLED,
-    TEACHER_SESSION_COMPACT_MAX_MESSAGES,
-    TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
-    TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS,
-    TEACHER_SESSION_COMPACT_MAIN_ONLY,
-    TEACHER_SESSION_COMPACT_KEEP_TAIL,
-    CHAT_MAX_MESSAGES_TEACHER,
-    SESSION_INDEX_MAX_ITEMS,
+    _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
+    _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
     _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
     _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
-    _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
-    _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
-    _TEACHER_MEMORY_CONFLICT_GROUPS,
+    CHAT_MAX_MESSAGES_TEACHER,
+    SESSION_INDEX_MAX_ITEMS,
+    TEACHER_MEMORY_AUTO_APPLY_ENABLED,
+    TEACHER_MEMORY_AUTO_APPLY_STRICT,
+    TEACHER_MEMORY_AUTO_APPLY_TARGETS,
+    TEACHER_MEMORY_AUTO_ENABLED,
+    TEACHER_MEMORY_AUTO_INFER_ENABLED,
+    TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
+    TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
+    TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
+    TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS,
+    TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
+    TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
+    TEACHER_MEMORY_FLUSH_ENABLED,
+    TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
+    TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS,
+    TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
+    TEACHER_SESSION_COMPACT_ENABLED,
+    TEACHER_SESSION_COMPACT_KEEP_TAIL,
+    TEACHER_SESSION_COMPACT_MAIN_ONLY,
+    TEACHER_SESSION_COMPACT_MAX_MESSAGES,
     TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY,
     TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
 )
+from .job_repository import _atomic_write_json
 from .paths import (
-    teacher_workspace_dir,
-    teacher_workspace_file,
-    teacher_session_file,
     teacher_daily_memory_dir,
     teacher_daily_memory_path,
+    teacher_session_file,
+    teacher_workspace_dir,
+    teacher_workspace_file,
 )
 from .session_store import (
     load_teacher_sessions_index,
     save_teacher_sessions_index,
 )
-from .job_repository import _atomic_write_json
-
-from .teacher_session_compaction_service import TeacherSessionCompactionDeps
 from .teacher_context_service import TeacherContextDeps
-from .teacher_workspace_service import TeacherWorkspaceDeps
 from .teacher_memory_api_service import TeacherMemoryApiDeps
-from .teacher_memory_auto_service import TeacherMemoryAutoDeps
 from .teacher_memory_apply_service import TeacherMemoryApplyDeps
+from .teacher_memory_auto_service import TeacherMemoryAutoDeps
 from .teacher_memory_insights_service import TeacherMemoryInsightsDeps
-from .teacher_memory_record_service import TeacherMemoryRecordDeps
 from .teacher_memory_propose_service import TeacherMemoryProposeDeps
+from .teacher_memory_record_service import TeacherMemoryRecordDeps
 from .teacher_memory_search_service import TeacherMemorySearchDeps
 from .teacher_memory_store_service import TeacherMemoryStoreDeps
+from .teacher_session_compaction_service import TeacherSessionCompactionDeps
+from .teacher_workspace_service import TeacherWorkspaceDeps
 
 __all__ = [
     "_teacher_workspace_deps",

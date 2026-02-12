@@ -13,31 +13,53 @@ __all__ = [
     "_agent_runtime_deps",
 ]
 
-from typing import Any, Dict, List, Optional
 
-from ..assignment_requirements_service import (
-    compute_requirements_missing as _compute_requirements_missing_impl,
-    merge_requirements as _merge_requirements_impl,
-)
+from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+
 from ..agent_service import (
     AgentRuntimeDeps,
+)
+from ..agent_service import (
     default_load_skill_runtime as _default_load_skill_runtime_impl,
+)
+from ..agent_service import (
     default_teacher_tools_to_openai as _default_teacher_tools_to_openai_impl,
+)
+from ..assignment_requirements_service import (
+    compute_requirements_missing as _compute_requirements_missing_impl,
+)
+from ..assignment_requirements_service import (
+    merge_requirements as _merge_requirements_impl,
 )
 from ..chart_agent_run_service import (
     ChartAgentRunDeps,
+)
+from ..chart_agent_run_service import (
     chart_agent_bool as _chart_agent_bool_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_default_code as _chart_agent_default_code_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_engine as _chart_agent_engine_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_generate_candidate as _chart_agent_generate_candidate_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_generate_candidate_opencode as _chart_agent_generate_candidate_opencode_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_opencode_overrides as _chart_agent_opencode_overrides_impl,
+)
+from ..chart_agent_run_service import (
     chart_agent_packages as _chart_agent_packages_impl,
 )
 from ..chart_api_service import ChartApiDeps
 from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
 from ..core_utils import _is_safe_tool_id, _resolve_app_path
+from ..dynamic_skill_tools import dispatch_dynamic_tool as _dispatch_dynamic_tool_impl
 from ..exam_longform_service import generate_longform_reply as _generate_longform_reply_impl
 from ..exam_score_processing_service import normalize_excel_cell as _normalize_excel_cell_impl
 from ..exam_utils import _safe_int_arg
@@ -45,9 +67,6 @@ from ..lesson_core_tool_service import LessonCaptureDeps
 from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
-from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
-
-
 from . import get_app_core as _app_core
 from .exam_wiring import _exam_longform_deps
 
@@ -96,6 +115,15 @@ def _tool_dispatch_deps():
         teacher_llm_routing_propose=_ac.teacher_llm_routing_propose,
         teacher_llm_routing_apply=_ac.teacher_llm_routing_apply,
         teacher_llm_routing_rollback=_ac.teacher_llm_routing_rollback,
+        dynamic_tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: _dispatch_dynamic_tool_impl(
+            name=name,
+            args=args,
+            role=role,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
+            diag_log=_ac.diag_log,
+        ),
     )
 
 

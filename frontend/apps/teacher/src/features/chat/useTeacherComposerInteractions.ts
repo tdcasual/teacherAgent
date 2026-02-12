@@ -229,7 +229,7 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
       }
 
       if (event.key === 'Enter' && !event.shiftKey) {
-        if ((event.nativeEvent as any)?.isComposing) return
+        if (event.nativeEvent.isComposing) return
         event.preventDefault()
         if (!input.trim()) return
         if (pendingChatJob?.job_id || sending) return

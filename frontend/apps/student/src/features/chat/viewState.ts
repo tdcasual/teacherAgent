@@ -26,8 +26,14 @@ export const compareSessionViewStateUpdatedAt = (a?: string, b?: string) => {
   return ma === mb ? 0 : ma > mb ? 1 : -1
 }
 
-export const normalizeSessionViewStatePayload = (raw: any): SessionViewStatePayload => {
-  const titleRaw = raw && typeof raw === 'object' && raw.title_map && typeof raw.title_map === 'object' ? raw.title_map : {}
+export const normalizeSessionViewStatePayload = (raw: unknown): SessionViewStatePayload => {
+  const rawRecord: Record<string, unknown> =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const titleRawValue = rawRecord.title_map
+  const titleRaw =
+    titleRawValue && typeof titleRawValue === 'object'
+      ? (titleRawValue as Record<string, unknown>)
+      : {}
   const titleMap: Record<string, string> = {}
   for (const [key, value] of Object.entries(titleRaw)) {
     const sid = String(key || '').trim()
@@ -35,10 +41,13 @@ export const normalizeSessionViewStatePayload = (raw: any): SessionViewStatePayl
     if (!sid || !title) continue
     titleMap[sid] = title
   }
-  const hiddenRaw: unknown[] = Array.isArray(raw?.hidden_ids) ? raw.hidden_ids : []
+  const hiddenRaw: unknown[] = Array.isArray(rawRecord.hidden_ids)
+    ? rawRecord.hidden_ids
+    : []
   const hiddenIds = Array.from(new Set(hiddenRaw.map((item: unknown) => String(item || '').trim()).filter(Boolean)))
-  const activeSessionId = String(raw?.active_session_id || '').trim()
-  const updatedAt = parseOptionalIso(raw?.updated_at) !== null ? String(raw?.updated_at) : ''
+  const activeSessionId = String(rawRecord.active_session_id || '').trim()
+  const updatedAtRaw = String(rawRecord.updated_at || '').trim()
+  const updatedAt = parseOptionalIso(updatedAtRaw) !== null ? updatedAtRaw : ''
   return {
     title_map: titleMap,
     hidden_ids: hiddenIds,

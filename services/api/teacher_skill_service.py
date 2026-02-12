@@ -5,9 +5,9 @@ import json
 import logging
 import re
 import shutil
-import urllib.request
 import urllib.error
 import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -95,8 +95,16 @@ def create_teacher_skill(
         allowed_roles=allowed_roles or ["teacher"],
     )
     (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+    dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
+    try:
+        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+
+        dynamic_report = compile_skill_dynamic_tools(skill_dir)
+        clear_dynamic_tools_cache(skill_dir)
+    except Exception:
+        _log.warning("dynamic tool precompile failed for %s", skill_id, exc_info=True)
     deps.clear_skill_cache()
-    return {"ok": True, "skill_id": skill_id}
+    return {"ok": True, "skill_id": skill_id, "dynamic_tools": dynamic_report}
 
 
 def update_teacher_skill(
@@ -143,8 +151,16 @@ def update_teacher_skill(
         allowed_roles=allowed_roles if allowed_roles is not None else existing_roles,
     )
     md_path.write_text(content, encoding="utf-8")
+    dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
+    try:
+        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+
+        dynamic_report = compile_skill_dynamic_tools(skill_dir)
+        clear_dynamic_tools_cache(skill_dir)
+    except Exception:
+        _log.warning("dynamic tool precompile failed for %s", skill_id, exc_info=True)
     deps.clear_skill_cache()
-    return {"ok": True, "skill_id": skill_id}
+    return {"ok": True, "skill_id": skill_id, "dynamic_tools": dynamic_report}
 
 
 def delete_teacher_skill(
@@ -157,6 +173,12 @@ def delete_teacher_skill(
     if not skill_dir.exists():
         return {"ok": False, "error": "skill not found"}
     shutil.rmtree(skill_dir)
+    try:
+        from .dynamic_skill_tools import clear_dynamic_tools_cache
+
+        clear_dynamic_tools_cache(skill_dir)
+    except Exception:
+        _log.warning("dynamic tool cache clear failed for %s", skill_id, exc_info=True)
     deps.clear_skill_cache()
     return {"ok": True, "skill_id": skill_id}
 
@@ -346,10 +368,28 @@ def import_skill_from_github(
     # Auto-generate requirements.txt from pip install commands in markdown
     auto_deps_count = _auto_generate_requirements(skill_dir, body)
 
+    dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
+    try:
+        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+
+        dynamic_report = compile_skill_dynamic_tools(skill_dir)
+        clear_dynamic_tools_cache(skill_dir)
+    except Exception:
+        _log.warning("dynamic tool precompile failed for %s", skill_id, exc_info=True)
+
     deps.clear_skill_cache()
     desc = str(fm.get("description") or fm.get("desc") or "").strip()
     preview = (body[:200] + "...") if len(body) > 200 else body
-    return {"ok": True, "skill_id": skill_id, "title": title, "preview": preview, "desc": desc, "companion_files": companion_count, "auto_deps": auto_deps_count}
+    return {
+        "ok": True,
+        "skill_id": skill_id,
+        "title": title,
+        "preview": preview,
+        "desc": desc,
+        "companion_files": companion_count,
+        "auto_deps": auto_deps_count,
+        "dynamic_tools": dynamic_report,
+    }
 
 
 def preview_github_skill(

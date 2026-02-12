@@ -6,6 +6,7 @@ summary generation, and session record I/O.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -16,19 +17,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .config import (
-    TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC,
-    TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS,
     SESSION_INDEX_MAX_ITEMS,
+    TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS,
+    TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC,
 )
-from .paths import safe_fs_id
+from .paths import safe_fs_id, teacher_sessions_index_path
 from .session_store import (
     _session_index_lock,
     load_teacher_sessions_index,
     save_teacher_sessions_index,
 )
-from .paths import teacher_sessions_index_path
-
-import logging
 
 __all__ = [
     "_teacher_compact_key",

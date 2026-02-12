@@ -5,9 +5,10 @@ with no module-level state or file I/O.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-import logging
+
 _log = logging.getLogger(__name__)
 
 

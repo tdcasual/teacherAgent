@@ -644,6 +644,8 @@ def _build_runner_source(
         f"MAIN_IMAGE = {main_image_json}\n"
         "ARTIFACTS = []\n"
         "os.makedirs(OUTPUT_DIR, exist_ok=True)\n"
+        "os.environ.setdefault('MPLCONFIGDIR', os.path.join(OUTPUT_DIR, '.mplconfig'))\n"
+        "os.makedirs(os.environ['MPLCONFIGDIR'], exist_ok=True)\n"
         "def save_chart(name=None, dpi=160, bbox_inches='tight'):\n"
         "    target = MAIN_IMAGE if not name else os.path.join(OUTPUT_DIR, os.path.basename(str(name)))\n"
         "    if not str(target).lower().endswith('.png'):\n"
@@ -703,9 +705,6 @@ def _build_runner_source(
 
 def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) -> Dict[str, Any]:
     from .chart_sandbox import (
-        build_filesystem_guard_source,
-        build_sanitized_env,
-        make_preexec_fn,
         scan_code_patterns,
     )
     from .global_limits import GLOBAL_CHART_EXEC_SEMAPHORE

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .subject_score_guard_service import (
     looks_like_subject_score_request,
@@ -11,7 +12,6 @@ from .subject_score_guard_service import (
     subject_display,
 )
 
-import logging
 _log = logging.getLogger(__name__)
 
 
@@ -40,6 +40,28 @@ class TeacherAssignmentPreflightDeps:
 
 
 _EXAM_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(EX[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
+
+
+def _looks_like_full_template_prompt(prompt: str) -> bool:
+    text = str(prompt or "").strip()
+    if not text:
+        return False
+    if "共8项" in text or "请按此模板回复" in text:
+        return True
+    if "为了生成一份高质量的作业" in text and "1." in text and "8." in text:
+        return True
+    return False
+
+
+def _build_incremental_missing_prompt(missing: List[str]) -> str:
+    normalized = [str(item).strip() for item in (missing or []) if str(item).strip()]
+    if not normalized:
+        return "老师，请补充缺失信息后我将继续生成作业。"
+    lines = ["老师，已收到大部分作业信息。请仅补充以下内容："]
+    for idx, item in enumerate(normalized, start=1):
+        lines.append(f"{idx}. {item}")
+    lines.append("补充后我将继续生成作业。")
+    return "\n".join(lines)
 
 
 def _extract_exam_id_from_messages(req: Any, deps: TeacherAssignmentPreflightDeps) -> Optional[str]:
@@ -233,6 +255,10 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     if missing:
         deps.diag_log("teacher_preflight.missing", {"missing": missing})
         prompt = analysis.get("next_prompt") or deps.format_requirements_prompt(errors=missing, include_assignment_id=not assignment_id)
+        prompt_text = str(prompt or "")
+        # 缺项较少时，统一追问缺失项，避免反复回整表模板。
+        if len(missing) <= 3 and (not prompt_text or _looks_like_full_template_prompt(prompt_text)):
+            return _build_incremental_missing_prompt(missing)
         return prompt
 
     requirements_payload = analysis.get("requirements") or {}

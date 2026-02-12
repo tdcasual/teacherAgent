@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-
 _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
 _ROUTING_RE = re.compile(r"(llm\s*routing|模型路由|路由(配置|仿真|回滚|策略|规则))", flags=re.I)

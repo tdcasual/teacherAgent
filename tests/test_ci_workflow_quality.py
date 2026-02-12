@@ -19,3 +19,9 @@ def test_ci_has_maintainability_guardrails_step() -> None:
     assert "Run maintainability guardrails" in text
     assert "tests/test_tech_debt_targets.py" in text
     assert "tests/test_observability_store.py" in text
+
+
+def test_ci_has_backend_quality_budget_check_step() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Check backend quality budget" in text
+    assert "python scripts/quality/check_backend_quality_budget.py" in text

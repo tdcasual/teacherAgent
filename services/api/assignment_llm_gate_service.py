@@ -60,7 +60,7 @@ def llm_assignment_gate(req: Any, deps: AssignmentLlmGateDeps) -> Optional[Dict[
         "- per_kp：每个知识点题量（未提到默认5）\n"
         "- mode：kp | explicit | hybrid\n"
         "- ready_to_generate：仅当assignment_id存在且requirements无缺项时为true\n"
-        "- next_prompt：若缺项或未准备好，输出提示老师补全的完整文案（包含8项模板）\n"
+        "- next_prompt：若缺项或未准备好，优先只追问 missing 中的缺失项；仅在缺失项很多时再给完整8项模板\n"
         "- intent：assignment 或 other\n"
         "仅输出JSON对象。"
     )

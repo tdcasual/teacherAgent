@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Protocol
 
 from services.api import settings
+
 from .queue_backend_rq import RqQueueBackend
 
 

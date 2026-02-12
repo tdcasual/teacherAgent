@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+_log = logging.getLogger(__name__)
+
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
     _log.debug("import failed", exc_info=True)
     yaml = None
-
-_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

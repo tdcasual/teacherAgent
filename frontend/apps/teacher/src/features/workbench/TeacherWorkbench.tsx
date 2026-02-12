@@ -91,7 +91,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           setComposerWarning={viewModel.setComposerWarning}
         />
       ) : workbenchTab === 'workflow' ? (
-        <WorkflowTab {...(viewModel as any)} />
+        <WorkflowTab {...viewModel} />
       ) : (
         <MemoryTab
           memoryStatusFilter={viewModel.memoryStatusFilter}

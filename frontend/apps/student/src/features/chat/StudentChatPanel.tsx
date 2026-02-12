@@ -7,7 +7,10 @@ type Props = {
   sending: boolean
   pendingChatJobId: string
   verifiedStudent: VerifiedStudent | null
+  messagesRef: RefObject<HTMLDivElement | null>
   endRef: RefObject<HTMLDivElement | null>
+  isNearBottom: boolean
+  scrollToBottom: () => void
   inputRef: RefObject<HTMLTextAreaElement | null>
   input: string
   setInput: (value: string) => void
@@ -22,7 +25,10 @@ export default function StudentChatPanel(props: Props) {
     sending,
     pendingChatJobId,
     verifiedStudent,
+    messagesRef,
     endRef,
+    isNearBottom,
+    scrollToBottom,
     inputRef,
     input,
     setInput,
@@ -35,7 +41,7 @@ export default function StudentChatPanel(props: Props) {
 
   return (
     <main className="chat-shell" data-testid="student-chat-panel">
-      <div className="messages">
+      <div className="messages" ref={messagesRef}>
         <div className="messages-inner">
           {renderedMessages.map((msg) => (
             <div key={msg.id} className={`message ${msg.role}`}>
@@ -58,6 +64,17 @@ export default function StudentChatPanel(props: Props) {
           <div ref={endRef} />
         </div>
       </div>
+
+      {!isNearBottom && (
+        <button
+          type="button"
+          className="new-message-indicator"
+          onClick={scrollToBottom}
+          aria-label="滚动到最新消息"
+        >
+          ↓ 新消息
+        </button>
+      )}
 
       <form className={`composer ${composerDisabled ? 'disabled' : ''}`} onSubmit={handleSend}>
         <div className="composer-inner">

@@ -5,14 +5,19 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .agent_service import (
     parse_tool_json as _parse_tool_json_impl,
+)
+from .agent_service import (
     run_agent_runtime as _run_agent_runtime_impl,
 )
 from .api_models import ChatRequest, ChatStartRequest
 from .chart_agent_run_service import chart_agent_run as _chart_agent_run_impl
-from .chart_api_service import chart_exec_api as _chart_exec_api_impl
 from .chat_job_processing_service import (
     compute_chat_reply_sync as _compute_chat_reply_sync_impl,
+)
+from .chat_job_processing_service import (
     detect_role_hint as _detect_role_hint_impl,
+)
+from .chat_job_processing_service import (
     process_chat_job as _process_chat_job_impl,
 )
 from .chat_runtime_service import call_llm_runtime as _call_llm_runtime_impl
@@ -20,30 +25,62 @@ from .chat_session_utils import resolve_student_session_id as _resolve_student_s
 from .chat_start_service import start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_support_service import (
     allowed_tools as _allowed_tools_impl,
+)
+from .chat_support_service import (
     build_interaction_note as _build_interaction_note_impl,
+)
+from .chat_support_service import (
     build_system_prompt as _build_system_prompt_impl,
+)
+from .chat_support_service import (
     build_verified_student_context as _build_verified_student_context_impl,
+)
+from .chat_support_service import (
     detect_latex_tokens as _detect_latex_tokens_impl,
+)
+from .chat_support_service import (
     detect_math_delimiters as _detect_math_delimiters_impl,
+)
+from .chat_support_service import (
     detect_student_study_trigger as _detect_student_study_trigger_impl,
+)
+from .chat_support_service import (
     extract_exam_id as _extract_exam_id_impl,
+)
+from .chat_support_service import (
     extract_min_chars_requirement as _extract_min_chars_requirement_impl,
+)
+from .chat_support_service import (
     is_exam_analysis_request as _is_exam_analysis_request_impl,
+)
+from .chat_support_service import (
     normalize_math_delimiters as _normalize_math_delimiters_impl,
 )
 from .content_catalog_service import (
     list_lessons as _list_lessons_impl,
+)
+from .content_catalog_service import (
     list_skills as _list_skills_impl,
 )
 from .core_example_tool_service import (
     core_example_register as _core_example_register_impl,
+)
+from .core_example_tool_service import (
     core_example_render as _core_example_render_impl,
+)
+from .core_example_tool_service import (
     core_example_search as _core_example_search_impl,
 )
 from .exam_longform_service import (
     build_exam_longform_context as _build_exam_longform_context_impl,
+)
+from .exam_longform_service import (
     calc_longform_max_tokens as _calc_longform_max_tokens_impl,
+)
+from .exam_longform_service import (
     generate_longform_reply as _generate_longform_reply_impl,
+)
+from .exam_longform_service import (
     summarize_exam_students as _summarize_exam_students_impl,
 )
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
@@ -51,23 +88,26 @@ from .paths import DATA_DIR, parse_date_str
 from .profile_service import detect_role
 from .student_import_service import (
     import_students_from_responses as _import_students_from_responses_impl,
-    resolve_responses_file as _resolve_responses_file_impl,
-    student_import as _student_import_impl,
 )
-from .teacher_llm_routing_service import (
-    ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
-    teacher_llm_routing_apply as _teacher_llm_routing_apply_impl,
-    teacher_llm_routing_get as _teacher_llm_routing_get_impl,
-    teacher_llm_routing_proposal_get as _teacher_llm_routing_proposal_get_impl,
-    teacher_llm_routing_propose as _teacher_llm_routing_propose_impl,
-    teacher_llm_routing_rollback as _teacher_llm_routing_rollback_impl,
-    teacher_llm_routing_simulate as _teacher_llm_routing_simulate_impl,
+from .student_import_service import (
+    resolve_responses_file as _resolve_responses_file_impl,
+)
+from .student_import_service import (
+    student_import as _student_import_impl,
 )
 from .teacher_provider_registry_service import (
     teacher_provider_registry_create as _teacher_provider_registry_create_impl,
+)
+from .teacher_provider_registry_service import (
     teacher_provider_registry_delete as _teacher_provider_registry_delete_impl,
+)
+from .teacher_provider_registry_service import (
     teacher_provider_registry_get as _teacher_provider_registry_get_impl,
+)
+from .teacher_provider_registry_service import (
     teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
+)
+from .teacher_provider_registry_service import (
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
 )
 from .tool_dispatch_service import tool_dispatch as _tool_dispatch_impl
@@ -83,14 +123,13 @@ from .wiring.exam_wiring import _exam_longform_deps
 from .wiring.misc_wiring import (
     _agent_runtime_deps,
     _chart_agent_run_deps,
-    _chart_api_deps,
     _content_catalog_deps,
     _core_example_tool_deps,
     _lesson_core_tool_deps,
     _tool_dispatch_deps,
 )
 from .wiring.student_wiring import _student_import_deps
-from .wiring.teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registry_deps
+from .wiring.teacher_wiring import _teacher_provider_registry_deps
 
 
 def build_verified_student_context(student_id: str, profile: Optional[Dict[str, Any]] = None) -> str:
@@ -207,7 +246,9 @@ def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .assignment_generate_tool_service import assignment_generate as _assignment_generate_tool_impl
+    from .assignment_generate_tool_service import (
+        assignment_generate as _assignment_generate_tool_impl,
+    )
 
     return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps())
 
@@ -245,8 +286,22 @@ def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
     return _core_example_render_impl(args, deps=_core_example_tool_deps())
 
 
-def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
-    return _tool_dispatch_impl(name, args, role, deps=_tool_dispatch_deps())
+def tool_dispatch(
+    name: str,
+    args: Dict[str, Any],
+    role: Optional[str] = None,
+    *,
+    skill_id: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    return _tool_dispatch_impl(
+        name,
+        args,
+        role,
+        deps=_tool_dispatch_deps(),
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+    )
 
 
 def call_llm(

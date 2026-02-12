@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .skills.loader import load_skills
 from .skills.auto_route_rules import score_role_skill
+from .skills.loader import load_skills
 from .skills.router import default_skill_id_for_role
-import logging
+
 _log = logging.getLogger(__name__)
 
 

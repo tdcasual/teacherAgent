@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+
 def _rq_tasks():
     from services.api.workers import rq_tasks
 

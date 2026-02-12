@@ -18,6 +18,21 @@ type Params = {
   setUploadStatus: (value: string) => void
 }
 
+const isAbortError = (error: unknown): boolean => {
+  if (error instanceof DOMException) return error.name === 'AbortError'
+  if (!error || typeof error !== 'object') return false
+  return (error as { name?: unknown }).name === 'AbortError'
+}
+
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
+}
+
 export function useAssignmentUploadStatusPolling({
   apiBase,
   uploadJobId,
@@ -46,9 +61,7 @@ export function useAssignmentUploadStatusPolling({
     }
 
     const makeFingerprint = (data: UploadJobStatus) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const extra = data as any
-      const updatedAt = extra?.updated_at || extra?.updatedAt || ''
+      const updatedAt = data.updated_at || data.updatedAt || ''
       const missing = Array.isArray(data.requirements_missing) ? data.requirements_missing.join(',') : ''
       const warnings = Array.isArray(data.warnings) ? data.warnings.length : 0
       return [
@@ -114,9 +127,9 @@ export function useAssignmentUploadStatusPolling({
           return { action: 'continue', resetDelay: true } as const
         }
         return 'continue' as const
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (cancelled) return 'stop' as const
-        if (err?.name === 'AbortError') return 'stop' as const
+        if (isAbortError(err)) return 'stop' as const
         throw err
       }
     }
@@ -125,7 +138,7 @@ export function useAssignmentUploadStatusPolling({
       poll,
       (err) => {
         if (cancelled) return
-        setUploadError((err as Error)?.message || String(err))
+        setUploadError(toErrorMessage(err))
       },
       {
         initialDelayMs: BASE_DELAY_MS,

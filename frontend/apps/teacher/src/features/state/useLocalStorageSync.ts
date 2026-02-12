@@ -123,7 +123,7 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
   useEffect(() => {
     safeLocalStorageSetItem('apiBaseTeacher', apiBase)
     markdownCacheRef.current.clear()
-  }, [apiBase])
+  }, [apiBase, markdownCacheRef])
 
   useEffect(() => {
     safeLocalStorageSetItem('teacherSkillFavorites', JSON.stringify(favorites))
@@ -180,23 +180,23 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
 
   useEffect(() => {
     activeSessionRef.current = activeSessionId
-  }, [activeSessionId])
+  }, [activeSessionId, activeSessionRef])
 
   useEffect(() => {
     historyCursorRef.current = historyCursor
-  }, [historyCursor])
+  }, [historyCursor, historyCursorRef])
 
   useEffect(() => {
     historyHasMoreRef.current = historyHasMore
-  }, [historyHasMore])
+  }, [historyHasMore, historyHasMoreRef])
 
   useEffect(() => {
     localDraftSessionIdsRef.current = localDraftSessionIds
-  }, [localDraftSessionIds])
+  }, [localDraftSessionIds, localDraftSessionIdsRef])
 
   useEffect(() => {
     pendingChatJobRef.current = pendingChatJob
-  }, [pendingChatJob])
+  }, [pendingChatJob, pendingChatJobRef])
 
   // --- Topbar height / viewport resize observer ---
 
@@ -219,7 +219,7 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
       window.removeEventListener('resize', updateHeight)
       observer?.disconnect()
     }
-  }, [])
+  }, [setTopbarHeight, setViewportWidth, topbarRef])
 
   // --- Session menu close-on-outside-click ---
 
@@ -243,13 +243,13 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
       document.removeEventListener('touchstart', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [openSessionMenuId])
+  }, [openSessionMenuId, setOpenSessionMenuId])
 
   useEffect(() => {
     if (!sessionSidebarOpen) {
       setOpenSessionMenuId('')
     }
-  }, [sessionSidebarOpen])
+  }, [sessionSidebarOpen, setOpenSessionMenuId])
 
   // --- Input textarea auto-resize ---
 
@@ -259,7 +259,7 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
     el.style.height = '0px'
     const next = Math.min(220, Math.max(56, el.scrollHeight))
     el.style.height = `${next}px`
-  }, [input, pendingChatJob?.job_id])
+  }, [input, inputRef, pendingChatJob?.job_id])
 
   // --- Composer warning clear ---
 
@@ -267,23 +267,23 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
     if (!composerWarning) return
     if (!input.trim()) return
     setComposerWarning('')
-  }, [composerWarning, input])
+  }, [composerWarning, input, setComposerWarning])
 
   // --- Upload/draft error auto-expand ---
 
   useEffect(() => {
     if (uploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
-  }, [uploadError, uploadCardCollapsed])
+  }, [uploadError, uploadCardCollapsed, setUploadCardCollapsed])
 
   useEffect(() => {
     if (examUploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
-  }, [examUploadError, uploadCardCollapsed])
+  }, [examUploadError, uploadCardCollapsed, setUploadCardCollapsed])
 
   useEffect(() => {
     if ((draftError || draftActionError) && draftPanelCollapsed) setDraftPanelCollapsed(false)
-  }, [draftError, draftActionError, draftPanelCollapsed])
+  }, [draftError, draftActionError, draftPanelCollapsed, setDraftPanelCollapsed])
 
   useEffect(() => {
     if ((examDraftError || examDraftActionError) && examDraftPanelCollapsed) setExamDraftPanelCollapsed(false)
-  }, [examDraftError, examDraftActionError, examDraftPanelCollapsed])
+  }, [examDraftError, examDraftActionError, examDraftPanelCollapsed, setExamDraftPanelCollapsed])
 }

@@ -21,6 +21,11 @@ const toQuery = (params: Record<string, string | number | undefined>) => {
   return text ? `?${text}` : ''
 }
 
+const readDetailField = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') return undefined
+  return (value as { detail?: unknown }).detail
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   const bodyText = await res.text()
@@ -33,7 +38,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
-    const detail = (data as any)?.detail
+    const detail = readDetailField(data)
     const errMsg = typeof detail === 'string' ? detail : JSON.stringify(detail || data || {})
     throw new Error(errMsg || `状态码 ${res.status}`)
   }

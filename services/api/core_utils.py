@@ -13,11 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_log = logging.getLogger(__name__)
-
 from fastapi import HTTPException
 
 from .config import APP_ROOT
+
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "model_dump_compat",

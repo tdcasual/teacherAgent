@@ -1,4 +1,4 @@
-import type { UploadSectionProps } from '../../../types/workflow'
+import type { UploadScope, UploadSectionProps } from '../../../types/workflow'
 
 type Props = UploadSectionProps & {
   uploading: boolean
@@ -75,7 +75,7 @@ export default function UploadSection(props: Props) {
     	                        </div>
     	                        <div className="grid gap-1.5">
     	                          <label>范围</label>
-    	                          <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value)}>
+    	                          <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value as UploadScope)}>
     	                            <option value="public">公共作业</option>
     	                            <option value="class">班级作业</option>
     	                            <option value="student">私人作业</option>

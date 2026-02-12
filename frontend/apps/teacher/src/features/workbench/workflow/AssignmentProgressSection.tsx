@@ -1,15 +1,26 @@
+import type { Dispatch, SetStateAction } from 'react'
+import type { AssignmentProgress, AssignmentProgressStudent } from '../../../appTypes'
+import type { FormatProgressSummary } from '../../../types/workflow'
+
 type AssignmentProgressSectionProps = {
   progressPanelCollapsed: boolean
-  setProgressPanelCollapsed: any
-  formatProgressSummary: any
-  progressData: any
-  progressAssignmentId: any
-  setProgressAssignmentId: any
+  setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
+  formatProgressSummary: FormatProgressSummary
+  progressData: AssignmentProgress | null
+  progressAssignmentId: string
+  setProgressAssignmentId: (value: string) => void
   progressOnlyIncomplete: boolean
-  setProgressOnlyIncomplete: any
+  setProgressOnlyIncomplete: (value: boolean) => void
   progressLoading: boolean
-  fetchAssignmentProgress: any
-  progressError: any
+  fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
+  progressError: string
+}
+
+const extractBestScore = (value: unknown): number | null => {
+  if (!value || typeof value !== 'object') return null
+  const candidate = value as { score_earned?: unknown }
+  const score = Number(candidate.score_earned)
+  return Number.isFinite(score) ? score : 0
 }
 
 export default function AssignmentProgressSection(props: AssignmentProgressSectionProps) {
@@ -85,14 +96,14 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
 
     	                  {progressData?.students && progressData.students.length > 0 && (
     	                    <div className="mt-3 grid gap-2">
-	    	                      {(progressOnlyIncomplete
-	    	                        ? progressData.students.filter((s: any) => !s.complete)
-    	                        : progressData.students
-	    	                      ).map((s: any) => {
+                          {(progressOnlyIncomplete
+                            ? progressData.students.filter((s: AssignmentProgressStudent) => !s.complete)
+                            : progressData.students
+                          ).map((s: AssignmentProgressStudent) => {
     	                        const attempts = s.submission?.attempts ?? 0
-    	                        const best = s.submission?.best as any
-    	                        const graded = best
-    	                          ? `得分${best.score_earned ?? 0}`
+    	                        const bestScore = extractBestScore(s.submission?.best)
+    	                        const graded = bestScore !== null
+    	                          ? `得分${bestScore}`
     	                          : attempts
     	                            ? `已提交${attempts}次（未评分）`
     	                            : '未提交'

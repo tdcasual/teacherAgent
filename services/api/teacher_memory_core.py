@@ -5,6 +5,7 @@ All public and underscore-prefixed names are re-exported by app_core.
 """
 from __future__ import annotations
 
+import importlib as _importlib
 import json
 import logging
 import os
@@ -12,7 +13,6 @@ import re
 import threading
 import time
 import uuid
-import importlib as _importlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -22,93 +22,231 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Imports from already-extracted sibling modules
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Re-exports from extracted compaction helpers
+# ---------------------------------------------------------------------------
+from . import teacher_session_compaction_helpers as _compaction_helpers_module
 from .config import (
-    TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC,
-    TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS,
-    TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
-    TEACHER_MEMORY_TTL_DAYS_DAILY,
-    TEACHER_MEMORY_TTL_DAYS_MEMORY,
-    TEACHER_MEMORY_DECAY_ENABLED,
-    TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
-    TEACHER_MEMORY_AUTO_APPLY_STRICT,
+    _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
+    _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
+    _TEACHER_MEMORY_CONFLICT_GROUPS,
+    _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
+    _TEACHER_MEMORY_SENSITIVE_PATTERNS,
+    _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
+    CHAT_MAX_MESSAGES_TEACHER,
+    DIAG_LOG_ENABLED,
+    SESSION_INDEX_MAX_ITEMS,
     TEACHER_MEMORY_AUTO_APPLY_ENABLED,
+    TEACHER_MEMORY_AUTO_APPLY_STRICT,
     TEACHER_MEMORY_AUTO_APPLY_TARGETS,
+    TEACHER_MEMORY_AUTO_ENABLED,
     TEACHER_MEMORY_AUTO_INFER_ENABLED,
-    TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
     TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
+    TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
+    TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
     TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS,
     TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
-    TEACHER_MEMORY_AUTO_ENABLED,
     TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
-    TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
+    TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
+    TEACHER_MEMORY_DECAY_ENABLED,
     TEACHER_MEMORY_FLUSH_ENABLED,
-    TEACHER_SESSION_COMPACT_ENABLED,
-    TEACHER_SESSION_COMPACT_MAX_MESSAGES,
     TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
     TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS,
-    TEACHER_SESSION_COMPACT_MAIN_ONLY,
+    TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
+    TEACHER_MEMORY_TTL_DAYS_DAILY,
+    TEACHER_MEMORY_TTL_DAYS_MEMORY,
+    TEACHER_SESSION_COMPACT_ENABLED,
     TEACHER_SESSION_COMPACT_KEEP_TAIL,
-    CHAT_MAX_MESSAGES_TEACHER,
-    SESSION_INDEX_MAX_ITEMS,
-    _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
-    _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
-    _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
-    _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
-    _TEACHER_MEMORY_SENSITIVE_PATTERNS,
-    _TEACHER_MEMORY_CONFLICT_GROUPS,
+    TEACHER_SESSION_COMPACT_MAIN_ONLY,
+    TEACHER_SESSION_COMPACT_MAX_MESSAGES,
+    TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS,
+    TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC,
     TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY,
     TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
-    DIAG_LOG_ENABLED,
 )
+from .job_repository import _atomic_write_json
 from .paths import (
     safe_fs_id,
-    teacher_workspace_dir,
-    teacher_workspace_file,
-    teacher_session_file,
     teacher_daily_memory_dir,
     teacher_daily_memory_path,
+    teacher_session_file,
+    teacher_workspace_dir,
+    teacher_workspace_file,
 )
 from .session_store import (
     load_teacher_sessions_index,
     save_teacher_sessions_index,
 )
-from .job_repository import _atomic_write_json
 
-# ---------------------------------------------------------------------------
-# Re-exports from extracted compaction helpers
-# ---------------------------------------------------------------------------
-from . import teacher_session_compaction_helpers as _compaction_helpers_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_compaction_helpers_module)
-from .teacher_session_compaction_helpers import *  # noqa: F401,F403
-from .teacher_session_compaction_helpers import (
-    _teacher_compact_key,
-    _teacher_compact_allowed,
-    _teacher_compact_transcript,
-    _teacher_compact_summary,
-    _write_teacher_session_records,
-    _mark_teacher_session_compacted,
-)
-
 # ---------------------------------------------------------------------------
 # Re-exports from extracted deps builders
 # ---------------------------------------------------------------------------
 from . import teacher_memory_deps as _teacher_memory_deps_module
+from .teacher_session_compaction_helpers import *  # noqa: F401,F403
+from .teacher_session_compaction_helpers import (
+    _mark_teacher_session_compacted,
+    _teacher_compact_allowed,
+    _teacher_compact_key,
+    _teacher_compact_summary,
+    _teacher_compact_transcript,
+    _write_teacher_session_records,
+)
+
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_deps_module)
+from .teacher_context_service import (
+    TeacherContextDeps,
+)
+from .teacher_context_service import (
+    build_teacher_context as _build_teacher_context_impl,
+)
+from .teacher_memory_api_service import (
+    TeacherMemoryApiDeps,
+)
+from .teacher_memory_api_service import (
+    list_proposals_api as _list_teacher_memory_proposals_api_impl,
+)
+from .teacher_memory_api_service import (
+    review_proposal_api as _review_teacher_memory_proposal_api_impl,
+)
+from .teacher_memory_apply_service import (
+    TeacherMemoryApplyDeps,
+)
+from .teacher_memory_apply_service import (
+    teacher_memory_apply as _teacher_memory_apply_impl,
+)
+from .teacher_memory_auto_service import (
+    TeacherMemoryAutoDeps,
+)
+from .teacher_memory_auto_service import (
+    teacher_memory_auto_flush_from_session as _teacher_memory_auto_flush_from_session_impl,
+)
+from .teacher_memory_auto_service import (
+    teacher_memory_auto_propose_from_turn as _teacher_memory_auto_propose_from_turn_impl,
+)
 from .teacher_memory_deps import *  # noqa: F401,F403
 from .teacher_memory_deps import (
-    _teacher_workspace_deps,
-    _teacher_memory_search_deps,
-    _teacher_memory_insights_deps,
+    _teacher_context_deps,
+    _teacher_memory_api_deps,
     _teacher_memory_apply_deps,
+    _teacher_memory_auto_deps,
+    _teacher_memory_insights_deps,
     _teacher_memory_propose_deps,
     _teacher_memory_record_deps,
+    _teacher_memory_search_deps,
     _teacher_memory_store_deps,
-    _teacher_memory_auto_deps,
-    _teacher_context_deps,
     _teacher_session_compaction_deps,
-    _teacher_memory_api_deps,
+    _teacher_workspace_deps,
+)
+from .teacher_memory_insights_service import (
+    TeacherMemoryInsightsDeps,
+)
+from .teacher_memory_insights_service import (
+    teacher_memory_insights as _teacher_memory_insights_impl,
+)
+from .teacher_memory_propose_service import (
+    TeacherMemoryProposeDeps,
+)
+from .teacher_memory_propose_service import (
+    teacher_memory_propose as _teacher_memory_propose_impl,
+)
+from .teacher_memory_record_service import (
+    TeacherMemoryRecordDeps,
+)
+from .teacher_memory_record_service import (
+    mark_teacher_session_memory_flush as _mark_teacher_session_memory_flush_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_auto_infer_candidate as _teacher_memory_auto_infer_candidate_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_memory_recent_user_turns as _teacher_memory_recent_user_turns_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_session_compaction_cycle_no as _teacher_session_compaction_cycle_no_impl,
+)
+from .teacher_memory_record_service import (
+    teacher_session_index_item as _teacher_session_index_item_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_age_days as _teacher_memory_age_days_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_conflicts as _teacher_memory_conflicts_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_has_term as _teacher_memory_has_term_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_is_expired_record as _teacher_memory_is_expired_record_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_is_sensitive as _teacher_memory_is_sensitive_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_loose_match as _teacher_memory_loose_match_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_norm_text as _teacher_memory_norm_text_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_parse_dt as _teacher_memory_parse_dt_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_priority_score as _teacher_memory_priority_score_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_rank_score as _teacher_memory_rank_score_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_record_expire_at as _teacher_memory_record_expire_at_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_record_ttl_days as _teacher_memory_record_ttl_days_impl,
+)
+from .teacher_memory_rules_service import (
+    teacher_memory_stable_hash as _teacher_memory_stable_hash_impl,
+)
+from .teacher_memory_search_service import (
+    TeacherMemorySearchDeps,
+)
+from .teacher_memory_search_service import (
+    teacher_memory_search as _teacher_memory_search_impl,
+)
+from .teacher_memory_store_service import (
+    TeacherMemoryStoreDeps,
+)
+from .teacher_memory_store_service import (
+    teacher_memory_active_applied_records as _teacher_memory_active_applied_records_impl,
+)
+from .teacher_memory_store_service import (
+    teacher_memory_event_log_path as _teacher_memory_event_log_path_impl,
+)
+from .teacher_memory_store_service import (
+    teacher_memory_load_events as _teacher_memory_load_events_impl,
+)
+from .teacher_memory_store_service import (
+    teacher_memory_load_record as _teacher_memory_load_record_impl,
+)
+from .teacher_memory_store_service import (
+    teacher_memory_log_event as _teacher_memory_log_event_impl,
 )
 
 # ---------------------------------------------------------------------------
@@ -116,79 +254,20 @@ from .teacher_memory_deps import (
 # ---------------------------------------------------------------------------
 from .teacher_session_compaction_service import (
     TeacherSessionCompactionDeps,
-    maybe_compact_teacher_session as _maybe_compact_teacher_session_impl,
 )
-from .teacher_context_service import (
-    TeacherContextDeps,
-    build_teacher_context as _build_teacher_context_impl,
+from .teacher_session_compaction_service import (
+    maybe_compact_teacher_session as _maybe_compact_teacher_session_impl,
 )
 from .teacher_workspace_service import (
     TeacherWorkspaceDeps,
+)
+from .teacher_workspace_service import (
     ensure_teacher_workspace as _ensure_teacher_workspace_impl,
+)
+from .teacher_workspace_service import (
     teacher_read_text as _teacher_read_text_impl,
 )
-from .teacher_memory_api_service import (
-    TeacherMemoryApiDeps,
-    list_proposals_api as _list_teacher_memory_proposals_api_impl,
-    review_proposal_api as _review_teacher_memory_proposal_api_impl,
-)
-from .teacher_memory_auto_service import (
-    TeacherMemoryAutoDeps,
-    teacher_memory_auto_flush_from_session as _teacher_memory_auto_flush_from_session_impl,
-    teacher_memory_auto_propose_from_turn as _teacher_memory_auto_propose_from_turn_impl,
-)
-from .teacher_memory_apply_service import (
-    TeacherMemoryApplyDeps,
-    teacher_memory_apply as _teacher_memory_apply_impl,
-)
-from .teacher_memory_insights_service import (
-    TeacherMemoryInsightsDeps,
-    teacher_memory_insights as _teacher_memory_insights_impl,
-)
-from .teacher_memory_record_service import (
-    TeacherMemoryRecordDeps,
-    mark_teacher_session_memory_flush as _mark_teacher_session_memory_flush_impl,
-    teacher_memory_auto_infer_candidate as _teacher_memory_auto_infer_candidate_impl,
-    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
-    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
-    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
-    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
-    teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
-    teacher_memory_recent_user_turns as _teacher_memory_recent_user_turns_impl,
-    teacher_session_compaction_cycle_no as _teacher_session_compaction_cycle_no_impl,
-    teacher_session_index_item as _teacher_session_index_item_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_age_days as _teacher_memory_age_days_impl,
-    teacher_memory_conflicts as _teacher_memory_conflicts_impl,
-    teacher_memory_has_term as _teacher_memory_has_term_impl,
-    teacher_memory_is_expired_record as _teacher_memory_is_expired_record_impl,
-    teacher_memory_is_sensitive as _teacher_memory_is_sensitive_impl,
-    teacher_memory_loose_match as _teacher_memory_loose_match_impl,
-    teacher_memory_norm_text as _teacher_memory_norm_text_impl,
-    teacher_memory_parse_dt as _teacher_memory_parse_dt_impl,
-    teacher_memory_priority_score as _teacher_memory_priority_score_impl,
-    teacher_memory_rank_score as _teacher_memory_rank_score_impl,
-    teacher_memory_record_expire_at as _teacher_memory_record_expire_at_impl,
-    teacher_memory_record_ttl_days as _teacher_memory_record_ttl_days_impl,
-    teacher_memory_stable_hash as _teacher_memory_stable_hash_impl,
-)
-from .teacher_memory_propose_service import (
-    TeacherMemoryProposeDeps,
-    teacher_memory_propose as _teacher_memory_propose_impl,
-)
-from .teacher_memory_search_service import (
-    TeacherMemorySearchDeps,
-    teacher_memory_search as _teacher_memory_search_impl,
-)
-from .teacher_memory_store_service import (
-    TeacherMemoryStoreDeps,
-    teacher_memory_active_applied_records as _teacher_memory_active_applied_records_impl,
-    teacher_memory_event_log_path as _teacher_memory_event_log_path_impl,
-    teacher_memory_load_events as _teacher_memory_load_events_impl,
-    teacher_memory_load_record as _teacher_memory_load_record_impl,
-    teacher_memory_log_event as _teacher_memory_log_event_impl,
-)
+
 
 # ---------------------------------------------------------------------------
 # Lazy accessor for app_core functions that would cause circular imports

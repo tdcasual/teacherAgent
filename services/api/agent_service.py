@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+from services.common.tool_registry import DEFAULT_TOOL_REGISTRY, ToolDef
 
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .subject_score_guard_service import (
@@ -114,8 +114,8 @@ class AgentRuntimeDeps:
     build_exam_longform_context: Callable[[str], Dict[str, Any]]
     generate_longform_reply: Callable[..., str]
     call_llm: Callable[..., Dict[str, Any]]
-    tool_dispatch: Callable[[str, Dict[str, Any], Optional[str]], Dict[str, Any]]
-    teacher_tools_to_openai: Callable[[Set[str]], List[Dict[str, Any]]]
+    tool_dispatch: Callable[..., Dict[str, Any]]
+    teacher_tools_to_openai: Callable[..., List[Dict[str, Any]]]
 
 
 def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
@@ -137,8 +137,29 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _default_teacher_tools_to_openai(allowed: Set[str]) -> List[Dict[str, Any]]:
-    return [DEFAULT_TOOL_REGISTRY.require(name).to_openai() for name in sorted(allowed)]
+def _default_teacher_tools_to_openai(
+    allowed: Set[str],
+    skill_runtime: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+    dynamic_tools = {}
+    if skill_runtime is not None:
+        dynamic_tools = getattr(skill_runtime, "dynamic_tools", {}) or {}
+
+    out: List[Dict[str, Any]] = []
+    for name in sorted(allowed):
+        static_tool = DEFAULT_TOOL_REGISTRY.get(name)
+        if static_tool is not None:
+            out.append(static_tool.to_openai())
+            continue
+        spec = dynamic_tools.get(name) if isinstance(dynamic_tools, dict) else None
+        if not isinstance(spec, dict):
+            continue
+        schema = spec.get("input_schema")
+        if not isinstance(schema, dict):
+            schema = {"type": "object", "properties": {}, "additionalProperties": True}
+        description = str(spec.get("description") or name)
+        out.append(ToolDef(name=name, description=description, parameters=schema).to_openai())
+    return out
 
 
 def _load_skill_runtime_with_logging(
@@ -181,6 +202,9 @@ def _resolve_runtime_tool_limits(
     max_tool_calls = deps.max_tool_calls
     if skill_runtime is not None:
         allowed = skill_runtime.apply_tool_policy(allowed)
+        dynamic_tools = getattr(skill_runtime, "dynamic_tools", {})
+        if role_hint == "teacher" and isinstance(dynamic_tools, dict):
+            allowed |= {str(name) for name in dynamic_tools.keys() if str(name).strip()}
         if skill_runtime.max_tool_rounds is not None:
             max_tool_rounds = max(1, int(skill_runtime.max_tool_rounds))
         if skill_runtime.max_tool_calls is not None:
@@ -336,9 +360,20 @@ def _dispatch_tool_safely(
     name: str,
     args_dict: Dict[str, Any],
     role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
 ) -> Dict[str, Any]:
     try:
-        return deps.tool_dispatch(name, args_dict, role_hint)
+        try:
+            return deps.tool_dispatch(
+                name,
+                args_dict,
+                role_hint,
+                skill_id=skill_id,
+                teacher_id=teacher_id,
+            )
+        except TypeError:
+            return deps.tool_dispatch(name, args_dict, role_hint)
     except Exception as exc:
         _log.debug("operation failed", exc_info=True)
         return {"error": f"tool_dispatch failed: {exc}"}
@@ -352,6 +387,8 @@ def _handle_structured_tool_calls(
     content: Optional[str],
     allowed: Set[str],
     role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
 ) -> Tuple[int, bool]:
@@ -377,7 +414,16 @@ def _handle_structured_tool_calls(
         except Exception:
             _log.debug("JSON parse failed", exc_info=True)
             args_dict = {}
-        result = _dispatch_tool_safely(deps, name, args_dict, role_hint)
+        result = _dispatch_tool_safely(
+            deps,
+            name,
+            args_dict,
+            role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+        )
+        if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
+            allowed.discard(name)
         convo.append(
             {
                 "role": "tool",
@@ -408,6 +454,8 @@ def _handle_json_tool_request(
     content: Optional[str],
     allowed: Set[str],
     role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
 ) -> Tuple[int, bool]:
@@ -424,7 +472,16 @@ def _handle_json_tool_request(
         )
         return tool_calls_total, False
     args_dict = tool_request.get("arguments") or {}
-    result = _dispatch_tool_safely(deps, name, args_dict, role_hint)
+    result = _dispatch_tool_safely(
+        deps,
+        name,
+        args_dict,
+        role_hint,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+    )
+    if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
+        allowed.discard(str(name))
     convo.append({"role": "assistant", "content": content or ""})
     tool_payload = json.dumps(result, ensure_ascii=False)
     convo.append(
@@ -476,6 +533,8 @@ def _run_tool_loop(
                 content=content,
                 allowed=allowed,
                 role_hint=role_hint,
+                skill_id=skill_id,
+                teacher_id=teacher_id,
                 max_tool_calls=max_tool_calls,
                 tool_calls_total=tool_calls_total,
             )
@@ -491,6 +550,8 @@ def _run_tool_loop(
                 content=content,
                 allowed=allowed,
                 role_hint=role_hint,
+                skill_id=skill_id,
+                teacher_id=teacher_id,
                 max_tool_calls=max_tool_calls,
                 tool_calls_total=tool_calls_total,
             )
@@ -581,7 +642,15 @@ def run_agent_runtime(
         if longform_reply:
             return longform_reply
 
-    tools = deps.teacher_tools_to_openai(allowed) if role_hint == "teacher" else []
+    tools: List[Dict[str, Any]] = []
+    if role_hint == "teacher":
+        try:
+            tools = deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
+        except TypeError:
+            try:
+                tools = deps.teacher_tools_to_openai(allowed, skill_runtime)
+            except TypeError:
+                tools = deps.teacher_tools_to_openai(allowed)
     reply, tool_budget_exhausted = _run_tool_loop(
         deps=deps,
         convo=convo,
@@ -635,5 +704,8 @@ def default_load_skill_runtime(
     return runtime, warning
 
 
-def default_teacher_tools_to_openai(allowed: Set[str]) -> List[Dict[str, Any]]:
-    return _default_teacher_tools_to_openai(allowed)
+def default_teacher_tools_to_openai(
+    allowed: Set[str],
+    skill_runtime: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+    return _default_teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)

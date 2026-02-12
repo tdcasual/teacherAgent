@@ -4,7 +4,10 @@ import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
 import { startVisibilityAwareBackoffPolling } from '../../shared/visibilityBackoffPolling'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../shared/storage'
 import { nowTime, timeFromIso } from '../../shared/time'
+import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
+import { useWheelScrollZone } from '../../shared/useWheelScrollZone'
 import { stripTransientPendingBubbles } from './features/chat/pendingOverlay'
+import { parsePendingChatJobFromStorage, PENDING_CHAT_MAX_AGE_MS } from './features/chat/pendingChatJob'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import StudentChatPanel from './features/chat/StudentChatPanel'
 import StudentSessionSidebar from './features/chat/StudentSessionSidebar'
@@ -111,6 +114,21 @@ const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问�
 
 const todayDate = () => new Date().toLocaleDateString('sv-SE')
 
+const isAbortError = (error: unknown): boolean => {
+  if (error instanceof DOMException) return error.name === 'AbortError'
+  if (!error || typeof error !== 'object') return false
+  return (error as { name?: unknown }).name === 'AbortError'
+}
+
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
+}
+
 export default function App() {
   const [apiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
   const {
@@ -124,6 +142,7 @@ export default function App() {
     handleSessionMenuTriggerKeyDown,
     handleSessionMenuKeyDown,
   } = useStudentSessionSidebarState()
+  const appRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: makeId(),
@@ -134,7 +153,23 @@ export default function App() {
   ])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const endRef = useRef<HTMLDivElement | null>(null)
+  const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
+  const { saveScrollHeight, restoreScrollPosition } = useScrollPositionLock(messagesRef)
+  useWheelScrollZone({
+    appRef,
+    defaultZone: 'chat' as const,
+    resolveTarget: (zone: string) => {
+      const root = appRef.current
+      if (!root) return null
+      if (zone === 'sidebar') return root.querySelector('.session-groups') as HTMLElement | null
+      return root.querySelector('.messages') as HTMLElement | null
+    },
+    detectors: [
+      { zone: 'sidebar', selector: '.session-sidebar', when: () => sidebarOpen },
+      { zone: 'chat', selector: '.chat-shell' },
+    ],
+    resetWhen: [{ zone: 'sidebar', condition: !sidebarOpen }],
+  })
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
   const [verifiedStudent, setVerifiedStudent] = useState<VerifiedStudent | null>(() => {
@@ -164,7 +199,7 @@ export default function App() {
       const sid = String(parsed?.student_id || '').trim()
       if (!sid) return null
       const raw = safeLocalStorageGetItem(`${PENDING_CHAT_KEY_PREFIX}${sid}`)
-      return raw ? (JSON.parse(raw) as PendingChatJob) : null
+      return parsePendingChatJobFromStorage(raw)
     } catch {
       return null
     }
@@ -252,6 +287,7 @@ export default function App() {
 
   const renderedMessages = useMemo(() => {
     const cache = markdownCacheRef.current
+    evictOldestEntries(cache)
     return messages.map((msg): RenderedMessage => {
       const cached = cache.get(msg.id)
       if (cached && cached.content === msg.content && cached.apiBase === apiBase) return { ...msg, html: cached.html }
@@ -262,8 +298,8 @@ export default function App() {
   }, [messages, apiBase])
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, sending])
+    autoScroll()
+  }, [messages, sending, autoScroll])
 
   useEffect(() => {
     const el = inputRef.current
@@ -299,9 +335,9 @@ export default function App() {
         }
         const data = await res.json()
         setTodayAssignment(data.assignment || null)
-      } catch (err: any) {
-        if (err.name === 'AbortError') return
-        setAssignmentError(err.message || '无法获取今日作业')
+      } catch (err: unknown) {
+        if (isAbortError(err)) return
+        setAssignmentError(toErrorMessage(err, '无法获取今日作业'))
         setTodayAssignment(null)
       } finally {
         setAssignmentLoading(false)
@@ -321,20 +357,21 @@ export default function App() {
       return
     }
     const key = `${PENDING_CHAT_KEY_PREFIX}${sid}`
-    try {
-      const raw = safeLocalStorageGetItem(key)
-      if (!raw) {
-        pendingRecoveredFromStorageRef.current = false
-        setPendingChatJob(null)
-        return
-      }
-      const parsed = JSON.parse(raw) as PendingChatJob
-      pendingRecoveredFromStorageRef.current = Boolean(parsed?.job_id)
-      setPendingChatJob(parsed)
-    } catch {
+    const raw = safeLocalStorageGetItem(key)
+    if (!raw) {
       pendingRecoveredFromStorageRef.current = false
       setPendingChatJob(null)
+      return
     }
+    const parsed = parsePendingChatJobFromStorage(raw)
+    if (!parsed) {
+      safeLocalStorageRemoveItem(key)
+      pendingRecoveredFromStorageRef.current = false
+      setPendingChatJob(null)
+      return
+    }
+    pendingRecoveredFromStorageRef.current = Boolean(parsed.job_id)
+    setPendingChatJob(parsed)
   }, [verifiedStudent?.student_id])
 
   useEffect(() => {
@@ -450,20 +487,14 @@ export default function App() {
 
       const pendingKey = `${PENDING_CHAT_KEY_PREFIX}${sid}`
       let nextPending: PendingChatJob | null = null
-      try {
-        const rawPending = safeLocalStorageGetItem(pendingKey)
-        if (rawPending) {
-          const parsedPending = JSON.parse(rawPending) as PendingChatJob
-          if (String(parsedPending?.job_id || '').trim()) {
-            nextPending = parsedPending
-          }
-        }
-      } catch {
-        nextPending = null
+      const rawPending = safeLocalStorageGetItem(pendingKey)
+      if (rawPending) {
+        nextPending = parsePendingChatJobFromStorage(rawPending)
+        if (!nextPending) safeLocalStorageRemoveItem(pendingKey)
       }
 
       if (!samePendingJob(pendingChatJobRef.current, nextPending)) {
-        pendingRecoveredFromStorageRef.current = false
+        pendingRecoveredFromStorageRef.current = Boolean(nextPending?.job_id)
         setPendingChatJob(nextPending)
         if (!nextPending) setSending(false)
       }
@@ -520,7 +551,7 @@ export default function App() {
         next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
       }
       if (!hasPlaceholder) {
-        next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+        next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
       }
       return next
     })
@@ -531,10 +562,33 @@ export default function App() {
     if (!pendingChatJob?.job_id) return
     const cleanup = startVisibilityAwareBackoffPolling(
       async () => {
+        const pendingAgeMs = Date.now() - Number(pendingChatJob.created_at || 0)
+        if (!Number.isFinite(pendingAgeMs) || pendingAgeMs > PENDING_CHAT_MAX_AGE_MS) {
+          const staleMsg = '上一条请求已过期，请重新发送。'
+          setMessages((prev) => {
+            const base = stripTransientPendingBubbles(prev)
+            const hasPlaceholder = base.some((item) => item.id === pendingChatJob.placeholder_id)
+            if (!hasPlaceholder) return base
+            return base.map((item) =>
+              item.id === pendingChatJob.placeholder_id ? { ...item, content: staleMsg, time: nowTime() } : item,
+            )
+          })
+          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+          setPendingChatJob(null)
+          setSending(false)
+          return 'stop'
+        }
         if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
           return 'continue'
         }
         const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
+        if (res.status === 404) {
+          setMessages((prev) => stripTransientPendingBubbles(prev))
+          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+          setPendingChatJob(null)
+          setSending(false)
+          return 'stop'
+        }
         if (!res.ok) {
           const text = await res.text()
           throw new Error(text || `状态码 ${res.status}`)
@@ -553,7 +607,7 @@ export default function App() {
               next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
             }
             if (!hasPlaceholder) {
-              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
             }
             return next.map((m) =>
               m.id === pendingChatJob.placeholder_id ? { ...m, content: resolvedReply, time: nowTime() } : m,
@@ -587,7 +641,7 @@ export default function App() {
               next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
             }
             if (!hasPlaceholder) {
-              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+              next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
             }
             return next.map((m) =>
               m.id === pendingChatJob.placeholder_id ? { ...m, content: `抱歉，请求失败：${msg}`, time: nowTime() } : m,
@@ -601,7 +655,7 @@ export default function App() {
         return 'continue'
       },
       (err) => {
-        const msg = (err as any)?.message || String(err)
+        const msg = toErrorMessage(err)
         setMessages((prev) => {
           const base = stripTransientPendingBubbles(prev)
           const hasUserText = pendingChatJob.user_text
@@ -613,7 +667,7 @@ export default function App() {
             next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
           }
           if (!hasPlaceholder) {
-            next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在恢复上一条回复…', time: nowTime() })
+            next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
           }
           return next.map((m) =>
             m.id === pendingChatJob.placeholder_id ? { ...m, content: `网络波动，正在重试…（${msg}）`, time: nowTime() } : m,
@@ -677,9 +731,9 @@ export default function App() {
           return seeded
         })
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (requestNo !== historyRequestRef.current) return
-      setHistoryError(err.message || String(err))
+      setHistoryError(toErrorMessage(err))
     } finally {
       if (requestNo !== historyRequestRef.current) return
       setHistoryLoading(false)
@@ -736,7 +790,7 @@ export default function App() {
                 next.push({ id: makeId(), role: 'user', content: pending.user_text, time: nowTime() })
               }
               if (!hasPlaceholder) {
-                next.push({ id: pending.placeholder_id, role: 'assistant', content: '正在恢复上一条回复…', time: nowTime() })
+                next.push({ id: pending.placeholder_id, role: 'assistant', content: '正在回复中…', time: nowTime() })
               }
               return next
             })()
@@ -822,7 +876,9 @@ export default function App() {
       setSessionCursor(next)
       setSessionHasMore(merged.length >= 1 && next > 0)
       if (append) {
+        saveScrollHeight()
         setMessages((prev) => [...merged, ...prev])
+        requestAnimationFrame(() => restoreScrollPosition())
       } else {
         setMessages(
           merged.length
@@ -837,9 +893,9 @@ export default function App() {
               ]
         )
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (requestNo !== sessionRequestRef.current) return
-      setSessionError(err.message || String(err))
+      setSessionError(toErrorMessage(err))
     } finally {
       if (requestNo !== sessionRequestRef.current) return
       setSessionLoading(false)
@@ -923,7 +979,7 @@ export default function App() {
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter') return
     if (event.shiftKey) return
-    if ((event.nativeEvent as any)?.isComposing) return
+    if (event.nativeEvent.isComposing) return
     event.preventDefault()
     if (!verifiedStudent) return
     if (sending || pendingChatJob?.job_id) return
@@ -983,8 +1039,8 @@ export default function App() {
       } else {
         setVerifyError(data.message || '未找到该学生，请检查姓名或班级。')
       }
-    } catch (err: any) {
-      setVerifyError(err.message || String(err))
+    } catch (err: unknown) {
+      setVerifyError(toErrorMessage(err))
     } finally {
       setVerifying(false)
     }
@@ -1043,7 +1099,7 @@ export default function App() {
   })
 
   return (
-    <div className="app">
+    <div className="app" ref={appRef}>
       <StudentTopbar verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} />
       <StudentSessionShell
         sidebarOpen={sidebarOpen}
@@ -1113,7 +1169,10 @@ export default function App() {
             sending={sending}
             pendingChatJobId={pendingChatJob?.job_id || ''}
             verifiedStudent={verifiedStudent}
+            messagesRef={messagesRef}
             endRef={endRef}
+            isNearBottom={isNearBottom}
+            scrollToBottom={scrollToBottom}
             inputRef={inputRef}
             input={input}
             setInput={setInput}

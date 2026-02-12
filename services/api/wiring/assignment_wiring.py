@@ -30,10 +30,13 @@ import shutil
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+
+from services.api.runtime import queue_runtime
 
 from ..assignment_api_service import (
     AssignmentApiDeps,
+)
+from ..assignment_api_service import (
     get_assignment_detail_api as _get_assignment_detail_api_impl,
 )
 from ..assignment_catalog_service import (
@@ -42,6 +45,8 @@ from ..assignment_catalog_service import (
 )
 from ..assignment_generate_service import (
     AssignmentGenerateDeps,
+)
+from ..assignment_generate_service import (
     generate_assignment as _generate_assignment_impl,
 )
 from ..assignment_generate_tool_service import AssignmentGenerateToolDeps
@@ -49,12 +54,16 @@ from ..assignment_llm_gate_service import AssignmentLlmGateDeps
 from ..assignment_progress_service import AssignmentProgressDeps
 from ..assignment_questions_ocr_service import (
     AssignmentQuestionsOcrDeps,
+)
+from ..assignment_questions_ocr_service import (
     assignment_questions_ocr as _assignment_questions_ocr_impl,
 )
 from ..assignment_requirements_service import AssignmentRequirementsDeps
 from ..assignment_submission_attempt_service import AssignmentSubmissionAttemptDeps
 from ..assignment_today_service import (
     AssignmentTodayDeps,
+)
+from ..assignment_today_service import (
     assignment_today as _assignment_today_impl,
 )
 from ..assignment_upload_confirm_gate_service import (
@@ -62,38 +71,55 @@ from ..assignment_upload_confirm_gate_service import (
 )
 from ..assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
+)
+from ..assignment_upload_confirm_service import (
     confirm_assignment_upload as _confirm_assignment_upload_impl,
 )
 from ..assignment_upload_draft_save_service import (
     AssignmentUploadDraftSaveDeps,
+)
+from ..assignment_upload_draft_save_service import (
     save_assignment_upload_draft as _save_assignment_upload_draft_impl,
 )
 from ..assignment_upload_draft_service import (
     assignment_upload_not_ready_detail as _assignment_upload_not_ready_detail_impl,
+)
+from ..assignment_upload_draft_service import (
     build_assignment_upload_draft as _build_assignment_upload_draft_impl,
+)
+from ..assignment_upload_draft_service import (
     clean_assignment_draft_questions as _clean_assignment_draft_questions_impl,
+)
+from ..assignment_upload_draft_service import (
     load_assignment_draft_override as _load_assignment_draft_override_impl,
+)
+from ..assignment_upload_draft_service import (
     save_assignment_draft_override as _save_assignment_draft_override_impl,
 )
 from ..assignment_upload_legacy_service import (
     AssignmentUploadLegacyDeps,
+)
+from ..assignment_upload_legacy_service import (
     assignment_upload as _assignment_upload_legacy_impl,
 )
 from ..assignment_upload_parse_service import AssignmentUploadParseDeps
 from ..assignment_upload_query_service import (
     AssignmentUploadQueryDeps,
+)
+from ..assignment_upload_query_service import (
     get_assignment_upload_draft as _get_assignment_upload_draft_impl,
+)
+from ..assignment_upload_query_service import (
     get_assignment_upload_status as _get_assignment_upload_status_impl,
 )
 from ..assignment_upload_start_service import (
     AssignmentUploadStartDeps,
+)
+from ..assignment_upload_start_service import (
     start_assignment_upload as _start_assignment_upload_impl,
 )
 from ..assignment_uploaded_question_service import AssignmentUploadedQuestionDeps
 from ..handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers
-from services.api.runtime import queue_runtime
-
-
 from . import get_app_core as _app_core
 
 

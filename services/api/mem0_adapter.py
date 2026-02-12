@@ -95,6 +95,7 @@ def get_mem0() -> Optional[Any]:
             return None
         try:
             from mem0 import Memory  # type: ignore
+
             from mem0_config import get_config  # type: ignore
 
             _MEM0_INSTANCE = Memory.from_config(get_config())

@@ -10,6 +10,17 @@ import type {
   WorkflowStepState,
 } from '../../../appTypes'
 
+type UnknownRecord = Record<string, unknown>
+
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
+}
+
 // ---------------------------------------------------------------------------
 // Params type – the state / setters the hook needs from the parent component
 // ---------------------------------------------------------------------------
@@ -91,16 +102,16 @@ export interface UseAssignmentWorkflowParams {
 
 export interface UseAssignmentWorkflowReturn {
   handleUploadAssignment: (event: FormEvent) => Promise<void>
-  saveDraft: (draft: UploadDraft) => Promise<any>
+  saveDraft: (draft: UploadDraft) => Promise<void>
   handleConfirmUpload: () => Promise<void>
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
   refreshWorkflowWorkbench: () => void
   scrollToWorkflowSection: (sectionId: string) => void
   assignmentWorkflowIndicator: WorkflowIndicator
   assignmentWorkflowAutoState: string
-  computeLocalRequirementsMissing: (req: Record<string, any>) => string[]
-  updateDraftRequirement: (key: string, value: any) => void
-  updateDraftQuestion: (index: number, patch: Record<string, any>) => void
+  computeLocalRequirementsMissing: (req: UnknownRecord) => string[]
+  updateDraftRequirement: (key: string, value: unknown) => void
+  updateDraftQuestion: (index: number, patch: UnknownRecord) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -231,26 +242,35 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       default:
         break
     }
-  }, [assignmentWorkflowAutoState, progressAssignmentId, uploadAssignmentId, uploadDraft?.assignment_id, uploadMode])
+  }, [
+    assignmentWorkflowAutoState,
+    progressAssignmentId,
+    setDraftPanelCollapsed,
+    setProgressPanelCollapsed,
+    setUploadCardCollapsed,
+    uploadAssignmentId,
+    uploadDraft?.assignment_id,
+    uploadMode,
+  ])
 
   // ---- Auto-expand upload card on error ----
 
   useEffect(() => {
     if (uploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
-  }, [uploadError, uploadCardCollapsed])
+  }, [setUploadCardCollapsed, uploadError, uploadCardCollapsed])
 
   // ---- Auto-expand draft panel on error ----
 
   useEffect(() => {
     if ((draftError || draftActionError) && draftPanelCollapsed) setDraftPanelCollapsed(false)
-  }, [draftError, draftActionError, draftPanelCollapsed])
+  }, [draftActionError, draftError, draftPanelCollapsed, setDraftPanelCollapsed])
 
   // ---- Load draft when job finishes parsing ----
 
   useEffect(() => {
+    const uploadJobStatus = uploadJobInfo?.status
     if (!uploadJobId) return
-    if (!uploadJobInfo) return
-    if (uploadJobInfo.status !== 'done' && uploadJobInfo.status !== 'confirmed') return
+    if (uploadJobStatus !== 'done' && uploadJobStatus !== 'confirmed') return
     let active = true
     const loadDraft = async () => {
       setDraftError('')
@@ -268,9 +288,9 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setUploadDraft(draft)
         setDraftPanelCollapsed(false)
         setQuestionShowCount(20)
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return
-        setDraftError(err.message || String(err))
+        setDraftError(toErrorMessage(err))
       } finally {
         if (!active) return
         setDraftLoading(false)
@@ -280,7 +300,16 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     return () => {
       active = false
     }
-  }, [uploadJobId, uploadJobInfo?.status, apiBase])
+  }, [
+    apiBase,
+    setDraftError,
+    setDraftLoading,
+    setDraftPanelCollapsed,
+    setQuestionShowCount,
+    setUploadDraft,
+    uploadJobId,
+    uploadJobInfo?.status,
+  ])
 
   // ---- Sync misconceptions text from draft ----
 
@@ -289,11 +318,11 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     if (misconceptionsDirty) return
     const list = Array.isArray(uploadDraft.requirements?.misconceptions) ? uploadDraft.requirements.misconceptions : []
     setMisconceptionsText(list.join('\n'))
-  }, [uploadDraft?.job_id, uploadDraft?.draft_version, misconceptionsDirty])
+  }, [misconceptionsDirty, setMisconceptionsText, uploadDraft, uploadDraft?.draft_version, uploadDraft?.job_id])
 
   // ---- computeLocalRequirementsMissing ----
 
-  const computeLocalRequirementsMissing = useCallback((req: Record<string, any>) => {
+  const computeLocalRequirementsMissing = useCallback((req: UnknownRecord) => {
     const missing: string[] = []
     const subject = String(req?.subject || '').trim()
     const topic = String(req?.topic || '').trim()
@@ -321,7 +350,7 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   // ---- updateDraftRequirement ----
 
   const updateDraftRequirement = useCallback(
-    (key: string, value: any) => {
+    (key: string, value: unknown) => {
       setUploadDraft((prev) => {
         if (!prev) return prev
         const nextRequirements = {
@@ -336,13 +365,13 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         }
       })
     },
-    [computeLocalRequirementsMissing],
+    [computeLocalRequirementsMissing, setUploadDraft],
   )
 
   // ---- updateDraftQuestion ----
 
   const updateDraftQuestion = useCallback(
-    (index: number, patch: Record<string, any>) => {
+    (index: number, patch: UnknownRecord) => {
       setUploadDraft((prev) => {
         if (!prev) return prev
         const next = [...(prev.questions || [])]
@@ -351,7 +380,7 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         return { ...prev, questions: next }
       })
     },
-    [],
+    [setUploadDraft],
   )
 
   // ---- fetchAssignmentProgress ----
@@ -379,13 +408,20 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         }
         setProgressData(data)
         setProgressAssignmentId(data.assignment_id || aid)
-      } catch (err: any) {
-        setProgressError(err?.message || String(err))
+      } catch (err: unknown) {
+        setProgressError(toErrorMessage(err))
       } finally {
         setProgressLoading(false)
       }
     },
-    [apiBase, progressAssignmentId],
+    [
+      apiBase,
+      progressAssignmentId,
+      setProgressAssignmentId,
+      setProgressData,
+      setProgressError,
+      setProgressLoading,
+    ],
   )
 
   // ---- refreshWorkflowWorkbench ----
@@ -397,7 +433,14 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     if (assignmentId) {
       void fetchAssignmentProgress(assignmentId)
     }
-  }, [fetchAssignmentProgress, progressAssignmentId, uploadAssignmentId, uploadDraft?.assignment_id])
+  }, [
+    fetchAssignmentProgress,
+    progressAssignmentId,
+    setExamStatusPollNonce,
+    setUploadStatusPollNonce,
+    uploadAssignmentId,
+    uploadDraft?.assignment_id,
+  ])
 
   // ---- scrollToWorkflowSection ----
 
@@ -460,16 +503,25 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setDraftActionStatus(msg)
         setUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}${msg}`)
         setMisconceptionsDirty(false)
-        return data
-      } catch (err: any) {
-        const message = err?.message || String(err)
+      } catch (err: unknown) {
+        const message = toErrorMessage(err)
         setDraftActionError(message)
         throw err
       } finally {
         setDraftSaving(false)
       }
     },
-    [apiBase, misconceptionsText],
+    [
+      apiBase,
+      misconceptionsText,
+      setDraftActionError,
+      setDraftActionStatus,
+      setDraftSaving,
+      setMisconceptionsDirty,
+      setUploadDraft,
+      setUploadError,
+      setUploadStatus,
+    ],
   )
 
   // ---- handleUploadAssignment ----
@@ -550,13 +602,35 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         }
         setUploadFiles([])
         setUploadAnswerFiles([])
-      } catch (err: any) {
-        setUploadError(err.message || String(err))
+      } catch (err: unknown) {
+        setUploadError(toErrorMessage(err))
       } finally {
         setUploading(false)
       }
     },
-    [apiBase, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds, uploadFiles, uploadAnswerFiles],
+    [
+      apiBase,
+      setDraftActionError,
+      setDraftActionStatus,
+      setDraftError,
+      setDraftPanelCollapsed,
+      setUploadAnswerFiles,
+      setUploadCardCollapsed,
+      setUploadDraft,
+      setUploadError,
+      setUploadFiles,
+      setUploadJobId,
+      setUploadJobInfo,
+      setUploadStatus,
+      setUploading,
+      uploadAnswerFiles,
+      uploadAssignmentId,
+      uploadClassName,
+      uploadDate,
+      uploadFiles,
+      uploadScope,
+      uploadStudentIds,
+    ],
   )
 
   // ---- handleConfirmUpload ----
@@ -672,8 +746,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
             void fetchAssignmentProgress(data.assignment_id)
           }
         }
-      } catch (err: any) {
-        const message = err?.message || String(err)
+      } catch (err: unknown) {
+        const message = toErrorMessage(err)
         setUploadError(message)
         setDraftActionError(message)
         setUploadJobInfo((prev) => {
@@ -693,7 +767,25 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setUploadConfirming(false)
       }
     },
-    [apiBase, fetchAssignmentProgress, saveDraft, uploadDraft, uploadJobId, uploadJobInfo],
+    [
+      apiBase,
+      fetchAssignmentProgress,
+      saveDraft,
+      setDraftActionError,
+      setDraftActionStatus,
+      setDraftPanelCollapsed,
+      setProgressAssignmentId,
+      setProgressPanelCollapsed,
+      setUploadConfirming,
+      setUploadError,
+      setUploadJobId,
+      setUploadJobInfo,
+      setUploadStatus,
+      setUploadStatusPollNonce,
+      uploadDraft,
+      uploadJobId,
+      uploadJobInfo,
+    ],
   )
 
   return {

@@ -5,11 +5,12 @@ import contextvars
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set
-import logging
+
 _log = logging.getLogger(__name__)
 
 

@@ -4,7 +4,11 @@ from typing import Any
 
 from services.api import settings
 from services.api.runtime.inline_backend_factory import build_inline_backend
-from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime, stop_tenant_runtime
+from services.api.runtime.runtime_manager import (
+    RuntimeManagerDeps,
+    start_tenant_runtime,
+    stop_tenant_runtime,
+)
 from services.api.teacher_provider_registry_service import validate_master_key_policy
 from services.api.workers import (
     chat_worker_service,

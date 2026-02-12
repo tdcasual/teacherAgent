@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 from .loader import LoadedSkills
 from .spec import SkillSpec
-
 
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
 

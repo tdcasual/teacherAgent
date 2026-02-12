@@ -4,7 +4,7 @@ type MessageLike = {
   content: string
 }
 
-const pendingStatusTexts = new Set(['正在生成…', '正在恢复上一条回复…'])
+const pendingStatusTexts = new Set(['正在生成…', '正在回复中…', '正在恢复上一条回复…'])
 
 export const stripTransientPendingBubbles = <T extends MessageLike>(messages: T[]): T[] => {
   return messages.filter((msg) => {
@@ -13,4 +13,3 @@ export const stripTransientPendingBubbles = <T extends MessageLike>(messages: T[
     return !(String(msg.id || '').startsWith('asst_') || String(msg.id || '').startsWith('pending_'))
   })
 }
-

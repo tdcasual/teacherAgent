@@ -17,6 +17,7 @@ import type {
 // ── Primitive helpers ──────────────────────────────────────────────────
 
 export type UploadScope = 'public' | 'class' | 'student'
+export type UploadMode = 'assignment' | 'exam'
 
 export type DifficultyOption = Readonly<{ value: string; label: string }>
 
@@ -73,8 +74,8 @@ export type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void
 
 export type UploadSectionProps = {
   // Upload mode & state
-  uploadMode: string
-  setUploadMode: (v: string) => void
+  uploadMode: UploadMode
+  setUploadMode: (v: UploadMode) => void
   uploadCardCollapsed: boolean
   setUploadCardCollapsed: Dispatch<SetStateAction<boolean>>
 
@@ -83,8 +84,8 @@ export type UploadSectionProps = {
   setUploadAssignmentId: (v: string) => void
   uploadDate: string
   setUploadDate: (v: string) => void
-  uploadScope: string
-  setUploadScope: (v: string) => void
+  uploadScope: UploadScope
+  setUploadScope: (v: UploadScope) => void
   uploadClassName: string
   setUploadClassName: (v: string) => void
   uploadStudentIds: string
@@ -174,8 +175,8 @@ export type ExamDraftSectionProps = {
 
 export type WorkflowSummaryCardProps = {
   activeWorkflowIndicator: WorkflowIndicator
-  uploadMode: string
-  setUploadMode: (v: string) => void
+  uploadMode: UploadMode
+  setUploadMode: (v: UploadMode) => void
   uploadJobInfo: UploadJobStatus | null
   uploadAssignmentId: string
   examJobInfo: ExamUploadJobStatus | null

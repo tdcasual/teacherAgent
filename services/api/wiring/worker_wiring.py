@@ -26,10 +26,9 @@ import time
 from typing import Any
 
 from services.api.runtime import queue_runtime
-from services.api.workers.upload_worker_service import UploadWorkerDeps
 from services.api.workers.exam_worker_service import ExamWorkerDeps
 from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
-
+from services.api.workers.upload_worker_service import UploadWorkerDeps
 
 from . import get_app_core as _app_core
 

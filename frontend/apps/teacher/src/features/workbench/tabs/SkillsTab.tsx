@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Skill } from '../../../appTypes'
+import type { InvocationTriggerType } from '../../chat/invocation'
 
 export type SkillsTabProps = {
   apiBase: string
@@ -15,12 +16,41 @@ export type SkillsTabProps = {
   chooseSkill: (id: string, pin: boolean) => void
   toggleFavorite: (id: string) => void
   insertPrompt: (prompt: string) => void
-  insertInvocationTokenAtCursor: (type: string, id: string) => void
-  stopKeyPropagation: (e: React.KeyboardEvent) => void
+  insertInvocationTokenAtCursor: (type: InvocationTriggerType, id: string) => void
+  stopKeyPropagation: (e: React.KeyboardEvent<HTMLElement>) => void
   setSkillQuery: (q: string) => void
   setShowFavoritesOnly: (v: boolean) => void
   setSkillPinned: (v: boolean) => void
   setComposerWarning: (msg: string) => void
+}
+
+type SkillMutationResponse = {
+  ok?: boolean
+  error?: string
+  detail?: string
+  exists?: boolean
+  skill_id?: string
+}
+
+type SkillImportPreviewResponse = SkillMutationResponse & {
+  title?: string
+  desc?: string
+  keywords?: string[]
+  preview?: string
+}
+
+type SkillDepsResponse = {
+  ok?: boolean
+  missing?: string[]
+}
+
+const toErrorMessage = (error: unknown, fallback = '网络错误') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
 }
 
 export default function SkillsTab(props: SkillsTabProps) {
@@ -54,7 +84,7 @@ export default function SkillsTab(props: SkillsTabProps) {
   const [createSaving, setCreateSaving] = useState(false)
   const [createError, setCreateError] = useState('')
   const [importUrl, setImportUrl] = useState('')
-  const [importPreview, setImportPreview] = useState<any>(null)
+  const [importPreview, setImportPreview] = useState<SkillImportPreviewResponse | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState('')
   const [depsInfo, setDepsInfo] = useState<{ skillId: string; missing: string[]; installing: boolean } | null>(null)
@@ -78,11 +108,11 @@ export default function SkillsTab(props: SkillsTabProps) {
           examples: createExamples.split('\n').map(s => s.trim()).filter(Boolean),
         }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as SkillMutationResponse
       if (!data.ok) { setCreateError(data.error || '创建失败'); return }
       setShowCreateForm(false); setCreateTitle(''); setCreateDesc(''); setCreateKeywords(''); setCreateExamples('')
       void fetchSkills()
-    } catch (e: any) { setCreateError(e.message || '网络错误') } finally { setCreateSaving(false) }
+    } catch (error: unknown) { setCreateError(toErrorMessage(error)) } finally { setCreateSaving(false) }
   }
 
   const handleImportPreview = async () => {
@@ -93,10 +123,10 @@ export default function SkillsTab(props: SkillsTabProps) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_url: importUrl.trim() }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as SkillImportPreviewResponse
       if (!data.ok) { setImportError(data.error || data.detail || '预览失败'); return }
       setImportPreview(data)
-    } catch (e: any) { setImportError(e.message || '网络错误') } finally { setImportLoading(false) }
+    } catch (error: unknown) { setImportError(toErrorMessage(error)) } finally { setImportLoading(false) }
   }
 
   const handleImportConfirm = async (overwrite = false) => {
@@ -107,7 +137,7 @@ export default function SkillsTab(props: SkillsTabProps) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_url: importUrl.trim(), overwrite }),
       })
-      const data = await res.json()
+      const data = (await res.json()) as SkillMutationResponse
       if (!data.ok) {
         if (data.exists && !overwrite) {
           setImportError(`${data.error}`)
@@ -117,30 +147,31 @@ export default function SkillsTab(props: SkillsTabProps) {
         return
       }
       // Check dependencies after successful import
-      const skillId = data.skill_id
+      const skillId = String(data.skill_id || '').trim()
       try {
         const depsRes = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(skillId)}/deps`)
-        const depsData = await depsRes.json()
-        if (depsData.ok && depsData.missing?.length > 0) {
-          setDepsInfo({ skillId, missing: depsData.missing, installing: false })
+        const depsData = (await depsRes.json()) as SkillDepsResponse
+        const missingDeps = Array.isArray(depsData.missing) ? depsData.missing : []
+        if (depsData.ok && missingDeps.length > 0) {
+          setDepsInfo({ skillId, missing: missingDeps, installing: false })
         }
       } catch { /* ignore dep check failure */ }
       setShowImportDialog(false); setImportUrl(''); setImportPreview(null)
       void fetchSkills()
-    } catch (e: any) { setImportError(e.message || '网络错误') } finally { setImportLoading(false) }
+    } catch (error: unknown) { setImportError(toErrorMessage(error)) } finally { setImportLoading(false) }
   }
 
   const handleDeleteSkill = async (skillId: string) => {
     if (!confirm('确定删除该技能？')) return
     try {
       const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(skillId)}`, { method: 'DELETE' })
-      const data = await res.json()
+      const data = (await res.json()) as SkillMutationResponse
       if (!data.ok) { alert(data.error || '删除失败'); return }
       void fetchSkills()
-    } catch (e: any) { alert(e.message || '删除失败') }
+    } catch (error: unknown) { alert(toErrorMessage(error, '删除失败')) }
   }
 
-  const handleEditSkill = (skill: any) => {
+  const handleEditSkill = (skill: Skill) => {
     setEditingSkillId(skill.id); setEditTitle(skill.title || '')
     // Use instructions (full body) if available, fall back to desc (short description)
     setEditDesc(skill.instructions || skill.desc || '')
@@ -153,19 +184,24 @@ export default function SkillsTab(props: SkillsTabProps) {
     if (!editingSkillId) return
     setEditSaving(true); setEditError('')
     try {
-      const body: any = {}
+      const body: {
+        title?: string
+        description?: string
+        keywords: string[]
+        examples: string[]
+      } = {
+        keywords: editKeywords.trim() ? editKeywords.split(/[,，]/).map(s => s.trim()).filter(Boolean) : [],
+        examples: editExamples.trim() ? editExamples.split('\n').map(s => s.trim()).filter(Boolean) : [],
+      }
       if (editTitle.trim()) body.title = editTitle.trim()
       if (editDesc.trim()) body.description = editDesc.trim()
-      // Always send keywords and examples so they can be cleared to empty
-      body.keywords = editKeywords.trim() ? editKeywords.split(/[,，]/).map(s => s.trim()).filter(Boolean) : []
-      body.examples = editExamples.trim() ? editExamples.split('\n').map(s => s.trim()).filter(Boolean) : []
       const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(editingSkillId)}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
-      const data = await res.json()
+      const data = (await res.json()) as SkillMutationResponse
       if (!data.ok) { setEditError(data.error || '更新失败'); return }
       setEditingSkillId(null); void fetchSkills()
-    } catch (e: any) { setEditError(e.message || '网络错误') } finally { setEditSaving(false) }
+    } catch (error: unknown) { setEditError(toErrorMessage(error)) } finally { setEditSaving(false) }
   }
 
   return (
@@ -249,10 +285,17 @@ export default function SkillsTab(props: SkillsTabProps) {
           )}
           {importPreview && (
             <div className="mt-[8px] p-[8px] bg-surface rounded-[6px] text-[13px]">
+              {(() => {
+                const previewKeywords = Array.isArray(importPreview.keywords) ? importPreview.keywords : []
+                return (
+                  <>
               <strong>{importPreview.title}</strong>
               {importPreview.desc && <p>{importPreview.desc}</p>}
-              {importPreview.keywords?.length > 0 && <div className="muted">关键词：{importPreview.keywords.join('、')}</div>}
+              {previewKeywords.length > 0 && <div className="muted">关键词：{previewKeywords.join('、')}</div>}
               {importPreview.preview && <pre className="status ok">{importPreview.preview}</pre>}
+                  </>
+                )
+              })()}
             </div>
           )}
         </div>
@@ -269,15 +312,15 @@ export default function SkillsTab(props: SkillsTabProps) {
                 setDepsInfo(prev => prev ? { ...prev, installing: true } : null)
                 try {
                   const res = await fetch(`${apiBase}/teacher/skills/${encodeURIComponent(depsInfo.skillId)}/install-deps`, { method: 'POST' })
-                  const data = await res.json()
+                  const data = (await res.json()) as SkillMutationResponse
                   if (data.ok) {
                     setDepsInfo(null)
                   } else {
                     alert(data.error || '安装失败')
                     setDepsInfo(prev => prev ? { ...prev, installing: false } : null)
                   }
-                } catch (e: any) {
-                  alert(e.message || '安装失败')
+                } catch (error: unknown) {
+                  alert(toErrorMessage(error, '安装失败'))
                   setDepsInfo(prev => prev ? { ...prev, installing: false } : null)
                 }
               }}
@@ -331,7 +374,7 @@ export default function SkillsTab(props: SkillsTabProps) {
               </button>
             </div>
             <div className="flex flex-wrap gap-[8px]">
-              {skill.prompts.map((prompt: any) => (
+              {skill.prompts.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"
@@ -346,7 +389,7 @@ export default function SkillsTab(props: SkillsTabProps) {
               ))}
             </div>
             <div className="flex flex-wrap gap-[8px]">
-              {skill.examples.map((ex: any) => (
+              {skill.examples.map((ex) => (
                 <button
                   key={ex}
                   type="button"

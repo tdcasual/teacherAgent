@@ -675,7 +675,7 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   }
 
   const pendingProposals = (overview?.proposals || []).filter((item) => item.status === 'pending')
-  const history = overview?.history || []
+  const history = useMemo(() => overview?.history || [], [overview?.history])
 
   const liveRouting = overview?.routing || null
   const liveEnabledRules = useMemo(

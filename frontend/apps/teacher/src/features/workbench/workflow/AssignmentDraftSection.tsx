@@ -147,7 +147,7 @@ export default function AssignmentDraftSection(props: Props) {
                           onChange={(e) => {
                             setMisconceptionsText(e.target.value)
                             setMisconceptionsDirty(true)
-                            // Also keep structured requirements up to date for any immediate UI reads.
+                            // Keep structured requirements in sync for immediate UI reads.
                             updateDraftRequirement('misconceptions', parseLineList(e.target.value))
                           }}
                           onKeyDown={stopKeyPropagation}

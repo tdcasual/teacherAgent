@@ -12,7 +12,7 @@ import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
 import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
 
-type WorkflowTabProps =
+export type WorkflowTabProps =
   // WorkflowSummaryCard props
   WorkflowSummaryCardProps &
   // UploadSection props

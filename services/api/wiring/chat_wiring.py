@@ -20,27 +20,27 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from ..api_models import ChatRequest, ChatStartRequest
-from ..chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
-from ..chat_job_repository import ChatJobRepositoryDeps
+from services.api.runtime import queue_runtime
+from services.api.workers.chat_worker_service import (
+    ChatWorkerDeps,
+)
+
+from ..api_models import ChatRequest
+from ..chat_api_service import ChatApiDeps
 from ..chat_job_processing_service import (
     ChatJobProcessDeps,
     ComputeChatReplyDeps,
-    compute_chat_reply_sync as _compute_chat_reply_sync_impl,
+)
+from ..chat_job_processing_service import (
     detect_role_hint as _detect_role_hint_impl,
 )
+from ..chat_job_repository import ChatJobRepositoryDeps
 from ..chat_job_service import chat_job_path as _chat_job_path_impl
-from ..chat_runtime_service import ChatRuntimeDeps
-from ..chat_session_history_service import load_session_messages as _load_session_messages_impl
-from ..chat_session_utils import paginate_session_items as _paginate_session_items_impl
-from ..chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
-from ..chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
-from ..chat_support_service import ChatSupportDeps
 from ..chat_lane_repository import (
     _chat_enqueue_locked,
     _chat_find_position_locked,
@@ -56,26 +56,34 @@ from ..chat_lane_repository import (
     resolve_chat_lane_id,
     resolve_chat_lane_id_from_job,
 )
+from ..chat_runtime_service import ChatRuntimeDeps
+from ..chat_session_history_service import load_session_messages as _load_session_messages_impl
+from ..chat_session_utils import paginate_session_items as _paginate_session_items_impl
+from ..chat_start_service import ChatStartDeps
+from ..chat_start_service import start_chat_orchestration as _start_chat_orchestration_impl
+from ..chat_status_service import ChatStatusDeps
+from ..chat_status_service import get_chat_status as _get_chat_status_impl
+from ..chat_support_service import ChatSupportDeps
 from ..handlers import chat_handlers
 from ..job_repository import _atomic_write_json, _release_lockfile, _try_acquire_lockfile
 from ..prompt_builder import compile_system_prompt
 from ..session_history_api_service import SessionHistoryApiDeps
 from ..session_view_state import (
     compare_iso_ts as _compare_iso_ts_impl,
+)
+from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
-from ..teacher_llm_routing_service import ensure_teacher_routing_file as _ensure_teacher_routing_file_impl
+from ..teacher_llm_routing_service import (
+    ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
+)
 from ..teacher_provider_registry_service import (
     merged_model_registry as _merged_model_registry_impl,
+)
+from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
-from services.api.runtime import queue_runtime
-from services.api.workers.chat_worker_service import (
-    ChatWorkerDeps,
-)
-
-
 from . import get_app_core as _app_core
 from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registry_deps
 from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set

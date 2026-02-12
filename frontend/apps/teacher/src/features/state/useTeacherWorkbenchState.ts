@@ -6,6 +6,15 @@ import {
 } from './teacherWorkbenchState'
 import type { AssignmentProgress, ExamUploadDraft, ExamUploadJobStatus, TeacherMemoryInsightsResponse, TeacherMemoryProposal, UploadDraft, UploadJobStatus } from '../../appTypes'
 
+type StateSetterValue<T> = T | ((prev: T) => T)
+
+const resolveStateSetter = <T>(value: StateSetterValue<T>, prev: T): T => {
+  if (typeof value === 'function') {
+    return (value as (prev: T) => T)(prev)
+  }
+  return value
+}
+
 export function useTeacherWorkbenchState() {
   const [state, dispatch] = useReducer(teacherWorkbenchReducer, undefined, createInitialTeacherWorkbenchState)
 
@@ -24,51 +33,35 @@ export function useTeacherWorkbenchState() {
   )
 
   const setUploadJobInfo = useCallback(
-    (value: UploadJobStatus | null | ((prev: UploadJobStatus | null) => UploadJobStatus | null)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, uploadJobInfo: (value as any)(prev.uploadJobInfo) }))
-        return
-      }
-      setField('uploadJobInfo', value)
+    (value: StateSetterValue<UploadJobStatus | null>) => {
+      update((prev) => ({ ...prev, uploadJobInfo: resolveStateSetter(value, prev.uploadJobInfo) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setExamJobInfo = useCallback(
-    (value: ExamUploadJobStatus | null | ((prev: ExamUploadJobStatus | null) => ExamUploadJobStatus | null)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, examJobInfo: (value as any)(prev.examJobInfo) }))
-        return
-      }
-      setField('examJobInfo', value)
+    (value: StateSetterValue<ExamUploadJobStatus | null>) => {
+      update((prev) => ({ ...prev, examJobInfo: resolveStateSetter(value, prev.examJobInfo) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setUploadError = useCallback((value: string) => setField('uploadError', value), [setField])
 
   const setUploadStatus = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, uploadStatus: (value as any)(prev.uploadStatus) }))
-        return
-      }
-      setField('uploadStatus', value)
+    (value: StateSetterValue<string>) => {
+      update((prev) => ({ ...prev, uploadStatus: resolveStateSetter(value, prev.uploadStatus) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setExamUploadError = useCallback((value: string) => setField('examUploadError', value), [setField])
 
   const setExamUploadStatus = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, examUploadStatus: (value as any)(prev.examUploadStatus) }))
-        return
-      }
-      setField('examUploadStatus', value)
+    (value: StateSetterValue<string>) => {
+      update((prev) => ({ ...prev, examUploadStatus: resolveStateSetter(value, prev.examUploadStatus) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setUploadMode = useCallback((value: 'assignment' | 'exam') => setField('uploadMode', value), [setField])
@@ -81,58 +74,38 @@ export function useTeacherWorkbenchState() {
   const setUploadAnswerFiles = useCallback((value: File[]) => setField('uploadAnswerFiles', value), [setField])
   const setUploading = useCallback((value: boolean) => setField('uploading', value), [setField])
   const setUploadCardCollapsed = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, uploadCardCollapsed: (value as any)(prev.uploadCardCollapsed) }))
-        return
-      }
-      setField('uploadCardCollapsed', value)
+    (value: StateSetterValue<boolean>) => {
+      update((prev) => ({ ...prev, uploadCardCollapsed: resolveStateSetter(value, prev.uploadCardCollapsed) }))
     },
-    [setField, update],
+    [update],
   )
   const setUploadJobId = useCallback((value: string) => setField('uploadJobId', value), [setField])
   const setUploadConfirming = useCallback((value: boolean) => setField('uploadConfirming', value), [setField])
   const setUploadStatusPollNonce = useCallback(
-    (value: number | ((prev: number) => number)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, uploadStatusPollNonce: (value as any)(prev.uploadStatusPollNonce) }))
-        return
-      }
-      setField('uploadStatusPollNonce', value)
+    (value: StateSetterValue<number>) => {
+      update((prev) => ({ ...prev, uploadStatusPollNonce: resolveStateSetter(value, prev.uploadStatusPollNonce) }))
     },
-    [setField, update],
+    [update],
   )
   const setUploadDraft = useCallback(
-    (value: UploadDraft | null | ((prev: UploadDraft | null) => UploadDraft | null)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, uploadDraft: (value as any)(prev.uploadDraft) }))
-        return
-      }
-      setField('uploadDraft', value)
+    (value: StateSetterValue<UploadDraft | null>) => {
+      update((prev) => ({ ...prev, uploadDraft: resolveStateSetter(value, prev.uploadDraft) }))
     },
-    [setField, update],
+    [update],
   )
   const setDraftPanelCollapsed = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, draftPanelCollapsed: (value as any)(prev.draftPanelCollapsed) }))
-        return
-      }
-      setField('draftPanelCollapsed', value)
+    (value: StateSetterValue<boolean>) => {
+      update((prev) => ({ ...prev, draftPanelCollapsed: resolveStateSetter(value, prev.draftPanelCollapsed) }))
     },
-    [setField, update],
+    [update],
   )
   const setDraftLoading = useCallback((value: boolean) => setField('draftLoading', value), [setField])
   const setDraftError = useCallback((value: string) => setField('draftError', value), [setField])
   const setQuestionShowCount = useCallback(
-    (value: number | ((prev: number) => number)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, questionShowCount: (value as any)(prev.questionShowCount) }))
-        return
-      }
-      setField('questionShowCount', value)
+    (value: StateSetterValue<number>) => {
+      update((prev) => ({ ...prev, questionShowCount: resolveStateSetter(value, prev.questionShowCount) }))
     },
-    [setField, update],
+    [update],
   )
   const setDraftSaving = useCallback((value: boolean) => setField('draftSaving', value), [setField])
   const setDraftActionStatus = useCallback((value: string) => setField('draftActionStatus', value), [setField])
@@ -141,14 +114,10 @@ export function useTeacherWorkbenchState() {
   const setMisconceptionsDirty = useCallback((value: boolean) => setField('misconceptionsDirty', value), [setField])
 
   const setProgressPanelCollapsed = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, progressPanelCollapsed: (value as any)(prev.progressPanelCollapsed) }))
-        return
-      }
-      setField('progressPanelCollapsed', value)
+    (value: StateSetterValue<boolean>) => {
+      update((prev) => ({ ...prev, progressPanelCollapsed: resolveStateSetter(value, prev.progressPanelCollapsed) }))
     },
-    [setField, update],
+    [update],
   )
   const setProgressAssignmentId = useCallback((value: string) => setField('progressAssignmentId', value), [setField])
   const setProgressLoading = useCallback((value: boolean) => setField('progressLoading', value), [setField])
@@ -171,34 +140,22 @@ export function useTeacherWorkbenchState() {
   const setExamUploading = useCallback((value: boolean) => setField('examUploading', value), [setField])
   const setExamJobId = useCallback((value: string) => setField('examJobId', value), [setField])
   const setExamStatusPollNonce = useCallback(
-    (value: number | ((prev: number) => number)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, examStatusPollNonce: (value as any)(prev.examStatusPollNonce) }))
-        return
-      }
-      setField('examStatusPollNonce', value)
+    (value: StateSetterValue<number>) => {
+      update((prev) => ({ ...prev, examStatusPollNonce: resolveStateSetter(value, prev.examStatusPollNonce) }))
     },
-    [setField, update],
+    [update],
   )
   const setExamDraft = useCallback(
-    (value: ExamUploadDraft | null | ((prev: ExamUploadDraft | null) => ExamUploadDraft | null)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, examDraft: (value as any)(prev.examDraft) }))
-        return
-      }
-      setField('examDraft', value)
+    (value: StateSetterValue<ExamUploadDraft | null>) => {
+      update((prev) => ({ ...prev, examDraft: resolveStateSetter(value, prev.examDraft) }))
     },
-    [setField, update],
+    [update],
   )
   const setExamDraftPanelCollapsed = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, examDraftPanelCollapsed: (value as any)(prev.examDraftPanelCollapsed) }))
-        return
-      }
-      setField('examDraftPanelCollapsed', value)
+    (value: StateSetterValue<boolean>) => {
+      update((prev) => ({ ...prev, examDraftPanelCollapsed: resolveStateSetter(value, prev.examDraftPanelCollapsed) }))
     },
-    [setField, update],
+    [update],
   )
   const setExamDraftLoading = useCallback((value: boolean) => setField('examDraftLoading', value), [setField])
   const setExamDraftError = useCallback((value: string) => setField('examDraftError', value), [setField])

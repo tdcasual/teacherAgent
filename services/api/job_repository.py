@@ -15,7 +15,11 @@ from starlette.concurrency import run_in_threadpool
 
 from .chat_lock_service import (
     ChatLockDeps,
+)
+from .chat_lock_service import (
     release_lockfile as _release_lockfile_impl,
+)
+from .chat_lock_service import (
     try_acquire_lockfile as _try_acquire_lockfile_impl,
 )
 from .paths import exam_job_path, upload_job_path

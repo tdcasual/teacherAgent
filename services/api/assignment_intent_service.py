@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .assignment_requirements_service import normalize_class_level, parse_duration, parse_list_value
-import logging
+
 _log = logging.getLogger(__name__)
 
 

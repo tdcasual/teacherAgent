@@ -47,6 +47,15 @@ export type UseExamWorkflowParams = {
   setExamStatusPollNonce: (v: number | ((prev: number) => number)) => void
 }
 
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
+}
+
 export function useExamWorkflow(params: UseExamWorkflowParams) {
   const {
     apiBase,
@@ -71,14 +80,14 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
   // Auto-expand upload card on exam upload error
   useEffect(() => {
     if (examUploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
-  }, [examUploadError, uploadCardCollapsed])
+  }, [examUploadError, setUploadCardCollapsed, uploadCardCollapsed])
 
   // Auto-expand exam draft panel on draft errors
   useEffect(() => {
     if ((examDraftError || examDraftActionError) && examDraftPanelCollapsed) {
       setExamDraftPanelCollapsed(false)
     }
-  }, [examDraftError, examDraftActionError, examDraftPanelCollapsed])
+  }, [examDraftActionError, examDraftError, examDraftPanelCollapsed, setExamDraftPanelCollapsed])
 
   // Exam workflow auto-state panel management
   const examAutoStateRef = useRef('')
@@ -109,13 +118,13 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
       default:
         break
     }
-  }, [examWorkflowAutoState, uploadMode])
+  }, [examWorkflowAutoState, setExamDraftPanelCollapsed, setUploadCardCollapsed, uploadMode])
 
   // Load exam draft when job is done
   useEffect(() => {
+    const examJobStatus = examJobInfo?.status
     if (!examJobId) return
-    if (!examJobInfo) return
-    if (examJobInfo.status !== 'done' && examJobInfo.status !== 'confirmed') return
+    if (examJobStatus !== 'done' && examJobStatus !== 'confirmed') return
     let active = true
     const loadDraft = async () => {
       setExamDraftError('')
@@ -131,26 +140,27 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
         let draft = data?.draft as ExamUploadDraft
         if (!draft || !draft.questions) throw new Error('draft 数据缺失')
 
-        const scoreSchema = draft.score_schema || {}
-        const subjectSchema = scoreSchema.subject || {}
-        const selectedCandidateId = String(subjectSchema.selected_candidate_id || '').trim()
+        const scoreSchema = draft.score_schema
+        const subjectSchema = scoreSchema?.subject
+        const selectedCandidateId = String(subjectSchema?.selected_candidate_id || '').trim()
         const suggestedCandidateId = String(
-          subjectSchema.suggested_selected_candidate_id || subjectSchema.recommended_candidate_id || '',
+          subjectSchema?.suggested_selected_candidate_id || subjectSchema?.recommended_candidate_id || '',
         ).trim()
-        const candidateColumns = Array.isArray(subjectSchema.candidate_columns) ? subjectSchema.candidate_columns : []
+        const candidateColumns = Array.isArray(subjectSchema?.candidate_columns) ? subjectSchema.candidate_columns : []
         const suggestedAvailable = Boolean(
-          suggestedCandidateId && candidateColumns.some((candidate: any) => String(candidate?.candidate_id || '') === suggestedCandidateId),
+          suggestedCandidateId &&
+            candidateColumns.some((candidate) => String(candidate?.candidate_id || '') === suggestedCandidateId),
         )
         if (!selectedCandidateId && suggestedAvailable) {
           draft = {
             ...draft,
             needs_confirm: true,
             score_schema: {
-              ...scoreSchema,
+              ...(scoreSchema || {}),
               confirm: false,
               needs_confirm: true,
               subject: {
-                ...subjectSchema,
+                ...(subjectSchema || {}),
                 selected_candidate_id: suggestedCandidateId,
                 selected_candidate_available: true,
                 selection_error: '',
@@ -161,9 +171,9 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
 
         setExamDraft(draft)
         setExamDraftPanelCollapsed(false)
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!active) return
-        setExamDraftError(err.message || String(err))
+        setExamDraftError(toErrorMessage(err))
       } finally {
         if (!active) return
         setExamDraftLoading(false)
@@ -173,7 +183,15 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
     return () => {
       active = false
     }
-  }, [examJobId, examJobInfo?.status, apiBase])
+  }, [
+    apiBase,
+    examJobId,
+    examJobInfo?.status,
+    setExamDraft,
+    setExamDraftError,
+    setExamDraftLoading,
+    setExamDraftPanelCollapsed,
+  ])
 
   // --- Exam workflow handlers ---
 
@@ -231,14 +249,33 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
       setExamPaperFiles([])
       setExamScoreFiles([])
       setExamAnswerFiles([])
-    } catch (err: any) {
-      setExamUploadError(err.message || String(err))
+    } catch (err: unknown) {
+      setExamUploadError(toErrorMessage(err))
     } finally {
       setExamUploading(false)
     }
   }, [
-    apiBase, examId, examDate, examClassName,
-    examPaperFiles, examScoreFiles, examAnswerFiles,
+    apiBase,
+    examAnswerFiles,
+    examClassName,
+    examDate,
+    examId,
+    examPaperFiles,
+    examScoreFiles,
+    setExamAnswerFiles,
+    setExamDraft,
+    setExamDraftActionError,
+    setExamDraftActionStatus,
+    setExamDraftError,
+    setExamDraftPanelCollapsed,
+    setExamJobId,
+    setExamJobInfo,
+    setExamPaperFiles,
+    setExamScoreFiles,
+    setExamUploadError,
+    setExamUploadStatus,
+    setExamUploading,
+    setUploadCardCollapsed,
   ])
 
   const saveExamDraft = useCallback(async (draft: ExamUploadDraft) => {
@@ -287,14 +324,24 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
         setExamStatusPollNonce((n: number) => n + 1)
       }
       return data
-    } catch (err: any) {
-      const message = err?.message || String(err)
+    } catch (err: unknown) {
+      const message = toErrorMessage(err)
       setExamDraftActionError(message)
       throw err
     } finally {
       setExamDraftSaving(false)
     }
-  }, [apiBase, examJobInfo?.score_schema?.subject?.selected_candidate_id])
+  }, [
+    apiBase,
+    examJobInfo?.score_schema?.subject?.selected_candidate_id,
+    setExamDraft,
+    setExamDraftActionError,
+    setExamDraftActionStatus,
+    setExamDraftSaving,
+    setExamStatusPollNonce,
+    setExamUploadError,
+    setExamUploadStatus,
+  ])
 
   const handleConfirmExamUpload = useCallback(async () => {
     if (!examJobId) return
@@ -371,14 +418,28 @@ export function useExamWorkflow(params: UseExamWorkflowParams) {
           // ignore
         }
       }
-    } catch (err: any) {
-      const message = err?.message || String(err)
+    } catch (err: unknown) {
+      const message = toErrorMessage(err)
       setExamUploadError(message)
       setExamDraftActionError(message)
     } finally {
       setExamConfirming(false)
     }
-  }, [apiBase, examJobId, examJobInfo, examDraft, saveExamDraft])
+  }, [
+    apiBase,
+    examDraft,
+    examJobId,
+    examJobInfo,
+    saveExamDraft,
+    setExamConfirming,
+    setExamDraftActionError,
+    setExamDraftActionStatus,
+    setExamDraftPanelCollapsed,
+    setExamJobInfo,
+    setExamStatusPollNonce,
+    setExamUploadError,
+    setExamUploadStatus,
+  ])
 
   return {
     handleUploadExam,

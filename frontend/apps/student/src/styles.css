@@ -19,6 +19,12 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
   font-family: "Noto Sans SC", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
@@ -26,8 +32,17 @@ body {
   background: var(--bg);
 }
 
+@media (min-width: 901px) {
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
+}
+
 .app {
-  height: 100vh;
+  height: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -114,12 +129,19 @@ body {
   min-height: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
   position: relative;
   background: var(--surface);
 }
 
 .student-layout.sidebar-collapsed {
   grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.student-workbench {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-overlay {
@@ -359,10 +381,12 @@ textarea:focus {
 }
 
 .chat-shell {
+  height: 100%;
   min-height: 0;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   background: var(--surface);
+  position: relative;
 }
 
 .messages {
@@ -490,6 +514,92 @@ textarea:focus {
   padding-left: 10px;
   border-left: 3px solid #86d6c4;
   color: var(--muted);
+}
+
+/* --- KaTeX math overflow guards --- */
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.markdown .katex {
+  overflow-wrap: normal;
+}
+
+.katex-error {
+  background: #f3f4f6;
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+
+/* --- GFM table styles --- */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+/* --- Code block font tweak --- */
+.markdown pre code {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* --- Image containment --- */
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* --- New message indicator --- */
+.new-message-indicator {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  padding: 6px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  z-index: 5;
+  animation: fadeInUp 0.2s ease;
+}
+
+.new-message-indicator:hover {
+  opacity: 0.9;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .composer {
@@ -728,6 +838,13 @@ textarea:focus {
 }
 
 @media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    overflow: hidden;
+    height: 100dvh;
+  }
+
   .app {
     height: auto;
     min-height: 100vh;
@@ -751,6 +868,7 @@ textarea:focus {
   .student-layout,
   .student-layout.sidebar-collapsed {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 0 minmax(0, 1fr);
   }
 
   .sidebar-overlay {
@@ -820,11 +938,17 @@ textarea:focus {
 
   .messages {
     padding: 14px 0 6px;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .messages-inner {
     padding: 0 14px 12px;
     gap: 12px;
+  }
+
+  .markdown .katex-display {
+    -webkit-overflow-scrolling: touch;
   }
 
   .bubble {

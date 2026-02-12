@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import csv
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-import logging
+
 _log = logging.getLogger(__name__)
 
 

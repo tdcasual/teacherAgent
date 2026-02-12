@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import uuid
 from datetime import datetime
@@ -20,7 +21,6 @@ from .config import (
     UPLOAD_JOB_DIR,
 )
 
-import logging
 _log = logging.getLogger(__name__)
 
 

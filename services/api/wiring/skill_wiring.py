@@ -15,15 +15,28 @@ from typing import Any, Dict, List, Optional
 
 from ..teacher_skill_service import (
     TeacherSkillDeps,
-    create_teacher_skill as _create_impl,
-    update_teacher_skill as _update_impl,
-    delete_teacher_skill as _delete_impl,
-    import_skill_from_github as _import_impl,
-    preview_github_skill as _preview_impl,
+)
+from ..teacher_skill_service import (
     check_skill_dependencies as _check_deps_impl,
+)
+from ..teacher_skill_service import (
+    create_teacher_skill as _create_impl,
+)
+from ..teacher_skill_service import (
+    delete_teacher_skill as _delete_impl,
+)
+from ..teacher_skill_service import (
+    import_skill_from_github as _import_impl,
+)
+from ..teacher_skill_service import (
     install_skill_dependencies as _install_deps_impl,
 )
-
+from ..teacher_skill_service import (
+    preview_github_skill as _preview_impl,
+)
+from ..teacher_skill_service import (
+    update_teacher_skill as _update_impl,
+)
 from . import get_app_core as _app_core
 
 

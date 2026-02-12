@@ -63,7 +63,7 @@ export type StudentHistoryMessage = {
   ts?: string
   role?: string
   content?: string
-  [k: string]: any
+  [k: string]: unknown
 }
 
 export type StudentHistorySessionResponse = {
@@ -102,4 +102,3 @@ export type VerifyResponse = {
   message?: string
   student?: VerifiedStudent
 }
-

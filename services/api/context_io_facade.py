@@ -5,6 +5,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .assignment_requirements_service import (
     compute_requirements_missing as _compute_requirements_missing_impl,
+)
+from .assignment_requirements_service import (
     merge_requirements as _merge_requirements_impl,
 )
 from .assignment_upload_parse_service import process_upload_job as _process_upload_job_impl
@@ -13,43 +15,102 @@ from .assignment_uploaded_question_service import (
 )
 from .exam_score_processing_service import (
     apply_answer_key_to_responses_csv as _apply_answer_key_to_responses_csv_impl,
+)
+from .exam_score_processing_service import (
     build_exam_question_id as _build_exam_question_id_impl,
+)
+from .exam_score_processing_service import (
     build_exam_rows_from_parsed_scores as _build_exam_rows_from_parsed_scores_impl,
+)
+from .exam_score_processing_service import (
     compute_max_scores_from_rows as _compute_max_scores_from_rows_impl,
+)
+from .exam_score_processing_service import (
     ensure_questions_max_score as _ensure_questions_max_score_impl,
+)
+from .exam_score_processing_service import (
     load_exam_answer_key_from_csv as _load_exam_answer_key_from_csv_impl,
+)
+from .exam_score_processing_service import (
     load_exam_max_scores_from_questions_csv as _load_exam_max_scores_from_questions_csv_impl,
+)
+from .exam_score_processing_service import (
     normalize_excel_cell as _normalize_excel_cell_impl,
+)
+from .exam_score_processing_service import (
     normalize_objective_answer as _normalize_objective_answer_impl,
+)
+from .exam_score_processing_service import (
     normalize_student_id_for_exam as _normalize_student_id_for_exam_impl,
+)
+from .exam_score_processing_service import (
     parse_exam_answer_key_text as _parse_exam_answer_key_text_impl,
+)
+from .exam_score_processing_service import (
     parse_exam_question_label as _parse_exam_question_label_impl,
+)
+from .exam_score_processing_service import (
     score_objective_answer as _score_objective_answer_impl,
+)
+from .exam_score_processing_service import (
     write_exam_answers_csv as _write_exam_answers_csv_impl,
+)
+from .exam_score_processing_service import (
     write_exam_questions_csv as _write_exam_questions_csv_impl,
+)
+from .exam_score_processing_service import (
     write_exam_responses_csv as _write_exam_responses_csv_impl,
 )
 from .exam_upload_parse_service import process_exam_upload_job as _process_exam_upload_job_impl
 from .upload_llm_service import (
     llm_autofill_requirements as _llm_autofill_requirements_impl,
+)
+from .upload_llm_service import (
     llm_parse_assignment_payload as _llm_parse_assignment_payload_impl,
+)
+from .upload_llm_service import (
     llm_parse_exam_scores as _llm_parse_exam_scores_impl,
+)
+from .upload_llm_service import (
     parse_llm_json as _parse_llm_json_impl,
+)
+from .upload_llm_service import (
     summarize_questions_for_prompt as _summarize_questions_for_prompt_impl,
+)
+from .upload_llm_service import (
     truncate_text as _truncate_text_impl,
+)
+from .upload_llm_service import (
     xls_to_table_preview as _xls_to_table_preview_impl,
+)
+from .upload_llm_service import (
     xlsx_to_table_preview as _xlsx_to_table_preview_impl,
 )
 from .upload_text_service import (
     clean_ocr_text as _clean_ocr_text_impl,
+)
+from .upload_text_service import (
     ensure_ocr_api_key_aliases as _ensure_ocr_api_key_aliases_impl,
+)
+from .upload_text_service import (
     extract_text_from_file as _extract_text_from_file_impl,
+)
+from .upload_text_service import (
     extract_text_from_image as _extract_text_from_image_impl,
+)
+from .upload_text_service import (
     extract_text_from_pdf as _extract_text_from_pdf_impl,
+)
+from .upload_text_service import (
     load_ocr_utils as _load_ocr_utils_impl,
+)
+from .upload_text_service import (
     parse_timeout_env as _parse_timeout_env_impl,
 )
-from .wiring.assignment_wiring import _assignment_upload_parse_deps, _assignment_uploaded_question_deps
+from .wiring.assignment_wiring import (
+    _assignment_upload_parse_deps,
+    _assignment_uploaded_question_deps,
+)
 from .wiring.exam_wiring import _exam_upload_parse_deps
 from .wiring.misc_wiring import _upload_llm_deps, _upload_text_deps
 

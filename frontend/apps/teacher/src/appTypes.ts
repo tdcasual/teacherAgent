@@ -143,7 +143,11 @@ export type UploadJobStatus = {
   progress?: number
   step?: string
   message?: string
+  updated_at?: string
+  updatedAt?: string
   error?: string
+  error_detail?: string
+  hints?: string[]
   assignment_id?: string
   question_count?: number
   requirements_missing?: string[]
@@ -166,11 +170,25 @@ export type UploadDraft = {
   answer_files?: string[]
   question_count?: number
   draft_version?: string | number
-  requirements: Record<string, any>
+  requirements: UploadDraftRequirements
   requirements_missing?: string[]
   warnings?: string[]
-  questions: Array<Record<string, any>>
+  questions: Array<Record<string, unknown>>
   draft_saved?: boolean
+}
+
+export type UploadDraftRequirements = {
+  subject?: string
+  topic?: string
+  grade_level?: string
+  class_level?: string
+  core_concepts?: string[]
+  typical_problem?: string
+  misconceptions?: string[]
+  duration_minutes?: number
+  preferences?: string[]
+  extra_constraints?: string
+  [k: string]: unknown
 }
 
 export type AssignmentProgressStudent = {
@@ -180,7 +198,7 @@ export type AssignmentProgressStudent = {
   complete?: boolean
   overdue?: boolean
   discussion?: { status?: string; pass?: boolean; message_count?: number; last_ts?: string }
-  submission?: { attempts?: number; best?: any }
+  submission?: { attempts?: number; best?: unknown }
 }
 
 export type AssignmentProgress = {
@@ -255,8 +273,51 @@ export type ExamScoreSchema = {
   needs_confirm?: boolean
   confirm?: boolean
   selected_candidate_id?: string
-  sources?: Array<Record<string, any>>
+  sources?: Array<Record<string, unknown>>
   subject?: ExamScoreSchemaSubject
+}
+
+export type ExamCounts = {
+  students?: number
+  responses?: number
+  questions?: number
+  [k: string]: unknown
+}
+
+export type ExamCountsScored = {
+  students?: number
+  responses?: number
+  [k: string]: unknown
+}
+
+export type ExamTotalsSummary = {
+  avg_total?: number
+  median_total?: number
+  max_total_observed?: number
+  [k: string]: unknown
+}
+
+export type ExamScoringSummary = {
+  status?: string
+  responses_total?: number
+  responses_scored?: number
+  students_total?: number
+  students_scored?: number
+  default_max_score_qids?: string[]
+  [k: string]: unknown
+}
+
+export type ExamDraftMeta = {
+  date?: string
+  class_name?: string
+  [k: string]: unknown
+}
+
+export type ExamAnswerKeySummary = {
+  count?: number
+  source?: string
+  warnings?: string[]
+  [k: string]: unknown
 }
 
 export type ExamUploadJobStatus = {
@@ -264,21 +325,17 @@ export type ExamUploadJobStatus = {
   status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming' | 'cancelled'
   progress?: number
   step?: string
+  updated_at?: string
+  updatedAt?: string
   error?: string
   error_detail?: string
+  hints?: string[]
   exam_id?: string
-  counts?: { students?: number; responses?: number; questions?: number }
-  counts_scored?: { students?: number; responses?: number }
-  totals_summary?: Record<string, any>
-  scoring?: {
-    status?: string
-    responses_total?: number
-    responses_scored?: number
-    students_total?: number
-    students_scored?: number
-    default_max_score_qids?: string[]
-  }
-  answer_key?: { count?: number; source?: string; warnings?: string[] }
+  counts?: ExamCounts
+  counts_scored?: ExamCountsScored
+  totals_summary?: ExamTotalsSummary
+  scoring?: ExamScoringSummary
+  answer_key?: ExamAnswerKeySummary
   warnings?: string[]
   score_schema?: ExamScoreSchema
   needs_confirm?: boolean
@@ -292,14 +349,14 @@ export type ExamUploadDraft = {
   paper_files?: string[]
   score_files?: string[]
   answer_files?: string[]
-  counts?: Record<string, any>
-  counts_scored?: Record<string, any>
-  totals_summary?: Record<string, any>
-  scoring?: Record<string, any>
-  meta: Record<string, any>
-  questions: Array<Record<string, any>>
+  counts?: ExamCounts
+  counts_scored?: ExamCountsScored
+  totals_summary?: ExamTotalsSummary
+  scoring?: ExamScoringSummary
+  meta: ExamDraftMeta
+  questions: Array<Record<string, unknown>>
   score_schema?: ExamScoreSchema
-  answer_key?: Record<string, any>
+  answer_key?: ExamAnswerKeySummary
   answer_key_text?: string
   answer_text_excerpt?: string
   warnings?: string[]

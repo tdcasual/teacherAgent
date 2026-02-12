@@ -335,6 +335,11 @@ class TestBuildRunnerSource:
         assert "MPLBACKEND" in src
         assert "matplotlib.use('Agg')" in src
 
+    def test_sets_mpl_config_dir_to_output(self):
+        src = _build_runner_source("pass", {}, Path("/o"), Path("/o/m.png"))
+        assert "MPLCONFIGDIR" in src
+        assert ".mplconfig" in src
+
     def test_input_data_embedded(self):
         data = {"x": [1, 2, 3]}
         src = _build_runner_source("pass", data, Path("/o"), Path("/o/m.png"))

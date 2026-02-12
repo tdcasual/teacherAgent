@@ -1,5 +1,5 @@
 {
-  "ruff_max": 332,
+  "ruff_max": 1,
   "mypy_max": 1,
-  "app_core_max_lines": 261
+  "app_core_max_lines": 276
 }

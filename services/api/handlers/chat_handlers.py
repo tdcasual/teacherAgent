@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple
 
@@ -8,7 +9,7 @@ from fastapi import HTTPException
 
 from ..api_models import ChatRequest, ChatResponse, ChatStartRequest
 from ..chat_support_service import extract_diagnostic_signals
-import logging
+
 _log = logging.getLogger(__name__)
 
 

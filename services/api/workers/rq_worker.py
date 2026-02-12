@@ -5,7 +5,11 @@ import os
 from rq import Worker
 
 from services.api.redis_clients import get_redis_client
-from services.api.workers.rq_tasks import scan_pending_chat_jobs, scan_pending_exam_jobs, scan_pending_upload_jobs
+from services.api.workers.rq_tasks import (
+    scan_pending_chat_jobs,
+    scan_pending_exam_jobs,
+    scan_pending_upload_jobs,
+)
 
 
 def _truthy(value: str) -> bool:

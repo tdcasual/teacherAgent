@@ -8,12 +8,14 @@ export type UseDraftMutationsParams = {
   setExamDraft: React.Dispatch<React.SetStateAction<ExamUploadDraft | null>>
 }
 
+type UnknownRecord = Record<string, unknown>
+
 export function useDraftMutations({
   setUploadDraft,
   setExamDraft,
 }: UseDraftMutationsParams) {
   const computeLocalRequirementsMissing = useCallback(
-    (req: Record<string, any>): string[] => {
+    (req: UnknownRecord): string[] => {
       const missing: string[] = []
       const subject = String(req?.subject || '').trim()
       const topic = String(req?.topic || '').trim()
@@ -45,7 +47,7 @@ export function useDraftMutations({
   )
 
   const updateDraftRequirement = useCallback(
-    (key: string, value: any) => {
+    (key: string, value: unknown) => {
       setUploadDraft((prev) => {
         if (!prev) return prev
         const nextRequirements = {
@@ -64,7 +66,7 @@ export function useDraftMutations({
   )
 
   const updateDraftQuestion = useCallback(
-    (index: number, patch: Record<string, any>) => {
+    (index: number, patch: UnknownRecord) => {
       setUploadDraft((prev) => {
         if (!prev) return prev
         const next = [...(prev.questions || [])]
@@ -77,7 +79,7 @@ export function useDraftMutations({
   )
 
   const updateExamDraftMeta = useCallback(
-    (key: string, value: any) => {
+    (key: string, value: unknown) => {
       setExamDraft((prev) => {
         if (!prev) return prev
         return {
@@ -93,7 +95,7 @@ export function useDraftMutations({
   )
 
   const updateExamQuestionField = useCallback(
-    (index: number, patch: Record<string, any>) => {
+    (index: number, patch: UnknownRecord) => {
       setExamDraft((prev) => {
         if (!prev) return prev
         const next = [...(prev.questions || [])]
@@ -125,7 +127,7 @@ export function useDraftMutations({
         const selectedAvailable = nextCandidateId
           ? Array.isArray(prevSubject?.candidate_columns)
             ? prevSubject.candidate_columns.some(
-                (candidate: any) =>
+                (candidate) =>
                   String(candidate?.candidate_id || '') === nextCandidateId,
               )
             : true

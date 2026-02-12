@@ -7,9 +7,7 @@ import types
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
-
-from fastapi import FastAPI
+from typing import Any
 
 from services.api.runtime import bootstrap
 from services.api.runtime.runtime_state import reset_runtime_state

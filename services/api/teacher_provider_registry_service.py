@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import logging
 import re
 import secrets
 import threading
@@ -16,7 +17,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests  # type: ignore[import-untyped]
-import logging
+
 _log = logging.getLogger(__name__)
 
 

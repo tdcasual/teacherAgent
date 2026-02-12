@@ -16,6 +16,7 @@ import type {
   RenderedMessage,
   Skill,
   SkillResponse,
+  TeacherHistorySession,
   TeacherHistorySessionResponse,
   TeacherHistorySessionsResponse,
   TeacherMemoryInsightsResponse,
@@ -46,7 +47,11 @@ export type UseTeacherChatApiParams = {
   setInput: React.Dispatch<React.SetStateAction<string>>
 
   // Session state setters (from useTeacherSessionState — useReducer-based)
-  setHistorySessions: (value: any[] | ((prev: any[]) => any[])) => void
+  setHistorySessions: (
+    value:
+      | TeacherHistorySession[]
+      | ((prev: TeacherHistorySession[]) => TeacherHistorySession[])
+  ) => void
   setHistoryLoading: (value: boolean) => void
   setHistoryError: (value: string) => void
   setHistoryCursor: (value: number) => void
@@ -72,6 +77,15 @@ export type UseTeacherChatApiParams = {
   chooseSkill: (skillId: string, pinned?: boolean) => void
   enableAutoScroll: () => void
   setWheelScrollZone: (zone: WheelScrollZone) => void
+}
+
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
 }
 
 export function useTeacherChatApi(params: UseTeacherChatApiParams) {
@@ -182,7 +196,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         if (mode === 'more') {
           setHistorySessions((prev) => {
             const merged = [...prev]
-            const existingIds = new Set(prev.map((item: any) => item.session_id))
+            const existingIds = new Set(prev.map((item) => item.session_id))
             for (const item of serverSessions) {
               if (existingIds.has(item.session_id)) continue
               merged.push(item)
@@ -193,19 +207,27 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           setHistorySessions((prev) => {
             const draftItems = localDraftSessionIdsRef.current
               .filter((id) => !serverIds.has(id))
-              .map((id) => prev.find((item: any) => item.session_id === id) || { session_id: id, updated_at: new Date().toISOString(), message_count: 0, preview: '' })
+              .map(
+                (id) =>
+                  prev.find((item) => item.session_id === id) || {
+                    session_id: id,
+                    updated_at: new Date().toISOString(),
+                    message_count: 0,
+                    preview: '',
+                  },
+              )
             const seeded = [...draftItems, ...serverSessions]
-            const seen = new Set(seeded.map((item: any) => item.session_id))
+            const seen = new Set(seeded.map((item) => item.session_id))
             for (const item of prev) {
-              if (seen.has((item as any).session_id)) continue
+              if (seen.has(item.session_id)) continue
               seeded.push(item)
             }
             return seeded
           })
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (requestNo !== historyRequestRef.current) return
-        setHistoryError(err.message || String(err))
+        setHistoryError(toErrorMessage(err))
       } finally {
         if (requestNo !== historyRequestRef.current) return
         setHistoryLoading(false)
@@ -277,9 +299,9 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             ]
           })
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
-        setSessionError(err.message || String(err))
+        setSessionError(toErrorMessage(err))
       } finally {
         if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
         setSessionLoading(false)
@@ -305,8 +327,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       }
       const data = (await res.json()) as TeacherMemoryProposalListResponse
       setProposals(Array.isArray(data.proposals) ? data.proposals : [])
-    } catch (err: any) {
-      setProposalError(err.message || String(err))
+    } catch (err: unknown) {
+      setProposalError(toErrorMessage(err))
     } finally {
       setProposalLoading(false)
     }
@@ -347,8 +369,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         return
       }
       setSkillList(teacherSkills.map((skill) => buildSkill(skill)))
-    } catch (err: any) {
-      setSkillsError(err.message || '无法加载技能列表')
+    } catch (err: unknown) {
+      setSkillsError(toErrorMessage(err, '无法加载技能列表'))
       setSkillList(fallbackSkills)
     } finally {
       setSkillsLoading(false)
@@ -437,8 +459,15 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           lane_id: data.lane_id,
           created_at: Date.now(),
         })
-      } catch (err: any) {
-        setMessages((prev) => prev.map((m) => (m.id === placeholderId ? { ...m, content: `抱歉，请求失败：${err.message || err}`, time: nowTime() } : m)))
+      } catch (err: unknown) {
+        const errorMessage = toErrorMessage(err)
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === placeholderId
+              ? { ...m, content: `抱歉，请求失败：${errorMessage}`, time: nowTime() }
+              : m,
+          ),
+        )
         setSending(false)
         setChatQueueHint('')
         setPendingChatJob(null)
@@ -492,8 +521,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           setSending(false)
           return 'stop'
         }
-        const lanePos = Number((data as any).lane_queue_position || 0)
-        const laneSize = Number((data as any).lane_queue_size || 0)
+        const lanePos = Number(data.lane_queue_position || 0)
+        const laneSize = Number(data.lane_queue_size || 0)
         if (data.status === 'queued') {
           setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
         } else if (data.status === 'processing') {
@@ -504,7 +533,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         return 'continue'
       },
       (err) => {
-        const msg = (err as any)?.message || String(err)
+        const msg = toErrorMessage(err, '网络错误')
         setMessages((prev) => {
           const overlaid = withPendingChatOverlay(prev, pendingChatJob, activeSessionId || pendingChatJob.session_id || 'main')
           return overlaid.map((item) =>
@@ -519,7 +548,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       setChatQueueHint('')
       cleanup()
     }
-  }, [pendingChatJob?.job_id, apiBase, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setSending])
+  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setSending])
 
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {

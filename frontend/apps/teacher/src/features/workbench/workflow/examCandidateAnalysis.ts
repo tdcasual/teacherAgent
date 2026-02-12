@@ -1,3 +1,8 @@
+import type {
+  ExamScoreSchemaSubjectCandidate,
+  ExamScoreSchemaSubjectCandidateSummary,
+} from '../../../appTypes'
+
 export type ExamConflictLevel = 'strict' | 'standard' | 'lenient'
 export type CandidateSummarySort = 'quality' | 'parsed_rate' | 'source_rank'
 
@@ -14,7 +19,7 @@ export type ParsedCandidateSummary = {
 }
 
 export type RecommendedCandidate = {
-  candidate: any
+  candidate: ExamScoreSchemaSubjectCandidate
   candidateId: string
   rowsConsidered: number
   rowsParsed: number
@@ -46,13 +51,13 @@ export function getExamConflictLevelLabel(level: ExamConflictLevel): string {
 }
 
 export function sortCandidateSummaries(
-  examCandidateSummaries: any[],
+  examCandidateSummaries: ExamScoreSchemaSubjectCandidateSummary[],
   candidateSummarySort: CandidateSummarySort,
   candidateSummaryTopOnly: boolean,
 ): ParsedCandidateSummary[] {
   if (!examCandidateSummaries.length) return []
   const items = examCandidateSummaries
-    .map((item: any) => {
+    .map((item: ExamScoreSchemaSubjectCandidateSummary) => {
       const candidateId = String(item?.candidate_id || '').trim()
       const rowsConsidered = Number(item?.rows_considered || 0)
       const rowsParsed = Number(item?.rows_parsed || 0)
@@ -60,8 +65,12 @@ export function sortCandidateSummaries(
       const parsedRate = Number(item?.parsed_rate || 0)
       const sourceRank = Number(item?.source_rank || 99)
       const qualityScore = Number(item?.quality_score || 0)
-      const files = Array.isArray(item?.files) ? item.files.filter(Boolean).map((x: any) => String(x)) : []
-      const types = Array.isArray(item?.types) ? item.types.filter(Boolean).map((x: any) => String(x)) : []
+      const files = Array.isArray(item?.files)
+        ? item.files.filter(Boolean).map((x) => String(x))
+        : []
+      const types = Array.isArray(item?.types)
+        ? item.types.filter(Boolean).map((x) => String(x))
+        : []
       return {
         candidateId,
         rowsConsidered,
@@ -74,7 +83,7 @@ export function sortCandidateSummaries(
         types,
       }
     })
-    .filter((item: any) => item.candidateId)
+    .filter((item) => Boolean(item.candidateId))
 
   const sorted = [...items].sort((a, b) => {
     if (candidateSummarySort === 'parsed_rate') {
@@ -107,12 +116,13 @@ export function sortCandidateSummaries(
 }
 
 export function computeRecommendedCandidate(
-  examCandidateColumns: any[],
+  examCandidateColumns: ExamScoreSchemaSubjectCandidate[],
   examRecommendedCandidateId: string,
 ): RecommendedCandidate {
   if (examRecommendedCandidateId) {
     const matched = examCandidateColumns.find(
-      (candidate: any) => String(candidate?.candidate_id || '') === examRecommendedCandidateId,
+      (candidate: ExamScoreSchemaSubjectCandidate) =>
+        String(candidate?.candidate_id || '') === examRecommendedCandidateId,
     )
     if (matched) {
       const rowsConsidered = Number(matched?.rows_considered || 0)
@@ -139,7 +149,7 @@ export function computeRecommendedCandidate(
     return 0
   }
   const sorted = [...examCandidateColumns]
-    .map((candidate: any) => {
+    .map((candidate: ExamScoreSchemaSubjectCandidate) => {
       const rowsConsidered = Number(candidate?.rows_considered || 0)
       const rowsParsed = Number(candidate?.rows_parsed || 0)
       const rowsInvalid = Number(candidate?.rows_invalid || 0)
@@ -163,7 +173,7 @@ export function computeRecommendedCandidate(
 }
 
 export function computeConflictStudents(
-  examCandidateColumns: any[],
+  examCandidateColumns: ExamScoreSchemaSubjectCandidate[],
   examConflictThreshold: number,
 ): ConflictStudent[] {
   if (!examCandidateColumns.length) return []

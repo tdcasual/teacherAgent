@@ -8,10 +8,10 @@ from __future__ import annotations
 import os
 import time
 from collections import defaultdict, deque
+from typing import Awaitable, Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
-from typing import Any, Callable, Awaitable
 
 _SKIP_PATHS = {"/health", "/health/"}
 

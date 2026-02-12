@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -9,7 +10,6 @@ from .chat_job_state_machine import (
     transition_chat_job_status,
 )
 
-import logging
 _log = logging.getLogger(__name__)
 
 

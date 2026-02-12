@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
 import type { RoutingSection } from './features/routing/RoutingPage'
 import { isRoutingSection } from './features/routing/routingSections'
@@ -73,6 +73,35 @@ const WORKBENCH_HARD_MAX_WIDTH = 920
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
+}
+
+const parsePendingChatJob = (raw: string | null): PendingChatJob | null => {
+  if (!raw) return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    const record = parsed as Record<string, unknown>
+    const jobId = String(record.job_id || '').trim()
+    const requestId = String(record.request_id || '').trim()
+    const placeholderId = String(record.placeholder_id || '').trim()
+    const userText = String(record.user_text || '').trim()
+    const sessionId = String(record.session_id || '').trim()
+    const createdAt = Number(record.created_at)
+    if (!jobId || !requestId || !placeholderId || !userText || !sessionId) return null
+    if (!Number.isFinite(createdAt)) return null
+    const laneId = String(record.lane_id || '').trim()
+    return {
+      job_id: jobId,
+      request_id: requestId,
+      placeholder_id: placeholderId,
+      user_text: userText,
+      session_id: sessionId,
+      created_at: createdAt,
+      ...(laneId ? { lane_id: laneId } : {}),
+    }
+  } catch {
+    return null
+  }
 }
 
 export default function App() {
@@ -170,14 +199,9 @@ export default function App() {
   const [composerWarning, setComposerWarning] = useState('')
   const [chatQueueHint, setChatQueueHint] = useState('')
   const PENDING_CHAT_KEY = 'teacherPendingChatJob'
-	  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() => {
-	    try {
-	      const raw = safeLocalStorageGetItem(PENDING_CHAT_KEY)
-	      return raw ? (JSON.parse(raw) as any) : null
-	    } catch {
-	      return null
-	    }
-	  })
+  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() =>
+    parsePendingChatJob(safeLocalStorageGetItem(PENDING_CHAT_KEY)),
+  )
   const [topbarHeight, setTopbarHeight] = useState(64)
 
   const appRef = useRef<HTMLDivElement | null>(null)
@@ -274,7 +298,7 @@ export default function App() {
     const sid = String(pendingChatJob?.session_id || '').trim()
     if (!sid || sid === 'main') return
     setLocalDraftSessionIds((prev) => (prev.includes(sid) ? prev : [sid, ...prev]))
-  }, [pendingChatJob?.session_id])
+  }, [pendingChatJob?.session_id, setLocalDraftSessionIds])
 
   useTeacherSessionViewStateSync({
     apiBase,
@@ -288,12 +312,12 @@ export default function App() {
     initialState: initialViewStateRef.current,
   })
 
-	  useEffect(() => {
-	    // Refresh recovery: resume polling for the last active upload job.
-	    const raw = safeLocalStorageGetItem('teacherActiveUpload')
-	    if (!raw) return
-	    try {
-	      const data = JSON.parse(raw)
+  useEffect(() => {
+    // Refresh recovery: resume polling for the last active upload job.
+    const raw = safeLocalStorageGetItem('teacherActiveUpload')
+    if (!raw) return
+    try {
+      const data = JSON.parse(raw)
       if (data?.type === 'assignment' && data?.job_id) {
         setUploadMode('assignment')
         setUploadJobId(String(data.job_id))
@@ -304,12 +328,12 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, [])
+  }, [setExamJobId, setUploadJobId, setUploadMode])
 
-	  useEffect(() => {
-	    if (pendingChatJob) safeLocalStorageSetItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
-	    else safeLocalStorageRemoveItem(PENDING_CHAT_KEY)
-	  }, [pendingChatJob, PENDING_CHAT_KEY])
+  useEffect(() => {
+    if (pendingChatJob) safeLocalStorageSetItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
+    else safeLocalStorageRemoveItem(PENDING_CHAT_KEY)
+  }, [pendingChatJob, PENDING_CHAT_KEY])
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
@@ -317,6 +341,7 @@ export default function App() {
     setMessages((prev) => withPendingChatOverlay(prev, pendingChatJob, activeSessionId))
   }, [
     activeSessionId,
+    pendingChatJob,
     pendingChatJob?.created_at,
     pendingChatJob?.job_id,
     pendingChatJob?.placeholder_id,
@@ -566,8 +591,13 @@ export default function App() {
   })
 
 
+  const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
+    '--teacher-topbar-height': `${topbarHeight}px`,
+    overscrollBehavior: 'none',
+  }
+
   return (
-    <div ref={appRef} className="app teacher h-dvh flex flex-col bg-bg overflow-hidden" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px`, overscrollBehavior: 'none' }}>
+    <div ref={appRef} className="app teacher h-dvh flex flex-col bg-bg overflow-hidden" style={appStyle}>
       <TeacherTopbar
         topbarRef={topbarRef}
         sessionSidebarOpen={sessionSidebarOpen}

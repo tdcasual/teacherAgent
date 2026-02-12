@@ -1,6 +1,321 @@
 import { expect, test } from '@playwright/test'
 import { setupStudentState } from './helpers/studentHarness'
 
+test('stale pending chat job is discarded so student can start today assignment immediately', async ({ page }) => {
+  const staleCreatedAt = Date.now() - 24 * 60 * 60 * 1000
+  await setupStudentState(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'false',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+      'studentPendingChatJob:S001': JSON.stringify({
+        job_id: 'stale_student_job',
+        request_id: 'stale_request_id',
+        placeholder_id: 'asst_stale_placeholder',
+        user_text: '旧的待恢复消息',
+        session_id: 'main',
+        created_at: staleCreatedAt,
+      }),
+    },
+  })
+
+  let startCalls = 0
+  const statusJobIds: string[] = []
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = url.searchParams.get('session_id') || 'main'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      startCalls += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: 'fresh_student_job', status: 'queued' }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      statusJobIds.push(url.searchParams.get('job_id') || '')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'fresh_student_job', status: 'done', reply: '新的回复已返回' }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '正在恢复上一条回复' })).toHaveCount(0)
+
+  await page.locator('textarea').fill('开始今天作业')
+  await page.locator('textarea').press('Enter')
+
+  await expect.poll(() => startCalls).toBe(1)
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '新的回复已返回' }).first()).toBeVisible()
+  expect(statusJobIds).not.toContain('stale_student_job')
+})
+
+test('orphan pending chat job with fresh timestamp is cleared on 404 before first send', async ({ page }) => {
+  const freshCreatedAt = Date.now() - 10 * 1000
+  await setupStudentState(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'false',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+      'studentPendingChatJob:S001': JSON.stringify({
+        job_id: 'orphan_student_job',
+        request_id: 'orphan_request_id',
+        placeholder_id: 'asst_orphan_placeholder',
+        user_text: '旧的孤儿任务',
+        session_id: 'main',
+        created_at: freshCreatedAt,
+      }),
+    },
+  })
+
+  let startCalls = 0
+  let orphanStatusCalls = 0
+  let freshStatusCalls = 0
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = url.searchParams.get('session_id') || 'main'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      const jobId = url.searchParams.get('job_id') || ''
+      if (jobId === 'orphan_student_job') {
+        orphanStatusCalls += 1
+        await route.fulfill({
+          status: 404,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'job not found' }),
+        })
+        return
+      }
+      if (jobId === 'fresh_student_job') {
+        freshStatusCalls += 1
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ job_id: 'fresh_student_job', status: 'done', reply: '新的回复已返回' }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'job not found' }),
+      })
+      return
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      startCalls += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: 'fresh_student_job', status: 'queued' }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '正在恢复上一条回复' })).toHaveCount(0)
+
+  await page.locator('textarea').fill('开始今天作业')
+  await page.locator('textarea').press('Enter')
+
+  await expect.poll(() => startCalls).toBe(1)
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '新的回复已返回' }).first()).toBeVisible()
+  await expect.poll(() => orphanStatusCalls).toBeGreaterThanOrEqual(1)
+  await expect.poll(() => freshStatusCalls).toBeGreaterThanOrEqual(1)
+})
+
 test('temporary network failures during pending can recover without duplicate user bubbles', async ({ page }) => {
   await setupStudentState(page, {
     stateOverrides: {

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List
-import logging
+
 _log = logging.getLogger(__name__)
 
 

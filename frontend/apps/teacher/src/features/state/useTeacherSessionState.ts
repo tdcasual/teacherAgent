@@ -7,6 +7,15 @@ import {
 import type { TeacherHistorySession } from '../../appTypes'
 import type { SessionViewStatePayload } from '../chat/viewState'
 
+type StateSetterValue<T> = T | ((prev: T) => T)
+
+const resolveStateSetter = <T>(value: StateSetterValue<T>, prev: T): T => {
+  if (typeof value === 'function') {
+    return (value as (prev: T) => T)(prev)
+  }
+  return value
+}
+
 export function useTeacherSessionState(initialViewState: SessionViewStatePayload) {
   const [state, dispatch] = useReducer(teacherSessionReducer, initialViewState, createInitialTeacherSessionState)
 
@@ -25,69 +34,45 @@ export function useTeacherSessionState(initialViewState: SessionViewStatePayload
   )
 
   const setHistorySessions = useCallback(
-    (value: TeacherHistorySession[] | ((prev: TeacherHistorySession[]) => TeacherHistorySession[])) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, historySessions: (value as any)(prev.historySessions) }))
-        return
-      }
-      setField('historySessions', value)
+    (value: StateSetterValue<TeacherHistorySession[]>) => {
+      update((prev) => ({ ...prev, historySessions: resolveStateSetter(value, prev.historySessions) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setSessionTitleMap = useCallback(
-    (value: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, sessionTitleMap: (value as any)(prev.sessionTitleMap) }))
-        return
-      }
-      setField('sessionTitleMap', value)
+    (value: StateSetterValue<Record<string, string>>) => {
+      update((prev) => ({ ...prev, sessionTitleMap: resolveStateSetter(value, prev.sessionTitleMap) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setDeletedSessionIds = useCallback(
-    (value: string[] | ((prev: string[]) => string[])) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, deletedSessionIds: (value as any)(prev.deletedSessionIds) }))
-        return
-      }
-      setField('deletedSessionIds', value)
+    (value: StateSetterValue<string[]>) => {
+      update((prev) => ({ ...prev, deletedSessionIds: resolveStateSetter(value, prev.deletedSessionIds) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setLocalDraftSessionIds = useCallback(
-    (value: string[] | ((prev: string[]) => string[])) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, localDraftSessionIds: (value as any)(prev.localDraftSessionIds) }))
-        return
-      }
-      setField('localDraftSessionIds', value)
+    (value: StateSetterValue<string[]>) => {
+      update((prev) => ({ ...prev, localDraftSessionIds: resolveStateSetter(value, prev.localDraftSessionIds) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setOpenSessionMenuId = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, openSessionMenuId: (value as any)(prev.openSessionMenuId) }))
-        return
-      }
-      setField('openSessionMenuId', value)
+    (value: StateSetterValue<string>) => {
+      update((prev) => ({ ...prev, openSessionMenuId: resolveStateSetter(value, prev.openSessionMenuId) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setActiveSessionId = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, activeSessionId: (value as any)(prev.activeSessionId) }))
-        return
-      }
-      setField('activeSessionId', value)
+    (value: StateSetterValue<string>) => {
+      update((prev) => ({ ...prev, activeSessionId: resolveStateSetter(value, prev.activeSessionId) }))
     },
-    [setField, update],
+    [update],
   )
 
   const setViewStateUpdatedAt = useCallback((value: string) => setField('viewStateUpdatedAt', value), [setField])
@@ -98,14 +83,10 @@ export function useTeacherSessionState(initialViewState: SessionViewStatePayload
   const setHistoryHasMore = useCallback((value: boolean) => setField('historyHasMore', value), [setField])
   const setHistoryQuery = useCallback((value: string) => setField('historyQuery', value), [setField])
   const setShowArchivedSessions = useCallback(
-    (value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        update((prev) => ({ ...prev, showArchivedSessions: (value as any)(prev.showArchivedSessions) }))
-        return
-      }
-      setField('showArchivedSessions', value)
+    (value: StateSetterValue<boolean>) => {
+      update((prev) => ({ ...prev, showArchivedSessions: resolveStateSetter(value, prev.showArchivedSessions) }))
     },
-    [setField, update],
+    [update],
   )
   const setRenameDialogSessionId = useCallback((value: string | null) => setField('renameDialogSessionId', value), [setField])
   const setArchiveDialogSessionId = useCallback((value: string | null) => setField('archiveDialogSessionId', value), [setField])

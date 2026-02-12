@@ -1,9 +1,10 @@
 import { useCallback, type FormEvent, type MutableRefObject } from 'react'
 import { makeId } from '../../../../shared/id'
-import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../../../../shared/storage'
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
 import { nowTime } from '../../../../shared/time'
 import type { AssignmentDetail, ChatStartResult, Message, PendingChatJob, VerifiedStudent } from '../../appTypes'
 import { stripTransientPendingBubbles } from './pendingOverlay'
+import { parsePendingChatJobFromStorage } from './pendingChatJob'
 import { withStudentSendLock } from './sendLock'
 
 type UseStudentSendFlowParams = {
@@ -28,6 +29,15 @@ type UseStudentSendFlowParams = {
 
   pendingRecoveredFromStorageRef: MutableRefObject<boolean>
   skipAutoSessionLoadIdRef: MutableRefObject<string>
+}
+
+const toErrorMessage = (error: unknown, fallback = '请求失败') => {
+  if (error instanceof Error) {
+    const message = error.message.trim()
+    if (message) return message
+  }
+  const raw = String(error || '').trim()
+  return raw || fallback
 }
 
 export function useStudentSendFlow(params: UseStudentSendFlowParams) {
@@ -68,26 +78,43 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       const studentId = verifiedStudent.student_id
       const pendingKey = `${pendingChatKeyPrefix}${studentId}`
 
-      const syncPendingFromStorage = () => {
-        try {
-          const raw = safeLocalStorageGetItem(pendingKey)
-          if (!raw) {
-            pendingRecoveredFromStorageRef.current = false
-            setPendingChatJob(null)
-            setSending(false)
-            return false
-          }
-          const parsed = JSON.parse(raw) as PendingChatJob
-          pendingRecoveredFromStorageRef.current = false
-          setPendingChatJob(parsed)
-          setSending(false)
-          return true
-        } catch {
+      const clearPendingFromStorage = () => {
+        safeLocalStorageRemoveItem(pendingKey)
+        pendingRecoveredFromStorageRef.current = false
+        setPendingChatJob(null)
+        setSending(false)
+      }
+
+      const syncPendingFromStorage = async ({ verifyRemote = false }: { verifyRemote?: boolean } = {}) => {
+        const raw = safeLocalStorageGetItem(pendingKey)
+        if (!raw) {
           pendingRecoveredFromStorageRef.current = false
           setPendingChatJob(null)
           setSending(false)
           return false
         }
+        const parsed = parsePendingChatJobFromStorage(raw)
+        if (!parsed) {
+          clearPendingFromStorage()
+          return false
+        }
+
+        if (verifyRemote) {
+          try {
+            const statusRes = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(parsed.job_id)}`)
+            if (statusRes.status === 404) {
+              clearPendingFromStorage()
+              return false
+            }
+          } catch {
+            // Keep the recovered pending record on transient status-check failures.
+          }
+        }
+
+        pendingRecoveredFromStorageRef.current = true
+        setPendingChatJob(parsed)
+        setSending(false)
+        return true
       }
 
       const waitPendingSync = async (timeoutMs = 2500) => {
@@ -95,7 +122,7 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
         setSending(true)
         const started = Date.now()
         while (Date.now() - started < timeoutMs) {
-          if (syncPendingFromStorage()) return true
+          if (await syncPendingFromStorage()) return true
           await new Promise((resolve) => window.setTimeout(resolve, 80))
         }
         setSending(false)
@@ -105,7 +132,7 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       let startedSubmission = false
 
       const lockAcquired = await withStudentSendLock(studentId, async () => {
-        if (syncPendingFromStorage()) return
+        if (await syncPendingFromStorage({ verifyRemote: true })) return
 
         startedSubmission = true
         const sessionId = activeSessionId || todayAssignment?.assignment_id || `general_${todayDate()}`
@@ -165,8 +192,8 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
           pendingRecoveredFromStorageRef.current = false
           safeLocalStorageSetItem(pendingKey, JSON.stringify(nextPending))
           setPendingChatJob(nextPending)
-        } catch (err: any) {
-          updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
+        } catch (err: unknown) {
+          updateMessage(placeholderId, { content: `抱歉，请求失败：${toErrorMessage(err)}`, time: nowTime() })
           setSending(false)
           skipAutoSessionLoadIdRef.current = sessionId
           pendingRecoveredFromStorageRef.current = false
@@ -180,7 +207,7 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       }
 
       if (!startedSubmission) {
-        syncPendingFromStorage()
+        await syncPendingFromStorage({ verifyRemote: true })
       }
     },
     [

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from collections import deque
 import threading
 import weakref
+from collections import deque
 from typing import Any, Callable
 
-from services.api import chat_lane_store_factory
-from services.api.queue import queue_backend_factory
-from services.api import session_store as _session_store_module
-from services.api import profile_service as _profile_service_module
 from services.api import assignment_data_service as _assignment_data_service_module
+from services.api import chat_lane_store_factory
+from services.api import profile_service as _profile_service_module
+from services.api import session_store as _session_store_module
 from services.api import teacher_session_compaction_helpers as _compaction_helpers_module
+from services.api.queue import queue_backend_factory
 
 
 def reset_runtime_state(mod: Any, *, create_chat_idempotency_store: Callable[[Any], Any]) -> None:

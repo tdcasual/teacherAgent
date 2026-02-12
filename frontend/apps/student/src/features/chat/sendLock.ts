@@ -10,6 +10,14 @@ type FallbackLockPayload = {
   expires_at: number
 }
 
+type WebLocksLike = {
+  request: (
+    name: string,
+    options: { ifAvailable: boolean; mode: 'exclusive' },
+    callback: (lock: { name?: string } | null) => Promise<boolean>,
+  ) => Promise<boolean>
+}
+
 const parseFallbackLock = (raw: string | null): FallbackLockPayload | null => {
   if (!raw) return null
   try {
@@ -26,12 +34,15 @@ const parseFallbackLock = (raw: string | null): FallbackLockPayload | null => {
 export async function withStudentSendLock(studentId: string, task: () => Promise<void>) {
   const sid = String(studentId || '').trim()
   if (!sid) return false
-  const lockManager = typeof navigator !== 'undefined' ? (navigator as any).locks : null
+  const lockManager =
+    typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { locks?: WebLocksLike }).locks
+      : null
   if (lockManager?.request) {
     const acquired = await lockManager.request(
       `student-send-lock:${sid}`,
       { ifAvailable: true, mode: 'exclusive' },
-      async (lock: any) => {
+      async (lock) => {
         if (!lock) return false
         await task()
         return true

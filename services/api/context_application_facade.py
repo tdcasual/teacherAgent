@@ -6,80 +6,162 @@ from typing import Any, Dict, List, Optional, Tuple
 from .api_models import ChatRequest
 from .assignment_catalog_service import (
     assignment_specificity as _assignment_specificity_impl,
+)
+from .assignment_catalog_service import (
     build_assignment_detail as _build_assignment_detail_impl,
+)
+from .assignment_catalog_service import (
     find_assignment_for_date as _find_assignment_for_date_impl,
+)
+from .assignment_catalog_service import (
     list_assignments as _list_assignments_impl,
+)
+from .assignment_catalog_service import (
     parse_iso_timestamp as _parse_iso_timestamp_impl,
-    read_text_safe as _read_text_safe_impl,
-    resolve_assignment_date as _resolve_assignment_date_impl,
+)
+from .assignment_catalog_service import (
     postprocess_assignment_meta as _postprocess_assignment_meta_impl,
+)
+from .assignment_catalog_service import (
+    read_text_safe as _read_text_safe_impl,
+)
+from .assignment_catalog_service import (
+    resolve_assignment_date as _resolve_assignment_date_impl,
 )
 from .assignment_context_service import build_assignment_context as _build_assignment_context_impl
 from .assignment_intent_service import (
     detect_assignment_intent as _detect_assignment_intent_impl,
+)
+from .assignment_intent_service import (
     extract_assignment_id as _extract_assignment_id_impl,
+)
+from .assignment_intent_service import (
     extract_date as _extract_date_impl,
+)
+from .assignment_intent_service import (
     extract_kp_list as _extract_kp_list_impl,
+)
+from .assignment_intent_service import (
     extract_numbered_item as _extract_numbered_item_impl,
+)
+from .assignment_intent_service import (
     extract_per_kp as _extract_per_kp_impl,
+)
+from .assignment_intent_service import (
     extract_question_ids as _extract_question_ids_impl,
+)
+from .assignment_intent_service import (
     extract_requirements_from_text as _extract_requirements_from_text_impl,
+)
+from .assignment_intent_service import (
     normalize_numbered_block as _normalize_numbered_block_impl,
+)
+from .assignment_intent_service import (
     parse_grade_and_level as _parse_grade_and_level_impl,
+)
+from .assignment_intent_service import (
     parse_subject_topic as _parse_subject_topic_impl,
 )
 from .assignment_llm_gate_service import (
     llm_assignment_gate as _llm_assignment_gate_impl,
+)
+from .assignment_llm_gate_service import (
     parse_json_from_text as _parse_json_from_text_impl,
 )
-from .assignment_progress_service import compute_assignment_progress as _compute_assignment_progress_impl
+from .assignment_progress_service import (
+    compute_assignment_progress as _compute_assignment_progress_impl,
+)
 from .assignment_requirements_service import (
     ensure_requirements_for_assignment as _ensure_requirements_for_assignment_impl,
+)
+from .assignment_requirements_service import (
     format_requirements_prompt as _format_requirements_prompt_impl,
+)
+from .assignment_requirements_service import (
     normalize_class_level as _normalize_class_level_impl,
+)
+from .assignment_requirements_service import (
     normalize_difficulty as _normalize_difficulty_impl,
+)
+from .assignment_requirements_service import (
     normalize_preferences as _normalize_preferences_impl,
+)
+from .assignment_requirements_service import (
     parse_duration as _parse_duration_impl,
+)
+from .assignment_requirements_service import (
     parse_list_value as _parse_list_value_impl,
+)
+from .assignment_requirements_service import (
     save_assignment_requirements as _save_assignment_requirements_impl,
+)
+from .assignment_requirements_service import (
     validate_requirements as _validate_requirements_impl,
 )
 from .assignment_submission_attempt_service import (
     best_submission_attempt as _best_submission_attempt_impl,
+)
+from .assignment_submission_attempt_service import (
     compute_submission_attempt as _compute_submission_attempt_impl,
+)
+from .assignment_submission_attempt_service import (
     counted_grade_item as _counted_grade_item_impl,
+)
+from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
 from .config import DISCUSSION_COMPLETE_MARKER
 from .core_utils import resolve_scope
-from .exam_analysis_charts_service import exam_analysis_charts_generate as _exam_analysis_charts_generate_impl
+from .exam_analysis_charts_service import (
+    exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
+)
 from .exam_catalog_service import list_exams as _list_exams_impl
 from .exam_detail_service import (
     exam_question_detail as _exam_question_detail_impl,
+)
+from .exam_detail_service import (
     exam_student_detail as _exam_student_detail_impl,
 )
 from .exam_overview_service import (
     exam_analysis_get as _exam_analysis_get_impl,
+)
+from .exam_overview_service import (
     exam_get as _exam_get_impl,
+)
+from .exam_overview_service import (
     exam_students_list as _exam_students_list_impl,
 )
 from .exam_range_service import (
     exam_question_batch_detail as _exam_question_batch_detail_impl,
-    exam_range_summary_batch as _exam_range_summary_batch_impl,
-    exam_range_top_students as _exam_range_top_students_impl,
 )
-from .student_directory_service import (
-    list_all_student_ids as _list_all_student_ids_impl,
-    list_all_student_profiles as _list_all_student_profiles_impl,
-    list_student_ids_by_class as _list_student_ids_by_class_impl,
-    student_candidates_by_name as _student_candidates_by_name_impl,
-    student_search as _student_search_impl,
+from .exam_range_service import (
+    exam_range_summary_batch as _exam_range_summary_batch_impl,
+)
+from .exam_range_service import (
+    exam_range_top_students as _exam_range_top_students_impl,
 )
 from .session_discussion_service import (
     SessionDiscussionDeps,
+)
+from .session_discussion_service import (
     session_discussion_pass as _session_discussion_pass_impl,
 )
 from .session_store import load_student_sessions_index, student_session_file
+from .student_directory_service import (
+    list_all_student_ids as _list_all_student_ids_impl,
+)
+from .student_directory_service import (
+    list_all_student_profiles as _list_all_student_profiles_impl,
+)
+from .student_directory_service import (
+    list_student_ids_by_class as _list_student_ids_by_class_impl,
+)
+from .student_directory_service import (
+    student_candidates_by_name as _student_candidates_by_name_impl,
+)
+from .student_directory_service import (
+    student_search as _student_search_impl,
+)
 from .teacher_assignment_preflight_service import (
     teacher_assignment_preflight as _teacher_assignment_preflight_impl,
 )

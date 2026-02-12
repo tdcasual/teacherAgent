@@ -4,6 +4,7 @@ Contains assignment meta/requirements loading and detail caching.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from pathlib import Path
@@ -12,7 +13,6 @@ from typing import Any, Dict, Tuple
 from .config import ASSIGNMENT_DETAIL_CACHE_TTL_SEC
 from .profile_service import load_profile_file
 
-import logging
 _log = logging.getLogger(__name__)
 
 __all__ = [

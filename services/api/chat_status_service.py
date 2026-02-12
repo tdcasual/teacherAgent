@@ -4,10 +4,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
-_log = logging.getLogger(__name__)
-
 from .auth_service import enforce_chat_job_access
 from .chat_job_state_machine import can_requeue_chat_job, normalize_chat_job_status
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)

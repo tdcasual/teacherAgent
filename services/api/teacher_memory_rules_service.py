@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
-import logging
+
 _log = logging.getLogger(__name__)
 
 

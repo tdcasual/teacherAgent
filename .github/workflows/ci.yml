@@ -37,9 +37,6 @@ jobs:
         run: |
           python -m ruff check \
             services/api/settings.py \
-            services/api/config.py \
-            services/api/chat_job_state_machine.py \
-            services/api/fs_atomic.py \
             services/api/runtime/runtime_manager.py \
             services/api/routes \
             tests/test_ci_workflow_quality.py \
@@ -49,9 +46,6 @@ jobs:
         run: |
           python -m black --check \
             services/api/settings.py \
-            services/api/config.py \
-            services/api/chat_job_state_machine.py \
-            services/api/fs_atomic.py \
             services/api/runtime/runtime_manager.py \
             tests/test_ci_workflow_quality.py \
             tests/test_ci_backend_scope.py
@@ -89,13 +83,16 @@ jobs:
             services/api/exam_utils.py \
             services/api/core_utils.py
 
+      - name: Check backend quality budget
+        run: |
+          python scripts/quality/check_backend_quality_budget.py
+
       - name: Run full backend test suite
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m pytest tests/ -x -q -m "not stress" \
-            --cov=services/api --cov-report=term-missing \
-            --cov-fail-under=84
+            --cov=services/api --cov-report=term-missing --cov-fail-under=84
 
       - name: Run maintainability guardrails
         env:

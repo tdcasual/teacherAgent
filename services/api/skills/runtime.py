@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from ..prompt_builder import DEFAULT_PROMPT_VERSION, PROMPTS_DIR
+from ..dynamic_skill_tools import load_dynamic_tools_for_skill_source
 from .spec import SkillModelPolicy, SkillSpec
 
 
@@ -45,6 +46,21 @@ def _read_prompt_module(version: str, relpath: str) -> str:
     return target.read_text(encoding="utf-8").strip()
 
 
+def _read_local_prompt_module(skill: SkillSpec, relpath: str) -> str:
+    raw = (relpath or "").strip()
+    if not raw:
+        return ""
+
+    source = Path(skill.source_path).resolve()
+    base = source.parent
+    target = (base / raw).resolve()
+    if base not in target.parents and target != base:
+        raise ValueError(f"invalid local prompt module path: {relpath}")
+    if not target.exists():
+        raise FileNotFoundError(f"local prompt module not found: {target}")
+    return target.read_text(encoding="utf-8").strip()
+
+
 @dataclass(frozen=True)
 class SkillRuntime:
     skill: SkillSpec
@@ -55,6 +71,7 @@ class SkillRuntime:
     max_tool_calls: Optional[int]
     context_providers: List[str]
     model_policy: SkillModelPolicy
+    dynamic_tools: Dict[str, Dict[str, Any]]
 
     def apply_tool_policy(self, role_allowed: Set[str]) -> Set[str]:
         allowed = set(role_allowed)
@@ -143,7 +160,20 @@ def compile_skill_runtime(
         module_name = str(mod or "").strip()
         if not module_name:
             continue
-        content = _read_prompt_module(version, module_name)
+        content = ""
+        if module_name.startswith("local:"):
+            content = _read_local_prompt_module(skill, module_name[len("local:"):].strip())
+        else:
+            try:
+                content = _read_prompt_module(version, module_name)
+            except FileNotFoundError:
+                # Markdown-only teacher/claude skills can reference companion files.
+                # Keep system skill behavior unchanged: system skills still require
+                # prompt modules under prompts/<version>/...
+                if skill.source_type in {"teacher", "claude"}:
+                    content = _read_local_prompt_module(skill, module_name)
+                else:
+                    raise
         if not content:
             continue
         used_modules.append(module_name)
@@ -165,4 +195,5 @@ def compile_skill_runtime(
         max_tool_calls=skill.agent.budgets.max_tool_calls,
         context_providers=skill.agent.context_providers,
         model_policy=skill.agent.model_policy,
+        dynamic_tools=load_dynamic_tools_for_skill_source(skill.source_path),
     )

@@ -19,10 +19,12 @@ __all__ = [
 import shutil
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
 
-from ..exam_api_service import ExamApiDeps
+from services.api.runtime import queue_runtime
+
+from ..core_utils import _non_ws_len
 from ..exam_analysis_charts_service import ExamAnalysisChartsDeps
+from ..exam_api_service import ExamApiDeps
 from ..exam_catalog_service import ExamCatalogDeps
 from ..exam_detail_service import ExamDetailDeps
 from ..exam_longform_service import ExamLongformDeps
@@ -30,33 +32,46 @@ from ..exam_overview_service import ExamOverviewDeps
 from ..exam_range_service import ExamRangeDeps
 from ..exam_upload_api_service import (
     ExamUploadApiDeps,
+)
+from ..exam_upload_api_service import (
     exam_upload_confirm as _exam_upload_confirm_api_impl,
+)
+from ..exam_upload_api_service import (
     exam_upload_draft as _exam_upload_draft_api_impl,
+)
+from ..exam_upload_api_service import (
     exam_upload_draft_save as _exam_upload_draft_save_api_impl,
+)
+from ..exam_upload_api_service import (
     exam_upload_status as _exam_upload_status_api_impl,
 )
 from ..exam_upload_confirm_service import (
     ExamUploadConfirmDeps,
+)
+from ..exam_upload_confirm_service import (
     confirm_exam_upload as _confirm_exam_upload_impl,
 )
 from ..exam_upload_draft_service import (
     build_exam_upload_draft as _build_exam_upload_draft_impl,
+)
+from ..exam_upload_draft_service import (
     exam_upload_not_ready_detail as _exam_upload_not_ready_detail_impl,
+)
+from ..exam_upload_draft_service import (
     load_exam_draft_override as _load_exam_draft_override_impl,
+)
+from ..exam_upload_draft_service import (
     save_exam_draft_override as _save_exam_draft_override_impl,
 )
 from ..exam_upload_parse_service import ExamUploadParseDeps
 from ..exam_upload_start_service import (
     ExamUploadStartDeps,
+)
+from ..exam_upload_start_service import (
     start_exam_upload as _start_exam_upload_impl,
 )
 from ..exam_utils import _parse_xlsx_with_script, _safe_int_arg
-from ..core_utils import _non_ws_len
-from ..chart_executor import execute_chart_exec
 from ..handlers import exam_upload_handlers
-from services.api.runtime import queue_runtime
-
-
 from . import get_app_core as _app_core
 
 

@@ -2,12 +2,14 @@ import type { TeacherMemoryProposal, TeacherMemoryInsightsResponse } from '../..
 
 type MemoryStatusFilter = 'applied' | 'rejected' | 'all'
 
-type MemoryTabProps = {
+type TopQueryItem = NonNullable<TeacherMemoryInsightsResponse['top_queries']>[number]
+
+export type MemoryTabProps = {
   memoryStatusFilter: MemoryStatusFilter
   setMemoryStatusFilter: (filter: MemoryStatusFilter) => void
   memoryInsights: TeacherMemoryInsightsResponse | null | undefined
-  proposalError: any
-  proposalLoading: any
+  proposalError: string
+  proposalLoading: boolean
   proposals: TeacherMemoryProposal[]
 }
 
@@ -82,7 +84,7 @@ export default function MemoryTab({
       {Array.isArray(memoryInsights?.top_queries) && (memoryInsights?.top_queries || []).length > 0 && (
         <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
           <div className="muted">高频命中查询（14天）</div>
-	        {(memoryInsights?.top_queries || []).slice(0, 5).map((q: any) => (
+          {(memoryInsights?.top_queries || []).slice(0, 5).map((q: TopQueryItem) => (
             <div key={q.query} className="text-[12px] text-muted flex justify-between gap-2 flex-wrap">
               <span>{q.query}</span>
               <span>

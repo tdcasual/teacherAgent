@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -8,7 +9,6 @@ from typing import Any, Callable, Optional, Tuple
 
 from fastapi import UploadFile
 
-import logging
 _log = logging.getLogger(__name__)
 
 _OCR_UTILS: Optional[Tuple[Any, Any]] = None

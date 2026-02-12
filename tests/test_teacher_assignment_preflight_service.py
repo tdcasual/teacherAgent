@@ -77,6 +77,48 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertEqual(result, "请补充知识点")
         self.assertEqual(generated, [])
 
+    def test_missing_small_rewrites_full_template_to_incremental_prompt(self):
+        full_template = (
+            "老师您好，已识别到您要布置关于“运动的合成与分解”的作业，日期为2026-02-12。\n\n"
+            "为了生成一份高质量的作业，请您补充以下信息（共8项）：\n"
+            "1. 学科\n2. 年级\n3. 班级水平\n4. 核心概念\n5. 典型问题\n6. 常见误解\n7. 作业时长\n8. 作业偏好\n\n"
+            "请按此模板回复，我将为您生成完整的作业。"
+        )
+        analysis = {
+            "intent": "assignment",
+            "assignment_id": "A1",
+            "date": "2026-02-07",
+            "missing": ["常见误解不足4个"],
+            "next_prompt": full_template,
+        }
+        deps, _logs, _saved, generated = self._deps(analysis=analysis)
+        req = _Req(messages=[_Msg(role="user", content="作业信息已给你大部分，请继续")])
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("请仅补充以下内容", result)
+        self.assertIn("常见误解不足4个", result)
+        self.assertNotIn("共8项", result)
+        self.assertEqual(generated, [])
+
+    def test_missing_large_keeps_full_template_prompt(self):
+        full_template = (
+            "老师您好！为了生成一份高质量的作业，请您提供以下信息：\n"
+            "1. 学科\n2. 年级\n3. 班级水平\n4. 核心概念\n5. 典型问题\n6. 常见误解\n7. 作业时长\n8. 作业偏好"
+        )
+        analysis = {
+            "intent": "assignment",
+            "assignment_id": "",
+            "date": "",
+            "missing": ["作业ID", "学科", "年级", "班级水平", "核心概念", "典型问题"],
+            "next_prompt": full_template,
+        }
+        deps, _logs, _saved, generated = self._deps(analysis=analysis)
+        req = _Req(messages=[_Msg(role="user", content="生成作业")])
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertEqual(result, full_template)
+        self.assertEqual(generated, [])
+
     def test_generates_assignment_when_ready(self):
         analysis = {
             "intent": "assignment",

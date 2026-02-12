@@ -76,7 +76,18 @@ export const fallbackSkills: Skill[] = [
 export const TEACHER_GREETING =
   '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$skill` 选择技能（未指定时自动路由）。'
 
-export const buildSkill = (skill: { id: string; title?: string; desc?: string; instructions?: string; prompts?: string[]; examples?: string[]; source_type?: string; routing?: any }): Skill => {
+type RawSkill = {
+  id: string
+  title?: string
+  desc?: string
+  instructions?: string
+  prompts?: string[]
+  examples?: string[]
+  source_type?: string
+  routing?: { keywords?: string[] }
+}
+
+export const buildSkill = (skill: RawSkill): Skill => {
   const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : []
   const examples = Array.isArray(skill.examples) ? skill.examples.filter(Boolean) : []
   const keywords = Array.isArray(skill.routing?.keywords) ? skill.routing.keywords.filter(Boolean) : []

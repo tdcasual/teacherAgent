@@ -1,11 +1,79 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
-import logging
+
 _log = logging.getLogger(__name__)
+
+_CJK_CHAR_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
+_GLYPH_MISSING_RE = re.compile(r"Glyph\s+(\d+)\b.*missing from font\(s\)", re.I)
+_BENIGN_WARNING_PATTERNS = (
+    "matplotlib created a temporary cache directory",
+    "could not save font_manager cache sandbox",
+    "mkdir -p failed for path /home/appuser/.config/matplotlib",
+)
+
+
+def _contains_cjk_text(text: str) -> bool:
+    return bool(_CJK_CHAR_RE.search(str(text or "")))
+
+
+def _is_cjk_codepoint(codepoint: int) -> bool:
+    return (
+        0x3400 <= codepoint <= 0x4DBF
+        or 0x4E00 <= codepoint <= 0x9FFF
+        or 0xF900 <= codepoint <= 0xFAFF
+        or 0x20000 <= codepoint <= 0x2CEAF
+    )
+
+
+def _has_missing_cjk_glyphs(stderr: str) -> bool:
+    text = str(stderr or "")
+    if not text:
+        return False
+    if "cjk unified ideograph" in text.lower():
+        return True
+    for match in _GLYPH_MISSING_RE.finditer(text):
+        try:
+            codepoint = int(match.group(1))
+        except Exception:
+            continue
+        if _is_cjk_codepoint(codepoint):
+            return True
+    return False
+
+
+def _extract_actionable_warnings(stderr: str) -> List[str]:
+    warnings: List[str] = []
+    seen: set[str] = set()
+    for raw_line in str(stderr or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        lowered = line.lower()
+        if any(pat in lowered for pat in _BENIGN_WARNING_PATTERNS):
+            continue
+        if ("findfont:" not in lowered) and ("warning" not in lowered):
+            continue
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        warnings.append(line)
+    return warnings
+
+
+def _warning_feedback(warnings: List[str]) -> str:
+    if not warnings:
+        return ""
+    preview = "\n".join(f"- {line}" for line in warnings[:6])
+    return (
+        "execution_warnings_detected:\n"
+        f"{preview}\n"
+        "请修复这些 warning 的根因后再输出代码，禁止通过忽略 warning 掩盖问题。"
+    )
 
 
 
@@ -168,6 +236,7 @@ def chart_agent_generate_candidate(
         "- 使用 matplotlib（可选 numpy/pandas/seaborn）。\n"
         "- 变量 input_data 已可直接使用。\n"
         "- 必须调用 save_chart('main.png') 或 save_chart()。\n"
+        "- 运行时不得产生 warning；若上次出现 warning，必须修复根因而不是忽略。\n"
         "- 代码必须可直接运行，禁止解释文字。"
     )
     user = (
@@ -263,6 +332,8 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
     attempts: List[Dict[str, Any]] = []
     last_error = ""
     previous_code = ""
+    unresolved_warning_lines: List[str] = []
+    unresolved_warning_result: Dict[str, Any] = {}
 
     for attempt in range(1, effective_max_retries + 1):
         candidate = deps.generate_candidate(
@@ -300,6 +371,16 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
             deps.app_root,
             deps.uploads_dir,
         )
+        stderr_text = str(exec_res.get("stderr") or "")
+        missing_cjk_glyphs = _has_missing_cjk_glyphs(stderr_text)
+        warning_lines = _extract_actionable_warnings(stderr_text)
+        has_actionable_warnings = bool(warning_lines)
+        if _contains_cjk_text(python_code) and missing_cjk_glyphs:
+            has_actionable_warnings = True
+            if "render_quality_failed: missing_cjk_glyphs" not in warning_lines:
+                warning_lines = ["render_quality_failed: missing_cjk_glyphs", *warning_lines]
+            if len(warning_lines) == 1:
+                warning_lines.append("UserWarning: missing CJK glyphs in selected font.")
 
         attempts.append(
             {
@@ -317,12 +398,26 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                     "timed_out": exec_res.get("timed_out"),
                     "image_url": exec_res.get("image_url"),
                     "meta_url": exec_res.get("meta_url"),
-                    "stderr": str(exec_res.get("stderr") or "")[:500],
+                    "stderr": stderr_text[:500],
+                    "missing_cjk_glyphs": missing_cjk_glyphs,
+                    "warnings": warning_lines[:8],
+                    "has_actionable_warnings": has_actionable_warnings,
                 },
             }
         )
 
         if exec_res.get("ok") and exec_res.get("image_url"):
+            if has_actionable_warnings:
+                unresolved_warning_lines = warning_lines
+                unresolved_warning_result = {
+                    "run_id": exec_res.get("run_id"),
+                    "image_url": exec_res.get("image_url"),
+                    "meta_url": exec_res.get("meta_url"),
+                    "artifacts": exec_res.get("artifacts") or [],
+                }
+                previous_code = python_code
+                last_error = _warning_feedback(warning_lines)
+                continue
             title = str(args.get("title") or "图表结果").strip() or "图表结果"
             markdown = f"### {title}\n\n![{title}]({exec_res.get('image_url')})"
             return {
@@ -344,6 +439,23 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
 
         previous_code = python_code
         last_error = str(exec_res.get("stderr") or exec_res.get("error") or "unknown_error")
+
+    if unresolved_warning_result:
+        return {
+            "ok": False,
+            "error": "chart_agent_unresolved_warnings",
+            "task": task,
+            "max_retries": effective_max_retries,
+            "engine_requested": requested_engine,
+            "last_error": (last_error or _warning_feedback(unresolved_warning_lines))[:1200],
+            "warnings": unresolved_warning_lines[:8],
+            "best_effort_run_id": unresolved_warning_result.get("run_id"),
+            "best_effort_image_url": unresolved_warning_result.get("image_url"),
+            "best_effort_meta_url": unresolved_warning_result.get("meta_url"),
+            "best_effort_artifacts": unresolved_warning_result.get("artifacts") or [],
+            "attempts": attempts,
+            "opencode_status": None,
+        }
 
     return {
         "ok": False,

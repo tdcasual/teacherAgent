@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from dataclasses import dataclass, replace
@@ -9,8 +10,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml  # type: ignore
 
 from .spec import SkillRoutingSpec, SkillSpec, parse_skill_spec
-import logging
+
 _log = logging.getLogger(__name__)
+
+_SKILL_INCLUDE_MAX_FILE_CHARS = 16_000
+_SKILL_INCLUDE_MAX_TOTAL_CHARS = 48_000
 
 
 
@@ -68,6 +72,78 @@ def _parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     if not isinstance(fm, dict):
         return {}, content
     return fm, body
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _as_str_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        s = value.strip()
+        return [s] if s else []
+    if not isinstance(value, list):
+        return []
+    out: List[str] = []
+    for item in value:
+        if item is None:
+            continue
+        s = str(item).strip()
+        if s:
+            out.append(s)
+    return out
+
+
+def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
+    include_keys = ("includes", "references")
+    include_paths: List[str] = []
+    for key in include_keys:
+        include_paths.extend(_as_str_list(fm.get(key)))
+
+    if not include_paths:
+        return ""
+
+    base = _normalize_path(folder)
+    chunks: List[str] = []
+    total_chars = 0
+
+    for rel in include_paths:
+        rel_text = str(rel).strip()
+        if not rel_text:
+            continue
+        rel_path = Path(rel_text)
+        if rel_path.is_absolute():
+            _log.warning("skip absolute include path: %s", rel_text)
+            continue
+        target = _normalize_path(folder / rel_path)
+        if target == base or base not in target.parents:
+            _log.warning("skip include outside skill dir: %s", rel_text)
+            continue
+        if not target.exists() or not target.is_file():
+            _log.warning("skip missing include path: %s", rel_text)
+            continue
+        try:
+            text = target.read_text(encoding="utf-8").strip()
+        except Exception:
+            _log.warning("failed to read include path: %s", rel_text, exc_info=True)
+            continue
+        if not text:
+            continue
+        if len(text) > _SKILL_INCLUDE_MAX_FILE_CHARS:
+            text = text[:_SKILL_INCLUDE_MAX_FILE_CHARS]
+
+        block = f"[Reference: {rel_path.as_posix()}]\n{text}"
+        remain = _SKILL_INCLUDE_MAX_TOTAL_CHARS - total_chars
+        if remain <= 0:
+            break
+        if len(block) > remain:
+            block = block[:remain]
+        chunks.append(block)
+        total_chars += len(block)
+
+    return "\n\n".join(chunks)
 
 
 def _resolve_source_dirs(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> List[Path]:
@@ -198,48 +274,63 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
         title = title or skill_id
 
         desc = str(fm.get("description") or fm.get("desc") or "").strip()
-        instructions = body if body else desc
+        explicit_instructions = str(fm.get("instructions") or "").strip()
+        instructions = body if body else (explicit_instructions or desc)
+        include_text = _collect_skill_includes(folder, fm)
+        if include_text:
+            if instructions:
+                instructions = f"{instructions}\n\n{include_text}"
+            else:
+                instructions = include_text
         # For backward compat: if no explicit desc in frontmatter, use body as desc
         if not desc and body:
             desc = body
 
-        keywords = []
-        kw_raw = fm.get("keywords")
-        if isinstance(kw_raw, list):
-            keywords = [str(k).strip() for k in kw_raw if str(k).strip()]
-        elif isinstance(kw_raw, str) and kw_raw.strip():
-            keywords = [k.strip() for k in kw_raw.split(",") if k.strip()]
+        keywords = _as_str_list(fm.get("keywords"))
 
         allowed_roles_raw = fm.get("allowed_roles") or fm.get("allowed-roles")
-        allowed_roles_list: List[str] = []
-        if isinstance(allowed_roles_raw, list):
-            allowed_roles_list = [str(r).strip() for r in allowed_roles_raw if str(r).strip()]
-        elif isinstance(allowed_roles_raw, str) and allowed_roles_raw.strip():
-            allowed_roles_list = [r.strip() for r in allowed_roles_raw.split(",") if r.strip()]
+        allowed_roles_list: List[str] = _as_str_list(allowed_roles_raw)
 
-        prompts_raw = fm.get("prompts")
-        prompts_list: List[str] = []
-        if isinstance(prompts_raw, list):
-            prompts_list = [str(p).strip() for p in prompts_raw if str(p).strip()]
+        ui_raw = _as_dict(fm.get("ui"))
+        prompts_list: List[str] = _as_str_list(fm.get("prompts")) or _as_str_list(ui_raw.get("prompts"))
+        examples_list: List[str] = _as_str_list(fm.get("examples")) or _as_str_list(ui_raw.get("examples"))
 
-        examples_raw = fm.get("examples")
-        examples_list: List[str] = []
-        if isinstance(examples_raw, list):
-            examples_list = [str(e).strip() for e in examples_raw if str(e).strip()]
+        routing_raw = _as_dict(fm.get("routing"))
+        if not routing_raw and keywords:
+            routing_raw = {"keywords": keywords}
+
+        agent_raw = _as_dict(fm.get("agent"))
+        if not agent_raw:
+            # Allow top-level advanced fields for markdown-only skills.
+            top_prompt_modules = _as_str_list(fm.get("prompt_modules") or fm.get("promptModules"))
+            top_context_providers = _as_str_list(fm.get("context_providers") or fm.get("contextProviders"))
+            top_tools = _as_dict(fm.get("tools"))
+            top_budgets = _as_dict(fm.get("budgets"))
+            top_model_policy = _as_dict(fm.get("model_policy") or fm.get("modelPolicy"))
+            if top_prompt_modules:
+                agent_raw["prompt_modules"] = top_prompt_modules
+            if top_context_providers:
+                agent_raw["context_providers"] = top_context_providers
+            if top_tools:
+                agent_raw["tools"] = top_tools
+            if top_budgets:
+                agent_raw["budgets"] = top_budgets
+            if top_model_policy:
+                agent_raw["model_policy"] = top_model_policy
 
         derived_raw: Dict[str, Any] = {
-            "schema_version": 1,
+            "schema_version": fm.get("schema_version") or fm.get("schemaVersion") or 1,
             "title": title,
             "description": desc,
             "instructions": instructions,
-            "agent": {
+            "agent": agent_raw if agent_raw else {
                 "prompt_modules": [],
                 "context_providers": [],
                 "tools": {},
                 "budgets": {},
                 "model_policy": {},
             },
-            "routing": {"keywords": keywords} if keywords else {},
+            "routing": routing_raw,
         }
         if allowed_roles_list:
             derived_raw["allowed_roles"] = allowed_roles_list

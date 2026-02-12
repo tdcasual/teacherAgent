@@ -26,11 +26,8 @@ export const formatUploadJobStatus = (job: UploadJobStatus) => {
   if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? '文档' : '图片'}`)
   if (job.error) lines.push(`错误：${job.error}`)
 
-  // Backend may include extra fields for better UX.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extra = job as any
-  if (extra.error_detail) lines.push(`详情：${extra.error_detail}`)
-  if (Array.isArray(extra.hints) && extra.hints.length) lines.push(`建议：${extra.hints.join('；')}`)
+  if (job.error_detail) lines.push(`详情：${job.error_detail}`)
+  if (Array.isArray(job.hints) && job.hints.length) lines.push(`建议：${job.hints.join('；')}`)
   if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
   if (job.requirements_missing && job.requirements_missing.length) {
     const missingLabelMap: Record<string, string> = {
@@ -91,10 +88,8 @@ export const formatExamJobStatus = (job: ExamUploadJobStatus) => {
     if (defaults) lines.push(`提示：有 ${defaults} 题缺少满分，系统已默认按 1 分/题 评分（建议在草稿里核对满分）。`)
   }
   if (job.error) lines.push(`错误：${job.error}`)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const extra = job as any
-  if (extra.error_detail) lines.push(`详情：${extra.error_detail}`)
-  if (Array.isArray(extra.hints) && extra.hints.length) lines.push(`建议：${extra.hints.join('；')}`)
+  if (job.error_detail) lines.push(`详情：${job.error_detail}`)
+  if (Array.isArray(job.hints) && job.hints.length) lines.push(`建议：${job.hints.join('；')}`)
   if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
   if (job.needs_confirm) lines.push('提示：成绩映射置信度不足，请先在草稿中确认物理分映射列。')
   return lines.join('\n')

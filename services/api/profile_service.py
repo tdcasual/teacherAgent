@@ -12,9 +12,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-_log = logging.getLogger(__name__)
-
 from .config import PROFILE_CACHE_TTL_SEC
+
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "detect_role",
@@ -91,8 +91,8 @@ def student_profile_get(student_id: str) -> Dict[str, Any]:
 
 
 def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .core_utils import run_script
     from .config import APP_ROOT
+    from .core_utils import run_script
     script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
     cmd = ["python3", str(script), "--student-id", args.get("student_id", "")]
     for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note",

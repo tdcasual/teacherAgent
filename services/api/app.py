@@ -13,8 +13,6 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-_log = logging.getLogger(__name__)
-
 from .app_routes import register_routes
 from .auth_service import (
     AuthError,
@@ -23,11 +21,13 @@ from .auth_service import (
     resolve_principal_from_headers,
     set_current_principal,
 )
-from .request_context import REQUEST_ID, RequestIdFilter, new_request_id
+from .observability import OBSERVABILITY
 from .rate_limit import rate_limit_middleware
+from .request_context import REQUEST_ID, RequestIdFilter, new_request_id
 from .runtime.lifecycle import app_lifespan
 from .wiring import CURRENT_CORE
-from .observability import OBSERVABILITY
+
+_log = logging.getLogger(__name__)
 
 _CORE_PATH = Path(__file__).resolve().with_name("app_core.py")
 

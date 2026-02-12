@@ -17,7 +17,7 @@ export const difficultyOptions = [
   { value: 'challenge', label: '压轴' },
 ] as const
 
-export const normalizeDifficulty = (value: any) => {
+export const normalizeDifficulty = (value: unknown) => {
   const raw = String(value || '').trim()
   if (!raw) return 'basic'
   const v = raw.toLowerCase()
@@ -51,7 +51,7 @@ export const normalizeDifficulty = (value: any) => {
   return 'basic'
 }
 
-export const difficultyLabel = (value: any) => {
+export const difficultyLabel = (value: unknown) => {
   const norm = normalizeDifficulty(value)
   const found = difficultyOptions.find((opt) => opt.value === norm)
   return found ? found.label : '基础'
@@ -74,4 +74,3 @@ export const formatMissingRequirements = (missing?: string[]) => {
   const items = Array.isArray(missing) ? missing : []
   return items.map((key) => requirementLabels[key] || key).join('、')
 }
-

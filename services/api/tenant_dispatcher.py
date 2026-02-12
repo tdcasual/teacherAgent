@@ -5,10 +5,8 @@ import re
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 from .auth_service import AuthError, principal_can_access_tenant, resolve_principal_from_scope
-
 from .tenant_registry import TenantRegistry
 from .wiring import CURRENT_CORE
-
 
 _log = logging.getLogger(__name__)
 _TENANT_PATH_RE = re.compile(r"^/t/([A-Za-z0-9][A-Za-z0-9_-]{0,63})(/.*)?$")
