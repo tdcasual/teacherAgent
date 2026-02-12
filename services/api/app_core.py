@@ -449,61 +449,6 @@ from . import teacher_memory_core as _teacher_memory_core_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_core_module)
 from .teacher_memory_core import *  # noqa: F401,F403 — re-export all teacher memory functions
-from .teacher_memory_core import (
-    _teacher_compact_key,
-    _teacher_compact_allowed,
-    _teacher_compact_transcript,
-    _teacher_compact_summary,
-    _write_teacher_session_records,
-    _mark_teacher_session_compacted,
-    _teacher_session_summary_text,
-    _teacher_memory_context_text,
-    _teacher_proposal_path,
-    _teacher_memory_load_events,
-    _teacher_memory_is_sensitive,
-    _teacher_memory_event_log_path,
-    _teacher_memory_log_event,
-    _teacher_memory_parse_dt,
-    _teacher_memory_record_ttl_days,
-    _teacher_memory_record_expire_at,
-    _teacher_memory_is_expired_record,
-    _teacher_memory_age_days,
-    _teacher_memory_priority_score,
-    _teacher_memory_rank_score,
-    _teacher_memory_load_record,
-    _teacher_memory_active_applied_records,
-    _teacher_memory_recent_user_turns,
-    _teacher_memory_loose_match,
-    _teacher_memory_auto_infer_candidate,
-    _teacher_session_index_item,
-    _mark_teacher_session_memory_flush,
-    _teacher_memory_has_term,
-    _teacher_memory_conflicts,
-    _teacher_memory_find_conflicting_applied,
-    _teacher_memory_mark_superseded,
-    _teacher_memory_norm_text,
-    _teacher_memory_stable_hash,
-    _teacher_memory_recent_proposals,
-    _teacher_memory_auto_quota_reached,
-    _teacher_memory_find_duplicate,
-    _teacher_session_compaction_cycle_no,
-    _teacher_mem0_search,
-    _teacher_mem0_should_index_target,
-    _teacher_mem0_index_entry,
-    _teacher_memory_search_deps,
-    _teacher_memory_insights_deps,
-    _teacher_memory_apply_deps,
-    _teacher_memory_propose_deps,
-    _teacher_memory_record_deps,
-    _teacher_memory_store_deps,
-    _teacher_memory_auto_deps,
-    _teacher_context_deps,
-    _teacher_session_compaction_deps,
-    _teacher_memory_api_deps,
-    _teacher_workspace_deps,
-    _list_teacher_memory_proposals_api_impl,
-    _review_teacher_memory_proposal_api_impl,
-)
 
 def _rq_enabled() -> bool:
     return _rq_enabled_impl()
@@ -540,25 +485,9 @@ if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATA_DIR") or os.getenv("UPLOA
     _importlib.reload(_importlib.import_module("services.api.context_runtime_facade"))
     _importlib.reload(_importlib.import_module("services.api.context_io_facade"))
 from .context_application_facade import *  # noqa: F401,F403
-from .context_application_facade import (
-    _best_submission_attempt,
-    _compute_submission_attempt,
-    _counted_grade_item,
-    _list_submission_attempts,
-    _session_discussion_pass,
-)
 from .context_runtime_facade import *  # noqa: F401,F403
-from .context_runtime_facade import (
-    _calc_longform_max_tokens,
-    _chat_start_orchestration,
-    _compute_chat_reply_sync,
-    _detect_role_hint,
-    _ensure_teacher_routing_file,
-    _generate_longform_reply,
-)
 from .context_io_facade import *  # noqa: F401,F403
-from .context_io_facade import _normalize_excel_cell_impl
-from .chat_limits import (
+from services.api.chat_limits import (
     acquire_limiters as _acquire_limiters_impl,
     student_inflight_guard as _student_inflight_guard_impl,
     trim_messages as _trim_messages_impl,
