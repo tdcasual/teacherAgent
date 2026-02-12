@@ -22,6 +22,15 @@ class ChartAgentRunDeps:
     default_code: Callable[[], str]
 
 
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
 def chart_agent_bool(value: Any, default: bool = True) -> bool:
     if value is None:
         return default
@@ -55,17 +64,15 @@ def chart_agent_opencode_overrides(args: Dict[str, Any]) -> Dict[str, Any]:
     if args.get("opencode_mode"):
         overrides["mode"] = str(args.get("opencode_mode")).strip()
     if args.get("opencode_timeout_sec") is not None:
-        try:
-            overrides["timeout_sec"] = max(10, int(args.get("opencode_timeout_sec")))
-        except Exception:
-            pass
+        timeout_val = _int_or_none(args.get("opencode_timeout_sec"))
+        if timeout_val is not None:
+            overrides["timeout_sec"] = max(10, timeout_val)
     if args.get("opencode_enabled") is not None:
-        overrides["enabled"] = chart_agent_bool(args.get("opencode_enabled"), default=True)
+        overrides["enabled"] = chart_agent_bool(args.get("opencode_enabled"), True)
     if args.get("opencode_max_retries") is not None:
-        try:
-            overrides["max_retries"] = max(1, min(int(args.get("opencode_max_retries")), 6))
-        except Exception:
-            pass
+        retries_val = _int_or_none(args.get("opencode_max_retries"))
+        if retries_val is not None:
+            overrides["max_retries"] = max(1, min(retries_val, 6))
     return overrides
 
 
@@ -227,9 +234,9 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
     if not task:
         return {"error": "task_required"}
 
-    timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), default=180, minimum=30, maximum=3600)
-    max_retries = deps.safe_int_arg(args.get("max_retries"), default=3, minimum=1, maximum=6)
-    auto_install = deps.chart_bool(args.get("auto_install"), default=True)
+    timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), 180, 30, 3600)
+    max_retries = deps.safe_int_arg(args.get("max_retries"), 3, 1, 6)
+    auto_install = deps.chart_bool(args.get("auto_install"), True)
     requested_engine = deps.chart_engine(args.get("engine"))
     if requested_engine == "opencode":
         return {
@@ -253,12 +260,12 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
 
     for attempt in range(1, effective_max_retries + 1):
         candidate = deps.generate_candidate(
-            task=task,
-            input_data=input_data,
-            last_error=last_error,
-            previous_code=previous_code,
-            attempt=attempt,
-            max_retries=effective_max_retries,
+            task,
+            input_data,
+            last_error,
+            previous_code,
+            attempt,
+            effective_max_retries,
         )
 
         python_code = str(candidate.get("python_code") or "").strip() or deps.default_code()
@@ -283,8 +290,8 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                 "packages": merged_packages,
                 "max_retries": 2,
             },
-            app_root=deps.app_root,
-            uploads_dir=deps.uploads_dir,
+            deps.app_root,
+            deps.uploads_dir,
         )
 
         attempts.append(
