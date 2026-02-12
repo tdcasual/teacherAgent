@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
+
+_log = logging.getLogger(__name__)
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
 
 
 class ExamUploadConfirmError(Exception):
@@ -77,22 +86,21 @@ def confirm_exam_upload(
     if not parsed_path.exists():
         deps.write_exam_job(job_id, {"status": "failed", "error": "parsed result missing", "step": "failed"})
         raise ExamUploadConfirmError(400, "parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
+    parsed = _as_dict(json.loads(parsed_path.read_text(encoding="utf-8")))
 
-    override = deps.load_exam_draft_override(job_dir)
-    parsed_score_schema = parsed.get("score_schema") if isinstance(parsed.get("score_schema"), dict) else {}
-    override_score_schema = override.get("score_schema") if isinstance(override.get("score_schema"), dict) else {}
-    merged_score_schema = {**parsed_score_schema, **override_score_schema} if isinstance(parsed_score_schema, dict) else override_score_schema
+    override = _as_dict(deps.load_exam_draft_override(job_dir))
+    parsed_score_schema = _as_dict(parsed.get("score_schema"))
+    override_score_schema = _as_dict(override.get("score_schema"))
+    merged_score_schema = {**parsed_score_schema, **override_score_schema}
     needs_confirm = bool(merged_score_schema.get("needs_confirm"))
+    subject_info = _as_dict(merged_score_schema.get("subject"))
     selected_candidate_id = str(
         (
-            ((merged_score_schema.get("subject") or {}).get("selected_candidate_id")
-            if isinstance(merged_score_schema.get("subject"), dict)
-            else merged_score_schema.get("selected_candidate_id"))
+            subject_info.get("selected_candidate_id")
+            or merged_score_schema.get("selected_candidate_id")
         )
         or ""
     ).strip()
-    subject_info = merged_score_schema.get("subject") if isinstance(merged_score_schema.get("subject"), dict) else {}
     selected_candidate_available = bool(subject_info.get("selected_candidate_available", True))
     selection_error = str(subject_info.get("selection_error") or "").strip()
     candidate_selection_valid = bool((not selected_candidate_id) or (selected_candidate_available and not selection_error))
@@ -111,9 +119,10 @@ def confirm_exam_upload(
     if not exam_id:
         raise ExamUploadConfirmError(400, "exam_id missing")
 
-    meta = parsed.get("meta") or {}
-    if isinstance(override.get("meta"), dict) and override.get("meta"):
-        meta = {**meta, **override.get("meta")}
+    meta = _as_dict(parsed.get("meta"))
+    override_meta = _as_dict(override.get("meta"))
+    if override_meta:
+        meta = {**meta, **override_meta}
     questions_override = override.get("questions") if isinstance(override.get("questions"), list) else None
 
     try:
@@ -167,8 +176,9 @@ def confirm_exam_upload(
                 if question.get("max_score") is not None
             }
         except Exception:
+            _log.warning("max_scores build failed from questions_override", exc_info=True)
             max_scores = None
-        deps.write_exam_questions_csv(dest_derived_dir / "questions.csv", questions_override, max_scores=max_scores)
+        deps.write_exam_questions_csv(dest_derived_dir / "questions.csv", questions_override, max_scores)
 
     answer_key_text = str(override.get("answer_key_text") or "").strip()
     dest_unscored = dest_derived_dir / "responses_unscored.csv"
@@ -184,15 +194,15 @@ def confirm_exam_upload(
                 if dest_answers.exists():
                     dest_answers.unlink()
         except Exception:
-            pass
+            _log.warning("answer key override parse/write failed", exc_info=True)
 
     if dest_unscored.exists() and dest_answers.exists() and dest_questions.exists():
         try:
             try:
                 answers = deps.load_exam_answer_key_from_csv(dest_answers)
-                deps.ensure_questions_max_score(dest_questions, answers.keys(), default_score=1.0)
+                deps.ensure_questions_max_score(dest_questions, answers.keys(), 1.0)
             except Exception:
-                pass
+                _log.warning("answer key CSV load/ensure_max_score failed", exc_info=True)
             deps.apply_answer_key_to_responses_csv(dest_unscored, dest_answers, dest_questions, dest_scored)
         except Exception:
             if src_responses.exists():
