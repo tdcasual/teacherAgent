@@ -93,7 +93,7 @@ def exam_range_top_students(
     if start_q > end_q:
         start_q, end_q = end_q, start_q
 
-    sample_n = deps.safe_int_arg(top_n, default=10, minimum=1, maximum=100)
+    sample_n = deps.safe_int_arg(top_n, 10, 1, 100)
 
     questions_path = deps.exam_questions_path(manifest)
     questions = deps.read_questions_csv(questions_path) if questions_path else {}
@@ -241,7 +241,7 @@ def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5, *, deps:
     if not isinstance(ranges, list) or not ranges:
         return {"error": "invalid_ranges", "exam_id": exam_id, "message": "ranges 必须是非空数组。"}
 
-    sample_n = deps.safe_int_arg(top_n, default=5, minimum=1, maximum=50)
+    sample_n = deps.safe_int_arg(top_n, 5, 1, 50)
     results: List[Dict[str, Any]] = []
     invalid_ranges: List[Dict[str, Any]] = []
     for idx, item in enumerate(ranges, start=1):
@@ -293,7 +293,7 @@ def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5, 
     if not normalized_nos:
         return {"error": "invalid_question_nos", "exam_id": exam_id, "message": "question_nos 必须包含至少一个有效题号。"}
 
-    sample_n = deps.safe_int_arg(top_n, default=5, minimum=1, maximum=100)
+    sample_n = deps.safe_int_arg(top_n, 5, 1, 100)
     items: List[Dict[str, Any]] = []
     missing_question_nos: List[int] = []
     for q_no in normalized_nos:
