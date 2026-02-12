@@ -4,6 +4,18 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
+def _as_list(value: Any) -> List[Any]:
+    if not isinstance(value, list):
+        return []
+    return value
+
+
 def _as_str_list(value: Any) -> List[str]:
     if value is None:
         return []
@@ -248,16 +260,16 @@ def _parse_model_target(raw: Any) -> Optional[SkillModelTarget]:
 
 
 def _parse_model_policy(raw: Any) -> SkillModelPolicy:
-    policy_raw = raw if isinstance(raw, dict) else {}
+    policy_raw = _as_dict(raw)
     default_target = _parse_model_target(policy_raw.get("default"))
-    routes_raw = policy_raw.get("routes") if isinstance(policy_raw.get("routes"), list) else []
+    routes_raw = _as_list(policy_raw.get("routes"))
     routes: List[SkillModelRoute] = []
     for idx, item in enumerate(routes_raw):
         if not isinstance(item, dict):
             continue
         route_id = str(item.get("id") or "").strip() or f"route_{idx + 1}"
         priority = _as_int_opt(item.get("priority"))
-        match_raw = item.get("match") if isinstance(item.get("match"), dict) else {}
+        match_raw = _as_dict(item.get("match"))
         target = _parse_model_target(item.get("target"))
         if target is None:
             continue
@@ -281,12 +293,12 @@ def _parse_model_policy(raw: Any) -> SkillModelPolicy:
 
 
 def _parse_routing(raw: Any) -> SkillRoutingSpec:
-    routing_raw = raw if isinstance(raw, dict) else {}
+    routing_raw = _as_dict(raw)
     keywords = _as_str_list(routing_raw.get("keywords"))
     negative_keywords = _as_str_list(routing_raw.get("negative_keywords") or routing_raw.get("negativeKeywords"))
     intents = _as_str_list(routing_raw.get("intents"))
 
-    keyword_weights_raw = routing_raw.get("keyword_weights") if isinstance(routing_raw.get("keyword_weights"), dict) else {}
+    keyword_weights_raw = _as_dict(routing_raw.get("keyword_weights"))
     keyword_weights: Dict[str, int] = {}
     for key, value in keyword_weights_raw.items():
         text = str(key or "").strip()
@@ -325,26 +337,26 @@ def parse_skill_spec(skill_id: str, source_path: str, raw: Dict[str, Any]) -> Sk
     desc = str(raw.get("desc") or raw.get("description") or "").strip()
     allowed_roles = _as_str_list(raw.get("allowed_roles") or raw.get("allowedRoles"))
 
-    ui_raw = raw.get("ui") if isinstance(raw.get("ui"), dict) else {}
-    ui_prompts = _as_str_list(ui_raw.get("prompts") if isinstance(ui_raw, dict) else raw.get("prompts"))
-    ui_examples = _as_str_list(ui_raw.get("examples") if isinstance(ui_raw, dict) else raw.get("examples"))
+    ui_raw = _as_dict(raw.get("ui"))
+    ui_prompts = _as_str_list(ui_raw.get("prompts") or raw.get("prompts"))
+    ui_examples = _as_str_list(ui_raw.get("examples") or raw.get("examples"))
     ui = SkillUiSpec(prompts=ui_prompts, examples=ui_examples)
     routing = _parse_routing(raw.get("routing"))
 
-    agent_raw = raw.get("agent") if isinstance(raw.get("agent"), dict) else {}
+    agent_raw = _as_dict(raw.get("agent"))
     prompt_modules = _as_str_list(agent_raw.get("prompt_modules") or agent_raw.get("promptModules"))
     context_providers = _as_str_list(agent_raw.get("context_providers") or agent_raw.get("contextProviders"))
 
-    tools_raw = agent_raw.get("tools") if isinstance(agent_raw.get("tools"), dict) else {}
-    allow_value = tools_raw.get("allow") if isinstance(tools_raw, dict) else None
+    tools_raw = _as_dict(agent_raw.get("tools"))
+    allow_value = tools_raw.get("allow")
     allow_list = _as_str_list(allow_value) if allow_value is not None else None
-    deny_list = _as_str_list(tools_raw.get("deny") if isinstance(tools_raw, dict) else None)
+    deny_list = _as_str_list(tools_raw.get("deny"))
     tools = SkillToolsPolicy(allow=allow_list, deny=deny_list)
 
-    budgets_raw = agent_raw.get("budgets") if isinstance(agent_raw.get("budgets"), dict) else {}
+    budgets_raw = _as_dict(agent_raw.get("budgets"))
     budgets = SkillBudgets(
-        max_tool_rounds=_as_int_opt(budgets_raw.get("max_tool_rounds") if isinstance(budgets_raw, dict) else None),
-        max_tool_calls=_as_int_opt(budgets_raw.get("max_tool_calls") if isinstance(budgets_raw, dict) else None),
+        max_tool_rounds=_as_int_opt(budgets_raw.get("max_tool_rounds")),
+        max_tool_calls=_as_int_opt(budgets_raw.get("max_tool_calls")),
     )
     model_policy = _parse_model_policy(agent_raw.get("model_policy"))
 
