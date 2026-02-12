@@ -5,6 +5,20 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List
 
 
+def _coerce_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
 @dataclass(frozen=True)
 class TeacherMemoryInsightsDeps:
     ensure_teacher_workspace: Callable[[str], Any]
@@ -57,10 +71,8 @@ def teacher_memory_insights(
                 expired_total += 1
                 continue
             active_total += 1
-            pr = rec.get("priority_score")
-            try:
-                p = float(pr)
-            except Exception:
+            p = _coerce_float(rec.get("priority_score"))
+            if p is None:
                 p = float(
                     deps.priority_score(
                         target=target,
@@ -127,20 +139,20 @@ def teacher_memory_insights(
         query = str(ev.get("query") or "").strip()
         if not query:
             continue
-        q = query[:120]
-        st = query_stats.get(q) or {"query": q, "calls": 0, "hit_calls": 0}
+        query_key = query[:120]
+        st = query_stats.get(query_key) or {"query": query_key, "calls": 0, "hit_calls": 0}
         st["calls"] = int(st.get("calls") or 0) + 1
         if hits > 0:
             st["hit_calls"] = int(st.get("hit_calls") or 0) + 1
-        query_stats[q] = st
+        query_stats[query_key] = st
 
     top_queries: List[Dict[str, Any]] = []
-    for q in query_stats.values():
-        calls = max(1, int(q.get("calls") or 1))
-        hit_calls = int(q.get("hit_calls") or 0)
+    for query_entry in query_stats.values():
+        calls = max(1, int(query_entry.get("calls") or 1))
+        hit_calls = int(query_entry.get("hit_calls") or 0)
         top_queries.append(
             {
-                "query": str(q.get("query") or ""),
+                "query": str(query_entry.get("query") or ""),
                 "calls": calls,
                 "hit_calls": hit_calls,
                 "hit_rate": round(hit_calls / calls, 4),

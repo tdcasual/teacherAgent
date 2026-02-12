@@ -9,7 +9,7 @@ def register_assignment_delivery_routes(
     router: APIRouter, *, app_deps: Any, assignment_app: Any, core: Any
 ) -> None:
     @router.get("/assignment/{assignment_id}/download")
-    async def assignment_download(assignment_id: str, file: str):
+    async def assignment_download(assignment_id: str, file: str) -> Any:
         return await assignment_app.download_assignment_file(
             assignment_id,
             file,
@@ -23,7 +23,7 @@ def register_assignment_delivery_routes(
         auto_generate: bool = False,
         generate: bool = True,
         per_kp: int = 5,
-    ):
+    ) -> Any:
         return await assignment_app.get_assignment_today(
             student_id=student_id,
             date=date,
@@ -34,7 +34,7 @@ def register_assignment_delivery_routes(
         )
 
     @router.get("/assignment/{assignment_id}")
-    async def assignment_detail(assignment_id: str):
+    async def assignment_detail(assignment_id: str) -> Any:
         # Keep compatibility with tests and legacy monkeypatch surface on app_core.
         return core._get_assignment_detail_api_impl(
             assignment_id,

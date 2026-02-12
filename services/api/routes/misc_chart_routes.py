@@ -11,7 +11,7 @@ _INLINE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".bmp"}
 
 def register_misc_chart_routes(router: APIRouter, core: Any) -> None:
     @router.get("/charts/{run_id}/{file_name}")
-    def chart_image_file(run_id: str, file_name: str):
+    def chart_image_file(run_id: str, file_name: str) -> Any:
         path = core.resolve_chart_image_path(core.UPLOADS_DIR, run_id, file_name)
         if not path:
             raise HTTPException(status_code=404, detail="chart file not found")
@@ -21,7 +21,7 @@ def register_misc_chart_routes(router: APIRouter, core: Any) -> None:
         return FileResponse(path, filename=path.name)
 
     @router.get("/chart-runs/{run_id}/meta")
-    def chart_run_meta(run_id: str):
+    def chart_run_meta(run_id: str) -> Any:
         path = core.resolve_chart_run_meta_path(core.UPLOADS_DIR, run_id)
         if not path:
             raise HTTPException(status_code=404, detail="chart run not found")
