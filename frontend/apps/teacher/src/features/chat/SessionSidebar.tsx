@@ -162,7 +162,7 @@ export default function SessionSidebar({
   )
 
   return (
-    <aside className={`session-sidebar border-r border-border bg-[#fbfbfc] p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out ${open ? 'open' : 'collapsed'}`}>
+    <aside className={`session-sidebar border-r border-border bg-[#fbfbfc] p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out max-[900px]:fixed max-[900px]:left-0 max-[900px]:top-0 max-[900px]:bottom-0 max-[900px]:w-[min(90vw,360px)] max-[900px]:max-w-[100vw] max-[900px]:h-dvh max-[900px]:z-20 max-[900px]:shadow-md max-[900px]:bg-white max-[900px]:p-[calc(10px+env(safe-area-inset-top))_10px_calc(10px+env(safe-area-inset-bottom))] ${open ? 'open max-[900px]:translate-x-0 max-[900px]:pointer-events-auto' : 'collapsed max-[900px]:-translate-x-full max-[900px]:pointer-events-none'}`}>
       <div className="flex justify-between items-center gap-[6px] flex-none">
         <strong>历史会话</strong>
         <div className="flex items-center gap-[6px]">

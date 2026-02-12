@@ -12,10 +12,10 @@
 
 .app-dialog {
   width: min(520px, calc(100vw - 36px));
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
   border-radius: 16px;
-  box-shadow: var(--shadow, 0 16px 50px rgba(15, 23, 42, 0.2));
+  box-shadow: var(--shadow-md, 0 2px 8px rgba(0, 0, 0, 0.08));
   padding: 16px;
   outline: none;
 }
@@ -28,7 +28,7 @@
 
 .app-dialog-desc {
   margin: 0 0 14px;
-  color: var(--muted, #64748b);
+  color: var(--color-muted, #6b7280);
   font-size: 13px;
   line-height: 1.45;
   overflow-wrap: anywhere;
@@ -43,14 +43,14 @@
   display: grid;
   gap: 6px;
   font-size: 12px;
-  color: var(--muted, #64748b);
+  color: var(--color-muted, #6b7280);
 }
 
 .app-dialog-form input {
   padding: 9px 10px;
   border-radius: 10px;
   font-size: 13px;
-  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  border: 1px solid var(--color-border, #e5e7eb);
   background: #fff;
 }
 
@@ -62,7 +62,7 @@
 }
 
 .app-dialog-btn {
-  border: 1px solid var(--border, rgba(148, 163, 184, 0.45));
+  border: 1px solid var(--color-border, #e5e7eb);
   background: #fff;
   padding: 8px 12px;
   border-radius: 999px;
@@ -75,19 +75,19 @@
 }
 
 .app-dialog-btn:hover {
-  background: var(--surface-soft, #f1f5f9);
-  border-color: var(--border-strong, rgba(100, 116, 139, 0.55));
+  background: var(--color-surface-soft, #f3f4f6);
+  border-color: var(--color-border-strong, #d1d5db);
 }
 
 .app-dialog-btn.primary {
-  background: var(--accent, #0ea5e9);
-  border-color: var(--accent, #0ea5e9);
+  background: var(--color-accent, #10a37f);
+  border-color: var(--color-accent, #10a37f);
   color: #fff;
 }
 
 .app-dialog-btn.primary:hover {
-  background: color-mix(in srgb, var(--accent, #0ea5e9) 88%, #000);
-  border-color: color-mix(in srgb, var(--accent, #0ea5e9) 88%, #000);
+  background: color-mix(in srgb, var(--color-accent, #10a37f) 88%, #000);
+  border-color: color-mix(in srgb, var(--color-accent, #10a37f) 88%, #000);
 }
 
 .app-dialog-btn.danger {

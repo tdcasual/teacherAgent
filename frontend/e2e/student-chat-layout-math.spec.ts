@@ -126,6 +126,16 @@ const setupStudentApiMocksWithReply = async (page: Page, assistantReply: string)
 test.describe('student chat layout and markdown math', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
+  test('root app shell keeps fallback class for stable full-height layout', async ({ page }) => {
+    await setupStudentState(page)
+    await setupStudentApiMocksWithReply(page, '你好')
+    await page.goto('/')
+
+    const rootShell = page.locator('#root > div').first()
+    await expect(rootShell).toBeVisible()
+    await expect(rootShell).toHaveClass(/app/)
+  })
+
   test('composer stays close to viewport bottom on desktop', async ({ page }) => {
     await setupStudentState(page)
     await setupStudentApiMocksWithReply(page, '你好')
@@ -146,6 +156,41 @@ test.describe('student chat layout and markdown math', () => {
     }))
     expect(overflow.html).toBe('hidden')
     expect(overflow.body).toBe('hidden')
+  })
+
+  test('composer remains anchored after messages become scrollable', async ({ page }) => {
+    const longReply = '用于触发滚动的回复内容。'.repeat(80)
+
+    await setupStudentState(page)
+    await setupStudentApiMocksWithReply(page, longReply)
+    await page.goto('/')
+
+    const composerInput = page.locator('textarea').first()
+    await expect(composerInput).toBeVisible()
+
+    for (let i = 1; i <= 8; i += 1) {
+      await composerInput.fill(`滚动稳定性验证 ${i}`)
+      await composerInput.press('Enter')
+      await expect.poll(async () => composerInput.isDisabled()).toBe(false)
+    }
+
+    const layout = await page.evaluate(() => {
+      const messages = document.querySelector('.messages')
+      const composer = document.querySelector('.composer')
+      const rect = composer?.getBoundingClientRect()
+      const m = messages instanceof HTMLElement ? messages : null
+      return {
+        hasScrollbar: Boolean(m && m.scrollHeight > m.clientHeight),
+        composerBottomGap: rect ? window.innerHeight - rect.bottom : null,
+        composerHeight: rect?.height ?? null,
+      }
+    })
+
+    expect(layout.hasScrollbar).toBe(true)
+    expect(layout.composerBottomGap).not.toBeNull()
+    expect(layout.composerBottomGap!).toBeLessThanOrEqual(2)
+    expect(layout.composerHeight).not.toBeNull()
+    expect(layout.composerHeight!).toBeLessThan(260)
   })
 
   test('renders inline and block math in markdown replies', async ({ page }) => {

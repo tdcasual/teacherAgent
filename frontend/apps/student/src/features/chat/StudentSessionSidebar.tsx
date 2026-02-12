@@ -203,7 +203,7 @@ export default function StudentSessionSidebar(props: Props) {
                         </div>
                         {item.preview ? <div className="text-xs text-muted mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{item.preview}</div> : null}
                       </button>
-                      <div className="absolute top-1.5 right-1.5">
+                      <div className="session-menu-wrap absolute top-1.5 right-1.5">
                         <button
                           type="button"
                           id={triggerId}

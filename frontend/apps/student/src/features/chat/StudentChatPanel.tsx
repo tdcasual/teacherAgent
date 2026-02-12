@@ -1,5 +1,4 @@
 import type { FormEvent, KeyboardEvent, RefObject } from 'react'
-import { nowTime } from '../../../../shared/time'
 import type { RenderedMessage, VerifiedStudent } from '../../appTypes'
 
 type Props = {
@@ -55,18 +54,10 @@ export default function StudentChatPanel(props: Props) {
                 <div className="text-[11px] text-muted mb-1.5">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text markdown leading-[1.6] break-anywhere" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div className="text markdown leading-[1.6] [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}
-          {sending && !pendingChatJobId && (
-            <div className="flex justify-start">
-              <div className="max-w-[760px] bg-[#f4f7fb] border border-dashed border-[#cfd8e3] rounded-[14px] px-3 py-2">
-                <div className="text-[11px] text-muted mb-1.5">助手 · {nowTime()}</div>
-                <div className="leading-[1.6] break-anywhere">正在思考…</div>
-              </div>
-            </div>
-          )}
           <div ref={endRef} />
         </div>
       </div>
@@ -82,7 +73,7 @@ export default function StudentChatPanel(props: Props) {
         </button>
       )}
 
-      <form className={`composer border-t border-border px-5 pt-3.5 pb-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.95)_32%,#fff_60%)] max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-3.5 ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
+      <form className={`composer border-t border-border px-5 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.95)_32%,#fff_60%)] max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-[calc(14px+env(safe-area-inset-bottom))] ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
         <div className="max-w-[860px] mx-auto border border-border rounded-[20px] bg-white shadow-sm px-3 py-2.5 max-[900px]:max-w-full">
           <textarea
             ref={inputRef}

@@ -221,6 +221,7 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
           return
         }
         if (event.key === 'Enter' && !event.shiftKey) {
+          if (event.nativeEvent.isComposing) return
           event.preventDefault()
           const item = mention.items[mentionIndex]
           if (item) insertMention(item)

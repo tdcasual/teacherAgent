@@ -28,8 +28,9 @@ function DialogFrame({
 
     const focusTimer = window.setTimeout(() => {
       initialFocusRef?.current?.focus?.();
-      if (document.activeElement) return;
-      dialogRef.current?.focus();
+      if (dialogRef.current && !dialogRef.current.contains(document.activeElement)) {
+        dialogRef.current.focus();
+      }
     }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
