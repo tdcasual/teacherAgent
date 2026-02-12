@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from services.api import settings
-from services.api.queue.queue_backend import get_queue_backend
+from services.api.queue.queue_backend import QueueBackend, get_queue_backend
 from services.api.queue.queue_backend_factory import get_app_queue_backend
 
 
-def app_queue_backend(*, tenant_id, is_pytest: bool, inline_backend_factory):
+def app_queue_backend(
+    *,
+    tenant_id: Optional[str],
+    is_pytest: bool,
+    inline_backend_factory: Callable[[], QueueBackend],
+) -> QueueBackend:
     return get_app_queue_backend(
         tenant_id=tenant_id,
         is_pytest=is_pytest,
@@ -15,37 +20,42 @@ def app_queue_backend(*, tenant_id, is_pytest: bool, inline_backend_factory):
     )
 
 
-def enqueue_upload_job(job_id: str, *, backend) -> None:
+def enqueue_upload_job(job_id: str, *, backend: QueueBackend) -> None:
     backend.enqueue_upload_job(job_id)
 
 
-def enqueue_exam_job(job_id: str, *, backend) -> None:
+def enqueue_exam_job(job_id: str, *, backend: QueueBackend) -> None:
     backend.enqueue_exam_job(job_id)
 
 
-def enqueue_profile_update(payload: dict, *, backend) -> None:
+def enqueue_profile_update(payload: Dict[str, Any], *, backend: QueueBackend) -> None:
     backend.enqueue_profile_update(payload)
 
 
-def enqueue_chat_job(job_id: str, lane_id=None, *, backend):
+def enqueue_chat_job(
+    job_id: str,
+    lane_id: Optional[str] = None,
+    *,
+    backend: QueueBackend,
+) -> Dict[str, Any]:
     return backend.enqueue_chat_job(job_id, lane_id=lane_id)
 
 
-def scan_pending_upload_jobs(*, backend) -> int:
+def scan_pending_upload_jobs(*, backend: QueueBackend) -> int:
     return int(backend.scan_pending_upload_jobs() or 0)
 
 
-def scan_pending_exam_jobs(*, backend) -> int:
+def scan_pending_exam_jobs(*, backend: QueueBackend) -> int:
     return int(backend.scan_pending_exam_jobs() or 0)
 
 
-def scan_pending_chat_jobs(*, backend) -> int:
+def scan_pending_chat_jobs(*, backend: QueueBackend) -> int:
     return int(backend.scan_pending_chat_jobs() or 0)
 
 
 def start_runtime(
     *,
-    backend=None,
+    backend: Optional[QueueBackend] = None,
     require_redis: Optional[Callable[[], None]] = None,
     is_pytest: Optional[bool] = None,
 ) -> None:
@@ -63,7 +73,7 @@ def start_runtime(
     backend.start()
 
 
-def stop_runtime(*, backend=None) -> None:
+def stop_runtime(*, backend: Optional[QueueBackend] = None) -> None:
     if backend is None:
         backend = get_queue_backend(tenant_id=settings.tenant_id() or None)
     backend.stop()
