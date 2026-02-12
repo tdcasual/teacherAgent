@@ -79,7 +79,12 @@ logging.getLogger().addFilter(RequestIdFilter())
 async def _set_core_context(request: Request, call_next):
     rid = request.headers.get("x-request-id") or new_request_id()
     rid_token = REQUEST_ID.set(rid)
-    core_token = CURRENT_CORE.set(_core)
+    state = getattr(request.app, "state", None)
+    core_from_state = getattr(state, "core", None) if state is not None else None
+    container = getattr(state, "container", None) if state is not None else None
+    core_from_container = getattr(container, "core", None) if container is not None else None
+    active_core = core_from_container or core_from_state or _core
+    core_token = CURRENT_CORE.set(active_core)
     principal_token = None
     try:
         principal = get_current_principal()
