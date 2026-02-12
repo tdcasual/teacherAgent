@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import UploadFile
 
@@ -8,7 +8,7 @@ from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, Up
 from .deps import AssignmentApplicationDeps
 
 
-async def list_assignments(*, deps: AssignmentApplicationDeps):
+async def list_assignments(*, deps: AssignmentApplicationDeps) -> Any:
     return await deps.list_assignments()
 
 
@@ -17,21 +17,21 @@ async def get_teacher_assignment_progress(
     *,
     include_students: bool,
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.teacher_assignment_progress(assignment_id, include_students)
 
 
-async def get_teacher_assignments_progress(*, date: Optional[str], deps: AssignmentApplicationDeps):
+async def get_teacher_assignments_progress(*, date: Optional[str], deps: AssignmentApplicationDeps) -> Any:
     return await deps.teacher_assignments_progress(date)
 
 
 async def post_assignment_requirements(
     req: AssignmentRequirementsRequest, *, deps: AssignmentApplicationDeps
-):
+) -> Any:
     return await deps.assignment_requirements(req)
 
 
-async def get_assignment_requirements(assignment_id: str, *, deps: AssignmentApplicationDeps):
+async def get_assignment_requirements(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_requirements_get(assignment_id)
 
 
@@ -47,7 +47,7 @@ async def upload_assignment_legacy(
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.assignment_upload_legacy(
         assignment_id=assignment_id,
         date=date,
@@ -74,7 +74,7 @@ async def upload_assignment_start(
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.assignment_upload_start(
         assignment_id=assignment_id,
         date=date,
@@ -89,21 +89,21 @@ async def upload_assignment_start(
     )
 
 
-async def get_assignment_upload_status(job_id: str, *, deps: AssignmentApplicationDeps):
+async def get_assignment_upload_status(job_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_upload_status(job_id)
 
 
-async def get_assignment_upload_draft(job_id: str, *, deps: AssignmentApplicationDeps):
+async def get_assignment_upload_draft(job_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_upload_draft(job_id)
 
 
 async def save_assignment_upload_draft(
     req: UploadDraftSaveRequest, *, deps: AssignmentApplicationDeps
-):
+) -> Any:
     return await deps.assignment_upload_draft_save(req)
 
 
-async def confirm_assignment_upload(req: UploadConfirmRequest, *, deps: AssignmentApplicationDeps):
+async def confirm_assignment_upload(req: UploadConfirmRequest, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_upload_confirm(req)
 
 
@@ -112,7 +112,7 @@ async def download_assignment_file(
     file: str,
     *,
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.assignment_download(assignment_id, file)
 
 
@@ -124,7 +124,7 @@ async def get_assignment_today(
     generate: bool,
     per_kp: int,
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.assignment_today(
         student_id=student_id,
         date=date,
@@ -134,7 +134,7 @@ async def get_assignment_today(
     )
 
 
-async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps):
+async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_detail(assignment_id)
 
 
@@ -154,7 +154,7 @@ async def post_generate_assignment(
     source: Optional[str],
     requirements_json: Optional[str],
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.generate_assignment(
         assignment_id=assignment_id,
         kp=kp,
@@ -172,7 +172,7 @@ async def post_generate_assignment(
     )
 
 
-async def post_render_assignment(assignment_id: str, *, deps: AssignmentApplicationDeps):
+async def post_render_assignment(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.render_assignment(assignment_id)
 
 
@@ -186,7 +186,7 @@ async def post_assignment_questions_ocr(
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentApplicationDeps,
-):
+) -> Any:
     return await deps.assignment_questions_ocr(
         assignment_id=assignment_id,
         files=files,
