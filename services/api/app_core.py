@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 import uuid
-from contextlib import contextmanager
 from datetime import datetime
 import hashlib
 from pathlib import Path
@@ -559,67 +558,34 @@ from .context_runtime_facade import (
 )
 from .context_io_facade import *  # noqa: F401,F403
 from .context_io_facade import _normalize_excel_cell_impl
+from .chat_limits import (
+    acquire_limiters as _acquire_limiters_impl,
+    student_inflight_guard as _student_inflight_guard_impl,
+    trim_messages as _trim_messages_impl,
+)
 
 
-@contextmanager
 def _limit(limiter: Any):
-    semas: List[Any]
-    if isinstance(limiter, (list, tuple)):
-        semas = list(limiter)
-    else:
-        semas = [limiter]
-    acquired: List[Any] = []
-    for sema in semas:
-        sema.acquire()
-        acquired.append(sema)
-    try:
-        yield
-    finally:
-        for sema in reversed(acquired):
-            sema.release()
+    return _acquire_limiters_impl(limiter)
 
 def _trim_messages(messages: List[Dict[str, Any]], role_hint: Optional[str] = None) -> List[Dict[str, Any]]:
-    if not messages:
-        return []
-    if role_hint == "student":
-        max_messages = CHAT_MAX_MESSAGES_STUDENT
-    elif role_hint == "teacher":
-        max_messages = CHAT_MAX_MESSAGES_TEACHER
-    else:
-        max_messages = CHAT_MAX_MESSAGES
-    trimmed: List[Dict[str, Any]] = []
-    for msg in messages[-max_messages:]:
-        role = msg.get("role")
-        content = msg.get("content") or ""
-        if isinstance(content, str) and len(content) > CHAT_MAX_MESSAGE_CHARS:
-            content = content[:CHAT_MAX_MESSAGE_CHARS] + "…"
-        trimmed.append({"role": role, "content": content})
-    return trimmed
+    return _trim_messages_impl(
+        messages,
+        role_hint=role_hint,
+        max_messages=CHAT_MAX_MESSAGES,
+        max_messages_student=CHAT_MAX_MESSAGES_STUDENT,
+        max_messages_teacher=CHAT_MAX_MESSAGES_TEACHER,
+        max_chars=CHAT_MAX_MESSAGE_CHARS,
+    )
 
 
-@contextmanager
 def _student_inflight(student_id: Optional[str]):
-    if not student_id:
-        yield True
-        return
-    allowed = True
-    with _STUDENT_INFLIGHT_LOCK:
-        cur = _STUDENT_INFLIGHT.get(student_id, 0)
-        if cur >= CHAT_STUDENT_INFLIGHT_LIMIT:
-            allowed = False
-        else:
-            _STUDENT_INFLIGHT[student_id] = cur + 1
-    try:
-        yield allowed
-    finally:
-        if not allowed:
-            return
-        with _STUDENT_INFLIGHT_LOCK:
-            cur = _STUDENT_INFLIGHT.get(student_id, 0)
-            if cur <= 1:
-                _STUDENT_INFLIGHT.pop(student_id, None)
-            else:
-                _STUDENT_INFLIGHT[student_id] = cur - 1
+    return _student_inflight_guard_impl(
+        student_id=student_id,
+        inflight=_STUDENT_INFLIGHT,
+        lock=_STUDENT_INFLIGHT_LOCK,
+        limit=CHAT_STUDENT_INFLIGHT_LIMIT,
+    )
 
 def _setup_diag_logger() -> Optional[logging.Logger]:
     if not DIAG_LOG_ENABLED:
