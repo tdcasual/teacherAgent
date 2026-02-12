@@ -140,9 +140,9 @@ export default function StudentSessionSidebar(props: Props) {
         onClick={() => setSidebarOpen(false)}
       />
       <aside className={`session-sidebar ${sidebarOpen ? 'open' : 'collapsed'}`}>
-        <div className="session-sidebar-header">
+        <div className="flex justify-between items-center gap-1.5 max-[900px]:sticky max-[900px]:top-0 max-[900px]:z-1 max-[900px]:bg-white max-[900px]:pb-1.5">
           <strong>历史会话</strong>
-          <div className="session-sidebar-actions">
+          <div className="flex items-center gap-1.5 [&_.ghost]:px-[9px] [&_.ghost]:py-1 [&_.ghost]:text-[11px]">
             <button type="button" className="ghost" onClick={startNewStudentSession}>
               新建
             </button>
@@ -159,19 +159,19 @@ export default function StudentSessionSidebar(props: Props) {
             </button>
           </div>
         </div>
-        <div className="session-search">
-          <input value={historyQuery} onChange={(e) => setHistoryQuery(e.target.value)} placeholder="搜索会话" disabled={!verifiedStudent} />
+        <div className="grid gap-1.5 max-[900px]:sticky max-[900px]:top-[34px] max-[900px]:z-1 max-[900px]:bg-white max-[900px]:pb-1">
+          <input className="!px-2.5 !py-2 !rounded-[10px] !text-[13px]" value={historyQuery} onChange={(e) => setHistoryQuery(e.target.value)} placeholder="搜索会话" disabled={!verifiedStudent} />
         </div>
-        {!verifiedStudent && <div className="history-hint">请先完成姓名验证后查看历史记录。</div>}
+        {!verifiedStudent && <div className="text-xs text-muted">请先完成姓名验证后查看历史记录。</div>}
         {historyError && <div className="status err">{historyError}</div>}
         {verifiedStudent && !historyLoading && visibleSessionCount === 0 && !historyError && (
-          <div className="history-hint">{showArchivedSessions ? '暂无归档会话。' : '暂无历史记录。'}</div>
+          <div className="text-xs text-muted">{showArchivedSessions ? '暂无归档会话。' : '暂无历史记录。'}</div>
         )}
-        <div className="session-groups">
+        <div className="session-groups flex flex-col gap-2 overflow-auto min-h-0 flex-1 pr-1">
           {groupedSessions.map((group) => (
-            <div key={group.key} className="session-group">
-              <div className="session-group-title">{group.label}</div>
-              <div className="session-list">
+            <div key={group.key} className="flex flex-col gap-1">
+              <div className="text-xs text-muted px-0.5">{group.label}</div>
+              <div className="flex flex-col gap-1.5">
                 {group.items.map((item) => {
                   const sid = item.session_id
                   const isActive = sid === activeSessionId
@@ -182,28 +182,33 @@ export default function StudentSessionSidebar(props: Props) {
                   const triggerId = `${menuDomIdBase}-trigger`
                   const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                   return (
-                    <div key={sid} className={`session-item ${isActive ? 'active' : ''}`}>
+                    <div
+                      key={sid}
+                      className={`relative rounded-xl border px-2.5 py-2 transition-[border-color,background] duration-150 max-[900px]:px-[9px] max-[900px]:py-2 ${
+                        isActive
+                          ? 'border-[#86d6c4] bg-[#f4fbf8]'
+                          : 'border-border bg-white hover:border-[#cfd4dc] hover:bg-[#fcfcfd]'
+                      }`}
+                    >
                       <button
                         type="button"
-                        className="session-select"
-                        onClick={() => {
-                          onSelectSession(sid)
-                        }}
+                        className="w-full border-none bg-transparent pr-7 text-left cursor-pointer block"
+                        onClick={() => onSelectSession(sid)}
                       >
-                        <div className="session-main">
-                          <div className="session-id">{getSessionTitle(sid)}</div>
-                          <div className="session-meta">
+                        <div className="grid gap-0.5">
+                          <div className="text-[13px] font-semibold text-ink leading-[1.35] whitespace-nowrap overflow-hidden text-ellipsis">{getSessionTitle(sid)}</div>
+                          <div className="text-[11px] text-muted leading-[1.3]">
                             {(item.message_count || 0).toString()} 条{updatedLabel ? ` · ${updatedLabel}` : ''}
                           </div>
                         </div>
-                        {item.preview ? <div className="session-preview">{item.preview}</div> : null}
+                        {item.preview ? <div className="text-xs text-muted mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{item.preview}</div> : null}
                       </button>
-                      <div className="session-menu-wrap">
+                      <div className="absolute top-1.5 right-1.5">
                         <button
                           type="button"
                           id={triggerId}
                           ref={(node) => setSessionMenuTriggerRef(sid, node)}
-                          className="session-menu-trigger"
+                          className="w-[22px] h-[22px] border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151]"
                           aria-haspopup="menu"
                           aria-expanded={isMenuOpen}
                           aria-controls={menuId}
@@ -220,7 +225,7 @@ export default function StudentSessionSidebar(props: Props) {
                           <div
                             id={menuId}
                             ref={(node) => setSessionMenuRef(sid, node)}
-                            className="session-menu"
+                            className="absolute top-[26px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-0.5 z-2 max-[900px]:min-w-[112px]"
                             role="menu"
                             aria-orientation="vertical"
                             aria-labelledby={triggerId}
@@ -229,20 +234,16 @@ export default function StudentSessionSidebar(props: Props) {
                             <button
                               type="button"
                               role="menuitem"
-                              className="session-menu-item"
-                              onClick={() => {
-                                renameSession(sid)
-                              }}
+                              className="session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left text-[#374151] cursor-pointer hover:bg-surface-soft"
+                              onClick={() => renameSession(sid)}
                             >
                               重命名
                             </button>
                             <button
                               type="button"
                               role="menuitem"
-                              className={`session-menu-item${isArchived ? '' : ' danger'}`}
-                              onClick={() => {
-                                toggleSessionArchive(sid)
-                              }}
+                              className={`session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left cursor-pointer ${isArchived ? 'text-[#374151] hover:bg-surface-soft' : 'text-[#b42318] hover:bg-[#fff1f1]'}`}
+                              onClick={() => toggleSessionArchive(sid)}
                             >
                               {isArchived ? '恢复' : '归档'}
                             </button>
@@ -257,14 +258,14 @@ export default function StudentSessionSidebar(props: Props) {
           ))}
         </div>
         {verifiedStudent && (
-          <div className="history-footer">
+          <div className="flex gap-2 items-start flex-wrap">
             <button type="button" className="ghost" disabled={!historyHasMore || historyLoading} onClick={() => void refreshSessions('more')}>
               {historyLoading ? '加载中…' : historyHasMore ? '加载更多会话' : '已显示全部会话'}
             </button>
           </div>
         )}
         {verifiedStudent && activeSessionId && (
-          <div className="history-footer">
+          <div className="flex gap-2 items-start flex-wrap">
             <button
               type="button"
               className="ghost"
@@ -277,61 +278,61 @@ export default function StudentSessionSidebar(props: Props) {
           </div>
         )}
 
-        <section className="student-side-card">
-          <div className="student-side-header">
+        <section className="border-t border-border pt-2.5 grid gap-2">
+          <div className="flex justify-between items-center gap-2">
             <strong>学习信息</strong>
             <button type="button" className="ghost" onClick={() => setVerifyOpen((prev) => !prev)}>
               {verifyOpen ? '收起' : '展开'}
             </button>
           </div>
           {verifiedStudent ? (
-            <div className="history-hint">
+            <div className="text-xs text-muted">
               已验证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}
               {verifiedStudent.student_name}
             </div>
           ) : (
-            <div className="history-hint">请先完成姓名验证后开始提问。</div>
+            <div className="text-xs text-muted">请先完成姓名验证后开始提问。</div>
           )}
           {verifyOpen && (
-            <form className="verify-form compact" onSubmit={handleVerify}>
-              <div className="verify-row">
+            <form className="grid gap-2.5" onSubmit={handleVerify}>
+              <div className="grid gap-1.5">
                 <label>姓名</label>
                 <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="例如：刘昊然" />
               </div>
-              <div className="verify-row">
+              <div className="grid gap-1.5">
                 <label>班级（重名时必填）</label>
                 <input value={classInput} onChange={(e) => setClassInput(e.target.value)} placeholder="例如：高二2403班" />
               </div>
-              <button type="submit" disabled={verifying}>
+              <button type="submit" className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer" disabled={verifying}>
                 {verifying ? '验证中…' : '确认身份'}
               </button>
               {verifyError && <div className="status err">{verifyError}</div>}
             </form>
           )}
           {verifiedStudent && (
-            <div className="assignment-compact">
-              <div className="assignment-meta">今日作业（{todayAssignment?.date || todayDate()}）</div>
-              {assignmentLoading && <div className="assignment-status">加载中...</div>}
-              {assignmentError && <div className="assignment-status err">{assignmentError}</div>}
-              {!assignmentLoading && !todayAssignment && !assignmentError && <div className="assignment-empty">今日暂无作业。</div>}
+            <div className="grid gap-1.5">
+              <div className="text-xs text-muted">今日作业（{todayAssignment?.date || todayDate()}）</div>
+              {assignmentLoading && <div className="text-xs text-muted">加载中...</div>}
+              {assignmentError && <div className="text-xs text-muted">{assignmentError}</div>}
+              {!assignmentLoading && !todayAssignment && !assignmentError && <div className="text-xs text-muted">今日暂无作业。</div>}
               {todayAssignment && (
                 <>
-                  <div className="assignment-meta">
+                  <div className="text-xs text-muted">
                     作业编号：{todayAssignment.assignment_id || '-'} · 题数：{todayAssignment.question_count || 0}
                   </div>
                   {todayAssignment.meta?.target_kp?.length ? (
-                    <div className="assignment-meta">知识点：{todayAssignment.meta.target_kp.join('，')}</div>
+                    <div className="text-xs text-muted">知识点：{todayAssignment.meta.target_kp.join('，')}</div>
                   ) : null}
                   {todayAssignment.delivery?.files?.length ? (
-                    <div className="download-list">
+                    <div className="grid gap-1.5">
                       {todayAssignment.delivery.files.map((file) => (
-                        <a key={file.url} className="download-link" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
+                        <a key={file.url} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-[#ecfaf5] text-[#0f766e] no-underline text-[13px] border border-[#cff0e6]" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
                           下载：{file.name}
                         </a>
                       ))}
                     </div>
                   ) : (
-                    <div className="assignment-note">在聊天中输入“开始今天作业”进入讨论。</div>
+                    <div className="text-xs text-muted">在聊天中输入"开始今天作业"进入讨论。</div>
                   )}
                 </>
               )}

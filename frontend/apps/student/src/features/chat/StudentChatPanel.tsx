@@ -40,24 +40,30 @@ export default function StudentChatPanel(props: Props) {
   const composerDisabled = !verifiedStudent || Boolean(pendingChatJobId)
 
   return (
-    <main className="chat-shell" data-testid="student-chat-panel">
-      <div className="messages" ref={messagesRef}>
-        <div className="messages-inner">
+    <main className="chat-shell h-full min-h-0 grid grid-rows-[minmax(0,1fr)_auto] bg-surface relative" data-testid="student-chat-panel">
+      <div className="messages overflow-auto pt-[18px] pb-2 bg-surface max-[900px]:pt-3.5 max-[900px]:pb-1.5 max-[900px]:[-webkit-overflow-scrolling:touch] max-[900px]:[overscroll-behavior:contain]" ref={messagesRef}>
+        <div className="max-w-[860px] mx-auto px-5 pb-3.5 grid gap-3.5 max-[900px]:px-3.5 max-[900px]:pb-3 max-[900px]:gap-3">
           {renderedMessages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.role}`}>
-              <div className="bubble">
-                <div className="meta">
+            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={
+                  msg.role === 'user'
+                    ? 'max-w-[min(760px,90%)] rounded-[18px] px-3.5 py-2.5 border border-[#e1e6eb] bg-[#eef1f4] shadow-sm max-[900px]:max-w-[min(100%,92vw)]'
+                    : 'max-w-[760px] bg-transparent p-[2px_0]'
+                }
+              >
+                <div className="text-[11px] text-muted mb-1.5">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div className="text markdown leading-[1.6] break-anywhere" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}
           {sending && !pendingChatJobId && (
-            <div className="message assistant">
-              <div className="bubble typing">
-                <div className="meta">助手 · {nowTime()}</div>
-                <div className="text">正在思考…</div>
+            <div className="flex justify-start">
+              <div className="max-w-[760px] bg-[#f4f7fb] border border-dashed border-[#cfd8e3] rounded-[14px] px-3 py-2">
+                <div className="text-[11px] text-muted mb-1.5">助手 · {nowTime()}</div>
+                <div className="leading-[1.6] break-anywhere">正在思考…</div>
               </div>
             </div>
           )}
@@ -68,7 +74,7 @@ export default function StudentChatPanel(props: Props) {
       {!isNearBottom && (
         <button
           type="button"
-          className="new-message-indicator"
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-accent text-white border-none rounded-2xl px-4 py-1.5 text-[13px] cursor-pointer shadow-sm z-5 animate-[fadeInUp_0.2s_ease] hover:opacity-90"
           onClick={scrollToBottom}
           aria-label="滚动到最新消息"
         >
@@ -76,8 +82,8 @@ export default function StudentChatPanel(props: Props) {
         </button>
       )}
 
-      <form className={`composer ${composerDisabled ? 'disabled' : ''}`} onSubmit={handleSend}>
-        <div className="composer-inner">
+      <form className={`composer border-t border-border px-5 pt-3.5 pb-[18px] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.95)_32%,#fff_60%)] max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-3.5 ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
+        <div className="max-w-[860px] mx-auto border border-border rounded-[20px] bg-white shadow-sm px-3 py-2.5 max-[900px]:max-w-full">
           <textarea
             ref={inputRef}
             value={input}
@@ -86,10 +92,11 @@ export default function StudentChatPanel(props: Props) {
             placeholder={verifiedStudent ? '输入问题，例如：牛顿第三定律是什么' : '请先填写姓名完成验证'}
             rows={1}
             disabled={composerDisabled}
+            className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.45] focus:!border-none focus:!shadow-none disabled:cursor-not-allowed"
           />
-          <div className="composer-actions">
-            <span className="composer-hint">{composerHint}</span>
-            <button type="submit" className="send-btn" disabled={sending || composerDisabled}>
+          <div className="flex items-center justify-between gap-2.5 mt-1">
+            <span className="composer-hint text-xs text-muted">{composerHint}</span>
+            <button type="submit" className="border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-white transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed" disabled={sending || composerDisabled}>
               发送
             </button>
           </div>

@@ -7,7 +7,7 @@ type Props = {
 export default function StudentWorkbench(props: Props) {
   const { children } = props
   return (
-    <section className="student-workbench" data-testid="student-workbench">
+    <section className="min-h-0 overflow-hidden" data-testid="student-workbench">
       {children}
     </section>
   )

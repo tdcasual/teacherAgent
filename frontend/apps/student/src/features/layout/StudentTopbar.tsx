@@ -18,9 +18,9 @@ export default function StudentTopbar(props: Props) {
   } = props
 
   return (
-    <header className="topbar">
-      <div className="top-left">
-        <div className="brand">物理学习助手 · 学生端</div>
+    <header className="flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between">
+        <div className="font-bold text-base tracking-[0.2px] max-[900px]:text-sm">物理学习助手 · 学生端</div>
         <button className="ghost" type="button" onClick={() => setSidebarOpen((prev) => !prev)}>
           {sidebarOpen ? '收起会话' : '展开会话'}
         </button>
@@ -28,10 +28,10 @@ export default function StudentTopbar(props: Props) {
           新会话
         </button>
       </div>
-      <div className="top-actions">
+      <div className="flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between">
         <div className="role-badge student">身份：学生</div>
         {verifiedStudent?.student_id ? (
-          <span className="muted" style={{ fontSize: 12 }}>
+          <span className="muted">
             当前学生：{verifiedStudent.student_id}
           </span>
         ) : null}

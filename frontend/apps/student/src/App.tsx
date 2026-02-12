@@ -1099,7 +1099,7 @@ export default function App() {
   })
 
   return (
-    <div className="app" ref={appRef}>
+    <div className="flex h-full min-h-screen flex-col bg-bg" ref={appRef}>
       <StudentTopbar verifiedStudent={verifiedStudent} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} startNewStudentSession={startNewStudentSession} />
       <StudentSessionShell
         sidebarOpen={sidebarOpen}
