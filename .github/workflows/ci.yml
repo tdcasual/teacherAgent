@@ -31,40 +31,56 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r services/api/requirements.txt pytest ruff black mypy
+          pip install -r services/api/requirements.txt pytest pytest-cov ruff black mypy
 
       - name: Ruff (backend quality gate)
         run: |
           python -m ruff check \
             services/api/settings.py \
             services/api/runtime/runtime_manager.py \
-            tests/test_ci_workflow_quality.py
+            services/api/routes \
+            tests/test_ci_workflow_quality.py \
+            tests/test_ci_backend_scope.py
 
       - name: Black (backend quality gate)
         run: |
           python -m black --check \
             services/api/settings.py \
             services/api/runtime/runtime_manager.py \
-            tests/test_ci_workflow_quality.py
+            tests/test_ci_workflow_quality.py \
+            tests/test_ci_backend_scope.py
 
       - name: Mypy (backend quality gate)
         run: |
           python -m mypy \
+            --ignore-missing-imports \
             --follow-imports=skip \
             services/api/settings.py \
-            services/api/runtime/runtime_manager.py
+            services/api/runtime/runtime_manager.py \
+            services/api/auth_service.py \
+            services/api/chat_job_state_machine.py \
+            services/api/rate_limit.py \
+            services/api/chat_status_service.py \
+            services/api/chat_idempotency_service.py \
+            services/api/llm_routing.py \
+            services/api/teacher_provider_registry_service.py
 
       - name: Run backend smoke tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m pytest -q \
+            --cov=services/api --cov-report=term-missing \
             tests/test_app_core_surface.py \
             tests/test_chat_routes.py \
             tests/test_exam_routes.py \
             tests/test_student_routes.py \
             tests/test_docs_architecture_presence.py \
-            tests/test_refactor_report.py
+            tests/test_refactor_report.py \
+            tests/test_auth_service.py \
+            tests/test_teacher_memory_core.py \
+            tests/test_chat_job_state_machine.py \
+            tests/test_rate_limit.py
 
       - name: Run maintainability guardrails
         env:
@@ -77,6 +93,8 @@ jobs:
             tests/test_chat_wiring_structure.py \
             tests/test_exam_wiring_structure.py \
             tests/test_misc_wiring_structure.py \
+            tests/test_no_duplicate_route_files.py \
+            tests/test_no_star_imports_guardrail.py \
             tests/test_teacher_student_wiring_structure.py \
             tests/test_worker_skill_wiring_structure.py \
             tests/test_teacher_frontend_structure.py \
