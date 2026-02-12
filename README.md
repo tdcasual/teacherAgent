@@ -65,6 +65,20 @@ npm install
 npm run dev:teacher
 ```
 
+## 代码质量检查（推荐）
+提交前建议先执行一轮质量检查，减少 CI 返工：
+
+```bash
+# 后端
+python3 -m ruff check services/api/settings.py services/api/runtime/runtime_manager.py tests/test_ci_workflow_quality.py
+python3 -m black --check services/api/settings.py services/api/runtime/runtime_manager.py tests/test_ci_workflow_quality.py
+python3 -m mypy --follow-imports=skip services/api/settings.py services/api/runtime/runtime_manager.py
+
+# 前端
+cd frontend
+npm run typecheck
+```
+
 ---
 
 如果你准备把它用于日常教学，建议下一步先看 `docs/http_api.md`，再按你的教学场景逐步开启对应模块。

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-smoke:
+  backend-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,7 +31,28 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r services/api/requirements.txt pytest
+          pip install -r services/api/requirements.txt pytest ruff black mypy
+
+      - name: Ruff (backend quality gate)
+        run: |
+          python -m ruff check \
+            services/api/settings.py \
+            services/api/runtime/runtime_manager.py \
+            tests/test_ci_workflow_quality.py
+
+      - name: Black (backend quality gate)
+        run: |
+          python -m black --check \
+            services/api/settings.py \
+            services/api/runtime/runtime_manager.py \
+            tests/test_ci_workflow_quality.py
+
+      - name: Mypy (backend quality gate)
+        run: |
+          python -m mypy \
+            --follow-imports=skip \
+            services/api/settings.py \
+            services/api/runtime/runtime_manager.py
 
       - name: Run backend smoke tests
         run: |
