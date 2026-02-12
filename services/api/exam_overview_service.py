@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,25 @@ def _compute_totals_from_rows(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "class_name": str(row.get("class_name") or "").strip(),
             }
     return {"totals": totals, "students": students}
+
+
+def _normalize_fallback_questions(payload: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    raw = payload.get("questions")
+    if not isinstance(raw, dict):
+        return {}
+
+    questions: Dict[str, Dict[str, Any]] = {}
+    for question_id, item in raw.items():
+        if isinstance(item, dict):
+            questions[str(question_id)] = dict(item)
+    return questions
+
+
+def _normalize_fallback_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = payload.get("rows")
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, dict)]
 
 
 def _collect_subject_fallback(
@@ -195,8 +214,8 @@ def _resolve_effective_scores(
         if fallback:
             score_mode = "subject"
             score_mode_source = "subject_from_scores_file"
-            questions = fallback.get("questions") if isinstance(fallback.get("questions"), dict) else {}
-            rows = fallback.get("rows") if isinstance(fallback.get("rows"), list) else []
+            questions = _normalize_fallback_questions(fallback)
+            rows = _normalize_fallback_rows(fallback)
             totals_result = _compute_totals_from_rows(rows)
             meta["score_mode"] = "subject"
             meta["score_mode_source"] = score_mode_source
@@ -357,9 +376,9 @@ def exam_students_list(exam_id: str, limit: int, deps: ExamOverviewDeps) -> Dict
         deps=deps,
     )
     if score_mode == "subject" and score_mode_source == "subject_from_scores_file":
-        totals: Dict[str, float] = totals_result["totals"]
-        students_meta: Dict[str, Dict[str, str]] = totals_result["students"]
-        items = []
+        totals = cast(Dict[str, float], totals_result["totals"])
+        students_meta = cast(Dict[str, Dict[str, str]], totals_result["students"])
+        items: List[Dict[str, Any]] = []
         for student_id, total_score in totals.items():
             meta = students_meta.get(student_id) or {}
             items.append(
@@ -371,7 +390,7 @@ def exam_students_list(exam_id: str, limit: int, deps: ExamOverviewDeps) -> Dict
                 }
             )
 
-        items.sort(key=lambda x: x["total_score"], reverse=True)
+        items.sort(key=lambda x: float(x.get("total_score") or 0.0), reverse=True)
         total_students = len(items)
         for idx, item in enumerate(items, start=1):
             item["rank"] = idx
@@ -389,8 +408,8 @@ def exam_students_list(exam_id: str, limit: int, deps: ExamOverviewDeps) -> Dict
         return {"error": "responses_missing", "exam_id": exam_id}
 
     totals_result = deps.compute_exam_totals(responses_path)
-    totals: Dict[str, float] = totals_result["totals"]
-    students_meta: Dict[str, Dict[str, str]] = totals_result["students"]
+    totals = cast(Dict[str, float], totals_result["totals"])
+    students_meta = cast(Dict[str, Dict[str, str]], totals_result["students"])
     items = []
     for student_id, total_score in totals.items():
         meta = students_meta.get(student_id) or {}
@@ -403,7 +422,7 @@ def exam_students_list(exam_id: str, limit: int, deps: ExamOverviewDeps) -> Dict
             }
         )
 
-    items.sort(key=lambda x: x["total_score"], reverse=True)
+    items.sort(key=lambda x: float(x.get("total_score") or 0.0), reverse=True)
     total_students = len(items)
     for idx, item in enumerate(items, start=1):
         item["rank"] = idx
