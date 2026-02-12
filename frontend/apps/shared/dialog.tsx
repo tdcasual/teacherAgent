@@ -1,53 +1,60 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 type DialogFrameProps = {
-  open: boolean
-  title: string
-  description?: string
-  onCancel: () => void
-  children: ReactNode
-  initialFocusRef?: React.RefObject<HTMLElement | null>
-}
+  open: boolean;
+  title: string;
+  description?: string;
+  onCancel: () => void;
+  children: ReactNode;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
+};
 
-function DialogFrame({ open, title, description, onCancel, children, initialFocusRef }: DialogFrameProps) {
-  const titleId = useId()
-  const descriptionId = useId()
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
-  const dialogRef = useRef<HTMLDivElement | null>(null)
+function DialogFrame({
+  open,
+  title,
+  description,
+  onCancel,
+  children,
+  initialFocusRef,
+}: DialogFrameProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open) return
-    previouslyFocusedRef.current = (document.activeElement as HTMLElement | null) || null
+    if (!open) return;
+    previouslyFocusedRef.current = (document.activeElement as HTMLElement | null) || null;
 
     const focusTimer = window.setTimeout(() => {
-      initialFocusRef?.current?.focus?.()
-      if (document.activeElement) return
-      dialogRef.current?.focus()
-    }, 0)
+      initialFocusRef?.current?.focus?.();
+      if (document.activeElement) return;
+      dialogRef.current?.focus();
+    }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      onCancel()
-    }
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onCancel();
+    };
 
-    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keydown', onKeyDown, true);
     return () => {
-      window.clearTimeout(focusTimer)
-      window.removeEventListener('keydown', onKeyDown, true)
-      previouslyFocusedRef.current?.focus?.()
-    }
-  }, [initialFocusRef, onCancel, open])
+      window.clearTimeout(focusTimer);
+      window.removeEventListener('keydown', onKeyDown, true);
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [initialFocusRef, onCancel, open]);
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div
       className="app-dialog-backdrop"
       onMouseDown={(event) => {
-        if (event.target !== event.currentTarget) return
-        onCancel()
+        if (event.target !== event.currentTarget) return;
+        onCancel();
       }}
     >
       <div
@@ -70,7 +77,7 @@ function DialogFrame({ open, title, description, onCancel, children, initialFocu
         {children}
       </div>
     </div>
-  )
+  );
 }
 
 export function ConfirmDialog({
@@ -83,29 +90,40 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: {
-  open: boolean
-  title: string
-  description?: string
-  confirmText: string
-  confirmTone?: 'primary' | 'danger'
-  cancelText?: string
-  onConfirm: () => void
-  onCancel: () => void
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmText: string;
+  confirmTone?: 'primary' | 'danger';
+  cancelText?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
 }) {
-  const confirmRef = useRef<HTMLButtonElement | null>(null)
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
 
   return (
-    <DialogFrame open={open} title={title} description={description} onCancel={onCancel} initialFocusRef={confirmRef}>
+    <DialogFrame
+      open={open}
+      title={title}
+      description={description}
+      onCancel={onCancel}
+      initialFocusRef={confirmRef}
+    >
       <div className="app-dialog-actions">
         <button type="button" className="app-dialog-btn" onClick={onCancel}>
           {cancelText}
         </button>
-        <button type="button" ref={confirmRef} className={`app-dialog-btn ${confirmTone}`} onClick={onConfirm}>
+        <button
+          type="button"
+          ref={confirmRef}
+          className={`app-dialog-btn ${confirmTone}`}
+          onClick={onConfirm}
+        >
           {confirmText}
         </button>
       </div>
     </DialogFrame>
-  )
+  );
 }
 
 export function PromptDialog({
@@ -120,32 +138,38 @@ export function PromptDialog({
   onConfirm,
   onCancel,
 }: {
-  open: boolean
-  title: string
-  description?: string
-  label?: string
-  placeholder?: string
-  confirmText?: string
-  cancelText?: string
-  defaultValue?: string
-  onConfirm: (value: string) => void
-  onCancel: () => void
+  open: boolean;
+  title: string;
+  description?: string;
+  label?: string;
+  placeholder?: string;
+  confirmText?: string;
+  cancelText?: string;
+  defaultValue?: string;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
 }) {
-  const [value, setValue] = useState(defaultValue)
-  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [value, setValue] = useState(defaultValue);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!open) return
-    setValue(defaultValue)
-  }, [defaultValue, open])
+    if (!open) return;
+    setValue(defaultValue);
+  }, [defaultValue, open]);
 
   const onSubmit = (event: FormEvent) => {
-    event.preventDefault()
-    onConfirm(value)
-  }
+    event.preventDefault();
+    onConfirm(value);
+  };
 
   return (
-    <DialogFrame open={open} title={title} description={description} onCancel={onCancel} initialFocusRef={inputRef}>
+    <DialogFrame
+      open={open}
+      title={title}
+      description={description}
+      onCancel={onCancel}
+      initialFocusRef={inputRef}
+    >
       <form className="app-dialog-form" onSubmit={onSubmit}>
         <label>
           <span>{label}</span>
@@ -166,6 +190,5 @@ export function PromptDialog({
         </div>
       </form>
     </DialogFrame>
-  )
+  );
 }
-
