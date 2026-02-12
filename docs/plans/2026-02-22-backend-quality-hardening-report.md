@@ -8,7 +8,7 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 | Metric | Baseline | Current | Delta | Reduction |
 | --- | ---: | ---: | ---: | ---: |
 | Ruff errors (`ruff check services/api --statistics`) | 745 | 661 | -84 | 11.3% |
-| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 217 | -265 | 55.0% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 209 | -273 | 56.6% |
 | `services/api/app_core.py` line count | 700 | 595 | -105 | 15.0% |
 
 ## 2) Completed Changes
@@ -34,6 +34,7 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 17. Added return annotations for `services/api/exam/application.py` sync/async entrypoints and added a focused type gate.
 18. Cleared `services/api/skills/spec.py` mypy union-attr hotspots and added a focused type gate.
 19. Cleared `services/api/exam_range_service.py` `safe_int_arg` call-signature hotspots and added a focused type gate.
+20. Cleared `services/api/exam_overview_service.py` fallback normalization/sort typing hotspots and added a focused type gate.
 
 ## 3) Validation Evidence
 
@@ -45,6 +46,7 @@ Executed and passed (representative list):
 - `python3 -m pytest -q tests/test_app_core_structure.py tests/test_app_core_import_fanout.py tests/test_app_core_surface.py`
 - `python3 -m pytest -q tests/test_llm_routing_types.py tests/test_llm_routing.py tests/test_llm_routing_resolver.py tests/test_teacher_llm_routing_service.py`
 - `python3 -m pytest -q tests/test_exam_range_types.py tests/test_exam_range_service.py`
+- `python3 -m pytest -q tests/test_exam_overview_service.py tests/test_exam_overview_types.py`
 - `python3 -m ruff check services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py tests/test_queue_backend_factory.py tests/test_security_auth_hardening.py`
 - `python3 -m ruff check services/api/llm_routing.py tests/test_llm_routing_types.py tests/test_app_core_structure.py`
 - `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py services/api/llm_routing.py`
@@ -60,7 +62,7 @@ Metric collection commands:
 Criteria from the 2-week plan are partially met:
 
 1. Ruff reduction >=30%: **Not met** (current 11.3%).
-2. Mypy reduction >=35%: **Met** (current 55.0%).
+2. Mypy reduction >=35%: **Met** (current 56.6%).
 3. `app_core.py` <=500 lines: **Not met** (current 595).
 4. CI backend-quality guardrails integrated: **Met**.
 5. Newly added guardrail tests pass locally: **Met**.
