@@ -130,7 +130,7 @@ def list_all_student_profiles(deps: StudentDirectoryDeps) -> List[Dict[str, str]
 
 
 def list_all_student_ids(deps: StudentDirectoryDeps) -> List[str]:
-    return sorted([item.get("student_id") for item in list_all_student_profiles(deps) if item.get("student_id")])
+    return sorted([item["student_id"] for item in list_all_student_profiles(deps) if item.get("student_id")])
 
 
 def list_student_ids_by_class(class_name: str, deps: StudentDirectoryDeps) -> List[str]:
