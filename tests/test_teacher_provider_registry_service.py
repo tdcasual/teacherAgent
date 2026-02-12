@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from services.api.teacher_provider_registry_service import (
     TeacherProviderRegistryDeps,
+    _catalog,
     merged_model_registry,
     resolve_provider_target,
     teacher_provider_registry_create,
@@ -171,6 +171,22 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
             merged = merged_model_registry("t01", deps=deps)
             private_cfg = ((merged.get("providers") or {}).get("openai") or {})
             self.assertEqual(private_cfg.get("base_url"), "https://api.openai.com/v1")
+
+    def test_catalog_ignores_malformed_provider_entries(self):
+        malformed = {
+            "providers": {
+                "openai": None,
+                "qwen": {"modes": {"openai-chat": {"default_model": "qwen-max"}}},
+            },
+            "defaults": None,
+            "routing": None,
+        }
+        out = _catalog(malformed)
+        providers = out.get("providers") or []
+        self.assertEqual(len(providers), 1)
+        self.assertEqual((providers[0] or {}).get("provider"), "qwen")
+        self.assertEqual((out.get("defaults") or {}).get("provider"), "")
+        self.assertEqual(out.get("fallback_chain"), [])
 
 
 if __name__ == "__main__":

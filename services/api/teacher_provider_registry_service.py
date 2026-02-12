@@ -15,8 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
-import requests
-
+import requests  # type: ignore[import-untyped]
 
 _PROVIDER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$")
 _LOCKS_GUARD = threading.Lock()
@@ -37,6 +36,10 @@ def _as_str(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _as_bool(value: Any, default: bool) -> bool:
@@ -199,14 +202,17 @@ def _providers(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _catalog(registry: Dict[str, Any]) -> Dict[str, Any]:
-    providers_raw = registry.get("providers") if isinstance(registry.get("providers"), dict) else {}
+    providers_raw = _as_dict(registry.get("providers"))
     providers: List[Dict[str, Any]] = []
     for provider_name in sorted(providers_raw.keys()):
-        provider_cfg = providers_raw.get(provider_name) if isinstance(providers_raw.get(provider_name), dict) else {}
-        modes_raw = provider_cfg.get("modes") if isinstance(provider_cfg.get("modes"), dict) else {}
+        provider_cfg = _as_dict(providers_raw.get(provider_name))
+        # Ignore malformed provider entries so bad data does not pollute catalog output.
+        if not provider_cfg:
+            continue
+        modes_raw = _as_dict(provider_cfg.get("modes"))
         modes = []
         for mode_name in sorted(modes_raw.keys()):
-            mode_cfg = modes_raw.get(mode_name) if isinstance(modes_raw.get(mode_name), dict) else {}
+            mode_cfg = _as_dict(modes_raw.get(mode_name))
             modes.append(
                 {
                     "mode": mode_name,
@@ -222,8 +228,8 @@ def _catalog(registry: Dict[str, Any]) -> Dict[str, Any]:
                 "modes": modes,
             }
         )
-    defaults = registry.get("defaults") if isinstance(registry.get("defaults"), dict) else {}
-    routing_cfg = registry.get("routing") if isinstance(registry.get("routing"), dict) else {}
+    defaults = _as_dict(registry.get("defaults"))
+    routing_cfg = _as_dict(registry.get("routing"))
     return {
         "providers": providers,
         "defaults": {
@@ -375,7 +381,6 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
         return {"ok": False, "error": "invalid_base_url"}
     if not api_key:
         return {"ok": False, "error": "api_key_required"}
-    shared_providers = deps.model_registry.get("providers") if isinstance(deps.model_registry.get("providers"), dict) else {}
     # Allow overriding shared providers — private entry takes precedence in merged registry
 
     path = ensure_teacher_provider_registry(actor, deps=deps)
@@ -507,7 +512,7 @@ def resolve_private_provider_target(
     model_val = _as_str(model) or _as_str(provider.get("default_model"))
     if not model_val:
         return None
-    defaults = deps.model_registry.get("defaults") if isinstance(deps.model_registry.get("defaults"), dict) else {}
+    defaults = _as_dict(deps.model_registry.get("defaults"))
     return {
         "provider": provider_id,
         "mode": mode_val,
@@ -542,15 +547,15 @@ def resolve_shared_provider_target(
     deps: TeacherProviderRegistryDeps,
 ) -> Optional[Dict[str, Any]]:
     """Resolve base_url + headers for a shared (built-in) provider so we can probe its /models endpoint."""
-    providers_raw = deps.model_registry.get("providers") if isinstance(deps.model_registry.get("providers"), dict) else {}
-    prov_cfg = providers_raw.get(provider_id)
-    if not isinstance(prov_cfg, dict):
+    providers_raw = _as_dict(deps.model_registry.get("providers"))
+    prov_cfg = _as_dict(providers_raw.get(provider_id))
+    if not prov_cfg:
         return None
     if _as_bool(prov_cfg.get("private_provider"), False):
         return None
     mode_val = _as_str(mode) or "openai-chat"
-    modes = prov_cfg.get("modes") if isinstance(prov_cfg.get("modes"), dict) else {}
-    mode_cfg = modes.get(mode_val) if isinstance(modes.get(mode_val), dict) else {}
+    modes = _as_dict(prov_cfg.get("modes"))
+    mode_cfg = _as_dict(modes.get(mode_val))
 
     # Resolve base_url: mode env → provider env → mode static → provider static
     base_url = _as_str(deps.getenv(mode_cfg.get("base_url_env", ""), None)) or _as_str(deps.getenv(prov_cfg.get("base_url_env", ""), None))
@@ -571,7 +576,7 @@ def resolve_shared_provider_target(
         return None
 
     # Build headers based on auth type
-    auth = prov_cfg.get("auth") if isinstance(prov_cfg.get("auth"), dict) else {}
+    auth = _as_dict(prov_cfg.get("auth"))
     auth_type = _as_str(auth.get("type")) or "bearer"
     headers: Dict[str, str] = {"Content-Type": "application/json"}
     if auth_type == "bearer":
@@ -626,7 +631,8 @@ def teacher_provider_registry_probe_models(args: Dict[str, Any], *, deps: Teache
         if resp.status_code >= 400:
             return {"ok": False, "error": "probe_failed", "status_code": resp.status_code, "detail": (resp.text or "")[:400]}
         payload = resp.json() if resp.text else {}
-        models_raw = payload.get("data") if isinstance(payload, dict) and isinstance(payload.get("data"), list) else []
+        data_items = payload.get("data") if isinstance(payload, dict) else None
+        models_raw = data_items if isinstance(data_items, list) else []
         models = []
         for item in models_raw:
             if isinstance(item, dict):
