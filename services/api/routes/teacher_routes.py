@@ -22,7 +22,7 @@ def build_router(core) -> APIRouter:
     router = APIRouter()
 
     @router.get("/teacher/history/sessions")
-    async def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0):
+    def teacher_history_sessions(teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0):
         try:
             teacher_id = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -30,7 +30,7 @@ def build_router(core) -> APIRouter:
         return core._teacher_history_sessions_api_impl(teacher_id, limit=limit, cursor=cursor, deps=core._session_history_api_deps())
 
     @router.get("/teacher/session/view-state")
-    async def teacher_session_view_state(teacher_id: Optional[str] = None):
+    def teacher_session_view_state(teacher_id: Optional[str] = None):
         try:
             teacher_id = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -38,7 +38,7 @@ def build_router(core) -> APIRouter:
         return core._teacher_session_view_state_api_impl(teacher_id, deps=core._session_history_api_deps())
 
     @router.put("/teacher/session/view-state")
-    async def update_teacher_session_view_state(req: dict):
+    def update_teacher_session_view_state(req: dict):
         try:
             req = dict(req or {})
             req["teacher_id"] = resolve_teacher_scope(req.get("teacher_id"))
@@ -47,7 +47,7 @@ def build_router(core) -> APIRouter:
         return core._update_teacher_session_view_state_api_impl(req, deps=core._session_history_api_deps())
 
     @router.get("/teacher/history/session")
-    async def teacher_history_session(
+    def teacher_history_session(
         session_id: str,
         teacher_id: Optional[str] = None,
         cursor: int = -1,
@@ -71,7 +71,7 @@ def build_router(core) -> APIRouter:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
     @router.get("/teacher/memory/proposals")
-    async def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
+    def teacher_memory_proposals(teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20):
         try:
             teacher_id = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -87,7 +87,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/teacher/memory/insights")
-    async def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14):
+    def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14):
         try:
             teacher_id_scoped = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -96,7 +96,7 @@ def build_router(core) -> APIRouter:
         return core.teacher_memory_insights(teacher_id_final, days=days)
 
     @router.post("/teacher/memory/proposals/{proposal_id}/review")
-    async def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
+    def teacher_memory_proposal_review(proposal_id: str, req: TeacherMemoryProposalReviewRequest):
         try:
             teacher_id = resolve_teacher_scope(req.teacher_id)
         except AuthError as exc:
@@ -113,7 +113,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/teacher/llm-routing")
-    async def teacher_llm_routing(
+    def teacher_llm_routing(
         teacher_id: Optional[str] = None,
         history_limit: int = 20,
         proposal_limit: int = 20,
@@ -137,7 +137,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/llm-routing/simulate")
-    async def teacher_llm_routing_simulate_api(req: RoutingSimulateRequest):
+    def teacher_llm_routing_simulate_api(req: RoutingSimulateRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -149,7 +149,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/llm-routing/proposals")
-    async def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
+    def teacher_llm_routing_proposals_api(req: RoutingProposalCreateRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -161,7 +161,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/teacher/llm-routing/proposals/{proposal_id}")
-    async def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optional[str] = None):
+    def teacher_llm_routing_proposal_api(proposal_id: str, teacher_id: Optional[str] = None):
         try:
             teacher_id = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -173,7 +173,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/llm-routing/proposals/{proposal_id}/review")
-    async def teacher_llm_routing_proposal_review_api(proposal_id: str, req: RoutingProposalReviewRequest):
+    def teacher_llm_routing_proposal_review_api(proposal_id: str, req: RoutingProposalReviewRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -187,7 +187,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/llm-routing/rollback")
-    async def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
+    def teacher_llm_routing_rollback_api(req: RoutingRollbackRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -200,7 +200,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/teacher/provider-registry")
-    async def teacher_provider_registry_api(teacher_id: Optional[str] = None):
+    def teacher_provider_registry_api(teacher_id: Optional[str] = None):
         try:
             teacher_id = resolve_teacher_scope(teacher_id)
         except AuthError as exc:
@@ -211,7 +211,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/provider-registry/providers")
-    async def teacher_provider_registry_create_api(req: TeacherProviderRegistryCreateRequest):
+    def teacher_provider_registry_create_api(req: TeacherProviderRegistryCreateRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -223,7 +223,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.patch("/teacher/provider-registry/providers/{provider_id}")
-    async def teacher_provider_registry_update_api(provider_id: str, req: TeacherProviderRegistryUpdateRequest):
+    def teacher_provider_registry_update_api(provider_id: str, req: TeacherProviderRegistryUpdateRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -237,7 +237,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.delete("/teacher/provider-registry/providers/{provider_id}")
-    async def teacher_provider_registry_delete_api(provider_id: str, req: TeacherProviderRegistryDeleteRequest):
+    def teacher_provider_registry_delete_api(provider_id: str, req: TeacherProviderRegistryDeleteRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))
@@ -251,7 +251,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.post("/teacher/provider-registry/providers/{provider_id}/probe-models")
-    async def teacher_provider_registry_probe_models_api(provider_id: str, req: TeacherProviderRegistryProbeRequest):
+    def teacher_provider_registry_probe_models_api(provider_id: str, req: TeacherProviderRegistryProbeRequest):
         payload = core.model_dump_compat(req, exclude_none=True)
         try:
             payload["teacher_id"] = resolve_teacher_scope(payload.get("teacher_id"))

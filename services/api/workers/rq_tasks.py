@@ -49,12 +49,12 @@ def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
 
 def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     queue = _get_queue()
-    queue.enqueue(run_upload_job, job_id=job_id, tenant_id=tenant_id)
+    queue.enqueue(run_upload_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     queue = _get_queue()
-    queue.enqueue(run_exam_job, job_id=job_id, tenant_id=tenant_id)
+    queue.enqueue(run_exam_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
@@ -76,7 +76,7 @@ def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: O
     info, dispatch = store.enqueue(job_id, lane_final)
     if dispatch:
         queue = _get_queue()
-        queue.enqueue(run_chat_job, job_id=job_id, lane_id=lane_final, tenant_id=tenant_id)
+        queue.enqueue(run_chat_job, job_id, lane_final, tenant_id=tenant_id)
     return {"lane_id": lane_final, **info}
 
 
@@ -159,4 +159,4 @@ def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) 
         next_job_id = store.finish(job_id, lane_id)
         if next_job_id:
             queue = _get_queue()
-            queue.enqueue(run_chat_job, job_id=next_job_id, lane_id=lane_id, tenant_id=tenant_id)
+            queue.enqueue(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)

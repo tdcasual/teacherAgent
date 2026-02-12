@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import threading
 from typing import Callable, Dict, Optional
 
 from .queue_backend import QueueBackend, get_queue_backend
+
+_log = logging.getLogger(__name__)
 
 
 _QUEUE_BACKENDS: Dict[str, QueueBackend] = {}
@@ -21,7 +24,16 @@ def get_app_queue_backend(
     with _BACKEND_LOCK:
         backend = _QUEUE_BACKENDS.get(key)
         if backend is None:
-            backend = inline_backend_factory() if is_pytest else get_backend(tenant_id=tenant_id)
+            if is_pytest:
+                backend = inline_backend_factory()
+            else:
+                try:
+                    backend = get_backend(tenant_id=tenant_id)
+                except RuntimeError:
+                    _log.warning(
+                        "RQ/Redis backend unavailable; falling back to inline backend (dev mode)"
+                    )
+                    backend = inline_backend_factory()
             _QUEUE_BACKENDS[key] = backend
     return backend
 

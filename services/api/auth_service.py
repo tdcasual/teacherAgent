@@ -7,7 +7,7 @@ import hmac
 import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Set
 
 
@@ -23,7 +23,7 @@ class AuthPrincipal:
     role: str
     tenant_id: str = ""
     exp: Optional[int] = None
-    claims: Dict[str, Any] = None  # type: ignore[assignment]
+    claims: Dict[str, Any] = field(default_factory=dict)
 
 
 class AuthError(Exception):
@@ -40,7 +40,11 @@ def _truthy(value: Any) -> bool:
 def auth_required() -> bool:
     raw = os.getenv("AUTH_REQUIRED")
     if raw is None:
-        return not bool(os.getenv("PYTEST_CURRENT_TEST"))
+        # Auto-detect: require auth only when secret is configured (or in test mode, skip)
+        if bool(os.getenv("PYTEST_CURRENT_TEST")):
+            return False
+        # If AUTH_TOKEN_SECRET is not set, auth cannot work — disable it for dev mode
+        return bool(_secret())
     return _truthy(raw)
 
 

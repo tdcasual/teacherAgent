@@ -92,24 +92,27 @@ export function useTeacherSessionState(initialViewState: SessionViewStatePayload
 
   const setViewStateUpdatedAt = useCallback((value: string) => setField('viewStateUpdatedAt', value), [setField])
 
-  const setHistoryLoading = (value: boolean) => setField('historyLoading', value)
-  const setHistoryError = (value: string) => setField('historyError', value)
-  const setHistoryCursor = (value: number) => setField('historyCursor', value)
-  const setHistoryHasMore = (value: boolean) => setField('historyHasMore', value)
-  const setHistoryQuery = (value: string) => setField('historyQuery', value)
-  const setShowArchivedSessions = (value: boolean | ((prev: boolean) => boolean)) => {
-    if (typeof value === 'function') {
-      update((prev) => ({ ...prev, showArchivedSessions: (value as any)(prev.showArchivedSessions) }))
-      return
-    }
-    setField('showArchivedSessions', value)
-  }
-  const setRenameDialogSessionId = (value: string | null) => setField('renameDialogSessionId', value)
-  const setArchiveDialogSessionId = (value: string | null) => setField('archiveDialogSessionId', value)
-  const setSessionLoading = (value: boolean) => setField('sessionLoading', value)
-  const setSessionError = (value: string) => setField('sessionError', value)
-  const setSessionCursor = (value: number) => setField('sessionCursor', value)
-  const setSessionHasMore = (value: boolean) => setField('sessionHasMore', value)
+  const setHistoryLoading = useCallback((value: boolean) => setField('historyLoading', value), [setField])
+  const setHistoryError = useCallback((value: string) => setField('historyError', value), [setField])
+  const setHistoryCursor = useCallback((value: number) => setField('historyCursor', value), [setField])
+  const setHistoryHasMore = useCallback((value: boolean) => setField('historyHasMore', value), [setField])
+  const setHistoryQuery = useCallback((value: string) => setField('historyQuery', value), [setField])
+  const setShowArchivedSessions = useCallback(
+    (value: boolean | ((prev: boolean) => boolean)) => {
+      if (typeof value === 'function') {
+        update((prev) => ({ ...prev, showArchivedSessions: (value as any)(prev.showArchivedSessions) }))
+        return
+      }
+      setField('showArchivedSessions', value)
+    },
+    [setField, update],
+  )
+  const setRenameDialogSessionId = useCallback((value: string | null) => setField('renameDialogSessionId', value), [setField])
+  const setArchiveDialogSessionId = useCallback((value: string | null) => setField('archiveDialogSessionId', value), [setField])
+  const setSessionLoading = useCallback((value: boolean) => setField('sessionLoading', value), [setField])
+  const setSessionError = useCallback((value: string) => setField('sessionError', value), [setField])
+  const setSessionCursor = useCallback((value: number) => setField('sessionCursor', value), [setField])
+  const setSessionHasMore = useCallback((value: boolean) => setField('sessionHasMore', value), [setField])
 
   return {
     ...state,

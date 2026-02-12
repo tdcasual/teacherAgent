@@ -5,7 +5,7 @@ import { getNextMenuIndex } from '../../shared/sessionMenuNavigation'
 import { sessionGroupFromIso, sessionGroupOrder } from '../../shared/sessionGrouping'
 import { startVisibilityAwareBackoffPolling } from '../../shared/visibilityBackoffPolling'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../shared/storage'
-import { formatSessionUpdatedLabel, nowTime, timeFromIso } from '../../shared/time'
+import { nowTime, timeFromIso } from '../../shared/time'
 import {
   STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX,
   STUDENT_SESSION_VIEW_STATE_KEY_PREFIX,
@@ -22,13 +22,11 @@ import StudentTopbar from './features/layout/StudentTopbar'
 import type {
   AssignmentDetail,
   ChatJobStatus,
-  ChatResponse,
   ChatStartResult,
   Message,
   PendingChatJob,
   RenderedMessage,
   SessionGroup,
-  StudentHistoryMessage,
   StudentHistorySession,
   StudentHistorySessionResponse,
   StudentHistorySessionsResponse,
@@ -124,10 +122,8 @@ const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问�
 
 const todayDate = () => new Date().toLocaleDateString('sv-SE')
 
-const toDomSafeId = (value: string) => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_')
-
 export default function App() {
-  const [apiBase, setApiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
+  const [apiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
   const [sidebarOpen, setSidebarOpen] = useState(() => safeLocalStorageGetItem('studentSidebarOpen') !== 'false')
   const [messages, setMessages] = useState<Message[]>(() => [
     {
@@ -1200,10 +1196,6 @@ export default function App() {
     void loadSessionMessages(activeSessionId, -1, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, verifiedStudent?.student_id, apiBase, pendingChatJob?.job_id, pendingChatJob?.session_id, forceSessionLoadToken])
-
-  const appendMessage = (roleType: 'user' | 'assistant', content: string) => {
-    setMessages((prev) => [...prev, { id: makeId(), role: roleType, content, time: nowTime() }])
-  }
 
   const updateMessage = (id: string, patch: Partial<Message>) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))

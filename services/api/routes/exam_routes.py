@@ -11,11 +11,11 @@ def build_router(core) -> APIRouter:
     router = APIRouter()
 
     @router.get("/exams")
-    async def exams():
+    def exams():
         return core.list_exams()
 
     @router.get("/exam/{exam_id}")
-    async def exam_detail(exam_id: str):
+    def exam_detail(exam_id: str):
         result = core._get_exam_detail_api_impl(exam_id, deps=core._exam_api_deps())
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
@@ -24,7 +24,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/analysis")
-    async def exam_analysis(exam_id: str):
+    def exam_analysis(exam_id: str):
         result = core.exam_analysis_get(exam_id)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
@@ -33,7 +33,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/students")
-    async def exam_students(exam_id: str, limit: int = 50):
+    def exam_students(exam_id: str, limit: int = 50):
         result = core.exam_students_list(exam_id, limit=limit)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
@@ -42,7 +42,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/student/{student_id}")
-    async def exam_student(exam_id: str, student_id: str):
+    def exam_student(exam_id: str, student_id: str):
         result = core.exam_student_detail(exam_id, student_id=student_id)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")
@@ -51,7 +51,7 @@ def build_router(core) -> APIRouter:
         return result
 
     @router.get("/exam/{exam_id}/question/{question_id}")
-    async def exam_question(exam_id: str, question_id: str):
+    def exam_question(exam_id: str, question_id: str):
         result = core.exam_question_detail(exam_id, question_id=question_id)
         if result.get("error") == "exam_not_found":
             raise HTTPException(status_code=404, detail="exam not found")

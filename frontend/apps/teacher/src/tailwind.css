@@ -22,6 +22,13 @@
     sans-serif;
 }
 
+/* ── Chat layout custom properties ── */
+:root {
+  --chat-content-max-width: 720px;
+  --chat-bubble-max-width: 520px;
+  --chat-assistant-bubble-max-width: 680px;
+}
+
 /* ── Global resets ── */
 html, body, #root { height: 100%; }
 body {
@@ -251,6 +258,12 @@ body {
   padding-left: 10px;
   border-left: 3px solid var(--color-accent);
   color: var(--color-muted);
+}
+
+/* ── Workbench resize drag ── */
+.dragging, .dragging * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
 }
 
 /* ── Settings modal animations ── */

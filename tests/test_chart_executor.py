@@ -8,14 +8,17 @@ import pytest
 
 from services.api.chart_executor import (
     _build_runner_source,
+    _chart_envs_root,
     _clip_text,
     _env_python_path,
     _env_root,
     _extract_missing_module,
+    _mark_chart_env_used,
     _normalize_bool,
     _normalize_packages,
     _normalize_retries,
     _normalize_timeout,
+    _prune_chart_envs,
     _safe_any_file_name,
     _safe_file_name,
     _safe_run_id,
@@ -401,3 +404,105 @@ class TestResolveChartRunMetaPath:
 
     def test_rejects_none(self, tmp_path):
         assert resolve_chart_run_meta_path(tmp_path, None) is None
+
+
+# ---------------------------------------------------------------------------
+# chart env lifecycle governance
+# ---------------------------------------------------------------------------
+
+class TestChartEnvLifecycle:
+    def _policy(self, **overrides):
+        policy = {
+            "enabled": True,
+            "ttl_sec": 3600,
+            "min_keep": 1,
+            "max_keep": 16,
+            "max_total_bytes": 1 << 50,
+            "active_grace_sec": 0,
+            "lease_ttl_sec": 3600,
+        }
+        policy.update(overrides)
+        return policy
+
+    def _touch_env(self, root: Path, scope: str, mtime: float, payload: bytes = b"x") -> Path:
+        env_dir = root / scope
+        env_dir.mkdir(parents=True, exist_ok=True)
+        (env_dir / "payload.bin").write_bytes(payload)
+        (env_dir / "bin").mkdir(exist_ok=True)
+        (env_dir / "bin" / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+        # set dir and file times so pruning can sort by age deterministically
+        (env_dir / "payload.bin").touch()
+        (env_dir / "bin" / "python").touch()
+        import os
+        os.utime(env_dir, (mtime, mtime))
+        os.utime(env_dir / "payload.bin", (mtime, mtime))
+        os.utime(env_dir / "bin" / "python", (mtime, mtime))
+        return env_dir
+
+    def test_mark_chart_env_used_writes_meta(self, tmp_path):
+        uploads = tmp_path / "uploads"
+        root = _chart_envs_root(uploads)
+        env_dir = root / "pkg_meta"
+        env_dir.mkdir(parents=True)
+
+        _mark_chart_env_used(env_dir, scope="pkg_meta", packages=["numpy", "pandas"], now_ts=100.0)
+        meta = json.loads((env_dir / ".env_meta.json").read_text(encoding="utf-8"))
+        assert meta["scope"] == "pkg_meta"
+        assert meta["packages"] == ["numpy", "pandas"]
+        assert meta["last_used_ts"] == 100.0
+
+    def test_prune_deletes_expired_env_but_keeps_current_scope(self, tmp_path):
+        uploads = tmp_path / "uploads"
+        root = _chart_envs_root(uploads)
+        now_ts = 10_000.0
+        self._touch_env(root, "pkg_old", mtime=now_ts - 8_000)
+        self._touch_env(root, "pkg_keep", mtime=now_ts - 8_000)
+
+        report = _prune_chart_envs(
+            uploads,
+            keep_scopes={"pkg_keep"},
+            policy=self._policy(ttl_sec=3600, min_keep=1, max_keep=16, active_grace_sec=0),
+            now_ts=now_ts,
+        )
+        assert (root / "pkg_old").exists() is False
+        assert (root / "pkg_keep").exists() is True
+        assert "pkg_old" in report["deleted_scopes"]
+        assert "pkg_keep" not in report["deleted_scopes"]
+
+    def test_prune_respects_max_keep_by_removing_oldest(self, tmp_path):
+        uploads = tmp_path / "uploads"
+        root = _chart_envs_root(uploads)
+        now_ts = 20_000.0
+        self._touch_env(root, "pkg_1", mtime=now_ts - 300)
+        self._touch_env(root, "pkg_2", mtime=now_ts - 200)
+        self._touch_env(root, "pkg_3", mtime=now_ts - 100)
+
+        report = _prune_chart_envs(
+            uploads,
+            keep_scopes=set(),
+            policy=self._policy(ttl_sec=999999, min_keep=1, max_keep=2, active_grace_sec=0),
+            now_ts=now_ts,
+        )
+        assert (root / "pkg_1").exists() is False
+        assert (root / "pkg_2").exists() is True
+        assert (root / "pkg_3").exists() is True
+        assert "pkg_1" in report["deleted_scopes"]
+
+    def test_prune_skips_env_with_active_lease(self, tmp_path):
+        uploads = tmp_path / "uploads"
+        root = _chart_envs_root(uploads)
+        now_ts = 30_000.0
+        leased_dir = self._touch_env(root, "pkg_leased", mtime=now_ts - 600)
+        self._touch_env(root, "pkg_free", mtime=now_ts - 500)
+        (leased_dir / ".lease_run123").write_text("lease", encoding="utf-8")
+
+        report = _prune_chart_envs(
+            uploads,
+            keep_scopes=set(),
+            policy=self._policy(ttl_sec=999999, min_keep=1, max_keep=1, active_grace_sec=0, lease_ttl_sec=3600),
+            now_ts=now_ts,
+        )
+        assert (root / "pkg_leased").exists() is True
+        assert (root / "pkg_free").exists() is False
+        assert "pkg_free" in report["deleted_scopes"]
+        assert "pkg_leased" not in report["deleted_scopes"]

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -13,7 +11,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:physics_edu_2026@redis:6379/0
       - QDRANT_PATH=/app/.qdrant
       - MEM0_DIR=/app/.mem0
       - LLM_MAX_CONCURRENCY_STUDENT=${LLM_MAX_CONCURRENCY_STUDENT:-12}
@@ -47,7 +45,7 @@ services:
     env_file: .env
     environment:
       - DATA_DIR=/app/data
-      - MCP_API_KEY=${MCP_API_KEY}
+      - MCP_API_KEY=${MCP_API_KEY:-}
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant
@@ -69,7 +67,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:physics_edu_2026@redis:6379/0
       - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-0}
     volumes:
       - ./data:/app/data
@@ -81,8 +79,22 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: >
+      redis-server
+      --requirepass physics_edu_2026
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "physics_edu_2026", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
   frontend_student:
     build:
@@ -212,3 +224,6 @@ services:
       - "6333:6333"
     volumes:
       - ./.qdrant:/qdrant/storage
+
+volumes:
+  redis_data:

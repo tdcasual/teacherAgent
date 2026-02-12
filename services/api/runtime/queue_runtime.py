@@ -53,7 +53,8 @@ def start_runtime(
         backend = get_queue_backend(tenant_id=settings.tenant_id() or None)
     if is_pytest is None:
         is_pytest = settings.is_pytest()
-    if not is_pytest:
+    # Only require Redis when using the RQ backend (not inline/dev mode)
+    if not is_pytest and not str(getattr(backend, "name", "")).startswith("inline"):
         if require_redis is None:
             from services.api.workers import rq_tasks
 

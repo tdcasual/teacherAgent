@@ -19,18 +19,16 @@ def test_rq_mode_disables_inprocess_workers(monkeypatch):
     assert app_mod._rq_enabled() is True
 
 
-def test_rq_required_in_api_startup(monkeypatch):
+def test_rq_fallback_to_inline_when_not_configured(monkeypatch):
+    """When RQ is not configured, the system should fall back to inline backend instead of crashing."""
     monkeypatch.delenv("RQ_BACKEND_ENABLED", raising=False)
     monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     from services.api.runtime import bootstrap
 
-    try:
-        bootstrap.start_runtime()
-    except RuntimeError as exc:
-        assert "rq" in str(exc).lower()
-    else:
-        assert False, "expected RuntimeError when rq not enabled"
+    # Should NOT raise — falls back to inline backend
+    bootstrap.start_runtime()
+    bootstrap.stop_runtime()
 
 
 def test_lifespan_does_not_start_workers(monkeypatch):
