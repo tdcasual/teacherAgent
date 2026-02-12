@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from rq import Queue
 
 from services.api.chat_redis_lane_store import ChatRedisLaneStore
 from services.api.redis_clients import get_redis_client
 from services.api.workers.rq_tenant_runtime import load_tenant_module
-import logging
+
 _log = logging.getLogger(__name__)
 
 
@@ -84,9 +85,11 @@ def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: O
     return {"lane_id": lane_final, **info}
 
 
-def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
-    mod = load_tenant_module(tenant_id)
-    job_dir: Path = mod.UPLOAD_JOB_DIR
+def _scan_pending_jobs(
+    job_dir: Path,
+    *,
+    enqueue_fn: Callable[[Dict[str, Any]], Any],
+) -> int:
     job_dir.mkdir(parents=True, exist_ok=True)
     count = 0
     for job_path in job_dir.glob("*/job.json"):
@@ -97,49 +100,39 @@ def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            enqueue_upload_job(job_id, tenant_id=tenant_id)
-            count += 1
+        if status not in {"queued", "processing"} or not job_id:
+            continue
+        enqueue_fn(data)
+        count += 1
     return count
+
+
+def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
+    mod = load_tenant_module(tenant_id)
+    return _scan_pending_jobs(
+        mod.UPLOAD_JOB_DIR,
+        enqueue_fn=lambda data: enqueue_upload_job(str(data.get("job_id") or ""), tenant_id=tenant_id),
+    )
 
 
 def scan_pending_exam_jobs(*, tenant_id: Optional[str] = None) -> int:
     mod = load_tenant_module(tenant_id)
-    job_dir: Path = mod.EXAM_UPLOAD_JOB_DIR
-    job_dir.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for job_path in job_dir.glob("*/job.json"):
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            _log.warning("directory creation failed", exc_info=True)
-            continue
-        status = str(data.get("status") or "")
-        job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            enqueue_exam_job(job_id, tenant_id=tenant_id)
-            count += 1
-    return count
+    return _scan_pending_jobs(
+        mod.EXAM_UPLOAD_JOB_DIR,
+        enqueue_fn=lambda data: enqueue_exam_job(str(data.get("job_id") or ""), tenant_id=tenant_id),
+    )
 
 
 def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
     mod = load_tenant_module(tenant_id)
-    job_dir: Path = mod.CHAT_JOB_DIR
-    job_dir.mkdir(parents=True, exist_ok=True)
-    count = 0
-    for job_path in job_dir.glob("*/job.json"):
-        try:
-            data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
-            _log.warning("directory creation failed", exc_info=True)
-            continue
-        status = str(data.get("status") or "")
-        job_id = str(data.get("job_id") or "")
-        if status in {"queued", "processing"} and job_id:
-            lane_id = mod.resolve_chat_lane_id_from_job(data)
-            enqueue_chat_job(job_id, lane_id, tenant_id=tenant_id)
-            count += 1
-    return count
+    return _scan_pending_jobs(
+        mod.CHAT_JOB_DIR,
+        enqueue_fn=lambda data: enqueue_chat_job(
+            str(data.get("job_id") or ""),
+            mod.resolve_chat_lane_id_from_job(data),
+            tenant_id=tenant_id,
+        ),
+    )
 
 
 def run_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
