@@ -370,6 +370,32 @@ class ChatJobFlowTest(unittest.TestCase):
 
 
 class ChatJobStateMachineTest(unittest.TestCase):
+    def _seed_total_mode_exam(
+        self,
+        tmp: Path,
+        exam_id: str = "EX20260209_9b92e1",
+        score_mode: str = "total",
+        paper_filename: str = "",
+    ) -> None:
+        return ChatJobFlowTest._seed_total_mode_exam(
+            self,
+            tmp,
+            exam_id=exam_id,
+            score_mode=score_mode,
+            paper_filename=paper_filename,
+        )
+
+    def _seed_total_mode_exam_with_subject_scores_file(
+        self,
+        tmp: Path,
+        exam_id: str = "EX20260209_9b92e1",
+    ) -> None:
+        return ChatJobFlowTest._seed_total_mode_exam_with_subject_scores_file(
+            self,
+            tmp,
+            exam_id=exam_id,
+        )
+
     def test_state_machine_rejects_invalid_transition(self):
         from services.api.chat_job_state_machine import ChatJobStateMachine
 

@@ -60,7 +60,9 @@ jobs:
             tests/test_app_core_surface.py \
             tests/test_chat_routes.py \
             tests/test_exam_routes.py \
-            tests/test_student_routes.py
+            tests/test_student_routes.py \
+            tests/test_docs_architecture_presence.py \
+            tests/test_refactor_report.py
 
   frontend-quality:
     runs-on: ubuntu-latest
