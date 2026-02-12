@@ -1,10 +1,10 @@
 """Tests for chart_sandbox module."""
 from __future__ import annotations
 
+import builtins
 import os
 import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from services.api.chart_sandbox import (
@@ -75,6 +75,53 @@ class MakePreexecFnTest(unittest.TestCase):
         fn = make_preexec_fn("unknown_profile", 60)
         if sys.platform != "win32":
             self.assertIsNotNone(fn)
+
+    def test_returns_none_on_win32(self):
+        with patch.object(sys, "platform", "win32"):
+            self.assertIsNone(make_preexec_fn("sandboxed", 60))
+
+    @unittest.skipIf(sys.platform == "win32", "Unix only")
+    def test_returns_none_when_resource_import_fails(self):
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "resource":
+                raise ImportError("missing resource")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_fake_import):
+            self.assertIsNone(make_preexec_fn("sandboxed", 60))
+
+    @unittest.skipIf(sys.platform == "win32", "Unix only")
+    def test_preexec_fn_calls_all_rlimits(self):
+        calls = []
+
+        class _FakeResource:
+            RLIMIT_CPU = 1
+            RLIMIT_AS = 2
+            RLIMIT_NPROC = 3
+            RLIMIT_FSIZE = 4
+
+            @staticmethod
+            def setrlimit(limit, values):
+                calls.append((limit, values))
+
+        real_import = builtins.__import__
+
+        def _fake_import(name, *args, **kwargs):
+            if name == "resource":
+                return _FakeResource
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=_fake_import):
+            fn = make_preexec_fn("sandboxed", 60)
+        self.assertIsNotNone(fn)
+        fn()
+
+        self.assertEqual(calls[0][0], _FakeResource.RLIMIT_CPU)
+        self.assertEqual(calls[1][0], _FakeResource.RLIMIT_AS)
+        self.assertEqual(calls[2][0], _FakeResource.RLIMIT_NPROC)
+        self.assertEqual(calls[3][0], _FakeResource.RLIMIT_FSIZE)
 
 
 class ScanCodePatternsTest(unittest.TestCase):
