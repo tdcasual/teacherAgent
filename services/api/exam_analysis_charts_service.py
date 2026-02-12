@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-
 _EXAM_CHART_DEFAULT_TYPES = ["score_distribution", "knowledge_radar", "class_compare", "question_discrimination"]
 _EXAM_CHART_TYPE_ALIASES = {
     "score_distribution": "score_distribution",
@@ -156,7 +155,7 @@ def build_exam_chart_bundle_input(exam_id: str, top_n: int, deps: ExamAnalysisCh
                 )
     if kp_items:
         kp_items.sort(key=lambda x: x.get("mastery") or 0)
-        kp_limit = deps.safe_int_arg(top_n, default=8, minimum=3, maximum=12)
+        kp_limit = deps.safe_int_arg(top_n, 8, 3, 12)
         kp_items = kp_items[:kp_limit]
     else:
         warnings.append("知识点雷达图数据不足（analysis.knowledge_points 缺失或为空）。")
@@ -219,7 +218,7 @@ def build_exam_chart_bundle_input(exam_id: str, top_n: int, deps: ExamAnalysisCh
                 }
             )
         question_discrimination.sort(key=lambda x: x.get("discrimination") or 0)
-        question_discrimination = question_discrimination[: deps.safe_int_arg(top_n, default=12, minimum=3, maximum=30)]
+        question_discrimination = question_discrimination[: deps.safe_int_arg(top_n, 12, 3, 30)]
     else:
         warnings.append("题目区分度图数据不足（学生数至少需要 4 人）。")
 
@@ -389,8 +388,8 @@ def exam_analysis_charts_generate(args: Dict[str, Any], deps: ExamAnalysisCharts
     if not exam_id:
         return {"error": "exam_id_required"}
 
-    top_n = deps.safe_int_arg(args.get("top_n"), default=12, minimum=3, maximum=30)
-    timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), default=120, minimum=30, maximum=3600)
+    top_n = deps.safe_int_arg(args.get("top_n"), 12, 3, 30)
+    timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), 120, 30, 3600)
     chart_types = normalize_exam_chart_types(args.get("chart_types"))
 
     bundle = build_exam_chart_bundle_input(exam_id, top_n=top_n, deps=deps)
