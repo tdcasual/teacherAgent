@@ -5,7 +5,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.workers.chat_worker_service import ChatWorkerDeps, enqueue_chat_job, start_chat_worker
+from services.api.workers.chat_worker_service import (
+    ChatWorkerDeps,
+    chat_job_worker_loop,
+    enqueue_chat_job,
+    start_chat_worker,
+)
 
 
 class _FakeEvent:
@@ -107,3 +112,75 @@ class ChatWorkerServiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_chat_pick_next_locked_initializes_missing_state(monkeypatch):
+    from services.api import chat_lane_repository as repo
+
+    class _State:
+        pass
+
+    state = _State()
+    monkeypatch.setattr(repo, "_get_state", lambda: state)
+
+    job_id, lane_id = repo._chat_pick_next_locked()
+
+    assert (job_id, lane_id) == ("", "")
+    assert isinstance(state.CHAT_JOB_LANES, dict)
+    assert isinstance(state.CHAT_JOB_ACTIVE_LANES, set)
+    assert isinstance(state.CHAT_JOB_QUEUED, set)
+    assert isinstance(state.CHAT_JOB_TO_LANE, dict)
+    assert isinstance(state.CHAT_LANE_CURSOR, list)
+
+
+def test_worker_loop_skips_pick_when_event_not_set(tmp_path):
+    stop_event = threading.Event()
+    pick_calls = {"count": 0}
+
+    class _IdleEvent:
+        def __init__(self):
+            self.calls = 0
+
+        def set(self):
+            return None
+
+        def clear(self):
+            return None
+
+        def wait(self, timeout=0.1):
+            self.calls += 1
+            if self.calls >= 2:
+                stop_event.set()
+            return False
+
+    event = _IdleEvent()
+
+    def _pick_next():
+        pick_calls["count"] += 1
+        return "", ""
+
+    deps = ChatWorkerDeps(
+        chat_job_dir=tmp_path / "jobs",
+        chat_job_lock=threading.Lock(),
+        chat_job_event=event,
+        chat_worker_threads=[],
+        chat_worker_pool_size=1,
+        worker_started_get=lambda: True,
+        worker_started_set=lambda value: None,
+        load_chat_job=lambda job_id: {"job_id": job_id},
+        write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+        resolve_chat_lane_id_from_job=lambda job: "lane:test",
+        chat_enqueue_locked=lambda job_id, lane_id: 1,
+        chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+        chat_pick_next_locked=_pick_next,
+        chat_mark_done_locked=lambda job_id, lane_id: None,
+        chat_has_pending_locked=lambda: False,
+        process_chat_job=lambda job_id: None,
+        diag_log=lambda *_args, **_kwargs: None,
+        sleep=lambda _seconds: None,
+        thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+        stop_event=stop_event,
+    )
+
+    chat_job_worker_loop(deps=deps)
+    assert pick_calls["count"] == 0
