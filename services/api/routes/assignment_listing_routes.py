@@ -11,11 +11,11 @@ def register_assignment_listing_routes(
     router: APIRouter, *, app_deps: Any, assignment_app: Any
 ) -> None:
     @router.get("/assignments")
-    async def assignments():
+    async def assignments() -> Any:
         return await assignment_app.list_assignments(deps=app_deps)
 
     @router.get("/teacher/assignment/progress")
-    async def teacher_assignment_progress(assignment_id: str, include_students: bool = True):
+    async def teacher_assignment_progress(assignment_id: str, include_students: bool = True) -> Any:
         return await assignment_app.get_teacher_assignment_progress(
             assignment_id,
             include_students=include_students,
@@ -23,16 +23,16 @@ def register_assignment_listing_routes(
         )
 
     @router.get("/teacher/assignments/progress")
-    async def teacher_assignments_progress(date: Optional[str] = None):
+    async def teacher_assignments_progress(date: Optional[str] = None) -> Any:
         return await assignment_app.get_teacher_assignments_progress(
             date=date,
             deps=app_deps,
         )
 
     @router.post("/assignment/requirements")
-    async def assignment_requirements(req: AssignmentRequirementsRequest):
+    async def assignment_requirements(req: AssignmentRequirementsRequest) -> Any:
         return await assignment_app.post_assignment_requirements(req, deps=app_deps)
 
     @router.get("/assignment/{assignment_id}/requirements")
-    async def assignment_requirements_get(assignment_id: str):
+    async def assignment_requirements_get(assignment_id: str) -> Any:
         return await assignment_app.get_assignment_requirements(assignment_id, deps=app_deps)

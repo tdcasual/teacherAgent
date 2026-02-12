@@ -51,11 +51,11 @@ def create_admin_app(*, deps: TenantAdminDeps) -> FastAPI:
     app = FastAPI(title="Tenant Admin", version="0.1.0")
 
     @app.get("/health")
-    async def health():
+    async def health() -> Dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/admin/tenants")
-    async def list_tenants(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")):
+    async def list_tenants(x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key")) -> Dict[str, Any]:
         _require_admin(deps, x_admin_key)
         tenants = deps.store.list(enabled_only=False)
         return {
@@ -77,7 +77,7 @@ def create_admin_app(*, deps: TenantAdminDeps) -> FastAPI:
         tenant_id: str,
         req: TenantUpsertRequest,
         x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
-    ):
+    ) -> Dict[str, Any]:
         _require_admin(deps, x_admin_key)
         try:
             tid = validate_tenant_id(tenant_id)
@@ -104,7 +104,7 @@ def create_admin_app(*, deps: TenantAdminDeps) -> FastAPI:
     async def delete_tenant(
         tenant_id: str,
         x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
-    ):
+    ) -> Dict[str, Any]:
         _require_admin(deps, x_admin_key)
         try:
             tid = validate_tenant_id(tenant_id)
@@ -115,4 +115,3 @@ def create_admin_app(*, deps: TenantAdminDeps) -> FastAPI:
         return {"ok": True, "tenant_id": tid}
 
     return app
-

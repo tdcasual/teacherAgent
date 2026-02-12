@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
 from ..assignment_upload_confirm_gate_service import AssignmentUploadConfirmGateError
@@ -34,7 +34,7 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def assignment_upload(**kwargs):
+async def assignment_upload(**kwargs: Any) -> Any:
     deps: AssignmentUploadHandlerDeps = kwargs.pop("deps")
     try:
         return await _maybe_await(deps.assignment_upload_legacy(**kwargs))
@@ -50,12 +50,12 @@ async def assignment_upload_start(
     scope: str,
     class_name: str,
     student_ids: str,
-    files,
-    answer_files,
+    files: list[UploadFile],
+    answer_files: Optional[list[UploadFile]],
     ocr_mode: str,
     language: str,
     deps: AssignmentUploadHandlerDeps,
-):
+) -> Any:
     try:
         return await _maybe_await(
             deps.start_assignment_upload(
@@ -75,21 +75,23 @@ async def assignment_upload_start(
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-async def assignment_upload_status(job_id: str, *, deps: AssignmentUploadHandlerDeps):
+async def assignment_upload_status(job_id: str, *, deps: AssignmentUploadHandlerDeps) -> Any:
     try:
         return await _maybe_await(deps.assignment_upload_status(job_id))
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-async def assignment_upload_draft(job_id: str, *, deps: AssignmentUploadHandlerDeps):
+async def assignment_upload_draft(job_id: str, *, deps: AssignmentUploadHandlerDeps) -> Any:
     try:
         return await _maybe_await(deps.assignment_upload_draft(job_id))
     except AssignmentUploadQueryError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-async def assignment_upload_draft_save(req: UploadDraftSaveRequest, *, deps: AssignmentUploadHandlerDeps):
+async def assignment_upload_draft_save(
+    req: UploadDraftSaveRequest, *, deps: AssignmentUploadHandlerDeps
+) -> Any:
     try:
         return await _maybe_await(
             deps.assignment_upload_draft_save(
@@ -103,7 +105,7 @@ async def assignment_upload_draft_save(req: UploadDraftSaveRequest, *, deps: Ass
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-async def assignment_upload_confirm(req: UploadConfirmRequest, *, deps: AssignmentUploadHandlerDeps):
+async def assignment_upload_confirm(req: UploadConfirmRequest, *, deps: AssignmentUploadHandlerDeps) -> Any:
     try:
         job = deps.load_upload_job(req.job_id)
     except FileNotFoundError:

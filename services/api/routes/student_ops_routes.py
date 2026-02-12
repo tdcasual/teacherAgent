@@ -9,14 +9,14 @@ from ..api_models import StudentImportRequest, StudentVerifyRequest
 
 def register_student_ops_routes(router: APIRouter, core: Any) -> None:
     @router.post("/student/import")
-    def import_students(req: StudentImportRequest):
+    def import_students(req: StudentImportRequest) -> Any:
         result = core.student_import(req.dict())
         if result.get("error"):
             raise HTTPException(status_code=400, detail=result["error"])
         return result
 
     @router.post("/student/verify")
-    def verify_student(req: StudentVerifyRequest):
+    def verify_student(req: StudentVerifyRequest) -> Any:
         return core._verify_student_api_impl(
             req.name, req.class_name, deps=core._student_ops_api_deps()
         )
@@ -27,7 +27,7 @@ def register_student_ops_routes(router: APIRouter, core: Any) -> None:
         files: list[UploadFile] = File(...),
         assignment_id: Optional[str] = Form(None),
         auto_assignment: bool = Form(False),
-    ):
+    ) -> Any:
         return await core._student_submit_impl(
             student_id=student_id,
             files=files,

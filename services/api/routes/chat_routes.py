@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 
 from ..api_models import ChatRequest, ChatStartRequest
@@ -13,21 +15,21 @@ def _bind_or_raise(req: ChatRequest | ChatStartRequest) -> ChatRequest | ChatSta
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-def build_router(core) -> APIRouter:
+def build_router(core: Any) -> APIRouter:
     router = APIRouter()
 
     @router.post("/chat")
-    async def chat(req: ChatRequest):
+    async def chat(req: ChatRequest) -> Any:
         bound = _bind_or_raise(req)
         return await core.chat_handlers.chat(bound, deps=core._chat_handlers_deps())
 
     @router.post("/chat/start")
-    async def chat_start(req: ChatStartRequest):
+    async def chat_start(req: ChatStartRequest) -> Any:
         bound = _bind_or_raise(req)
         return await core.chat_handlers.chat_start(bound, deps=core._chat_handlers_deps())
 
     @router.get("/chat/status")
-    async def chat_status(job_id: str):
+    async def chat_status(job_id: str) -> Any:
         return await core.chat_handlers.chat_status(job_id, deps=core._chat_handlers_deps())
 
     return router

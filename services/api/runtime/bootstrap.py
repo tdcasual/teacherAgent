@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from services.api import settings
 from services.api.runtime.inline_backend_factory import build_inline_backend
 from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime, stop_tenant_runtime
@@ -13,7 +15,7 @@ from services.api.workers import (
 from services.api.workers.inline_runtime import start_inline_workers, stop_inline_workers
 
 
-def build_inline_backend_for_app(app_mod):
+def build_inline_backend_for_app(app_mod: Any) -> Any:
     upload_deps = app_mod.upload_worker_deps()
     exam_deps = app_mod.exam_worker_deps()
     profile_deps = app_mod.profile_update_worker_deps()
@@ -53,7 +55,7 @@ def build_inline_backend_for_app(app_mod):
     )
 
 
-def build_runtime_deps(app_mod) -> RuntimeManagerDeps:
+def build_runtime_deps(app_mod: Any) -> RuntimeManagerDeps:
     return RuntimeManagerDeps(
         tenant_id=getattr(app_mod, "TENANT_ID", None) or None,
         is_pytest=settings.is_pytest(),
@@ -62,15 +64,19 @@ def build_runtime_deps(app_mod) -> RuntimeManagerDeps:
     )
 
 
-def start_runtime(*, app_mod=None) -> None:
-    if app_mod is None:
-        from services.api import app as app_mod
+def start_runtime(*, app_mod: Any | None = None) -> None:
+    active_app_mod = app_mod
+    if active_app_mod is None:
+        from services.api import app as default_app_mod
 
-    start_tenant_runtime(deps=build_runtime_deps(app_mod))
+        active_app_mod = default_app_mod
+    start_tenant_runtime(deps=build_runtime_deps(active_app_mod))
 
 
-def stop_runtime(*, app_mod=None) -> None:
-    if app_mod is None:
-        from services.api import app as app_mod
+def stop_runtime(*, app_mod: Any | None = None) -> None:
+    active_app_mod = app_mod
+    if active_app_mod is None:
+        from services.api import app as default_app_mod
 
-    stop_tenant_runtime(deps=build_runtime_deps(app_mod))
+        active_app_mod = default_app_mod
+    stop_tenant_runtime(deps=build_runtime_deps(active_app_mod))

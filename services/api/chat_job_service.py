@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from .chat_job_repository import (
@@ -10,7 +11,7 @@ from .chat_job_repository import (
 )
 
 
-def chat_job_path(job_id: str, *, deps: ChatJobRepositoryDeps):
+def chat_job_path(job_id: str, *, deps: ChatJobRepositoryDeps) -> Path:
     return _chat_job_path_impl(job_id, deps)
 
 

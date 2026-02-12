@@ -16,7 +16,7 @@ class ChatHandlerDeps:
     detect_math_delimiters: Callable[[str], bool]
     detect_latex_tokens: Callable[[str], bool]
     diag_log: Callable[[str, dict], None]
-    build_interaction_note: Callable[[str, str, Optional[str]], str]
+    build_interaction_note: Callable[..., str]
     enqueue_profile_update: Callable[[dict], None]
     student_profile_update: Callable[[dict], dict]
     profile_update_async: bool
@@ -64,14 +64,14 @@ async def chat(req: ChatRequest, *, deps: ChatHandlerDeps) -> ChatResponse:
     return ChatResponse(reply=reply_text, role=role_hint)
 
 
-async def chat_start(req: ChatStartRequest, *, deps: ChatHandlerDeps):
+async def chat_start(req: ChatStartRequest, *, deps: ChatHandlerDeps) -> Any:
     result = deps.start_chat_api(req)
     if _is_awaitable(result):
         return await result
     return result
 
 
-async def chat_status(job_id: str, *, deps: ChatHandlerDeps):
+async def chat_status(job_id: str, *, deps: ChatHandlerDeps) -> Any:
     try:
         result = deps.get_chat_status(job_id)
         if _is_awaitable(result):

@@ -7,9 +7,9 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -100,7 +100,9 @@ logging.getLogger().addFilter(RequestIdFilter())
 
 
 @app.middleware("http")
-async def _set_core_context(request: Request, call_next):
+async def _set_core_context(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     rid = request.headers.get("x-request-id") or new_request_id()
     start = time.perf_counter()
     rid_token = REQUEST_ID.set(rid)

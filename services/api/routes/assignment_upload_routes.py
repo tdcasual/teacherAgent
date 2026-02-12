@@ -21,7 +21,7 @@ def register_assignment_upload_routes(
         answer_files: Optional[list[UploadFile]] = File(None),
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
-    ):
+    ) -> Any:
         return await assignment_app.upload_assignment_legacy(
             assignment_id=assignment_id,
             date=date,
@@ -47,7 +47,7 @@ def register_assignment_upload_routes(
         answer_files: Optional[list[UploadFile]] = File(None),
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
-    ):
+    ) -> Any:
         return await assignment_app.upload_assignment_start(
             assignment_id=assignment_id,
             date=date,
@@ -63,17 +63,17 @@ def register_assignment_upload_routes(
         )
 
     @router.get("/assignment/upload/status")
-    async def assignment_upload_status(job_id: str):
+    async def assignment_upload_status(job_id: str) -> Any:
         return await assignment_app.get_assignment_upload_status(job_id, deps=app_deps)
 
     @router.get("/assignment/upload/draft")
-    async def assignment_upload_draft(job_id: str):
+    async def assignment_upload_draft(job_id: str) -> Any:
         return await assignment_app.get_assignment_upload_draft(job_id, deps=app_deps)
 
     @router.post("/assignment/upload/draft/save")
-    async def assignment_upload_draft_save(req: UploadDraftSaveRequest):
+    async def assignment_upload_draft_save(req: UploadDraftSaveRequest) -> Any:
         return await assignment_app.save_assignment_upload_draft(req, deps=app_deps)
 
     @router.post("/assignment/upload/confirm")
-    async def assignment_upload_confirm(req: UploadConfirmRequest):
+    async def assignment_upload_confirm(req: UploadConfirmRequest) -> Any:
         return await assignment_app.confirm_assignment_upload(req, deps=app_deps)

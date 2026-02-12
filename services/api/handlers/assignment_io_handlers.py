@@ -3,9 +3,9 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from ..assignment_generate_service import AssignmentGenerateError
@@ -27,7 +27,7 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def assignment_download(assignment_id: str, file: str, *, deps: AssignmentIoHandlerDeps):
+async def assignment_download(assignment_id: str, file: str, *, deps: AssignmentIoHandlerDeps) -> Any:
     try:
         assignment_dir = deps.resolve_assignment_dir(assignment_id)
     except ValueError as exc:
@@ -48,7 +48,7 @@ async def assignment_download(assignment_id: str, file: str, *, deps: Assignment
     return FileResponse(path)
 
 
-async def render_assignment(assignment_id: str, *, deps: AssignmentIoHandlerDeps):
+async def render_assignment(assignment_id: str, *, deps: AssignmentIoHandlerDeps) -> Any:
     script = deps.app_root / "scripts" / "render_assignment_pdf.py"
     out = deps.run_script(["python3", str(script), "--assignment-id", assignment_id])
     return {"ok": True, "output": out}
@@ -57,14 +57,14 @@ async def render_assignment(assignment_id: str, *, deps: AssignmentIoHandlerDeps
 async def assignment_questions_ocr(
     *,
     assignment_id: str,
-    files,
+    files: list[UploadFile],
     kp_id: Optional[str],
     difficulty: Optional[str],
     tags: Optional[str],
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentIoHandlerDeps,
-):
+) -> Any:
     return await _maybe_await(
         deps.assignment_questions_ocr(
             assignment_id=assignment_id,
@@ -94,7 +94,7 @@ async def generate_assignment(
     source: Optional[str],
     requirements_json: Optional[str],
     deps: AssignmentIoHandlerDeps,
-):
+) -> Any:
     try:
         return await _maybe_await(
             deps.generate_assignment(
