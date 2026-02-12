@@ -7,13 +7,11 @@ import random
 import shutil
 import sys
 import tempfile
-import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
-
+from typing import Any, Dict, List
 
 _DEFAULT_TEXTS: Dict[str, str] = {
     "teacher": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
@@ -62,8 +60,9 @@ def _scenario_non_mapping_yaml(skills_root: Path, rng: random.Random) -> Dict[st
 
 def _scenario_missing_yaml(skills_root: Path, rng: random.Random) -> Dict[str, Any]:
     path = _pick_skill_yaml(skills_root, rng)
+    has_skill_md_fallback = (path.parent / "SKILL.md").exists()
     path.unlink(missing_ok=True)
-    return {"scenario": "missing_yaml", "expect_load_error": True}
+    return {"scenario": "missing_yaml", "expect_load_error": not has_skill_md_fallback}
 
 
 def _run_single_case(
@@ -89,7 +88,9 @@ def _run_single_case(
         scenario_name = "none"
 
         if suite == "p0":
-            op = rng.choice([_scenario_corrupt_yaml, _scenario_non_mapping_yaml, _scenario_missing_yaml])
+            op = rng.choice(
+                [_scenario_corrupt_yaml, _scenario_non_mapping_yaml, _scenario_missing_yaml]
+            )
             meta = op(skills_root, rng)
             scenario_name = str(meta.get("scenario") or "p0")
             expect_load_error = bool(meta.get("expect_load_error"))
@@ -134,7 +135,9 @@ def _run_single_case(
                 "stale_event": stale_event,
             }
         elif suite == "nightly":
-            op = rng.choice([_scenario_corrupt_yaml, _scenario_non_mapping_yaml, _scenario_missing_yaml])
+            op = rng.choice(
+                [_scenario_corrupt_yaml, _scenario_non_mapping_yaml, _scenario_missing_yaml]
+            )
             meta = op(skills_root, rng)
             scenario_name = str(meta.get("scenario") or "nightly")
             expect_load_error = bool(meta.get("expect_load_error"))
@@ -163,7 +166,9 @@ def _run_single_case(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Chaos test runner for skill router configuration resilience.")
+    parser = argparse.ArgumentParser(
+        description="Chaos test runner for skill router configuration resilience."
+    )
     parser.add_argument("--app-root", required=True, help="repo root containing skills/")
     parser.add_argument("--rounds", type=int, default=100)
     parser.add_argument("--workers", type=int, default=8)
@@ -258,7 +263,9 @@ def main() -> int:
     if args.assert_load_errors_visible and load_error_missing > 0:
         failures.append(f"load_error_missing={load_error_missing} > 0")
     if args.max_stale_ratio is not None and stale_ratio > float(args.max_stale_ratio):
-        failures.append(f"stale_ratio={stale_ratio:.4f} > max_stale_ratio={float(args.max_stale_ratio):.4f}")
+        failures.append(
+            f"stale_ratio={stale_ratio:.4f} > max_stale_ratio={float(args.max_stale_ratio):.4f}"
+        )
 
     report["assertions"] = {
         "assert_no_crash": bool(args.assert_no_crash),
