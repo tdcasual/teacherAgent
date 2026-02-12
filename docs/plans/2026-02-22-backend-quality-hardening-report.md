@@ -8,7 +8,7 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 | Metric | Baseline | Current | Delta | Reduction |
 | --- | ---: | ---: | ---: | ---: |
 | Ruff errors (`ruff check services/api --statistics`) | 745 | 662 | -83 | 11.1% |
-| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 307 | -175 | 36.3% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 295 | -187 | 38.8% |
 | `services/api/app_core.py` line count | 700 | 595 | -105 | 15.0% |
 
 ## 2) Completed Changes
@@ -27,6 +27,7 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 10. Cleared `services/api/llm_routing_resolver.py` mypy `union-attr` debt and expanded type gate coverage.
 11. Cleared `services/api/exam_upload_parse_service.py` mypy `union-attr`/`arg-type` hotspots and added a focused type gate.
 12. Added full type annotations to `services/api/runtime/queue_runtime.py` and added a focused type gate.
+13. Cleared `services/api/exam_upload_confirm_service.py` mypy schema/merge typing hotspots and added a focused type gate.
 
 ## 3) Validation Evidence
 
@@ -52,7 +53,7 @@ Metric collection commands:
 Criteria from the 2-week plan are partially met:
 
 1. Ruff reduction >=30%: **Not met** (current 11.1%).
-2. Mypy reduction >=35%: **Met** (current 36.3%).
+2. Mypy reduction >=35%: **Met** (current 38.8%).
 3. `app_core.py` <=500 lines: **Not met** (current 595).
 4. CI backend-quality guardrails integrated: **Met**.
 5. Newly added guardrail tests pass locally: **Met**.
