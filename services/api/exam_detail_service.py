@@ -143,10 +143,13 @@ def exam_question_detail(
             score = deps.parse_score_value(row.get("score"))
             if score is not None:
                 scores.append(score)
-            is_correct = row.get("is_correct")
-            if is_correct not in (None, ""):
+            is_correct_raw = row.get("is_correct")
+            if is_correct_raw not in (None, ""):
+                is_correct_text = str(is_correct_raw).strip()
+                if not is_correct_text:
+                    continue
                 try:
-                    correct_flags.append(int(is_correct))
+                    correct_flags.append(int(float(is_correct_text)))
                 except Exception:
                     pass
             by_student.append(
@@ -169,7 +172,7 @@ def exam_question_detail(
         key = str(int(s)) if float(s).is_integer() else str(s)
         dist[key] = dist.get(key, 0) + 1
 
-    sample_n = deps.safe_int_arg(top_n, default=5, minimum=1, maximum=100)
+    sample_n = deps.safe_int_arg(top_n, 5, 1, 100)
     by_student_sorted = sorted(by_student, key=lambda x: (x["score"] is None, -(x["score"] or 0)))
     top_students = [x for x in by_student_sorted if x.get("student_id")][:sample_n]
     bottom_students = sorted(by_student, key=lambda x: (x["score"] is None, x["score"] or 0))[:sample_n]
