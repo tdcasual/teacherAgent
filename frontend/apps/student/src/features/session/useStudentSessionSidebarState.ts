@@ -1,36 +1,34 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, type Dispatch, type KeyboardEvent } from 'react'
 import { getNextMenuIndex } from '../../../../shared/sessionMenuNavigation'
-import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../../../../shared/storage'
+import type { StudentAction } from '../../hooks/useStudentState'
 
-export function useStudentSessionSidebarState() {
-  const [sidebarOpen, setSidebarOpen] = useState(() => safeLocalStorageGetItem('studentSidebarOpen') !== 'false')
-  const [openSessionMenuId, setOpenSessionMenuId] = useState('')
+type UseStudentSessionSidebarStateParams = {
+  sidebarOpen: boolean
+  openSessionMenuId: string
+  dispatch: Dispatch<StudentAction>
+}
+
+export function useStudentSessionSidebarState({ sidebarOpen, openSessionMenuId, dispatch }: UseStudentSessionSidebarStateParams) {
   const sessionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const sessionMenuTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
   const toggleSessionMenu = useCallback((sessionId: string) => {
     const sid = String(sessionId || '').trim()
     if (!sid) return
-    setOpenSessionMenuId((prev) => (prev === sid ? '' : sid))
-  }, [])
+    dispatch({ type: 'SET', field: 'openSessionMenuId', value: openSessionMenuId === sid ? '' : sid })
+  }, [openSessionMenuId, dispatch])
 
   const setSessionMenuRef = useCallback((sessionId: string, node: HTMLDivElement | null) => {
     const sid = String(sessionId || '').trim()
     if (!sid) return
-    if (node) {
-      sessionMenuRefs.current[sid] = node
-      return
-    }
+    if (node) { sessionMenuRefs.current[sid] = node; return }
     delete sessionMenuRefs.current[sid]
   }, [])
 
   const setSessionMenuTriggerRef = useCallback((sessionId: string, node: HTMLButtonElement | null) => {
     const sid = String(sessionId || '').trim()
     if (!sid) return
-    if (node) {
-      sessionMenuTriggerRefs.current[sid] = node
-      return
-    }
+    if (node) { sessionMenuTriggerRefs.current[sid] = node; return }
     delete sessionMenuTriggerRefs.current[sid]
   }, [])
 
@@ -73,7 +71,6 @@ export function useStudentSessionSidebarState() {
       if (!menu) return
       const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
       if (!items.length) return
-      const activeIndex = items.findIndex((item) => item === document.activeElement)
 
       if (event.key === 'Escape') {
         event.preventDefault()
@@ -81,10 +78,7 @@ export function useStudentSessionSidebarState() {
         sessionMenuTriggerRefs.current[sid]?.focus()
         return
       }
-      if (event.key === 'Tab') {
-        toggleSessionMenu(sid)
-        return
-      }
+      if (event.key === 'Tab') { toggleSessionMenu(sid); return }
 
       let direction: 'next' | 'prev' | 'first' | 'last' | null = null
       if (event.key === 'ArrowDown') direction = 'next'
@@ -94,24 +88,26 @@ export function useStudentSessionSidebarState() {
       if (!direction) return
 
       event.preventDefault()
+      const activeIndex = items.findIndex((item) => item === document.activeElement)
       const nextIndex = getNextMenuIndex(activeIndex, items.length, direction)
       if (nextIndex >= 0) items[nextIndex]?.focus()
     },
     [openSessionMenuId, toggleSessionMenu],
   )
 
+  // Close menu on outside click
   useEffect(() => {
     if (!openSessionMenuId) return
     const sid = openSessionMenuId
     const onPointerDown = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.closest('.session-menu-wrap')) return
-      setOpenSessionMenuId('')
+      dispatch({ type: 'SET', field: 'openSessionMenuId', value: '' })
     }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         sessionMenuTriggerRefs.current[sid]?.focus()
-        setOpenSessionMenuId('')
+        dispatch({ type: 'SET', field: 'openSessionMenuId', value: '' })
       }
     }
     document.addEventListener('mousedown', onPointerDown)
@@ -122,23 +118,14 @@ export function useStudentSessionSidebarState() {
       document.removeEventListener('touchstart', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [openSessionMenuId])
+  }, [openSessionMenuId, dispatch])
 
+  // Close menu when sidebar closes
   useEffect(() => {
-    if (!sidebarOpen) {
-      setOpenSessionMenuId('')
-    }
-  }, [sidebarOpen])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('studentSidebarOpen', sidebarOpen ? 'true' : 'false')
-  }, [sidebarOpen])
+    if (!sidebarOpen) dispatch({ type: 'SET', field: 'openSessionMenuId', value: '' })
+  }, [sidebarOpen, dispatch])
 
   return {
-    sidebarOpen,
-    setSidebarOpen,
-    openSessionMenuId,
-    setOpenSessionMenuId,
     toggleSessionMenu,
     setSessionMenuRef,
     setSessionMenuTriggerRef,

@@ -122,7 +122,7 @@ body {
   .muted { color: var(--color-muted); font-size: 12px; }
 }
 
-/* ── Markdown rich text (unified with teacher) ── */
+/* ── Markdown rich text ── */
 .markdown p { margin: 0 0 3px; }
 .markdown p:last-child { margin-bottom: 0; }
 .markdown ul, .markdown ol { margin: 0 0 2px 16px; padding: 0; }
@@ -193,41 +193,37 @@ body {
   color: var(--color-muted);
 }
 
-/* ── Layout: student-layout + sidebar ── */
+/* ── Layout: student-layout (flex, not grid-rows) ── */
 .student-layout {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  position: relative;
   background: var(--color-surface);
 }
 .student-layout.sidebar-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: 0px minmax(0, 1fr);
 }
 
-.sidebar-overlay { display: none; }
-
 .session-sidebar {
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--color-border);
   background: #fbfbfc;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 0;
-  overflow: hidden;
-  transition: transform 0.18s ease, opacity 0.18s ease, padding 0.18s ease, width 0.18s ease;
+  transition: transform 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
 }
 .student-layout.sidebar-collapsed .session-sidebar {
-  width: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateX(-8px);
   padding: 0;
   border-right: none;
+  overflow: hidden;
 }
 
 /* ── Responsive ── */
@@ -245,8 +241,8 @@ body {
 
   .student-layout,
   .student-layout.sidebar-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 0 minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar-overlay {
