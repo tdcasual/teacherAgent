@@ -12,9 +12,13 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from ..job_repository import _atomic_write_json
 from ..teacher_assignment_preflight_service import TeacherAssignmentPreflightDeps
 from ..teacher_llm_routing_service import TeacherLlmRoutingDeps
-from ..teacher_provider_registry_service import TeacherProviderRegistryDeps
+from ..teacher_provider_registry_service import (
+    TeacherProviderRegistryDeps,
+    merged_model_registry as _merged_model_registry_impl,
+)
 from ..teacher_routing_api_service import TeacherRoutingApiDeps
 
 
@@ -27,7 +31,7 @@ def _teacher_provider_registry_deps():
         model_registry=_ac.LLM_GATEWAY.registry,
         resolve_teacher_id=_ac.resolve_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
-        atomic_write_json=_ac._atomic_write_json,
+        atomic_write_json=_atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         getenv=os.getenv,
     )
@@ -37,11 +41,11 @@ def _teacher_llm_routing_deps():
     _ac = _app_core()
     return TeacherLlmRoutingDeps(
         model_registry=_ac.LLM_GATEWAY.registry,
-        resolve_model_registry=lambda teacher_id: _ac._merged_model_registry_impl(teacher_id, deps=_ac._teacher_provider_registry_deps()),
+        resolve_model_registry=lambda teacher_id: _merged_model_registry_impl(teacher_id, deps=_teacher_provider_registry_deps()),
         resolve_teacher_id=_ac.resolve_teacher_id,
         teacher_llm_routing_path=_ac.teacher_llm_routing_path,
         legacy_routing_path=_ac.LLM_ROUTING_PATH,
-        atomic_write_json=_ac._atomic_write_json,
+        atomic_write_json=_atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 

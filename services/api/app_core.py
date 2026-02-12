@@ -134,7 +134,6 @@ from .assignment_upload_draft_service import (
     load_assignment_draft_override as _load_assignment_draft_override_impl,
     save_assignment_draft_override as _save_assignment_draft_override_impl,
 )
-from .assignment_upload_parse_service import AssignmentUploadParseDeps, process_upload_job as _process_upload_job_impl
 from .assignment_questions_ocr_service import (
     AssignmentQuestionsOcrDeps,
     assignment_questions_ocr as _assignment_questions_ocr_impl,
@@ -153,10 +152,6 @@ from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
 from .assignment_today_service import AssignmentTodayDeps, assignment_today as _assignment_today_impl
-from .assignment_uploaded_question_service import (
-    AssignmentUploadedQuestionDeps,
-    write_uploaded_questions as _write_uploaded_questions_impl,
-)
 from .assignment_upload_start_service import (
     AssignmentUploadStartDeps,
     AssignmentUploadStartError,
@@ -216,7 +211,6 @@ from .chat_support_service import (
     is_exam_analysis_request as _is_exam_analysis_request_impl,
     normalize_math_delimiters as _normalize_math_delimiters_impl,
 )
-from .skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
 from .chart_agent_run_service import (
     ChartAgentRunDeps,
     chart_agent_bool as _chart_agent_bool_impl,
@@ -272,24 +266,6 @@ from .exam_range_service import (
     exam_range_summary_batch as _exam_range_summary_batch_impl,
     exam_range_top_students as _exam_range_top_students_impl,
 )
-from .exam_score_processing_service import (
-    apply_answer_key_to_responses_csv as _apply_answer_key_to_responses_csv_impl,
-    build_exam_question_id as _build_exam_question_id_impl,
-    build_exam_rows_from_parsed_scores as _build_exam_rows_from_parsed_scores_impl,
-    compute_max_scores_from_rows as _compute_max_scores_from_rows_impl,
-    ensure_questions_max_score as _ensure_questions_max_score_impl,
-    load_exam_answer_key_from_csv as _load_exam_answer_key_from_csv_impl,
-    load_exam_max_scores_from_questions_csv as _load_exam_max_scores_from_questions_csv_impl,
-    normalize_excel_cell as _normalize_excel_cell_impl,
-    normalize_objective_answer as _normalize_objective_answer_impl,
-    normalize_student_id_for_exam as _normalize_student_id_for_exam_impl,
-    parse_exam_answer_key_text as _parse_exam_answer_key_text_impl,
-    parse_exam_question_label as _parse_exam_question_label_impl,
-    score_objective_answer as _score_objective_answer_impl,
-    write_exam_answers_csv as _write_exam_answers_csv_impl,
-    write_exam_questions_csv as _write_exam_questions_csv_impl,
-    write_exam_responses_csv as _write_exam_responses_csv_impl,
-)
 from .exam_upload_confirm_service import (
     ExamUploadConfirmDeps,
     confirm_exam_upload as _confirm_exam_upload_impl,
@@ -308,7 +284,6 @@ from .exam_upload_draft_service import (
     load_exam_draft_override as _load_exam_draft_override_impl,
     save_exam_draft_override as _save_exam_draft_override_impl,
 )
-from .exam_upload_parse_service import ExamUploadParseDeps, process_exam_upload_job as _process_exam_upload_job_impl
 from .exam_upload_start_service import ExamUploadStartDeps, start_exam_upload as _start_exam_upload_impl
 from .lesson_core_tool_service import LessonCaptureDeps, lesson_capture as _lesson_capture_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
@@ -383,35 +358,8 @@ from .teacher_provider_registry_service import (
     teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
 )
-from .teacher_assignment_preflight_service import (
-    TeacherAssignmentPreflightDeps,
-    teacher_assignment_preflight as _teacher_assignment_preflight_impl,
-)
-from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
 from .tool_dispatch_service import ToolDispatchDeps, tool_dispatch as _tool_dispatch_impl
 from .upload_io_service import sanitize_filename_io
-from .upload_llm_service import (
-    UploadLlmDeps,
-    llm_autofill_requirements as _llm_autofill_requirements_impl,
-    llm_parse_assignment_payload as _llm_parse_assignment_payload_impl,
-    llm_parse_exam_scores as _llm_parse_exam_scores_impl,
-    parse_llm_json as _parse_llm_json_impl,
-    summarize_questions_for_prompt as _summarize_questions_for_prompt_impl,
-    truncate_text as _truncate_text_impl,
-    xls_to_table_preview as _xls_to_table_preview_impl,
-    xlsx_to_table_preview as _xlsx_to_table_preview_impl,
-)
-from .upload_text_service import (
-    UploadTextDeps,
-    clean_ocr_text as _clean_ocr_text_impl,
-    ensure_ocr_api_key_aliases as _ensure_ocr_api_key_aliases_impl,
-    extract_text_from_file as _extract_text_from_file_impl,
-    extract_text_from_image as _extract_text_from_image_impl,
-    extract_text_from_pdf as _extract_text_from_pdf_impl,
-    load_ocr_utils as _load_ocr_utils_impl,
-    parse_timeout_env as _parse_timeout_env_impl,
-    save_upload_file as _save_upload_file_impl,
-)
 from .chat_lane_store_factory import get_chat_lane_store
 from services.api.queue.queue_backend import rq_enabled as _rq_enabled_impl
 from services.api.runtime import queue_runtime
@@ -588,6 +536,29 @@ from .wiring.teacher_wiring import *  # noqa: F401,F403
 from .wiring.worker_wiring import *  # noqa: F401,F403
 from .wiring.misc_wiring import *  # noqa: F401,F403
 from .wiring.skill_wiring import *  # noqa: F401,F403
+if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATA_DIR") or os.getenv("UPLOADS_DIR"):
+    _importlib.reload(_importlib.import_module("services.api.context_application_facade"))
+    _importlib.reload(_importlib.import_module("services.api.context_runtime_facade"))
+    _importlib.reload(_importlib.import_module("services.api.context_io_facade"))
+from .context_application_facade import *  # noqa: F401,F403
+from .context_application_facade import (
+    _best_submission_attempt,
+    _compute_submission_attempt,
+    _counted_grade_item,
+    _list_submission_attempts,
+    _session_discussion_pass,
+)
+from .context_runtime_facade import *  # noqa: F401,F403
+from .context_runtime_facade import (
+    _calc_longform_max_tokens,
+    _chat_start_orchestration,
+    _compute_chat_reply_sync,
+    _detect_role_hint,
+    _ensure_teacher_routing_file,
+    _generate_longform_reply,
+)
+from .context_io_facade import *  # noqa: F401,F403
+from .context_io_facade import _normalize_excel_cell_impl
 
 
 @contextmanager
@@ -727,648 +698,3 @@ def _inline_backend_factory():
             profile_update_async=PROFILE_UPDATE_ASYNC,
         ),
     )
-
-
-def parse_timeout_env(name: str) -> Optional[float]:
-    return _parse_timeout_env_impl(name)
-
-def _ensure_ocr_api_key_aliases() -> None:
-    _ensure_ocr_api_key_aliases_impl()
-
-def load_ocr_utils():
-    return _load_ocr_utils_impl()
-
-def clean_ocr_text(text: str) -> str:
-    return _clean_ocr_text_impl(text)
-
-def extract_text_from_pdf(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
-    return _extract_text_from_pdf_impl(
-        path,
-        deps=_upload_text_deps(),
-        language=language,
-        ocr_mode=ocr_mode,
-        prompt=prompt,
-    )
-
-def extract_text_from_file(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
-    return _extract_text_from_file_impl(
-        path,
-        deps=_upload_text_deps(),
-        language=language,
-        ocr_mode=ocr_mode,
-        prompt=prompt,
-    )
-
-def extract_text_from_image(path: Path, language: str = "zh", ocr_mode: str = "FREE_OCR", prompt: str = "") -> str:
-    return _extract_text_from_image_impl(
-        path,
-        deps=_upload_text_deps(),
-        language=language,
-        ocr_mode=ocr_mode,
-        prompt=prompt,
-    )
-
-def truncate_text(text: str, limit: int = 12000) -> str:
-    return _truncate_text_impl(text, limit)
-
-def parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
-    return _parse_llm_json_impl(content)
-
-def llm_parse_assignment_payload(source_text: str, answer_text: str) -> Dict[str, Any]:
-    return _llm_parse_assignment_payload_impl(source_text, answer_text, deps=_upload_llm_deps())
-
-def summarize_questions_for_prompt(questions: List[Dict[str, Any]], limit: int = 4000) -> str:
-    return _summarize_questions_for_prompt_impl(questions, limit=limit)
-
-def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
-    return _compute_requirements_missing_impl(requirements)
-
-def merge_requirements(base: Dict[str, Any], update: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
-    return _merge_requirements_impl(base, update, overwrite=overwrite)
-
-def llm_autofill_requirements(
-    source_text: str,
-    answer_text: str,
-    questions: List[Dict[str, Any]],
-    requirements: Dict[str, Any],
-    missing: List[str],
-) -> Tuple[Dict[str, Any], List[str], bool]:
-    return _llm_autofill_requirements_impl(
-        source_text,
-        answer_text,
-        questions,
-        requirements,
-        missing,
-        deps=_upload_llm_deps(),
-    )
-
-def process_upload_job(job_id: str) -> None:
-    _process_upload_job_impl(job_id, deps=_assignment_upload_parse_deps())
-
-def normalize_student_id_for_exam(class_name: str, student_name: str) -> str:
-    return _normalize_student_id_for_exam_impl(class_name, student_name)
-
-def normalize_excel_cell(value: Any) -> str:
-    return _normalize_excel_cell_impl(value)
-
-def parse_exam_question_label(label: str) -> Optional[Tuple[int, Optional[str], str]]:
-    return _parse_exam_question_label_impl(label)
-
-def build_exam_question_id(q_no: int, sub_no: Optional[str]) -> str:
-    return _build_exam_question_id_impl(q_no, sub_no)
-
-def xlsx_to_table_preview(path: Path, max_rows: int = 60, max_cols: int = 30) -> str:
-    return _xlsx_to_table_preview_impl(path, deps=_upload_llm_deps(), max_rows=max_rows, max_cols=max_cols)
-
-def xls_to_table_preview(path: Path, max_rows: int = 60, max_cols: int = 30) -> str:
-    return _xls_to_table_preview_impl(path, deps=_upload_llm_deps(), max_rows=max_rows, max_cols=max_cols)
-
-def llm_parse_exam_scores(table_text: str) -> Dict[str, Any]:
-    return _llm_parse_exam_scores_impl(table_text, deps=_upload_llm_deps())
-
-def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
-    return _build_exam_rows_from_parsed_scores_impl(exam_id, parsed)
-
-def write_exam_responses_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
-    _write_exam_responses_csv_impl(path, rows)
-
-def write_exam_questions_csv(path: Path, questions: List[Dict[str, Any]], max_scores: Optional[Dict[str, float]] = None) -> None:
-    _write_exam_questions_csv_impl(path, questions, max_scores=max_scores)
-
-def compute_max_scores_from_rows(rows: List[Dict[str, Any]]) -> Dict[str, float]:
-    return _compute_max_scores_from_rows_impl(rows)
-
-def normalize_objective_answer(value: str) -> str:
-    return _normalize_objective_answer_impl(value)
-
-def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
-    return _parse_exam_answer_key_text_impl(text)
-
-def write_exam_answers_csv(path: Path, answers: List[Dict[str, Any]]) -> None:
-    _write_exam_answers_csv_impl(path, answers)
-
-def load_exam_answer_key_from_csv(path: Path) -> Dict[str, str]:
-    return _load_exam_answer_key_from_csv_impl(path)
-
-def load_exam_max_scores_from_questions_csv(path: Path) -> Dict[str, float]:
-    return _load_exam_max_scores_from_questions_csv_impl(path)
-
-def ensure_questions_max_score(
-    questions_csv: Path,
-    qids: Iterable[str],
-    default_score: float = 1.0,
-) -> List[str]:
-    return _ensure_questions_max_score_impl(questions_csv, qids, default_score=default_score)
-
-def score_objective_answer(raw_answer: str, correct: str, max_score: float) -> Tuple[float, int]:
-    return _score_objective_answer_impl(raw_answer, correct, max_score)
-
-def apply_answer_key_to_responses_csv(
-    responses_path: Path,
-    answers_csv: Path,
-    questions_csv: Path,
-    out_path: Path,
-) -> Dict[str, Any]:
-    return _apply_answer_key_to_responses_csv_impl(responses_path, answers_csv, questions_csv, out_path)
-
-def process_exam_upload_job(job_id: str) -> None:
-    _process_exam_upload_job_impl(job_id, deps=_exam_upload_parse_deps())
-
-def write_uploaded_questions(out_dir: Path, assignment_id: str, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return _write_uploaded_questions_impl(
-        out_dir,
-        assignment_id,
-        questions,
-        deps=_assignment_uploaded_question_deps(),
-    )
-def student_search(query: str, limit: int = 5) -> Dict[str, Any]:
-    return _student_search_impl(query, limit, _student_directory_deps())
-
-def student_candidates_by_name(name: str) -> List[Dict[str, str]]:
-    return _student_candidates_by_name_impl(name, _student_directory_deps())
-
-def list_all_student_profiles() -> List[Dict[str, str]]:
-    return _list_all_student_profiles_impl(_student_directory_deps())
-
-def list_all_student_ids() -> List[str]:
-    return _list_all_student_ids_impl(_student_directory_deps())
-
-def list_student_ids_by_class(class_name: str) -> List[str]:
-    return _list_student_ids_by_class_impl(class_name, _student_directory_deps())
-
-def compute_expected_students(scope: str, class_name: str, student_ids: List[str]) -> List[str]:
-    scope_val = resolve_scope(scope, student_ids, class_name)
-    if scope_val == "student":
-        return sorted(list(dict.fromkeys([s for s in student_ids if s])))
-    if scope_val == "class":
-        return list_student_ids_by_class(class_name)
-    return list_all_student_ids()
-
-def list_exams() -> Dict[str, Any]:
-    return _list_exams_impl(deps=_exam_catalog_deps())
-
-def exam_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_get_impl(exam_id, _exam_overview_deps())
-
-def exam_analysis_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_analysis_get_impl(exam_id, _exam_overview_deps())
-
-def exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
-    return _exam_students_list_impl(exam_id, limit, _exam_overview_deps())
-
-def exam_student_detail(exam_id: str, student_id: Optional[str] = None, student_name: Optional[str] = None, class_name: Optional[str] = None) -> Dict[str, Any]:
-    return _exam_student_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        student_id=student_id,
-        student_name=student_name,
-        class_name=class_name,
-    )
-
-def exam_question_detail(
-    exam_id: str,
-    question_id: Optional[str] = None,
-    question_no: Optional[str] = None,
-    top_n: int = 5,
-) -> Dict[str, Any]:
-    return _exam_question_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        question_id=question_id,
-        question_no=question_no,
-        top_n=top_n,
-    )
-
-def exam_range_top_students(
-    exam_id: str,
-    start_question_no: Any,
-    end_question_no: Any,
-    top_n: int = 10,
-) -> Dict[str, Any]:
-    return _exam_range_top_students_impl(
-        exam_id,
-        start_question_no,
-        end_question_no,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_range_summary_batch_impl(
-        exam_id,
-        ranges,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_question_batch_detail_impl(
-        exam_id,
-        question_nos,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
-
-def list_assignments() -> Dict[str, Any]:
-    return _list_assignments_impl(deps=_assignment_catalog_deps())
-
-def parse_list_value(value: Any) -> List[str]:
-    return _parse_list_value_impl(value)
-
-def normalize_preferences(values: List[str]) -> Tuple[List[str], List[str]]:
-    return _normalize_preferences_impl(values)
-
-def normalize_class_level(value: str) -> Optional[str]:
-    return _normalize_class_level_impl(value)
-
-def parse_duration(value: Any) -> Optional[int]:
-    return _parse_duration_impl(value)
-
-def normalize_difficulty(value: Any) -> str:
-    return _normalize_difficulty_impl(value)
-
-def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-    return _validate_requirements_impl(payload)
-
-def save_assignment_requirements(
-    assignment_id: str,
-    requirements: Dict[str, Any],
-    date_str: str,
-    created_by: str = "teacher",
-    validate: bool = True,
-) -> Dict[str, Any]:
-    return _save_assignment_requirements_impl(
-        assignment_id,
-        requirements,
-        date_str,
-        deps=_assignment_requirements_deps(),
-        created_by=created_by,
-        validate=validate,
-    )
-
-def ensure_requirements_for_assignment(
-    assignment_id: str,
-    date_str: str,
-    requirements: Optional[Dict[str, Any]],
-    source: str,
-) -> Optional[Dict[str, Any]]:
-    return _ensure_requirements_for_assignment_impl(
-        assignment_id,
-        date_str,
-        requirements,
-        source,
-        deps=_assignment_requirements_deps(),
-    )
-
-def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
-    return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
-
-def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
-    return _parse_json_from_text_impl(text)
-
-def llm_assignment_gate(req: ChatRequest) -> Optional[Dict[str, Any]]:
-    return _llm_assignment_gate_impl(req, deps=_assignment_llm_gate_deps())
-
-def normalize_numbered_block(text: str) -> str:
-    return _normalize_numbered_block_impl(text)
-
-def extract_numbered_item(text: str, idx: int) -> Optional[str]:
-    return _extract_numbered_item_impl(text, idx)
-
-def parse_subject_topic(text: str) -> Tuple[str, str]:
-    return _parse_subject_topic_impl(text)
-
-def parse_grade_and_level(text: str) -> Tuple[str, str]:
-    return _parse_grade_and_level_impl(text)
-
-def extract_requirements_from_text(text: str) -> Dict[str, Any]:
-    return _extract_requirements_from_text_impl(text)
-
-def detect_assignment_intent(text: str) -> bool:
-    return _detect_assignment_intent_impl(text)
-
-def extract_assignment_id(text: str) -> Optional[str]:
-    return _extract_assignment_id_impl(text)
-
-def extract_date(text: str) -> Optional[str]:
-    return _extract_date_impl(text)
-
-def extract_kp_list(text: str) -> List[str]:
-    return _extract_kp_list_impl(text)
-
-def extract_question_ids(text: str) -> List[str]:
-    return _extract_question_ids_impl(text)
-
-def extract_per_kp(text: str) -> Optional[int]:
-    return _extract_per_kp_impl(text)
-
-def teacher_assignment_preflight(req: ChatRequest) -> Optional[str]:
-    return _teacher_assignment_preflight_impl(req, deps=_teacher_assignment_preflight_deps())
-
-def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]:
-    return _resolve_assignment_date_impl(meta, folder)
-
-def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
-    return _assignment_specificity_impl(meta, student_id, class_name)
-
-def parse_iso_timestamp(value: Optional[str]) -> float:
-    return _parse_iso_timestamp_impl(value)
-
-def find_assignment_for_date(
-    date_str: str,
-    student_id: Optional[str] = None,
-    class_name: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
-    return _find_assignment_for_date_impl(
-        date_str=date_str,
-        student_id=student_id,
-        class_name=class_name,
-        deps=_assignment_catalog_deps(),
-    )
-
-def read_text_safe(path: Path, limit: int = 4000) -> str:
-    return _read_text_safe_impl(path, limit=limit)
-
-def build_assignment_detail(folder: Path, include_text: bool = True) -> Dict[str, Any]:
-    return _build_assignment_detail_impl(
-        folder=folder,
-        include_text=include_text,
-        deps=_assignment_catalog_deps(),
-    )
-
-def postprocess_assignment_meta(
-    assignment_id: str,
-    *,
-    due_at: Optional[str] = None,
-    expected_students: Optional[List[str]] = None,
-    completion_policy: Optional[Dict[str, Any]] = None,
-) -> None:
-    return _postprocess_assignment_meta_impl(
-        assignment_id=assignment_id,
-        due_at=due_at,
-        expected_students=expected_students,
-        completion_policy=completion_policy,
-        deps=_assignment_meta_postprocess_deps(),
-    )
-
-def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
-    return _session_discussion_pass_impl(
-        student_id,
-        assignment_id,
-        deps=SessionDiscussionDeps(
-            marker=DISCUSSION_COMPLETE_MARKER,
-            load_student_sessions_index=load_student_sessions_index,
-            student_session_file=student_session_file,
-        ),
-    )
-
-def _counted_grade_item(item: Dict[str, Any]) -> bool:
-    return _counted_grade_item_impl(item, deps=_assignment_submission_attempt_deps())
-
-def _compute_submission_attempt(attempt_dir: Path) -> Optional[Dict[str, Any]]:
-    return _compute_submission_attempt_impl(attempt_dir, deps=_assignment_submission_attempt_deps())
-
-def _list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
-    return _list_submission_attempts_impl(assignment_id, student_id, deps=_assignment_submission_attempt_deps())
-
-def _best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    return _best_submission_attempt_impl(attempts)
-
-def compute_assignment_progress(assignment_id: str, include_students: bool = True) -> Dict[str, Any]:
-    return _compute_assignment_progress_impl(
-        assignment_id,
-        deps=_assignment_progress_deps(),
-        include_students=include_students,
-    )
-
-def build_assignment_context(detail: Optional[Dict[str, Any]], study_mode: bool = False) -> Optional[str]:
-    return _build_assignment_context_impl(
-        detail,
-        study_mode=study_mode,
-        discussion_complete_marker=DISCUSSION_COMPLETE_MARKER,
-    )
-
-def build_verified_student_context(student_id: str, profile: Optional[Dict[str, Any]] = None) -> str:
-    return _build_verified_student_context_impl(student_id, profile=profile)
-
-def detect_student_study_trigger(text: str) -> bool:
-    return _detect_student_study_trigger_impl(text)
-
-def build_interaction_note(last_user: str, reply: str, assignment_id: Optional[str] = None) -> str:
-    return _build_interaction_note_impl(last_user, reply, assignment_id=assignment_id)
-
-def detect_math_delimiters(text: str) -> bool:
-    return _detect_math_delimiters_impl(text)
-
-def detect_latex_tokens(text: str) -> bool:
-    return _detect_latex_tokens_impl(text)
-
-def normalize_math_delimiters(text: str) -> str:
-    return _normalize_math_delimiters_impl(text)
-
-def list_lessons() -> Dict[str, Any]:
-    return _list_lessons_impl(deps=_content_catalog_deps())
-
-def list_skills() -> Dict[str, Any]:
-    return _list_skills_impl(deps=_content_catalog_deps())
-
-def _ensure_teacher_routing_file(actor: str) -> Path:
-    return _ensure_teacher_routing_file_impl(actor, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_get_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_simulate_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_propose_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_apply_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_rollback_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_llm_routing_proposal_get_impl(args, deps=_teacher_llm_routing_deps())
-
-def teacher_provider_registry_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_get_impl(args, deps=_teacher_provider_registry_deps())
-
-def teacher_provider_registry_create(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_create_impl(args, deps=_teacher_provider_registry_deps())
-
-def teacher_provider_registry_update(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_update_impl(args, deps=_teacher_provider_registry_deps())
-
-def teacher_provider_registry_delete(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_delete_impl(args, deps=_teacher_provider_registry_deps())
-
-def teacher_provider_registry_probe_models(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_probe_models_impl(args, deps=_teacher_provider_registry_deps())
-
-def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
-    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps())
-
-def import_students_from_responses(path: Path, mode: str = "merge") -> Dict[str, Any]:
-    return _import_students_from_responses_impl(path, deps=_student_import_deps(), mode=mode)
-
-def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _student_import_impl(args, deps=_student_import_deps())
-
-def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps())
-
-def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .assignment_generate_tool_service import assignment_render as _assignment_render_impl
-    return _assignment_render_impl(args, deps=_assignment_generate_tool_deps())
-
-def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _chart_exec_api_impl(args, deps=_chart_api_deps())
-
-def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _chart_agent_run_impl(args, deps=_chart_agent_run_deps())
-
-
-def lesson_capture(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _lesson_capture_impl(args, deps=_lesson_core_tool_deps())
-
-def core_example_search(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_search_impl(args, deps=_core_example_tool_deps())
-
-def core_example_register(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_register_impl(args, deps=_core_example_tool_deps())
-
-def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_render_impl(args, deps=_core_example_tool_deps())
-
-def tool_dispatch(name: str, args: Dict[str, Any], role: Optional[str] = None) -> Dict[str, Any]:
-    return _tool_dispatch_impl(name, args, role, deps=_tool_dispatch_deps())
-
-def call_llm(
-    messages: List[Dict[str, Any]],
-    tools: Optional[List[Dict[str, Any]]] = None,
-    role_hint: Optional[str] = None,
-    max_tokens: Optional[int] = None,
-    skill_id: Optional[str] = None,
-    kind: Optional[str] = None,
-    teacher_id: Optional[str] = None,
-    skill_runtime: Optional[Any] = None,
-) -> Dict[str, Any]:
-    return _call_llm_runtime_impl(
-        messages,
-        deps=_chat_runtime_deps(),
-        tools=tools,
-        role_hint=role_hint,
-        max_tokens=max_tokens,
-        skill_id=skill_id,
-        kind=kind,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-    )
-
-def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
-    return _parse_tool_json_impl(content)
-
-def build_system_prompt(role_hint: Optional[str]) -> str:
-    return _build_system_prompt_impl(role_hint, deps=_chat_support_deps())
-
-def allowed_tools(role_hint: Optional[str]) -> set:
-    return _allowed_tools_impl(role_hint)
-
-def extract_min_chars_requirement(text: str) -> Optional[int]:
-    return _extract_min_chars_requirement_impl(text)
-
-def extract_exam_id(text: str) -> Optional[str]:
-    return _extract_exam_id_impl(text)
-
-def is_exam_analysis_request(text: str) -> bool:
-    return _is_exam_analysis_request_impl(text)
-
-def summarize_exam_students(exam_id: str, max_total: Optional[float]) -> Dict[str, Any]:
-    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps())
-
-def load_kp_catalog() -> Dict[str, Dict[str, str]]:
-    from .content_catalog_service import load_kp_catalog as _load_kp_catalog_impl
-    return _load_kp_catalog_impl(DATA_DIR)
-
-def load_question_kp_map() -> Dict[str, str]:
-    from .content_catalog_service import load_question_kp_map as _load_question_kp_map_impl
-    return _load_question_kp_map_impl(DATA_DIR)
-
-def build_exam_longform_context(exam_id: str) -> Dict[str, Any]:
-    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps())
-
-def _calc_longform_max_tokens(min_chars: int) -> int:
-    return _calc_longform_max_tokens_impl(min_chars)
-
-def _generate_longform_reply(
-    convo: List[Dict[str, Any]],
-    min_chars: int,
-    role_hint: Optional[str],
-    skill_id: Optional[str] = None,
-    teacher_id: Optional[str] = None,
-    skill_runtime: Optional[Any] = None,
-) -> str:
-    return _generate_longform_reply_impl(
-        convo,
-        min_chars,
-        role_hint,
-        skill_id,
-        teacher_id,
-        skill_runtime,
-        deps=_exam_longform_deps(),
-    )
-
-def run_agent(
-    messages: List[Dict[str, Any]],
-    role_hint: Optional[str],
-    extra_system: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    skill_id: Optional[str] = None,
-    teacher_id: Optional[str] = None,
-) -> Dict[str, Any]:
-    return _run_agent_runtime_impl(
-        messages,
-        role_hint,
-        deps=_agent_runtime_deps(),
-        extra_system=extra_system,
-        agent_id=agent_id,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-    )
-
-def _detect_role_hint(req: ChatRequest) -> Optional[str]:
-    return _detect_role_hint_impl(req, detect_role=detect_role)
-
-def _compute_chat_reply_sync(
-    req: ChatRequest,
-    session_id: str = "main",
-    teacher_id_override: Optional[str] = None,
-) -> Tuple[str, Optional[str], str]:
-    return _compute_chat_reply_sync_impl(
-        req,
-        deps=_compute_chat_reply_deps(),
-        session_id=session_id,
-        teacher_id_override=teacher_id_override,
-    )
-
-def resolve_student_session_id(student_id: str, assignment_id: Optional[str], assignment_date: Optional[str]) -> str:
-    return _resolve_student_session_id_impl(
-        student_id,
-        assignment_id,
-        assignment_date,
-        parse_date_str=parse_date_str,
-    )
-
-def process_chat_job(job_id: str) -> None:
-    _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
-def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
-    return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
-
-

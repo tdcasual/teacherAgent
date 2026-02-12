@@ -26,19 +26,50 @@ from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 
 from ..api_models import ChatRequest, ChatStartRequest
-from ..chat_api_service import ChatApiDeps
+from ..chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
 from ..chat_job_repository import ChatJobRepositoryDeps
 from ..chat_job_processing_service import (
     ChatJobProcessDeps,
     ComputeChatReplyDeps,
+    compute_chat_reply_sync as _compute_chat_reply_sync_impl,
+    detect_role_hint as _detect_role_hint_impl,
 )
+from ..chat_job_service import chat_job_path as _chat_job_path_impl
 from ..chat_runtime_service import ChatRuntimeDeps
-from ..chat_start_service import ChatStartDeps
-from ..chat_status_service import ChatStatusDeps
+from ..chat_session_history_service import load_session_messages as _load_session_messages_impl
+from ..chat_session_utils import paginate_session_items as _paginate_session_items_impl
+from ..chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
+from ..chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
 from ..chat_support_service import ChatSupportDeps
+from ..chat_lane_repository import (
+    _chat_enqueue_locked,
+    _chat_find_position_locked,
+    _chat_has_pending_locked,
+    _chat_lane_load_locked,
+    _chat_last_user_text,
+    _chat_mark_done_locked,
+    _chat_pick_next_locked,
+    _chat_recent_job_locked,
+    _chat_register_recent_locked,
+    _chat_request_map_set_if_absent,
+    _chat_text_fingerprint,
+    resolve_chat_lane_id,
+    resolve_chat_lane_id_from_job,
+)
 from ..handlers import chat_handlers
+from ..job_repository import _atomic_write_json, _release_lockfile, _try_acquire_lockfile
 from ..prompt_builder import compile_system_prompt
 from ..session_history_api_service import SessionHistoryApiDeps
+from ..session_view_state import (
+    compare_iso_ts as _compare_iso_ts_impl,
+    normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
+)
+from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..teacher_llm_routing_service import ensure_teacher_routing_file as _ensure_teacher_routing_file_impl
+from ..teacher_provider_registry_service import (
+    merged_model_registry as _merged_model_registry_impl,
+    resolve_provider_target as _resolve_provider_target_impl,
+)
 from services.api.runtime import queue_runtime
 from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
@@ -46,6 +77,8 @@ from services.api.workers.chat_worker_service import (
 
 
 from . import get_app_core as _app_core
+from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registry_deps
+from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
 
 
 def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
@@ -56,7 +89,7 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         inline_backend_factory=_ac._inline_backend_factory,
     )
     return chat_handlers.ChatHandlerDeps(
-        compute_chat_reply_sync=_ac._compute_chat_reply_sync,
+        compute_chat_reply_sync=lambda req: _ac._compute_chat_reply_sync(req),
         detect_math_delimiters=_ac.detect_math_delimiters,
         detect_latex_tokens=_ac.detect_latex_tokens,
         diag_log=_ac.diag_log,
@@ -68,7 +101,7 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         student_profile_update=_ac.student_profile_update,
         profile_update_async=_ac.PROFILE_UPDATE_ASYNC,
         run_in_threadpool=run_in_threadpool,
-        get_chat_status=lambda job_id: _ac._get_chat_status_impl(job_id, deps=_ac._chat_status_deps()),
+        get_chat_status=lambda job_id: _get_chat_status_impl(job_id, deps=_chat_status_deps()),
         start_chat_api=lambda req: _ac._start_chat_api_impl(req, deps=_ac._chat_api_deps()),
     )
 
@@ -84,18 +117,18 @@ def _chat_start_deps():
         http_error=lambda code, detail: HTTPException(status_code=code, detail=detail),
         get_chat_job_id_by_request=_ac.get_chat_job_id_by_request,
         load_chat_job=_ac.load_chat_job,
-        detect_role_hint=_ac._detect_role_hint,
+        detect_role_hint=lambda req: _detect_role_hint_impl(req, detect_role=_ac.detect_role),
         resolve_student_session_id=_ac.resolve_student_session_id,
         resolve_teacher_id=_ac.resolve_teacher_id,
-        resolve_chat_lane_id=_ac.resolve_chat_lane_id,
-        chat_last_user_text=_ac._chat_last_user_text,
-        chat_text_fingerprint=_ac._chat_text_fingerprint,
+        resolve_chat_lane_id=resolve_chat_lane_id,
+        chat_last_user_text=_chat_last_user_text,
+        chat_text_fingerprint=_chat_text_fingerprint,
         chat_job_lock=_ac.CHAT_JOB_LOCK,
-        chat_recent_job_locked=_ac._chat_recent_job_locked,
+        chat_recent_job_locked=_chat_recent_job_locked,
         upsert_chat_request_index=_ac.upsert_chat_request_index,
-        chat_lane_load_locked=_ac._chat_lane_load_locked,
+        chat_lane_load_locked=_chat_lane_load_locked,
         chat_lane_max_queue=_ac.CHAT_LANE_MAX_QUEUE,
-        chat_request_map_set_if_absent=_ac._chat_request_map_set_if_absent,
+        chat_request_map_set_if_absent=_chat_request_map_set_if_absent,
         new_job_id=lambda: f"cjob_{uuid.uuid4().hex[:12]}",
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         write_chat_job=lambda job_id, updates, overwrite=False: _ac.write_chat_job(job_id, updates, overwrite=overwrite),
@@ -104,7 +137,7 @@ def _chat_start_deps():
             lane_id=lane_id,
             backend=backend,
         ),
-        chat_register_recent_locked=_ac._chat_register_recent_locked,
+        chat_register_recent_locked=_chat_register_recent_locked,
         append_student_session_message=_ac.append_student_session_message,
         update_student_session_index=_ac.update_student_session_index,
         append_teacher_session_message=_ac.append_teacher_session_message,
@@ -127,10 +160,10 @@ def _chat_status_deps():
             lane_id=lane_id,
             backend=backend,
         ),
-        resolve_chat_lane_id_from_job=_ac.resolve_chat_lane_id_from_job,
+        resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
         chat_job_lock=_ac.CHAT_JOB_LOCK,
-        chat_lane_load_locked=_ac._chat_lane_load_locked,
-        chat_find_position_locked=_ac._chat_find_position_locked,
+        chat_lane_load_locked=_chat_lane_load_locked,
+        chat_find_position_locked=_chat_find_position_locked,
     )
 
 
@@ -162,17 +195,17 @@ def _chat_runtime_deps():
             GLOBAL_LLM_SEMAPHORE_TEACHER,
         ),
         resolve_teacher_id=_ac.resolve_teacher_id,
-        resolve_teacher_model_registry=lambda teacher_id: _ac._merged_model_registry_impl(
-            teacher_id, deps=_ac._teacher_provider_registry_deps()
+        resolve_teacher_model_registry=lambda teacher_id: _merged_model_registry_impl(
+            teacher_id, deps=_teacher_provider_registry_deps()
         ),
-        resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _ac._resolve_provider_target_impl(
+        resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _resolve_provider_target_impl(
             teacher_id,
             provider,
             mode,
             model,
-            deps=_ac._teacher_provider_registry_deps(),
+            deps=_teacher_provider_registry_deps(),
         ),
-        ensure_teacher_routing_file=_ac._ensure_teacher_routing_file,
+        ensure_teacher_routing_file=lambda actor: _ensure_teacher_routing_file_impl(actor, deps=_teacher_llm_routing_deps()),
         routing_config_path_for_role=_ac.routing_config_path_for_role,
         diag_log=_ac.diag_log,
         monotonic=time.monotonic,
@@ -183,7 +216,7 @@ def _chat_job_repo_deps():
     _ac = _app_core()
     return ChatJobRepositoryDeps(
         chat_job_dir=_ac.CHAT_JOB_DIR,
-        atomic_write_json=_ac._atomic_write_json,
+        atomic_write_json=_atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
@@ -197,16 +230,16 @@ def _chat_worker_deps():
         stop_event=_ac.CHAT_WORKER_STOP_EVENT,
         chat_worker_threads=_ac.CHAT_WORKER_THREADS,
         chat_worker_pool_size=_ac.CHAT_WORKER_POOL_SIZE,
-        worker_started_get=_ac._chat_worker_started_get,
-        worker_started_set=_ac._chat_worker_started_set,
+        worker_started_get=_chat_worker_started_get,
+        worker_started_set=_chat_worker_started_set,
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
-        resolve_chat_lane_id_from_job=_ac.resolve_chat_lane_id_from_job,
-        chat_enqueue_locked=_ac._chat_enqueue_locked,
-        chat_lane_load_locked=_ac._chat_lane_load_locked,
-        chat_pick_next_locked=_ac._chat_pick_next_locked,
-        chat_mark_done_locked=_ac._chat_mark_done_locked,
-        chat_has_pending_locked=_ac._chat_has_pending_locked,
+        resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
+        chat_enqueue_locked=_chat_enqueue_locked,
+        chat_lane_load_locked=_chat_lane_load_locked,
+        chat_pick_next_locked=_chat_pick_next_locked,
+        chat_mark_done_locked=_chat_mark_done_locked,
+        chat_has_pending_locked=_chat_has_pending_locked,
         process_chat_job=_ac.process_chat_job,
         diag_log=_ac.diag_log,
         sleep=time.sleep,
@@ -226,8 +259,8 @@ def _chat_job_process_deps():
         inline_backend_factory=_ac._inline_backend_factory,
     )
     return ChatJobProcessDeps(
-        chat_job_claim_path=_ac._chat_job_claim_path,
-        try_acquire_lockfile=_ac._try_acquire_lockfile,
+        chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()) / "claim.lock",
+        try_acquire_lockfile=_try_acquire_lockfile,
         chat_job_claim_ttl_sec=_ac.CHAT_JOB_CLAIM_TTL_SEC,
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
@@ -257,7 +290,7 @@ def _chat_job_process_deps():
         teacher_memory_auto_flush_from_session=_ac.teacher_memory_auto_flush_from_session,
         maybe_compact_teacher_session=_ac.maybe_compact_teacher_session,
         diag_log=_ac.diag_log,
-        release_lockfile=_ac._release_lockfile,
+        release_lockfile=_release_lockfile,
     )
 
 
@@ -287,7 +320,7 @@ def _compute_chat_reply_deps():
         student_inflight=_ac._student_inflight,
         run_agent=_ac.run_agent,
         normalize_math_delimiters=_ac.normalize_math_delimiters,
-        resolve_effective_skill=lambda role_hint, requested_skill_id, last_user_text: _ac._resolve_effective_skill_impl(
+        resolve_effective_skill=lambda role_hint, requested_skill_id, last_user_text: _resolve_effective_skill_impl(
             app_root=_ac.APP_ROOT,
             role_hint=role_hint,
             requested_skill_id=requested_skill_id,
@@ -299,8 +332,7 @@ def _compute_chat_reply_deps():
 
 
 def _chat_api_deps():
-    _ac = _app_core()
-    return ChatApiDeps(start_chat=_ac._chat_start_orchestration)
+    return ChatApiDeps(start_chat=lambda req: _start_chat_orchestration_impl(req, deps=_chat_start_deps()))
 
 
 def _chat_support_deps():
@@ -317,16 +349,16 @@ def _session_history_api_deps():
     return SessionHistoryApiDeps(
         load_student_sessions_index=_ac.load_student_sessions_index,
         load_teacher_sessions_index=_ac.load_teacher_sessions_index,
-        paginate_session_items=lambda items, cursor, limit: _ac._paginate_session_items_impl(items, cursor=cursor, limit=limit),
+        paginate_session_items=lambda items, cursor, limit: _paginate_session_items_impl(items, cursor=cursor, limit=limit),
         load_student_session_view_state=_ac.load_student_session_view_state,
         load_teacher_session_view_state=_ac.load_teacher_session_view_state,
-        normalize_session_view_state_payload=_ac._normalize_session_view_state_payload_impl,
-        compare_iso_ts=_ac._compare_iso_ts_impl,
+        normalize_session_view_state_payload=_normalize_session_view_state_payload_impl,
+        compare_iso_ts=_compare_iso_ts_impl,
         now_iso_millis=lambda: datetime.now().isoformat(timespec="milliseconds"),
         save_student_session_view_state=_ac.save_student_session_view_state,
         save_teacher_session_view_state=_ac.save_teacher_session_view_state,
         student_session_file=_ac.student_session_file,
         teacher_session_file=_ac.teacher_session_file,
-        load_session_messages=_ac._load_session_messages_impl,
+        load_session_messages=_load_session_messages_impl,
         resolve_teacher_id=_ac.resolve_teacher_id,
     )

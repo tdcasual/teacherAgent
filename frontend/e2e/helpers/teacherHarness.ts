@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Page, type Route } from '@playwright/test'
 
 export const TEACHER_COMPOSER_PLACEHOLDER =
   '输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行'
@@ -88,6 +88,8 @@ type SetupApiMocksOptions = {
 export type SetupApiMocksResult = {
   chatStartCalls: ChatStartPayload[]
   getStatusCallCount: (jobId: string) => number
+  getHistorySessionsCallCount: () => number
+  getHistorySessionCallCount: (sessionId?: string) => number
 }
 
 type OpenTeacherAppOptions = {
@@ -145,6 +147,8 @@ export const setupBasicTeacherApiMocks = async (
   const chatStartCalls: ChatStartPayload[] = []
   const chatStartByJob = new Map<string, ChatStartPayload>()
   const statusCallCountByJob = new Map<string, number>()
+  let historySessionsCallCount = 0
+  const historySessionCallCountBySession = new Map<string, number>()
   const statusReplyByJob = new Map<string, string>()
   let viewStatePayload = {
     title_map: {},
@@ -153,7 +157,7 @@ export const setupBasicTeacherApiMocks = async (
     updated_at: new Date().toISOString(),
   }
 
-  await page.route('http://localhost:8000/**', async (route) => {
+  const handleRoute = async (route: Route) => {
     const request = route.request()
     const url = new URL(request.url())
     const method = request.method().toUpperCase()
@@ -169,6 +173,7 @@ export const setupBasicTeacherApiMocks = async (
     }
 
     if (method === 'GET' && path === '/teacher/history/sessions') {
+      historySessionsCallCount += 1
       const sessions = Object.entries(historyBySession).map(([sessionId, messages]) => {
         const latest = messages[messages.length - 1]
         return {
@@ -194,6 +199,10 @@ export const setupBasicTeacherApiMocks = async (
 
     if (method === 'GET' && path === '/teacher/history/session') {
       const sessionId = url.searchParams.get('session_id') || 'main'
+      historySessionCallCountBySession.set(
+        sessionId,
+        (historySessionCallCountBySession.get(sessionId) || 0) + 1,
+      )
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -300,11 +309,43 @@ export const setupBasicTeacherApiMocks = async (
       contentType: 'application/json',
       body: JSON.stringify({ ok: true }),
     })
-  })
+  }
+
+  await page.route('http://localhost:8000/**', handleRoute)
+  await page.route('http://127.0.0.1:8000/**', handleRoute)
 
   return {
     chatStartCalls,
     getStatusCallCount: (jobId: string) => statusCallCountByJob.get(jobId) || 0,
+    getHistorySessionsCallCount: () => historySessionsCallCount,
+    getHistorySessionCallCount: (sessionId?: string) => {
+      if (!sessionId) {
+        let total = 0
+        for (const count of historySessionCallCountBySession.values()) total += count
+        return total
+      }
+      return historySessionCallCountBySession.get(sessionId) || 0
+    },
+  }
+}
+
+const getExpectedVisibleSessionCount = (
+  historyBySession: Record<string, TeacherHistoryMessage[]>,
+  stateOverrides?: LocalStorageState,
+) => {
+  const sessionIds = Object.keys(historyBySession).filter((id) => id.trim().length > 0)
+  const rawViewState = stateOverrides?.teacherSessionViewState
+  if (!rawViewState) return sessionIds.length
+  try {
+    const parsed = JSON.parse(String(rawViewState)) as { hidden_ids?: string[] }
+    const hidden = new Set(
+      Array.isArray(parsed.hidden_ids)
+        ? parsed.hidden_ids.map((id) => String(id || '').trim()).filter((id) => id.length > 0)
+        : [],
+    )
+    return sessionIds.filter((id) => !hidden.has(id)).length
+  } catch {
+    return sessionIds.length
   }
 }
 
@@ -321,5 +362,20 @@ export const openTeacherApp = async (
   await page.goto('/')
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
   await expect(page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)).toBeVisible()
+
+  const sidebarOpenRaw = options.stateOverrides?.teacherSessionSidebarOpen
+  const sidebarOpen = String(sidebarOpenRaw ?? defaultLocalStorageState.teacherSessionSidebarOpen) !== 'false'
+  if (sidebarOpen) {
+    const expectedHistory = options.apiMocks?.historyBySession ?? { main: [] }
+    const expectedVisibleCount = getExpectedVisibleSessionCount(expectedHistory, options.stateOverrides)
+    await expect.poll(() => mocks.getHistorySessionsCallCount()).toBeGreaterThan(0)
+    await expect.poll(() => mocks.getHistorySessionCallCount()).toBeGreaterThan(0)
+    if (expectedVisibleCount > 0) {
+      await expect
+        .poll(() => page.locator('.session-item').count())
+        .toBeGreaterThanOrEqual(expectedVisibleCount)
+    }
+  }
+
   return mocks
 }

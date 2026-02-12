@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -16,43 +16,44 @@ class AssignmentUploadParseDeps:
     extract_text_from_file: Callable[..., str]
     llm_parse_assignment_payload: Callable[[str, str], Dict[str, Any]]
     compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
-    llm_autofill_requirements: Callable[[str, str, List[Dict[str, Any]], Dict[str, Any], List[str]], Tuple[Dict[str, Any], List[str], bool]]
+    llm_autofill_requirements: Callable[
+        [str, str, List[Dict[str, Any]], Dict[str, Any], List[str]],
+        Tuple[Dict[str, Any], List[str], bool],
+    ]
     diag_log: Callable[[str, Dict[str, Any]], None]
 
 
-def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
-    job = deps.load_upload_job(job_id)
-    job_dir = deps.upload_job_path(job_id)
-    source_dir = job_dir / "source"
-    answers_dir = job_dir / "answer_source"
-    source_files = job.get("source_files") or []
-    answer_files = job.get("answer_files") or []
-    language = job.get("language") or "zh"
-    ocr_mode = job.get("ocr_mode") or "FREE_OCR"
-    delivery_mode = job.get("delivery_mode") or "image"
+_OCR_HINTS = [
+    "图片上传需要 OCR 支持。请确保已配置 OCR API Key（OPENAI_API_KEY/SILICONFLOW_API_KEY）并可访问对应服务。",
+    "建议优先上传包含可复制文字的 PDF；若为扫描件/照片，请使用清晰的 JPG/PNG（避免 HEIC）。",
+]
 
+
+def _mark_job_processing(job_id: str, deps: AssignmentUploadParseDeps) -> None:
     deps.write_upload_job(
         job_id,
         {"status": "processing", "step": "extract", "progress": 10, "error": ""},
     )
 
-    if not source_files:
-        deps.write_upload_job(
-            job_id,
-            {"status": "failed", "error": "no source files", "progress": 100},
-        )
-        return
 
+def _extract_source_text(
+    job_id: str,
+    job_dir: Path,
+    source_dir: Path,
+    source_files: List[str],
+    *,
+    language: str,
+    ocr_mode: str,
+    deps: AssignmentUploadParseDeps,
+) -> Optional[str]:
     source_text_parts: List[str] = []
-    ocr_hints = [
-        "图片上传需要 OCR 支持。请确保已配置 OCR API Key（OPENAI_API_KEY/SILICONFLOW_API_KEY）并可访问对应服务。",
-        "建议优先上传包含可复制文字的 PDF；若为扫描件/照片，请使用清晰的 JPG/PNG（避免 HEIC）。",
-    ]
     t_extract = deps.now_monotonic()
     for fname in source_files:
         path = source_dir / fname
         try:
-            source_text_parts.append(deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
+            source_text_parts.append(
+                deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode)
+            )
         except Exception as exc:
             msg = str(exc)[:200]
             err_code = "extract_failed"
@@ -68,10 +69,11 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
                     "progress": 100,
                     "error": err_code,
                     "error_detail": msg,
-                    "hints": ocr_hints,
+                    "hints": _OCR_HINTS,
                 },
             )
-            return
+            return None
+
     source_text = "\n\n".join([text for text in source_text_parts if text])
     (job_dir / "source_text.txt").write_text(source_text or "", encoding="utf-8")
     deps.diag_log(
@@ -82,32 +84,48 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
             "chars": len(source_text),
         },
     )
-
     if not source_text.strip():
         deps.write_upload_job(
             job_id,
             {
                 "status": "failed",
                 "error": "source_text_empty",
-                "hints": ocr_hints,
+                "hints": _OCR_HINTS,
                 "progress": 100,
             },
         )
-        return
+        return None
+    return source_text
 
+
+def _extract_answer_text(
+    job_dir: Path,
+    answers_dir: Path,
+    answer_files: List[str],
+    *,
+    language: str,
+    ocr_mode: str,
+    deps: AssignmentUploadParseDeps,
+) -> str:
     answer_text_parts: List[str] = []
     for fname in answer_files:
         path = answers_dir / fname
         try:
-            answer_text_parts.append(deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode))
+            answer_text_parts.append(
+                deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode)
+            )
         except Exception:
             continue
     answer_text = "\n\n".join([text for text in answer_text_parts if text])
     if answer_text:
         (job_dir / "answer_text.txt").write_text(answer_text, encoding="utf-8")
+    return answer_text
 
+
+def _parse_assignment_payload(
+    job_id: str, source_text: str, answer_text: str, deps: AssignmentUploadParseDeps
+) -> Optional[Dict[str, Any]]:
     deps.write_upload_job(job_id, {"step": "parse", "progress": 55})
-
     t_parse = deps.now_monotonic()
     parsed = deps.llm_parse_assignment_payload(source_text, answer_text)
     deps.diag_log(
@@ -126,8 +144,13 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
                 "progress": 100,
             },
         )
-        return
+        return None
+    return parsed
 
+
+def _validate_questions(
+    job_id: str, parsed: Dict[str, Any], deps: AssignmentUploadParseDeps
+) -> Optional[List[Dict[str, Any]]]:
     questions = parsed.get("questions") or []
     if not isinstance(questions, list) or not questions:
         deps.write_upload_job(
@@ -138,8 +161,17 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
                 "progress": 100,
             },
         )
-        return
+        return None
+    return questions
 
+
+def _enrich_requirements(
+    source_text: str,
+    answer_text: str,
+    questions: List[Dict[str, Any]],
+    parsed: Dict[str, Any],
+    deps: AssignmentUploadParseDeps,
+) -> Tuple[Dict[str, Any], List[str], List[str], bool]:
     requirements = parsed.get("requirements") or {}
     missing = deps.compute_requirements_missing(requirements)
     warnings: List[str] = []
@@ -157,7 +189,20 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
         )
         if autofilled and missing:
             warnings.append("已自动补全部分要求，请核对并补充缺失项。")
+    return requirements, missing, warnings, autofilled
 
+
+def _write_parsed_payload(
+    job_dir: Path,
+    *,
+    questions: List[Dict[str, Any]],
+    requirements: Dict[str, Any],
+    missing: List[str],
+    warnings: List[str],
+    delivery_mode: str,
+    autofilled: bool,
+    deps: AssignmentUploadParseDeps,
+) -> None:
     parsed_payload = {
         "questions": questions,
         "requirements": requirements,
@@ -168,12 +213,29 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
         "autofilled": autofilled,
         "generated_at": deps.now_iso(),
     }
-    (job_dir / "parsed.json").write_text(json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    (job_dir / "parsed.json").write_text(
+        json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
+
+def _build_questions_preview(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     preview_items: List[Dict[str, Any]] = []
     for idx, question in enumerate(questions[:3], start=1):
         preview_items.append({"id": idx, "stem": str(question.get("stem") or "")[:160]})
+    return preview_items
 
+
+def _write_done_status(
+    job_id: str,
+    *,
+    questions: List[Dict[str, Any]],
+    requirements: Dict[str, Any],
+    missing: List[str],
+    warnings: List[str],
+    delivery_mode: str,
+    autofilled: bool,
+    deps: AssignmentUploadParseDeps,
+) -> None:
     deps.write_upload_job(
         job_id,
         {
@@ -185,8 +247,80 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
             "requirements": requirements,
             "warnings": warnings,
             "delivery_mode": delivery_mode,
-            "questions_preview": preview_items,
+            "questions_preview": _build_questions_preview(questions),
             "autofilled": autofilled,
             "draft_version": 1,
         },
+    )
+
+
+def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
+    job = deps.load_upload_job(job_id)
+    job_dir = deps.upload_job_path(job_id)
+    source_dir = job_dir / "source"
+    answers_dir = job_dir / "answer_source"
+    source_files = job.get("source_files") or []
+    answer_files = job.get("answer_files") or []
+    language = job.get("language") or "zh"
+    ocr_mode = job.get("ocr_mode") or "FREE_OCR"
+    delivery_mode = job.get("delivery_mode") or "image"
+
+    _mark_job_processing(job_id, deps)
+    if not source_files:
+        deps.write_upload_job(
+            job_id,
+            {"status": "failed", "error": "no source files", "progress": 100},
+        )
+        return
+
+    source_text = _extract_source_text(
+        job_id,
+        job_dir,
+        source_dir,
+        source_files,
+        language=language,
+        ocr_mode=ocr_mode,
+        deps=deps,
+    )
+    if source_text is None:
+        return
+
+    answer_text = _extract_answer_text(
+        job_dir,
+        answers_dir,
+        answer_files,
+        language=language,
+        ocr_mode=ocr_mode,
+        deps=deps,
+    )
+    parsed = _parse_assignment_payload(job_id, source_text, answer_text, deps)
+    if parsed is None:
+        return
+
+    questions = _validate_questions(job_id, parsed, deps)
+    if questions is None:
+        return
+
+    requirements, missing, warnings, autofilled = _enrich_requirements(
+        source_text, answer_text, questions, parsed, deps
+    )
+    _write_parsed_payload(
+        job_dir,
+        questions=questions,
+        requirements=requirements,
+        missing=missing,
+        warnings=warnings,
+        delivery_mode=delivery_mode,
+        autofilled=autofilled,
+        deps=deps,
+    )
+    _write_done_status(
+        job_id,
+        questions=questions,
+        requirements=requirements,
+        missing=missing,
+        warnings=warnings,
+        delivery_mode=delivery_mode,
+        autofilled=autofilled,
+        deps=deps,
     )

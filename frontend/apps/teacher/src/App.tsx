@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
-import RoutingPage, { type RoutingSection } from './features/routing/RoutingPage'
-import SettingsModal from './features/settings/SettingsModal'
-import {
-  buildInvocationToken,
-  findInvocationTrigger,
-  type InvocationTriggerType,
-} from './features/chat/invocation'
+import type { RoutingSection } from './features/routing/RoutingPage'
+import { isRoutingSection } from './features/routing/routingSections'
+import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
+import TeacherTopbar from './features/layout/TeacherTopbar'
 import { useChatScroll } from './features/chat/useChatScroll'
 import {
   readTeacherLocalViewState,
@@ -15,13 +12,13 @@ import {
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
 import { withPendingChatOverlay } from './features/chat/pendingOverlay'
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
-import ChatComposer from './features/chat/ChatComposer'
-import ChatMessages from './features/chat/ChatMessages'
-import MentionPanel from './features/chat/MentionPanel'
-import SessionSidebar from './features/chat/SessionSidebar'
+import TeacherChatMainContent from './features/chat/TeacherChatMainContent'
+import TeacherSessionRail from './features/chat/TeacherSessionRail'
 import TeacherWorkbench from './features/workbench/TeacherWorkbench'
+import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWorkbenchViewModel'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
+import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeacherWorkbenchPanelControls'
 import {
   formatDraftSummary,
   formatExamDraftSummary,
@@ -40,7 +37,6 @@ import {
   parseCommaList,
   parseLineList,
 } from './features/workbench/workbenchUtils'
-import { sessionGroupFromIso, sessionGroupOrder } from '../../shared/sessionGrouping'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -53,14 +49,14 @@ import { useSessionActions } from './features/chat/useSessionActions'
 import { useAssignmentWorkflow } from './features/workbench/hooks/useAssignmentWorkflow'
 import { useExamWorkflow } from './features/workbench/hooks/useExamWorkflow'
 import { useTeacherChatApi } from './features/chat/useTeacherChatApi'
+import { useTeacherComposerInteractions } from './features/chat/useTeacherComposerInteractions'
+import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSessionSidebarModel'
+import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import type {
-  MentionOption,
   Message,
   PendingChatJob,
-  SessionGroup,
   Skill,
-  TeacherHistorySession,
   WorkbenchTab,
   WorkflowIndicator,
 } from './appTypes'
@@ -73,10 +69,6 @@ const WORKBENCH_MIN_WIDTH = 280
 const WORKBENCH_BASE_MAX_WIDTH = 620
 const WORKBENCH_MAX_WIDTH_RATIO = 0.42
 const WORKBENCH_HARD_MAX_WIDTH = 920
-const ROUTING_SECTIONS: RoutingSection[] = ['general', 'providers', 'channels', 'rules', 'simulate', 'history']
-
-const isRoutingSection = (value: string | null | undefined): value is RoutingSection =>
-  Boolean(value && ROUTING_SECTIONS.includes(value as RoutingSection))
 
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
@@ -88,7 +80,6 @@ export default function App() {
   const workbenchPanelRef = useRef<PanelImperativeHandle | null>(null)
   const workbench = useTeacherWorkbenchState()
   const session = useTeacherSessionState(initialViewStateRef.current)
-  const [isWorkbenchResizing, setIsWorkbenchResizing] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
   const workbenchMaxWidth = workbenchMaxWidthForViewport(viewportWidth)
@@ -176,7 +167,6 @@ export default function App() {
   const [skillList, setSkillList] = useState<Skill[]>(fallbackSkills)
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsError, setSkillsError] = useState('')
-  const [mentionIndex, setMentionIndex] = useState(0)
   const [composerWarning, setComposerWarning] = useState('')
   const [chatQueueHint, setChatQueueHint] = useState('')
   const PENDING_CHAT_KEY = 'teacherPendingChatJob'
@@ -418,95 +408,51 @@ export default function App() {
   })
 
 
-  const mention = useMemo(() => {
-    const trigger = findInvocationTrigger(input, cursorPos)
-    if (!trigger) return null
-    const query = trigger.query
-    const source: MentionOption[] = skillList.map((skill) => ({
-      id: skill.id,
-      title: skill.title,
-      desc: skill.desc,
-      type: 'skill' as const,
-    }))
+  const {
+    mention,
+    mentionIndex,
+    filteredSkills,
+    stopKeyPropagation,
+    insertPrompt,
+    insertInvocationTokenAtCursor,
+    insertMention,
+    toggleFavorite,
+    handleSend,
+    handleKeyDown,
+  } = useTeacherComposerInteractions({
+    input,
+    setInput,
+    cursorPos,
+    setCursorPos,
+    inputRef,
+    skillList,
+    skillQuery,
+    showFavoritesOnly,
+    favorites,
+    activeSkillId,
+    setActiveSkillId,
+    setSkillPinned,
+    chooseSkill,
+    setFavorites,
+    submitMessage,
+    pendingChatJob,
+    sending,
+  })
 
-    const items = source.filter(
-      (item) =>
-        item.title.toLowerCase().includes(query) ||
-        item.desc.toLowerCase().includes(query) ||
-        item.id.toLowerCase().includes(query),
-    )
-    return { start: trigger.start, query, type: trigger.type, items }
-  }, [cursorPos, input, skillList])
-
-  const mentionItemIds = mention?.items.map((i) => i.id).join(',') ?? ''
-  useEffect(() => {
-    if (mention && mention.items.length) {
-      setMentionIndex(0)
-    }
-  }, [mentionItemIds])
-
-  const filteredSkills = useMemo(() => {
-    const query = skillQuery.trim().toLowerCase()
-    let list = skillList.filter((skill) => {
-      if (!query) return true
-      return (
-        skill.id.toLowerCase().includes(query) ||
-        skill.title.toLowerCase().includes(query) ||
-        skill.desc.toLowerCase().includes(query)
-      )
-    })
-    if (showFavoritesOnly) {
-      list = list.filter((skill) => favorites.includes(skill.id))
-    }
-    return list.sort((a, b) => {
-      const aFav = favorites.includes(a.id)
-      const bFav = favorites.includes(b.id)
-      if (aFav === bFav) return a.title.localeCompare(b.title)
-      return aFav ? -1 : 1
-    })
-  }, [skillQuery, showFavoritesOnly, favorites, skillList])
-
-  const visibleHistorySessions = useMemo(() => {
-    const archived = new Set(deletedSessionIds)
-    const q = historyQuery.trim().toLowerCase()
-    return historySessions.filter((item) => {
-      const sid = String(item.session_id || '').trim()
-      if (!sid) return false
-      const title = (sessionTitleMap[sid] || '').toLowerCase()
-      const preview = (item.preview || '').toLowerCase()
-      const matched = !q || sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
-      if (!matched) return false
-      return showArchivedSessions ? archived.has(sid) : !archived.has(sid)
-    })
-  }, [historySessions, deletedSessionIds, historyQuery, sessionTitleMap, showArchivedSessions])
-
-  const groupedHistorySessions = useMemo(() => {
-    const buckets = new Map<string, SessionGroup<TeacherHistorySession>>()
-    for (const item of visibleHistorySessions) {
-      const info = sessionGroupFromIso(item.updated_at)
-      const existing = buckets.get(info.key)
-      if (existing) {
-        existing.items.push(item)
-      } else {
-        buckets.set(info.key, { key: info.key, label: info.label, items: [item] })
-      }
-    }
-    return Array.from(buckets.values()).sort((a, b) => {
-      const oa = sessionGroupOrder[a.key] ?? 99
-      const ob = sessionGroupOrder[b.key] ?? 99
-      if (oa !== ob) return oa - ob
-      return a.label.localeCompare(b.label)
-    })
-  }, [visibleHistorySessions])
-
-  const getSessionTitle = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return '未命名会话'
-      return sessionTitleMap[sid] || sid
-    },
-    [sessionTitleMap],
-  )
+  const {
+    visibleHistorySessions,
+    groupedHistorySessions,
+    getSessionTitle,
+    archiveDialogIsArchived,
+    archiveDialogActionLabel,
+  } = useTeacherSessionSidebarModel({
+    historySessions,
+    deletedSessionIds,
+    historyQuery,
+    sessionTitleMap,
+    showArchivedSessions,
+    archiveDialogSessionId,
+  })
 
   const isMobileViewport = useCallback(() => {
     if (typeof window === 'undefined') return false
@@ -530,301 +476,158 @@ export default function App() {
     isMobileViewport,
   })
 
-  const archiveDialogIsArchived = archiveDialogSessionId ? deletedSessionIds.includes(archiveDialogSessionId) : false
-  const archiveDialogActionLabel = archiveDialogIsArchived ? '恢复' : '归档'
+  const {
+    toggleSkillsWorkbench,
+    requestCloseSettings,
+    toggleSettingsPanel,
+    openRoutingSettingsPanel,
+  } = useTeacherUiPanels({
+    skillsOpen,
+    setSkillsOpen,
+    setSessionSidebarOpen,
+    isMobileViewport,
+    settingsHasUnsavedDraft,
+    settingsOpen,
+    setSettingsOpen,
+    setSettingsLegacyFlat,
+    setSettingsHasUnsavedDraft,
+    setInlineRoutingOpen,
+    setSettingsSection,
+  })
 
-  const toggleSkillsWorkbench = useCallback(() => {
-    if (skillsOpen) {
-      setSkillsOpen(false)
-      return
-    }
-    setSkillsOpen(true)
-    if (isMobileViewport()) setSessionSidebarOpen(false)
-  }, [isMobileViewport, skillsOpen])
+  const {
+    isWorkbenchResizing,
+    startWorkbenchResize,
+    handleWorkbenchResizeReset,
+  } = useTeacherWorkbenchPanelControls({
+    workbenchPanelRef,
+    skillsOpen,
+    setSkillsOpen,
+    isMobileLayout,
+    workbenchMaxWidth,
+    workbenchMinWidth: WORKBENCH_MIN_WIDTH,
+    defaultWorkbenchWidth: WORKBENCH_DEFAULT_WIDTH,
+  })
 
-  const activeSkill = useMemo(() => {
-    if (!activeSkillId) return null
-    return skillList.find((s) => s.id === activeSkillId) || null
-  }, [activeSkillId, skillList])
-
-  useEffect(() => {
-    if (!activeSkillId) {
-      setActiveSkillId('physics-teacher-ops')
-      setSkillPinned(false)
-      return
-    }
-    if (!activeSkill) {
-      setActiveSkillId('physics-teacher-ops')
-      setSkillPinned(false)
-    }
-  }, [activeSkillId, activeSkill])
-
-  // Avoid any accidental key handlers interfering with draft editing.
-  const stopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => {
-    e.stopPropagation()
-  }
-
-  const insertPrompt = (prompt: string) => {
-    const nextValue = input ? `${input}\n${prompt}` : prompt
-    setInput(nextValue)
-    requestAnimationFrame(() => {
-      if (!inputRef.current) return
-      inputRef.current.focus()
-      inputRef.current.setSelectionRange(nextValue.length, nextValue.length)
-      setCursorPos(nextValue.length)
-    })
-  }
-
-  const insertInvocationTokenAtCursor = (type: InvocationTriggerType, id: string) => {
-    const token = buildInvocationToken(type, id)
-    if (!token) return
-    const before = input.slice(0, cursorPos)
-    const after = input.slice(cursorPos)
-    const leading = before && !/\s$/.test(before) ? ' ' : ''
-    const trailing = after && !/^\s/.test(after) ? ' ' : ''
-    const nextValue = `${before}${leading}${token}${trailing}${after}`
-    const nextPos = (before + leading + token).length
-    setInput(nextValue)
-    setCursorPos(nextPos)
-
-    const el = inputRef.current
-    if (el) {
-      try {
-        el.value = nextValue
-        el.focus()
-        el.setSelectionRange(nextPos, nextPos)
-      } catch {
-        // ignore selection errors
-      }
-    }
-  }
-
-  const insertMention = (item: MentionOption) => {
-    if (!mention) return
-    const token = buildInvocationToken(item.type, item.id)
-    if (!token) return
-    chooseSkill(item.id, true)
-    const before = input.slice(0, mention.start)
-    const after = input.slice(cursorPos)
-	    const nextValue = `${before}${token} ${after}`.replace(/\s+$/, ' ')
-	    const nextPos = `${before}${token} `.length
-	    setInput(nextValue)
-	    setCursorPos(nextPos)
-
-	    const el = inputRef.current
-	    if (el) {
-	      try {
-	        // Ensure the cursor lands after the inserted token immediately, not only after the next render.
-	        el.value = nextValue
-	        el.focus()
-	        el.setSelectionRange(nextPos, nextPos)
-	      } catch {
-	        // ignore selection errors
-	      }
-	    }
-	  }
-
-  const toggleFavorite = (skillId: string) => {
-    setFavorites((prev) => (prev.includes(skillId) ? prev.filter((id) => id !== skillId) : [...prev, skillId]))
-  }
-
-  const handleSend = async (event: FormEvent) => {
-    event.preventDefault()
-    if (sending) return
-    await submitMessage(input.trim())
-  }
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mention && mention.items.length) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault()
-        setMentionIndex((prev) => (prev + 1) % mention.items.length)
-        return
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault()
-        setMentionIndex((prev) => (prev - 1 + mention.items.length) % mention.items.length)
-        return
-      }
-      if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault()
-        const item = mention.items[mentionIndex]
-        if (item) insertMention(item)
-        return
-      }
-    }
-
-    if (event.key === 'Enter' && !event.shiftKey) {
-      if ((event.nativeEvent as any)?.isComposing) return
-      event.preventDefault()
-      if (!input.trim()) return
-      if (pendingChatJob?.job_id || sending) return
-      void submitMessage(input.trim())
-    }
-  }
-
-  const requestCloseSettings = useCallback(() => {
-    if (settingsHasUnsavedDraft && typeof window !== 'undefined') {
-      const confirmed = window.confirm('当前有未提交的路由草稿，确认关闭并丢弃吗？')
-      if (!confirmed) return
-    }
-    setSettingsOpen(false)
-    setSettingsLegacyFlat(false)
-    setSettingsHasUnsavedDraft(false)
-  }, [settingsHasUnsavedDraft])
-
-  const toggleSettingsPanel = useCallback(() => {
-    if (settingsOpen) {
-      requestCloseSettings()
-      return
-    }
-    setInlineRoutingOpen(false)
-    setSettingsLegacyFlat(false)
-    setSettingsOpen(true)
-  }, [requestCloseSettings, settingsOpen])
-
-  const openRoutingSettingsPanel = useCallback(() => {
-    setInlineRoutingOpen(true)
-    setSettingsSection('general')
-    setSettingsLegacyFlat(false)
-    if (settingsOpen) setSettingsOpen(false)
-  }, [settingsOpen])
-
-  const handleWorkbenchResizeReset = useCallback(() => {
-    const panel = workbenchPanelRef.current
-    if (!panel) return
-    panel.resize(WORKBENCH_DEFAULT_WIDTH)
-    panel.expand()
-    if (!skillsOpen) setSkillsOpen(true)
-  }, [skillsOpen])
-
-  useEffect(() => {
-    const panel = workbenchPanelRef.current
-    if (!panel) return
-    if (isMobileLayout || !skillsOpen) {
-      panel.collapse()
-      return
-    }
-    panel.expand()
-    const currentWidth = panel.getSize().inPixels
-    if (!Number.isFinite(currentWidth)) return
-    const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, Math.round(currentWidth)))
-    if (Math.abs(clamped - currentWidth) > 1) {
-      panel.resize(clamped)
-    }
-  }, [isMobileLayout, skillsOpen, workbenchMaxWidth])
-
-  useEffect(() => {
-    if (!isWorkbenchResizing || typeof window === 'undefined') return
-    const stop = () => setIsWorkbenchResizing(false)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    return () => {
-      window.removeEventListener('pointerup', stop)
-      window.removeEventListener('pointercancel', stop)
-    }
-  }, [isWorkbenchResizing])
+  const teacherWorkbenchViewModel = buildTeacherWorkbenchViewModel({
+    workbench,
+    skillsOpen,
+    setSkillsOpen,
+    workbenchTab,
+    setWorkbenchTab,
+    apiBase,
+    activeSkillId,
+    activeWorkflowIndicator,
+    chooseSkill,
+    difficultyLabel,
+    difficultyOptions,
+    favorites,
+    fetchAssignmentProgress,
+    fetchSkills,
+    filteredSkills,
+    formatDraftSummary,
+    formatExamDraftSummary,
+    formatExamJobSummary,
+    formatMissingRequirements,
+    formatProgressSummary,
+    formatUploadJobSummary,
+    handleConfirmExamUpload,
+    handleConfirmUpload,
+    handleUploadAssignment,
+    handleUploadExam,
+    insertInvocationTokenAtCursor,
+    insertPrompt,
+    normalizeDifficulty,
+    parseCommaList,
+    parseLineList,
+    refreshMemoryInsights,
+    refreshMemoryProposals,
+    refreshWorkflowWorkbench,
+    saveDraft,
+    saveExamDraft,
+    scrollToWorkflowSection,
+    setComposerWarning,
+    setShowFavoritesOnly,
+    setSkillPinned,
+    setSkillQuery,
+    showFavoritesOnly,
+    skillPinned,
+    skillQuery,
+    skillsError,
+    skillsLoading,
+    stopKeyPropagation,
+    toggleFavorite,
+    updateDraftQuestion,
+    updateDraftRequirement,
+    updateExamAnswerKeyText,
+    updateExamDraftMeta,
+    updateExamScoreSchemaSelectedCandidate,
+    updateExamQuestionField,
+  })
 
 
   return (
     <div ref={appRef} className="app teacher h-dvh flex flex-col bg-bg overflow-hidden" style={{ ['--teacher-topbar-height' as any]: `${topbarHeight}px`, overscrollBehavior: 'none' }}>
-      <header ref={topbarRef} className="flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25]" style={{ backdropFilter: 'saturate(180%) blur(8px)' }}>
-        <div className="flex items-center gap-[10px] flex-wrap">
-          <div className="font-bold text-[16px] tracking-[0.2px]">物理教学助手 · 老师端</div>
-          <button className="ghost" type="button" onClick={toggleSessionSidebar}>
-            {sessionSidebarOpen ? '收起会话' : '展开会话'}
-          </button>
-        </div>
-        <div className="flex gap-[10px] items-center flex-wrap">
-          <div className="role-badge teacher">身份：老师</div>
-          <button className="ghost" type="button" onClick={openRoutingSettingsPanel}>
-            模型路由
-          </button>
-          <button
-            className="ghost"
-            type="button"
-            onClick={toggleSkillsWorkbench}
-          >
-            {skillsOpen ? '收起工作台' : '打开工作台'}
-          </button>
-          <button className="ghost border-none bg-transparent cursor-pointer p-[6px] rounded-lg text-[#6b7280] transition-[background] duration-150 ease-in-out hover:bg-surface-soft [&_svg]:block" onClick={toggleSettingsPanel} aria-label="设置">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </button>
-        </div>
-      </header>
+      <TeacherTopbar
+        topbarRef={topbarRef}
+        sessionSidebarOpen={sessionSidebarOpen}
+        skillsOpen={skillsOpen}
+        onToggleSessionSidebar={toggleSessionSidebar}
+        onOpenRoutingSettingsPanel={openRoutingSettingsPanel}
+        onToggleSkillsWorkbench={toggleSkillsWorkbench}
+        onToggleSettingsPanel={toggleSettingsPanel}
+      />
 
-      <SettingsModal
+      <TeacherSettingsPanel
         open={settingsOpen}
         onClose={requestCloseSettings}
-        sections={[
-          { id: 'general', label: '通用' },
-          { id: 'providers', label: 'Provider' },
-          { id: 'channels', label: '渠道' },
-          { id: 'rules', label: '路由规则' },
-          { id: 'simulate', label: '仿真' },
-          { id: 'history', label: '版本历史' },
-        ]}
-        activeSection={settingsSection}
-        onSectionChange={(id) => {
-          if (isRoutingSection(id)) setSettingsSection(id)
-        }}
-      >
-        <RoutingPage
-          apiBase={apiBase}
-          onApiBaseChange={setApiBase}
-          onDirtyChange={setSettingsHasUnsavedDraft}
-          section={settingsSection}
-          legacyFlat={settingsLegacyFlat}
-        />
-      </SettingsModal>
+        settingsSection={settingsSection}
+        onSettingsSectionChange={setSettingsSection}
+        apiBase={apiBase}
+        onApiBaseChange={setApiBase}
+        onDirtyChange={setSettingsHasUnsavedDraft}
+        settingsLegacyFlat={settingsLegacyFlat}
+      />
 
       <div
         className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${sessionSidebarOpen ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]' : 'grid-cols-[0_minmax(0,1fr)]'}`}
         style={{ overscrollBehavior: 'none' }}
       >
-        <button
-            type="button"
-            className={`hidden max-[900px]:block max-[900px]:fixed max-[900px]:inset-0 max-[900px]:z-[15] max-[900px]:bg-black/[0.15] max-[900px]:transition-opacity max-[900px]:duration-200 max-[900px]:ease-in-out ${sessionSidebarOpen || skillsOpen ? 'max-[900px]:opacity-100 max-[900px]:pointer-events-auto' : 'max-[900px]:opacity-0 max-[900px]:pointer-events-none'}`}
-            aria-label="关闭侧边栏"
-            onClick={() => {
-              setSessionSidebarOpen(false)
-              setSkillsOpen(false)
-            }}
-          />
-        <SessionSidebar
-            open={sessionSidebarOpen}
-            historyQuery={historyQuery}
-            historyLoading={historyLoading}
-            historyError={historyError}
-            showArchivedSessions={showArchivedSessions}
-            visibleHistoryCount={visibleHistorySessions.length}
-            groupedHistorySessions={groupedHistorySessions}
-            activeSessionId={activeSessionId}
-            openSessionMenuId={openSessionMenuId}
-            deletedSessionIds={deletedSessionIds}
-            historyHasMore={historyHasMore}
-            sessionHasMore={sessionHasMore}
-            sessionLoading={sessionLoading}
-            sessionError={sessionError}
-            onStartNewSession={startNewTeacherSession}
-            onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
-            onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
-            onHistoryQueryChange={setHistoryQuery}
-            onSelectSession={(sid) => {
-              setActiveSessionId(sid)
-              setSessionCursor(-1)
-              setSessionHasMore(false)
-              setSessionError('')
-              setOpenSessionMenuId('')
-              closeSessionSidebarOnMobile()
-            }}
-            onToggleSessionMenu={toggleSessionMenu}
-            onRenameSession={renameSession}
-            onToggleSessionArchive={toggleSessionArchive}
-            onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
-            getSessionTitle={getSessionTitle}
-            formatSessionUpdatedLabel={formatSessionUpdatedLabel}
-          />
+        <TeacherSessionRail
+          sessionSidebarOpen={sessionSidebarOpen}
+          skillsOpen={skillsOpen}
+          setSessionSidebarOpen={setSessionSidebarOpen}
+          setSkillsOpen={setSkillsOpen}
+          setActiveSessionId={setActiveSessionId}
+          setSessionCursor={setSessionCursor}
+          setSessionHasMore={setSessionHasMore}
+          setSessionError={setSessionError}
+          setOpenSessionMenuId={setOpenSessionMenuId}
+          closeSessionSidebarOnMobile={closeSessionSidebarOnMobile}
+          historyQuery={historyQuery}
+          historyLoading={historyLoading}
+          historyError={historyError}
+          showArchivedSessions={showArchivedSessions}
+          visibleHistoryCount={visibleHistorySessions.length}
+          groupedHistorySessions={groupedHistorySessions}
+          activeSessionId={activeSessionId}
+          openSessionMenuId={openSessionMenuId}
+          deletedSessionIds={deletedSessionIds}
+          historyHasMore={historyHasMore}
+          sessionHasMore={sessionHasMore}
+          sessionLoading={sessionLoading}
+          sessionError={sessionError}
+          onStartNewSession={startNewTeacherSession}
+          onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
+          onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
+          onHistoryQueryChange={setHistoryQuery}
+          onToggleSessionMenu={toggleSessionMenu}
+          onRenameSession={renameSession}
+          onToggleSessionArchive={toggleSessionArchive}
+          onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
+          getSessionTitle={getSessionTitle}
+          formatSessionUpdatedLabel={formatSessionUpdatedLabel}
+        />
 
         <div className="min-w-0 min-h-0 flex overflow-hidden">
           <Group
@@ -836,57 +639,41 @@ export default function App() {
               className="min-w-0 min-h-0 overflow-hidden flex"
               minSize={isMobileLayout ? 0 : 360}
             >
-                      <main className={`chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 overflow-hidden bg-surface ${inlineRoutingOpen ? 'overflow-auto' : ''}`} style={inlineRoutingOpen ? { overscrollBehavior: 'contain' } : undefined}>
-                        {inlineRoutingOpen ? (
-                          <RoutingPage
-                            apiBase={apiBase}
-                            onApiBaseChange={setApiBase}
-                            onDirtyChange={setSettingsHasUnsavedDraft}
-                            section="general"
-                            legacyFlat
-                          />
-                        ) : (
-                          <>
-                            <ChatMessages
-                              renderedMessages={renderedMessages}
-                              sending={sending}
-                              hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
-                              typingTimeLabel={nowTime()}
-                              messagesRef={messagesRef}
-                              onMessagesScroll={handleMessagesScroll}
-                              showScrollToBottom={showScrollToBottom}
-                              onScrollToBottom={() => scrollMessagesToBottom('smooth')}
-                            />
-
-                            <ChatComposer
-                              activeSkillId={activeSkillId || 'physics-teacher-ops'}
-                              skillPinned={skillPinned}
-                              input={input}
-                              pendingChatJob={Boolean(pendingChatJob?.job_id)}
-                              sending={sending}
-                              chatQueueHint={chatQueueHint}
-                              composerWarning={composerWarning}
-                              inputRef={inputRef}
-                              onSubmit={handleSend}
-                              onInputChange={(value, selectionStart) => {
-                                setInput(value)
-                                setCursorPos(selectionStart)
-                              }}
-                              onInputClick={(selectionStart) => setCursorPos(selectionStart)}
-                              onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
-                              onInputKeyDown={handleKeyDown}
-                            />
-
-	            	              {/* workflow panels moved to right workbench */}
-
-                            <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={insertMention} />
-                          </>
-                        )}
-                      </main>
+              <TeacherChatMainContent
+                inlineRoutingOpen={inlineRoutingOpen}
+                apiBase={apiBase}
+                onApiBaseChange={setApiBase}
+                onDirtyChange={setSettingsHasUnsavedDraft}
+                renderedMessages={renderedMessages}
+                sending={sending}
+                hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
+                typingTimeLabel={nowTime()}
+                messagesRef={messagesRef}
+                onMessagesScroll={handleMessagesScroll}
+                showScrollToBottom={showScrollToBottom}
+                onScrollToBottom={() => scrollMessagesToBottom('smooth')}
+                activeSkillId={activeSkillId}
+                skillPinned={skillPinned}
+                input={input}
+                chatQueueHint={chatQueueHint}
+                composerWarning={composerWarning}
+                inputRef={inputRef}
+                onSubmit={handleSend}
+                onInputChange={(value, selectionStart) => {
+                  setInput(value)
+                  setCursorPos(selectionStart)
+                }}
+                onInputClick={(selectionStart) => setCursorPos(selectionStart)}
+                onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
+                onInputKeyDown={handleKeyDown}
+                mention={mention}
+                mentionIndex={mentionIndex}
+                onInsertMention={insertMention}
+              />
             </Panel>
             <Separator
               className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[rgba(16,163,127,0.08)] ${isWorkbenchResizing ? 'bg-[rgba(16,163,127,0.08)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
-              onPointerDown={() => setIsWorkbenchResizing(true)}
+              onPointerDown={startWorkbenchResize}
               onDoubleClick={handleWorkbenchResizeReset}
             >
               <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-[#10a37f]' : 'bg-[#d1d5db] group-hover:bg-[#10a37f]'}`} />
@@ -911,131 +698,7 @@ export default function App() {
                 }
               }}
             >
-                      <TeacherWorkbench
-                          apiBase={apiBase}
-                          skillsOpen={skillsOpen}
-                          setSkillsOpen={setSkillsOpen}
-                          workbenchTab={workbenchTab}
-                          setWorkbenchTab={setWorkbenchTab}
-                          activeSkillId={activeSkillId}
-                          activeWorkflowIndicator={activeWorkflowIndicator}
-                          chooseSkill={chooseSkill}
-                          difficultyLabel={difficultyLabel}
-                          difficultyOptions={difficultyOptions}
-                          draftActionError={draftActionError}
-                          draftActionStatus={draftActionStatus}
-                          draftError={draftError}
-                          draftLoading={draftLoading}
-                          draftPanelCollapsed={draftPanelCollapsed}
-                          draftSaving={draftSaving}
-                          examClassName={examClassName}
-                          examConfirming={examConfirming}
-                          examDate={examDate}
-                          examDraft={examDraft}
-                          examDraftActionError={examDraftActionError}
-                          examDraftActionStatus={examDraftActionStatus}
-                          examDraftError={examDraftError}
-                          examDraftLoading={examDraftLoading}
-                          examDraftPanelCollapsed={examDraftPanelCollapsed}
-                          examDraftSaving={examDraftSaving}
-                          examId={examId}
-                          examJobInfo={examJobInfo}
-                          examUploadError={examUploadError}
-                          examUploadStatus={examUploadStatus}
-                          examUploading={examUploading}
-                          favorites={favorites}
-                          fetchAssignmentProgress={fetchAssignmentProgress}
-                          fetchSkills={fetchSkills}
-                          filteredSkills={filteredSkills}
-                          formatDraftSummary={formatDraftSummary}
-                          formatExamDraftSummary={formatExamDraftSummary}
-                          formatExamJobSummary={formatExamJobSummary}
-                          formatMissingRequirements={formatMissingRequirements}
-                          formatProgressSummary={formatProgressSummary}
-                          formatUploadJobSummary={formatUploadJobSummary}
-                          handleConfirmExamUpload={handleConfirmExamUpload}
-                          handleConfirmUpload={handleConfirmUpload}
-                          handleUploadAssignment={handleUploadAssignment}
-                          handleUploadExam={handleUploadExam}
-                          insertInvocationTokenAtCursor={insertInvocationTokenAtCursor}
-                          insertPrompt={insertPrompt}
-                          memoryInsights={memoryInsights}
-                          memoryStatusFilter={memoryStatusFilter}
-                          misconceptionsText={misconceptionsText}
-                          normalizeDifficulty={normalizeDifficulty}
-                          parseCommaList={parseCommaList}
-                          parseLineList={parseLineList}
-                          progressAssignmentId={progressAssignmentId}
-                          progressData={progressData}
-                          progressError={progressError}
-                          progressLoading={progressLoading}
-                          progressOnlyIncomplete={progressOnlyIncomplete}
-                          progressPanelCollapsed={progressPanelCollapsed}
-                          proposalError={proposalError}
-                          proposalLoading={proposalLoading}
-                          proposals={proposals}
-                          questionShowCount={questionShowCount}
-                          refreshMemoryInsights={refreshMemoryInsights}
-                          refreshMemoryProposals={refreshMemoryProposals}
-                          refreshWorkflowWorkbench={refreshWorkflowWorkbench}
-                          saveDraft={saveDraft}
-                          saveExamDraft={saveExamDraft}
-                          scrollToWorkflowSection={scrollToWorkflowSection}
-                          setComposerWarning={setComposerWarning}
-                          setDraftPanelCollapsed={setDraftPanelCollapsed}
-                          setExamAnswerFiles={setExamAnswerFiles}
-                          setExamClassName={setExamClassName}
-                          setExamDate={setExamDate}
-                          setExamDraftPanelCollapsed={setExamDraftPanelCollapsed}
-                          setExamId={setExamId}
-                          setExamPaperFiles={setExamPaperFiles}
-                          setExamScoreFiles={setExamScoreFiles}
-                          setMemoryStatusFilter={setMemoryStatusFilter}
-                          setMisconceptionsDirty={setMisconceptionsDirty}
-                          setMisconceptionsText={setMisconceptionsText}
-                          setProgressAssignmentId={setProgressAssignmentId}
-                          setProgressOnlyIncomplete={setProgressOnlyIncomplete}
-                          setProgressPanelCollapsed={setProgressPanelCollapsed}
-                          setQuestionShowCount={setQuestionShowCount}
-                          setShowFavoritesOnly={setShowFavoritesOnly}
-                          setSkillPinned={setSkillPinned}
-                          setSkillQuery={setSkillQuery}
-                          setUploadAnswerFiles={setUploadAnswerFiles}
-                          setUploadAssignmentId={setUploadAssignmentId}
-                          setUploadCardCollapsed={setUploadCardCollapsed}
-                          setUploadClassName={setUploadClassName}
-                          setUploadDate={setUploadDate}
-                          setUploadFiles={setUploadFiles}
-                          setUploadMode={setUploadMode}
-                          setUploadScope={setUploadScope}
-                          setUploadStudentIds={setUploadStudentIds}
-                          showFavoritesOnly={showFavoritesOnly}
-                          skillPinned={skillPinned}
-                          skillQuery={skillQuery}
-                          skillsError={skillsError}
-                          skillsLoading={skillsLoading}
-                          stopKeyPropagation={stopKeyPropagation}
-                          toggleFavorite={toggleFavorite}
-                          updateDraftQuestion={updateDraftQuestion}
-                          updateDraftRequirement={updateDraftRequirement}
-                          updateExamAnswerKeyText={updateExamAnswerKeyText}
-                          updateExamDraftMeta={updateExamDraftMeta}
-                          updateExamScoreSchemaSelectedCandidate={updateExamScoreSchemaSelectedCandidate}
-                          updateExamQuestionField={updateExamQuestionField}
-                          uploadAssignmentId={uploadAssignmentId}
-                          uploadCardCollapsed={uploadCardCollapsed}
-                          uploadClassName={uploadClassName}
-                          uploadConfirming={uploadConfirming}
-                          uploadDate={uploadDate}
-                          uploadDraft={uploadDraft}
-                          uploadError={uploadError}
-                          uploadJobInfo={uploadJobInfo}
-                          uploadMode={uploadMode}
-                          uploadScope={uploadScope}
-                          uploadStatus={uploadStatus}
-                          uploadStudentIds={uploadStudentIds}
-                          uploading={uploading}
-                        />
+                      <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
             </Panel>
           </Group>
         </div>

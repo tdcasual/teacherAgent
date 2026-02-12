@@ -15,18 +15,33 @@ __all__ = [
 
 from typing import Any, Dict, List, Optional
 
+from ..assignment_requirements_service import (
+    compute_requirements_missing as _compute_requirements_missing_impl,
+    merge_requirements as _merge_requirements_impl,
+)
 from ..agent_service import (
     AgentRuntimeDeps,
+    default_load_skill_runtime as _default_load_skill_runtime_impl,
+    default_teacher_tools_to_openai as _default_teacher_tools_to_openai_impl,
 )
 from ..chart_agent_run_service import (
     ChartAgentRunDeps,
+    chart_agent_bool as _chart_agent_bool_impl,
+    chart_agent_default_code as _chart_agent_default_code_impl,
+    chart_agent_engine as _chart_agent_engine_impl,
+    chart_agent_generate_candidate as _chart_agent_generate_candidate_impl,
+    chart_agent_generate_candidate_opencode as _chart_agent_generate_candidate_opencode_impl,
+    chart_agent_opencode_overrides as _chart_agent_opencode_overrides_impl,
+    chart_agent_packages as _chart_agent_packages_impl,
 )
 from ..chart_api_service import ChartApiDeps
-from ..chart_executor import execute_chart_exec
 from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
+from ..core_utils import _is_safe_tool_id, _resolve_app_path
+from ..exam_longform_service import generate_longform_reply as _generate_longform_reply_impl
+from ..exam_score_processing_service import normalize_excel_cell as _normalize_excel_cell_impl
+from ..exam_utils import _safe_int_arg
 from ..lesson_core_tool_service import LessonCaptureDeps
-from ..opencode_executor import resolve_opencode_status, run_opencode_codegen
 from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
@@ -34,6 +49,7 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 
 from . import get_app_core as _app_core
+from .exam_wiring import _exam_longform_deps
 
 
 def _tool_dispatch_deps():
@@ -90,13 +106,13 @@ def _upload_llm_deps():
         call_llm=_ac.call_llm,
         diag_log=_ac.diag_log,
         parse_list_value=_ac.parse_list_value,
-        compute_requirements_missing=_ac._compute_requirements_missing_impl,
-        merge_requirements=lambda base, update, overwrite=False: _ac._merge_requirements_impl(
+        compute_requirements_missing=_compute_requirements_missing_impl,
+        merge_requirements=lambda base, update, overwrite=False: _merge_requirements_impl(
             base,
             update,
             overwrite=overwrite,
         ),
-        normalize_excel_cell=_ac._normalize_excel_cell_impl,
+        normalize_excel_cell=_normalize_excel_cell_impl,
     )
 
 
@@ -127,22 +143,26 @@ def _content_catalog_deps():
 def _chart_api_deps():
     _ac = _app_core()
     return ChartApiDeps(
-        chart_exec=lambda args: _ac.execute_chart_exec(args, app_root=_ac.APP_ROOT, uploads_dir=_ac.UPLOADS_DIR)
+        chart_exec=lambda args: _ac.execute_chart_exec(
+            args,
+            app_root=_ac.APP_ROOT,
+            uploads_dir=_ac.UPLOADS_DIR,
+        )
     )
 
 
 def _chart_agent_run_deps():
     _ac = _app_core()
     return ChartAgentRunDeps(
-        safe_int_arg=_ac._safe_int_arg,
-        chart_bool=_ac._chart_agent_bool_impl,
-        chart_engine=_ac._chart_agent_engine_impl,
-        chart_packages=_ac._chart_agent_packages_impl,
-        chart_opencode_overrides=_ac._chart_agent_opencode_overrides_impl,
+        safe_int_arg=_safe_int_arg,
+        chart_bool=_chart_agent_bool_impl,
+        chart_engine=_chart_agent_engine_impl,
+        chart_packages=_chart_agent_packages_impl,
+        chart_opencode_overrides=_chart_agent_opencode_overrides_impl,
         resolve_opencode_status=_ac.resolve_opencode_status,
         app_root=_ac.APP_ROOT,
         uploads_dir=_ac.UPLOADS_DIR,
-        generate_candidate=lambda task, input_data, last_error, previous_code, attempt, max_retries: _ac._chart_agent_generate_candidate_impl(
+        generate_candidate=lambda task, input_data, last_error, previous_code, attempt, max_retries: _chart_agent_generate_candidate_impl(
             task,
             input_data,
             last_error,
@@ -152,7 +172,7 @@ def _chart_agent_run_deps():
             call_llm=_ac.call_llm,
             parse_json_from_text=_ac.parse_json_from_text,
         ),
-        generate_candidate_opencode=lambda task, input_data, last_error, previous_code, attempt, max_retries, opencode_overrides: _ac._chart_agent_generate_candidate_opencode_impl(
+        generate_candidate_opencode=lambda task, input_data, last_error, previous_code, attempt, max_retries, opencode_overrides: _chart_agent_generate_candidate_opencode_impl(
             task,
             input_data,
             last_error,
@@ -164,15 +184,15 @@ def _chart_agent_run_deps():
             run_opencode_codegen=_ac.run_opencode_codegen,
         ),
         execute_chart_exec=_ac.execute_chart_exec,
-        default_code=_ac._chart_agent_default_code_impl,
+        default_code=_chart_agent_default_code_impl,
     )
 
 
 def _lesson_core_tool_deps():
     _ac = _app_core()
     return LessonCaptureDeps(
-        is_safe_tool_id=_ac._is_safe_tool_id,
-        resolve_app_path=_ac._resolve_app_path,
+        is_safe_tool_id=_is_safe_tool_id,
+        resolve_app_path=_resolve_app_path,
         app_root=_ac.APP_ROOT,
         run_script=_ac.run_script,
     )
@@ -183,8 +203,8 @@ def _core_example_tool_deps():
     return CoreExampleToolDeps(
         data_dir=_ac.DATA_DIR,
         app_root=_ac.APP_ROOT,
-        is_safe_tool_id=_ac._is_safe_tool_id,
-        resolve_app_path=_ac._resolve_app_path,
+        is_safe_tool_id=_is_safe_tool_id,
+        resolve_app_path=_resolve_app_path,
         run_script=_ac.run_script,
     )
 
@@ -195,7 +215,7 @@ def _agent_runtime_deps():
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
         diag_log=_ac.diag_log,
-        load_skill_runtime=lambda role_hint, skill_id: _ac._default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id, teacher_skills_dir=_ac.TEACHER_SKILLS_DIR),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id, teacher_skills_dir=_ac.TEACHER_SKILLS_DIR),
         allowed_tools=_ac.allowed_tools,
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,
@@ -203,8 +223,16 @@ def _agent_runtime_deps():
         extract_exam_id=_ac.extract_exam_id,
         is_exam_analysis_request=_ac.is_exam_analysis_request,
         build_exam_longform_context=_ac.build_exam_longform_context,
-        generate_longform_reply=_ac._generate_longform_reply,
+        generate_longform_reply=lambda convo, min_chars, role_hint, skill_id=None, teacher_id=None, skill_runtime=None: _generate_longform_reply_impl(
+            convo,
+            min_chars,
+            role_hint,
+            skill_id,
+            teacher_id,
+            skill_runtime,
+            deps=_exam_longform_deps(),
+        ),
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
-        teacher_tools_to_openai=_ac._default_teacher_tools_to_openai_impl,
+        teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
     )

@@ -237,6 +237,253 @@ class ChatJobProcessDeps:
     release_lockfile: Callable[[Any], None]
 
 
+class _ChatJobStatusWriter:
+    def __init__(
+        self,
+        *,
+        job_id: str,
+        deps: ChatJobProcessDeps,
+        current_status: str,
+    ) -> None:
+        self.job_id = job_id
+        self.deps = deps
+        self.current_status = current_status
+
+    def transition(self, next_status: str, updates: Dict[str, Any]) -> bool:
+        try:
+            resolved = transition_chat_job_status(self.current_status, next_status)
+        except ValueError:
+            self.deps.write_chat_job(
+                self.job_id,
+                {
+                    "status": "failed",
+                    "error": "invalid_status_transition",
+                    "error_detail": f"{self.current_status}->{normalize_chat_job_status(next_status)}",
+                },
+            )
+            self.current_status = "failed"
+            return False
+
+        payload = dict(updates or {})
+        payload["status"] = resolved
+        self.deps.write_chat_job(self.job_id, payload)
+        self.current_status = resolved
+        return True
+
+
+def _build_chat_request_for_job(
+    job: Dict[str, Any],
+    *,
+    deps: ChatJobProcessDeps,
+    status_writer: _ChatJobStatusWriter,
+) -> Optional[Any]:
+    req_payload = job.get("request") or {}
+    if not isinstance(req_payload, dict):
+        req_payload = {}
+    messages_payload = req_payload.get("messages") or []
+    if not isinstance(messages_payload, list) or not messages_payload:
+        status_writer.transition("failed", {"error": "missing_messages"})
+        return None
+    try:
+        return deps.chat_request_model(**req_payload)
+    except Exception as exc:
+        status_writer.transition(
+            "failed",
+            {"error": "invalid_request", "error_detail": str(exc)[:200]},
+        )
+        return None
+
+
+def _persist_teacher_history(
+    job_id: str,
+    job: Dict[str, Any],
+    req: Any,
+    *,
+    reply_text: str,
+    last_user_text: str,
+    user_turn_persisted: bool,
+    deps: ChatJobProcessDeps,
+    status_writer: _ChatJobStatusWriter,
+) -> tuple[bool, str, str]:
+    teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
+    session_id = str(job.get("session_id") or "").strip() or "main"
+    try:
+        if not user_turn_persisted:
+            deps.append_teacher_session_message(
+                teacher_id,
+                session_id,
+                "user",
+                last_user_text,
+                meta={
+                    "request_id": job.get("request_id") or "",
+                    "skill_id": req.skill_id or "",
+                    "skill_id_requested": str(job.get("skill_id") or ""),
+                    "skill_id_effective": req.skill_id or "",
+                },
+            )
+        deps.append_teacher_session_message(
+            teacher_id,
+            session_id,
+            "assistant",
+            reply_text,
+            meta={
+                "job_id": job_id,
+                "request_id": job.get("request_id") or "",
+                "skill_id": req.skill_id or "",
+                "skill_id_requested": str(job.get("skill_id") or ""),
+                "skill_id_effective": req.skill_id or "",
+            },
+        )
+        deps.update_teacher_session_index(
+            teacher_id,
+            session_id,
+            preview=last_user_text or reply_text,
+            message_increment=1 if user_turn_persisted else 2,
+        )
+        return True, teacher_id, session_id
+    except Exception as exc:
+        detail = str(exc)[:200]
+        deps.diag_log(
+            "teacher.history.append_failed",
+            {"teacher_id": str(job.get("teacher_id") or ""), "error": detail},
+        )
+        status_writer.transition(
+            "failed", {"error": "history_persist_failed", "error_detail": detail}
+        )
+        return False, teacher_id, session_id
+
+
+def _update_student_profile_safe(
+    req: Any, *, last_user_text: str, reply_text: str, deps: ChatJobProcessDeps
+) -> None:
+    try:
+        note = deps.build_interaction_note(
+            last_user_text, reply_text, assignment_id=req.assignment_id
+        )
+        payload = {"student_id": req.student_id, "interaction_note": note}
+        if deps.profile_update_async:
+            deps.enqueue_profile_update(payload)
+        else:
+            deps.student_profile_update(payload)
+    except Exception as exc:
+        deps.diag_log(
+            "student.profile.update_failed",
+            {"student_id": req.student_id, "error": str(exc)[:200]},
+        )
+
+
+def _persist_student_history(
+    job_id: str,
+    job: Dict[str, Any],
+    req: Any,
+    *,
+    reply_text: str,
+    last_user_text: str,
+    user_turn_persisted: bool,
+    deps: ChatJobProcessDeps,
+    status_writer: _ChatJobStatusWriter,
+) -> bool:
+    try:
+        session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
+            req.student_id, req.assignment_id, req.assignment_date
+        )
+        if not user_turn_persisted:
+            deps.append_student_session_message(
+                req.student_id,
+                session_id,
+                "user",
+                last_user_text,
+                meta={"request_id": job.get("request_id") or ""},
+            )
+        deps.append_student_session_message(
+            req.student_id,
+            session_id,
+            "assistant",
+            reply_text,
+            meta={"job_id": job_id, "request_id": job.get("request_id") or ""},
+        )
+        deps.update_student_session_index(
+            req.student_id,
+            session_id,
+            req.assignment_id,
+            deps.parse_date_str(req.assignment_date),
+            preview=last_user_text or reply_text,
+            message_increment=1 if user_turn_persisted else 2,
+        )
+        return True
+    except Exception as exc:
+        detail = str(exc)[:200]
+        deps.diag_log(
+            "student.history.append_failed", {"student_id": req.student_id, "error": detail}
+        )
+        status_writer.transition(
+            "failed", {"error": "history_persist_failed", "error_detail": detail}
+        )
+        return False
+
+
+def _run_teacher_post_done_side_effects(
+    teacher_id: str,
+    session_id: str,
+    *,
+    last_user_text: str,
+    reply_text: str,
+    deps: ChatJobProcessDeps,
+) -> None:
+    try:
+        deps.ensure_teacher_workspace(teacher_id)
+    except Exception as exc:
+        deps.diag_log(
+            "teacher.workspace.ensure_failed",
+            {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+        )
+    try:
+        auto_intent = deps.teacher_memory_auto_propose_from_turn(
+            teacher_id,
+            session_id=session_id,
+            user_text=last_user_text,
+            assistant_text=reply_text,
+        )
+        if auto_intent.get("created"):
+            deps.diag_log(
+                "teacher.memory.auto_intent.proposed",
+                {
+                    "teacher_id": teacher_id,
+                    "session_id": session_id,
+                    "proposal_id": auto_intent.get("proposal_id"),
+                    "target": auto_intent.get("target"),
+                },
+            )
+    except Exception as exc:
+        deps.diag_log(
+            "teacher.memory.auto_intent.failed",
+            {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+        )
+    try:
+        auto_flush = deps.teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
+        if auto_flush.get("created"):
+            deps.diag_log(
+                "teacher.memory.auto_flush.proposed",
+                {
+                    "teacher_id": teacher_id,
+                    "session_id": session_id,
+                    "proposal_id": auto_flush.get("proposal_id"),
+                },
+            )
+    except Exception as exc:
+        deps.diag_log(
+            "teacher.memory.auto_flush.failed",
+            {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+        )
+    try:
+        deps.maybe_compact_teacher_session(teacher_id, session_id)
+    except Exception as exc:
+        deps.diag_log(
+            "teacher.session.compact_failed",
+            {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
+        )
+
+
 def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
     claim_path = deps.chat_job_claim_path(job_id)
     if not deps.try_acquire_lockfile(claim_path, deps.chat_job_claim_ttl_sec):
@@ -247,46 +494,14 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
         if is_terminal_chat_job_status(status):
             return
 
-        def _write_status(next_status: str, updates: Dict[str, Any]) -> bool:
-            nonlocal status
-            try:
-                resolved = transition_chat_job_status(status, next_status)
-            except ValueError:
-                deps.write_chat_job(
-                    job_id,
-                    {
-                        "status": "failed",
-                        "error": "invalid_status_transition",
-                        "error_detail": f"{status}->{normalize_chat_job_status(next_status)}",
-                    },
-                )
-                status = "failed"
-                return False
-            payload = dict(updates or {})
-            payload["status"] = resolved
-            deps.write_chat_job(job_id, payload)
-            status = resolved
-            return True
-
-        req_payload = job.get("request") or {}
-        if not isinstance(req_payload, dict):
-            req_payload = {}
-        messages_payload = req_payload.get("messages") or []
-        if not isinstance(messages_payload, list) or not messages_payload:
-            _write_status("failed", {"error": "missing_messages"})
+        status_writer = _ChatJobStatusWriter(job_id=job_id, deps=deps, current_status=status)
+        req = _build_chat_request_for_job(job, deps=deps, status_writer=status_writer)
+        if req is None:
             return
 
-        try:
-            req = deps.chat_request_model(**req_payload)
-        except Exception as exc:
-            _write_status(
-                "failed",
-                {"error": "invalid_request", "error_detail": str(exc)[:200]},
-            )
+        if not status_writer.transition("processing", {"step": "agent", "error": ""}):
             return
 
-        if not _write_status("processing", {"step": "agent", "error": ""}):
-            return
         t0 = deps.monotonic()
         reply_text, role_hint, last_user_text = deps.compute_chat_reply_sync(
             req,
@@ -299,110 +514,40 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
         teacher_id = ""
         session_id = ""
         if role_hint == "teacher":
-            teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(
-                req.teacher_id
+            (
+                persisted_ok,
+                teacher_id,
+                session_id,
+            ) = _persist_teacher_history(
+                job_id,
+                job,
+                req,
+                reply_text=reply_text,
+                last_user_text=last_user_text,
+                user_turn_persisted=user_turn_persisted,
+                deps=deps,
+                status_writer=status_writer,
             )
-            session_id = str(job.get("session_id") or "").strip() or "main"
-            try:
-                if not user_turn_persisted:
-                    deps.append_teacher_session_message(
-                        teacher_id,
-                        session_id,
-                        "user",
-                        last_user_text,
-                        meta={
-                            "request_id": job.get("request_id") or "",
-                            "skill_id": req.skill_id or "",
-                            "skill_id_requested": str(job.get("skill_id") or ""),
-                            "skill_id_effective": req.skill_id or "",
-                        },
-                    )
-                deps.append_teacher_session_message(
-                    teacher_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={
-                        "job_id": job_id,
-                        "request_id": job.get("request_id") or "",
-                        "skill_id": req.skill_id or "",
-                        "skill_id_requested": str(job.get("skill_id") or ""),
-                        "skill_id_effective": req.skill_id or "",
-                    },
-                )
-                deps.update_teacher_session_index(
-                    teacher_id,
-                    session_id,
-                    preview=last_user_text or reply_text,
-                    message_increment=1 if user_turn_persisted else 2,
-                )
-            except Exception as exc:
-                detail = str(exc)[:200]
-                deps.diag_log(
-                    "teacher.history.append_failed",
-                    {"teacher_id": str(job.get("teacher_id") or ""), "error": detail},
-                )
-                _write_status(
-                    "failed",
-                    {"error": "history_persist_failed", "error_detail": detail},
-                )
+            if not persisted_ok:
                 return
 
         if role_hint == "student" and req.student_id:
-            try:
-                note = deps.build_interaction_note(
-                    last_user_text, reply_text, assignment_id=req.assignment_id
-                )
-                payload = {"student_id": req.student_id, "interaction_note": note}
-                if deps.profile_update_async:
-                    deps.enqueue_profile_update(payload)
-                else:
-                    deps.student_profile_update(payload)
-            except Exception as exc:
-                deps.diag_log(
-                    "student.profile.update_failed",
-                    {"student_id": req.student_id, "error": str(exc)[:200]},
-                )
-
-            try:
-                session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
-                    req.student_id, req.assignment_id, req.assignment_date
-                )
-                if not user_turn_persisted:
-                    deps.append_student_session_message(
-                        req.student_id,
-                        session_id,
-                        "user",
-                        last_user_text,
-                        meta={"request_id": job.get("request_id") or ""},
-                    )
-                deps.append_student_session_message(
-                    req.student_id,
-                    session_id,
-                    "assistant",
-                    reply_text,
-                    meta={"job_id": job_id, "request_id": job.get("request_id") or ""},
-                )
-                deps.update_student_session_index(
-                    req.student_id,
-                    session_id,
-                    req.assignment_id,
-                    deps.parse_date_str(req.assignment_date),
-                    preview=last_user_text or reply_text,
-                    message_increment=1 if user_turn_persisted else 2,
-                )
-            except Exception as exc:
-                detail = str(exc)[:200]
-                deps.diag_log(
-                    "student.history.append_failed", {"student_id": req.student_id, "error": detail}
-                )
-                _write_status(
-                    "failed",
-                    {"error": "history_persist_failed", "error_detail": detail},
-                )
+            _update_student_profile_safe(
+                req, last_user_text=last_user_text, reply_text=reply_text, deps=deps
+            )
+            if not _persist_student_history(
+                job_id,
+                job,
+                req,
+                reply_text=reply_text,
+                last_user_text=last_user_text,
+                user_turn_persisted=user_turn_persisted,
+                deps=deps,
+                status_writer=status_writer,
+            ):
                 return
 
-        if not _write_status(
+        if not status_writer.transition(
             "done",
             {
                 "step": "done",
@@ -416,59 +561,12 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             return
 
         if role_hint == "teacher":
-            try:
-                deps.ensure_teacher_workspace(teacher_id)
-            except Exception as exc:
-                deps.diag_log(
-                    "teacher.workspace.ensure_failed",
-                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                )
-            try:
-                auto_intent = deps.teacher_memory_auto_propose_from_turn(
-                    teacher_id,
-                    session_id=session_id,
-                    user_text=last_user_text,
-                    assistant_text=reply_text,
-                )
-                if auto_intent.get("created"):
-                    deps.diag_log(
-                        "teacher.memory.auto_intent.proposed",
-                        {
-                            "teacher_id": teacher_id,
-                            "session_id": session_id,
-                            "proposal_id": auto_intent.get("proposal_id"),
-                            "target": auto_intent.get("target"),
-                        },
-                    )
-            except Exception as exc:
-                deps.diag_log(
-                    "teacher.memory.auto_intent.failed",
-                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                )
-            try:
-                auto_flush = deps.teacher_memory_auto_flush_from_session(
-                    teacher_id, session_id=session_id
-                )
-                if auto_flush.get("created"):
-                    deps.diag_log(
-                        "teacher.memory.auto_flush.proposed",
-                        {
-                            "teacher_id": teacher_id,
-                            "session_id": session_id,
-                            "proposal_id": auto_flush.get("proposal_id"),
-                        },
-                    )
-            except Exception as exc:
-                deps.diag_log(
-                    "teacher.memory.auto_flush.failed",
-                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                )
-            try:
-                deps.maybe_compact_teacher_session(teacher_id, session_id)
-            except Exception as exc:
-                deps.diag_log(
-                    "teacher.session.compact_failed",
-                    {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
-                )
+            _run_teacher_post_done_side_effects(
+                teacher_id,
+                session_id,
+                last_user_text=last_user_text,
+                reply_text=reply_text,
+                deps=deps,
+            )
     finally:
         deps.release_lockfile(claim_path)

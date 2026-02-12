@@ -32,25 +32,63 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..assignment_api_service import AssignmentApiDeps
+from ..assignment_api_service import (
+    AssignmentApiDeps,
+    get_assignment_detail_api as _get_assignment_detail_api_impl,
+)
 from ..assignment_catalog_service import (
     AssignmentCatalogDeps,
     AssignmentMetaPostprocessDeps,
 )
-from ..assignment_generate_service import AssignmentGenerateDeps
+from ..assignment_generate_service import (
+    AssignmentGenerateDeps,
+    generate_assignment as _generate_assignment_impl,
+)
 from ..assignment_generate_tool_service import AssignmentGenerateToolDeps
 from ..assignment_llm_gate_service import AssignmentLlmGateDeps
 from ..assignment_progress_service import AssignmentProgressDeps
-from ..assignment_questions_ocr_service import AssignmentQuestionsOcrDeps
+from ..assignment_questions_ocr_service import (
+    AssignmentQuestionsOcrDeps,
+    assignment_questions_ocr as _assignment_questions_ocr_impl,
+)
 from ..assignment_requirements_service import AssignmentRequirementsDeps
 from ..assignment_submission_attempt_service import AssignmentSubmissionAttemptDeps
-from ..assignment_today_service import AssignmentTodayDeps
-from ..assignment_upload_confirm_service import AssignmentUploadConfirmDeps
-from ..assignment_upload_draft_save_service import AssignmentUploadDraftSaveDeps
-from ..assignment_upload_legacy_service import AssignmentUploadLegacyDeps
+from ..assignment_today_service import (
+    AssignmentTodayDeps,
+    assignment_today as _assignment_today_impl,
+)
+from ..assignment_upload_confirm_gate_service import (
+    ensure_assignment_upload_confirm_ready as _ensure_assignment_upload_confirm_ready_impl,
+)
+from ..assignment_upload_confirm_service import (
+    AssignmentUploadConfirmDeps,
+    confirm_assignment_upload as _confirm_assignment_upload_impl,
+)
+from ..assignment_upload_draft_save_service import (
+    AssignmentUploadDraftSaveDeps,
+    save_assignment_upload_draft as _save_assignment_upload_draft_impl,
+)
+from ..assignment_upload_draft_service import (
+    assignment_upload_not_ready_detail as _assignment_upload_not_ready_detail_impl,
+    build_assignment_upload_draft as _build_assignment_upload_draft_impl,
+    clean_assignment_draft_questions as _clean_assignment_draft_questions_impl,
+    load_assignment_draft_override as _load_assignment_draft_override_impl,
+    save_assignment_draft_override as _save_assignment_draft_override_impl,
+)
+from ..assignment_upload_legacy_service import (
+    AssignmentUploadLegacyDeps,
+    assignment_upload as _assignment_upload_legacy_impl,
+)
 from ..assignment_upload_parse_service import AssignmentUploadParseDeps
-from ..assignment_upload_query_service import AssignmentUploadQueryDeps
-from ..assignment_upload_start_service import AssignmentUploadStartDeps
+from ..assignment_upload_query_service import (
+    AssignmentUploadQueryDeps,
+    get_assignment_upload_draft as _get_assignment_upload_draft_impl,
+    get_assignment_upload_status as _get_assignment_upload_status_impl,
+)
+from ..assignment_upload_start_service import (
+    AssignmentUploadStartDeps,
+    start_assignment_upload as _start_assignment_upload_impl,
+)
 from ..assignment_uploaded_question_service import AssignmentUploadedQuestionDeps
 from ..handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers
 from services.api.runtime import queue_runtime
@@ -68,17 +106,17 @@ def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
         save_assignment_requirements=_ac.save_assignment_requirements,
         resolve_assignment_dir=_ac.resolve_assignment_dir,
         load_assignment_requirements=_ac.load_assignment_requirements,
-        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: _ac._assignment_today_impl(
+        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: _assignment_today_impl(
             student_id=student_id,
             date=date,
             auto_generate=auto_generate,
             generate=generate,
             per_kp=per_kp,
-            deps=_ac._assignment_today_deps(),
+            deps=_assignment_today_deps(),
         ),
-        get_assignment_detail_api=lambda assignment_id: _ac._get_assignment_detail_api_impl(
+        get_assignment_detail_api=lambda assignment_id: _get_assignment_detail_api_impl(
             assignment_id,
-            deps=_ac._assignment_api_deps(),
+            deps=_assignment_api_deps(),
         ),
     )
 
@@ -86,31 +124,31 @@ def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
 def _assignment_upload_handlers_deps() -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
     _ac = _app_core()
     return assignment_upload_handlers.AssignmentUploadHandlerDeps(
-        assignment_upload_legacy=lambda **kwargs: _ac._assignment_upload_legacy_impl(
-            deps=_ac._assignment_upload_legacy_deps(),
+        assignment_upload_legacy=lambda **kwargs: _assignment_upload_legacy_impl(
+            deps=_assignment_upload_legacy_deps(),
             **kwargs,
         ),
-        start_assignment_upload=lambda **kwargs: _ac._start_assignment_upload_impl(
-            deps=_ac._assignment_upload_start_deps(),
+        start_assignment_upload=lambda **kwargs: _start_assignment_upload_impl(
+            deps=_assignment_upload_start_deps(),
             **kwargs,
         ),
-        assignment_upload_status=lambda job_id: _ac._get_assignment_upload_status_impl(job_id, deps=_ac._assignment_upload_query_deps()),
-        assignment_upload_draft=lambda job_id: _ac._get_assignment_upload_draft_impl(job_id, deps=_ac._assignment_upload_query_deps()),
-        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: _ac._save_assignment_upload_draft_impl(
+        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps()),
+        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps()),
+        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: _save_assignment_upload_draft_impl(
             job_id,
             requirements,
             questions,
-            deps=_ac._assignment_upload_draft_save_deps(),
+            deps=_assignment_upload_draft_save_deps(),
         ),
         load_upload_job=_ac.load_upload_job,
-        ensure_assignment_upload_confirm_ready=_ac._ensure_assignment_upload_confirm_ready_impl,
-        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: _ac._confirm_assignment_upload_impl(
+        ensure_assignment_upload_confirm_ready=_ensure_assignment_upload_confirm_ready_impl,
+        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: _confirm_assignment_upload_impl(
             job_id,
             job,
             job_dir,
             requirements_override=requirements_override,
             strict_requirements=strict_requirements,
-            deps=_ac._assignment_upload_confirm_deps(),
+            deps=_assignment_upload_confirm_deps(),
         ),
         upload_job_path=_ac.upload_job_path,
     )
@@ -122,12 +160,12 @@ def _assignment_io_handlers_deps() -> assignment_io_handlers.AssignmentIoHandler
         resolve_assignment_dir=_ac.resolve_assignment_dir,
         sanitize_filename=_ac.sanitize_filename,
         run_script=_ac.run_script,
-        assignment_questions_ocr=lambda **kwargs: _ac._assignment_questions_ocr_impl(
-            deps=_ac._assignment_questions_ocr_deps(),
+        assignment_questions_ocr=lambda **kwargs: _assignment_questions_ocr_impl(
+            deps=_assignment_questions_ocr_deps(),
             **kwargs,
         ),
-        generate_assignment=lambda **kwargs: _ac._generate_assignment_impl(
-            deps=_ac._assignment_generate_deps(),
+        generate_assignment=lambda **kwargs: _generate_assignment_impl(
+            deps=_assignment_generate_deps(),
             **kwargs,
         ),
         app_root=_ac.APP_ROOT,
@@ -330,9 +368,9 @@ def _assignment_upload_query_deps():
     return AssignmentUploadQueryDeps(
         load_upload_job=_ac.load_upload_job,
         upload_job_path=_ac.upload_job_path,
-        assignment_upload_not_ready_detail=_ac._assignment_upload_not_ready_detail_impl,
-        load_assignment_draft_override=_ac._load_assignment_draft_override_impl,
-        build_assignment_upload_draft=_ac._build_assignment_upload_draft_impl,
+        assignment_upload_not_ready_detail=_assignment_upload_not_ready_detail_impl,
+        load_assignment_draft_override=_load_assignment_draft_override_impl,
+        build_assignment_upload_draft=_build_assignment_upload_draft_impl,
         merge_requirements=_ac.merge_requirements,
         compute_requirements_missing=_ac.compute_requirements_missing,
         parse_list_value=_ac.parse_list_value,
@@ -344,9 +382,9 @@ def _assignment_upload_draft_save_deps():
     return AssignmentUploadDraftSaveDeps(
         load_upload_job=_ac.load_upload_job,
         upload_job_path=_ac.upload_job_path,
-        assignment_upload_not_ready_detail=_ac._assignment_upload_not_ready_detail_impl,
-        clean_assignment_draft_questions=_ac._clean_assignment_draft_questions_impl,
-        save_assignment_draft_override=_ac._save_assignment_draft_override_impl,
+        assignment_upload_not_ready_detail=_assignment_upload_not_ready_detail_impl,
+        clean_assignment_draft_questions=_clean_assignment_draft_questions_impl,
+        save_assignment_draft_override=_save_assignment_draft_override_impl,
         merge_requirements=_ac.merge_requirements,
         compute_requirements_missing=_ac.compute_requirements_missing,
         write_upload_job=_ac.write_upload_job,

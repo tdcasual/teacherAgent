@@ -28,10 +28,30 @@ from ..exam_detail_service import ExamDetailDeps
 from ..exam_longform_service import ExamLongformDeps
 from ..exam_overview_service import ExamOverviewDeps
 from ..exam_range_service import ExamRangeDeps
-from ..exam_upload_api_service import ExamUploadApiDeps
-from ..exam_upload_confirm_service import ExamUploadConfirmDeps
+from ..exam_upload_api_service import (
+    ExamUploadApiDeps,
+    exam_upload_confirm as _exam_upload_confirm_api_impl,
+    exam_upload_draft as _exam_upload_draft_api_impl,
+    exam_upload_draft_save as _exam_upload_draft_save_api_impl,
+    exam_upload_status as _exam_upload_status_api_impl,
+)
+from ..exam_upload_confirm_service import (
+    ExamUploadConfirmDeps,
+    confirm_exam_upload as _confirm_exam_upload_impl,
+)
+from ..exam_upload_draft_service import (
+    build_exam_upload_draft as _build_exam_upload_draft_impl,
+    exam_upload_not_ready_detail as _exam_upload_not_ready_detail_impl,
+    load_exam_draft_override as _load_exam_draft_override_impl,
+    save_exam_draft_override as _save_exam_draft_override_impl,
+)
 from ..exam_upload_parse_service import ExamUploadParseDeps
-from ..exam_upload_start_service import ExamUploadStartDeps
+from ..exam_upload_start_service import (
+    ExamUploadStartDeps,
+    start_exam_upload as _start_exam_upload_impl,
+)
+from ..exam_utils import _parse_xlsx_with_script, _safe_int_arg
+from ..core_utils import _non_ws_len
 from ..chart_executor import execute_chart_exec
 from ..handlers import exam_upload_handlers
 from services.api.runtime import queue_runtime
@@ -41,9 +61,8 @@ from . import get_app_core as _app_core
 
 
 def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
-    _ac = _app_core()
     return exam_upload_handlers.ExamUploadHandlerDeps(
-        start_exam_upload=lambda exam_id, date, class_name, paper_files, score_files, answer_files, ocr_mode, language, deps=None: _ac._start_exam_upload_impl(
+        start_exam_upload=lambda exam_id, date, class_name, paper_files, score_files, answer_files, ocr_mode, language, deps=None: _start_exam_upload_impl(
             exam_id=exam_id,
             date=date,
             class_name=class_name,
@@ -52,12 +71,12 @@ def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
             answer_files=answer_files,
             ocr_mode=ocr_mode,
             language=language,
-            deps=_ac._exam_upload_start_deps(),
+            deps=_exam_upload_start_deps(),
         ),
-        exam_upload_status=lambda job_id: _ac._exam_upload_status_api_impl(job_id, deps=_ac._exam_upload_api_deps()),
-        exam_upload_draft=lambda job_id: _ac._exam_upload_draft_api_impl(job_id, deps=_ac._exam_upload_api_deps()),
-        exam_upload_draft_save=lambda **kwargs: _ac._exam_upload_draft_save_api_impl(**kwargs, deps=_ac._exam_upload_api_deps()),
-        exam_upload_confirm=lambda job_id: _ac._exam_upload_confirm_api_impl(job_id, deps=_ac._exam_upload_api_deps()),
+        exam_upload_status=lambda job_id: _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps()),
+        exam_upload_draft=lambda job_id: _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps()),
+        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_api_impl(**kwargs, deps=_exam_upload_api_deps()),
+        exam_upload_confirm=lambda job_id: _exam_upload_confirm_api_impl(job_id, deps=_exam_upload_api_deps()),
     )
 
 
@@ -69,7 +88,7 @@ def _exam_range_deps():
         exam_questions_path=_ac.exam_questions_path,
         read_questions_csv=_ac.read_questions_csv,
         parse_score_value=_ac.parse_score_value,
-        safe_int_arg=_ac._safe_int_arg,
+        safe_int_arg=_safe_int_arg,
         exam_question_detail=_ac.exam_question_detail,
     )
 
@@ -79,7 +98,7 @@ def _exam_analysis_charts_deps():
     return ExamAnalysisChartsDeps(
         app_root=_ac.APP_ROOT,
         uploads_dir=_ac.UPLOADS_DIR,
-        safe_int_arg=_ac._safe_int_arg,
+        safe_int_arg=_safe_int_arg,
         load_exam_manifest=_ac.load_exam_manifest,
         exam_responses_path=_ac.exam_responses_path,
         compute_exam_totals=_ac.compute_exam_totals,
@@ -99,7 +118,7 @@ def _exam_longform_deps():
         exam_get=_ac.exam_get,
         exam_analysis_get=_ac.exam_analysis_get,
         call_llm=_ac.call_llm,
-        non_ws_len=_ac._non_ws_len,
+        non_ws_len=_non_ws_len,
     )
 
 
@@ -115,7 +134,7 @@ def _exam_upload_parse_deps():
         extract_text_from_file=_ac.extract_text_from_file,
         extract_text_from_pdf=_ac.extract_text_from_pdf,
         extract_text_from_image=_ac.extract_text_from_image,
-        parse_xlsx_with_script=_ac._parse_xlsx_with_script,
+        parse_xlsx_with_script=_parse_xlsx_with_script,
         xlsx_to_table_preview=_ac.xlsx_to_table_preview,
         xls_to_table_preview=_ac.xls_to_table_preview,
         llm_parse_exam_scores=_ac.llm_parse_exam_scores,
@@ -141,7 +160,7 @@ def _exam_upload_confirm_deps():
         data_dir=_ac.DATA_DIR,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         write_exam_job=_ac.write_exam_job,
-        load_exam_draft_override=_ac._load_exam_draft_override_impl,
+        load_exam_draft_override=_load_exam_draft_override_impl,
         parse_exam_answer_key_text=_ac.parse_exam_answer_key_text,
         write_exam_questions_csv=_ac.write_exam_questions_csv,
         write_exam_answers_csv=_ac.write_exam_answers_csv,
@@ -187,19 +206,19 @@ def _exam_upload_api_deps():
     return ExamUploadApiDeps(
         load_exam_job=_ac.load_exam_job,
         exam_job_path=_ac.exam_job_path,
-        load_exam_draft_override=_ac._load_exam_draft_override_impl,
-        save_exam_draft_override=_ac._save_exam_draft_override_impl,
-        build_exam_upload_draft=_ac._build_exam_upload_draft_impl,
-        exam_upload_not_ready_detail=_ac._exam_upload_not_ready_detail_impl,
+        load_exam_draft_override=_load_exam_draft_override_impl,
+        save_exam_draft_override=_save_exam_draft_override_impl,
+        build_exam_upload_draft=_build_exam_upload_draft_impl,
+        exam_upload_not_ready_detail=_exam_upload_not_ready_detail_impl,
         parse_exam_answer_key_text=_ac.parse_exam_answer_key_text,
         read_text_safe=_ac.read_text_safe,
         write_exam_job=lambda job_id, updates: _ac.write_exam_job(job_id, updates),
         enqueue_exam_job=lambda job_id: queue_runtime.enqueue_exam_job(job_id, backend=backend),
-        confirm_exam_upload=lambda job_id, job, job_dir: _ac._confirm_exam_upload_impl(
+        confirm_exam_upload=lambda job_id, job, job_dir: _confirm_exam_upload_impl(
             job_id,
             job,
             job_dir,
-            deps=_ac._exam_upload_confirm_deps(),
+            deps=_exam_upload_confirm_deps(),
         ),
     )
 
@@ -215,7 +234,7 @@ def _exam_overview_deps():
         read_questions_csv=_ac.read_questions_csv,
         compute_exam_totals=_ac.compute_exam_totals,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
-        parse_xlsx_with_script=_ac._parse_xlsx_with_script,
+        parse_xlsx_with_script=_parse_xlsx_with_script,
     )
 
 
@@ -240,5 +259,5 @@ def _exam_detail_deps():
         exam_questions_path=_ac.exam_questions_path,
         read_questions_csv=_ac.read_questions_csv,
         parse_score_value=_ac.parse_score_value,
-        safe_int_arg=_ac._safe_int_arg,
+        safe_int_arg=_safe_int_arg,
     )

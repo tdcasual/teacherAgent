@@ -1,141 +1,29 @@
 import SkillsTab from './tabs/SkillsTab'
 import WorkflowTab from './tabs/WorkflowTab'
 import MemoryTab from './tabs/MemoryTab'
-
-type WorkbenchTab = 'skills' | 'memory' | 'workflow'
+import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel'
 
 type TeacherWorkbenchProps = {
-  apiBase: string
-  skillsOpen: boolean
-  setSkillsOpen: any
-  workbenchTab: WorkbenchTab
-  setWorkbenchTab: any
-  activeSkillId: any
-  activeWorkflowIndicator: any
-  chooseSkill: any
-  difficultyLabel: any
-  difficultyOptions: readonly any[]
-  draftActionError: any
-  draftActionStatus: any
-  draftError: any
-  draftLoading: any
-  draftPanelCollapsed: any
-  draftSaving: any
-  examClassName: any
-  examConfirming: any
-  examDate: any
-  examDraft: any
-  examDraftActionError: any
-  examDraftActionStatus: any
-  examDraftError: any
-  examDraftLoading: any
-  examDraftPanelCollapsed: any
-  examDraftSaving: any
-  examId: any
-  examJobInfo: any
-  examUploadError: any
-  examUploadStatus: any
-  examUploading: any
-  favorites: any[]
-  fetchAssignmentProgress: any
-  fetchSkills: any
-  filteredSkills: any[]
-  formatDraftSummary: any
-  formatExamDraftSummary: any
-  formatExamJobSummary: any
-  formatMissingRequirements: any
-  formatProgressSummary: any
-  formatUploadJobSummary: any
-  handleConfirmExamUpload: any
-  handleConfirmUpload: any
-  handleUploadAssignment: any
-  handleUploadExam: any
-  insertInvocationTokenAtCursor: any
-  insertPrompt: any
-  memoryInsights: any
-  memoryStatusFilter: any
-  misconceptionsText: any
-  normalizeDifficulty: any
-  parseCommaList: any
-  parseLineList: any
-  progressAssignmentId: any
-  progressData: any
-  progressError: any
-  progressLoading: any
-  progressOnlyIncomplete: any
-  progressPanelCollapsed: any
-  proposalError: any
-  proposalLoading: any
-  proposals: any[]
-  questionShowCount: any
-  refreshMemoryInsights: any
-  refreshMemoryProposals: any
-  refreshWorkflowWorkbench: any
-  saveDraft: any
-  saveExamDraft: any
-  scrollToWorkflowSection: any
-  setComposerWarning: any
-  setDraftPanelCollapsed: any
-  setExamAnswerFiles: any
-  setExamClassName: any
-  setExamDate: any
-  setExamDraftPanelCollapsed: any
-  setExamId: any
-  setExamPaperFiles: any
-  setExamScoreFiles: any
-  setMemoryStatusFilter: any
-  setMisconceptionsDirty: any
-  setMisconceptionsText: any
-  setProgressAssignmentId: any
-  setProgressOnlyIncomplete: any
-  setProgressPanelCollapsed: any
-  setQuestionShowCount: any
-  setShowFavoritesOnly: any
-  setSkillPinned: any
-  setSkillQuery: any
-  setUploadAnswerFiles: any
-  setUploadAssignmentId: any
-  setUploadCardCollapsed: any
-  setUploadClassName: any
-  setUploadDate: any
-  setUploadFiles: any
-  setUploadMode: any
-  setUploadScope: any
-  setUploadStudentIds: any
-  showFavoritesOnly: any
-  skillPinned: any
-  skillQuery: any
-  skillsError: any
-  skillsLoading: any
-  stopKeyPropagation: any
-  toggleFavorite: any
-  updateDraftQuestion: any
-  updateDraftRequirement: any
-  updateExamAnswerKeyText: any
-  updateExamDraftMeta: any
-  updateExamScoreSchemaSelectedCandidate: any
-  updateExamQuestionField: any
-  uploadAssignmentId: any
-  uploadCardCollapsed: any
-  uploadClassName: any
-  uploadConfirming: any
-  uploadDate: any
-  uploadDraft: any
-  uploadError: any
-  uploadJobInfo: any
-  uploadMode: any
-  uploadScope: any
-  uploadStatus: any
-  uploadStudentIds: any
-  uploading: any
+  viewModel: TeacherWorkbenchViewModel
 }
 
 export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
+  const { viewModel } = props
   const {
-    skillsOpen, setSkillsOpen, workbenchTab, setWorkbenchTab,
-    fetchSkills, skillsLoading, refreshMemoryProposals, refreshMemoryInsights,
-    refreshWorkflowWorkbench, proposalLoading, progressLoading, uploading, examUploading,
-  } = props
+    skillsOpen,
+    setSkillsOpen,
+    workbenchTab,
+    setWorkbenchTab,
+    fetchSkills,
+    skillsLoading,
+    refreshMemoryProposals,
+    refreshMemoryInsights,
+    refreshWorkflowWorkbench,
+    proposalLoading,
+    progressLoading,
+    uploading,
+    examUploading,
+  } = viewModel
 
   return (
     <aside className={`skills-panel border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
@@ -182,36 +70,36 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
       </div>
       {workbenchTab === 'skills' ? (
         <SkillsTab
-          apiBase={props.apiBase}
-          filteredSkills={props.filteredSkills}
-          favorites={props.favorites}
-          activeSkillId={props.activeSkillId}
-          skillPinned={props.skillPinned}
-          skillQuery={props.skillQuery}
-          showFavoritesOnly={props.showFavoritesOnly}
-          skillsLoading={props.skillsLoading}
-          skillsError={props.skillsError}
-          fetchSkills={props.fetchSkills}
-          chooseSkill={props.chooseSkill}
-          toggleFavorite={props.toggleFavorite}
-          insertPrompt={props.insertPrompt}
-          insertInvocationTokenAtCursor={props.insertInvocationTokenAtCursor}
-          stopKeyPropagation={props.stopKeyPropagation}
-          setSkillQuery={props.setSkillQuery}
-          setShowFavoritesOnly={props.setShowFavoritesOnly}
-          setSkillPinned={props.setSkillPinned}
-          setComposerWarning={props.setComposerWarning}
+          apiBase={viewModel.apiBase}
+          filteredSkills={viewModel.filteredSkills}
+          favorites={viewModel.favorites}
+          activeSkillId={viewModel.activeSkillId}
+          skillPinned={viewModel.skillPinned}
+          skillQuery={viewModel.skillQuery}
+          showFavoritesOnly={viewModel.showFavoritesOnly}
+          skillsLoading={viewModel.skillsLoading}
+          skillsError={viewModel.skillsError}
+          fetchSkills={viewModel.fetchSkills}
+          chooseSkill={viewModel.chooseSkill}
+          toggleFavorite={viewModel.toggleFavorite}
+          insertPrompt={viewModel.insertPrompt}
+          insertInvocationTokenAtCursor={viewModel.insertInvocationTokenAtCursor}
+          stopKeyPropagation={viewModel.stopKeyPropagation}
+          setSkillQuery={viewModel.setSkillQuery}
+          setShowFavoritesOnly={viewModel.setShowFavoritesOnly}
+          setSkillPinned={viewModel.setSkillPinned}
+          setComposerWarning={viewModel.setComposerWarning}
         />
       ) : workbenchTab === 'workflow' ? (
-        <WorkflowTab {...props} />
+        <WorkflowTab {...(viewModel as any)} />
       ) : (
         <MemoryTab
-          memoryStatusFilter={props.memoryStatusFilter}
-          setMemoryStatusFilter={props.setMemoryStatusFilter}
-          memoryInsights={props.memoryInsights}
-          proposalError={props.proposalError}
-          proposalLoading={props.proposalLoading}
-          proposals={props.proposals}
+          memoryStatusFilter={viewModel.memoryStatusFilter}
+          setMemoryStatusFilter={viewModel.setMemoryStatusFilter}
+          memoryInsights={viewModel.memoryInsights}
+          proposalError={viewModel.proposalError}
+          proposalLoading={viewModel.proposalLoading}
+          proposals={viewModel.proposals}
         />
       )}
     </aside>

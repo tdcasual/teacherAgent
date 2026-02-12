@@ -1,35 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { makeId } from '../../shared/id'
 import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
-import { getNextMenuIndex } from '../../shared/sessionMenuNavigation'
-import { sessionGroupFromIso, sessionGroupOrder } from '../../shared/sessionGrouping'
 import { startVisibilityAwareBackoffPolling } from '../../shared/visibilityBackoffPolling'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../shared/storage'
 import { nowTime, timeFromIso } from '../../shared/time'
-import {
-  STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX,
-  STUDENT_SESSION_VIEW_STATE_KEY_PREFIX,
-  buildSessionViewStateSignature,
-  compareSessionViewStateUpdatedAt,
-  normalizeSessionViewStatePayload,
-  readStudentLocalDraftSessionIds,
-  readStudentLocalViewState,
-  type SessionViewStatePayload,
-} from './features/chat/viewState'
 import { stripTransientPendingBubbles } from './features/chat/pendingOverlay'
+import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import StudentChatPanel from './features/chat/StudentChatPanel'
 import StudentSessionSidebar from './features/chat/StudentSessionSidebar'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentSessionShell from './features/session/StudentSessionShell'
+import { useStudentSessionActions } from './features/session/useStudentSessionActions'
+import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
+import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import StudentWorkbench from './features/workbench/StudentWorkbench'
 import type {
   AssignmentDetail,
   ChatJobStatus,
-  ChatStartResult,
   Message,
   PendingChatJob,
   RenderedMessage,
-  SessionGroup,
   StudentHistorySession,
   StudentHistorySessionResponse,
   StudentHistorySessionsResponse,
@@ -40,10 +30,6 @@ import 'katex/dist/katex.min.css'
 
 const PENDING_CHAT_KEY_PREFIX = 'studentPendingChatJob:'
 const RECENT_COMPLETION_KEY_PREFIX = 'studentRecentCompletion:'
-const SEND_LOCK_KEY_PREFIX = 'studentSendLock:'
-const FALLBACK_SEND_LOCK_TTL_MS = 5000
-const FALLBACK_SEND_LOCK_SETTLE_MS = 120
-const FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS = 1000
 const RECENT_COMPLETION_TTL_MS = 3 * 60 * 1000
 
 type RecentCompletedReply = {
@@ -127,7 +113,17 @@ const todayDate = () => new Date().toLocaleDateString('sv-SE')
 
 export default function App() {
   const [apiBase] = useState(() => safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL)
-  const [sidebarOpen, setSidebarOpen] = useState(() => safeLocalStorageGetItem('studentSidebarOpen') !== 'false')
+  const {
+    sidebarOpen,
+    setSidebarOpen,
+    openSessionMenuId,
+    setOpenSessionMenuId,
+    toggleSessionMenu,
+    setSessionMenuRef,
+    setSessionMenuTriggerRef,
+    handleSessionMenuTriggerKeyDown,
+    handleSessionMenuKeyDown,
+  } = useStudentSessionSidebarState()
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: makeId(),
@@ -197,7 +193,6 @@ export default function App() {
   const [sessionTitleMap, setSessionTitleMap] = useState<Record<string, string>>({})
   const [deletedSessionIds, setDeletedSessionIds] = useState<string[]>([])
   const [localDraftSessionIds, setLocalDraftSessionIds] = useState<string[]>([])
-  const [openSessionMenuId, setOpenSessionMenuId] = useState('')
   const [renameDialogSessionId, setRenameDialogSessionId] = useState<string | null>(null)
   const [archiveDialogSessionId, setArchiveDialogSessionId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState('')
@@ -205,44 +200,36 @@ export default function App() {
   const [sessionError, setSessionError] = useState('')
   const [sessionCursor, setSessionCursor] = useState(0)
   const [sessionHasMore, setSessionHasMore] = useState(false)
-  const [viewStateUpdatedAt, setViewStateUpdatedAt] = useState(() => new Date().toISOString())
-  const [viewStateSyncReady, setViewStateSyncReady] = useState(false)
   const [forceSessionLoadToken, setForceSessionLoadToken] = useState(0)
   const activeSessionRef = useRef('')
   const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
   const recentCompletedRepliesRef = useRef<RecentCompletedReply[]>(recentCompletedReplies)
   const pendingRecoveredFromStorageRef = useRef(false)
   const skipAutoSessionLoadIdRef = useRef('')
-  const sessionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const sessionMenuTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const historyRequestRef = useRef(0)
   const sessionRequestRef = useRef(0)
-  const applyingViewStateRef = useRef(false)
-  const currentViewStateRef = useRef<SessionViewStatePayload>(
-    normalizeSessionViewStatePayload({
-      title_map: {},
-      hidden_ids: [],
-      active_session_id: '',
-      updated_at: new Date().toISOString(),
-    }),
-  )
-  const lastSyncedViewStateSignatureRef = useRef('')
-  const currentViewState = useMemo(
-    () =>
-      normalizeSessionViewStatePayload({
-        title_map: sessionTitleMap,
-        hidden_ids: deletedSessionIds,
-        active_session_id: '',
-        updated_at: viewStateUpdatedAt,
-      }),
-    [deletedSessionIds, sessionTitleMap, viewStateUpdatedAt],
-  )
 
   const setActiveSession = useCallback((sessionId: string) => {
     const sid = String(sessionId || '').trim()
     activeSessionRef.current = sid
     setActiveSessionId(sid)
   }, [])
+
+  const { viewStateSyncReady } = useStudentSessionViewStateSync({
+    apiBase,
+    verifiedStudentId: verifiedStudent?.student_id,
+    activeSessionId,
+    sessionTitleMap,
+    deletedSessionIds,
+    localDraftSessionIds,
+    setSessions,
+    setHistoryCursor,
+    setHistoryHasMore,
+    setSessionTitleMap,
+    setDeletedSessionIds,
+    setLocalDraftSessionIds,
+    setActiveSession,
+  })
 
   useEffect(() => {
     safeLocalStorageSetItem('apiBaseStudent', apiBase)
@@ -262,135 +249,6 @@ export default function App() {
       setVerifyOpen(false)
     }
   }, [verifiedStudent])
-
-  const toggleSessionMenu = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      setOpenSessionMenuId((prev) => (prev === sid ? '' : sid))
-    },
-    [],
-  )
-
-  const setSessionMenuRef = useCallback((sessionId: string, node: HTMLDivElement | null) => {
-    const sid = String(sessionId || '').trim()
-    if (!sid) return
-    if (node) {
-      sessionMenuRefs.current[sid] = node
-      return
-    }
-    delete sessionMenuRefs.current[sid]
-  }, [])
-
-  const setSessionMenuTriggerRef = useCallback((sessionId: string, node: HTMLButtonElement | null) => {
-    const sid = String(sessionId || '').trim()
-    if (!sid) return
-    if (node) {
-      sessionMenuTriggerRefs.current[sid] = node
-      return
-    }
-    delete sessionMenuTriggerRefs.current[sid]
-  }, [])
-
-  const focusSessionMenuItem = useCallback((sessionId: string, target: 'first' | 'last') => {
-    const sid = String(sessionId || '').trim()
-    if (!sid) return
-    const menu = sessionMenuRefs.current[sid]
-    if (!menu) return
-    const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
-    if (!items.length) return
-    const index = target === 'last' ? items.length - 1 : 0
-    items[index]?.focus()
-  }, [])
-
-  const handleSessionMenuTriggerKeyDown = useCallback(
-    (sessionId: string, isMenuOpen: boolean, event: KeyboardEvent<HTMLButtonElement>) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        event.stopPropagation()
-        if (!isMenuOpen) toggleSessionMenu(sid)
-        const target: 'first' | 'last' = event.key === 'ArrowUp' ? 'last' : 'first'
-        window.setTimeout(() => focusSessionMenuItem(sid, target), 0)
-        return
-      }
-      if (event.key === 'Escape' && isMenuOpen) {
-        event.preventDefault()
-        toggleSessionMenu(sid)
-      }
-    },
-    [focusSessionMenuItem, toggleSessionMenu],
-  )
-
-  const handleSessionMenuKeyDown = useCallback(
-    (sessionId: string, event: KeyboardEvent<HTMLDivElement>) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid || openSessionMenuId !== sid) return
-      const menu = sessionMenuRefs.current[sid]
-      if (!menu) return
-      const items = Array.from(menu.querySelectorAll<HTMLButtonElement>('.session-menu-item:not([disabled])'))
-      if (!items.length) return
-      const activeIndex = items.findIndex((item) => item === document.activeElement)
-
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        toggleSessionMenu(sid)
-        sessionMenuTriggerRefs.current[sid]?.focus()
-        return
-      }
-      if (event.key === 'Tab') {
-        toggleSessionMenu(sid)
-        return
-      }
-
-      let direction: 'next' | 'prev' | 'first' | 'last' | null = null
-      if (event.key === 'ArrowDown') direction = 'next'
-      else if (event.key === 'ArrowUp') direction = 'prev'
-      else if (event.key === 'Home') direction = 'first'
-      else if (event.key === 'End') direction = 'last'
-      if (!direction) return
-
-      event.preventDefault()
-      const nextIndex = getNextMenuIndex(activeIndex, items.length, direction)
-      if (nextIndex >= 0) items[nextIndex]?.focus()
-    },
-    [openSessionMenuId, toggleSessionMenu],
-  )
-
-  useEffect(() => {
-    if (!openSessionMenuId) return
-    const sid = openSessionMenuId
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.closest('.session-menu-wrap')) return
-      setOpenSessionMenuId('')
-    }
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        sessionMenuTriggerRefs.current[sid]?.focus()
-        setOpenSessionMenuId('')
-      }
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('touchstart', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('touchstart', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [openSessionMenuId])
-
-  useEffect(() => {
-    if (!sidebarOpen) {
-      setOpenSessionMenuId('')
-    }
-  }, [sidebarOpen])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('studentSidebarOpen', sidebarOpen ? 'true' : 'false')
-  }, [sidebarOpen])
 
   const renderedMessages = useMemo(() => {
     const cache = markdownCacheRef.current
@@ -1004,155 +862,6 @@ export default function App() {
   }, [verifiedStudent?.student_id, apiBase])
 
   useEffect(() => {
-    const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid) {
-      setSessions([])
-      setHistoryCursor(0)
-      setHistoryHasMore(false)
-      setSessionTitleMap({})
-      setDeletedSessionIds([])
-      setLocalDraftSessionIds([])
-      setViewStateUpdatedAt(new Date().toISOString())
-      setViewStateSyncReady(false)
-      lastSyncedViewStateSignatureRef.current = ''
-      return
-    }
-    setSessions([])
-    setHistoryCursor(0)
-    setHistoryHasMore(false)
-    const localState = readStudentLocalViewState(sid)
-    const localDraftSessionIds = readStudentLocalDraftSessionIds(sid)
-    applyingViewStateRef.current = true
-    setSessionTitleMap(localState.title_map)
-    setDeletedSessionIds(localState.hidden_ids)
-    setLocalDraftSessionIds(localDraftSessionIds)
-    setActiveSession(localState.active_session_id || '')
-    setViewStateUpdatedAt(localState.updated_at || '')
-    lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(localState)
-    setViewStateSyncReady(false)
-
-    let cancelled = false
-    const bootstrap = async () => {
-      try {
-        const res = await fetch(`${apiBase}/student/session/view-state?student_id=${encodeURIComponent(sid)}`)
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
-        }
-        const data = await res.json()
-        const remoteState = normalizeSessionViewStatePayload(data?.state || {})
-        const cmp = compareSessionViewStateUpdatedAt(remoteState.updated_at, localState.updated_at)
-        if (cmp > 0) {
-          if (cancelled) return
-          applyingViewStateRef.current = true
-          setSessionTitleMap(remoteState.title_map)
-          setDeletedSessionIds(remoteState.hidden_ids)
-          if (remoteState.active_session_id) {
-            setActiveSession(remoteState.active_session_id)
-          }
-          setViewStateUpdatedAt(remoteState.updated_at || new Date().toISOString())
-          lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(remoteState)
-          return
-        }
-        const payload = normalizeSessionViewStatePayload({
-          ...localState,
-          active_session_id: '',
-        })
-        const saveRes = await fetch(`${apiBase}/student/session/view-state`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: sid, state: payload }),
-        })
-        if (!saveRes.ok) {
-          const text = await saveRes.text()
-          throw new Error(text || `状态码 ${saveRes.status}`)
-        }
-        const savedData = await saveRes.json()
-        const savedState = normalizeSessionViewStatePayload(savedData?.state || payload)
-        if (cancelled) return
-        lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(savedState)
-        if (savedState.updated_at && savedState.updated_at !== payload.updated_at) {
-          applyingViewStateRef.current = true
-          setViewStateUpdatedAt(savedState.updated_at)
-        }
-      } catch {
-        lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(localState)
-      } finally {
-        if (!cancelled) setViewStateSyncReady(true)
-      }
-    }
-    void bootstrap()
-    return () => {
-      cancelled = true
-    }
-  }, [apiBase, verifiedStudent?.student_id])
-
-  useEffect(() => {
-    const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid || !viewStateSyncReady) return
-    currentViewStateRef.current = currentViewState
-    safeLocalStorageSetItem(`${STUDENT_SESSION_VIEW_STATE_KEY_PREFIX}${sid}`, JSON.stringify(currentViewState))
-    safeLocalStorageSetItem(`studentSessionTitles:${sid}`, JSON.stringify(currentViewState.title_map))
-    safeLocalStorageSetItem(`studentDeletedSessions:${sid}`, JSON.stringify(currentViewState.hidden_ids))
-    if (activeSessionId) safeLocalStorageSetItem(`studentActiveSession:${sid}`, activeSessionId)
-    else safeLocalStorageRemoveItem(`studentActiveSession:${sid}`)
-  }, [activeSessionId, currentViewState, verifiedStudent?.student_id, viewStateSyncReady])
-
-  useEffect(() => {
-    const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid) return
-    try {
-      safeLocalStorageSetItem(`${STUDENT_LOCAL_DRAFT_SESSIONS_KEY_PREFIX}${sid}`, JSON.stringify(localDraftSessionIds))
-    } catch {
-      // ignore localStorage write errors
-    }
-  }, [localDraftSessionIds, verifiedStudent?.student_id])
-
-  useEffect(() => {
-    const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid || !viewStateSyncReady) return
-    if (applyingViewStateRef.current) {
-      applyingViewStateRef.current = false
-      return
-    }
-    setViewStateUpdatedAt(new Date().toISOString())
-  }, [deletedSessionIds, sessionTitleMap, verifiedStudent?.student_id, viewStateSyncReady])
-
-  useEffect(() => {
-    const sid = verifiedStudent?.student_id?.trim() || ''
-    if (!sid || !viewStateSyncReady) return
-    const signature = buildSessionViewStateSignature(currentViewState)
-    if (signature === lastSyncedViewStateSignatureRef.current) return
-    const timer = window.setTimeout(async () => {
-      try {
-        const payload = normalizeSessionViewStatePayload({
-          ...currentViewState,
-          active_session_id: '',
-        })
-        const res = await fetch(`${apiBase}/student/session/view-state`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: sid, state: payload }),
-        })
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
-        }
-        const data = await res.json()
-        const savedState = normalizeSessionViewStatePayload(data?.state || payload)
-        lastSyncedViewStateSignatureRef.current = buildSessionViewStateSignature(savedState)
-        if (savedState.updated_at && savedState.updated_at !== payload.updated_at) {
-          applyingViewStateRef.current = true
-          setViewStateUpdatedAt(savedState.updated_at)
-        }
-      } catch {
-        // keep local state and retry on next mutation
-      }
-    }, 260)
-    return () => window.clearTimeout(timer)
-  }, [apiBase, currentViewState, verifiedStudent?.student_id, viewStateSyncReady])
-
-  useEffect(() => {
     activeSessionRef.current = activeSessionId
   }, [activeSessionId])
 
@@ -1222,243 +931,27 @@ export default function App() {
     event.currentTarget.form?.requestSubmit()
   }
 
-  const withStudentSendLock = useCallback(
-    async (studentId: string, task: () => Promise<void>) => {
-      const sid = String(studentId || '').trim()
-      if (!sid) return false
-      const lockManager = typeof navigator !== 'undefined' ? (navigator as any).locks : null
-      if (lockManager?.request) {
-        const acquired = await lockManager.request(
-          `student-send-lock:${sid}`,
-          { ifAvailable: true, mode: 'exclusive' },
-          async (lock: any) => {
-            if (!lock) return false
-            await task()
-            return true
-          },
-        )
-        return Boolean(acquired)
-      }
-
-      const lockKey = `${SEND_LOCK_KEY_PREFIX}${sid}`
-      const owner = `slock_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const parseFallbackLock = (raw: string | null): { owner: string; expires_at: number } | null => {
-        if (!raw) return null
-        try {
-          const parsed = JSON.parse(raw) as { owner?: string; expires_at?: number }
-          const parsedOwner = String(parsed?.owner || '').trim()
-          const parsedExpiresAt = Number(parsed?.expires_at || 0)
-          if (!parsedOwner || !Number.isFinite(parsedExpiresAt)) return null
-          return { owner: parsedOwner, expires_at: parsedExpiresAt }
-        } catch {
-          return null
-        }
-      }
-
-      const now = Date.now()
-      const existing = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-      if (existing && existing.expires_at > now) {
-        return false
-      }
-      if (existing && existing.expires_at <= now) {
-        safeLocalStorageRemoveItem(lockKey)
-      }
-
-      const wrote = safeLocalStorageSetItem(
-        lockKey,
-        JSON.stringify({
-          owner,
-          expires_at: now + FALLBACK_SEND_LOCK_TTL_MS,
-        }),
-      )
-      if (!wrote) return false
-
-      const settleStartedAt = Date.now()
-      while (Date.now() - settleStartedAt < FALLBACK_SEND_LOCK_SETTLE_MS) {
-        await new Promise((resolve) => window.setTimeout(resolve, 24))
-        const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-        if (!observed || observed.owner !== owner || observed.expires_at <= Date.now()) {
-          return false
-        }
-      }
-
-      const latest = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-      if (!latest || latest.owner !== owner || latest.expires_at <= Date.now()) {
-        return false
-      }
-
-      const extendFallbackLock = () => {
-        const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-        if (!current || current.owner !== owner) return false
-        const renewed = safeLocalStorageSetItem(
-          lockKey,
-          JSON.stringify({
-            owner,
-            expires_at: Date.now() + FALLBACK_SEND_LOCK_TTL_MS,
-          }),
-        )
-        if (!renewed) return false
-        const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-        return Boolean(observed && observed.owner === owner && observed.expires_at > Date.now())
-      }
-
-      if (!extendFallbackLock()) {
-        return false
-      }
-
-      let renewTimer: number | null = window.setInterval(() => {
-        if (extendFallbackLock()) return
-        if (renewTimer !== null) {
-          window.clearInterval(renewTimer)
-          renewTimer = null
-        }
-      }, FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS)
-
-      try {
-        await task()
-        return true
-      } finally {
-        if (renewTimer !== null) {
-          window.clearInterval(renewTimer)
-          renewTimer = null
-        }
-        const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-        if (current?.owner === owner) {
-          safeLocalStorageRemoveItem(lockKey)
-        }
-      }
-    },
-    [],
-  )
-
-  const handleSend = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!verifiedStudent) {
-      setVerifyError('请先填写姓名并完成验证。')
-      setVerifyOpen(true)
-      return
-    }
-    if (pendingChatJob?.job_id) return
-    const trimmed = input.trim()
-    if (!trimmed) return
-
-    const studentId = verifiedStudent.student_id
-    const pendingKey = `${PENDING_CHAT_KEY_PREFIX}${studentId}`
-
-    const syncPendingFromStorage = () => {
-      try {
-        const raw = safeLocalStorageGetItem(pendingKey)
-        if (!raw) {
-          pendingRecoveredFromStorageRef.current = false
-          setPendingChatJob(null)
-          setSending(false)
-          return false
-        }
-        const parsed = JSON.parse(raw) as PendingChatJob
-        pendingRecoveredFromStorageRef.current = false
-        setPendingChatJob(parsed)
-        setSending(false)
-        return true
-      } catch {
-        pendingRecoveredFromStorageRef.current = false
-        setPendingChatJob(null)
-        setSending(false)
-        return false
-      }
-    }
-
-    const waitPendingSync = async (timeoutMs = 2500) => {
-      setSending(true)
-      const started = Date.now()
-      while (Date.now() - started < timeoutMs) {
-        if (syncPendingFromStorage()) return true
-        await new Promise((resolve) => window.setTimeout(resolve, 80))
-      }
-      setSending(false)
-      return false
-    }
-
-    let startedSubmission = false
-
-    const lockAcquired = await withStudentSendLock(studentId, async () => {
-      if (syncPendingFromStorage()) return
-
-      startedSubmission = true
-      const sessionId = activeSessionId || todayAssignment?.assignment_id || `general_${todayDate()}`
-      if (!activeSessionId) setActiveSession(sessionId)
-      const requestId = `schat_${studentId}_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
-
-      setMessages((prev) => {
-        const next = stripTransientPendingBubbles(prev)
-        return [
-          ...next,
-          { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
-          { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
-        ]
-      })
-      setInput('')
-
-      const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
-        .slice(-40)
-        .map((msg) => ({ role: msg.role, content: msg.content }))
-
-      setSending(true)
-      try {
-        const inferredAssignmentId =
-          sessionId && !sessionId.startsWith('general_')
-            ? sessionId
-            : todayAssignment?.assignment_id && sessionId === todayAssignment.assignment_id
-              ? todayAssignment.assignment_id
-              : undefined
-        const res = await fetch(`${apiBase}/chat/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            request_id: requestId,
-            session_id: sessionId,
-            messages: contextMessages,
-            role: 'student',
-            student_id: studentId,
-            assignment_id: inferredAssignmentId,
-            assignment_date: todayDate(),
-          }),
-        })
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
-        }
-        const data = (await res.json()) as ChatStartResult
-        if (!data?.job_id) throw new Error('任务编号缺失')
-        const nextPending: PendingChatJob = {
-          job_id: data.job_id,
-          request_id: requestId,
-          placeholder_id: placeholderId,
-          user_text: trimmed,
-          session_id: sessionId,
-          created_at: Date.now(),
-        }
-        pendingRecoveredFromStorageRef.current = false
-        safeLocalStorageSetItem(pendingKey, JSON.stringify(nextPending))
-        setPendingChatJob(nextPending)
-      } catch (err: any) {
-        updateMessage(placeholderId, { content: `抱歉，请求失败：${err.message || err}`, time: nowTime() })
-        setSending(false)
-        skipAutoSessionLoadIdRef.current = sessionId
-        pendingRecoveredFromStorageRef.current = false
-        setPendingChatJob(null)
-      }
-    })
-
-    if (!lockAcquired) {
-      await waitPendingSync()
-      return
-    }
-
-    if (!startedSubmission) {
-      syncPendingFromStorage()
-    }
-  }
+  const { handleSend } = useStudentSendFlow({
+    apiBase,
+    input,
+    messages,
+    activeSessionId,
+    todayAssignment,
+    verifiedStudent,
+    pendingChatJob,
+    pendingChatKeyPrefix: PENDING_CHAT_KEY_PREFIX,
+    todayDate,
+    setVerifyError,
+    setVerifyOpen,
+    setSending,
+    setInput,
+    setActiveSession,
+    setPendingChatJob,
+    setMessages,
+    updateMessage,
+    pendingRecoveredFromStorageRef,
+    skipAutoSessionLoadIdRef,
+  })
 
   const handleVerify = async (event: FormEvent) => {
     event.preventDefault()
@@ -1497,195 +990,57 @@ export default function App() {
     }
   }
 
-  const getSessionTitle = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return '未命名会话'
-      return sessionTitleMap[sid] || sid
-    },
-    [sessionTitleMap],
-  )
-
-  const visibleSessions = useMemo(() => {
-    const archived = new Set(deletedSessionIds)
-    const q = historyQuery.trim().toLowerCase()
-    return sessions.filter((item) => {
-      const sid = String(item.session_id || '').trim()
-      if (!sid) return false
-      const title = (sessionTitleMap[sid] || '').toLowerCase()
-      const preview = (item.preview || '').toLowerCase()
-      const matched = !q || sid.toLowerCase().includes(q) || title.includes(q) || preview.includes(q)
-      if (!matched) return false
-      return showArchivedSessions ? archived.has(sid) : !archived.has(sid)
-    })
-  }, [sessions, deletedSessionIds, historyQuery, sessionTitleMap, showArchivedSessions])
-
-  const groupedSessions = useMemo(() => {
-    const buckets = new Map<string, SessionGroup<StudentHistorySession>>()
-    for (const item of visibleSessions) {
-      const info = sessionGroupFromIso(item.updated_at)
-      const existing = buckets.get(info.key)
-      if (existing) {
-        existing.items.push(item)
-      } else {
-        buckets.set(info.key, { key: info.key, label: info.label, items: [item] })
-      }
-    }
-    return Array.from(buckets.values()).sort((a, b) => {
-      const oa = sessionGroupOrder[a.key] ?? 99
-      const ob = sessionGroupOrder[b.key] ?? 99
-      if (oa !== ob) return oa - ob
-      return a.label.localeCompare(b.label)
-    })
-  }, [visibleSessions])
-
-  const closeSidebarOnMobile = useCallback(() => {
-    if (typeof window === 'undefined') return
-    if (window.matchMedia('(max-width: 900px)').matches) {
-      setSidebarOpen(false)
-    }
-  }, [])
-
-  const selectStudentSession = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      setForceSessionLoadToken((prev) => prev + 1)
-      setActiveSession(sid)
-      setSessionCursor(-1)
-      setSessionHasMore(false)
-      setSessionError('')
-      setOpenSessionMenuId('')
-      closeSidebarOnMobile()
-    },
-    [closeSidebarOnMobile, setActiveSession],
-  )
-
-  const resetVerification = useCallback(() => {
-    setVerifiedStudent(null)
-    setNameInput('')
-    setClassInput('')
-    setVerifyError('')
-    setVerifyOpen(true)
-  }, [])
-
-  const startNewStudentSession = useCallback(() => {
-    const next = `general_${todayDate()}_${Math.random().toString(16).slice(2, 6)}`
-    sessionRequestRef.current += 1
-    setLocalDraftSessionIds((prev) => (prev.includes(next) ? prev : [next, ...prev]))
-    setShowArchivedSessions(false)
-    setActiveSession(next)
-    setSessionCursor(-1)
-    setSessionHasMore(false)
-    setSessionError('')
-    setOpenSessionMenuId('')
-    setPendingChatJob(null)
-    setSending(false)
-    setInput('')
-    setSessions((prev) => {
-      if (prev.some((item) => item.session_id === next)) return prev
-      const nowIso = new Date().toISOString()
-      return [
-        { session_id: next, updated_at: nowIso, message_count: 0, preview: '' },
-        ...prev,
-      ]
-    })
-    setMessages([
-      {
-        id: makeId(),
-        role: 'assistant',
-        content: STUDENT_NEW_SESSION_MESSAGE,
-        time: nowTime(),
-      },
-    ])
-    closeSidebarOnMobile()
-  }, [closeSidebarOnMobile, setActiveSession])
-
-  const renameSession = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      setRenameDialogSessionId(sid)
-    },
-    [],
-  )
-
-  const toggleSessionArchive = useCallback(
-    (sessionId: string) => {
-      const sid = String(sessionId || '').trim()
-      if (!sid) return
-      setArchiveDialogSessionId(sid)
-    },
-    [],
-  )
-
-  const focusSessionMenuTrigger = useCallback((sessionId: string) => {
-    const sid = String(sessionId || '').trim()
-    if (!sid) return
-    const domSafe = sid.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const triggerId = `student-session-menu-${domSafe}-trigger`
-    window.setTimeout(() => {
-      const node = document.getElementById(triggerId) as HTMLButtonElement | null
-      node?.focus?.()
-    }, 0)
-  }, [])
-
-  const cancelRenameDialog = useCallback(() => {
-    const sid = renameDialogSessionId
-    setRenameDialogSessionId(null)
-    setOpenSessionMenuId('')
-    if (sid) focusSessionMenuTrigger(sid)
-  }, [focusSessionMenuTrigger, renameDialogSessionId])
-
-  const confirmRenameDialog = useCallback(
-    (nextTitle: string) => {
-      const sid = renameDialogSessionId
-      if (!sid) return
-      const title = String(nextTitle || '').trim()
-      setSessionTitleMap((prev) => {
-        const next = { ...prev }
-        if (title) next[sid] = title
-        else delete next[sid]
-        return next
-      })
-      setRenameDialogSessionId(null)
-      setOpenSessionMenuId('')
-      focusSessionMenuTrigger(sid)
-    },
-    [focusSessionMenuTrigger, renameDialogSessionId],
-  )
-
-  const cancelArchiveDialog = useCallback(() => {
-    setArchiveDialogSessionId(null)
-  }, [])
-
-  const confirmArchiveDialog = useCallback(() => {
-    const sid = archiveDialogSessionId
-    if (!sid) return
-    const isArchived = deletedSessionIds.includes(sid)
-    setArchiveDialogSessionId(null)
-    setOpenSessionMenuId('')
-    setDeletedSessionIds((prev) => {
-      if (isArchived) return prev.filter((id) => id !== sid)
-      if (prev.includes(sid)) return prev
-      return [...prev, sid]
-    })
-    focusSessionMenuTrigger(sid)
-    if (!isArchived && activeSessionId === sid) {
-      const next = visibleSessions.find((item) => item.session_id !== sid)?.session_id
-      if (next) {
-        setActiveSession(next)
-        setSessionCursor(-1)
-        setSessionHasMore(false)
-        setSessionError('')
-      } else {
-        startNewStudentSession()
-      }
-    }
-  }, [activeSessionId, archiveDialogSessionId, deletedSessionIds, startNewStudentSession, visibleSessions, setActiveSession])
-
-  const archiveDialogIsArchived = archiveDialogSessionId ? deletedSessionIds.includes(archiveDialogSessionId) : false
-  const archiveDialogActionLabel = archiveDialogIsArchived ? '恢复' : '归档'
+  const {
+    getSessionTitle,
+    visibleSessions,
+    groupedSessions,
+    selectStudentSession,
+    resetVerification,
+    startNewStudentSession,
+    renameSession,
+    toggleSessionArchive,
+    cancelRenameDialog,
+    confirmRenameDialog,
+    cancelArchiveDialog,
+    confirmArchiveDialog,
+    archiveDialogIsArchived,
+    archiveDialogActionLabel,
+  } = useStudentSessionActions({
+    sessions,
+    deletedSessionIds,
+    historyQuery,
+    sessionTitleMap,
+    showArchivedSessions,
+    activeSessionId,
+    renameDialogSessionId,
+    archiveDialogSessionId,
+    sessionRequestRef,
+    todayDate,
+    newSessionMessage: STUDENT_NEW_SESSION_MESSAGE,
+    setSidebarOpen,
+    setForceSessionLoadToken,
+    setActiveSession,
+    setSessionCursor,
+    setSessionHasMore,
+    setSessionError,
+    setOpenSessionMenuId,
+    setVerifiedStudent,
+    setNameInput,
+    setClassInput,
+    setVerifyError,
+    setVerifyOpen,
+    setLocalDraftSessionIds,
+    setShowArchivedSessions,
+    setPendingChatJob,
+    setSending,
+    setInput,
+    setSessions,
+    setMessages,
+    setRenameDialogSessionId,
+    setArchiveDialogSessionId,
+    setSessionTitleMap,
+    setDeletedSessionIds,
+  })
 
   return (
     <div className="app">

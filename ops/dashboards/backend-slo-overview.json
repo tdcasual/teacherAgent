@@ -1,0 +1,82 @@
+{
+  "title": "Backend SLO Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["slo", "api", "operations"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Requests Total",
+      "type": "stat",
+      "description": "Total API requests since process start",
+      "targets": [
+        {
+          "expr": "metrics.http_requests_total",
+          "legendFormat": "requests_total"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "HTTP Error Rate",
+      "type": "stat",
+      "description": "5xx error ratio",
+      "targets": [
+        {
+          "expr": "metrics.http_error_rate",
+          "legendFormat": "error_rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.005},
+              {"color": "red", "value": 0.01}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "HTTP Latency P95 (sec)",
+      "type": "stat",
+      "description": "Request p95 latency",
+      "targets": [
+        {
+          "expr": "metrics.http_latency_sec.p95",
+          "legendFormat": "latency_p95_sec"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1.0},
+              {"color": "red", "value": 2.0}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "SLO Status",
+      "type": "table",
+      "description": "Latency and error SLO compliance flags",
+      "targets": [
+        {
+          "expr": "metrics.slo",
+          "legendFormat": "slo_flags"
+        }
+      ]
+    }
+  ]
+}

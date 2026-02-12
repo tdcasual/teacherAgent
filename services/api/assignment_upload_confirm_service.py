@@ -46,6 +46,16 @@ class AssignmentUploadConfirmDeps:
     copy2: Callable[[Path, Path], Any]
 
 
+@dataclass(frozen=True)
+class _PreparedConfirmData:
+    questions: List[Dict[str, Any]]
+    requirements: Dict[str, Any]
+    missing: List[str]
+    warnings: List[str]
+    delivery_mode: str
+    autofilled: bool
+
+
 def _load_draft_override(job_dir: Path) -> Dict[str, Any]:
     override_path = job_dir / "draft_override.json"
     if not override_path.exists():
@@ -63,15 +73,7 @@ def _copy_if_exists(src: Path, dst: Path, copy2: Callable[[Path, Path], Any]) ->
         copy2(src, dst)
 
 
-def confirm_assignment_upload(
-    job_id: str,
-    job: Dict[str, Any],
-    job_dir: Path,
-    *,
-    requirements_override: Optional[Dict[str, Any]],
-    strict_requirements: bool,
-    deps: AssignmentUploadConfirmDeps,
-) -> Dict[str, Any]:
+def _mark_confirming(job_id: str, deps: AssignmentUploadConfirmDeps) -> None:
     deps.write_upload_job(
         job_id,
         {
@@ -82,61 +84,121 @@ def confirm_assignment_upload(
         },
     )
 
+
+def _load_parsed_or_fail(
+    job_id: str, job_dir: Path, deps: AssignmentUploadConfirmDeps
+) -> Dict[str, Any]:
     parsed_path = job_dir / "parsed.json"
     if not parsed_path.exists():
-        deps.write_upload_job(job_id, {"status": "failed", "error": "parsed result missing", "step": "failed"})
+        deps.write_upload_job(
+            job_id,
+            {"status": "failed", "error": "parsed result missing", "step": "failed"},
+        )
         raise AssignmentUploadConfirmError(400, "parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
+    return json.loads(parsed_path.read_text(encoding="utf-8"))
 
-    override = _load_draft_override(job_dir)
+
+def _prepare_confirm_data(
+    *,
+    job: Dict[str, Any],
+    parsed: Dict[str, Any],
+    override: Dict[str, Any],
+    requirements_override: Optional[Dict[str, Any]],
+    deps: AssignmentUploadConfirmDeps,
+) -> _PreparedConfirmData:
     questions = parsed.get("questions") or []
     if isinstance(override.get("questions"), list) and override.get("questions"):
         questions = override.get("questions") or questions
 
     requirements = parsed.get("requirements") or {}
     if isinstance(override.get("requirements"), dict) and override.get("requirements"):
-        requirements = deps.merge_requirements(requirements, override.get("requirements") or {}, True)
-    missing = parsed.get("missing") or []
+        requirements = deps.merge_requirements(
+            requirements,
+            override.get("requirements") or {},
+            True,
+        )
+    if requirements_override:
+        requirements = deps.merge_requirements(requirements, requirements_override, True)
+
+    missing = deps.compute_requirements_missing(requirements)
     warnings = parsed.get("warnings") or []
     delivery_mode = parsed.get("delivery_mode") or job.get("delivery_mode") or "image"
     autofilled = parsed.get("autofilled") or False
 
-    if requirements_override:
-        requirements = deps.merge_requirements(requirements, requirements_override, True)
-        missing = deps.compute_requirements_missing(requirements)
-    else:
-        missing = deps.compute_requirements_missing(requirements)
+    return _PreparedConfirmData(
+        questions=questions,
+        requirements=requirements,
+        missing=missing,
+        warnings=warnings,
+        delivery_mode=delivery_mode,
+        autofilled=autofilled,
+    )
 
-    if strict_requirements and missing:
-        deps.write_upload_job(
-            job_id,
-            {
-                "status": "done",
-                "step": "await_requirements",
-                "progress": 100,
-                "requirements_missing": missing,
-            },
-        )
-        raise AssignmentUploadConfirmError(
-            400,
-            {"error": "requirements_missing", "missing": missing, "message": "作业要求未补全，无法创建作业。"},
-        )
 
+def _ensure_requirements_ready(
+    job_id: str,
+    *,
+    strict_requirements: bool,
+    missing: List[str],
+    deps: AssignmentUploadConfirmDeps,
+) -> None:
+    if not (strict_requirements and missing):
+        return
+    deps.write_upload_job(
+        job_id,
+        {
+            "status": "done",
+            "step": "await_requirements",
+            "progress": 100,
+            "requirements_missing": missing,
+        },
+    )
+    raise AssignmentUploadConfirmError(
+        400,
+        {
+            "error": "requirements_missing",
+            "missing": missing,
+            "message": "作业要求未补全，无法创建作业。",
+        },
+    )
+
+
+def _resolve_output_target(
+    job_id: str,
+    job: Dict[str, Any],
+    deps: AssignmentUploadConfirmDeps,
+) -> tuple[str, Path, Path]:
     assignment_id = str(job.get("assignment_id") or "").strip()
     if not assignment_id:
-        deps.write_upload_job(job_id, {"status": "failed", "error": "assignment_id missing", "step": "failed"})
+        deps.write_upload_job(
+            job_id,
+            {"status": "failed", "error": "assignment_id missing", "step": "failed"},
+        )
         raise AssignmentUploadConfirmError(400, "assignment_id missing")
     try:
         out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
     except AssignmentUploadConfirmError as exc:
-        deps.write_upload_job(job_id, {"status": "failed", "error": str(exc.detail), "step": "failed"})
+        deps.write_upload_job(
+            job_id,
+            {"status": "failed", "error": str(exc.detail), "step": "failed"},
+        )
         raise
+
     meta_path = out_dir / "meta.json"
     if meta_path.exists():
         deps.write_upload_job(job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
         raise AssignmentUploadConfirmError(409, "assignment already exists")
     out_dir.mkdir(parents=True, exist_ok=True)
+    return assignment_id, out_dir, meta_path
 
+
+def _copy_uploaded_files(
+    job_id: str,
+    job: Dict[str, Any],
+    job_dir: Path,
+    out_dir: Path,
+    deps: AssignmentUploadConfirmDeps,
+) -> None:
     deps.write_upload_job(job_id, {"step": "copy_files", "progress": 20})
     source_dir = out_dir / "source"
     answer_dir = out_dir / "answer_source"
@@ -147,6 +209,17 @@ def confirm_assignment_upload(
     for fname in job.get("answer_files") or []:
         _copy_if_exists(job_dir / "answer_source" / str(fname), answer_dir / str(fname), deps.copy2)
 
+
+def _write_questions_and_requirements(
+    job_id: str,
+    *,
+    job: Dict[str, Any],
+    out_dir: Path,
+    assignment_id: str,
+    questions: List[Dict[str, Any]],
+    requirements: Dict[str, Any],
+    deps: AssignmentUploadConfirmDeps,
+) -> tuple[List[Dict[str, Any]], str]:
     deps.write_upload_job(job_id, {"step": "write_questions", "progress": 55})
     rows = deps.write_uploaded_questions(out_dir, assignment_id, questions)
     date_str = deps.parse_date_str(job.get("date"))
@@ -158,23 +231,48 @@ def confirm_assignment_upload(
         created_by="teacher_upload",
         validate=False,
     )
+    return rows, date_str
 
+
+def _resolve_students_scope(
+    job: Dict[str, Any], deps: AssignmentUploadConfirmDeps
+) -> tuple[List[str], str]:
     student_ids_list = deps.parse_ids_value(job.get("student_ids") or [])
-    scope_val = deps.resolve_scope(job.get("scope") or "", student_ids_list, job.get("class_name") or "")
+    scope_val = deps.resolve_scope(
+        job.get("scope") or "",
+        student_ids_list,
+        job.get("class_name") or "",
+    )
     if scope_val == "student" and not student_ids_list:
         raise AssignmentUploadConfirmError(400, "student scope requires student_ids")
+    return student_ids_list, scope_val
 
-    meta = {
+
+def _build_assignment_meta(
+    job_id: str,
+    *,
+    job: Dict[str, Any],
+    assignment_id: str,
+    date_str: str,
+    rows: List[Dict[str, Any]],
+    prepared: _PreparedConfirmData,
+    student_ids_list: List[str],
+    scope_val: str,
+    deps: AssignmentUploadConfirmDeps,
+) -> Dict[str, Any]:
+    return {
         "assignment_id": assignment_id,
         "date": date_str,
         "due_at": deps.normalize_due_at(job.get("due_at")) or "",
         "mode": "upload",
-        "target_kp": requirements.get("core_concepts") or [],
+        "target_kp": prepared.requirements.get("core_concepts") or [],
         "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
         "class_name": job.get("class_name") or "",
         "student_ids": student_ids_list,
         "scope": scope_val,
-        "expected_students": deps.compute_expected_students(scope_val, job.get("class_name") or "", student_ids_list),
+        "expected_students": deps.compute_expected_students(
+            scope_val, job.get("class_name") or "", student_ids_list
+        ),
         "expected_students_generated_at": deps.now_iso(),
         "completion_policy": {
             "requires_discussion": True,
@@ -185,16 +283,17 @@ def confirm_assignment_upload(
             "version": 1,
         },
         "source": "teacher",
-        "delivery_mode": delivery_mode,
+        "delivery_mode": prepared.delivery_mode,
         "source_files": job.get("source_files") or [],
         "answer_files": job.get("answer_files") or [],
-        "requirements_missing": missing,
-        "requirements_autofilled": autofilled,
+        "requirements_missing": prepared.missing,
+        "requirements_autofilled": prepared.autofilled,
         "generated_at": deps.now_iso(),
         "job_id": job_id,
     }
-    deps.atomic_write_json(meta_path, meta)
 
+
+def _mark_confirmed(job_id: str, deps: AssignmentUploadConfirmDeps) -> None:
     deps.write_upload_job(
         job_id,
         {
@@ -205,11 +304,64 @@ def confirm_assignment_upload(
         },
     )
 
+
+def confirm_assignment_upload(
+    job_id: str,
+    job: Dict[str, Any],
+    job_dir: Path,
+    *,
+    requirements_override: Optional[Dict[str, Any]],
+    strict_requirements: bool,
+    deps: AssignmentUploadConfirmDeps,
+) -> Dict[str, Any]:
+    _mark_confirming(job_id, deps)
+    parsed = _load_parsed_or_fail(job_id, job_dir, deps)
+    override = _load_draft_override(job_dir)
+    prepared = _prepare_confirm_data(
+        job=job,
+        parsed=parsed,
+        override=override,
+        requirements_override=requirements_override,
+        deps=deps,
+    )
+    _ensure_requirements_ready(
+        job_id,
+        strict_requirements=strict_requirements,
+        missing=prepared.missing,
+        deps=deps,
+    )
+
+    assignment_id, out_dir, meta_path = _resolve_output_target(job_id, job, deps)
+    _copy_uploaded_files(job_id, job, job_dir, out_dir, deps)
+    rows, date_str = _write_questions_and_requirements(
+        job_id,
+        job=job,
+        out_dir=out_dir,
+        assignment_id=assignment_id,
+        questions=prepared.questions,
+        requirements=prepared.requirements,
+        deps=deps,
+    )
+    student_ids_list, scope_val = _resolve_students_scope(job, deps)
+    meta = _build_assignment_meta(
+        job_id,
+        job=job,
+        assignment_id=assignment_id,
+        date_str=date_str,
+        rows=rows,
+        prepared=prepared,
+        student_ids_list=student_ids_list,
+        scope_val=scope_val,
+        deps=deps,
+    )
+    deps.atomic_write_json(meta_path, meta)
+    _mark_confirmed(job_id, deps)
+
     return {
         "ok": True,
         "assignment_id": assignment_id,
         "question_count": len(rows),
-        "requirements_missing": missing,
-        "warnings": warnings,
+        "requirements_missing": prepared.missing,
+        "warnings": prepared.warnings,
         "status": "confirmed",
     }
