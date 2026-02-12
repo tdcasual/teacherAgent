@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import type { MatrixCase, MatrixCaseRunner } from './helpers/e2eMatrixCases'
 import { registerMatrixCases } from './helpers/e2eMatrixCases'
 
@@ -100,6 +100,12 @@ const studentLoopCases: MatrixCase[] = [
     then: 'Composer position remains stable and usable',
   },
 ]
+
+test('student shell renders chat and workbench regions', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('student-chat-panel')).toBeVisible()
+  await expect(page.getByTestId('student-workbench')).toBeVisible()
+})
 
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   I001: async ({ page }) => {
