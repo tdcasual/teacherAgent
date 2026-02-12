@@ -14,14 +14,12 @@ from . import settings as _settings
 from .chat_lane_store_factory import get_chat_lane_store
 from .config import (
     CHAT_JOB_CLAIM_TTL_SEC,
-    CHAT_JOB_DIR,
     CHAT_LANE_DEBOUNCE_MS,
     REDIS_URL,
     TENANT_ID,
 )
 from .job_repository import _atomic_write_json
 from .paths import resolve_teacher_id, safe_fs_id
-
 
 # ---------------------------------------------------------------------------
 # Module-level mutable state — removed.
@@ -377,3 +375,4 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
     except Exception:
         _log.debug("get_chat_job_id_by_request: stale job path check failed for job_id=%s", legacy)
         return None
+    return str(legacy)
