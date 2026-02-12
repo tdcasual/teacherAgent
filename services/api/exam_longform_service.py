@@ -160,9 +160,9 @@ def build_exam_longform_context(exam_id: str, deps: ExamLongformDeps) -> Dict[st
                 needed_kp_ids.add(kp_id)
 
     for qid in needed_qids:
-        kp_id = q_kp_map_all.get(qid)
-        if kp_id:
-            needed_kp_ids.add(kp_id)
+        mapped_kp_id = q_kp_map_all.get(qid)
+        if mapped_kp_id:
+            needed_kp_ids.add(mapped_kp_id)
 
     kp_catalog = {kp_id: kp_catalog_all[kp_id] for kp_id in needed_kp_ids if kp_id in kp_catalog_all}
     q_kp_map = {qid: q_kp_map_all[qid] for qid in needed_qids if qid in q_kp_map_all}
