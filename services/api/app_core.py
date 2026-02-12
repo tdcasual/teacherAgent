@@ -22,6 +22,13 @@ from collections import deque
 
 _log = logging.getLogger(__name__)
 
+
+def _reexport_private_symbols(module: Any) -> None:
+    """Compatibility shim: expose underscore-prefixed names on app_core facade."""
+    for _name, _value in vars(module).items():
+        if _name.startswith("_") and not _name.startswith("__"):
+            globals().setdefault(_name, _value)
+
 from llm_gateway import LLMGateway
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,6 +122,7 @@ from . import teacher_memory_core as _teacher_memory_core_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_core_module)
 from .teacher_memory_core import *  # noqa: F401,F403 — re-export all teacher memory functions
+_reexport_private_symbols(_teacher_memory_core_module)
 
 def _rq_enabled() -> bool:
     return _rq_enabled_impl()
@@ -146,13 +154,20 @@ from .wiring.teacher_wiring import *  # noqa: F401,F403
 from .wiring.worker_wiring import *  # noqa: F401,F403
 from .wiring.misc_wiring import *  # noqa: F401,F403
 from .wiring.skill_wiring import *  # noqa: F401,F403
+
+from . import context_application_facade as _context_application_facade_module
+from . import context_runtime_facade as _context_runtime_facade_module
+from . import context_io_facade as _context_io_facade_module
 if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATA_DIR") or os.getenv("UPLOADS_DIR"):
-    _importlib.reload(_importlib.import_module("services.api.context_application_facade"))
-    _importlib.reload(_importlib.import_module("services.api.context_runtime_facade"))
-    _importlib.reload(_importlib.import_module("services.api.context_io_facade"))
+    _importlib.reload(_context_application_facade_module)
+    _importlib.reload(_context_runtime_facade_module)
+    _importlib.reload(_context_io_facade_module)
 from .context_application_facade import *  # noqa: F401,F403
 from .context_runtime_facade import *  # noqa: F401,F403
 from .context_io_facade import *  # noqa: F401,F403
+_reexport_private_symbols(_context_application_facade_module)
+_reexport_private_symbols(_context_runtime_facade_module)
+_reexport_private_symbols(_context_io_facade_module)
 from services.api.chat_limits import (
     acquire_limiters as _acquire_limiters_impl,
     student_inflight_guard as _student_inflight_guard_impl,

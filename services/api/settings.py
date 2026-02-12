@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 import logging
-_log = logging.getLogger(__name__)
+import os
 
+_log = logging.getLogger(__name__)
 
 
 def truthy(value: str) -> bool:
