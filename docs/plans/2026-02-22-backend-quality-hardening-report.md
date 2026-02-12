@@ -1,15 +1,15 @@
 # Backend Quality Hardening Report (Interim)
 
 Date: 2026-02-12
-Scope: Week 1 + Week 2 Task 7 implementation snapshot
+Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 
 ## 1) Baseline vs Current
 
 | Metric | Baseline | Current | Delta | Reduction |
 | --- | ---: | ---: | ---: | ---: |
-| Ruff errors (`ruff check services/api --statistics`) | 745 | 731 | -14 | 1.9% |
-| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 381 | -101 | 21.0% |
-| `services/api/app_core.py` line count | 700 | 666 | -34 | 4.9% |
+| Ruff errors (`ruff check services/api --statistics`) | 745 | 662 | -83 | 11.1% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 355 | -127 | 26.3% |
+| `services/api/app_core.py` line count | 700 | 595 | -105 | 15.0% |
 
 ## 2) Completed Changes
 
@@ -22,6 +22,8 @@ Scope: Week 1 + Week 2 Task 7 implementation snapshot
 7. Hardened production runtime policy:
    - `AUTH_REQUIRED=1` + missing `AUTH_TOKEN_SECRET` now fails fast in production lifecycle startup.
    - Queue backend no longer silently falls back to inline in production unless explicitly allowed.
+8. Removed duplicate explicit re-export import blocks in `services/api/app_core.py`, reducing facade bloat.
+9. Cleared `services/api/llm_routing.py` mypy `union-attr` debt with dict/list type narrowing helpers and added a focused type gate.
 
 ## 3) Validation Evidence
 
@@ -30,8 +32,11 @@ Executed and passed (representative list):
 - `python3 -m pytest -q tests/test_chat_limits.py tests/test_chat_route_flow.py tests/test_chat_start_flow.py tests/test_app_core_surface.py`
 - `python3 -m pytest -q tests/test_ci_backend_scope.py tests/test_ci_workflow_quality.py`
 - `python3 -m pytest -q tests/test_security_auth_hardening.py tests/test_queue_backend_factory.py tests/test_tenant_admin_and_dispatcher.py`
+- `python3 -m pytest -q tests/test_app_core_structure.py tests/test_app_core_import_fanout.py tests/test_app_core_surface.py`
+- `python3 -m pytest -q tests/test_llm_routing_types.py tests/test_llm_routing.py tests/test_llm_routing_resolver.py tests/test_teacher_llm_routing_service.py`
 - `python3 -m ruff check services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py tests/test_queue_backend_factory.py tests/test_security_auth_hardening.py`
-- `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py`
+- `python3 -m ruff check services/api/llm_routing.py tests/test_llm_routing_types.py tests/test_app_core_structure.py`
+- `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py services/api/llm_routing.py`
 
 Metric collection commands:
 
@@ -43,9 +48,9 @@ Metric collection commands:
 
 Criteria from the 2-week plan are partially met:
 
-1. Ruff reduction >=30%: **Not met** (current 1.9%).
-2. Mypy reduction >=35%: **Not met** (current 21.0%).
-3. `app_core.py` <=500 lines: **Not met** (current 666).
+1. Ruff reduction >=30%: **Not met** (current 11.1%).
+2. Mypy reduction >=35%: **Not met** (current 26.3%).
+3. `app_core.py` <=500 lines: **Not met** (current 595).
 4. CI backend-quality guardrails integrated: **Met**.
 5. Newly added guardrail tests pass locally: **Met**.
 
