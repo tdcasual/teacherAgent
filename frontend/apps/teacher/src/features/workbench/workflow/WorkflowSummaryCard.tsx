@@ -1,21 +1,5 @@
-type WorkflowSummaryCardProps = {
-  uploadMode: string
-  setUploadMode: any
-  activeWorkflowIndicator: any
-  formatUploadJobSummary: any
-  formatExamJobSummary: any
-  formatProgressSummary: any
-  uploadJobInfo: any
-  uploadAssignmentId: string
-  examJobInfo: any
-  examId: string
-  scrollToWorkflowSection: any
-  refreshWorkflowWorkbench: any
-  progressData: any
-  progressAssignmentId: any
-  progressLoading: boolean
-  fetchAssignmentProgress: any
-}
+import type { WorkflowSummaryCardProps } from '../../../types/workflow'
+import type { WorkflowStepItem } from '../../../appTypes'
 
 export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
   const {
@@ -61,7 +45,7 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
                         }`}>{activeWorkflowIndicator.label}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {activeWorkflowIndicator.steps.map((step: any) => (
+                        {activeWorkflowIndicator.steps.map((step: WorkflowStepItem) => (
                           <div key={step.key} className={`inline-flex items-center gap-1.5 py-1.5 px-2 rounded-[10px] border text-[12px] ${
                             step.state === 'done'
                               ? 'text-[#0f766e] border-[#bfe7dc] bg-[#eaf9f4]'

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List
+
+_log = logging.getLogger(__name__)
 
 
 def assignment_upload_not_ready_detail(job: Dict[str, Any], message: str) -> Dict[str, Any]:
@@ -22,6 +25,7 @@ def load_assignment_draft_override(job_dir: Path) -> Dict[str, Any]:
     try:
         data = json.loads(override_path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("corrupt draft_override.json in %s", job_dir, exc_info=True)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -87,7 +91,7 @@ def build_assignment_upload_draft(
         try:
             missing = sorted(set(missing + parse_list_value(override.get("requirements_missing"))))
         except Exception:
-            pass
+            _log.warning("requirements_missing merge failed for job %s", job_id, exc_info=True)
 
     return {
         "job_id": job_id,

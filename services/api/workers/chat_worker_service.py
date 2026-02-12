@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+_log = logging.getLogger(__name__)
 
 
 CHAT_PENDING_RESCAN_INTERVAL_SEC = 15.0
@@ -41,6 +44,7 @@ def enqueue_chat_job(job_id: str, *, deps: ChatWorkerDeps, lane_id: Optional[str
             job = deps.load_chat_job(job_id)
             lane_final = deps.resolve_chat_lane_id_from_job(job)
         except Exception:
+            _log.warning("lane resolution failed for chat job %s, using fallback", job_id, exc_info=True)
             lane_final = "unknown:session_main:req_unknown"
     with deps.chat_job_lock:
         lane_position = deps.chat_enqueue_locked(job_id, lane_final)
@@ -60,6 +64,7 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> None:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("corrupt chat job.json at %s, skipping", job_path, exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Set, Tuple
+
+_log = logging.getLogger(__name__)
 
 _SUBJECT_DISPLAY = {
     "physics": "物理",
@@ -114,7 +117,7 @@ def _iter_overview_subject_texts(overview: Dict[str, Any]) -> Iterable[str]:
                     if item.is_file():
                         texts.append(item.name)
         except Exception:
-            pass
+            _log.debug("subject inference dir traversal failed for %s", manifest_path_raw, exc_info=True)
 
     return texts
 

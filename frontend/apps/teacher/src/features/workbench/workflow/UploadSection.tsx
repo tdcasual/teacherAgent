@@ -1,44 +1,11 @@
-type UploadSectionProps = {
-  uploadMode: string
-  setUploadMode: any
-  uploadCardCollapsed: boolean
-  setUploadCardCollapsed: any
-  formatUploadJobSummary: any
-  formatExamJobSummary: any
-  uploadJobInfo: any
-  uploadAssignmentId: string
-  examJobInfo: any
-  examId: string
-  handleUploadAssignment: any
-  handleUploadExam: any
-  setUploadAssignmentId: any
-  uploadDate: string
-  setUploadDate: any
-  uploadScope: string
-  setUploadScope: any
-  uploadClassName: string
-  setUploadClassName: any
-  uploadStudentIds: string
-  setUploadStudentIds: any
-  setUploadFiles: any
-  setUploadAnswerFiles: any
+import type { UploadSectionProps } from '../../../types/workflow'
+
+type Props = UploadSectionProps & {
   uploading: boolean
-  uploadError: any
-  uploadStatus: any
-  setExamId: any
-  examDate: string
-  setExamDate: any
-  examClassName: string
-  setExamClassName: any
-  setExamPaperFiles: any
-  setExamAnswerFiles: any
-  setExamScoreFiles: any
   examUploading: boolean
-  examUploadError: any
-  examUploadStatus: any
 }
 
-export default function UploadSection(props: UploadSectionProps) {
+export default function UploadSection(props: Props) {
   const {
     uploadMode, setUploadMode, uploadCardCollapsed, setUploadCardCollapsed,
     formatUploadJobSummary, formatExamJobSummary, uploadJobInfo, uploadAssignmentId,
@@ -83,7 +50,7 @@ export default function UploadSection(props: UploadSectionProps) {
     	                    : formatExamJobSummary(examJobInfo, examId.trim())}
     	                </div>
     	              ) : null}
-	    	              <button type="button" className="ghost" onClick={() => setUploadCardCollapsed((v: boolean) => !v)}>
+	    	              <button type="button" className="ghost" onClick={() => setUploadCardCollapsed((v) => !v)}>
     	                {uploadCardCollapsed ? '展开' : '收起'}
     	              </button>
     	            </div>
@@ -108,7 +75,7 @@ export default function UploadSection(props: UploadSectionProps) {
     	                        </div>
     	                        <div className="grid gap-1.5">
     	                          <label>范围</label>
-    	                          <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value as any)}>
+    	                          <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value)}>
     	                            <option value="public">公共作业</option>
     	                            <option value="class">班级作业</option>
     	                            <option value="student">私人作业</option>

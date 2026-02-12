@@ -11,7 +11,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://:physics_edu_2026@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-physics_edu_2026}@redis:6379/0
       - QDRANT_PATH=/app/.qdrant
       - MEM0_DIR=/app/.mem0
       - LLM_MAX_CONCURRENCY_STUDENT=${LLM_MAX_CONCURRENCY_STUDENT:-12}
@@ -67,7 +67,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://:physics_edu_2026@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-physics_edu_2026}@redis:6379/0
       - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-0}
     volumes:
       - ./data:/app/data
@@ -81,7 +81,7 @@ services:
     image: redis:7-alpine
     command: >
       redis-server
-      --requirepass physics_edu_2026
+      --requirepass ${REDIS_PASSWORD:-physics_edu_2026}
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
@@ -90,7 +90,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "physics_edu_2026", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-physics_edu_2026}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5

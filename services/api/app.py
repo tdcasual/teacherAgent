@@ -78,10 +78,15 @@ app.state.core = _core
 
 origins = os.getenv("CORS_ORIGINS", "*")
 origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]
+_allow_credentials = "*" not in origins_list
+if not _allow_credentials:
+    logging.getLogger(__name__).warning(
+        "CORS_ORIGINS is '*'; credentials disabled. Set specific origins for production."
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins_list,
-    allow_credentials=True,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

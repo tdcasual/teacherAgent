@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,6 +26,7 @@ def load_chat_request_index(path: Path) -> Dict[str, str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("corrupt chat request index at %s", path, exc_info=True)
         return {}
     if not isinstance(data, dict):
         return {}
@@ -34,7 +38,7 @@ def load_chat_request_index(path: Path) -> Dict[str, str]:
 
 
 def request_map_path(request_id: str, deps: ChatIdempotencyDeps) -> Path:
-    return deps.request_map_dir / f"{deps.safe_fs_id(request_id, prefix='req')}.txt"
+    return deps.request_map_dir / f"{deps.safe_fs_id(request_id, prefix='req')}.txt"  # type: ignore[call-arg]
 
 
 def request_map_get(request_id: str, deps: ChatIdempotencyDeps) -> Optional[str]:
@@ -47,6 +51,7 @@ def request_map_get(request_id: str, deps: ChatIdempotencyDeps) -> Optional[str]
     try:
         job_id = (path.read_text(encoding="utf-8", errors="ignore") or "").strip()
     except Exception:
+        _log.warning("failed to read request map for %s", request_id, exc_info=True)
         return None
     if not job_id:
         return None
@@ -55,7 +60,7 @@ def request_map_get(request_id: str, deps: ChatIdempotencyDeps) -> Optional[str]
             path.unlink(missing_ok=True)
             return None
     except Exception:
-        pass
+        _log.debug("expired request map cleanup failed for %s", request_id, exc_info=True)
     return job_id
 
 
@@ -71,9 +76,8 @@ def request_map_set_if_absent(request_id: str, job_id: str, deps: ChatIdempotenc
     except FileExistsError:
         return False
     except Exception:
+        _log.warning("idempotent lock creation failed for request %s", request_id, exc_info=True)
         return False
-    try:
-        os.write(fd, job_id.encode("utf-8", errors="ignore"))
     finally:
         try:
             os.close(fd)
@@ -90,7 +94,7 @@ def upsert_chat_request_index(request_id: str, job_id: str, deps: ChatIdempotenc
             idx[str(request_id)] = str(job_id)
             deps.atomic_write_json(deps.request_index_path, idx)
     except Exception:
-        pass
+        _log.warning("chat request index persist failed for request=%s job=%s", request_id, job_id, exc_info=True)
 
 
 def get_chat_job_id_by_request(request_id: str, deps: ChatIdempotencyDeps) -> Optional[str]:

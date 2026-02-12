@@ -21,5 +21,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DATA_DIR=/app/data
 
+RUN adduser --disabled-password --no-create-home appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app/data
+USER appuser
+
 EXPOSE 9000
 CMD ["uvicorn", "services.mcp.app:app", "--host", "0.0.0.0", "--port", "9000"]

@@ -10,7 +10,8 @@ import time
 from collections import defaultdict, deque
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from typing import Any, Callable, Awaitable
 
 _SKIP_PATHS = {"/health", "/health/"}
 
@@ -27,7 +28,7 @@ def _client_key(request: Request) -> str:
     return client.host if client else "unknown"
 
 
-async def rate_limit_middleware(request: Request, call_next):
+async def rate_limit_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     if _rpm <= 0 or request.url.path in _SKIP_PATHS or os.getenv("PYTEST_CURRENT_TEST"):
         return await call_next(request)
 

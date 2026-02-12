@@ -34,9 +34,20 @@ ignore = ["E501"]
 python_version = "3.9"
 warn_unused_configs = true
 ignore_missing_imports = true
-follow_imports = "skip"
+follow_imports = "normal"
 check_untyped_defs = true
-disallow_incomplete_defs = false
+disallow_incomplete_defs = true
 disallow_untyped_defs = false
 no_implicit_optional = false
 pretty = true
+
+[tool.coverage.run]
+source = ["services/api"]
+omit = [
+  "services/api/workers/rq_worker.py",
+  "services/api/__main__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

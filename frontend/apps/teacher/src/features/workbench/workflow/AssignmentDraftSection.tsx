@@ -1,32 +1,11 @@
-type AssignmentDraftSectionProps = {
-  uploadDraft: any
-  uploadJobInfo: any
-  draftPanelCollapsed: boolean
-  setDraftPanelCollapsed: any
-  draftActionError: any
-  draftActionStatus: any
+import type { AssignmentDraftSectionProps, AssignmentQuestion } from '../../../types/workflow'
+
+type Props = AssignmentDraftSectionProps & {
   draftSaving: boolean
-  saveDraft: any
-  handleConfirmUpload: any
   uploadConfirming: boolean
-  formatDraftSummary: any
-  formatMissingRequirements: any
-  updateDraftRequirement: any
-  updateDraftQuestion: any
-  misconceptionsText: string
-  setMisconceptionsText: any
-  setMisconceptionsDirty: any
-  parseCommaList: any
-  parseLineList: any
-  difficultyLabel: any
-  difficultyOptions: readonly any[]
-  normalizeDifficulty: any
-  questionShowCount: number
-  setQuestionShowCount: any
-  stopKeyPropagation: any
 }
 
-export default function AssignmentDraftSection(props: AssignmentDraftSectionProps) {
+export default function AssignmentDraftSection(props: Props) {
   const {
     uploadDraft, uploadJobInfo,
     draftPanelCollapsed, setDraftPanelCollapsed,
@@ -54,7 +33,7 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                       {draftPanelCollapsed ? '展开' : '收起'}
                     </button>
                   </div>
-                  {draftPanelCollapsed ? (
+                  {draftPanelCollapsed || !uploadDraft ? (
                     <></>
                   ) : (
                     <>
@@ -119,7 +98,7 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                           }
                         >
                           {uploadConfirming
-                            ? uploadJobInfo && (uploadJobInfo.status as any) === 'confirming'
+                            ? uploadJobInfo && uploadJobInfo.status === 'confirming'
                               ? `创建中…${uploadJobInfo.progress ?? 0}%`
                               : '创建中…'
                             : uploadJobInfo && (uploadJobInfo.status === 'confirmed' || uploadJobInfo.status === 'created')
@@ -204,10 +183,10 @@ export default function AssignmentDraftSection(props: AssignmentDraftSectionProp
                     <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                       <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
                       <div className="text-muted text-[12px] mb-[10px]">题目较多时可先修改关键题，点击"保存草稿"后再创建。</div>
-	                      {(uploadDraft.questions || []).slice(0, questionShowCount).map((q: any, idx: number) => (
+	                      {(uploadDraft.questions || []).slice(0, questionShowCount).map((q: AssignmentQuestion, idx: number) => (
                         <details key={idx} className="border border-border rounded-[14px] py-2 px-[10px] mb-[10px] bg-[#fbfaf7]" open={idx < 1}>
                           <summary>
-                            Q{idx + 1} · {(q.kp || q.kp_id || '未分类') as any} · {difficultyLabel(q.difficulty)}
+                            Q{idx + 1} · {(q.kp || q.kp_id || '未分类')} · {difficultyLabel(q.difficulty)}
                           </summary>
                           <div className="mt-[10px] grid gap-2">
                             <label>题干</label>

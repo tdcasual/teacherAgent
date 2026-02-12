@@ -26,5 +26,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV DATA_DIR=/app/data
 ENV UPLOADS_DIR=/app/uploads
 
+RUN adduser --disabled-password --no-create-home appuser \
+    && mkdir -p /app/data /app/uploads \
+    && chown -R appuser:appuser /app/data /app/uploads
+USER appuser
+
 EXPOSE 8000
 CMD ["uvicorn", "services.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

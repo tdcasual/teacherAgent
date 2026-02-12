@@ -1,106 +1,50 @@
+import type { Dispatch, SetStateAction } from 'react'
+import type {
+  UploadSectionProps,
+  AssignmentDraftSectionProps,
+  ExamDraftSectionProps,
+  WorkflowSummaryCardProps,
+} from '../../../types/workflow'
+
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
 import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
 import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
 
-type WorkflowTabProps = {
-  uploadMode: string
-  setUploadMode: any
-  activeWorkflowIndicator: any
-  formatUploadJobSummary: any
-  formatExamJobSummary: any
-  formatProgressSummary: any
-  formatDraftSummary: any
-  formatExamDraftSummary: any
-  formatMissingRequirements: any
-  uploadJobInfo: any
-  uploadAssignmentId: string
-  examJobInfo: any
-  examId: string
-  scrollToWorkflowSection: any
-  refreshWorkflowWorkbench: any
-  progressData: any
-  progressAssignmentId: any
-  setProgressAssignmentId: any
-  progressLoading: boolean
-  progressError: any
-  progressOnlyIncomplete: boolean
-  setProgressOnlyIncomplete: any
-  progressPanelCollapsed: boolean
-  setProgressPanelCollapsed: any
-  fetchAssignmentProgress: any
-  uploadCardCollapsed: boolean
-  setUploadCardCollapsed: any
-  handleUploadAssignment: any
-  handleUploadExam: any
-  setUploadAssignmentId: any
-  uploadDate: string
-  setUploadDate: any
-  uploadScope: string
-  setUploadScope: any
-  uploadClassName: string
-  setUploadClassName: any
-  uploadStudentIds: string
-  setUploadStudentIds: any
-  setUploadFiles: any
-  setUploadAnswerFiles: any
-  uploading: boolean
-  uploadError: any
-  uploadStatus: any
-  setExamId: any
-  examDate: string
-  setExamDate: any
-  examClassName: string
-  setExamClassName: any
-  setExamPaperFiles: any
-  setExamAnswerFiles: any
-  setExamScoreFiles: any
-  examUploading: boolean
-  examUploadError: any
-  examUploadStatus: any
-  // Draft states
-  draftLoading: any
-  draftError: any
-  uploadDraft: any
-  draftPanelCollapsed: boolean
-  setDraftPanelCollapsed: any
-  draftActionError: any
-  draftActionStatus: any
-  draftSaving: boolean
-  saveDraft: any
-  handleConfirmUpload: any
-  uploadConfirming: boolean
-  updateDraftRequirement: any
-  updateDraftQuestion: any
-  misconceptionsText: string
-  setMisconceptionsText: any
-  setMisconceptionsDirty: any
-  parseCommaList: any
-  parseLineList: any
-  difficultyLabel: any
-  difficultyOptions: readonly any[]
-  normalizeDifficulty: any
-  questionShowCount: number
-  setQuestionShowCount: any
-  stopKeyPropagation: any
-  // Exam draft states
-  examDraftLoading: boolean
-  examDraftError: any
-  examDraft: any
-  examDraftPanelCollapsed: boolean
-  setExamDraftPanelCollapsed: any
-  examDraftSaving: boolean
-  examDraftActionError: any
-  examDraftActionStatus: any
-  examConfirming: boolean
-  saveExamDraft: any
-  handleConfirmExamUpload: any
-  updateExamDraftMeta: any
-  updateExamQuestionField: any
-  updateExamAnswerKeyText: any
-  updateExamScoreSchemaSelectedCandidate: any
-}
+type WorkflowTabProps =
+  // WorkflowSummaryCard props
+  WorkflowSummaryCardProps &
+  // UploadSection props
+  UploadSectionProps &
+  // AssignmentDraftSection props
+  AssignmentDraftSectionProps &
+  // ExamDraftSection props
+  ExamDraftSectionProps & {
+    // UploadSection extras (uploading flags)
+    uploading: boolean
+    examUploading: boolean
+
+    // AssignmentProgressSection props
+    progressPanelCollapsed: boolean
+    setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
+    progressAssignmentId: string
+    setProgressAssignmentId: (v: string) => void
+    progressOnlyIncomplete: boolean
+    setProgressOnlyIncomplete: (v: boolean) => void
+    progressError: string
+
+    // AssignmentDraftSection extras
+    draftLoading: boolean
+    draftError: string
+    draftSaving: boolean
+    uploadConfirming: boolean
+
+    // ExamDraftSection extras
+    examDraftLoading: boolean
+    examDraftSaving: boolean
+    examConfirming: boolean
+  }
 
 export default function WorkflowTab(props: WorkflowTabProps) {
   const {

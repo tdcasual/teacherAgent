@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
+
+_log = logging.getLogger(__name__)
 
 from .auth_service import enforce_chat_job_access
 from .chat_job_state_machine import can_requeue_chat_job, normalize_chat_job_status
@@ -27,7 +30,7 @@ def get_chat_status(job_id: str, *, deps: ChatStatusDeps) -> Dict[str, Any]:
         if can_requeue_chat_job(status):
             deps.enqueue_chat_job(job_id, lane_hint or deps.resolve_chat_lane_id_from_job(job))
     except Exception:
-        pass
+        _log.warning("chat re-enqueue failed for job %s", job_id, exc_info=True)
     lane_id = str(job.get("lane_id") or "").strip()
     if lane_id:
         with deps.chat_job_lock:

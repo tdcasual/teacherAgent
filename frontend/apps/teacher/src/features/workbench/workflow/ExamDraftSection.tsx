@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type {
   ExamConflictLevel,
   CandidateSummarySort,
+  ParsedCandidateSummary,
 } from './examCandidateAnalysis'
 import {
   getExamConflictThreshold,
@@ -10,29 +11,16 @@ import {
   computeRecommendedCandidate,
   computeConflictStudents,
 } from './examCandidateAnalysis'
+import type { ExamDraftSectionProps, ExamQuestion } from '../../../types/workflow'
+import type { ExamScoreSchemaSubjectCandidate } from '../../../appTypes'
 
-type ExamDraftSectionProps = {
-  examDraft: any
+type ExamDraftSectionLocalProps = ExamDraftSectionProps & {
   examDraftLoading: boolean
-  examDraftError: any
-  examDraftPanelCollapsed: boolean
-  setExamDraftPanelCollapsed: any
   examDraftSaving: boolean
-  examDraftActionError: any
-  examDraftActionStatus: any
   examConfirming: boolean
-  examJobInfo: any
-  formatExamDraftSummary: any
-  saveExamDraft: any
-  handleConfirmExamUpload: any
-  updateExamDraftMeta: any
-  updateExamQuestionField: any
-  updateExamAnswerKeyText: any
-  updateExamScoreSchemaSelectedCandidate: any
-  stopKeyPropagation: any
 }
 
-export default function ExamDraftSection(props: ExamDraftSectionProps) {
+export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
   const {
     examDraft, examDraftLoading, examDraftError,
     examDraftPanelCollapsed, setExamDraftPanelCollapsed,
@@ -173,7 +161,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
               }
             >
               {examConfirming
-                ? examJobInfo && (examJobInfo.status as any) === 'confirming'
+                ? examJobInfo && examJobInfo.status === 'confirming'
                   ? `创建中…${examJobInfo.progress ?? 0}%`
                   : '创建中…'
                 : examJobInfo && examJobInfo.status === 'confirmed'
@@ -196,7 +184,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                         onKeyDown={stopKeyPropagation}
                       >
                         <option value="">请选择物理分映射列</option>
-                        {examCandidateColumns.map((candidate: any, idx: number) => {
+                        {examCandidateColumns.map((candidate: ExamScoreSchemaSubjectCandidate, idx: number) => {
                           const candidateId = String(candidate?.candidate_id || '')
                           if (!candidateId) return null
                           const kindLabel =
@@ -288,7 +276,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                       </label>
                     </div>
                     <div className="mt-2 grid gap-2">
-                      {examSortedCandidateSummaries.map((item: any, idx: number) => {
+                      {examSortedCandidateSummaries.map((item: ParsedCandidateSummary, idx: number) => {
                         const cid = String(item?.candidateId || '')
                         if (!cid) return null
                         const parsed = Number(item?.rowsParsed || 0)
@@ -387,13 +375,13 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
                     <summary className="text-muted text-[12px]">查看当前映射样本预览（最多 5 行）</summary>
                     {(() => {
                       const selected = examCandidateColumns.find(
-                        (candidate: any) => String(candidate?.candidate_id || '') === examEffectiveCandidateId,
+                        (candidate: ExamScoreSchemaSubjectCandidate) => String(candidate?.candidate_id || '') === examEffectiveCandidateId,
                       )
                       const rows = Array.isArray(selected?.sample_rows) ? selected.sample_rows : []
                       if (!rows.length) return <div className="text-muted text-[12px]">当前映射暂无样本行。</div>
                       return (
                         <div className="mt-2 grid gap-2">
-                          {rows.map((row: any, rowIdx: number) => {
+                          {rows.map((row: { student_id?: string; student_name?: string; class_name?: string; raw_value?: string; score?: number; status?: string }, rowIdx: number) => {
                             const label = [
                               row?.class_name ? String(row.class_name) : '',
                               row?.student_name ? String(row.student_name) : '',
@@ -441,7 +429,7 @@ export default function ExamDraftSection(props: ExamDraftSectionProps) {
             <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
               <h4 className="m-0 mb-[10px]">题目满分（可编辑）</h4>
               <div className="grid gap-2">
-                {(examDraft.questions || []).map((q: any, idx: number) => (
+                {(examDraft.questions || []).map((q: ExamQuestion, idx: number) => (
                   <div className="grid gap-[10px] grid-cols-[90px_minmax(0,1fr)_120px] items-center py-2 px-[10px] border border-border rounded-[14px] bg-[#fbfaf7]" key={`${q.question_id || 'q'}-${idx}`}>
                     <div className="font-mono font-bold text-ink">{q.question_id || `Q${idx + 1}`}</div>
                     <div className="text-muted text-[12px]">{q.question_no ? `题号 ${q.question_no}` : ''}</div>

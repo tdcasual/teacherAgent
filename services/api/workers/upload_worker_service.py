@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ def scan_pending_upload_jobs_inline(*, deps: UploadWorkerDeps) -> int:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("corrupt job.json at %s, skipping", job_path, exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")

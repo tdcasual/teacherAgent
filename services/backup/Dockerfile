@@ -20,3 +20,7 @@ RUN curl -fsSL -o /tmp/ossutil.zip https://gosspublic.alicdn.com/ossutil/v2/2.0.
     && rm -rf /tmp/ossutil.zip /tmp/ossutil-2.0.4-linux-amd64
 
 WORKDIR /workspace
+
+RUN adduser --disabled-password --no-create-home appuser \
+    && chown -R appuser:appuser /workspace
+USER appuser

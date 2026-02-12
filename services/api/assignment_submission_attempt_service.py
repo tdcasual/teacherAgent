@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,7 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("corrupt grading_report.json at %s", report_path, exc_info=True)
         return None
     if not isinstance(report, dict):
         return None
