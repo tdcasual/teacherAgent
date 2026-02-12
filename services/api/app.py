@@ -55,6 +55,7 @@ _core = _load_core()
 _APP_CORE = _core
 
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
+app.state.core = _core
 
 origins = os.getenv("CORS_ORIGINS", "*")
 origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]
