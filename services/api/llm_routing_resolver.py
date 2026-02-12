@@ -53,6 +53,12 @@ def _as_str_list(value: Any) -> List[str]:
     return out
 
 
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
 def _as_float_opt(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -149,7 +155,7 @@ class CompiledRouting:
 def _rule_matches(rule: Dict[str, Any], ctx: RoutingContext) -> bool:
     if not _as_bool(rule.get("enabled"), True):
         return False
-    match = rule.get("match") if isinstance(rule.get("match"), dict) else {}
+    match = _as_dict(rule.get("match"))
     roles = set(_as_str_list(match.get("roles")))
     skills = set(_as_str_list(match.get("skills")))
     kinds = set(_as_str_list(match.get("kinds")))
@@ -170,7 +176,7 @@ def _rule_matches(rule: Dict[str, Any], ctx: RoutingContext) -> bool:
 
 
 def _channel_capable(channel: Dict[str, Any], ctx: RoutingContext) -> bool:
-    cap = channel.get("capabilities") if isinstance(channel.get("capabilities"), dict) else {}
+    cap = _as_dict(channel.get("capabilities"))
     tools_ok = _as_bool(cap.get("tools"), True)
     json_ok = _as_bool(cap.get("json"), True)
     if ctx.needs_tools and not tools_ok:
@@ -201,9 +207,9 @@ def _expand_candidate_chain(
                 queue.append(fb)
         if not _channel_capable(channel, ctx):
             continue
-        target = channel.get("target") if isinstance(channel.get("target"), dict) else {}
-        params = channel.get("params") if isinstance(channel.get("params"), dict) else {}
-        cap = channel.get("capabilities") if isinstance(channel.get("capabilities"), dict) else {}
+        target = _as_dict(channel.get("target"))
+        params = _as_dict(channel.get("params"))
+        cap = _as_dict(channel.get("capabilities"))
         out.append(
             RouteCandidate(
                 channel_id=channel_id,
@@ -230,7 +236,7 @@ def resolve_routing(compiled: CompiledRouting, ctx: RoutingContext) -> RoutingDe
         if not _rule_matches(rule, ctx):
             continue
         matched_rule_id = _as_str(rule.get("id")) or None
-        route = rule.get("route") if isinstance(rule.get("route"), dict) else {}
+        route = _as_dict(rule.get("route"))
         channel_id = _as_str(route.get("channel_id"))
         if not channel_id:
             continue
