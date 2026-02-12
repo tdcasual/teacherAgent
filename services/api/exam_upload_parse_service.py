@@ -2,9 +2,39 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+_log = logging.getLogger(__name__)
+
+
+def _as_dict(value: Any) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
+def _as_list(value: Any) -> List[Any]:
+    if not isinstance(value, list):
+        return []
+    return value
+
+
+def _as_set(value: Any) -> set[Any]:
+    if not isinstance(value, set):
+        return set()
+    return value
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
 
 
 def _candidate_source_rank(candidate_id: str) -> int:
@@ -93,14 +123,8 @@ def _extract_paper_text(
 
 def _resolve_selected_candidate(job: Dict[str, Any]) -> Tuple[str, Optional[str]]:
     class_name_hint = str(job.get("class_name") or "").strip()
-    score_schema_override = (
-        job.get("score_schema") if isinstance(job.get("score_schema"), dict) else {}
-    )
-    override_subject = (
-        score_schema_override.get("subject")
-        if isinstance(score_schema_override.get("subject"), dict)
-        else {}
-    )
+    score_schema_override = _as_dict(job.get("score_schema"))
+    override_subject = _as_dict(score_schema_override.get("subject"))
     selected_candidate_id = (
         str(
             override_subject.get("selected_candidate_id")
@@ -248,18 +272,12 @@ def _deduplicate_rows(all_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not sid or not qid:
             continue
         key = (sid, qid)
-        try:
-            score_val = float(row.get("score")) if row.get("score") is not None else None
-        except Exception:
-            score_val = None
+        score_val = _float_or_none(row.get("score"))
         prev = dedup.get(key)
         if not prev:
             dedup[key] = row
             continue
-        try:
-            prev_score = float(prev.get("score")) if prev.get("score") is not None else None
-        except Exception:
-            prev_score = None
+        prev_score = _float_or_none(prev.get("score"))
         if score_val is not None and (prev_score is None or score_val > prev_score):
             dedup[key] = row
     return list(dedup.values())
@@ -363,7 +381,7 @@ def _write_scoring_outputs(
                 defaulted_max_score_qids.append(qid)
 
     questions_csv = derived_dir / "questions.csv"
-    deps.write_exam_questions_csv(questions_csv, questions, max_scores=max_scores)
+    deps.write_exam_questions_csv(questions_csv, questions, max_scores)
 
     answer_apply_stats: Dict[str, Any] = {}
     if needs_answer_scoring and answers and answers_csv.exists():
@@ -423,7 +441,7 @@ def _collect_response_scoring(
                     if sid:
                         scored_students.add(sid)
     except Exception:
-        pass
+        _log.warning("failed to read scored responses CSV %s", responses_scored_csv, exc_info=True)
     return raw_students, scored_students, responses_total, responses_scored
 
 
@@ -482,25 +500,16 @@ def _build_score_schema(
     confidence_values: List[float] = []
     selected_candidate_invalid = False
     for source in score_schema_sources:
-        summary = source.get("summary") if isinstance(source.get("summary"), dict) else {}
+        summary = _as_dict(source.get("summary"))
         aggregated_data_rows += int(summary.get("data_rows") or 0)
         aggregated_parsed_rows += int(summary.get("parsed_rows") or 0)
-        try:
-            confidence_values.append(float(source.get("confidence")))
-        except Exception:
-            pass
-        subject_info = source.get("subject") if isinstance(source.get("subject"), dict) else {}
-        unresolved = (
-            subject_info.get("unresolved_students")
-            if isinstance(subject_info.get("unresolved_students"), list)
-            else []
-        )
+        confidence_value = _float_or_none(source.get("confidence"))
+        if confidence_value is not None:
+            confidence_values.append(confidence_value)
+        subject_info = _as_dict(source.get("subject"))
+        unresolved = _as_list(subject_info.get("unresolved_students"))
         aggregated_unresolved.extend([str(x) for x in unresolved if str(x or "").strip()])
-        candidates = (
-            subject_info.get("candidate_columns")
-            if isinstance(subject_info.get("candidate_columns"), list)
-            else []
-        )
+        candidates = _as_list(subject_info.get("candidate_columns"))
         for item in candidates:
             if not isinstance(item, dict):
                 continue
@@ -579,8 +588,8 @@ def _build_score_schema(
             - (rows_invalid * 0.2)
             - (_candidate_source_rank(candidate_id) * 2.0)
         )
-        files = bucket.get("files") if isinstance(bucket.get("files"), set) else set()
-        types = bucket.get("types") if isinstance(bucket.get("types"), set) else set()
+        files = _as_set(bucket.get("files"))
+        types = _as_set(bucket.get("types"))
         candidate_summaries.append(
             {
                 "candidate_id": candidate_id,
@@ -624,7 +633,7 @@ def _build_score_schema(
         )
         availability_flags: List[bool] = []
         for source in subject_sources:
-            subject_info = source.get("subject") if isinstance(source.get("subject"), dict) else {}
+            subject_info = _as_dict(source.get("subject"))
             if "selected_candidate_available" in subject_info:
                 availability_flags.append(bool(subject_info.get("selected_candidate_available")))
         selected_candidate_available = bool(
@@ -669,16 +678,12 @@ def _append_needs_confirm_warnings(*, score_schema: Dict[str, Any], warnings: Li
         return needs_confirm
     selection_error = ""
     if isinstance(score_schema, dict):
-        subject_info = (
-            score_schema.get("subject") if isinstance(score_schema.get("subject"), dict) else {}
-        )
+        subject_info = _as_dict(score_schema.get("subject"))
         selection_error = str(subject_info.get("selection_error") or "").strip()
     if selection_error == "selected_candidate_not_found":
         recommended_id = ""
         if isinstance(score_schema, dict):
-            subject_info = (
-                score_schema.get("subject") if isinstance(score_schema.get("subject"), dict) else {}
-            )
+            subject_info = _as_dict(score_schema.get("subject"))
             recommended_id = str(subject_info.get("recommended_candidate_id") or "").strip()
         if recommended_id:
             warnings.append(
@@ -686,11 +691,7 @@ def _append_needs_confirm_warnings(*, score_schema: Dict[str, Any], warnings: Li
             )
         else:
             warnings.append("所选物理分映射在当前成绩表中不可用，已回退自动匹配，请重新确认映射。")
-    unresolved = (
-        ((score_schema.get("subject") or {}).get("unresolved_students") or [])
-        if isinstance(score_schema, dict)
-        else []
-    )
+    unresolved = _as_list(_as_dict(score_schema.get("subject")).get("unresolved_students"))
     unresolved_count = len(unresolved) if isinstance(unresolved, list) else 0
     if unresolved_count > 0:
         preview = "，".join([str(x) for x in unresolved[:5]])
