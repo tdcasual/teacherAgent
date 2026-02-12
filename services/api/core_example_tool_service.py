@@ -10,7 +10,7 @@ class CoreExampleToolDeps:
     data_dir: Any
     app_root: Any
     is_safe_tool_id: Callable[[Any], bool]
-    resolve_app_path: Callable[[Any, bool], Any]
+    resolve_app_path: Callable[..., Any]
     run_script: Callable[[list[str]], Any]
 
 

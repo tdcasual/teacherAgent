@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List
 @dataclass(frozen=True)
 class LessonCaptureDeps:
     is_safe_tool_id: Callable[[Any], bool]
-    resolve_app_path: Callable[[Any, bool], Any]
+    resolve_app_path: Callable[..., Any]
     app_root: Any
     run_script: Callable[[List[str]], Any]
 
