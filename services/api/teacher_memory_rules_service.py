@@ -185,9 +185,17 @@ def teacher_memory_rank_score(
     record_ttl_days: Callable[[Dict[str, Any]], int],
 ) -> float:
     priority = rec.get("priority_score")
-    try:
-        p = float(priority)
-    except Exception:
+    parsed_priority: Optional[float] = None
+    if isinstance(priority, (int, float)):
+        parsed_priority = float(priority)
+    elif isinstance(priority, str):
+        raw_priority = priority.strip()
+        if raw_priority:
+            try:
+                parsed_priority = float(raw_priority)
+            except ValueError:
+                parsed_priority = None
+    if parsed_priority is None:
         p = float(
             priority_score(
                 target=str(rec.get("target") or "MEMORY"),
@@ -197,6 +205,8 @@ def teacher_memory_rank_score(
                 meta=rec.get("meta") if isinstance(rec.get("meta"), dict) else None,
             )
         )
+    else:
+        p = parsed_priority
     age = age_days(rec)
     ttl_days = record_ttl_days(rec)
     if not decay_enabled or ttl_days <= 0:

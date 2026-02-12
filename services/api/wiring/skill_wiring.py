@@ -38,20 +38,27 @@ def _teacher_skill_deps() -> TeacherSkillDeps:
 
 def create_teacher_skill(
     *, title: str, description: str,
-    keywords: List[str] = (), examples: List[str] = (),
-    allowed_roles: List[str] = ("teacher",),
+    keywords: Optional[List[str]] = None,
+    examples: Optional[List[str]] = None,
+    allowed_roles: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     return _create_impl(
         _teacher_skill_deps(), title=title,
-        description=description, keywords=list(keywords),
-        examples=list(examples),
-        allowed_roles=list(allowed_roles),
+        description=description,
+        keywords=list(keywords or []),
+        examples=list(examples or []),
+        allowed_roles=list(allowed_roles or ["teacher"]),
     )
 
 
 def update_teacher_skill(
-    *, skill_id: str, title=None, description=None,
-    keywords=None, examples=None, allowed_roles=None,
+    *,
+    skill_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    keywords: Optional[List[str]] = None,
+    examples: Optional[List[str]] = None,
+    allowed_roles: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     return _update_impl(
         _teacher_skill_deps(), skill_id=skill_id,
@@ -77,5 +84,5 @@ def check_skill_dependencies(*, skill_id: str) -> Dict[str, Any]:
     return _check_deps_impl(_teacher_skill_deps(), skill_id=skill_id)
 
 
-def install_skill_dependencies(*, skill_id: str, packages=None) -> Dict[str, Any]:
+def install_skill_dependencies(*, skill_id: str, packages: Optional[List[str]] = None) -> Dict[str, Any]:
     return _install_deps_impl(_teacher_skill_deps(), skill_id=skill_id, packages=packages)

@@ -74,7 +74,9 @@ class MultiTenantDispatcher:
             if token is not None:
                 CURRENT_CORE.reset(token)
 
-    async def _send_simple(self, send, *, status: int, body: bytes) -> None:
+    async def _send_simple(
+        self, send: Callable[[Dict[str, Any]], Awaitable[None]], *, status: int, body: bytes
+    ) -> None:
         await send(
             {
                 "type": "http.response.start",

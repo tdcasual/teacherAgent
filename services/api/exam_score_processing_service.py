@@ -69,8 +69,9 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
     if mode not in {"question", "total"}:
         mode = "question" if parsed.get("questions") else "total"
     warnings: List[str] = []
-    if isinstance(parsed.get("warnings"), list):
-        warnings.extend([str(x) for x in parsed.get("warnings") if x])
+    parsed_warnings = parsed.get("warnings")
+    if isinstance(parsed_warnings, list):
+        warnings.extend([str(x) for x in parsed_warnings if x])
 
     students = parsed.get("students") or []
     if not isinstance(students, list):
@@ -492,7 +493,7 @@ def apply_answer_key_to_responses_csv(
     answers = load_exam_answer_key_from_csv(answers_csv)
     max_scores = load_exam_max_scores_from_questions_csv(questions_csv)
 
-    stats = {
+    stats: Dict[str, Any] = {
         "updated_rows": 0,
         "total_rows": 0,
         "scored_rows": 0,

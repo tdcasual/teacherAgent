@@ -129,7 +129,7 @@ def compile_skill_runtime(
     prompt_version: Optional[str] = None,
     debug: Optional[bool] = None,
 ) -> SkillRuntime:
-    version = prompt_version or os.getenv("PROMPT_VERSION", DEFAULT_PROMPT_VERSION)
+    version = str(prompt_version or os.getenv("PROMPT_VERSION") or DEFAULT_PROMPT_VERSION)
     parts: List[str] = []
 
     header = f"激活技能：{skill.skill_id}（{skill.title}）"
@@ -140,12 +140,15 @@ def compile_skill_runtime(
 
     used_modules: List[str] = []
     for mod in skill.agent.prompt_modules:
-        content = _read_prompt_module(version, mod)
+        module_name = str(mod or "").strip()
+        if not module_name:
+            continue
+        content = _read_prompt_module(version, module_name)
         if not content:
             continue
-        used_modules.append(mod)
+        used_modules.append(module_name)
         if debug:
-            parts.append(f"【SKILL MODULE: {mod}】\n{content}")
+            parts.append(f"【SKILL MODULE: {module_name}】\n{content}")
         else:
             parts.append(content)
 

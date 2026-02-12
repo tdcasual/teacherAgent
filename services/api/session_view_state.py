@@ -49,7 +49,8 @@ def default_session_view_state() -> Dict[str, Any]:
 
 def normalize_session_view_state_payload(raw: Any) -> Dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
-    title_map_raw = data.get("title_map") if isinstance(data.get("title_map"), dict) else {}
+    title_map_data = data.get("title_map")
+    title_map_raw: Dict[Any, Any] = title_map_data if isinstance(title_map_data, dict) else {}
     title_map: Dict[str, str] = {}
     for key, value in title_map_raw.items():
         sid = str(key or "").strip()
@@ -60,7 +61,8 @@ def normalize_session_view_state_payload(raw: Any) -> Dict[str, Any]:
 
     hidden_ids: List[str] = []
     seen_hidden: set[str] = set()
-    hidden_raw = data.get("hidden_ids") if isinstance(data.get("hidden_ids"), list) else []
+    hidden_data = data.get("hidden_ids")
+    hidden_raw: List[Any] = hidden_data if isinstance(hidden_data, list) else []
     for item in hidden_raw:
         sid = str(item or "").strip()
         if not sid:

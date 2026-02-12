@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 
-def model_dump_compat(model, *, exclude_none: bool = False) -> Dict[str, Any]:
+def model_dump_compat(model: Any, *, exclude_none: bool = False) -> Dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump(exclude_none=exclude_none)
     return model.dict(exclude_none=exclude_none)

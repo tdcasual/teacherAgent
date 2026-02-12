@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 import threading
 import weakref
-from typing import Any
+from typing import Any, Callable
 
 from services.api import chat_lane_store_factory
 from services.api.queue import queue_backend_factory
@@ -13,7 +13,7 @@ from services.api import assignment_data_service as _assignment_data_service_mod
 from services.api import teacher_session_compaction_helpers as _compaction_helpers_module
 
 
-def reset_runtime_state(mod: Any, *, create_chat_idempotency_store) -> None:
+def reset_runtime_state(mod: Any, *, create_chat_idempotency_store: Callable[[Any], Any]) -> None:
     mod.UPLOAD_JOB_QUEUE = deque()
     mod.UPLOAD_JOB_LOCK = threading.Lock()
     mod.UPLOAD_JOB_EVENT = threading.Event()

@@ -96,7 +96,8 @@ def resolve_chat_lane_id_from_job(job: Dict[str, Any]) -> str:
     lane_id = str(job.get("lane_id") or "").strip()
     if lane_id:
         return lane_id
-    request = job.get("request") if isinstance(job.get("request"), dict) else {}
+    request_data = job.get("request")
+    request: Dict[str, Any] = request_data if isinstance(request_data, dict) else {}
     role = str(job.get("role") or request.get("role") or "unknown")
     session_id = str(job.get("session_id") or "").strip() or None
     student_id = str(job.get("student_id") or request.get("student_id") or "").strip() or None

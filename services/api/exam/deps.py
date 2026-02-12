@@ -22,13 +22,16 @@ class ExamApplicationDeps:
 
 
 def build_exam_application_deps(core: Any) -> ExamApplicationDeps:
+    def _exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
+        return core.exam_students_list(exam_id, limit=limit)
+
     return ExamApplicationDeps(
         list_exams=lambda: core.list_exams(),
         get_exam_detail_api=lambda exam_id: core._get_exam_detail_api_impl(
             exam_id, deps=core._exam_api_deps()
         ),
         exam_analysis_get=lambda exam_id: core.exam_analysis_get(exam_id),
-        exam_students_list=lambda exam_id, limit=50: core.exam_students_list(exam_id, limit=limit),
+        exam_students_list=_exam_students_list,
         exam_student_detail=lambda exam_id, student_id: core.exam_student_detail(
             exam_id, student_id=student_id
         ),

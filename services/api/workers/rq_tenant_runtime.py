@@ -4,7 +4,7 @@ import importlib
 import os
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from services.api.tenant_config_store import TenantConfigStore
 from services.api.tenant_registry import TenantRegistry
@@ -31,7 +31,7 @@ def _get_registry() -> TenantRegistry:
     return _TENANT_REGISTRY
 
 
-def load_tenant_module(tenant_id: Optional[str]):
+def load_tenant_module(tenant_id: Optional[str]) -> Any:
     tid = str(tenant_id or "").strip()
     if not tid:
         return importlib.import_module("services.api.app")

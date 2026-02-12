@@ -354,7 +354,7 @@ def _assignment_upload_start_deps():
         resolve_scope=_ac.resolve_scope,
         normalize_due_at=_ac.normalize_due_at,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
-        write_upload_job=lambda job_id, updates, overwrite=False: _ac.write_upload_job(job_id, updates, overwrite=overwrite),
+        write_upload_job=_ac.write_upload_job,
         enqueue_upload_job=lambda job_id: queue_runtime.enqueue_upload_job(
             job_id,
             backend=backend,

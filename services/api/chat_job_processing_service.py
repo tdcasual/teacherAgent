@@ -21,12 +21,12 @@ class ComputeChatReplyDeps:
     load_profile_file: Callable[[Any], Dict[str, Any]]
     data_dir: Any
     build_verified_student_context: Callable[[str, Dict[str, Any]], str]
-    build_assignment_detail_cached: Callable[[Any], Dict[str, Any]]
+    build_assignment_detail_cached: Callable[..., Dict[str, Any]]
     find_assignment_for_date: Callable[..., Optional[Dict[str, Any]]]
     parse_date_str: Callable[[Optional[str]], str]
     build_assignment_context: Callable[..., str]
     chat_extra_system_max_chars: int
-    trim_messages: Callable[[List[Dict[str, Any]], Optional[str]], List[Dict[str, Any]]]
+    trim_messages: Callable[..., List[Dict[str, Any]]]
     student_inflight: Callable[[Optional[str]], Any]
     run_agent: Callable[..., Dict[str, Any]]
     normalize_math_delimiters: Callable[[str], str]
@@ -218,7 +218,7 @@ class ChatJobProcessDeps:
     chat_request_model: Any
     compute_chat_reply_sync: Callable[..., Tuple[str, Optional[str], str]]
     monotonic: Callable[[], float]
-    build_interaction_note: Callable[[str, str, Optional[str]], str]
+    build_interaction_note: Callable[..., str]
     profile_update_async: bool
     enqueue_profile_update: Callable[[Dict[str, Any]], None]
     student_profile_update: Callable[[Dict[str, Any]], Any]

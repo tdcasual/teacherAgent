@@ -185,7 +185,7 @@ def _exam_upload_start_deps():
         exam_job_path=_ac.exam_job_path,
         sanitize_filename=_ac.sanitize_filename,
         save_upload_file=_ac.save_upload_file,
-        write_exam_job=lambda job_id, updates, overwrite=False: _ac.write_exam_job(job_id, updates, overwrite=overwrite),
+        write_exam_job=_ac.write_exam_job,
         enqueue_exam_job=lambda job_id: queue_runtime.enqueue_exam_job(
             job_id,
             backend=backend,

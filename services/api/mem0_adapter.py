@@ -159,7 +159,7 @@ def teacher_mem0_search(
         _log.warning("mem0 search failed for teacher_id=%s", teacher_id, exc_info=True)
         return {"ok": False, "error": str(exc), "matches": []}
 
-    items = []
+    items: List[Any] = []
     if isinstance(res, dict) and isinstance(res.get("results"), list):
         items = res.get("results") or []
     elif isinstance(res, list):
@@ -224,4 +224,3 @@ def teacher_mem0_index_entry(
             return {"ok": False, "error": str(exc), "indexed": i, "total": len(chunks)}
 
     return {"ok": True, "chunks": len(chunks), "results_count": len(results)}
-

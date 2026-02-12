@@ -6,7 +6,7 @@ application and validation.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 __all__ = [
     "create_routing_proposal",
@@ -127,7 +127,10 @@ def apply_routing_proposal(
             _lr._atomic_write_json(path, proposal)
             return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
 
-        candidate = proposal.get("candidate") if isinstance(proposal.get("candidate"), dict) else {}
+        candidate = cast(
+            Dict[str, Any],
+            proposal.get("candidate") if isinstance(proposal.get("candidate"), dict) else {},
+        )
         apply_res = _lr.apply_routing_config(
             config_path=config_path,
             model_registry=model_registry,

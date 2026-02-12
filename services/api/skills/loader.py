@@ -217,7 +217,7 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
         if isinstance(examples_raw, list):
             examples_list = [str(e).strip() for e in examples_raw if str(e).strip()]
 
-        raw: Dict[str, Any] = {
+        derived_raw: Dict[str, Any] = {
             "schema_version": 1,
             "title": title,
             "description": desc,
@@ -232,16 +232,16 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
             "routing": {"keywords": keywords} if keywords else {},
         }
         if allowed_roles_list:
-            raw["allowed_roles"] = allowed_roles_list
+            derived_raw["allowed_roles"] = allowed_roles_list
         if prompts_list or examples_list:
-            raw["ui"] = {}
+            derived_raw["ui"] = {}
             if prompts_list:
-                raw["ui"]["prompts"] = prompts_list
+                derived_raw["ui"]["prompts"] = prompts_list
             if examples_list:
-                raw["ui"]["examples"] = examples_list
+                derived_raw["ui"]["examples"] = examples_list
 
         try:
-            spec = parse_skill_spec(skill_id=skill_id, source_path=str(skill_md_path), raw=raw)
+            spec = parse_skill_spec(skill_id=skill_id, source_path=str(skill_md_path), raw=derived_raw)
             spec = _ensure_minimal_routing(spec)
             return spec, None
         except Exception as exc:

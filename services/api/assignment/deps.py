@@ -28,6 +28,12 @@ class AssignmentApplicationDeps:
 
 
 def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
+    def _teacher_assignments_progress(date: Optional[str] = None) -> Awaitable[Dict[str, Any]]:
+        return core.assignment_handlers.teacher_assignments_progress(
+            date=date,
+            deps=core._assignment_handlers_deps(),
+        )
+
     return AssignmentApplicationDeps(
         list_assignments=lambda: core.assignment_handlers.assignments(
             deps=core._assignment_handlers_deps()
@@ -37,10 +43,7 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
             include_students=include_students,
             deps=core._assignment_handlers_deps(),
         ),
-        teacher_assignments_progress=lambda date=None: core.assignment_handlers.teacher_assignments_progress(
-            date=date,
-            deps=core._assignment_handlers_deps(),
-        ),
+        teacher_assignments_progress=_teacher_assignments_progress,
         assignment_requirements=lambda req: core.assignment_handlers.assignment_requirements(
             req,
             deps=core._assignment_handlers_deps(),

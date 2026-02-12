@@ -18,7 +18,7 @@ def _default_now_iso() -> str:
 class ChatHistoryStoreDeps:
     student_sessions_dir: Path
     teacher_sessions_dir: Path
-    safe_fs_id: Callable[[str, str], str]
+    safe_fs_id: Callable[..., str]
     atomic_write_json: Callable[[Path, Any], None]
     now_iso: Callable[[], str] = _default_now_iso
     session_index_max_items: int = 500

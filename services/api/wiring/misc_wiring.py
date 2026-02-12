@@ -107,11 +107,7 @@ def _upload_llm_deps():
         diag_log=_ac.diag_log,
         parse_list_value=_ac.parse_list_value,
         compute_requirements_missing=_compute_requirements_missing_impl,
-        merge_requirements=lambda base, update, overwrite=False: _merge_requirements_impl(
-            base,
-            update,
-            overwrite=overwrite,
-        ),
+        merge_requirements=_merge_requirements_impl,
         normalize_excel_cell=_normalize_excel_cell_impl,
     )
 

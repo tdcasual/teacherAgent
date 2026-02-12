@@ -84,7 +84,8 @@ def _iter_overview_subject_texts(overview: Dict[str, Any]) -> Iterable[str]:
         return []
 
     texts = []
-    meta = overview.get("meta") if isinstance(overview.get("meta"), dict) else {}
+    meta_raw = overview.get("meta")
+    meta: Dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
     for key in ("subject", "subject_name", "subject_hint", "title", "name"):
         value = meta.get(key)
         if isinstance(value, str) and value.strip():
@@ -102,7 +103,8 @@ def _iter_overview_subject_texts(overview: Dict[str, Any]) -> Iterable[str]:
                 if isinstance(item, str) and item.strip():
                     texts.append(item)
 
-    files = overview.get("files") if isinstance(overview.get("files"), dict) else {}
+    files_raw = overview.get("files")
+    files: Dict[str, Any] = files_raw if isinstance(files_raw, dict) else {}
     manifest_path_raw = str(files.get("manifest") or "").strip()
     if manifest_path_raw:
         try:

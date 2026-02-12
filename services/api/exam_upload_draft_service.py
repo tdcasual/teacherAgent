@@ -84,8 +84,9 @@ def build_exam_upload_draft(
     scoring = parsed.get("scoring") or {}
     counts_scored = parsed.get("counts_scored") or {}
 
-    if isinstance(override.get("meta"), dict) and override.get("meta"):
-        meta = {**meta, **override.get("meta")}
+    override_meta = override.get("meta")
+    if isinstance(override_meta, dict) and override_meta:
+        meta = {**meta, **override_meta}
     if isinstance(override.get("questions"), list) and override.get("questions"):
         questions = override.get("questions")
     if isinstance(override.get("score_schema"), dict) and override.get("score_schema"):

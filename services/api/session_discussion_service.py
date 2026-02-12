@@ -31,7 +31,12 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
     except Exception:
         _log.warning("failed to load session index for student=%s", student_id, exc_info=True)
 
-    best = {"status": "not_started", "pass": False, "session_id": assignment_id, "message_count": 0}
+    best: Dict[str, Any] = {
+        "status": "not_started",
+        "pass": False,
+        "session_id": assignment_id,
+        "message_count": 0,
+    }
     for sid in session_ids:
         path = deps.student_session_file(student_id, sid)
         if not path.exists():
@@ -62,7 +67,7 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
                         if marker and marker in content:
                             passed = True
 
-            cur = {
+            cur: Dict[str, Any] = {
                 "status": "pass" if passed else "in_progress",
                 "pass": passed,
                 "session_id": sid,

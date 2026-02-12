@@ -91,7 +91,7 @@ def teacher_memory_search(
         daily_files = sorted(daily_dir.glob("*.md"), key=lambda p: p.name, reverse=True)[:14]
         files.extend(daily_files)
 
-    matches: List[Dict[str, Any]] = []
+    keyword_matches: List[Dict[str, Any]] = []
     for path in files:
         try:
             lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -104,7 +104,7 @@ def teacher_memory_search(
             start = max(0, idx - 2)
             end = min(len(lines), idx + 1)
             snippet = "\n".join(lines[start:end]).strip()
-            matches.append(
+            keyword_matches.append(
                 {
                     "source": "keyword",
                     "file": str(path),
@@ -112,16 +112,26 @@ def teacher_memory_search(
                     "snippet": snippet[:400],
                 }
             )
-            if len(matches) >= topk:
+            if len(keyword_matches) >= topk:
                 deps.log_event(
                     teacher_id,
                     "search",
-                    {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
+                    {
+                        "mode": "keyword",
+                        "query": q[:120],
+                        "hits": len(keyword_matches),
+                        "raw_hits": len(keyword_matches),
+                    },
                 )
-                return {"matches": matches, "mode": "keyword"}
+                return {"matches": keyword_matches, "mode": "keyword"}
     deps.log_event(
         teacher_id,
         "search",
-        {"mode": "keyword", "query": q[:120], "hits": len(matches), "raw_hits": len(matches)},
+        {
+            "mode": "keyword",
+            "query": q[:120],
+            "hits": len(keyword_matches),
+            "raw_hits": len(keyword_matches),
+        },
     )
-    return {"matches": matches, "mode": "keyword"}
+    return {"matches": keyword_matches, "mode": "keyword"}

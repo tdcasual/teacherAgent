@@ -216,7 +216,7 @@ def _download_skill_md(raw_url: str) -> str:
         raise ValueError(f"download failed: {exc}") from exc
 
 
-def _parse_github_url(github_url: str):
+def _parse_github_url(github_url: str) -> tuple[str, str, str, str]:
     """Parse a GitHub URL into (user, repo, branch, path) or raise ValueError."""
     url = github_url.strip()
     m = re.match(

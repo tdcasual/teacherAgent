@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .teacher_provider_registry_service import _catalog as _provider_catalog_from_registry
 
@@ -120,9 +120,12 @@ def teacher_llm_routing_simulate(args: Dict[str, Any], *, deps: TeacherLlmRoutin
 
     if config_override:
         override_validation = validate_routing_config(config_override, registry)
-        normalized = override_validation.get("normalized") if isinstance(override_validation.get("normalized"), dict) else {}
-        channels = normalized.get("channels") if isinstance(normalized.get("channels"), list) else []
-        rules = normalized.get("rules") if isinstance(normalized.get("rules"), list) else []
+        normalized_data = override_validation.get("normalized")
+        normalized: Dict[str, Any] = normalized_data if isinstance(normalized_data, dict) else {}
+        channels_data = normalized.get("channels")
+        channels: List[Any] = channels_data if isinstance(channels_data, list) else []
+        rules_data = normalized.get("rules")
+        rules: List[Any] = rules_data if isinstance(rules_data, list) else []
         channels_by_id: Dict[str, Dict[str, Any]] = {}
         for item in channels:
             if not isinstance(item, dict):

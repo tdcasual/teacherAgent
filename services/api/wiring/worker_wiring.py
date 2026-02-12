@@ -57,7 +57,7 @@ def _upload_worker_thread_get():
     return _app_core().UPLOAD_JOB_WORKER_THREAD
 
 
-def _upload_worker_thread_set(value) -> None:
+def _upload_worker_thread_set(value: Any) -> None:
     _ac = _app_core()
     _ac.UPLOAD_JOB_WORKER_THREAD = value
 
@@ -96,7 +96,7 @@ def _exam_worker_thread_get():
     return _app_core().EXAM_JOB_WORKER_THREAD
 
 
-def _exam_worker_thread_set(value) -> None:
+def _exam_worker_thread_set(value: Any) -> None:
     _ac = _app_core()
     _ac.EXAM_JOB_WORKER_THREAD = value
 
@@ -135,7 +135,7 @@ def _profile_update_worker_thread_get():
     return _app_core()._PROFILE_UPDATE_WORKER_THREAD
 
 
-def _profile_update_worker_thread_set(value) -> None:
+def _profile_update_worker_thread_set(value: Any) -> None:
     _ac = _app_core()
     _ac._PROFILE_UPDATE_WORKER_THREAD = value
 

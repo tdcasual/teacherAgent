@@ -70,7 +70,7 @@ def _teacher_compact_allowed(teacher_id: str, session_id: str) -> bool:
         _TEACHER_SESSION_COMPACT_TS[key] = now
         # Evict oldest entries when dict grows too large
         if len(_TEACHER_SESSION_COMPACT_TS) > _COMPACT_TS_MAX_SIZE:
-            oldest = sorted(_TEACHER_SESSION_COMPACT_TS, key=_TEACHER_SESSION_COMPACT_TS.get)
+            oldest = sorted(_TEACHER_SESSION_COMPACT_TS, key=lambda item: _TEACHER_SESSION_COMPACT_TS.get(item, 0.0))
             for k in oldest[: len(oldest) // 2]:
                 del _TEACHER_SESSION_COMPACT_TS[k]
     return True

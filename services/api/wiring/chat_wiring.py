@@ -113,11 +113,22 @@ def _chat_start_deps():
         is_pytest=_ac._settings.is_pytest(),
         inline_backend_factory=_ac._inline_backend_factory,
     )
+
+    def _detect_role_hint_nonnull(req: Any) -> str:
+        return _detect_role_hint_impl(req, detect_role=_ac.detect_role) or "unknown"
+
+    def _enqueue_chat_job(job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
+        return queue_runtime.enqueue_chat_job(
+            job_id,
+            lane_id=lane_id,
+            backend=backend,
+        )
+
     return ChatStartDeps(
         http_error=lambda code, detail: HTTPException(status_code=code, detail=detail),
         get_chat_job_id_by_request=_ac.get_chat_job_id_by_request,
         load_chat_job=_ac.load_chat_job,
-        detect_role_hint=lambda req: _detect_role_hint_impl(req, detect_role=_ac.detect_role),
+        detect_role_hint=_detect_role_hint_nonnull,
         resolve_student_session_id=_ac.resolve_student_session_id,
         resolve_teacher_id=_ac.resolve_teacher_id,
         resolve_chat_lane_id=resolve_chat_lane_id,
@@ -131,12 +142,8 @@ def _chat_start_deps():
         chat_request_map_set_if_absent=_chat_request_map_set_if_absent,
         new_job_id=lambda: f"cjob_{uuid.uuid4().hex[:12]}",
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
-        write_chat_job=lambda job_id, updates, overwrite=False: _ac.write_chat_job(job_id, updates, overwrite=overwrite),
-        enqueue_chat_job=lambda job_id, lane_id=None: queue_runtime.enqueue_chat_job(
-            job_id,
-            lane_id=lane_id,
-            backend=backend,
-        ),
+        write_chat_job=_ac.write_chat_job,
+        enqueue_chat_job=_enqueue_chat_job,
         chat_register_recent_locked=_chat_register_recent_locked,
         append_student_session_message=_ac.append_student_session_message,
         update_student_session_index=_ac.update_student_session_index,
@@ -316,7 +323,7 @@ def _compute_chat_reply_deps():
         parse_date_str=_ac.parse_date_str,
         build_assignment_context=_ac.build_assignment_context,
         chat_extra_system_max_chars=_ac.CHAT_EXTRA_SYSTEM_MAX_CHARS,
-        trim_messages=lambda messages, role_hint=None: _ac._trim_messages(messages, role_hint=role_hint),
+        trim_messages=_ac._trim_messages,
         student_inflight=_ac._student_inflight,
         run_agent=_ac.run_agent,
         normalize_math_delimiters=_ac.normalize_math_delimiters,

@@ -4,7 +4,7 @@ import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ def import_students_from_responses(
     created = 0
     updated = 0
     skipped = 0
-    sample = []
+    sample: List[str] = []
 
     for student_id, info in students.items():
         profile_path = _resolve_profile_path(profiles_dir, student_id)
