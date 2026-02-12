@@ -1,28 +1,57 @@
 from __future__ import annotations
 
+import hashlib
+import importlib as _importlib
 import json
 import logging
 import os
 import re
 import threading
 import uuid
-import hashlib
-import importlib as _importlib
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import llm_routing_resolver as _llm_routing_resolver_module
+
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_llm_routing_resolver_module)
-from .llm_routing_resolver import *  # noqa: F401,F403
-from .llm_routing_resolver import CompiledRouting, RoutingContext  # explicit for type hints
-
 from . import llm_routing_proposals as _llm_routing_proposals_module
+from .llm_routing_resolver import (
+    CompiledRouting,
+    RoutingContext,
+    resolve_routing,
+    simulate_routing,
+)
+
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_llm_routing_proposals_module)
-from .llm_routing_proposals import *  # noqa: F401,F403
+from .llm_routing_proposals import (
+    apply_routing_proposal,
+    create_routing_proposal,
+    list_proposals,
+    read_proposal,
+)
+
+__all__ = [
+    "RoutingContext",
+    "CompiledRouting",
+    "resolve_routing",
+    "simulate_routing",
+    "default_routing_config",
+    "validate_routing_config",
+    "invalidate_routing_cache",
+    "get_compiled_routing",
+    "list_routing_history",
+    "get_active_routing",
+    "apply_routing_config",
+    "rollback_routing_config",
+    "ensure_routing_file",
+    "create_routing_proposal",
+    "read_proposal",
+    "list_proposals",
+    "apply_routing_proposal",
+]
 
 
 _log = logging.getLogger(__name__)
