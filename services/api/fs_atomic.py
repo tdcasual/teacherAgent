@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable
+
+_log = logging.getLogger(__name__)
 
 
 def _atomic_tmp_path(path: Path) -> Path:
@@ -26,6 +29,7 @@ def atomic_write_json(path: Path, payload: Any) -> None:
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
+            _log.debug("failed to clean up temp file %s", tmp)
             pass
 
 
@@ -43,4 +47,5 @@ def atomic_write_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
+            _log.debug("failed to clean up temp file %s", tmp)
             pass

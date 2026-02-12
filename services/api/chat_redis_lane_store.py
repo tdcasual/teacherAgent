@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Dict, Optional, Tuple
 
 import redis
+
+_log = logging.getLogger(__name__)
 
 
 class ChatRedisLaneStore:
@@ -114,12 +117,14 @@ class ChatRedisLaneStore:
         try:
             pos = self.redis.lpos(queue_key, job_id)
         except Exception:
+            _log.warning("Redis LPOS failed for lane=%s job=%s", lane_id, job_id, exc_info=True)
             pos = None
         if pos is None:
             return 0
         try:
             return int(pos) + 1
         except Exception:
+            _log.debug("int conversion failed for lpos result pos=%s", pos)
             return 0
 
     def enqueue(self, job_id: str, lane_id: str) -> Tuple[Dict[str, int], bool]:
@@ -153,6 +158,7 @@ class ChatRedisLaneStore:
         try:
             self.redis.set(key, payload, px=self.debounce_ms)
         except Exception:
+            _log.warning("Redis SET failed for recent key lane=%s", lane_id, exc_info=True)
             pass
 
     def recent_job(self, lane_id: str, fingerprint: str) -> Optional[str]:
@@ -162,12 +168,14 @@ class ChatRedisLaneStore:
         try:
             raw = self.redis.get(key)
         except Exception:
+            _log.warning("Redis GET failed for recent key lane=%s", lane_id, exc_info=True)
             return None
         if not raw:
             return None
         try:
             data = json.loads(raw)
         except Exception:
+            _log.warning("JSON parse failed for recent key lane=%s", lane_id, exc_info=True)
             return None
         if not isinstance(data, dict):
             return None

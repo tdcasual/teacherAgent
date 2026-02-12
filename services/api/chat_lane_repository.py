@@ -283,6 +283,7 @@ def _chat_request_map_get(request_id: str) -> Optional[str]:
             path.unlink(missing_ok=True)
             return None
     except Exception:
+        _log.debug("_chat_request_map_get: stale cleanup failed for request_id mapping at %s", path)
         pass
     return job_id
 
@@ -301,6 +302,7 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
     except FileExistsError:
         return False
     except Exception:
+        _log.warning("_chat_request_map_set_if_absent: os.open failed for %s", path, exc_info=True)
         return False
     try:
         os.write(fd, job_id.encode("utf-8", errors="ignore"))
@@ -309,6 +311,7 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
         try:
             os.close(fd)
         except Exception:
+            _log.debug("_chat_request_map_set_if_absent: os.close failed for fd=%s", fd)
             pass
     return True
 
@@ -344,6 +347,7 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
             idx = load_chat_request_index()
             legacy = idx.get(str(request_id))
     except Exception:
+        _log.warning("get_chat_job_id_by_request: legacy index read failed for request_id=%s", request_id, exc_info=True)
         legacy = None
     if not legacy:
         return None
@@ -351,5 +355,5 @@ def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
         if not (_chat_job_path(legacy) / "job.json").exists():
             return None
     except Exception:
+        _log.debug("get_chat_job_id_by_request: stale job path check failed for job_id=%s", legacy)
         return None
-    return legacy

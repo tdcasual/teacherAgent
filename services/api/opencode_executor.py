@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -10,9 +11,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+_log = logging.getLogger(__name__)
+
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
+    _log.debug("yaml package not available, YAML config loading disabled")
     yaml = None
 
 
@@ -46,6 +50,7 @@ def _as_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
     except Exception:
+        _log.debug("int conversion failed for value=%r, using default=%d", value, default)
         return default
     if parsed < minimum:
         return minimum
@@ -84,6 +89,7 @@ def _parse_json_dict(text: str) -> Optional[Dict[str, Any]]:
         if isinstance(data, dict):
             return data
     except Exception:
+        _log.warning("JSON parse failed in _parse_json_dict (full content), len=%d", len(content), exc_info=True)
         pass
     match = re.search(r"\{.*\}", content, re.S)
     if not match:
@@ -91,6 +97,7 @@ def _parse_json_dict(text: str) -> Optional[Dict[str, Any]]:
     try:
         data = json.loads(match.group(0))
     except Exception:
+        _log.warning("JSON parse failed in _parse_json_dict (regex match), len=%d", len(match.group(0)), exc_info=True)
         return None
     return data if isinstance(data, dict) else None
 
@@ -121,6 +128,7 @@ def _collect_text_from_json_lines(stdout: str) -> str:
             try:
                 payload = json.loads(raw)
             except Exception:
+                _log.warning("JSON line parse failed in _collect_text_from_json_lines, line=%s", raw[:200], exc_info=True)
                 chunks.append(raw)
                 continue
             if isinstance(payload, dict):
@@ -172,6 +180,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
     try:
         parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("Failed to load config file %s", path, exc_info=True)
         return {}
     if not isinstance(parsed, dict):
         return {}
@@ -225,6 +234,7 @@ def load_opencode_bridge_config(app_root: Path, overrides: Optional[Dict[str, An
             if isinstance(parsed, dict):
                 merged["extra_env"] = parsed
         except Exception:
+            _log.warning("Failed to parse OPENCODE_BRIDGE_EXTRA_ENV=%s", extra_env_raw[:200], exc_info=True)
             pass
 
     mode = str(merged.get("mode") or "run").strip().lower()
@@ -320,6 +330,7 @@ def _detect_run_flags(binary: str, timeout_sec: int = 15) -> Dict[str, bool]:
         flags["attach"] = "--attach" in help_text
         flags["prompt"] = ("--prompt" in help_text) or bool(re.search(r"(^|\s)-p(,|\s)", help_text))
     except Exception:
+        _log.warning("Failed to detect run flags for binary=%s", binary, exc_info=True)
         pass
 
     with _HELP_CACHE_LOCK:
@@ -338,6 +349,7 @@ def build_opencode_chart_prompt(
     try:
         payload_text = json.dumps(input_data, ensure_ascii=False)
     except Exception:
+        _log.debug("json.dumps failed for input_data, falling back to str()")
         payload_text = str(input_data)
     if len(payload_text) > 5000:
         payload_text = payload_text[:5000] + "...[truncated]"
@@ -449,6 +461,7 @@ def run_opencode_codegen(
             "status": status,
         }
     except Exception as exc:
+        _log.warning("opencode subprocess execution failed: %s", exc, exc_info=True)
         return {
             "ok": False,
             "error": "opencode_exec_error",

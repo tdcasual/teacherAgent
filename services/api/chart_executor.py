@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
 import re
+import shutil
 import subprocess
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,80}$")
@@ -20,6 +26,9 @@ _MAX_EXEC_RETRIES = 6
 _MAX_STD_CHARS = 60000
 _MAX_PACKAGES = 24
 _MAX_PIP_TIMEOUT_SEC = 1200
+_CHART_ENV_META_FILE = ".env_meta.json"
+_CHART_ENV_GC_STATE_FILE = ".gc_state.json"
+_CHART_ENV_LEASE_PREFIX = ".lease_"
 
 
 def _iso_now() -> str:
@@ -65,6 +74,7 @@ def _normalize_timeout(value: Any) -> int:
     try:
         timeout = int(value)
     except Exception:
+        _log.debug("non-numeric timeout value %r, using default", value)
         return _DEFAULT_TIMEOUT_SEC
     if timeout <= 0:
         return _DEFAULT_TIMEOUT_SEC
@@ -75,6 +85,7 @@ def _normalize_retries(value: Any) -> int:
     try:
         retries = int(value)
     except Exception:
+        _log.debug("non-numeric retries value %r, using default", value)
         return _DEFAULT_EXEC_RETRIES
     if retries <= 0:
         return _DEFAULT_EXEC_RETRIES
@@ -142,6 +153,366 @@ def _venv_scope(packages: List[str]) -> str:
 
 def _env_root(uploads_dir: Path, scope: str) -> Path:
     return uploads_dir / "chart_envs" / scope
+
+
+def _chart_envs_root(uploads_dir: Path) -> Path:
+    return uploads_dir / "chart_envs"
+
+
+def _env_meta_path(env_dir: Path) -> Path:
+    return env_dir / _CHART_ENV_META_FILE
+
+
+def _env_gc_state_path(envs_root: Path) -> Path:
+    return envs_root / _CHART_ENV_GC_STATE_FILE
+
+
+def _read_json_dict(path: Path) -> Dict[str, Any]:
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        _log.warning("failed to parse JSON from %s", path, exc_info=True)
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_dict(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw = str(os.getenv(name, str(default)) or str(default)).strip()
+    try:
+        value = int(raw)
+    except Exception:
+        _log.debug("non-numeric env var %s=%r, using default %d", name, raw, default)
+        value = int(default)
+    if value < minimum:
+        return int(minimum)
+    if value > maximum:
+        return int(maximum)
+    return int(value)
+
+
+def _chart_env_gc_policy() -> Dict[str, Any]:
+    ttl_hours = _env_int("CHART_ENV_TTL_HOURS", default=72, minimum=1, maximum=24 * 365)
+    min_keep = _env_int("CHART_ENV_MIN_KEEP", default=2, minimum=0, maximum=200)
+    max_keep = _env_int("CHART_ENV_MAX_KEEP", default=8, minimum=1, maximum=500)
+    if max_keep < min_keep:
+        max_keep = min_keep
+    max_total_mb = _env_int("CHART_ENV_MAX_TOTAL_MB", default=2048, minimum=64, maximum=1024 * 1024)
+    return {
+        "enabled": _normalize_bool(os.getenv("CHART_ENV_GC_ENABLED"), default=True),
+        "interval_sec": _env_int("CHART_ENV_GC_INTERVAL_SEC", default=900, minimum=0, maximum=24 * 3600),
+        "ttl_sec": int(ttl_hours * 3600),
+        "min_keep": int(min_keep),
+        "max_keep": int(max_keep),
+        "max_total_bytes": int(max_total_mb * 1024 * 1024),
+        "active_grace_sec": _env_int("CHART_ENV_ACTIVE_GRACE_SEC", default=600, minimum=0, maximum=24 * 3600),
+        "lease_ttl_sec": _env_int("CHART_ENV_LEASE_TTL_SEC", default=6 * 3600, minimum=60, maximum=7 * 24 * 3600),
+    }
+
+
+def _scope_from_env_dir(env_dir: Path) -> str:
+    return str(env_dir.name or "").strip()
+
+
+def _numeric_ts(value: Any) -> Optional[float]:
+    try:
+        ts = float(value)
+    except Exception:
+        _log.debug("non-numeric timestamp value %r", value)
+        return None
+    if ts <= 0:
+        return None
+    return ts
+
+
+def _env_last_used_ts(env_dir: Path, meta: Dict[str, Any]) -> float:
+    meta_ts = _numeric_ts(meta.get("last_used_ts"))
+    if meta_ts is not None:
+        return meta_ts
+    try:
+        return float(env_dir.stat().st_mtime)
+    except Exception:
+        _log.debug("cannot stat env dir %s for last_used_ts", env_dir)
+        return 0.0
+
+
+def _mark_chart_env_used(env_dir: Path, *, scope: str, packages: List[str], now_ts: Optional[float] = None) -> None:
+    ts = float(now_ts if now_ts is not None else time.time())
+    env_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = _env_meta_path(env_dir)
+    current = _read_json_dict(meta_path)
+    created_ts = _numeric_ts(current.get("created_ts")) or ts
+    payload = {
+        "scope": str(scope or _scope_from_env_dir(env_dir)),
+        "packages": list(packages),
+        "created_ts": float(created_ts),
+        "last_used_ts": float(ts),
+        "updated_at": datetime.fromtimestamp(ts).isoformat(timespec="seconds"),
+    }
+    _write_json_dict(meta_path, payload)
+    try:
+        os.utime(env_dir, (ts, ts))
+    except Exception:
+        _log.debug("failed to update mtime on env dir %s", env_dir)
+        pass
+
+
+def _env_lease_path(env_dir: Path, run_id: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(run_id or "").strip()) or "run"
+    return env_dir / f"{_CHART_ENV_LEASE_PREFIX}{safe}"
+
+
+def _acquire_chart_env_lease(env_dir: Path, run_id: str) -> Path:
+    path = _env_lease_path(env_dir, run_id)
+    path.write_text(_iso_now(), encoding="utf-8")
+    return path
+
+
+def _release_chart_env_lease(path: Optional[Path]) -> None:
+    if path is None:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        _log.debug("failed to release chart env lease %s", path)
+        pass
+
+
+def _cleanup_stale_chart_env_leases(env_dir: Path, *, now_ts: float, lease_ttl_sec: int) -> None:
+    for lease in env_dir.glob(f"{_CHART_ENV_LEASE_PREFIX}*"):
+        try:
+            mtime = float(lease.stat().st_mtime)
+        except Exception:
+            _log.debug("cannot stat lease file %s", lease)
+            continue
+        if (now_ts - mtime) > float(max(1, lease_ttl_sec)):
+            try:
+                lease.unlink(missing_ok=True)
+            except Exception:
+                _log.debug("failed to remove stale lease %s", lease)
+                pass
+
+
+def _has_active_chart_env_lease(env_dir: Path) -> bool:
+    try:
+        return any(env_dir.glob(f"{_CHART_ENV_LEASE_PREFIX}*"))
+    except Exception:
+        _log.debug("failed to check active leases in %s", env_dir)
+        return False
+
+
+def _dir_size_bytes(path: Path) -> int:
+    total = 0
+    stack = [path]
+    while stack:
+        cur = stack.pop()
+        try:
+            with os.scandir(cur) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            total += int(entry.stat(follow_symlinks=False).st_size)
+                    except Exception:
+                        _log.debug("cannot stat entry in %s", cur)
+                        continue
+        except Exception:
+            _log.debug("cannot scan directory %s", cur)
+            continue
+    return int(total)
+
+
+def _delete_chart_env_dir(item: Dict[str, Any]) -> Optional[str]:
+    target = item.get("path")
+    if not isinstance(target, Path):
+        return "invalid_env_path"
+    try:
+        shutil.rmtree(target)
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
+def _prune_chart_envs(
+    uploads_dir: Path,
+    *,
+    keep_scopes: set[str],
+    policy: Optional[Dict[str, Any]] = None,
+    now_ts: Optional[float] = None,
+) -> Dict[str, Any]:
+    pol = dict(policy or _chart_env_gc_policy())
+    envs_root = _chart_envs_root(uploads_dir)
+    envs_root.mkdir(parents=True, exist_ok=True)
+    ts_now = float(now_ts if now_ts is not None else time.time())
+    if not _normalize_bool(pol.get("enabled"), default=True):
+        return {
+            "enabled": False,
+            "skipped": "disabled",
+            "root": str(envs_root),
+            "before_count": 0,
+            "after_count": 0,
+            "before_size_bytes": 0,
+            "after_size_bytes": 0,
+            "reclaimed_bytes": 0,
+            "deleted_scopes": [],
+            "failed": [],
+        }
+
+    min_keep = max(0, int(pol.get("min_keep") or 0))
+    max_keep = max(min_keep, int(pol.get("max_keep") or 0))
+    ttl_sec = max(0, int(pol.get("ttl_sec") or 0))
+    max_total_bytes = max(0, int(pol.get("max_total_bytes") or 0))
+    active_grace_sec = max(0, int(pol.get("active_grace_sec") or 0))
+    lease_ttl_sec = max(60, int(pol.get("lease_ttl_sec") or 3600))
+
+    items: List[Dict[str, Any]] = []
+    for child in sorted(envs_root.iterdir(), key=lambda p: p.name):
+        if not child.is_dir():
+            continue
+        scope = _scope_from_env_dir(child)
+        if not scope or scope.startswith("."):
+            continue
+        _cleanup_stale_chart_env_leases(child, now_ts=ts_now, lease_ttl_sec=lease_ttl_sec)
+        meta = _read_json_dict(_env_meta_path(child))
+        last_used_ts = _env_last_used_ts(child, meta)
+        size_bytes = _dir_size_bytes(child)
+        age_sec = max(0, int(ts_now - last_used_ts))
+        items.append(
+            {
+                "scope": scope,
+                "path": child,
+                "size_bytes": int(size_bytes),
+                "last_used_ts": float(last_used_ts),
+                "age_sec": age_sec,
+                "keep_scope": bool(scope in keep_scopes),
+                "active_lease": _has_active_chart_env_lease(child),
+            }
+        )
+
+    before_count = len(items)
+    before_size_bytes = int(sum(int(item.get("size_bytes") or 0) for item in items))
+    deleted_scopes: List[str] = []
+    failed: List[Dict[str, Any]] = []
+
+    remaining: List[Dict[str, Any]] = list(items)
+
+    def _is_eligible(item: Dict[str, Any]) -> bool:
+        if item.get("keep_scope"):
+            return False
+        if item.get("active_lease"):
+            return False
+        if int(item.get("age_sec") or 0) < active_grace_sec:
+            return False
+        return True
+
+    def _oldest_eligible() -> Optional[Dict[str, Any]]:
+        candidates = [item for item in remaining if _is_eligible(item)]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: float(item.get("last_used_ts") or 0))
+        return candidates[0]
+
+    def _remove_item(target: Dict[str, Any], reason: str) -> bool:
+        nonlocal remaining
+        err = _delete_chart_env_dir(target)
+        if err:
+            failed.append({"scope": target.get("scope"), "reason": reason, "error": err})
+            return False
+        deleted_scopes.append(str(target.get("scope") or ""))
+        remaining = [item for item in remaining if str(item.get("scope") or "") != str(target.get("scope") or "")]
+        return True
+
+    if ttl_sec > 0:
+        for item in sorted(remaining, key=lambda x: float(x.get("last_used_ts") or 0)):
+            if len(remaining) <= min_keep:
+                break
+            if not _is_eligible(item):
+                continue
+            if int(item.get("age_sec") or 0) < ttl_sec:
+                continue
+            _remove_item(item, reason="ttl")
+
+    while len(remaining) > max_keep:
+        if len(remaining) <= min_keep:
+            break
+        victim = _oldest_eligible()
+        if victim is None:
+            break
+        _remove_item(victim, reason="max_keep")
+
+    while max_total_bytes > 0:
+        total_bytes = int(sum(int(item.get("size_bytes") or 0) for item in remaining))
+        if total_bytes <= max_total_bytes or len(remaining) <= min_keep:
+            break
+        victim = _oldest_eligible()
+        if victim is None:
+            break
+        _remove_item(victim, reason="max_total_bytes")
+
+    after_count = len(remaining)
+    after_size_bytes = int(sum(int(item.get("size_bytes") or 0) for item in remaining))
+    return {
+        "enabled": True,
+        "root": str(envs_root),
+        "before_count": before_count,
+        "after_count": after_count,
+        "before_size_bytes": before_size_bytes,
+        "after_size_bytes": after_size_bytes,
+        "reclaimed_bytes": max(0, before_size_bytes - after_size_bytes),
+        "deleted_scopes": deleted_scopes,
+        "failed": failed,
+    }
+
+
+def _maybe_prune_chart_envs(uploads_dir: Path, *, keep_scopes: set[str], policy: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    pol = dict(policy or _chart_env_gc_policy())
+    envs_root = _chart_envs_root(uploads_dir)
+    envs_root.mkdir(parents=True, exist_ok=True)
+    if not _normalize_bool(pol.get("enabled"), default=True):
+        return {
+            "enabled": False,
+            "skipped": "disabled",
+            "root": str(envs_root),
+        }
+    interval_sec = max(0, int(pol.get("interval_sec") or 0))
+    now_ts = float(time.time())
+    state_path = _env_gc_state_path(envs_root)
+    state = _read_json_dict(state_path)
+    last_gc_ts = _numeric_ts(state.get("last_gc_ts")) or 0.0
+    if interval_sec > 0 and last_gc_ts > 0 and (now_ts - last_gc_ts) < interval_sec:
+        return {
+            "enabled": True,
+            "skipped": "interval",
+            "interval_sec": interval_sec,
+            "last_gc_ts": last_gc_ts,
+            "next_gc_ts": last_gc_ts + interval_sec,
+            "root": str(envs_root),
+        }
+    report = _prune_chart_envs(uploads_dir, keep_scopes=keep_scopes, policy=pol, now_ts=now_ts)
+    try:
+        _write_json_dict(
+            state_path,
+            {
+                "last_gc_ts": now_ts,
+                "last_gc_at": datetime.fromtimestamp(now_ts).isoformat(timespec="seconds"),
+                "last_gc_report": report,
+            },
+        )
+    except Exception:
+        _log.warning("failed to write GC state to %s", state_path, exc_info=True)
+        pass
+    report["interval_sec"] = interval_sec
+    report["last_gc_ts"] = now_ts
+    return report
 
 
 def _env_python_path(env_dir: Path) -> Path:
@@ -315,99 +686,134 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
     try:
         (run_dir / "input.json").write_text(json.dumps(input_data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
+        _log.debug("failed to serialize input_data for run %s, writing null", run_id)
         (run_dir / "input.json").write_text("null\n", encoding="utf-8")
 
     started_at = _iso_now()
     python_exec = "python3"
+    env_scope: Optional[str] = None
     env_dir: Optional[Path] = None
+    lease_path: Optional[Path] = None
     installed_packages: List[str] = []
     install_logs: List[Dict[str, Any]] = []
     attempts: List[Dict[str, Any]] = []
+    env_gc: Dict[str, Any] = {"enabled": False, "skipped": "auto_install_disabled"}
     timed_out = False
     exit_code = -1
     stdout = ""
     stderr = ""
+    try:
+        if auto_install:
+            env_scope = _venv_scope(requested_packages)
+            try:
+                env_gc = _maybe_prune_chart_envs(uploads_dir, keep_scopes={env_scope})
+            except Exception as exc:
+                env_gc = {"enabled": True, "error": "gc_failed", "detail": str(exc)}
+            env_dir = _env_root(uploads_dir, env_scope)
+            venv_result = _ensure_venv(env_dir)
+            if not venv_result.get("ok"):
+                error_payload = {
+                    "error": "venv_init_failed",
+                    "run_id": run_id,
+                    "detail": venv_result,
+                    "environment_scope": env_scope,
+                    "env_gc": env_gc,
+                    "meta_url": f"/chart-runs/{run_id}/meta",
+                }
+                meta_path.write_text(
+                    json.dumps({"run_id": run_id, "ok": False, **error_payload}, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                return error_payload
+            python_exec = str(venv_result.get("python") or _env_python_path(env_dir))
+            try:
+                _mark_chart_env_used(env_dir, scope=env_scope, packages=requested_packages)
+            except Exception:
+                _log.debug("failed to mark chart env used for scope %s", env_scope)
+                pass
+            try:
+                lease_path = _acquire_chart_env_lease(env_dir, run_id)
+            except Exception:
+                _log.warning("failed to acquire chart env lease for run %s", run_id, exc_info=True)
+                lease_path = None
+            if requested_packages:
+                pre_install = _pip_install(python_exec, requested_packages, timeout_sec=max(120, timeout_sec * 4))
+                install_logs.append({"phase": "requested_packages", **pre_install})
+                if pre_install.get("ok"):
+                    installed_packages.extend(requested_packages)
 
-    if auto_install:
-        env_scope = _venv_scope(requested_packages)
-        env_dir = _env_root(uploads_dir, env_scope)
-        venv_result = _ensure_venv(env_dir)
-        if not venv_result.get("ok"):
-            error_payload = {
-                "error": "venv_init_failed",
-                "run_id": run_id,
-                "detail": venv_result,
-                "meta_url": f"/chart-runs/{run_id}/meta",
-            }
-            meta_path.write_text(json.dumps({"run_id": run_id, "ok": False, **error_payload}, ensure_ascii=False, indent=2), encoding="utf-8")
-            return error_payload
-        python_exec = str(venv_result.get("python") or _env_python_path(env_dir))
-        if requested_packages:
-            pre_install = _pip_install(python_exec, requested_packages, timeout_sec=max(120, timeout_sec * 4))
-            install_logs.append({"phase": "requested_packages", **pre_install})
-            if pre_install.get("ok"):
-                installed_packages.extend(requested_packages)
+        auto_installed_missing: set[str] = set()
+        for attempt in range(1, exec_retries + 1):
+            cur_timed_out = False
+            cur_exit_code = -1
+            cur_stdout = ""
+            cur_stderr = ""
+            try:
+                proc = subprocess.run(
+                    [python_exec, str(script_path)],
+                    cwd=str(app_root),
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout_sec,
+                )
+                cur_exit_code = int(proc.returncode)
+                cur_stdout = proc.stdout or ""
+                cur_stderr = proc.stderr or ""
+            except subprocess.TimeoutExpired as exc:
+                cur_timed_out = True
+                cur_exit_code = -1
+                cur_stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+                cur_stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
+                cur_stderr = (cur_stderr + "\nprocess timed out").strip()
+            except Exception as exc:
+                cur_exit_code = -1
+                cur_stderr = str(exc)
 
-    auto_installed_missing: set[str] = set()
-    for attempt in range(1, exec_retries + 1):
-        cur_timed_out = False
-        cur_exit_code = -1
-        cur_stdout = ""
-        cur_stderr = ""
-        try:
-            proc = subprocess.run(
-                [python_exec, str(script_path)],
-                cwd=str(app_root),
-                capture_output=True,
-                text=True,
-                timeout=timeout_sec,
+            cur_stdout = _clip_text(cur_stdout)
+            cur_stderr = _clip_text(cur_stderr)
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "exit_code": cur_exit_code,
+                    "timed_out": cur_timed_out,
+                    "stdout": cur_stdout,
+                    "stderr": cur_stderr,
+                }
             )
-            cur_exit_code = int(proc.returncode)
-            cur_stdout = proc.stdout or ""
-            cur_stderr = proc.stderr or ""
-        except subprocess.TimeoutExpired as exc:
-            cur_timed_out = True
-            cur_exit_code = -1
-            cur_stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-            cur_stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
-            cur_stderr = (cur_stderr + "\nprocess timed out").strip()
-        except Exception as exc:
-            cur_exit_code = -1
-            cur_stderr = str(exc)
+            exit_code = cur_exit_code
+            timed_out = cur_timed_out
+            stdout = cur_stdout
+            stderr = cur_stderr
+            if cur_exit_code == 0:
+                break
 
-        cur_stdout = _clip_text(cur_stdout)
-        cur_stderr = _clip_text(cur_stderr)
-        attempts.append(
-            {
-                "attempt": attempt,
-                "exit_code": cur_exit_code,
-                "timed_out": cur_timed_out,
-                "stdout": cur_stdout,
-                "stderr": cur_stderr,
-            }
-        )
-        exit_code = cur_exit_code
-        timed_out = cur_timed_out
-        stdout = cur_stdout
-        stderr = cur_stderr
-        if cur_exit_code == 0:
+            missing_module = _extract_missing_module(cur_stderr)
+            if (
+                auto_install
+                and (attempt < exec_retries)
+                and missing_module
+                and (missing_module not in auto_installed_missing)
+            ):
+                auto_installed_missing.add(missing_module)
+                install_res = _pip_install(python_exec, [missing_module], timeout_sec=max(120, timeout_sec * 3))
+                install_logs.append({"phase": f"missing_module_attempt_{attempt}", **install_res})
+                if install_res.get("ok"):
+                    if missing_module.lower() not in {p.lower() for p in installed_packages}:
+                        installed_packages.append(missing_module)
+                    continue
             break
-
-        missing_module = _extract_missing_module(cur_stderr)
-        if (
-            auto_install
-            and (attempt < exec_retries)
-            and missing_module
-            and (missing_module not in auto_installed_missing)
-        ):
-            auto_installed_missing.add(missing_module)
-            install_res = _pip_install(python_exec, [missing_module], timeout_sec=max(120, timeout_sec * 3))
-            install_logs.append({"phase": f"missing_module_attempt_{attempt}", **install_res})
-            if install_res.get("ok"):
-                if missing_module.lower() not in {p.lower() for p in installed_packages}:
-                    installed_packages.append(missing_module)
-                continue
-        break
+    finally:
+        _release_chart_env_lease(lease_path)
+        if env_dir is not None:
+            try:
+                _mark_chart_env_used(
+                    env_dir,
+                    scope=env_scope or _scope_from_env_dir(env_dir),
+                    packages=requested_packages,
+                )
+            except Exception:
+                _log.debug("failed to mark chart env used in finally for scope %s", env_scope)
+                pass
 
     stdout_path.write_text(stdout, encoding="utf-8")
     stderr_path.write_text(stderr, encoding="utf-8")
@@ -439,10 +845,12 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
         "output_dir": str(output_dir),
         "python_executable": python_exec,
         "environment_dir": str(env_dir) if env_dir else None,
+        "environment_scope": env_scope,
         "auto_install": auto_install,
         "requested_packages": requested_packages,
         "installed_packages": installed_packages,
         "install_logs": install_logs,
+        "env_gc": env_gc,
         "attempts": attempts,
         "stdout_file": str(stdout_path),
         "stderr_file": str(stderr_path),
@@ -463,10 +871,12 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
         "stderr": stderr,
         "python_executable": python_exec,
         "environment_dir": str(env_dir) if env_dir else None,
+        "environment_scope": env_scope,
         "auto_install": auto_install,
         "requested_packages": requested_packages,
         "installed_packages": installed_packages,
         "install_logs": install_logs,
+        "env_gc": env_gc,
         "attempts": attempts,
         "meta_url": f"/chart-runs/{run_id}/meta",
     }

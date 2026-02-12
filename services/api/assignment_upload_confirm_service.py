@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 class AssignmentUploadConfirmError(Exception):
@@ -50,6 +53,7 @@ def _load_draft_override(job_dir: Path) -> Dict[str, Any]:
     try:
         payload = json.loads(override_path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to parse draft_override.json in %s", override_path, exc_info=True)
         return {}
     return payload if isinstance(payload, dict) else {}
 

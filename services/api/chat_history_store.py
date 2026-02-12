@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 def _default_now_iso() -> str:
@@ -62,6 +65,7 @@ def load_student_sessions_index(student_id: str, deps: ChatHistoryStoreDeps) -> 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to parse student sessions index for student=%s path=%s", student_id, path, exc_info=True)
         return []
     return data if isinstance(data, list) else []
 
@@ -78,6 +82,7 @@ def load_teacher_sessions_index(teacher_id: str, deps: ChatHistoryStoreDeps) -> 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to parse teacher sessions index for teacher=%s path=%s", teacher_id, path, exc_info=True)
         return []
     return data if isinstance(data, list) else []
 
@@ -91,6 +96,7 @@ def _to_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
     except Exception:
+        _log.debug("non-integer value %r, using default=%d", value, default)
         return default
 
 

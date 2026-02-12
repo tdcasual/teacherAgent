@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,6 +26,7 @@ def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
         if isinstance(data, dict):
             return data
     except Exception:
+        _log.debug("initial JSON parse failed, trying regex fallback for: %.200s", content)
         match = re.search(r"\{.*\}", content, re.S)
         if match:
             try:
@@ -30,6 +34,7 @@ def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
                 if isinstance(data, dict):
                     return data
             except Exception:
+                _log.debug("regex fallback JSON parse also failed for: %.200s", content)
                 return None
     return None
 

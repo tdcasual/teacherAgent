@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,7 @@ def teacher_memory_search(
         try:
             lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
         except Exception:
+            _log.debug("skipping unreadable memory file %s", path)
             continue
         for idx, line in enumerate(lines, start=1):
             if q not in line:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,7 @@ def teacher_read_text(path: Path, max_chars: int = 8000) -> str:
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
+        _log.warning("failed to read teacher file %s", path, exc_info=True)
         return ""
     if max_chars and len(text) > max_chars:
         return text[:max_chars] + "…"

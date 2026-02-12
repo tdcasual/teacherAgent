@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ def teacher_memory_apply(
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to read proposal file for teacher=%s proposal=%s", teacher_id, proposal_id, exc_info=True)
         record = {}
     status = str(record.get("status") or "proposed")
     if status in {"applied", "rejected"}:

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,7 @@ def teacher_memory_log_event(
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
+        _log.warning("failed to write memory event log for teacher=%s", teacher_id, exc_info=True)
         return
 
 
@@ -59,6 +63,7 @@ def teacher_memory_load_events(teacher_id: str, *, deps: TeacherMemoryStoreDeps,
         try:
             rec = json.loads(line)
         except Exception:
+            _log.debug("skipping malformed JSONL line in event log for teacher=%s", teacher_id)
             continue
         if not isinstance(rec, dict):
             continue
@@ -76,6 +81,7 @@ def teacher_memory_load_record(teacher_id: str, proposal_id: str, *, deps: Teach
     try:
         rec = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to read proposal file for teacher=%s proposal=%s", teacher_id, proposal_id, exc_info=True)
         return None
     if not isinstance(rec, dict):
         return None

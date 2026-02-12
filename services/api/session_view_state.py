@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .fs_atomic import atomic_write_json
+
+_log = logging.getLogger(__name__)
 
 
 def parse_iso_ts(value: Any) -> Optional[datetime]:
@@ -15,6 +18,7 @@ def parse_iso_ts(value: Any) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except Exception:
+        _log.debug("unparseable ISO timestamp: %s", raw)
         return None
 
 
@@ -85,6 +89,7 @@ def load_session_view_state(path: Path) -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to read session view state from %s", path, exc_info=True)
         return default_session_view_state()
     return normalize_session_view_state_payload(data)
 

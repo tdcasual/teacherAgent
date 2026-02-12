@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
+
+_log = logging.getLogger(__name__)
 
 
 def _merge_score_schema(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -34,6 +37,7 @@ def load_exam_draft_override(job_dir: Path) -> Dict[str, Any]:
     try:
         data = json.loads(override_path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to parse exam draft_override.json in %s", override_path, exc_info=True)
         return {}
     return data if isinstance(data, dict) else {}
 

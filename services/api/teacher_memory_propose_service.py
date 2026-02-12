@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Set
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,7 @@ def teacher_memory_propose(
         try:
             latest = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("failed to re-read proposal file for teacher=%s proposal=%s", teacher_id, proposal_id, exc_info=True)
             latest = record
         if not isinstance(latest, dict):
             latest = record
@@ -107,6 +111,7 @@ def teacher_memory_propose(
     try:
         final_record = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to re-read final proposal file for teacher=%s proposal=%s", teacher_id, proposal_id, exc_info=True)
         final_record = record
     return {
         "ok": True,

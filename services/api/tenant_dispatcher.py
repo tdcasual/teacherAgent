@@ -60,6 +60,7 @@ class MultiTenantDispatcher:
         try:
             handle = self.registry.get_or_create(tenant_id)
         except Exception:
+            _log.warning("failed to resolve tenant %s", tenant_id, exc_info=True)
             return await self._send_simple(send, status=404, body=b"tenant not found")
 
         new_scope = dict(scope)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ def teacher_memory_recent_proposals(teacher_id: str, *, deps: TeacherMemoryRecor
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("failed to read proposal file %s", path, exc_info=True)
             continue
         if not isinstance(data, dict):
             continue
@@ -76,6 +80,7 @@ def teacher_memory_recent_user_turns(
         try:
             rec = json.loads(text)
         except Exception:
+            _log.debug("skipping malformed JSONL line in session file for teacher=%s session=%s", teacher_id, session_id)
             continue
         if not isinstance(rec, dict):
             continue
@@ -202,6 +207,7 @@ def teacher_memory_mark_superseded(
         try:
             rec = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("failed to read proposal file for supersede teacher=%s proposal=%s", teacher_id, pid, exc_info=True)
             rec = {}
         if not isinstance(rec, dict):
             continue
@@ -264,5 +270,6 @@ def teacher_session_compaction_cycle_no(teacher_id: str, session_id: str, *, dep
     try:
         runs = int(item.get("compaction_runs") or 0)
     except Exception:
+        _log.debug("non-integer compaction_runs for teacher=%s session=%s", teacher_id, session_id)
         runs = 0
     return max(1, runs + 1)

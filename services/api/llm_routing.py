@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -23,6 +24,8 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_llm_routing_proposals_module)
 from .llm_routing_proposals import *  # noqa: F401,F403
 
+
+_log = logging.getLogger(__name__)
 
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 _KIND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,120}$")
@@ -58,6 +61,7 @@ def _as_int(value: Any, default: int, min_value: Optional[int] = None) -> int:
     try:
         iv = int(value)
     except Exception:
+        _log.debug("_as_int: could not convert %r to int, using default %r", value, default)
         iv = default
     if min_value is not None and iv < min_value:
         iv = min_value
@@ -70,6 +74,7 @@ def _as_float_opt(value: Any) -> Optional[float]:
     try:
         return float(value)
     except Exception:
+        _log.debug("_as_float_opt: could not convert %r to float", value)
         return None
 
 
@@ -79,6 +84,7 @@ def _as_int_opt(value: Any) -> Optional[int]:
     try:
         return int(value)
     except Exception:
+        _log.debug("_as_int_opt: could not convert %r to int", value)
         return None
 
 
@@ -114,6 +120,7 @@ def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
+            _log.debug("_atomic_write_json: failed to clean up temp file %s", tmp)
             pass
 
 
@@ -123,6 +130,7 @@ def _read_json(path: Path) -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("_read_json: failed to read/parse %s", path, exc_info=True)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -368,6 +376,7 @@ def _config_signature(config_path: Path, model_registry: Dict[str, Any]) -> Tupl
         ctime_ns = int(stat.st_ctime_ns)
         digest = hashlib.sha1(config_path.read_bytes()).hexdigest()
     except Exception:
+        _log.warning("_config_signature: failed to stat/read %s", config_path, exc_info=True)
         mtime_ns = 0
         size = 0
         ctime_ns = 0
@@ -437,6 +446,7 @@ def _prune_history(config_path: Path, keep: int = _HISTORY_KEEP_LIMIT) -> None:
         try:
             stale_path.unlink(missing_ok=True)
         except Exception:
+            _log.debug("_prune_history: failed to remove stale history file %s", stale_path)
             pass
 
 
@@ -565,6 +575,7 @@ def rollback_routing_config(
     try:
         target = int(target_version)
     except Exception:
+        _log.debug("rollback_routing_config: invalid target_version %r", target_version)
         return {"ok": False, "error": "invalid_target_version"}
     if target <= 0:
         return {"ok": False, "error": "invalid_target_version"}

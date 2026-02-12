@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+_log = logging.getLogger(__name__)
 
 
 def _pid_alive(pid: int) -> bool:
@@ -18,6 +21,7 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     except Exception:
+        _log.debug("unexpected error checking pid %s, assuming alive", pid)
         return True
     return True
 
@@ -27,12 +31,14 @@ def _read_lock_pid(path: Path) -> int:
         raw = path.read_text(encoding="utf-8", errors="ignore")
         payload = json.loads(raw)
     except Exception:
+        _log.warning("failed to read/parse lock file %s", path, exc_info=True)
         return 0
     if not isinstance(payload, dict):
         return 0
     try:
         return int(payload.get("pid") or 0)
     except Exception:
+        _log.debug("non-integer pid in lock file %s", path)
         return 0
 
 
@@ -60,6 +66,7 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
                     path.unlink(missing_ok=True)
                     continue
             except Exception:
+                _log.debug("failed to check/remove stale lock %s", path)
                 pass
             try:
                 age = now - float(path.stat().st_mtime)
@@ -67,9 +74,11 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
                     path.unlink(missing_ok=True)
                     continue
             except Exception:
+                _log.debug("failed to check lock TTL for %s", path)
                 pass
             return False
         except Exception:
+            _log.warning("unexpected error acquiring lock %s", path, exc_info=True)
             return False
         try:
             payload = {"pid": deps.get_pid(), "ts": deps.now_iso()}
@@ -78,6 +87,7 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
             try:
                 deps.os_close(fd)
             except Exception:
+                _log.debug("failed to close lock fd for %s", path)
                 pass
         return True
     return False
@@ -87,6 +97,7 @@ def release_lockfile(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
     except Exception:
+        _log.debug("failed to release lock file %s", path)
         pass
 
 

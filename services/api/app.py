@@ -20,6 +20,8 @@ from .auth_service import (
     resolve_principal_from_headers,
     set_current_principal,
 )
+from .request_context import REQUEST_ID, RequestIdFilter, new_request_id
+from .rate_limit import rate_limit_middleware
 from .runtime.lifecycle import app_lifespan
 from .wiring import CURRENT_CORE
 
@@ -64,11 +66,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.middleware("http")(rate_limit_middleware)
+
 register_routes(app, _core)
+
+# Attach request-id filter so all loggers include it
+logging.getLogger().addFilter(RequestIdFilter())
 
 
 @app.middleware("http")
 async def _set_core_context(request: Request, call_next):
+    rid = request.headers.get("x-request-id") or new_request_id()
+    rid_token = REQUEST_ID.set(rid)
     core_token = CURRENT_CORE.set(_core)
     principal_token = None
     try:
@@ -82,13 +91,19 @@ async def _set_core_context(request: Request, call_next):
             )
             if principal is not None:
                 principal_token = set_current_principal(principal)
-        return await call_next(request)
+        response = await call_next(request)
+        response.headers["x-request-id"] = rid
+        return response
     except AuthError as exc:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    except Exception:
+        logging.getLogger(__name__).exception("Unhandled error in request middleware")
+        return JSONResponse(status_code=500, content={"detail": "internal_error"})
     finally:
         if principal_token is not None:
             reset_current_principal(principal_token)
         CURRENT_CORE.reset(core_token)
+        REQUEST_ID.reset(rid_token)
 
 if __name__ == "services.api.app":
     _DEFAULT_APP = app

@@ -6,6 +6,7 @@ All public and underscore-prefixed names are re-exported by app_core.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -15,6 +16,8 @@ import importlib as _importlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Imports from already-extracted sibling modules
@@ -151,12 +154,14 @@ from .teacher_memory_record_service import (
     teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
     teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
     teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
+    teacher_memory_recent_user_turns as _teacher_memory_recent_user_turns_impl,
     teacher_session_compaction_cycle_no as _teacher_session_compaction_cycle_no_impl,
     teacher_session_index_item as _teacher_session_index_item_impl,
 )
 from .teacher_memory_rules_service import (
     teacher_memory_age_days as _teacher_memory_age_days_impl,
     teacher_memory_conflicts as _teacher_memory_conflicts_impl,
+    teacher_memory_has_term as _teacher_memory_has_term_impl,
     teacher_memory_is_expired_record as _teacher_memory_is_expired_record_impl,
     teacher_memory_is_sensitive as _teacher_memory_is_sensitive_impl,
     teacher_memory_loose_match as _teacher_memory_loose_match_impl,
@@ -179,6 +184,7 @@ from .teacher_memory_search_service import (
 from .teacher_memory_store_service import (
     TeacherMemoryStoreDeps,
     teacher_memory_active_applied_records as _teacher_memory_active_applied_records_impl,
+    teacher_memory_event_log_path as _teacher_memory_event_log_path_impl,
     teacher_memory_load_events as _teacher_memory_load_events_impl,
     teacher_memory_load_record as _teacher_memory_load_record_impl,
     teacher_memory_log_event as _teacher_memory_log_event_impl,
@@ -226,6 +232,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
     try:
         path = teacher_session_file(teacher_id, session_id)
     except Exception:
+        _log.debug("Failed to resolve session file path for teacher=%s session=%s", teacher_id, session_id)
         return ""
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -236,6 +243,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
                 try:
                     obj = json.loads(line)
                 except Exception:
+                    _log.debug("Skipping non-JSON line in session file %s", path)
                     continue
                 if isinstance(obj, dict) and obj.get("kind") == "session_summary":
                     text = str(obj.get("content") or "").strip()
@@ -243,6 +251,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
                 # If the first meaningful record isn't summary, don't scan the whole file.
                 break
     except Exception:
+        _log.warning("Failed to read session file %s for summary", path, exc_info=True)
         return ""
     return ""
 
@@ -334,6 +343,7 @@ def teacher_memory_list_proposals(
         try:
             rec = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("Failed to read proposal file %s", path, exc_info=True)
             continue
         if not isinstance(rec, dict):
             continue
@@ -366,6 +376,10 @@ def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
 
 def _teacher_memory_is_sensitive(content: str) -> bool:
     return _teacher_memory_is_sensitive_impl(content, patterns=_TEACHER_MEMORY_SENSITIVE_PATTERNS)
+
+
+def _teacher_memory_event_log_path(teacher_id: str) -> Path:
+    return _teacher_memory_event_log_path_impl(teacher_id, deps=_teacher_memory_store_deps())
 
 
 def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
@@ -459,6 +473,10 @@ def _teacher_memory_active_applied_records(
     )
 
 
+def _teacher_memory_recent_user_turns(teacher_id: str, session_id: str, limit: int = 24) -> List[str]:
+    return _teacher_memory_recent_user_turns_impl(teacher_id, session_id, deps=_teacher_memory_record_deps(), limit=limit)
+
+
 def _teacher_memory_loose_match(a: str, b: str) -> bool:
     return _teacher_memory_loose_match_impl(a, b, norm_text=_teacher_memory_norm_text)
 
@@ -473,6 +491,10 @@ def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, A
 
 def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_no: int) -> None:
     _mark_teacher_session_memory_flush_impl(teacher_id, session_id, cycle_no, deps=_teacher_memory_record_deps())
+
+
+def _teacher_memory_has_term(text: str, terms: Tuple[str, ...]) -> bool:
+    return _teacher_memory_has_term_impl(text, terms)
 
 
 def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
@@ -610,6 +632,7 @@ def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, A
     try:
         from .mem0_adapter import teacher_mem0_search
     except Exception:
+        _log.warning("Failed to import mem0_adapter for search", exc_info=True)
         return {"ok": False, "matches": []}
     return teacher_mem0_search(teacher_id, query, limit=limit)
 
@@ -618,10 +641,12 @@ def _teacher_mem0_should_index_target(target: str) -> bool:
     try:
         from .mem0_adapter import teacher_mem0_should_index_target
     except Exception:
+        _log.warning("Failed to import mem0_adapter for index target check", exc_info=True)
         return False
     try:
         return bool(teacher_mem0_should_index_target(target))
     except Exception:
+        _log.warning("mem0 should_index_target call failed for target=%s", target, exc_info=True)
         return False
 
 
@@ -629,5 +654,6 @@ def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, An
     try:
         from .mem0_adapter import teacher_mem0_index_entry
     except Exception:
+        _log.warning("Failed to import mem0_adapter for index entry", exc_info=True)
         return {"ok": False, "error": "mem0_unavailable"}
     return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)

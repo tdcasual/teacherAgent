@@ -45,6 +45,7 @@ def _atomic_write_json(path: Path, payload: Any) -> None:
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
+            _log.debug("failed to clean up temp file %s", tmp)
             pass
 
 
@@ -144,6 +145,7 @@ def _is_pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     except Exception:
+        _log.debug("unexpected error checking pid %s liveness", pid)
         return True
     return True
 

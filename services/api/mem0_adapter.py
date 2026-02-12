@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from typing import Any, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -19,6 +22,7 @@ def _env_int(name: str, default: int) -> int:
     try:
         return int(str(raw).strip())
     except Exception:
+        _log.debug("env var %s=%r is not a valid int, using default %d", name, raw, default)
         return default
 
 
@@ -29,6 +33,7 @@ def _env_float(name: str, default: float) -> float:
     try:
         return float(str(raw).strip())
     except Exception:
+        _log.debug("env var %s=%r is not a valid float, using default %s", name, raw, default)
         return default
 
 
@@ -95,6 +100,7 @@ def get_mem0() -> Optional[Any]:
             _MEM0_INSTANCE = Memory.from_config(get_config())
             return _MEM0_INSTANCE
         except Exception as exc:
+            _log.warning("mem0 initialization failed", exc_info=True)
             _MEM0_INIT_ERROR = str(exc)
             return None
 
@@ -150,6 +156,7 @@ def teacher_mem0_search(
     try:
         res = memory.search(query, user_id=user_id, limit=topk, threshold=th, rerank=False)
     except Exception as exc:
+        _log.warning("mem0 search failed for teacher_id=%s", teacher_id, exc_info=True)
         return {"ok": False, "error": str(exc), "matches": []}
 
     items = []
@@ -213,6 +220,7 @@ def teacher_mem0_index_entry(
         try:
             results.append(memory.add(chunk, user_id=user_id, infer=False, metadata=md))
         except Exception as exc:
+            _log.warning("mem0 index chunk %d/%d failed for teacher_id=%s", i, len(chunks), teacher_id, exc_info=True)
             return {"ok": False, "error": str(exc), "indexed": i, "total": len(chunks)}
 
     return {"ok": True, "chunks": len(chunks), "results_count": len(results)}
