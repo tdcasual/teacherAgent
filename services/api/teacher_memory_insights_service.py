@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def _coerce_float(value: Any) -> float | None:
@@ -133,6 +136,7 @@ def teacher_memory_insights(
         try:
             hits = int(ev.get("hits") or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             hits = 0
         if hits > 0:
             search_hit_calls += 1

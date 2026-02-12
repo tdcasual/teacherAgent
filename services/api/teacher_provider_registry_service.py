@@ -16,6 +16,9 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 import requests  # type: ignore[import-untyped]
+import logging
+_log = logging.getLogger(__name__)
+
 
 _PROVIDER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$")
 _LOCKS_GUARD = threading.Lock()
@@ -170,6 +173,7 @@ def _is_private_host(hostname: str) -> bool:
         addr = ipaddress.ip_address(host)
         return bool(addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return False
 
 
@@ -190,6 +194,7 @@ def _read_json(path: Path) -> Dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.debug("JSON parse failed", exc_info=True)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -641,6 +646,7 @@ def teacher_provider_registry_probe_models(args: Dict[str, Any], *, deps: Teache
                     models.append(model_id)
         return {"ok": True, "teacher_id": actor, "provider_id": provider_id, "models": sorted(set(models))}
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         return {"ok": False, "error": "probe_exception", "detail": str(exc)[:400]}
 
 

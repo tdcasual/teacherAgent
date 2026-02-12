@@ -37,12 +37,14 @@ def counted_grade_item(item: Dict[str, Any], *, deps: AssignmentSubmissionAttemp
     try:
         status = str(item.get("status") or "")
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         status = ""
     if status == "ungraded":
         return False
     try:
         conf = float(item.get("confidence") or 0.0)
     except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
         conf = 0.0
     return conf >= deps.grade_count_conf_threshold
 
@@ -73,19 +75,23 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
             try:
                 score_earned += float(it.get("score") or 0.0)
             except Exception:
+                _log.warning("numeric conversion failed", exc_info=True)
                 pass
 
     try:
         graded_total = int(report.get("graded_total") or 0)
     except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
         graded_total = counted
     try:
         correct = int(report.get("correct") or 0)
     except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
         correct = 0
     try:
         ungraded = int(report.get("ungraded") or 0)
     except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
         ungraded = 0
 
     submitted_at = ""
@@ -95,11 +101,13 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
             dt = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")
             submitted_at = dt.isoformat(timespec="seconds")
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         submitted_at = ""
     if not submitted_at:
         try:
             submitted_at = datetime.fromtimestamp(report_path.stat().st_mtime).isoformat(timespec="seconds")
         except Exception:
+            _log.warning("file stat failed", exc_info=True)
             submitted_at = ""
 
     return {
@@ -144,6 +152,7 @@ def best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str
         try:
             return datetime.fromisoformat(v).timestamp()
         except Exception:
+            _log.warning("operation failed", exc_info=True)
             return 0.0
 
     valid.sort(

@@ -8,6 +8,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .skills.loader import load_skills
 from .skills.auto_route_rules import score_role_skill
 from .skills.router import default_skill_id_for_role
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
@@ -200,6 +203,7 @@ def resolve_effective_skill(
         try:
             assignment_intent = bool(detect_assignment_intent(last_user_text or ""))
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             assignment_intent = False
     assignment_generation = _is_explicit_assignment_generation(text)
 

@@ -151,10 +151,12 @@ def update_student_session_index(
         try:
             found["message_count"] = int(found.get("message_count") or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             found["message_count"] = 0
         try:
             inc = int(message_increment or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             inc = 0
         if inc:
             found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)
@@ -232,10 +234,12 @@ def update_teacher_session_index(
         try:
             found["message_count"] = int(found.get("message_count") or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             found["message_count"] = 0
         try:
             inc = int(message_increment or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             inc = 0
         if inc:
             found["message_count"] = max(0, int(found.get("message_count") or 0) + inc)

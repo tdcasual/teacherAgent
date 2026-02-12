@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 try:
     import yaml  # type: ignore
 except Exception:  # pragma: no cover
+    _log.debug("import failed", exc_info=True)
     yaml = None
 
 _log = logging.getLogger(__name__)

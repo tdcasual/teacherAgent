@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
@@ -40,6 +43,7 @@ def _as_int_opt(value: Any) -> Optional[int]:
     try:
         iv = int(str(value).strip())
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
     return iv
 
@@ -50,6 +54,7 @@ def _as_float_opt(value: Any) -> Optional[float]:
     try:
         return float(str(value).strip())
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -57,6 +62,7 @@ def _as_int(value: Any, default: int = 0) -> int:
     try:
         return int(str(value).strip())
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return default
 
 

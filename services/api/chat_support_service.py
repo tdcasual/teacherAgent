@@ -4,6 +4,9 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -251,6 +254,7 @@ def build_system_prompt(role_hint: Optional[str], *, deps: ChatSupportDeps) -> s
         )
         return prompt
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log(
             "prompt.compile_failed",
             {
@@ -328,6 +332,7 @@ def extract_min_chars_requirement(text: str) -> Optional[int]:
         try:
             value = int(match.group(1))
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             continue
         if value > 0:
             return value

@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+import logging
+_log = logging.getLogger(__name__)
+
 
 __all__ = [
     "RoutingContext",
@@ -65,6 +68,7 @@ def _as_float_opt(value: Any) -> Optional[float]:
     try:
         return float(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -74,6 +78,7 @@ def _as_int_opt(value: Any) -> Optional[int]:
     try:
         return int(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 

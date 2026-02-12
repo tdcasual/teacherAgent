@@ -82,6 +82,7 @@ def request_map_set_if_absent(request_id: str, job_id: str, deps: ChatIdempotenc
         try:
             os.close(fd)
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             pass
     return True
 
@@ -106,6 +107,7 @@ def get_chat_job_id_by_request(request_id: str, deps: ChatIdempotencyDeps) -> Op
             idx = load_chat_request_index(deps.request_index_path)
             legacy = idx.get(str(request_id))
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         legacy = None
     if not legacy:
         return None
@@ -113,5 +115,6 @@ def get_chat_job_id_by_request(request_id: str, deps: ChatIdempotencyDeps) -> Op
         if not deps.chat_job_exists(legacy):
             return None
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return None
     return legacy

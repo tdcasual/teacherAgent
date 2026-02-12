@@ -66,6 +66,7 @@ def compute_assignment_progress(
         try:
             due_ts = datetime.fromisoformat(due_at.replace("Z", "+00:00")).timestamp()
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             due_ts = None
 
     now_ts = deps.time_time()

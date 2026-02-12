@@ -241,6 +241,7 @@ def _persist_user_turn_prewrite(
             )
             deps.write_chat_job(job_id, {"user_turn_persisted": True}, False)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         detail = str(exc)[:200]
         deps.write_chat_job(
             job_id,

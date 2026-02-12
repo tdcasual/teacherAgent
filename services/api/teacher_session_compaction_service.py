@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,7 @@ def maybe_compact_teacher_session(
         try:
             obj = json.loads(text)
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             continue
         if isinstance(obj, dict):
             records.append(obj)

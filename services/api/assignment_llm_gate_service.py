@@ -86,6 +86,7 @@ def llm_assignment_gate(req: Any, deps: AssignmentLlmGateDeps) -> Optional[Dict[
             teacher_id=getattr(req, "teacher_id", None),
         )
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("llm_gate.error", {"error": str(exc)})
         return None
     content = resp.get("choices", [{}])[0].get("message", {}).get("content", "")

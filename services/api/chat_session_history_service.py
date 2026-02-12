@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, List
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def load_session_messages(
@@ -35,6 +38,7 @@ def load_session_messages(
                 try:
                     obj = json.loads(line)
                 except Exception:
+                    _log.debug("JSON parse failed", exc_info=True)
                     continue
                 if isinstance(obj, dict):
                     messages.append(obj)
@@ -55,6 +59,7 @@ def load_session_messages(
         try:
             obj = json.loads(line)
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             continue
         if isinstance(obj, dict):
             messages_rev.append(obj)

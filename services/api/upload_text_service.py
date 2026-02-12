@@ -8,6 +8,9 @@ from typing import Any, Callable, Optional, Tuple
 
 from fastapi import UploadFile
 
+import logging
+_log = logging.getLogger(__name__)
+
 _OCR_UTILS: Optional[Tuple[Any, Any]] = None
 
 
@@ -30,6 +33,7 @@ def parse_timeout_env(name: str) -> Optional[float]:
     try:
         return float(val)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -47,6 +51,7 @@ async def save_upload_file(
         try:
             upload.file.seek(0)
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             pass
         with dest.open("wb") as out:
             while True:
@@ -88,6 +93,7 @@ def load_ocr_utils() -> Tuple[Any, Any]:
         _OCR_UTILS = (load_env_from_dotenv, ocr_with_sdk)
         return _OCR_UTILS
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         _OCR_UTILS = (None, None)
         return _OCR_UTILS
 
@@ -108,7 +114,6 @@ def extract_text_from_pdf(
     text = ""
     try:
         import pdfplumber  # type: ignore
-
         t1 = time.monotonic()
         pages_text = []
         with pdfplumber.open(str(path)) as pdf:
@@ -122,6 +127,7 @@ def extract_text_from_pdf(
             {"file": str(path), "duration_ms": int((time.monotonic() - t1) * 1000)},
         )
     except Exception as exc:
+        _log.debug("numeric conversion failed", exc_info=True)
         deps.diag_log("pdf.extract.error", {"file": str(path), "error": str(exc)[:200]})
 
     if len(text.strip()) >= 50:
@@ -144,6 +150,7 @@ def extract_text_from_pdf(
                 },
             )
         except Exception as exc:
+            _log.debug("numeric conversion failed", exc_info=True)
             deps.diag_log("pdf.ocr.error", {"file": str(path), "error": str(exc)[:200], "timeout": ocr_timeout})
             if "OCR unavailable" in str(exc) or "Missing OCR SDK" in str(exc):
                 raise
@@ -202,6 +209,7 @@ def extract_text_from_file(
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
+            _log.debug("file read failed", exc_info=True)
             text = path.read_text(errors="ignore")
         if suffix == ".tex":
             lines = []

@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import yaml  # type: ignore
 
 from .spec import SkillRoutingSpec, SkillSpec, parse_skill_spec
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,7 @@ def _normalize_path(value: Path) -> Path:
     try:
         return value.resolve()
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return value
 
 
@@ -59,6 +63,7 @@ def _parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     try:
         fm = yaml.safe_load(fm_text)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return {}, content
     if not isinstance(fm, dict):
         return {}, content
@@ -95,10 +100,12 @@ def _dir_signature(skills_dir: Path) -> Tuple[Tuple[str, int], ...]:
         try:
             spec_mtime = int(spec_path.stat().st_mtime_ns) if spec_path.exists() else 0
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             spec_mtime = 0
         try:
             skill_md_mtime = int(skill_md_path.stat().st_mtime_ns) if skill_md_path.exists() else 0
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             skill_md_mtime = 0
         entries.append((folder.name, max(spec_mtime, skill_md_mtime)))
     return tuple(sorted(entries))
@@ -156,6 +163,7 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
         try:
             raw = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
         except Exception as exc:
+            _log.debug("file read failed", exc_info=True)
             return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"YAML parse failed: {exc}")
         if not isinstance(raw, dict):
             return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml must be a mapping")
@@ -164,6 +172,7 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
             spec = _ensure_minimal_routing(spec)
             return spec, None
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"invalid skill spec: {exc}")
 
     skill_md_path = folder / "SKILL.md"
@@ -171,6 +180,7 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
         try:
             content = skill_md_path.read_text(encoding="utf-8").strip()
         except Exception as exc:
+            _log.debug("file read failed", exc_info=True)
             return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"SKILL.md read failed: {exc}")
 
         fm, body = _parse_yaml_frontmatter(content)
@@ -245,6 +255,7 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
             spec = _ensure_minimal_routing(spec)
             return spec, None
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"invalid SKILL.md derived spec: {exc}")
 
     return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml not found")

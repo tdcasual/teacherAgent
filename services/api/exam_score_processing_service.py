@@ -20,6 +20,7 @@ def parse_score_value(value: Any) -> Optional[float]:
     try:
         return float(s)
     except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -91,6 +92,7 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
                 try:
                     qid = build_exam_question_id(int(q_no), sub_no)
                 except Exception:
+                    _log.warning("numeric conversion failed", exc_info=True)
                     qid = ""
             if not raw_label and qid:
                 raw_label = qid
@@ -190,6 +192,7 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
         try:
             no_int = int(str(no))
         except Exception:
+            _log.warning("numeric conversion failed", exc_info=True)
             no_int = 9999
         return no_int, str(q.get("sub_no") or "")
 
@@ -260,6 +263,7 @@ def compute_max_scores_from_rows(rows: List[Dict[str, Any]]) -> Dict[str, float]
         try:
             val = float(score)
         except Exception:
+            _log.warning("numeric conversion failed", exc_info=True)
             continue
         prev = max_scores.get(qid)
         if prev is None or val > prev:

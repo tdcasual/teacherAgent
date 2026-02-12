@@ -54,6 +54,7 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
                     try:
                         obj = json.loads(line)
                     except Exception:
+                        _log.debug("JSON parse failed", exc_info=True)
                         continue
                     if not isinstance(obj, dict):
                         continue

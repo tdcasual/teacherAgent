@@ -12,6 +12,9 @@ from typing import Any, Dict, Tuple
 from .config import ASSIGNMENT_DETAIL_CACHE_TTL_SEC
 from .profile_service import load_profile_file
 
+import logging
+_log = logging.getLogger(__name__)
+
 __all__ = [
     "load_assignment_meta",
     "load_assignment_requirements",
@@ -52,6 +55,7 @@ def _assignment_detail_fingerprint(folder: Path) -> Tuple[float, float, float]:
         try:
             return p.stat().st_mtime if p.exists() else 0.0
         except Exception:
+            _log.debug("file stat failed", exc_info=True)
             return 0.0
     return (mtime(meta_path), mtime(req_path), mtime(q_path))
 

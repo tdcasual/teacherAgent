@@ -4,6 +4,9 @@ import hashlib
 import re
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def teacher_memory_is_sensitive(content: str, *, patterns: Sequence[Any]) -> bool:
@@ -22,6 +25,7 @@ def teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(text)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return None
 
 
@@ -35,6 +39,7 @@ def teacher_memory_record_ttl_days(
         if rec.get("ttl_days") is not None:
             return max(0, int(rec.get("ttl_days") or 0))
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         pass
     meta = rec.get("meta") if isinstance(rec.get("meta"), dict) else {}
     if isinstance(meta, dict):
@@ -42,6 +47,7 @@ def teacher_memory_record_ttl_days(
             if meta.get("ttl_days") is not None:
                 return max(0, int(meta.get("ttl_days") or 0))
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             pass
     target = str(rec.get("target") or "").strip().upper()
     source = str(rec.get("source") or "").strip().lower()
@@ -169,6 +175,7 @@ def teacher_memory_priority_score(
         try:
             similar_hits = int(meta.get("similar_hits") or 0)
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             similar_hits = 0
         if similar_hits > 0:
             score += min(16, similar_hits * 4)

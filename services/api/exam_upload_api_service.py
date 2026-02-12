@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 class ExamUploadApiError(Exception):
@@ -67,6 +70,7 @@ def exam_upload_draft(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, Any]
     try:
         answer_text_excerpt = deps.read_text_safe(job_dir / "answer_text.txt", 6000)
     except Exception:
+        _log.debug("JSON parse failed", exc_info=True)
         answer_text_excerpt = ""
     draft = deps.build_exam_upload_draft(
         job_id,
@@ -167,6 +171,7 @@ def exam_upload_confirm(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, An
     try:
         return deps.confirm_exam_upload(job_id, job, job_dir)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         status_code = getattr(exc, "status_code", None)
         if status_code is not None:
             raise ExamUploadApiError(status_code=status_code, detail=getattr(exc, "detail", str(exc))) from exc

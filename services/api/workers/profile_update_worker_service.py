@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,7 @@ def profile_update_worker_loop(*, deps: ProfileUpdateWorkerDeps) -> None:
                     {"student_id": student_id, "duration_ms": int((deps.monotonic() - t0) * 1000)},
                 )
             except Exception as exc:
+                _log.debug("numeric conversion failed", exc_info=True)
                 deps.diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
 
 
@@ -94,6 +98,7 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
         try:
             thread.join(max(0.0, float(timeout_sec or 0.0)))
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             pass
     deps.worker_thread_set(None)
     deps.worker_started_set(False)

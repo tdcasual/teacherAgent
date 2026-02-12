@@ -7,6 +7,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from llm_gateway import UnifiedLLMRequest
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ChatRuntimeDeps:
@@ -67,6 +70,7 @@ def call_llm_runtime(
             if isinstance(merged_registry, dict):
                 routing_registry = merged_registry
         except Exception as exc:
+            _log.warning("operation failed", exc_info=True)
             route_exception = str(exc)[:200]
     else:
         route_config_path = str(deps.routing_config_path_for_role(role_hint, teacher_id))
@@ -79,7 +83,6 @@ def call_llm_runtime(
         routing_context: Optional[Any] = None
         try:
             from .llm_routing import RoutingContext, get_compiled_routing, resolve_routing
-
             routing_context = RoutingContext(
                 role=role_hint,
                 skill_id=skill_id,
@@ -117,6 +120,7 @@ def call_llm_runtime(
                                 candidate.model,
                             )
                         except Exception as exc:
+                            _log.warning("operation failed", exc_info=True)
                             route_attempt_errors.append(
                                 {
                                     "source": "teacher_provider_target",
@@ -142,10 +146,12 @@ def call_llm_runtime(
                         route_source = "teacher_routing"
                         break
                     except Exception as exc:  # pragma: no cover - exercised via integration tests
+                        _log.warning("operation failed", exc_info=True)
                         route_attempt_errors.append(
                             {"source": "teacher_routing", "channel_id": candidate.channel_id, "error": str(exc)[:200]}
                         )
         except Exception as exc:  # pragma: no cover - exercised via integration tests
+            _log.warning("operation failed", exc_info=True)
             route_exception = str(exc)[:200]
 
         if result is None and skill_runtime is not None:
@@ -159,6 +165,7 @@ def call_llm_runtime(
                         needs_json=bool(req.json_schema),
                     )
                 except Exception as exc:  # pragma: no cover - defensive
+                    _log.warning("operation failed", exc_info=True)
                     policy_targets = []
                     route_policy_exception = str(exc)[:200]
                 for item in policy_targets or []:
@@ -191,6 +198,7 @@ def call_llm_runtime(
                                 model,
                             )
                         except Exception as exc:
+                            _log.warning("operation failed", exc_info=True)
                             route_attempt_errors.append(
                                 {
                                     "source": "skill_policy_provider_target",
@@ -220,6 +228,7 @@ def call_llm_runtime(
                         route_target_model = model
                         break
                     except Exception as exc:  # pragma: no cover - defensive
+                        _log.warning("operation failed", exc_info=True)
                         route_attempt_errors.append(
                             {
                                 "source": "skill_policy",

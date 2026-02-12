@@ -12,6 +12,9 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+import logging
+_log = logging.getLogger(__name__)
+
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
@@ -24,6 +27,7 @@ else:
     try:
         SCRIPT_TIMEOUT_SEC = float(SCRIPT_TIMEOUT_ENV)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         SCRIPT_TIMEOUT_SEC = 600.0
 
 app = FastAPI(title="Physics MCP Server", version="0.2.0")
@@ -111,6 +115,7 @@ def _load_exam_manifest(exam_id: str) -> Dict[str, Any]:
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
+        _log.debug("JSON parse failed", exc_info=True)
         return {}
 
 
@@ -160,12 +165,14 @@ def _parse_score_value(value: Any) -> Optional[float]:
     try:
         return float(text)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         match = re.search(r"-?\\d+(\\.\\d+)?", text)
         if not match:
             return None
         try:
             return float(match.group(0))
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             return None
 
 
@@ -188,6 +195,7 @@ def _read_questions_csv(path: Optional[Path]) -> Dict[str, Dict[str, Any]]:
                     "max_score": _parse_score_value(row.get("max_score")),
                 }
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return {}
     return questions
 
@@ -226,6 +234,7 @@ def _tool_exam_list() -> Dict[str, Any]:
         try:
             data = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             data = {}
         exam_id = data.get("exam_id") or folder.name
         generated_at = data.get("generated_at")
@@ -293,6 +302,7 @@ def _tool_exam_analysis_get(args: Dict[str, Any]) -> Dict[str, Any]:
             payload = json.loads(analysis_path.read_text(encoding="utf-8"))
             return {"ok": True, "exam_id": exam_id, "analysis": payload, "source": str(analysis_path)}
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             return {"error": "analysis_parse_failed", "exam_id": exam_id, "source": str(analysis_path)}
     responses_path = _exam_responses_path(manifest)
     if not responses_path or not responses_path.exists():
@@ -464,6 +474,7 @@ def _tool_exam_question_get(args: Dict[str, Any]) -> Dict[str, Any]:
                 try:
                     correct_flags.append(int(is_correct))
                 except Exception:
+                    _log.debug("numeric conversion failed", exc_info=True)
                     pass
             by_student.append(
                 {
@@ -545,6 +556,7 @@ def _tool_student_search(args: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 profile = json.loads(path.read_text(encoding="utf-8"))
             except Exception:
+                _log.debug("JSON parse failed", exc_info=True)
                 profile = {}
             results.append(
                 {
@@ -753,6 +765,7 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
         except HTTPException as exc:
             return _jsonrpc_error(req.id, -32000, str(exc.detail), {"http_status": exc.status_code})
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             return _jsonrpc_error(req.id, -32000, f"tool failed: {exc}")
 
         return _jsonrpc_error(req.id, -32601, f"Unknown tool: {name}")

@@ -358,6 +358,7 @@ def _delete_chart_env_dir(item: Dict[str, Any]) -> Optional[str]:
     try:
         shutil.rmtree(target)
     except Exception as exc:
+        _log.debug("file cleanup failed", exc_info=True)
         return str(exc)
     return None
 
@@ -555,6 +556,7 @@ def _ensure_venv(env_dir: Path) -> Dict[str, Any]:
             timeout=300,
         )
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         return {"ok": False, "error": str(exc)}
     if proc.returncode != 0:
         return {
@@ -591,6 +593,7 @@ def _pip_install(python_exec: str, packages: List[str], timeout_sec: int) -> Dic
             "stderr": _clip_text((stderr + "\npip install timed out").strip()),
         }
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         return {"ok": False, "error": str(exc), "packages": packages}
     return {
         "ok": proc.returncode == 0,
@@ -601,13 +604,21 @@ def _pip_install(python_exec: str, packages: List[str], timeout_sec: int) -> Dic
     }
 
 
-def _build_runner_source(python_code: str, input_payload: Any, output_dir: Path, main_image: Path) -> str:
+def _build_runner_source(
+    python_code: str,
+    input_payload: Any,
+    output_dir: Path,
+    main_image: Path,
+    filesystem_guard: str = "",
+) -> str:
     input_json = json.dumps(input_payload, ensure_ascii=False)
     input_json_text = json.dumps(input_json, ensure_ascii=False)
     output_dir_json = json.dumps(str(output_dir))
     main_image_json = json.dumps(str(main_image))
     code_json = json.dumps(python_code, ensure_ascii=False)
+    guard_prefix = filesystem_guard + "\n" if filesystem_guard else ""
     return (
+        guard_prefix +
         "import json\n"
         "import os\n"
         "import traceback\n"
@@ -691,9 +702,53 @@ def _build_runner_source(python_code: str, input_payload: Any, output_dir: Path,
 
 
 def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) -> Dict[str, Any]:
+    from .chart_sandbox import (
+        build_filesystem_guard_source,
+        build_sanitized_env,
+        make_preexec_fn,
+        scan_code_patterns,
+    )
+    from .global_limits import GLOBAL_CHART_EXEC_SEMAPHORE
+
     python_code = str(args.get("python_code") or "")
     if not python_code.strip():
         return {"error": "missing_python_code"}
+
+    execution_profile = str(args.get("execution_profile") or "trusted").strip()
+    if execution_profile not in ("template", "trusted", "sandboxed"):
+        execution_profile = "trusted"
+
+    # Sandboxed profile: scan code before execution
+    if execution_profile == "sandboxed":
+        scan_result = scan_code_patterns(python_code, execution_profile)
+        if scan_result is not None:
+            return scan_result
+
+    # Concurrency control
+    acquired = GLOBAL_CHART_EXEC_SEMAPHORE.acquire(timeout=30)
+    if not acquired:
+        return {"error": "chart_exec_busy", "message": "Too many concurrent chart executions"}
+
+    try:
+        return _execute_chart_exec_inner(
+            args, app_root, uploads_dir, python_code, execution_profile,
+        )
+    finally:
+        GLOBAL_CHART_EXEC_SEMAPHORE.release()
+
+
+def _execute_chart_exec_inner(
+    args: Dict[str, Any],
+    app_root: Path,
+    uploads_dir: Path,
+    python_code: str,
+    execution_profile: str,
+) -> Dict[str, Any]:
+    from .chart_sandbox import (
+        build_filesystem_guard_source,
+        build_sanitized_env,
+        make_preexec_fn,
+    )
 
     run_id = f"chr_{uuid.uuid4().hex[:12]}"
     timeout_sec = _normalize_timeout(args.get("timeout_sec"))
@@ -717,7 +772,17 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
     stderr_path = run_dir / "stderr.txt"
     meta_path = run_dir / "meta.json"
 
-    script_source = _build_runner_source(python_code, input_data, output_dir, main_image)
+    # Build filesystem guard for sandboxed profile
+    fs_guard = ""
+    if execution_profile == "sandboxed":
+        data_dir = str(uploads_dir.parent / "data")
+        fs_guard = build_filesystem_guard_source(
+            str(output_dir), [str(output_dir), str(uploads_dir), data_dir]
+        )
+
+    script_source = _build_runner_source(
+        python_code, input_data, output_dir, main_image, filesystem_guard=fs_guard
+    )
     script_path.write_text(script_source, encoding="utf-8")
     try:
         (run_dir / "input.json").write_text(json.dumps(input_data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -744,6 +809,7 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
             try:
                 env_gc = _maybe_prune_chart_envs(uploads_dir, keep_scopes={env_scope})
             except Exception as exc:
+                _log.debug("operation failed", exc_info=True)
                 env_gc = {"enabled": True, "error": "gc_failed", "detail": str(exc)}
             env_dir = _env_root(uploads_dir, env_scope)
             venv_result = _ensure_venv(env_dir)
@@ -786,6 +852,8 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
             _log.debug("failed to snapshot cwd before execution")
 
         auto_installed_missing: set[str] = set()
+        sandbox_env = build_sanitized_env(execution_profile)
+        sandbox_preexec = make_preexec_fn(execution_profile, timeout_sec)
         for attempt in range(1, exec_retries + 1):
             cur_timed_out = False
             cur_exit_code = -1
@@ -798,6 +866,8 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
                     capture_output=True,
                     text=True,
                     timeout=timeout_sec,
+                    env=sandbox_env,
+                    preexec_fn=sandbox_preexec,
                 )
                 cur_exit_code = int(proc.returncode)
                 cur_stdout = proc.stdout or ""
@@ -809,6 +879,7 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
                 cur_stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
                 cur_stderr = (cur_stderr + "\nprocess timed out").strip()
             except Exception as exc:
+                _log.debug("operation failed", exc_info=True)
                 cur_exit_code = -1
                 cur_stderr = str(exc)
 

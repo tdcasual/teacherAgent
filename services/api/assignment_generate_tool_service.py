@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class AssignmentGenerateToolDeps:
@@ -71,6 +74,7 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) 
     try:
         deps.postprocess_assignment_meta(assignment_id, due_at=args.get("due_at"))
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log(
             "assignment.meta.postprocess_failed",
             {"assignment_id": assignment_id, "error": str(exc)[:200]},

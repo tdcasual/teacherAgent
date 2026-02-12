@@ -4,6 +4,9 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -151,6 +154,7 @@ def exam_question_detail(
                 try:
                     correct_flags.append(int(float(is_correct_text)))
                 except Exception:
+                    _log.debug("numeric conversion failed", exc_info=True)
                     pass
             by_student.append(
                 {

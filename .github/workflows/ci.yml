@@ -56,31 +56,39 @@ jobs:
             --ignore-missing-imports \
             --follow-imports=skip \
             services/api/settings.py \
-            services/api/runtime/runtime_manager.py \
+            services/api/config.py \
+            services/api/paths.py \
             services/api/auth_service.py \
-            services/api/chat_job_state_machine.py \
             services/api/rate_limit.py \
+            services/api/chat_job_state_machine.py \
             services/api/chat_status_service.py \
             services/api/chat_idempotency_service.py \
+            services/api/chat_redis_lane_store.py \
+            services/api/chat_lock_service.py \
+            services/api/chat_lane_repository.py \
+            services/api/job_repository.py \
+            services/api/session_store.py \
+            services/api/profile_service.py \
+            services/api/global_limits.py \
+            services/api/observability.py \
+            services/api/request_context.py \
+            services/api/fs_atomic.py \
+            services/api/runtime/runtime_manager.py \
             services/api/llm_routing.py \
-            services/api/teacher_provider_registry_service.py
+            services/api/llm_routing_resolver.py \
+            services/api/llm_routing_proposals.py \
+            services/api/teacher_provider_registry_service.py \
+            services/api/chart_executor.py \
+            services/api/chart_sandbox.py \
+            services/api/exam_utils.py \
+            services/api/core_utils.py
 
-      - name: Run backend smoke tests
+      - name: Run full backend test suite
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m pytest -q \
-            --cov=services/api --cov-report=term-missing \
-            tests/test_app_core_surface.py \
-            tests/test_chat_routes.py \
-            tests/test_exam_routes.py \
-            tests/test_student_routes.py \
-            tests/test_docs_architecture_presence.py \
-            tests/test_refactor_report.py \
-            tests/test_auth_service.py \
-            tests/test_teacher_memory_core.py \
-            tests/test_chat_job_state_machine.py \
-            tests/test_rate_limit.py
+          python -m pytest tests/ -x -q -m "not stress" \
+            --cov=services/api --cov-report=term-missing
 
       - name: Run maintainability guardrails
         env:

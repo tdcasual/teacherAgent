@@ -78,6 +78,7 @@ def teacher_memory_search(
         else:
             deps.diag_log("teacher.mem0.search.miss", {"teacher_id": teacher_id, "query_len": len(q)})
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("teacher.mem0.search.crash", {"teacher_id": teacher_id, "error": str(exc)[:200]})
 
     files: List[Path] = [

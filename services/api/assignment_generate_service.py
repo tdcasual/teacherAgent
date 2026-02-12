@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 class AssignmentGenerateError(Exception):
@@ -91,6 +94,7 @@ def generate_assignment(
     try:
         deps.postprocess_assignment_meta(assignment_id, due_at=due_at or None)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log(
             "assignment.meta.postprocess_failed",
             {"assignment_id": assignment_id, "error": str(exc)[:200]},

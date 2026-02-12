@@ -6,6 +6,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,7 @@ def chat_job_exists(job_id: str, deps: ChatJobRepositoryDeps) -> bool:
     try:
         return (chat_job_path(job_id, deps) / "job.json").exists()
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return False
 
 
@@ -58,6 +62,7 @@ def write_chat_job(
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             data = {}
     data.update(updates)
     data["updated_at"] = deps.now_iso()

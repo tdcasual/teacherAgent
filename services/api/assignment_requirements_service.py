@@ -5,6 +5,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,7 @@ def parse_duration(value: Any) -> Optional[int]:
     try:
         return int(match.group(0))
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 

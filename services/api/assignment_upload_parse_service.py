@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,7 @@ def _extract_source_text(
                 deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode)
             )
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             msg = str(exc)[:200]
             err_code = "extract_failed"
             if "OCR unavailable" in msg:
@@ -115,6 +119,7 @@ def _extract_answer_text(
                 deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode)
             )
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             continue
     answer_text = "\n\n".join([text for text in answer_text_parts if text])
     if answer_text:

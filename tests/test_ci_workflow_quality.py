@@ -9,9 +9,9 @@ def test_ci_contains_quality_jobs() -> None:
 
 def test_backend_smoke_tests_pin_pythonpath_and_pytest_entrypoint() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "Run backend smoke tests" in text
+    assert "Run full backend test suite" in text
     assert "PYTHONPATH: ${{ github.workspace }}" in text
-    assert "python -m pytest -q" in text
+    assert "python -m pytest" in text
 
 
 def test_ci_has_maintainability_guardrails_step() -> None:

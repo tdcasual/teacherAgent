@@ -67,6 +67,7 @@ class TenantRegistry:
                 try:
                     value = int(raw)
                 except Exception:
+                    _log.debug("numeric conversion failed", exc_info=True)
                     continue
                 if value <= 0:
                     continue

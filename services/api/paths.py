@@ -20,6 +20,9 @@ from .config import (
     UPLOAD_JOB_DIR,
 )
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Tiny date helpers (needed by teacher_daily_memory_path)
@@ -35,6 +38,7 @@ def parse_date_str(date_str: Optional[str]) -> str:
     try:
         return datetime.fromisoformat(date_str).date().isoformat()
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return today_iso()
 
 

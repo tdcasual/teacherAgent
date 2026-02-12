@@ -8,6 +8,9 @@ from fastapi import HTTPException
 
 from ..api_models import ChatRequest, ChatResponse, ChatStartRequest
 from ..chat_support_service import extract_diagnostic_signals
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -60,6 +63,7 @@ async def chat(req: ChatRequest, *, deps: ChatHandlerDeps) -> ChatResponse:
             else:
                 await deps.run_in_threadpool(deps.student_profile_update, payload)
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             deps.diag_log("student.profile.update_failed", {"student_id": req.student_id, "error": str(exc)[:200]})
     return ChatResponse(reply=reply_text, role=role_hint)
 

@@ -149,6 +149,7 @@ def teacher_memory_apply(
                 },
             )
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         mem0_info = {"ok": False, "error": str(exc)[:200]}
         deps.diag_log("teacher.mem0.index.crash", {"teacher_id": teacher_id, "proposal_id": proposal_id, "error": str(exc)[:200]})
 

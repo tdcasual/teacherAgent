@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ def _safe_float(value: Any) -> Optional[float]:
             return None
         return float(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -122,6 +126,7 @@ def _collect_subject_fallback(
             try:
                 parsed_rows, _report = parser(score_path, out_csv, exam_id, class_name_hint, None)
             except Exception:
+                _log.debug("operation failed", exc_info=True)
                 continue
             if not parsed_rows:
                 continue
@@ -335,6 +340,7 @@ def exam_analysis_get(exam_id: str, deps: ExamOverviewDeps) -> Dict[str, Any]:
             payload = json.loads(analysis_path.read_text(encoding="utf-8"))
             return {"ok": True, "exam_id": exam_id, "analysis": payload, "source": str(analysis_path)}
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             return {"error": "analysis_parse_failed", "exam_id": exam_id, "source": str(analysis_path)}
 
     responses_path = deps.exam_responses_path(manifest)

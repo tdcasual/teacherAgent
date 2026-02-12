@@ -89,6 +89,7 @@ def normalize_due_at(value: Optional[str]) -> Optional[str]:
         datetime.fromisoformat(raw.replace("Z", "+00:00"))
         return raw
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return None
 
 

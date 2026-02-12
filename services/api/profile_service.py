@@ -54,6 +54,7 @@ def load_profile_file(path: Path) -> Dict[str, Any]:
         try:
             mtime = path.stat().st_mtime
         except Exception:
+            _log.debug("file stat failed", exc_info=True)
             mtime = 0.0
         with _PROFILE_CACHE_LOCK:
             cached = _PROFILE_CACHE.get(key)
@@ -69,6 +70,7 @@ def load_profile_file(path: Path) -> Dict[str, Any]:
             try:
                 mtime = path.stat().st_mtime
             except Exception:
+                _log.debug("file stat failed", exc_info=True)
                 mtime = 0.0
             with _PROFILE_CACHE_LOCK:
                 _PROFILE_CACHE[key] = (now, mtime, data)

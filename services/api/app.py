@@ -13,6 +13,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+_log = logging.getLogger(__name__)
+
 from .app_routes import register_routes
 from .auth_service import (
     AuthError,
@@ -226,6 +228,7 @@ class _AppModule(types.ModuleType):
             try:
                 del self.__dict__[name]
             except Exception:
+                _log.debug("operation failed", exc_info=True)
                 pass
         return None
 

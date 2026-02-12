@@ -4,6 +4,9 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from .assignment_requirements_service import normalize_class_level, parse_duration, parse_list_value
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def normalize_numbered_block(text: str) -> str:
@@ -156,4 +159,5 @@ def extract_per_kp(text: str) -> Optional[int]:
     try:
         return int(match.group(1))
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None

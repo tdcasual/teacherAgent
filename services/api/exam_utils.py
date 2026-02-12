@@ -46,6 +46,7 @@ def parse_score_value(value: Any) -> Optional[float]:
     try:
         return float(s)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -160,6 +161,7 @@ def _parse_question_no_int(value: Any) -> Optional[int]:
         out = int(text)
         return out if out > 0 else None
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         pass
     match = re.match(r"^(\d+)", text)
     if not match:
@@ -167,6 +169,7 @@ def _parse_question_no_int(value: Any) -> Optional[int]:
     try:
         out = int(match.group(1))
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
     return out if out > 0 else None
 
@@ -229,6 +232,7 @@ def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
         out = int(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         out = default
     if out < minimum:
         return minimum
@@ -287,6 +291,7 @@ def _parse_xlsx_with_script(
             if not isinstance(report, dict):
                 report = {}
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             report = {}
     if proc.returncode != 0 or not out_csv.exists():
         if proc.returncode != 0:

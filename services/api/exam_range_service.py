@@ -4,6 +4,9 @@ import csv
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Set
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ def parse_question_no_int(value: Any) -> Optional[int]:
         out = int(text)
         return out if out > 0 else None
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         pass
     match = re.match(r"^(\d+)", text)
     if not match:
@@ -32,6 +36,7 @@ def parse_question_no_int(value: Any) -> Optional[int]:
     try:
         out = int(match.group(1))
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
     return out if out > 0 else None
 

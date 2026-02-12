@@ -11,6 +11,9 @@ from .subject_score_guard_service import (
     subject_display,
 )
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 def _default_extract_exam_id(_text: str) -> Optional[str]:
     return None
@@ -56,6 +59,7 @@ def _fmt_score(value: Any) -> str:
     try:
         return f"{float(value):.1f}"
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return "-"
 
 
@@ -194,7 +198,6 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     try:
         from .skills.loader import load_skills
         from .skills.router import resolve_skill
-
         loaded = load_skills(deps.app_root / "skills")
         selection = resolve_skill(loaded, req.skill_id, "teacher")
         spec = selection.skill
@@ -204,6 +207,7 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
             if spec.agent.tools.deny:
                 allowed -= set(spec.agent.tools.deny)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("teacher_preflight.skill_policy_failed", {"error": str(exc)[:200]})
 
     if not required_tools.issubset(allowed):
@@ -214,6 +218,7 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
                 if hw and hw.title:
                     title = hw.title
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             pass
         deps.diag_log("teacher_preflight.skip", {"reason": "skill_policy_denied"})
         return f"当前技能未开启作业生成功能。请切换到「{title}」技能后再试。"

@@ -66,6 +66,7 @@ def _to_rel(path: Path, app_root: Path) -> str:
     try:
         return str(path.resolve().relative_to(app_root.resolve()))
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return str(path.resolve())
 
 
@@ -205,6 +206,7 @@ def confirm_exam_upload(
                 _log.warning("answer key CSV load/ensure_max_score failed", exc_info=True)
             deps.apply_answer_key_to_responses_csv(dest_unscored, dest_answers, dest_questions, dest_scored)
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             if src_responses.exists():
                 deps.copy2(src_responses, dest_scored)
             else:
@@ -235,6 +237,7 @@ def confirm_exam_upload(
         ]
         deps.run_script(cmd)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("exam_upload.analysis_failed", {"exam_id": exam_id, "error": str(exc)[:200]})
 
     deps.write_exam_job(job_id, {"step": "manifest", "progress": 90})

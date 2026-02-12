@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -15,6 +16,8 @@ from .subject_score_guard_service import (
     should_guard_total_mode_subject_request,
     subject_display,
 )
+
+_log = logging.getLogger(__name__)
 
 
 _EXAM_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(EX[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
@@ -46,6 +49,7 @@ def _fmt_total_score(value: Any) -> str:
     try:
         return f"{float(value):.1f}"
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return "-"
 
 
@@ -147,6 +151,7 @@ def _load_skill_runtime_with_logging(
     try:
         skill_runtime, runtime_warning = deps.load_skill_runtime(role_hint, skill_id)
     except Exception as exc:  # pragma: no cover - defensive
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log(
             "skill.selection.failed",
             {"role": role_hint or "unknown", "requested": skill_id or "", "error": str(exc)[:200]},
@@ -196,6 +201,7 @@ def _maybe_guard_teacher_subject_total(
     try:
         context = deps.build_exam_longform_context(exam_id)
     except Exception as exc:  # pragma: no cover - defensive
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log(
             "teacher.subject_total_guard_failed",
             {
@@ -334,6 +340,7 @@ def _dispatch_tool_safely(
     try:
         return deps.tool_dispatch(name, args_dict, role_hint)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         return {"error": f"tool_dispatch failed: {exc}"}
 
 
@@ -368,6 +375,7 @@ def _handle_structured_tool_calls(
         try:
             args_dict = json.loads(args)
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             args_dict = {}
         result = _dispatch_tool_safely(deps, name, args_dict, role_hint)
         convo.append(

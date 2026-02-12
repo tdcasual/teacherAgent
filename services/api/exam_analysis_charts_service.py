@@ -413,6 +413,7 @@ def exam_analysis_charts_generate(args: Dict[str, Any], deps: ExamAnalysisCharts
                 "chart_hint": f"{chart_type}:{exam_id}",
                 "timeout_sec": timeout_sec,
                 "save_as": save_as,
+                "execution_profile": "template",
             },
             app_root=deps.app_root,
             uploads_dir=deps.uploads_dir,

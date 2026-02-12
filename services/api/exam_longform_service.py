@@ -4,6 +4,9 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,7 @@ def load_kp_catalog(deps: ExamLongformDeps) -> Dict[str, Dict[str, str]]:
                     "notes": str(row.get("notes") or "").strip(),
                 }
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return {}
     return out
 
@@ -120,6 +124,7 @@ def load_question_kp_map(deps: ExamLongformDeps) -> Dict[str, str]:
                 if qid and kp_id:
                     out[qid] = kp_id
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return {}
     return out
 
@@ -137,6 +142,7 @@ def build_exam_longform_context(exam_id: str, deps: ExamLongformDeps) -> Dict[st
             try:
                 max_total = float(max_total) if max_total is not None else None
             except Exception:
+                _log.debug("numeric conversion failed", exc_info=True)
                 max_total = None
 
     students_summary = summarize_exam_students(exam_id, max_total=max_total, deps=deps)

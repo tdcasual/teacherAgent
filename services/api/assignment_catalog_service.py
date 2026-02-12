@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class AssignmentCatalogDeps:
@@ -48,7 +51,6 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
         return date_val
     raw = meta.get("assignment_id") or folder.name
     import re
-
     match = re.search(r"\d{4}-\d{2}-\d{2}", str(raw))
     if match:
         return match.group(0)
@@ -80,6 +82,7 @@ def parse_iso_timestamp(value: Optional[str]) -> float:
     try:
         return datetime.fromisoformat(value).timestamp()
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return 0.0
 
 

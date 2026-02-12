@@ -432,6 +432,7 @@ def _auto_generate_requirements(skill_dir: Path, body: str) -> int:
         try:
             all_text += "\n" + md_file.read_text(encoding="utf-8")
         except Exception:
+            _log.debug("file read failed", exc_info=True)
             pass
     pkgs = _extract_pip_packages_from_text(all_text)
     if not pkgs:

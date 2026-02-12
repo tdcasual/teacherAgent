@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class UploadLlmDeps:
@@ -33,12 +36,14 @@ def parse_llm_json(content: str) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(text)
     except Exception:
+        _log.debug("JSON parse failed", exc_info=True)
         match = re.search(r"\{.*\}", text, re.S)
         if not match:
             return None
         try:
             return json.loads(match.group(0))
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             return None
 
 
@@ -155,6 +160,7 @@ def llm_autofill_requirements(
             new_missing = sorted(set(new_missing + [str(item) for item in uncertain if item]))
         return merged, new_missing, True
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("upload.autofill.error", {"error": str(exc)[:200]})
         return requirements, missing, False
 
@@ -189,13 +195,13 @@ def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60
             lines.append("\t".join(line))
         return "\n".join(lines)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return ""
 
 
 def xls_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60, max_cols: int = 30) -> str:
     try:
         import xlrd  # type: ignore
-
         book = xlrd.open_workbook(str(path))
         sheet = book.sheet_by_index(0)
         rows = min(sheet.nrows, max_rows)
@@ -211,6 +217,7 @@ def xls_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60,
             lines.append("\t".join(line))
         return "\n".join(lines)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         return ""
 
 

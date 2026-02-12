@@ -80,6 +80,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
             try:
                 scan_pending_chat_jobs(deps=deps)
             except Exception as exc:
+                _log.warning("operation failed", exc_info=True)
                 deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
             next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
 
@@ -103,6 +104,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
         try:
             deps.process_chat_job(job_id)
         except Exception as exc:  # pragma: no cover - covered by integration tests
+            _log.warning("operation failed", exc_info=True)
             detail = str(exc)[:200]
             deps.diag_log("chat.job.failed", {"job_id": job_id, "error": detail})
             deps.write_chat_job(
@@ -147,10 +149,12 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
     try:
         deps.stop_event.set()
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         return
     try:
         deps.chat_job_event.set()
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         pass
 
     deadline = time.monotonic() + max(0.0, float(timeout_sec or 0.0))
@@ -161,5 +165,6 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
         try:
             thread.join(remaining)
         except Exception:
+            _log.warning("operation failed", exc_info=True)
             pass
     deps.worker_started_set(False)

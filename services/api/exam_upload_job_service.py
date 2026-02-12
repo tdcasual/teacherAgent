@@ -6,6 +6,9 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,7 @@ def write_exam_job(
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             data = {}
     data.update(updates)
     data["updated_at"] = deps.now_iso()
@@ -76,6 +80,7 @@ def scan_pending_exam_jobs(deps: ExamUploadJobDeps) -> None:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.debug("directory creation failed", exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
@@ -96,6 +101,7 @@ def exam_job_worker_step(deps: ExamUploadJobDeps) -> bool:
     try:
         deps.process_exam_upload_job(job_id)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         deps.diag_log("exam_upload.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
         write_exam_job(
             job_id,

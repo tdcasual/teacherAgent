@@ -9,6 +9,9 @@ from .chat_job_state_machine import (
     transition_chat_job_status,
 )
 
+import logging
+_log = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ComputeChatReplyDeps:
@@ -44,6 +47,7 @@ def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
             return None
         return target
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         return None
 
 
@@ -58,6 +62,7 @@ def _resolve_student_profile_path(data_dir: Any, student_id: str) -> Optional[An
             return None
         return target
     except Exception:
+        _log.warning("operation failed", exc_info=True)
         return None
 
 
@@ -111,6 +116,7 @@ def compute_chat_reply_sync(
             },
         )
     except Exception as exc:
+        _log.warning("numeric conversion failed", exc_info=True)
         deps.diag_log(
             "skill.resolve.failed",
             {
@@ -287,6 +293,7 @@ def _build_chat_request_for_job(
     try:
         return deps.chat_request_model(**req_payload)
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         status_writer.transition(
             "failed",
             {"error": "invalid_request", "error_detail": str(exc)[:200]},
@@ -342,6 +349,7 @@ def _persist_teacher_history(
         )
         return True, teacher_id, session_id
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         detail = str(exc)[:200]
         deps.diag_log(
             "teacher.history.append_failed",
@@ -366,6 +374,7 @@ def _update_student_profile_safe(
         else:
             deps.student_profile_update(payload)
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         deps.diag_log(
             "student.profile.update_failed",
             {"student_id": req.student_id, "error": str(exc)[:200]},
@@ -412,6 +421,7 @@ def _persist_student_history(
         )
         return True
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         detail = str(exc)[:200]
         deps.diag_log(
             "student.history.append_failed", {"student_id": req.student_id, "error": detail}
@@ -433,6 +443,7 @@ def _run_teacher_post_done_side_effects(
     try:
         deps.ensure_teacher_workspace(teacher_id)
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         deps.diag_log(
             "teacher.workspace.ensure_failed",
             {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
@@ -455,6 +466,7 @@ def _run_teacher_post_done_side_effects(
                 },
             )
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         deps.diag_log(
             "teacher.memory.auto_intent.failed",
             {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
@@ -471,6 +483,7 @@ def _run_teacher_post_done_side_effects(
                 },
             )
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         deps.diag_log(
             "teacher.memory.auto_flush.failed",
             {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
@@ -478,6 +491,7 @@ def _run_teacher_post_done_side_effects(
     try:
         deps.maybe_compact_teacher_session(teacher_id, session_id)
     except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
         deps.diag_log(
             "teacher.session.compact_failed",
             {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},

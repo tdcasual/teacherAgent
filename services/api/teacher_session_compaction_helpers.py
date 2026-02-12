@@ -142,6 +142,7 @@ def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) ->
         try:
             tmp.unlink(missing_ok=True)
         except Exception:
+            _log.debug("file cleanup failed", exc_info=True)
             pass
 
 

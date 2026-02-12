@@ -10,6 +10,9 @@ from rq import Queue
 from services.api.chat_redis_lane_store import ChatRedisLaneStore
 from services.api.redis_clients import get_redis_client
 from services.api.workers.rq_tenant_runtime import load_tenant_module
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def _queue_name() -> str:
@@ -70,6 +73,7 @@ def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: O
             job = mod.load_chat_job(job_id)
             lane_final = mod.resolve_chat_lane_id_from_job(job)
         except Exception:
+            _log.warning("operation failed", exc_info=True)
             lane_final = "unknown:session_main:req_unknown"
 
     store = _lane_store(mod, tenant_id)
@@ -89,6 +93,7 @@ def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("directory creation failed", exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
@@ -107,6 +112,7 @@ def scan_pending_exam_jobs(*, tenant_id: Optional[str] = None) -> int:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("directory creation failed", exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
@@ -125,6 +131,7 @@ def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
+            _log.warning("directory creation failed", exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")

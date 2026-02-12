@@ -69,6 +69,7 @@ def upload_job_worker_loop(*, deps: UploadWorkerDeps) -> None:
         try:
             deps.process_job(job_id)
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             deps.diag_log("upload.job.failed", {"job_id": job_id, "error": str(exc)[:200]})
             deps.write_job(
                 job_id,
@@ -102,6 +103,7 @@ def stop_upload_worker(*, deps: UploadWorkerDeps, timeout_sec: float = 1.5) -> N
         try:
             thread.join(max(0.0, float(timeout_sec or 0.0)))
         except Exception:
+            _log.debug("numeric conversion failed", exc_info=True)
             pass
     deps.worker_thread_set(None)
     deps.worker_started_set(False)

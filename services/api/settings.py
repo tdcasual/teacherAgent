@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 def truthy(value: str) -> bool:
@@ -15,6 +18,7 @@ def env_int(name: str, default: int) -> int:
     try:
         return int(env_str(name, str(default)) or default)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return int(default)
 
 
@@ -22,6 +26,7 @@ def env_float(name: str, default: float) -> float:
     try:
         return float(env_str(name, str(default)) or default)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return float(default)
 
 

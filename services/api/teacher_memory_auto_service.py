@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Sequence
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -164,6 +167,7 @@ def teacher_memory_auto_flush_from_session(
         try:
             rec = json.loads(text)
         except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
             continue
         if isinstance(rec, dict):
             records.append(rec)
@@ -180,6 +184,7 @@ def teacher_memory_auto_flush_from_session(
     try:
         flushed_cycle = int(idx.get("memory_flush_cycle") or 0)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         flushed_cycle = 0
     if flushed_cycle >= cycle_no:
         return {"ok": False, "reason": "already_flushed_cycle", "cycle": cycle_no}

@@ -4,6 +4,9 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
+import logging
+_log = logging.getLogger(__name__)
+
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,7 @@ def _int_or_none(value: Any) -> int | None:
     try:
         return int(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -152,6 +156,7 @@ def chart_agent_generate_candidate(
     try:
         payload_text = json.dumps(input_data, ensure_ascii=False)
     except Exception:
+        _log.debug("operation failed", exc_info=True)
         payload_text = str(input_data)
     if len(payload_text) > 5000:
         payload_text = payload_text[:5000] + "...[truncated]"
@@ -180,6 +185,7 @@ def chart_agent_generate_candidate(
         )
         content = resp.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         return {"python_code": "", "packages": [], "summary": "", "raw": f"llm_error: {exc}"}
 
     parsed = parse_json_from_text(content) or {}
@@ -289,6 +295,7 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                 "auto_install": auto_install,
                 "packages": merged_packages,
                 "max_retries": 2,
+                "execution_profile": "sandboxed",
             },
             deps.app_root,
             deps.uploads_dir,

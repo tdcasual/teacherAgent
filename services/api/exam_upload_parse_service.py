@@ -34,6 +34,7 @@ def _float_or_none(value: Any) -> Optional[float]:
     try:
         return float(value)
     except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
         return None
 
 
@@ -104,6 +105,7 @@ def _extract_paper_text(
                 deps.extract_text_from_file(path, language=language, ocr_mode=ocr_mode)
             )
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             deps.write_exam_job(
                 job_id,
                 {
@@ -223,6 +225,7 @@ def _parse_score_rows_for_file(
             file_rows = preview_rows
             warnings.extend(preview_warnings)
     except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
         warnings.append(f"成绩文件 {fname} 解析异常：{str(exc)[:120]}")
     return file_rows, warnings, schema_source
 
@@ -333,6 +336,7 @@ def _extract_answers(
                 )
             )
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             warnings.append(f"答案文件 {fname} 解析失败：{str(exc)[:120]}")
     answer_text = "\n\n".join([text for text in answer_text_parts if text])
     (job_dir / "answer_text.txt").write_text(answer_text or "", encoding="utf-8")
@@ -412,6 +416,7 @@ def _write_scoring_outputs(
                 more = f" 等{len(missing_max)}题" if len(missing_max) > 8 else ""
                 warnings.append(f"题目满分缺失：{preview}{more}（这些题无法自动评分）")
         except Exception as exc:
+            _log.debug("operation failed", exc_info=True)
             warnings.append(f"未能根据标准答案自动补齐客观题得分：{str(exc)[:120]}")
             deps.copy2(responses_unscored_csv, responses_scored_csv)
     else:

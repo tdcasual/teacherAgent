@@ -9,6 +9,9 @@ import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set
+import logging
+_log = logging.getLogger(__name__)
+
 
 _CURRENT_PRINCIPAL: contextvars.ContextVar[Optional["AuthPrincipal"]] = contextvars.ContextVar(
     "CURRENT_PRINCIPAL",
@@ -178,6 +181,7 @@ def resolve_principal_from_scope(scope: Dict[str, Any], *, allow_exempt: bool = 
         try:
             key_raw, value_raw = item
         except Exception:
+            _log.debug("operation failed", exc_info=True)
             continue
         key = key_raw.decode("latin-1", errors="ignore") if isinstance(key_raw, (bytes, bytearray)) else str(key_raw)
         value = value_raw.decode("latin-1", errors="ignore") if isinstance(value_raw, (bytes, bytearray)) else str(value_raw)
