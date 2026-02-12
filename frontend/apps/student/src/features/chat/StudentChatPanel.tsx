@@ -39,8 +39,8 @@ export default function StudentChatPanel(props: Props) {
   const composerDisabled = !verifiedStudent || Boolean(pendingChatJobId)
 
   return (
-    <main className="chat-shell h-full min-h-0 grid grid-rows-[minmax(0,1fr)_auto] bg-surface relative" data-testid="student-chat-panel">
-      <div className="messages overflow-auto pt-[18px] pb-2 bg-surface max-[900px]:pt-3.5 max-[900px]:pb-1.5 max-[900px]:[-webkit-overflow-scrolling:touch] max-[900px]:[overscroll-behavior:contain]" ref={messagesRef}>
+    <main className="chat-shell min-h-0 flex flex-col overflow-hidden bg-surface relative" data-testid="student-chat-panel">
+      <div className="messages flex-1 min-h-0 overflow-auto pt-[18px] pb-2 bg-surface max-[900px]:pt-3.5 max-[900px]:pb-1.5 max-[900px]:[-webkit-overflow-scrolling:touch] max-[900px]:[overscroll-behavior:contain]" ref={messagesRef}>
         <div className="max-w-[860px] mx-auto px-5 pb-3.5 grid gap-3.5 max-[900px]:px-3.5 max-[900px]:pb-3 max-[900px]:gap-3">
           {renderedMessages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -73,7 +73,7 @@ export default function StudentChatPanel(props: Props) {
         </button>
       )}
 
-      <form className={`composer border-t border-border px-5 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.95)_32%,#fff_60%)] max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-[calc(14px+env(safe-area-inset-bottom))] ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
+      <form className={`composer shrink-0 border-t border-border px-5 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.95)_32%,#fff_60%)] max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-[calc(14px+env(safe-area-inset-bottom))] ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
         <div className="max-w-[860px] mx-auto border border-border rounded-[20px] bg-white shadow-sm px-3 py-2.5 max-[900px]:max-w-full">
           <textarea
             ref={inputRef}
