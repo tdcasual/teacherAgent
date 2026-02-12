@@ -8,7 +8,7 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 | Metric | Baseline | Current | Delta | Reduction |
 | --- | ---: | ---: | ---: | ---: |
 | Ruff errors (`ruff check services/api --statistics`) | 745 | 661 | -84 | 11.3% |
-| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 169 | -313 | 64.9% |
+| Mypy errors (`mypy --follow-imports=skip services/api`) | 482 | 163 | -319 | 66.2% |
 | `services/api/app_core.py` line count | 700 | 595 | -105 | 15.0% |
 
 ## 2) Completed Changes
@@ -43,6 +43,8 @@ Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot
 26. Narrowed student id list extraction in `services/api/student_directory_service.py` and added a focused type gate.
 27. Removed optional-to-str reassignment hotspot in `services/api/exam_longform_service.py` and added a focused type gate.
 28. Normalized correctness parsing and positional `safe_int_arg` call in `services/api/exam_detail_service.py`, and added a focused type gate.
+29. Added return annotations for `services/api/routes/student_profile_routes.py` handlers and added a focused type gate.
+30. Added return annotations for `services/api/routes/student_history_routes.py` handlers and added a focused type gate.
 
 ## 3) Validation Evidence
 
@@ -63,6 +65,7 @@ Executed and passed (representative list):
 - `python3 -m pytest -q tests/test_student_directory_service.py tests/test_student_directory_types.py`
 - `python3 -m pytest -q tests/test_exam_longform_service.py tests/test_exam_longform_types.py`
 - `python3 -m pytest -q tests/test_exam_detail_service.py tests/test_exam_detail_types.py`
+- `python3 -m pytest -q tests/test_student_routes.py tests/test_student_profile_routes_types.py tests/test_student_history_routes_types.py`
 - `python3 -m ruff check services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py tests/test_queue_backend_factory.py tests/test_security_auth_hardening.py`
 - `python3 -m ruff check services/api/llm_routing.py tests/test_llm_routing_types.py tests/test_app_core_structure.py`
 - `python3 -m mypy --follow-imports=skip services/api/auth_service.py services/api/queue/queue_backend_factory.py services/api/settings.py services/api/runtime/lifecycle.py services/api/llm_routing.py`
@@ -78,7 +81,7 @@ Metric collection commands:
 Criteria from the 2-week plan are partially met:
 
 1. Ruff reduction >=30%: **Not met** (current 11.3%).
-2. Mypy reduction >=35%: **Met** (current 64.9%).
+2. Mypy reduction >=35%: **Met** (current 66.2%).
 3. `app_core.py` <=500 lines: **Not met** (current 595).
 4. CI backend-quality guardrails integrated: **Met**.
 5. Newly added guardrail tests pass locally: **Met**.
