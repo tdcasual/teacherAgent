@@ -145,6 +145,40 @@ jobs:
       - name: Build student frontend
         run: npm run build:student
 
+      - name: Check student bundle budget
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const assetsDir = path.join("dist-student", "assets");
+          if (!fs.existsSync(assetsDir)) {
+            console.error(`Missing ${assetsDir}. Run npm run build:student first.`);
+            process.exit(1);
+          }
+
+          const candidates = fs
+            .readdirSync(assetsDir)
+            .filter((name) => /^index-.*\.js$/.test(name))
+            .sort();
+          if (candidates.length === 0) {
+            console.error(`No student main chunk found in ${assetsDir}`);
+            process.exit(1);
+          }
+
+          const mainChunkPath = path.join(assetsDir, candidates[0]);
+          const sizeKb = fs.statSync(mainChunkPath).size / 1024;
+          const budgetKb = 550;
+          if (sizeKb >= budgetKb) {
+            console.error(
+              `Student main chunk too large: ${sizeKb.toFixed(2)} kB (budget < ${budgetKb} kB)`
+            );
+            process.exit(1);
+          }
+
+          console.log(`Student main chunk ${sizeKb.toFixed(2)} kB within budget < ${budgetKb} kB`);
+          NODE
+
   docker-build-check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
