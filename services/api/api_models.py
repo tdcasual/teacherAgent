@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     role: Optional[str] = None
     agent_id: Optional[str] = None
     skill_id: Optional[str] = None
+    persona_id: Optional[str] = None
     teacher_id: Optional[str] = None
     student_id: Optional[str] = None
     assignment_id: Optional[str] = None

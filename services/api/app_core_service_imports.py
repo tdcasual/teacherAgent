@@ -286,6 +286,13 @@ from .session_discussion_service import (
     session_discussion_pass as _session_discussion_pass_impl,
 )
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+from .student_persona_api_service import (
+    StudentPersonaApiDeps,
+    student_persona_activate_api as _student_persona_activate_api_impl,
+    student_persona_custom_create_api as _student_persona_custom_create_api_impl,
+    student_persona_custom_delete_api as _student_persona_custom_delete_api_impl,
+    student_personas_get_api as _student_personas_get_api_impl,
+)
 from .student_import_service import (
     StudentImportDeps,
     import_students_from_responses as _import_students_from_responses_impl,

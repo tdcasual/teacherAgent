@@ -20,6 +20,7 @@ class _FakeRequest:
         self.assignment_id = kwargs.get("assignment_id", "")
         self.assignment_date = kwargs.get("assignment_date", "")
         self.auto_generate_assignment = None
+        self.persona_id = kwargs.get("persona_id", "")
         self.messages = kwargs.get("messages", [_FakeMsg("user", "hello")])
         self.attachments = kwargs.get("attachments", [])
 
@@ -137,6 +138,18 @@ class ChatStartServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             start_chat_orchestration(req, deps=deps)
         self.assertIn("429", str(ctx.exception))
+
+    def test_fingerprint_seed_contains_persona_id(self):
+        captured_seed: dict[str, str] = {}
+
+        def _capture_seed(seed: str) -> str:
+            captured_seed["value"] = seed
+            return "fp-static"
+
+        deps, _ = _make_deps(chat_text_fingerprint=_capture_seed)
+        req = _FakeRequest(persona_id="persona_lin_dai_yu")
+        start_chat_orchestration(req, deps=deps)
+        self.assertIn("persona_lin_dai_yu", captured_seed.get("value", ""))
 
 
 if __name__ == "__main__":

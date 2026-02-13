@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from services.api.student_persona_api_service import (
+    StudentPersonaApiDeps,
+    student_persona_activate_api,
+    student_persona_custom_create_api,
+    student_persona_custom_delete_api,
+    student_personas_get_api,
+)
+
+
+def _write_json(path: Path, data: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+class StudentPersonaApiServiceTest(unittest.TestCase):
+    def _deps(self, root: Path) -> StudentPersonaApiDeps:
+        return StudentPersonaApiDeps(
+            data_dir=root / "data",
+            now_iso=lambda: "2026-02-13T12:00:00",
+        )
+
+    def test_get_personas_merges_assigned_and_custom(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "persona_assignments" / "by_student" / "S001.json",
+                {
+                    "assignments": [
+                        {"teacher_id": "T001", "persona_id": "preset_1", "status": "active"},
+                    ]
+                },
+            )
+            _write_json(
+                root / "data" / "teacher_personas" / "T001" / "personas.json",
+                {
+                    "personas": [
+                        {
+                            "persona_id": "preset_1",
+                            "name": "林风",
+                            "summary": "温柔启发式",
+                            "style_rules": ["先肯定后引导"],
+                            "few_shot_examples": ["我们先看你这一步很接近了。"],
+                            "lifecycle_status": "active",
+                            "visibility_mode": "assigned_only",
+                        }
+                    ]
+                },
+            )
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {
+                    "student_id": "S001",
+                    "personas": {
+                        "active_persona_id": "preset_1",
+                        "custom": [
+                            {
+                                "persona_id": "custom_1",
+                                "name": "自定义A",
+                                "style_rules": ["句子短"],
+                                "few_shot_examples": ["先写已知，再列方程。"],
+                                "review_status": "approved",
+                            }
+                        ],
+                    },
+                },
+            )
+
+            data = student_personas_get_api("S001", deps=deps)
+            assert data["ok"] is True
+            assert data["student_id"] == "S001"
+            assert data["active_persona_id"] == "preset_1"
+            assert len(data["assigned"]) == 1
+            assert data["assigned"][0]["persona_id"] == "preset_1"
+            assert len(data["custom"]) == 1
+            assert data["custom"][0]["persona_id"] == "custom_1"
+
+    def test_custom_create_rejects_when_approved_limit_reached(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {
+                    "student_id": "S001",
+                    "personas": {
+                        "custom": [
+                            {"persona_id": f"c{i}", "name": f"N{i}", "review_status": "approved"}
+                            for i in range(1, 6)
+                        ]
+                    },
+                },
+            )
+
+            data = student_persona_custom_create_api(
+                "S001",
+                {
+                    "name": "new_one",
+                    "style_rules": ["温和"],
+                    "few_shot_examples": ["我们一步步来。"],
+                },
+                deps=deps,
+            )
+            assert data["ok"] is False
+            assert data["error"] == "custom_persona_limit_reached"
+
+    def test_activate_and_delete_custom_persona(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {
+                    "student_id": "S001",
+                    "personas": {
+                        "active_persona_id": "",
+                        "custom": [
+                            {
+                                "persona_id": "custom_1",
+                                "name": "自定义A",
+                                "review_status": "approved",
+                                "style_rules": ["温和"],
+                                "few_shot_examples": ["先看题干。"],
+                            }
+                        ],
+                    },
+                },
+            )
+
+            activated = student_persona_activate_api("S001", "custom_1", deps=deps)
+            assert activated["ok"] is True
+            assert activated["active_persona_id"] == "custom_1"
+
+            deleted = student_persona_custom_delete_api("S001", "custom_1", deps=deps)
+            assert deleted["ok"] is True
+            assert deleted["removed"] is True
+            listing = student_personas_get_api("S001", deps=deps)
+            assert listing["active_persona_id"] == ""
+            assert listing["custom"] == []
+
+
+if __name__ == "__main__":
+    unittest.main()
+
