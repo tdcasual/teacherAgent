@@ -177,9 +177,11 @@ export default function App() {
       }
       const data = (await res.json()) as StudentPersonaListResponse
       if (!data?.ok) throw new Error('角色卡数据格式错误')
-      const assigned = Array.isArray(data.assigned) ? data.assigned : []
+      const assigned = (Array.isArray(data.assigned) ? data.assigned : [])
+        .map((item) => ({ ...item, source: 'teacher_assigned' })) as StudentPersonaCard[]
       const customApproved = (Array.isArray(data.custom) ? data.custom : [])
         .filter((item) => String(item?.review_status || '').toLowerCase() === 'approved')
+        .map((item) => ({ ...item, source: 'student_custom' })) as StudentPersonaCard[]
       const cards = [...assigned, ...customApproved] as StudentPersonaCard[]
       dispatch({
         type: 'BATCH',
@@ -271,6 +273,66 @@ export default function App() {
     }
   }, [dispatch, state.apiBase, state.verifiedStudent?.student_id])
 
+  const handleCreateCustomPersona = useCallback(async (payload: { name: string; summary: string; styleRules: string[]; examples: string[] }) => {
+    const sid = state.verifiedStudent?.student_id
+    if (!sid) throw new Error('请先完成身份验证')
+    const res = await fetch(`${state.apiBase}/student/personas/custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_id: sid,
+        name: payload.name,
+        summary: payload.summary,
+        style_rules: payload.styleRules,
+        few_shot_examples: payload.examples,
+      }),
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || `状态码 ${res.status}`)
+    }
+    await loadStudentPersonas(sid)
+  }, [loadStudentPersonas, state.apiBase, state.verifiedStudent?.student_id])
+
+  const handleUpdateCustomPersona = useCallback(async (personaId: string, payload: { name: string; summary: string; styleRules: string[]; examples: string[] }) => {
+    const sid = state.verifiedStudent?.student_id
+    if (!sid) throw new Error('请先完成身份验证')
+    const res = await fetch(`${state.apiBase}/student/personas/custom/${encodeURIComponent(personaId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_id: sid,
+        name: payload.name,
+        summary: payload.summary,
+        style_rules: payload.styleRules,
+        few_shot_examples: payload.examples,
+      }),
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || `状态码 ${res.status}`)
+    }
+    await loadStudentPersonas(sid)
+  }, [loadStudentPersonas, state.apiBase, state.verifiedStudent?.student_id])
+
+  const handleUploadCustomPersonaAvatar = useCallback(async (personaId: string, file: File) => {
+    const sid = state.verifiedStudent?.student_id
+    if (!sid) throw new Error('请先完成身份验证')
+    const form = new FormData()
+    form.append('student_id', sid)
+    form.append('persona_id', personaId)
+    form.append('file', file)
+    const res = await fetch(`${state.apiBase}/student/personas/avatar/upload`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(text || `状态码 ${res.status}`)
+    }
+    await loadStudentPersonas(sid)
+  }, [loadStudentPersonas, state.apiBase, state.verifiedStudent?.student_id])
+
   // ── Composer hint + keyboard ──
   const composerHint = useMemo(() => selectComposerHint({
     verifiedStudent: state.verifiedStudent,
@@ -307,6 +369,9 @@ export default function App() {
         onTogglePersonaEnabled={handleTogglePersonaEnabled}
         onTogglePersonaPicker={handleTogglePersonaPicker}
         onSelectPersona={handleSelectPersona}
+        onCreateCustomPersona={handleCreateCustomPersona}
+        onUpdateCustomPersona={handleUpdateCustomPersona}
+        onUploadCustomPersonaAvatar={handleUploadCustomPersonaAvatar}
       />
       <StudentLayout
         sidebarOpen={state.sidebarOpen}

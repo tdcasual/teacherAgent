@@ -350,6 +350,71 @@ def student_persona_custom_delete_api(
     }
 
 
+def student_persona_custom_update_api(
+    student_id: str,
+    persona_id: str,
+    payload: Dict[str, Any],
+    *,
+    deps: StudentPersonaApiDeps,
+) -> Dict[str, Any]:
+    sid = str(student_id or "").strip()
+    pid = str(persona_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "missing_student_id"}
+    if not pid:
+        return {"ok": False, "error": "missing_persona_id"}
+    body = payload if isinstance(payload, dict) else {}
+
+    profile = _ensure_profile(sid, deps)
+    personas = profile["personas"]
+    custom_raw = personas.get("custom")
+    custom = custom_raw if isinstance(custom_raw, list) else []
+    idx = next(
+        (
+            i
+            for i, item in enumerate(custom)
+            if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
+        ),
+        -1,
+    )
+    if idx < 0:
+        return {"ok": False, "error": "custom_persona_not_found"}
+
+    current = dict(custom[idx])
+    if "name" in body:
+        name = str(body.get("name") or "").strip()
+        if not name:
+            return {"ok": False, "error": "invalid_name"}
+        current["name"] = name
+    if "summary" in body:
+        current["summary"] = str(body.get("summary") or "").strip()
+    if "style_rules" in body:
+        style_rules = _as_str_list(body.get("style_rules"), limit=20)
+        if not style_rules:
+            return {"ok": False, "error": "invalid_style_rules"}
+        current["style_rules"] = style_rules
+    if "few_shot_examples" in body:
+        few_shot_examples = _as_str_list(body.get("few_shot_examples"), limit=10)
+        if not few_shot_examples:
+            return {"ok": False, "error": "invalid_few_shot_examples"}
+        current["few_shot_examples"] = few_shot_examples
+
+    review_status, review_reason = _review_custom_persona(
+        str(current.get("name") or ""),
+        _as_str_list(current.get("style_rules"), limit=20),
+        _as_str_list(current.get("few_shot_examples"), limit=10),
+    )
+    current["review_status"] = review_status
+    current["review_reason"] = review_reason
+    current["updated_at"] = deps.now_iso()
+    custom[idx] = current
+    personas["custom"] = custom
+    if review_status != "approved" and str(personas.get("active_persona_id") or "").strip() == pid:
+        personas["active_persona_id"] = ""
+    _write_json(_student_profile_path(sid, deps), profile)
+    return {"ok": True, "student_id": sid, "persona": current}
+
+
 def _build_persona_prompt(persona: Dict[str, Any]) -> str:
     name = str(persona.get("name") or persona.get("persona_id") or "未命名角色").strip() or "未命名角色"
     rules = _as_str_list(persona.get("style_rules"), limit=12)

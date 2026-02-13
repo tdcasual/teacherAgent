@@ -105,6 +105,8 @@ export type StudentPersonaCard = {
   teacher_id?: string
   avatar_url?: string
   review_status?: string
+  style_rules?: string[]
+  few_shot_examples?: string[]
 }
 
 export type StudentPersonaListResponse = {

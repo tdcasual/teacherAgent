@@ -74,3 +74,6 @@ def test_student_topbar_contains_persona_controls() -> None:
     assert "角色卡" in source
     assert "onTogglePersonaEnabled" in source
     assert "onSelectPersona" in source
+    assert "onCreateCustomPersona" in source
+    assert "onUpdateCustomPersona" in source
+    assert "onUploadCustomPersonaAvatar" in source

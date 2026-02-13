@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { StudentPersonaCard, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
@@ -17,6 +18,9 @@ type Props = {
   onTogglePersonaEnabled: (next: boolean) => void
   onTogglePersonaPicker: () => void
   onSelectPersona: (personaId: string) => void
+  onCreateCustomPersona: (payload: { name: string; summary: string; styleRules: string[]; examples: string[] }) => Promise<void>
+  onUpdateCustomPersona: (personaId: string, payload: { name: string; summary: string; styleRules: string[]; examples: string[] }) => Promise<void>
+  onUploadCustomPersonaAvatar: (personaId: string, file: File) => Promise<void>
 }
 
 export default function StudentTopbar({
@@ -34,8 +38,26 @@ export default function StudentTopbar({
   onTogglePersonaEnabled,
   onTogglePersonaPicker,
   onSelectPersona,
+  onCreateCustomPersona,
+  onUpdateCustomPersona,
+  onUploadCustomPersonaAvatar,
 }: Props) {
   const activePersonaName = personaCards.find((item) => item.persona_id === activePersonaId)?.name || '未选择'
+  const customPersonas = useMemo(
+    () => personaCards.filter((item) => String(item.source || '') === 'student_custom'),
+    [personaCards],
+  )
+  const [customName, setCustomName] = useState('')
+  const [customSummary, setCustomSummary] = useState('')
+  const [customRules, setCustomRules] = useState('先肯定后追问')
+  const [customExamples, setCustomExamples] = useState('你这步很接近，我们再推进一步。')
+  const [customEditId, setCustomEditId] = useState('')
+  const [customLoading, setCustomLoading] = useState(false)
+  const [customMsg, setCustomMsg] = useState('')
+
+  const customTarget = customPersonas.find((item) => item.persona_id === customEditId) || null
+  const parseLines = (value: string) =>
+    value.split('\n').map((item) => item.trim()).filter(Boolean).slice(0, 20)
 
   return (
     <header className="relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap">
@@ -108,6 +130,131 @@ export default function StudentTopbar({
                 </div>
               </button>
             ))}
+            <div className="h-px bg-border my-2" />
+            <div className="text-[12px] font-semibold text-[#334155] px-1 pb-1">自定义角色</div>
+            <input
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] mb-1"
+              placeholder="角色名称"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+            />
+            <input
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] mb-1"
+              placeholder="角色摘要"
+              value={customSummary}
+              onChange={(e) => setCustomSummary(e.target.value)}
+            />
+            <textarea
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] min-h-[56px] mb-1"
+              placeholder="风格规则（每行一条）"
+              value={customRules}
+              onChange={(e) => setCustomRules(e.target.value)}
+            />
+            <textarea
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] min-h-[56px] mb-1"
+              placeholder="示例（每行一条）"
+              value={customExamples}
+              onChange={(e) => setCustomExamples(e.target.value)}
+            />
+            <button
+              type="button"
+              className="w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] hover:bg-surface-soft disabled:opacity-60"
+              disabled={customLoading}
+              onClick={async () => {
+                const name = customName.trim()
+                const styleRules = parseLines(customRules)
+                const examples = parseLines(customExamples).slice(0, 5)
+                if (!name || !styleRules.length || !examples.length) {
+                  setCustomMsg('请完整填写名称/规则/示例')
+                  return
+                }
+                setCustomLoading(true)
+                setCustomMsg('')
+                try {
+                  await onCreateCustomPersona({ name, summary: customSummary.trim(), styleRules, examples })
+                  setCustomMsg('创建成功')
+                  setCustomName('')
+                } catch (err) {
+                  setCustomMsg(String((err as Error)?.message || err || '创建失败'))
+                } finally {
+                  setCustomLoading(false)
+                }
+              }}
+            >
+              创建自定义角色
+            </button>
+            <select
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] my-1"
+              value={customEditId}
+              onChange={(e) => {
+                const nextId = e.target.value
+                setCustomEditId(nextId)
+                const next = customPersonas.find((item) => item.persona_id === nextId)
+                if (!next) return
+                setCustomName(String(next.name || ''))
+                setCustomSummary(String(next.summary || ''))
+                setCustomRules(Array.isArray(next.style_rules) ? next.style_rules.join('\n') : '')
+                setCustomExamples(Array.isArray(next.few_shot_examples) ? next.few_shot_examples.join('\n') : '')
+              }}
+            >
+              <option value="">选择要编辑的自定义角色</option>
+              {customPersonas.map((item) => (
+                <option key={item.persona_id} value={item.persona_id}>
+                  {item.name || item.persona_id}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="w-full rounded-lg border border-border bg-white px-2.5 py-2 text-[12px] hover:bg-surface-soft disabled:opacity-60"
+              disabled={customLoading || !customEditId}
+              onClick={async () => {
+                if (!customEditId) return
+                const name = customName.trim()
+                const styleRules = parseLines(customRules)
+                const examples = parseLines(customExamples).slice(0, 5)
+                if (!name || !styleRules.length || !examples.length) {
+                  setCustomMsg('请完整填写名称/规则/示例')
+                  return
+                }
+                setCustomLoading(true)
+                setCustomMsg('')
+                try {
+                  await onUpdateCustomPersona(customEditId, { name, summary: customSummary.trim(), styleRules, examples })
+                  setCustomMsg('更新成功')
+                } catch (err) {
+                  setCustomMsg(String((err as Error)?.message || err || '更新失败'))
+                } finally {
+                  setCustomLoading(false)
+                }
+              }}
+            >
+              更新自定义角色
+            </button>
+            <input
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+              className="w-full rounded-lg border border-border px-2.5 py-2 text-[12px] mt-1"
+              disabled={!customEditId || customLoading}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file || !customEditId) return
+                setCustomLoading(true)
+                setCustomMsg('')
+                void onUploadCustomPersonaAvatar(customEditId, file)
+                  .then(() => setCustomMsg('头像上传成功'))
+                  .catch((err) => setCustomMsg(String((err as Error)?.message || err || '头像上传失败')))
+                  .finally(() => setCustomLoading(false))
+              }}
+            />
+            {customTarget?.avatar_url ? (
+              <img
+                src={customTarget.avatar_url.startsWith('http') ? customTarget.avatar_url : `${apiBase}${customTarget.avatar_url}`}
+                alt={customTarget.name || customTarget.persona_id}
+                className="w-10 h-10 rounded-full object-cover border border-border mt-1"
+              />
+            ) : null}
+            {customMsg ? <div className="text-[12px] text-muted mt-1">{customMsg}</div> : null}
           </div>
         ) : null}
       </div>

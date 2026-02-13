@@ -33,6 +33,23 @@ def register_student_persona_routes(router: APIRouter, core: Any) -> None:
             raise HTTPException(status_code=400, detail=result)
         return result
 
+    @router.patch("/student/personas/custom/{persona_id}")
+    def update_student_persona(persona_id: str, req: Dict[str, Any]) -> Any:
+        student_id = str(req.get("student_id") or "").strip()
+        if not student_id:
+            raise HTTPException(status_code=400, detail={"error": "missing_student_id"})
+        payload = dict(req)
+        payload.pop("student_id", None)
+        result = core._student_persona_custom_update_api_impl(
+            student_id,
+            persona_id,
+            payload,
+            deps=core._student_persona_api_deps(),
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result)
+        return result
+
     @router.post("/student/personas/activate")
     def activate_student_persona(req: Dict[str, Any]) -> Any:
         student_id = str(req.get("student_id") or "").strip()

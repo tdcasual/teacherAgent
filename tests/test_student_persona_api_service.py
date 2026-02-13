@@ -10,6 +10,7 @@ from services.api.student_persona_api_service import (
     resolve_student_persona_runtime,
     student_persona_avatar_upload_api,
     student_persona_activate_api,
+    student_persona_custom_update_api,
     student_persona_custom_create_api,
     student_persona_custom_delete_api,
     student_personas_get_api,
@@ -223,6 +224,45 @@ class StudentPersonaApiServiceTest(unittest.TestCase):
             listing = student_personas_get_api("S001", deps=deps)
             custom = next(item for item in listing["custom"] if item["persona_id"] == "custom_1")
             assert custom.get("avatar_url") == uploaded["avatar_url"]
+
+    def test_student_custom_persona_update_changes_fields(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {
+                    "student_id": "S001",
+                    "personas": {
+                        "custom": [
+                            {
+                                "persona_id": "custom_1",
+                                "name": "原始名",
+                                "summary": "原始摘要",
+                                "review_status": "approved",
+                                "style_rules": ["温和"],
+                                "few_shot_examples": ["先看题干。"],
+                            }
+                        ]
+                    },
+                },
+            )
+            updated = student_persona_custom_update_api(
+                "S001",
+                "custom_1",
+                {
+                    "name": "新名字",
+                    "summary": "新摘要",
+                    "style_rules": ["先肯定再追问"],
+                    "few_shot_examples": ["你这步很接近，我们再推进一步。"],
+                },
+                deps=deps,
+            )
+            assert updated["ok"] is True
+            assert updated["persona"]["name"] == "新名字"
+            listing = student_personas_get_api("S001", deps=deps)
+            custom = next(item for item in listing["custom"] if item["persona_id"] == "custom_1")
+            assert custom.get("summary") == "新摘要"
 
 
 if __name__ == "__main__":
