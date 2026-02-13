@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
+from .auth_service import AuthError, enforce_upload_job_access
+
 
 class AssignmentUploadDraftSaveError(Exception):
     def __init__(self, status_code: int, detail: Any):
@@ -37,6 +39,10 @@ def save_assignment_upload_draft(
         job = deps.load_upload_job(job_id)
     except FileNotFoundError:
         raise AssignmentUploadDraftSaveError(404, "job not found")
+    try:
+        enforce_upload_job_access(job)
+    except AuthError as exc:
+        raise AssignmentUploadDraftSaveError(exc.status_code, exc.detail)
 
     if job.get("status") not in {"done", "confirmed"}:
         raise AssignmentUploadDraftSaveError(

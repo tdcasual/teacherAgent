@@ -304,6 +304,25 @@ def enforce_chat_job_access(job: Mapping[str, Any]) -> None:
         return
 
 
+def enforce_upload_job_access(
+    job: Mapping[str, Any],
+    *,
+    owner_field: str = "teacher_id",
+    detail: str = "forbidden_upload_job",
+) -> None:
+    if not auth_required():
+        return
+
+    principal = require_principal(roles=("teacher", "admin"))
+    if principal is None or principal.role == "admin":
+        return
+
+    payload = dict(job or {})
+    owner = str(payload.get(owner_field) or "").strip()
+    if not owner or owner != principal.actor_id:
+        raise AuthError(403, detail)
+
+
 def bind_chat_request_to_principal(req: Any) -> Any:
     principal = require_principal(roles=("teacher", "student", "admin"))
     if principal is None:
@@ -352,6 +371,7 @@ __all__ = [
     "resolve_teacher_scope",
     "resolve_student_scope",
     "enforce_chat_job_access",
+    "enforce_upload_job_access",
     "bind_chat_request_to_principal",
     "mint_test_token",
 ]

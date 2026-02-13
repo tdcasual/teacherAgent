@@ -123,6 +123,29 @@ class AssignmentUploadStartServiceTest(unittest.TestCase):
             self.assertEqual(cm.exception.status_code, 400)
             self.assertEqual(cm.exception.detail, "student scope requires student_ids")
 
+    def test_rejects_unsupported_source_file_type(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps, _writes, _queued, _logs = self._deps(root)
+            with self.assertRaises(AssignmentUploadStartError) as cm:
+                asyncio.run(
+                    start_assignment_upload(
+                        assignment_id="HW_1",
+                        date="2026-02-08",
+                        due_at="",
+                        scope="public",
+                        class_name="",
+                        student_ids="",
+                        files=[_FakeUpload("malware.exe")],
+                        answer_files=None,
+                        ocr_mode="FREE_OCR",
+                        language="zh",
+                        deps=deps,
+                    )
+                )
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertIn("不支持的文件类型", str(cm.exception.detail))
+
 
 if __name__ == "__main__":
     unittest.main()

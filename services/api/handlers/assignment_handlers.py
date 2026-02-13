@@ -12,7 +12,7 @@ from ..api_models import AssignmentRequirementsRequest
 
 @dataclass
 class AssignmentHandlerDeps:
-    list_assignments: Callable[[], Dict[str, Any]]
+    list_assignments: Callable[[int, int], Dict[str, Any]]
     compute_assignment_progress: Callable[[str, bool], Dict[str, Any]]
     parse_date_str: Callable[[Optional[str]], str]
     save_assignment_requirements: Callable[..., Dict[str, Any]]
@@ -28,8 +28,8 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def assignments(*, deps: AssignmentHandlerDeps) -> Any:
-    return await _maybe_await(deps.list_assignments())
+async def assignments(*, limit: int = 50, cursor: int = 0, deps: AssignmentHandlerDeps) -> Any:
+    return await _maybe_await(deps.list_assignments(int(limit), int(cursor)))
 
 
 async def teacher_assignment_progress(
@@ -53,7 +53,15 @@ async def teacher_assignments_progress(
     deps: AssignmentHandlerDeps,
 ) -> Any:
     date_str = deps.parse_date_str(date)
-    items = (await _maybe_await(deps.list_assignments())).get("assignments") or []
+    items = []
+    cursor = 0
+    while True:
+        page = await _maybe_await(deps.list_assignments(100, cursor))
+        page_items = page.get("assignments") or []
+        items.extend(page_items)
+        if not page.get("has_more"):
+            break
+        cursor = int(page.get("next_cursor") or (cursor + len(page_items)))
     out = []
     for it in items:
         if (it.get("date") or "") != date_str:

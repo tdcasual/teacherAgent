@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
+from .auth_service import AuthError, enforce_upload_job_access
+
 
 class AssignmentUploadQueryError(Exception):
     def __init__(self, status_code: int, detail: Any):
@@ -27,9 +29,14 @@ class AssignmentUploadQueryDeps:
 
 def get_assignment_upload_status(job_id: str, *, deps: AssignmentUploadQueryDeps) -> Dict[str, Any]:
     try:
-        return deps.load_upload_job(job_id)
+        job = deps.load_upload_job(job_id)
     except FileNotFoundError:
         raise AssignmentUploadQueryError(404, "job not found")
+    try:
+        enforce_upload_job_access(job)
+    except AuthError as exc:
+        raise AssignmentUploadQueryError(exc.status_code, exc.detail)
+    return job
 
 
 def get_assignment_upload_draft(job_id: str, *, deps: AssignmentUploadQueryDeps) -> Dict[str, Any]:
@@ -37,6 +44,10 @@ def get_assignment_upload_draft(job_id: str, *, deps: AssignmentUploadQueryDeps)
         job = deps.load_upload_job(job_id)
     except FileNotFoundError:
         raise AssignmentUploadQueryError(404, "job not found")
+    try:
+        enforce_upload_job_access(job)
+    except AuthError as exc:
+        raise AssignmentUploadQueryError(exc.status_code, exc.detail)
 
     if job.get("status") not in {"done", "confirmed"}:
         raise AssignmentUploadQueryError(

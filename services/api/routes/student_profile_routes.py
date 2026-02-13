@@ -4,12 +4,25 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
+from ..auth_service import AuthError, resolve_student_scope
+
+
+def _scoped_student_id(student_id: str | None) -> str:
+    try:
+        scoped = resolve_student_scope(student_id, required_for_admin=False)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    sid = str(scoped or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="student_id is required")
+    return sid
 
 
 def register_student_profile_routes(router: APIRouter, core: Any) -> None:
     @router.get("/student/profile/{student_id}")
     def get_profile(student_id: str) -> Any:
-        result = core._get_profile_api_impl(student_id, deps=core._student_profile_api_deps())
+        sid = _scoped_student_id(student_id)
+        result = core._get_profile_api_impl(sid, deps=core._student_profile_api_deps())
         if result.get("error") in {"profile not found", "profile_not_found"}:
             raise HTTPException(status_code=404, detail="profile not found")
         if result.get("error"):
@@ -25,8 +38,9 @@ def register_student_profile_routes(router: APIRouter, core: Any) -> None:
         next_focus: Optional[str] = Form(""),
         interaction_note: Optional[str] = Form(""),
     ) -> JSONResponse:
+        sid = _scoped_student_id(student_id)
         payload = core._update_profile_api_impl(
-            student_id=student_id,
+            student_id=sid,
             weak_kp=weak_kp,
             strong_kp=strong_kp,
             medium_kp=medium_kp,

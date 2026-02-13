@@ -8,7 +8,7 @@ from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
 
 @dataclass(frozen=True)
 class ExamApplicationDeps:
-    list_exams: Callable[[], Dict[str, Any]]
+    list_exams: Callable[[int, int], Dict[str, Any]]
     get_exam_detail_api: Callable[[str], Dict[str, Any]]
     exam_analysis_get: Callable[[str], Dict[str, Any]]
     exam_students_list: Callable[[str, int], Dict[str, Any]]
@@ -26,7 +26,7 @@ def build_exam_application_deps(core: Any) -> ExamApplicationDeps:
         return core.exam_students_list(exam_id, limit=limit)
 
     return ExamApplicationDeps(
-        list_exams=lambda: core.list_exams(),
+        list_exams=lambda limit, cursor: core.list_exams(limit=limit, cursor=cursor),
         get_exam_detail_api=lambda exam_id: core._get_exam_detail_api_impl(
             exam_id, deps=core._exam_api_deps()
         ),

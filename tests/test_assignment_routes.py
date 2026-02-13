@@ -26,8 +26,10 @@ def test_assignment_routes_call_assignment_application_layer(monkeypatch):
 
     called = {"count": 0}
 
-    async def _fake_list_assignments(*, deps):
+    async def _fake_list_assignments(*, limit=50, cursor=0, deps):
         called["count"] += 1
+        called["limit"] = limit
+        called["cursor"] = cursor
         return {"ok": True, "assignments": []}
 
     monkeypatch.setattr(
@@ -46,3 +48,5 @@ def test_assignment_routes_call_assignment_application_layer(monkeypatch):
 
     assert res.status_code == 200
     assert called["count"] == 1
+    assert called["limit"] == 50
+    assert called["cursor"] == 0

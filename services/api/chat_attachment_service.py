@@ -183,73 +183,78 @@ async def upload_chat_attachments(
     root = _attachments_root(deps.uploads_dir)
     total_written = 0
     attachments: List[Dict[str, Any]] = []
+    created_dirs: List[Path] = []
 
-    for upload in items:
-        raw_name = str(getattr(upload, "filename", "") or "")
-        file_name = deps.sanitize_filename(raw_name)
-        if not file_name:
-            raise ChatAttachmentError(400, "文件名不能为空")
-        suffix = Path(file_name).suffix.lower()
-        if suffix not in _ALLOWED_SUFFIXES:
-            raise ChatAttachmentError(400, f"不支持的文件类型: {suffix or file_name}")
+    try:
+        for upload in items:
+            raw_name = str(getattr(upload, "filename", "") or "")
+            file_name = deps.sanitize_filename(raw_name)
+            if not file_name:
+                raise ChatAttachmentError(400, "文件名不能为空")
+            suffix = Path(file_name).suffix.lower()
+            if suffix not in _ALLOWED_SUFFIXES:
+                raise ChatAttachmentError(400, f"不支持的文件类型: {suffix or file_name}")
 
-        attachment_id = f"att_{deps.uuid_hex()[:16]}"
-        attachment_dir = (root / attachment_id).resolve()
-        attachment_dir.mkdir(parents=True, exist_ok=True)
-        source_path = attachment_dir / file_name
+            attachment_id = f"att_{deps.uuid_hex()[:16]}"
+            attachment_dir = (root / attachment_id).resolve()
+            attachment_dir.mkdir(parents=True, exist_ok=True)
+            created_dirs.append(attachment_dir)
+            source_path = attachment_dir / file_name
 
-        size_bytes = int(await deps.save_upload_file(upload, source_path))
-        total_written += size_bytes
-        if size_bytes > MAX_FILE_SIZE_BYTES:
-            shutil.rmtree(attachment_dir, ignore_errors=True)
-            raise ChatAttachmentError(400, "单个文件大小不能超过 10MB")
-        if total_written > MAX_TOTAL_SIZE_BYTES:
-            shutil.rmtree(attachment_dir, ignore_errors=True)
-            raise ChatAttachmentError(400, "单条消息文件总大小不能超过 30MB")
+            size_bytes = int(await deps.save_upload_file(upload, source_path))
+            total_written += size_bytes
+            if size_bytes > MAX_FILE_SIZE_BYTES:
+                raise ChatAttachmentError(400, "单个文件大小不能超过 10MB")
+            if total_written > MAX_TOTAL_SIZE_BYTES:
+                raise ChatAttachmentError(400, "单条消息文件总大小不能超过 30MB")
 
-        content_type = str(getattr(upload, "content_type", "") or "")
-        extracted_text = ""
-        status = "ready"
-        error_code = ""
-        error_detail = ""
-        try:
-            if suffix == ".xlsx":
-                extracted_text = deps.xlsx_to_table_preview(source_path)
-            elif suffix == ".xls":
-                extracted_text = deps.xls_to_table_preview(source_path)
-            else:
-                extracted_text = deps.extract_text_from_file(source_path, language, ocr_mode)
-            if not str(extracted_text or "").strip():
+            content_type = str(getattr(upload, "content_type", "") or "")
+            extracted_text = ""
+            status = "ready"
+            error_code = ""
+            error_detail = ""
+            try:
+                if suffix == ".xlsx":
+                    extracted_text = deps.xlsx_to_table_preview(source_path)
+                elif suffix == ".xls":
+                    extracted_text = deps.xls_to_table_preview(source_path)
+                else:
+                    extracted_text = deps.extract_text_from_file(source_path, language, ocr_mode)
+                if not str(extracted_text or "").strip():
+                    status = "failed"
+                    error_code = "extract_empty"
+                    error_detail = "附件解析结果为空"
+                else:
+                    (attachment_dir / "extracted.txt").write_text(
+                        str(extracted_text), encoding="utf-8"
+                    )
+            except Exception as exc:
                 status = "failed"
-                error_code = "extract_empty"
-                error_detail = "附件解析结果为空"
-            else:
-                (attachment_dir / "extracted.txt").write_text(
-                    str(extracted_text), encoding="utf-8"
-                )
-        except Exception as exc:
-            status = "failed"
-            error_code = "extract_failed"
-            error_detail = str(exc)[:200]
+                error_code = "extract_failed"
+                error_detail = str(exc)[:200]
 
-        meta = {
-            "attachment_id": attachment_id,
-            "role": role_norm,
-            "teacher_id": teacher_value,
-            "student_id": student_value,
-            "session_id": session_value,
-            "request_id": str(request_id or "").strip(),
-            "file_name": file_name,
-            "size_bytes": size_bytes,
-            "content_type": content_type,
-            "status": status,
-            "error_code": error_code,
-            "error_detail": error_detail,
-            "created_at": deps.now_iso(),
-            "updated_at": deps.now_iso(),
-        }
-        _write_meta(attachment_dir / "meta.json", meta)
-        attachments.append(_to_public_item(meta))
+            meta = {
+                "attachment_id": attachment_id,
+                "role": role_norm,
+                "teacher_id": teacher_value,
+                "student_id": student_value,
+                "session_id": session_value,
+                "request_id": str(request_id or "").strip(),
+                "file_name": file_name,
+                "size_bytes": size_bytes,
+                "content_type": content_type,
+                "status": status,
+                "error_code": error_code,
+                "error_detail": error_detail,
+                "created_at": deps.now_iso(),
+                "updated_at": deps.now_iso(),
+            }
+            _write_meta(attachment_dir / "meta.json", meta)
+            attachments.append(_to_public_item(meta))
+    except Exception:
+        for attachment_dir in created_dirs:
+            shutil.rmtree(attachment_dir, ignore_errors=True)
+        raise
 
     return {
         "ok": True,

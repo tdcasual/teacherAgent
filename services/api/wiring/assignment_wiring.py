@@ -126,7 +126,7 @@ from . import get_app_core as _app_core
 def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
     _ac = _app_core()
     return assignment_handlers.AssignmentHandlerDeps(
-        list_assignments=_ac.list_assignments,
+        list_assignments=lambda limit, cursor: _ac.list_assignments(limit=limit, cursor=cursor),
         compute_assignment_progress=_ac.compute_assignment_progress,
         parse_date_str=_ac.parse_date_str,
         save_assignment_requirements=_ac.save_assignment_requirements,

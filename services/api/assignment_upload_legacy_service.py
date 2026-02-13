@@ -13,6 +13,23 @@ class AssignmentUploadLegacyError(Exception):
         self.detail = detail
 
 
+MAX_FILES_PER_UPLOAD_FIELD = 20
+MAX_UPLOAD_FILE_SIZE_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_TOTAL_SIZE_BYTES = 80 * 1024 * 1024
+_ASSIGNMENT_ALLOWED_SUFFIXES = {
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".md",
+    ".markdown",
+    ".txt",
+    ".tex",
+}
+
+
 def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     root = (data_dir / "assignments").resolve()
     aid = str(assignment_id or "").strip()
@@ -22,6 +39,52 @@ def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     if target != root and root not in target.parents:
         raise AssignmentUploadLegacyError(status_code=400, detail="invalid assignment_id")
     return target
+
+
+def _detect_upload_size(upload: Any) -> Optional[int]:
+    file_obj = getattr(upload, "file", None)
+    if file_obj is None:
+        return None
+    try:
+        current = file_obj.tell()
+        file_obj.seek(0, 2)
+        size = int(file_obj.tell())
+        file_obj.seek(current)
+        if size < 0:
+            return None
+        return size
+    except Exception:
+        return None
+
+
+def _prepare_uploads(
+    files: Optional[List[Any]],
+    *,
+    field_label: str,
+    sanitize_filename: Callable[[Optional[str]], str],
+) -> tuple[List[tuple[Any, str]], int]:
+    items = [item for item in (files or []) if item is not None]
+    if len(items) > MAX_FILES_PER_UPLOAD_FIELD:
+        raise AssignmentUploadLegacyError(
+            status_code=400,
+            detail=f"{field_label} 最多上传 {MAX_FILES_PER_UPLOAD_FIELD} 个文件",
+        )
+    prepared: List[tuple[Any, str]] = []
+    known_total = 0
+    for upload in items:
+        fname = sanitize_filename(getattr(upload, "filename", ""))
+        if not fname:
+            continue
+        suffix = Path(fname).suffix.lower()
+        if suffix not in _ASSIGNMENT_ALLOWED_SUFFIXES:
+            raise AssignmentUploadLegacyError(status_code=400, detail=f"不支持的文件类型: {suffix or fname}")
+        known_size = _detect_upload_size(upload)
+        if known_size is not None:
+            if known_size > MAX_UPLOAD_FILE_SIZE_BYTES:
+                raise AssignmentUploadLegacyError(status_code=400, detail="单个文件大小不能超过 20MB")
+            known_total += known_size
+        prepared.append((upload, fname))
+    return prepared, known_total
 
 
 @dataclass(frozen=True)
@@ -63,30 +126,69 @@ async def assignment_upload(
     source_dir.mkdir(parents=True, exist_ok=True)
     answers_dir.mkdir(parents=True, exist_ok=True)
 
+    source_inputs, source_known_total = _prepare_uploads(
+        files,
+        field_label="files",
+        sanitize_filename=deps.sanitize_filename,
+    )
+    answer_inputs, answer_known_total = _prepare_uploads(
+        answer_files,
+        field_label="answer_files",
+        sanitize_filename=deps.sanitize_filename,
+    )
+    if (source_known_total + answer_known_total) > MAX_UPLOAD_TOTAL_SIZE_BYTES:
+        raise AssignmentUploadLegacyError(status_code=400, detail="单次上传总大小不能超过 80MB")
+
     saved_sources = []
     delivery_mode = "image"
-    for f in files:
-        fname = deps.sanitize_filename(getattr(f, "filename", ""))
-        if not fname:
-            continue
-        dest = source_dir / fname
-        await deps.save_upload_file(f, dest)
-        saved_sources.append(fname)
-        suffix = dest.suffix.lower()
-        if suffix == ".pdf":
-            delivery_mode = "pdf"
-        elif suffix in {".md", ".markdown", ".tex", ".txt"} and delivery_mode != "pdf":
-            delivery_mode = "text"
-
     saved_answers = []
-    if answer_files:
-        for f in answer_files:
-            fname = deps.sanitize_filename(getattr(f, "filename", ""))
-            if not fname:
-                continue
+    total_written = 0
+    created_paths: List[Path] = []
+    try:
+        for f, fname in source_inputs:
+            dest = source_dir / fname
+            existed_before = dest.exists()
+            written = await deps.save_upload_file(f, dest)
+            size_bytes = int(written if written is not None else dest.stat().st_size)
+            if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
+                if not existed_before:
+                    dest.unlink(missing_ok=True)
+                raise AssignmentUploadLegacyError(status_code=400, detail="单个文件大小不能超过 20MB")
+            total_written += size_bytes
+            if total_written > MAX_UPLOAD_TOTAL_SIZE_BYTES:
+                if not existed_before:
+                    dest.unlink(missing_ok=True)
+                raise AssignmentUploadLegacyError(status_code=400, detail="单次上传总大小不能超过 80MB")
+            if not existed_before:
+                created_paths.append(dest)
+            saved_sources.append(fname)
+            suffix = dest.suffix.lower()
+            if suffix == ".pdf":
+                delivery_mode = "pdf"
+            elif suffix in {".md", ".markdown", ".tex", ".txt"} and delivery_mode != "pdf":
+                delivery_mode = "text"
+
+        for f, fname in answer_inputs:
             dest = answers_dir / fname
-            await deps.save_upload_file(f, dest)
+            existed_before = dest.exists()
+            written = await deps.save_upload_file(f, dest)
+            size_bytes = int(written if written is not None else dest.stat().st_size)
+            if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
+                if not existed_before:
+                    dest.unlink(missing_ok=True)
+                raise AssignmentUploadLegacyError(status_code=400, detail="单个文件大小不能超过 20MB")
+            total_written += size_bytes
+            if total_written > MAX_UPLOAD_TOTAL_SIZE_BYTES:
+                if not existed_before:
+                    dest.unlink(missing_ok=True)
+                raise AssignmentUploadLegacyError(status_code=400, detail="单次上传总大小不能超过 80MB")
+            if not existed_before:
+                created_paths.append(dest)
             saved_answers.append(fname)
+    except Exception:
+        for path in created_paths:
+            path.unlink(missing_ok=True)
+        raise
 
     if not saved_sources:
         raise AssignmentUploadLegacyError(status_code=400, detail="No source files uploaded")

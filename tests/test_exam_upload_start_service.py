@@ -90,6 +90,26 @@ class ExamUploadStartServiceTest(unittest.IsolatedAsyncioTestCase):
                     deps=deps,
                 )
 
+    async def test_rejects_unsupported_score_file_type(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            queued = []
+            deps = self._deps(root, writes, queued)
+            with self.assertRaises(ValueError) as cm:
+                await start_exam_upload(
+                    exam_id="EX1",
+                    date="2026-02-08",
+                    class_name="",
+                    paper_files=[_FakeUpload("paper.pdf", b"paper")],
+                    score_files=[_FakeUpload("scores.exe", b"score")],
+                    answer_files=None,
+                    ocr_mode="FREE_OCR",
+                    language="zh",
+                    deps=deps,
+                )
+            self.assertIn("不支持的文件类型", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -213,8 +213,8 @@ def compute_expected_students(scope: str, class_name: str, student_ids: List[str
     return list_all_student_ids()
 
 
-def list_exams() -> Dict[str, Any]:
-    return _list_exams_impl(deps=_exam_catalog_deps())
+def list_exams(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
+    return _list_exams_impl(limit=limit, cursor=cursor, deps=_exam_catalog_deps())
 
 
 def exam_get(exam_id: str) -> Dict[str, Any]:
@@ -296,8 +296,8 @@ def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
 
 
-def list_assignments() -> Dict[str, Any]:
-    return _list_assignments_impl(deps=_assignment_catalog_deps())
+def list_assignments(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
+    return _list_assignments_impl(limit=limit, cursor=cursor, deps=_assignment_catalog_deps())
 
 
 def parse_list_value(value: Any) -> List[str]:

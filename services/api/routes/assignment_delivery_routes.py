@@ -2,7 +2,20 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+
+from ..auth_service import AuthError, resolve_student_scope
+
+
+def _scoped_student_id(student_id: Optional[str]) -> str:
+    try:
+        scoped = resolve_student_scope(student_id, required_for_admin=False)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    sid = str(scoped or "").strip()
+    if not sid:
+        raise HTTPException(status_code=400, detail="student_id is required")
+    return sid
 
 
 def register_assignment_delivery_routes(
@@ -24,8 +37,9 @@ def register_assignment_delivery_routes(
         generate: bool = True,
         per_kp: int = 5,
     ) -> Any:
+        sid = _scoped_student_id(student_id)
         return await assignment_app.get_assignment_today(
-            student_id=student_id,
+            student_id=sid,
             date=date,
             auto_generate=auto_generate,
             generate=generate,
