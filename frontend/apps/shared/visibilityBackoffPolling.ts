@@ -6,7 +6,14 @@ export type VisibilityBackoffPollingOptions = {
   jitterMin?: number;
   jitterMax?: number;
   hiddenMinDelayMs?: number;
+  pollTimeoutMs?: number;
+  inFlightTimeoutMs?: number;
   kickMode?: 'direct' | 'timeout0';
+};
+
+export type VisibilityBackoffPollContext = {
+  signal: AbortSignal;
+  pollTimeoutMs: number;
 };
 
 export type VisibilityBackoffPollOutcome =
@@ -19,7 +26,7 @@ export type VisibilityBackoffPollOutcome =
     };
 
 export function startVisibilityAwareBackoffPolling(
-  poll: () => Promise<VisibilityBackoffPollOutcome>,
+  poll: (ctx: VisibilityBackoffPollContext) => Promise<VisibilityBackoffPollOutcome>,
   onError: (err: unknown) => void,
   options: VisibilityBackoffPollingOptions = {},
 ): () => void {
@@ -31,17 +38,30 @@ export function startVisibilityAwareBackoffPolling(
     jitterMin = 0.85,
     jitterMax = 1.15,
     hiddenMinDelayMs,
+    pollTimeoutMs = 15000,
+    inFlightTimeoutMs = 20000,
     kickMode = 'timeout0',
   } = options;
 
   let cancelled = false;
   let timeoutId: number | null = null;
   let inFlight = false;
+  let inFlightStartedAt = 0;
+  let abortController: AbortController | null = null;
   let delayMs = initialDelayMs;
 
   const clearTimer = () => {
     if (timeoutId != null) window.clearTimeout(timeoutId);
     timeoutId = null;
+  };
+
+  const abortInFlight = () => {
+    try {
+      abortController?.abort();
+    } catch {
+      // ignore abort errors
+    }
+    abortController = null;
   };
 
   const jitter = (ms: number) =>
@@ -69,14 +89,33 @@ export function startVisibilityAwareBackoffPolling(
   };
 
   const run = async () => {
-    if (cancelled || inFlight) return;
+    if (cancelled) return;
+    if (inFlight) {
+      const inflightAge = Date.now() - inFlightStartedAt;
+      if (inFlightTimeoutMs > 0 && inFlightStartedAt > 0 && inflightAge > inFlightTimeoutMs) {
+        abortInFlight();
+        inFlight = false;
+        inFlightStartedAt = 0;
+      } else {
+        return;
+      }
+    }
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       scheduleHidden();
       return;
     }
     inFlight = true;
+    inFlightStartedAt = Date.now();
+    abortInFlight();
+    abortController = new AbortController();
+    let pollTimeoutId: number | null = null;
+    if (pollTimeoutMs > 0) {
+      pollTimeoutId = window.setTimeout(() => {
+        abortInFlight();
+      }, pollTimeoutMs);
+    }
     try {
-      const outcome = await poll();
+      const outcome = await poll({ signal: abortController.signal, pollTimeoutMs });
       if (cancelled) return;
       if (outcome === 'stop') return;
       if (typeof outcome === 'object' && outcome.action === 'continue') {
@@ -99,7 +138,10 @@ export function startVisibilityAwareBackoffPolling(
       delayMs = Math.min(maxDelayMs, Math.round(delayMs * errorBackoffFactor));
       schedule(jitter(delayMs));
     } finally {
+      if (pollTimeoutId != null) window.clearTimeout(pollTimeoutId);
+      abortController = null;
       inFlight = false;
+      inFlightStartedAt = 0;
     }
   };
 
@@ -118,5 +160,6 @@ export function startVisibilityAwareBackoffPolling(
     cancelled = true;
     document.removeEventListener('visibilitychange', onVisibilityChange);
     clearTimer();
+    abortInFlight();
   };
 }

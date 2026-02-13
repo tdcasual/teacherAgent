@@ -201,7 +201,7 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
     const cleanup = startVisibilityAwareBackoffPolling(
-      async () => {
+      async ({ signal }) => {
         const pendingAgeMs = Date.now() - Number(pendingChatJob.created_at || 0)
         if (!Number.isFinite(pendingAgeMs) || pendingAgeMs > PENDING_CHAT_MAX_AGE_MS) {
           const staleMsg = '上一条请求已过期，请重新发送。'
@@ -216,7 +216,7 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
           return 'stop'
         }
         if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) return 'continue'
-        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
+        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
         if (res.status === 404) {
           dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => stripTransientPendingBubbles(prev) })
           skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
@@ -274,7 +274,7 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
           return next.map((m) => m.id === pendingChatJob.placeholder_id ? { ...m, content: `网络波动，正在重试…（${msg}）`, time: nowTime() } : m)
         }})
       },
-      { kickMode: 'direct' },
+      { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
     )
     return cleanup
     // eslint-disable-next-line react-hooks/exhaustive-deps

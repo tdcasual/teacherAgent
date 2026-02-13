@@ -59,7 +59,7 @@ class Target:
     base_url: str
     endpoint: str
     headers: Dict[str, str]
-    timeout_sec: Optional[float]
+    timeout_sec: Tuple[float, float]
     retry: int
 
 
@@ -147,6 +147,49 @@ def _response_text_from_output(output: List[Dict[str, Any]]) -> str:
                 if text:
                     texts.append(text)
     return "\n".join(texts).strip()
+
+
+def _clamp_timeout_seconds(value: Any, *, default: float, min_value: float = 1.0, max_value: float = 300.0) -> float:
+    try:
+        parsed = float(value)
+    except Exception:
+        parsed = float(default)
+    if parsed <= 0:
+        parsed = float(default)
+    return min(max_value, max(min_value, parsed))
+
+
+def _parse_timeout_candidate(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if not text:
+        return None
+    if text in {"0", "none", "inf", "infinite", "null"}:
+        return None
+    try:
+        return float(text)
+    except Exception:
+        return None
+
+
+def _build_timeout_pair(
+    *,
+    default_timeout_sec: Any,
+    timeout_value: Any = None,
+    connect_value: Any = None,
+    read_value: Any = None,
+) -> Tuple[float, float]:
+    default_read = _clamp_timeout_seconds(default_timeout_sec, default=120.0)
+    timeout_candidate = _parse_timeout_candidate(timeout_value)
+    base_read = _clamp_timeout_seconds(timeout_candidate, default=default_read)
+    read_candidate = _parse_timeout_candidate(read_value)
+    read_timeout = _clamp_timeout_seconds(read_candidate, default=base_read)
+    connect_default = min(10.0, read_timeout)
+    connect_candidate = _parse_timeout_candidate(connect_value)
+    connect_timeout = _clamp_timeout_seconds(connect_candidate, default=connect_default, max_value=120.0)
+    connect_timeout = min(connect_timeout, read_timeout)
+    return (connect_timeout, read_timeout)
 
 
 class OpenAIResponsesAdapter:
@@ -377,18 +420,12 @@ class LLMGateway:
 
         headers = self._build_headers(prov_cfg, api_key)
 
-        timeout_env = os.getenv("LLM_TIMEOUT_SEC")
-        if timeout_env is None or not timeout_env.strip():
-            timeout_sec: Optional[float] = float(defaults.get("timeout_sec", 120))
-        else:
-            val = timeout_env.strip().lower()
-            if val in {"0", "none", "inf", "infinite", "null"}:
-                timeout_sec = None
-            else:
-                try:
-                    timeout_sec = float(val)
-                except Exception:
-                    timeout_sec = float(defaults.get("timeout_sec", 120))
+        timeout_sec = _build_timeout_pair(
+            default_timeout_sec=defaults.get("timeout_sec", 120),
+            timeout_value=os.getenv("LLM_TIMEOUT_SEC"),
+            connect_value=os.getenv("LLM_CONNECT_TIMEOUT_SEC"),
+            read_value=os.getenv("LLM_READ_TIMEOUT_SEC"),
+        )
         retry = int(os.getenv("LLM_RETRY", "")) if os.getenv("LLM_RETRY") else int(defaults.get("retry", 1))
 
         return Target(
@@ -467,19 +504,12 @@ class LLMGateway:
         if "Content-Type" not in headers:
             headers["Content-Type"] = "application/json"
 
-        timeout_override = override.get("timeout_sec")
-        timeout_sec: Optional[float]
-        if timeout_override is None or timeout_override == "":
-            timeout_sec = float(defaults.get("timeout_sec", 120))
-        else:
-            text = str(timeout_override).strip().lower()
-            if text in {"0", "none", "inf", "infinite", "null"}:
-                timeout_sec = None
-            else:
-                try:
-                    timeout_sec = float(timeout_override)
-                except Exception:
-                    timeout_sec = float(defaults.get("timeout_sec", 120))
+        timeout_sec = _build_timeout_pair(
+            default_timeout_sec=defaults.get("timeout_sec", 120),
+            timeout_value=override.get("timeout_sec"),
+            connect_value=override.get("connect_timeout_sec"),
+            read_value=override.get("read_timeout_sec"),
+        )
 
         retry_override = override.get("retry")
         if retry_override is None or retry_override == "":

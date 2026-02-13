@@ -527,12 +527,12 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     if (!authToken) return
     if (!pendingChatJob?.job_id) return
     const cleanup = startVisibilityAwareBackoffPolling(
-      async () => {
+      async ({ signal }) => {
         if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
           return 'continue'
         }
 
-        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`)
+        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
         if (!res.ok) {
           const text = await res.text()
           throw new Error(text || `状态码 ${res.status}`)
@@ -584,7 +584,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           )
         })
       },
-      { kickMode: 'direct' },
+      { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
     )
 
     return () => {

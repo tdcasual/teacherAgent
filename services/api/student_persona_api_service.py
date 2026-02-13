@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import logging
+import os
 import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+
+from .fs_atomic import atomic_write_json
+
+_log = logging.getLogger(__name__)
+_T = TypeVar("_T")
+
+_MAX_NAME_LEN = 80
+_MAX_SUMMARY_LEN = 500
+_MAX_RULE_LEN = 300
+_MAX_EXAMPLE_LEN = 300
 
 
 @dataclass(frozen=True)
@@ -63,13 +76,31 @@ def _read_json_dict(path: Path) -> Dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
+        _log.warning("failed to read/parse json file %s", path, exc_info=True)
         return {}
     return raw if isinstance(raw, dict) else {}
 
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(path, payload)
+
+
+def _lock_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".lock")
+
+
+def _with_path_lock(path: Path, fn: Callable[[], _T]) -> _T:
+    lock_path = _lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return fn()
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def _as_str_list(value: Any, *, limit: int) -> List[str]:
@@ -84,6 +115,29 @@ def _as_str_list(value: Any, *, limit: int) -> List[str]:
         if len(out) >= limit:
             break
     return out
+
+
+def _validate_name(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) > _MAX_NAME_LEN:
+        raise ValueError("invalid_name")
+    return text
+
+
+def _validate_summary(value: Any) -> str:
+    text = str(value or "").strip()
+    if len(text) > _MAX_SUMMARY_LEN:
+        raise ValueError("invalid_summary")
+    return text
+
+
+def _validate_list_items(value: Any, *, limit: int, max_item_len: int, error: str) -> List[str]:
+    items = _as_str_list(value, limit=limit)
+    if not items:
+        raise ValueError(error)
+    if any(len(item) > max_item_len for item in items):
+        raise ValueError(error)
+    return items
 
 
 def _validate_avatar_file(filename: str, content: bytes) -> str:
@@ -217,7 +271,8 @@ def student_personas_get_api(student_id: str, *, deps: StudentPersonaApiDeps) ->
     active_persona_id = str(personas.get("active_persona_id") or "").strip() if isinstance(personas, dict) else ""
     if active_persona_id and active_persona_id not in custom_ids and active_persona_id not in assigned_ids:
         personas["active_persona_id"] = ""
-        _write_json(_student_profile_path(sid, deps), profile)
+        path = _student_profile_path(sid, deps)
+        _with_path_lock(path, lambda: _write_json(path, profile))
         active_persona_id = ""
 
     return {
@@ -239,45 +294,58 @@ def student_persona_custom_create_api(
     if not sid:
         return {"ok": False, "error": "missing_student_id"}
     body = payload if isinstance(payload, dict) else {}
-    name = str(body.get("name") or "").strip()
-    if not name:
-        return {"ok": False, "error": "invalid_name"}
-    style_rules = _as_str_list(body.get("style_rules"), limit=20)
-    few_shot_examples = _as_str_list(body.get("few_shot_examples"), limit=10)
-    if not style_rules:
-        return {"ok": False, "error": "invalid_style_rules"}
-    if not few_shot_examples:
-        return {"ok": False, "error": "invalid_few_shot_examples"}
+    try:
+        name = _validate_name(body.get("name"))
+        summary = _validate_summary(body.get("summary"))
+        style_rules = _validate_list_items(
+            body.get("style_rules"),
+            limit=20,
+            max_item_len=_MAX_RULE_LEN,
+            error="invalid_style_rules",
+        )
+        few_shot_examples = _validate_list_items(
+            body.get("few_shot_examples"),
+            limit=10,
+            max_item_len=_MAX_EXAMPLE_LEN,
+            error="invalid_few_shot_examples",
+        )
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
 
-    profile = _ensure_profile(sid, deps)
-    personas = profile["personas"]
-    custom_raw = personas.get("custom")
-    custom = custom_raw if isinstance(custom_raw, list) else []
-    approved_count = sum(
-        1
-        for item in custom
-        if isinstance(item, dict) and str(item.get("review_status") or "").strip().lower() == "approved"
-    )
-    if approved_count >= 5:
-        return {"ok": False, "error": "custom_persona_limit_reached"}
+    path = _student_profile_path(sid, deps)
 
-    review_status, review_reason = _review_custom_persona(name, style_rules, few_shot_examples)
-    persona = {
-        "persona_id": f"custom_{uuid.uuid4().hex[:12]}",
-        "name": name,
-        "summary": str(body.get("summary") or "").strip(),
-        "style_rules": style_rules,
-        "few_shot_examples": few_shot_examples,
-        "avatar_url": str(body.get("avatar_url") or "").strip(),
-        "review_status": review_status,
-        "review_reason": review_reason,
-        "created_at": deps.now_iso(),
-        "updated_at": deps.now_iso(),
-    }
-    custom.append(persona)
-    personas["custom"] = custom
-    _write_json(_student_profile_path(sid, deps), profile)
-    return {"ok": True, "student_id": sid, "persona": persona}
+    def _create_locked() -> Dict[str, Any]:
+        profile = _ensure_profile(sid, deps)
+        personas = profile["personas"]
+        custom_raw = personas.get("custom")
+        custom = custom_raw if isinstance(custom_raw, list) else []
+        approved_count = sum(
+            1
+            for item in custom
+            if isinstance(item, dict) and str(item.get("review_status") or "").strip().lower() == "approved"
+        )
+        if approved_count >= 5:
+            return {"ok": False, "error": "custom_persona_limit_reached"}
+
+        review_status, review_reason = _review_custom_persona(name, style_rules, few_shot_examples)
+        persona = {
+            "persona_id": f"custom_{uuid.uuid4().hex[:12]}",
+            "name": name,
+            "summary": summary,
+            "style_rules": style_rules,
+            "few_shot_examples": few_shot_examples,
+            "avatar_url": str(body.get("avatar_url") or "").strip(),
+            "review_status": review_status,
+            "review_reason": review_reason,
+            "created_at": deps.now_iso(),
+            "updated_at": deps.now_iso(),
+        }
+        custom.append(persona)
+        personas["custom"] = custom
+        _write_json(path, profile)
+        return {"ok": True, "student_id": sid, "persona": persona}
+
+    return _with_path_lock(path, _create_locked)
 
 
 def student_persona_activate_api(
@@ -290,12 +358,15 @@ def student_persona_activate_api(
     if not sid:
         return {"ok": False, "error": "missing_student_id"}
     target_persona_id = str(persona_id or "").strip()
+    path = _student_profile_path(sid, deps)
     profile = _ensure_profile(sid, deps)
     personas = profile["personas"]
     if not target_persona_id:
         personas["active_persona_id"] = ""
-        _write_json(_student_profile_path(sid, deps), profile)
-        return {"ok": True, "student_id": sid, "active_persona_id": ""}
+        return _with_path_lock(
+            path,
+            lambda: (_write_json(path, profile), {"ok": True, "student_id": sid, "active_persona_id": ""})[1],
+        )
 
     listing = student_personas_get_api(sid, deps=deps)
     if not listing.get("ok"):
@@ -309,9 +380,14 @@ def student_persona_activate_api(
     if target_persona_id not in assigned_ids and target_persona_id not in custom_ids:
         return {"ok": False, "error": "persona_not_available"}
 
-    personas["active_persona_id"] = target_persona_id
-    _write_json(_student_profile_path(sid, deps), profile)
-    return {"ok": True, "student_id": sid, "active_persona_id": target_persona_id}
+    def _activate_locked() -> Dict[str, Any]:
+        profile_locked = _ensure_profile(sid, deps)
+        personas_locked = profile_locked["personas"]
+        personas_locked["active_persona_id"] = target_persona_id
+        _write_json(path, profile_locked)
+        return {"ok": True, "student_id": sid, "active_persona_id": target_persona_id}
+
+    return _with_path_lock(path, _activate_locked)
 
 
 def student_persona_custom_delete_api(
@@ -327,27 +403,32 @@ def student_persona_custom_delete_api(
     if not target_persona_id:
         return {"ok": False, "error": "missing_persona_id"}
 
-    profile = _ensure_profile(sid, deps)
-    personas = profile["personas"]
-    custom_raw = personas.get("custom")
-    custom = custom_raw if isinstance(custom_raw, list) else []
-    original_size = len(custom)
-    next_custom = [
-        item
-        for item in custom
-        if not (isinstance(item, dict) and str(item.get("persona_id") or "").strip() == target_persona_id)
-    ]
-    removed = len(next_custom) < original_size
-    personas["custom"] = next_custom
-    if str(personas.get("active_persona_id") or "").strip() == target_persona_id:
-        personas["active_persona_id"] = ""
-    _write_json(_student_profile_path(sid, deps), profile)
-    return {
-        "ok": True,
-        "student_id": sid,
-        "removed": removed,
-        "active_persona_id": str(personas.get("active_persona_id") or "").strip(),
-    }
+    path = _student_profile_path(sid, deps)
+
+    def _delete_locked() -> Dict[str, Any]:
+        profile = _ensure_profile(sid, deps)
+        personas = profile["personas"]
+        custom_raw = personas.get("custom")
+        custom = custom_raw if isinstance(custom_raw, list) else []
+        original_size = len(custom)
+        next_custom = [
+            item
+            for item in custom
+            if not (isinstance(item, dict) and str(item.get("persona_id") or "").strip() == target_persona_id)
+        ]
+        removed = len(next_custom) < original_size
+        personas["custom"] = next_custom
+        if str(personas.get("active_persona_id") or "").strip() == target_persona_id:
+            personas["active_persona_id"] = ""
+        _write_json(path, profile)
+        return {
+            "ok": True,
+            "student_id": sid,
+            "removed": removed,
+            "active_persona_id": str(personas.get("active_persona_id") or "").strip(),
+        }
+
+    return _with_path_lock(path, _delete_locked)
 
 
 def student_persona_custom_update_api(
@@ -365,54 +446,63 @@ def student_persona_custom_update_api(
         return {"ok": False, "error": "missing_persona_id"}
     body = payload if isinstance(payload, dict) else {}
 
-    profile = _ensure_profile(sid, deps)
-    personas = profile["personas"]
-    custom_raw = personas.get("custom")
-    custom = custom_raw if isinstance(custom_raw, list) else []
-    idx = next(
-        (
-            i
-            for i, item in enumerate(custom)
-            if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
-        ),
-        -1,
-    )
-    if idx < 0:
-        return {"ok": False, "error": "custom_persona_not_found"}
+    path = _student_profile_path(sid, deps)
 
-    current = dict(custom[idx])
-    if "name" in body:
-        name = str(body.get("name") or "").strip()
-        if not name:
-            return {"ok": False, "error": "invalid_name"}
-        current["name"] = name
-    if "summary" in body:
-        current["summary"] = str(body.get("summary") or "").strip()
-    if "style_rules" in body:
-        style_rules = _as_str_list(body.get("style_rules"), limit=20)
-        if not style_rules:
-            return {"ok": False, "error": "invalid_style_rules"}
-        current["style_rules"] = style_rules
-    if "few_shot_examples" in body:
-        few_shot_examples = _as_str_list(body.get("few_shot_examples"), limit=10)
-        if not few_shot_examples:
-            return {"ok": False, "error": "invalid_few_shot_examples"}
-        current["few_shot_examples"] = few_shot_examples
+    def _update_locked() -> Dict[str, Any]:
+        profile = _ensure_profile(sid, deps)
+        personas = profile["personas"]
+        custom_raw = personas.get("custom")
+        custom = custom_raw if isinstance(custom_raw, list) else []
+        idx = next(
+            (
+                i
+                for i, item in enumerate(custom)
+                if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
+            ),
+            -1,
+        )
+        if idx < 0:
+            return {"ok": False, "error": "custom_persona_not_found"}
 
-    review_status, review_reason = _review_custom_persona(
-        str(current.get("name") or ""),
-        _as_str_list(current.get("style_rules"), limit=20),
-        _as_str_list(current.get("few_shot_examples"), limit=10),
-    )
-    current["review_status"] = review_status
-    current["review_reason"] = review_reason
-    current["updated_at"] = deps.now_iso()
-    custom[idx] = current
-    personas["custom"] = custom
-    if review_status != "approved" and str(personas.get("active_persona_id") or "").strip() == pid:
-        personas["active_persona_id"] = ""
-    _write_json(_student_profile_path(sid, deps), profile)
-    return {"ok": True, "student_id": sid, "persona": current}
+        current = dict(custom[idx])
+        try:
+            if "name" in body:
+                current["name"] = _validate_name(body.get("name"))
+            if "summary" in body:
+                current["summary"] = _validate_summary(body.get("summary"))
+            if "style_rules" in body:
+                current["style_rules"] = _validate_list_items(
+                    body.get("style_rules"),
+                    limit=20,
+                    max_item_len=_MAX_RULE_LEN,
+                    error="invalid_style_rules",
+                )
+            if "few_shot_examples" in body:
+                current["few_shot_examples"] = _validate_list_items(
+                    body.get("few_shot_examples"),
+                    limit=10,
+                    max_item_len=_MAX_EXAMPLE_LEN,
+                    error="invalid_few_shot_examples",
+                )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        review_status, review_reason = _review_custom_persona(
+            str(current.get("name") or ""),
+            _as_str_list(current.get("style_rules"), limit=20),
+            _as_str_list(current.get("few_shot_examples"), limit=10),
+        )
+        current["review_status"] = review_status
+        current["review_reason"] = review_reason
+        current["updated_at"] = deps.now_iso()
+        custom[idx] = current
+        personas["custom"] = custom
+        if review_status != "approved" and str(personas.get("active_persona_id") or "").strip() == pid:
+            personas["active_persona_id"] = ""
+        _write_json(path, profile)
+        return {"ok": True, "student_id": sid, "persona": current}
+
+    return _with_path_lock(path, _update_locked)
 
 
 def _build_persona_prompt(persona: Dict[str, Any]) -> str:
@@ -481,9 +571,22 @@ def resolve_student_persona_runtime(
     }
     first_notice = pid not in notified_ids
     if first_notice and isinstance(personas, dict):
-        notified_ids.add(pid)
-        personas["first_activation_notified_ids"] = sorted(notified_ids)
-        _write_json(_student_profile_path(sid, deps), profile)
+        path = _student_profile_path(sid, deps)
+
+        def _mark_locked() -> None:
+            profile_locked = _ensure_profile(sid, deps)
+            personas_locked = profile_locked.get("personas") if isinstance(profile_locked.get("personas"), dict) else {}
+            notified_locked_raw = personas_locked.get("first_activation_notified_ids") if isinstance(personas_locked, dict) else []
+            notified_locked = {
+                str(item or "").strip()
+                for item in notified_locked_raw
+                if str(item or "").strip()
+            }
+            notified_locked.add(pid)
+            personas_locked["first_activation_notified_ids"] = sorted(notified_locked)
+            _write_json(path, profile_locked)
+
+        _with_path_lock(path, _mark_locked)
 
     return {
         "ok": True,
@@ -510,38 +613,42 @@ def student_persona_avatar_upload_api(
     if not pid:
         return {"ok": False, "error": "missing_persona_id"}
 
-    profile = _ensure_profile(sid, deps)
-    personas = profile["personas"]
-    custom_raw = personas.get("custom")
-    custom = custom_raw if isinstance(custom_raw, list) else []
-    idx = next(
-        (
-            i
-            for i, item in enumerate(custom)
-            if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
-        ),
-        -1,
-    )
-    if idx < 0:
-        return {"ok": False, "error": "custom_persona_not_found"}
-
     try:
         ext = _validate_avatar_file(filename, content)
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
-    folder = _student_avatar_dir(sid, pid, deps)
-    folder.mkdir(parents=True, exist_ok=True)
-    file_name = f"avatar_{uuid.uuid4().hex[:10]}.{ext}"
-    target = folder / file_name
-    target.write_bytes(content)
-    avatar_url = f"/student/personas/avatar/{sid}/{pid}/{file_name}"
-    updated = dict(custom[idx])
-    updated["avatar_url"] = avatar_url
-    updated["updated_at"] = deps.now_iso()
-    custom[idx] = updated
-    personas["custom"] = custom
-    _write_json(_student_profile_path(sid, deps), profile)
-    return {"ok": True, "student_id": sid, "persona_id": pid, "avatar_url": avatar_url}
+    path = _student_profile_path(sid, deps)
+
+    def _upload_locked() -> Dict[str, Any]:
+        profile = _ensure_profile(sid, deps)
+        personas = profile["personas"]
+        custom_raw = personas.get("custom")
+        custom = custom_raw if isinstance(custom_raw, list) else []
+        idx = next(
+            (
+                i
+                for i, item in enumerate(custom)
+                if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
+            ),
+            -1,
+        )
+        if idx < 0:
+            return {"ok": False, "error": "custom_persona_not_found"}
+        folder = _student_avatar_dir(sid, pid, deps)
+        folder.mkdir(parents=True, exist_ok=True)
+        file_name = f"avatar_{uuid.uuid4().hex[:10]}.{ext}"
+        target = folder / file_name
+        target.write_bytes(content)
+        avatar_url = f"/student/personas/avatar/{sid}/{pid}/{file_name}"
+        updated = dict(custom[idx])
+        updated["avatar_url"] = avatar_url
+        updated["updated_at"] = deps.now_iso()
+        custom[idx] = updated
+        personas["custom"] = custom
+        _write_json(path, profile)
+        return {"ok": True, "student_id": sid, "persona_id": pid, "avatar_url": avatar_url}
+
+    return _with_path_lock(path, _upload_locked)
 
 
 def resolve_student_persona_avatar_path(

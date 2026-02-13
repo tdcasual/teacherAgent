@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -263,6 +264,35 @@ class StudentPersonaApiServiceTest(unittest.TestCase):
             listing = student_personas_get_api("S001", deps=deps)
             custom = next(item for item in listing["custom"] if item["persona_id"] == "custom_1")
             assert custom.get("summary") == "新摘要"
+
+    def test_student_persona_create_rejects_overlong_fields(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            created = student_persona_custom_create_api(
+                "S001",
+                {
+                    "name": "n" * 81,
+                    "summary": "s" * 501,
+                    "style_rules": ["r" * 301],
+                    "few_shot_examples": ["e" * 301],
+                },
+                deps=deps,
+            )
+            assert created["ok"] is False
+            assert created["error"] in {"invalid_name", "invalid_summary", "invalid_style_rules", "invalid_few_shot_examples"}
+
+    def test_student_persona_read_json_logs_warning_on_parse_error(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            bad = root / "data" / "student_profiles" / "S001.json"
+            bad.parent.mkdir(parents=True, exist_ok=True)
+            bad.write_text("{bad json", encoding="utf-8")
+            with self.assertLogs("services.api.student_persona_api_service", level=logging.WARNING) as logs:
+                result = student_personas_get_api("S001", deps=deps)
+            assert result["ok"] is True
+            assert "failed to read/parse json file" in "\n".join(logs.output)
 
 
 if __name__ == "__main__":
