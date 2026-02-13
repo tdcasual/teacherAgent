@@ -81,20 +81,6 @@ export default function App() {
     setActiveSession(next)
   }, [state.verifiedStudent?.student_id, state.todayAssignment?.assignment_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
 
-  // ── Keep desktop layout stable: sidebar is default-visible on desktop ──
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const media = window.matchMedia('(min-width: 901px)')
-    const syncDesktopSidebar = () => {
-      if (!media.matches) return
-      if (state.sidebarOpen) return
-      dispatch({ type: 'SET', field: 'sidebarOpen', value: true })
-    }
-    syncDesktopSidebar()
-    media.addEventListener('change', syncDesktopSidebar)
-    return () => media.removeEventListener('change', syncDesktopSidebar)
-  }, [state.sidebarOpen, dispatch])
-
   // ── Auto-load session messages ──
   useEffect(() => {
     if (!state.verifiedStudent?.student_id) return
