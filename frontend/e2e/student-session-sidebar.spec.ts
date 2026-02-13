@@ -86,6 +86,33 @@ test('rename dialog escape restores focus to session menu trigger', async ({ pag
   await expect(trigger).toBeFocused()
 })
 
+test('sidebar toggle exposes aria contract and verification inputs are label-associated', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      verifiedStudent: null,
+      studentSidebarOpen: 'true',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+      },
+    },
+  })
+
+  const collapseToggle = page.getByRole('button', { name: '收起会话' })
+  await expect(collapseToggle).toHaveAttribute('aria-controls', 'student-session-sidebar')
+  await expect(collapseToggle).toHaveAttribute('aria-expanded', 'true')
+
+  await collapseToggle.click()
+  const expandToggle = page.getByRole('button', { name: '展开会话' })
+  await expect(expandToggle).toHaveAttribute('aria-controls', 'student-session-sidebar')
+  await expect(expandToggle).toHaveAttribute('aria-expanded', 'false')
+
+  await expect(page.getByLabel('姓名')).toBeVisible()
+  await expect(page.getByLabel('班级（重名时必填）')).toBeVisible()
+})
+
 test('restoring pending job keeps only one pending status bubble', async ({ page }) => {
   await setupStudentState(page, {
     stateOverrides: {

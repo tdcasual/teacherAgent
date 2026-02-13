@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "e2e:teacher": "playwright test -c playwright.teacher.config.ts",
     "e2e:student": "playwright test -c playwright.student.config.ts",
+    "e2e:student:critical": "npm run e2e:student -- e2e/student-sidebar-collapse-regression.spec.ts && npm run e2e:student -- e2e/student-high-risk-resilience.spec.ts --grep \"stale pending chat job is discarded so student can start today assignment immediately\"",
     "e2e:smoke": "npm run e2e:teacher -- e2e/teacher-chat-chaos.spec.ts --grep \"status polling retries after transient failure and eventually renders final reply\" && npm run e2e:teacher -- e2e/teacher-upload-lifecycle.spec.ts --grep \"assignment upload success writes teacherActiveUpload and displays status message\" && npm run e2e:student -- e2e/student-learning-loop.spec.ts --grep \"student shell renders chat and workbench regions\" && npm run e2e:mobile-menu",
     "e2e:mobile-menu": "npm run e2e:teacher -- e2e/teacher-session-sidebar.spec.ts --grep \"mobile session menu supports keyboard navigation and escape focus return\" && npm run e2e:student -- e2e/student-session-sidebar.spec.ts --grep \"mobile session menu supports keyboard navigation and escape focus return\"",
     "preview:student": "vite preview --config vite.student.config.ts",

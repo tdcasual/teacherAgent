@@ -99,6 +99,12 @@ body {
     background: var(--color-surface-soft);
     border-color: var(--color-border-strong);
   }
+  .ghost:disabled {
+    opacity: 0.56;
+    cursor: not-allowed;
+    background: #f8fafc;
+    border-color: var(--color-border);
+  }
 
   .role-badge {
     padding: 5px 10px;

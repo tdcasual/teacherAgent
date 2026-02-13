@@ -110,6 +110,7 @@ jobs:
             tests/test_teacher_student_wiring_structure.py \
             tests/test_worker_skill_wiring_structure.py \
             tests/test_teacher_frontend_structure.py \
+            tests/test_student_frontend_structure.py \
             tests/test_tech_debt_targets.py \
             tests/test_observability_store.py \
             tests/test_operability_evidence.py
@@ -223,6 +224,50 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smoke-playwright-test-results-${{ github.run_id }}
+          path: frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  student-critical-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run student critical E2E
+        run: npm run e2e:student:critical
+
+      - name: Upload student critical Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-critical-playwright-report-${{ github.run_id }}
+          path: frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload student critical Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-critical-playwright-test-results-${{ github.run_id }}
           path: frontend/test-results
           if-no-files-found: ignore
           retention-days: 14

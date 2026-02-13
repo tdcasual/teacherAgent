@@ -15,9 +15,14 @@ type Props = {
 
 export default function ChatComposer({ verifiedStudent, pendingChatJobId, sending, inputRef, input, setInput, handleInputKeyDown, handleSend, composerHint }: Props) {
   const composerDisabled = !verifiedStudent || Boolean(pendingChatJobId)
+  const composerBusy = sending || Boolean(pendingChatJobId)
 
   return (
-    <form className={`composer flex-none border-t border-border px-5 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-white max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-[calc(14px+env(safe-area-inset-bottom))] ${composerDisabled ? 'opacity-[0.78]' : ''}`} onSubmit={handleSend}>
+    <form
+      className={`composer flex-none border-t border-border px-5 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] bg-white max-[900px]:px-3 max-[900px]:pt-2.5 max-[900px]:pb-[calc(14px+env(safe-area-inset-bottom))] ${composerDisabled ? 'opacity-[0.78]' : ''}`}
+      aria-busy={composerBusy}
+      onSubmit={handleSend}
+    >
       <div className="max-w-[860px] mx-auto border border-border rounded-[20px] bg-white shadow-sm px-3 py-2.5 max-[900px]:max-w-full">
         <textarea
           ref={inputRef}
@@ -30,7 +35,7 @@ export default function ChatComposer({ verifiedStudent, pendingChatJobId, sendin
           className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.45] focus:!border-none focus:!shadow-none disabled:cursor-not-allowed"
         />
         <div className="flex items-center justify-between gap-2.5 mt-1">
-          <span className="composer-hint text-xs text-muted">{composerHint}</span>
+          <span className="composer-hint text-xs text-muted" role="status" aria-live="polite">{composerHint}</span>
           <button type="submit" className="border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-white transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed" disabled={sending || composerDisabled}>
             发送
           </button>

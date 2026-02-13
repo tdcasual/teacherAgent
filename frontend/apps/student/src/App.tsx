@@ -8,6 +8,7 @@ import { useSessionManager } from './hooks/useSessionManager'
 import { useChatPolling } from './hooks/useChatPolling'
 import { useAssignment } from './hooks/useAssignment'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
+import { selectComposerHint } from './features/chat/studentUiSelectors'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import StudentTopbar from './features/layout/StudentTopbar'
@@ -140,12 +141,11 @@ export default function App() {
   })
 
   // ── Composer hint + keyboard ──
-  const composerHint = useMemo(() => {
-    if (!state.verifiedStudent) return '请先完成身份验证'
-    if (state.pendingChatJob?.job_id) return '正在生成回复，请稍候...'
-    if (state.sending) return '正在提交请求...'
-    return 'Enter 发送 · Shift+Enter 换行'
-  }, [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent])
+  const composerHint = useMemo(() => selectComposerHint({
+    verifiedStudent: state.verifiedStudent,
+    pendingChatJobId: state.pendingChatJob?.job_id || '',
+    sending: state.sending,
+  }), [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent])
 
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter') return
