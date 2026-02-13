@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import math
 import os
 from functools import lru_cache
 import time
@@ -154,8 +155,12 @@ def _clamp_timeout_seconds(value: Any, *, default: float, min_value: float = 1.0
         parsed = float(value)
     except Exception:
         parsed = float(default)
+    if not math.isfinite(parsed):
+        parsed = float(default)
     if parsed <= 0:
         parsed = float(default)
+    if not math.isfinite(parsed):
+        parsed = 120.0
     return min(max_value, max(min_value, parsed))
 
 
@@ -165,12 +170,15 @@ def _parse_timeout_candidate(value: Any) -> Optional[float]:
     text = str(value).strip().lower()
     if not text:
         return None
-    if text in {"0", "none", "inf", "infinite", "null"}:
+    if text in {"0", "none", "inf", "+inf", "-inf", "infinite", "null", "nan"}:
         return None
     try:
-        return float(text)
+        parsed = float(text)
     except Exception:
         return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
 
 
 def _build_timeout_pair(

@@ -840,6 +840,13 @@
    - 涉及文件：`frontend/apps/shared/uploadValidation.ts`、`frontend/apps/shared/useChatAttachments.ts`、`frontend/apps/teacher/src/features/workbench/hooks/useAssignmentWorkflow.ts`、`frontend/apps/teacher/src/features/persona/TeacherPersonaManager.tsx`、`frontend/apps/student/src/features/layout/StudentTopbar.tsx`。  
    - 验证：新增 `tests/test_frontend_upload_precheck.py` 并通过；`frontend` TypeScript typecheck 通过。
 
+13. P1：`llm_gateway` 非有限超时值回退策略加固  
+   - 修复点：  
+     - `llm_gateway.py` 中 `_parse_timeout_candidate` 显式拦截 `nan/+inf/-inf` 与非有限值，统一回退到默认超时策略；  
+     - `_clamp_timeout_seconds` 增加 `math.isfinite` 守卫，确保最终 connect/read timeout 始终为有限正数。  
+   - 涉及文件：`llm_gateway.py`。  
+   - 验证：扩展 `tests/test_llm_gateway.py` 覆盖 `nan/inf` 与极值夹紧场景并通过；`tests/test_llm_gateway_retry.py` 回归通过。
+
 ### 最近一次回归结果
 
 - `python3 -m pytest tests/test_grade_submission_security.py tests/test_student_submit_service.py tests/test_student_ops_api_service.py tests/test_security_auth_hardening.py tests/test_student_history_flow.py tests/test_student_routes.py tests/test_skill_routes.py tests/test_student_history_routes_types.py tests/test_student_profile_routes_types.py -q`  
@@ -880,3 +887,5 @@
   结果：`70 passed, 2 skipped`
 - `npm --prefix frontend run typecheck`  
   结果：`通过`
+- `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_frontend_upload_precheck.py tests/test_student_verify_contract_drift.py tests/test_llm_gateway.py tests/test_llm_gateway_retry.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
+  结果：`78 passed, 2 skipped, 1 warning`

@@ -2,7 +2,7 @@ import os
 import unittest
 from pathlib import Path
 
-from llm_gateway import LLMGateway, _messages_to_response_input
+from llm_gateway import LLMGateway, _build_timeout_pair, _messages_to_response_input
 
 
 class TestLLMGateway(unittest.TestCase):
@@ -68,6 +68,24 @@ class TestLLMGateway(unittest.TestCase):
         self.assertNotEqual(target.timeout_sec, None)
         self.assertIsInstance(target.timeout_sec, tuple)
         self.assertEqual(len(target.timeout_sec), 2)
+
+    def test_build_timeout_pair_rejects_non_finite_values(self):
+        timeout_sec = _build_timeout_pair(
+            default_timeout_sec=120,
+            timeout_value="nan",
+            connect_value="+inf",
+            read_value="-inf",
+        )
+        self.assertEqual(timeout_sec, (10.0, 120.0))
+
+    def test_build_timeout_pair_caps_extreme_values(self):
+        timeout_sec = _build_timeout_pair(
+            default_timeout_sec=120,
+            timeout_value=9999,
+            connect_value=9999,
+            read_value=1,
+        )
+        self.assertEqual(timeout_sec, (1.0, 1.0))
 
 
 if __name__ == "__main__":
