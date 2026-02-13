@@ -290,6 +290,20 @@ export default function App() {
       const text = await res.text()
       throw new Error(text || `状态码 ${res.status}`)
     }
+    const data = (await res.json()) as {
+      persona?: { review_status?: string; review_reason?: string }
+    }
+    const reviewStatus = String(data?.persona?.review_status || '').toLowerCase()
+    if (reviewStatus && reviewStatus !== 'approved') {
+      const reviewReason = String(data?.persona?.review_reason || '')
+      const reasonLabel =
+        reviewReason === 'contains_unsafe_instruction'
+          ? '内容包含不安全指令'
+          : reviewReason === 'roleplay_overreach'
+            ? '角色设定越界（涉及现实身份冒充）'
+            : (reviewReason || '未通过审核')
+      throw new Error(`角色卡创建未通过审核：${reasonLabel}`)
+    }
     await loadStudentPersonas(sid)
   }, [loadStudentPersonas, state.apiBase, state.verifiedStudent?.student_id])
 
