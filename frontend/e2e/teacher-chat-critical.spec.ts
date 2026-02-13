@@ -23,7 +23,7 @@ const chatCases: MatrixCase[] = [
     title: 'Start request failure shows recoverable error',
     given: '/chat/start returns 500',
     when: 'Click send',
-    then: 'Error is shown and composer is re-enabled',
+    then: 'Error is shown and user can retry send',
   },
   {
     id: 'A003',
@@ -39,7 +39,7 @@ const chatCases: MatrixCase[] = [
     title: 'Failed status clears pending state',
     given: '/chat/status returns failed with detail',
     when: 'Send one message',
-    then: 'Readable failure is shown and pending state is cleared',
+    then: 'Readable failure is shown, pending is cleared, and retry works',
   },
   {
     id: 'A005',
@@ -135,7 +135,7 @@ const chatCases: MatrixCase[] = [
     title: 'Unknown terminal status falls back gracefully',
     given: '/chat/status returns unknown terminal value',
     when: 'Send message',
-    then: 'UI enters fallback error state and does not hang',
+    then: 'UI enters fallback error state and allows retry',
   },
 ]
 
@@ -274,12 +274,19 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     await page.goto('/')
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('start 失败回退')
-    await page.getByRole('button', { name: '发送' }).click()
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    const sendButton = page.getByRole('button', { name: '发送' })
+    await composer.fill('start 失败回退')
+    await sendButton.click()
 
     await expect.poll(() => startCalls).toBe(1)
     await expect(page.getByText('抱歉，请求失败')).toBeVisible()
-    await expect(page.getByRole('button', { name: '发送' })).toBeEnabled()
+    await expect(sendButton).toBeDisabled()
+
+    await composer.fill('start 再试一次')
+    await expect(sendButton).toBeEnabled()
+    await sendButton.click()
+    await expect.poll(() => startCalls).toBe(2)
   },
 
   A003: async ({ page }) => {
@@ -305,7 +312,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   },
 
   A004: async ({ page }) => {
-    await openTeacherApp(page, {
+    const { chatStartCalls } = await openTeacherApp(page, {
       apiMocks: {
         onChatStatus: ({ jobId }) => ({
           job_id: jobId,
@@ -316,12 +323,19 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('失败状态处理')
-    await page.getByRole('button', { name: '发送' }).click()
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    const sendButton = page.getByRole('button', { name: '发送' })
+    await composer.fill('失败状态处理')
+    await sendButton.click()
 
     await expect(page.getByText('抱歉，请求失败：mock failed detail')).toBeVisible()
-    await expect(page.getByRole('button', { name: '发送' })).toBeEnabled()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob'))).toBeNull()
+    await expect(sendButton).toBeDisabled()
+
+    await composer.fill('失败后重试')
+    await expect(sendButton).toBeEnabled()
+    await sendButton.click()
+    await expect.poll(() => chatStartCalls.length).toBe(2)
   },
 
   A005: async ({ page }) => {
@@ -567,7 +581,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   },
 
   A016: async ({ page }) => {
-    const { getStatusCallCount } = await openTeacherApp(page, {
+    const { chatStartCalls, getStatusCallCount } = await openTeacherApp(page, {
       apiMocks: {
         onChatStatus: ({ jobId, callCount }) =>
           callCount === 1
@@ -580,13 +594,20 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('未知终态容错')
-    await page.getByRole('button', { name: '发送' }).click()
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    const sendButton = page.getByRole('button', { name: '发送' })
+    await composer.fill('未知终态容错')
+    await sendButton.click()
 
     await expect(page.getByText('抱歉，请求失败：unknown terminal status: halted')).toBeVisible()
-    await expect(page.getByRole('button', { name: '发送' })).toBeEnabled()
     await expect.poll(() => getStatusCallCount('job_1')).toBeGreaterThan(1)
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob'))).toBeNull()
+    await expect(sendButton).toBeDisabled()
+
+    await composer.fill('未知终态后重试')
+    await expect(sendButton).toBeEnabled()
+    await sendButton.click()
+    await expect.poll(() => chatStartCalls.length).toBe(2)
   },
 
   B001: async ({ page }) => {
@@ -841,6 +862,16 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       localStorage.setItem('teacherSkillPinned', 'false')
       localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
       localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
+      localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
+      localStorage.setItem(
+        'teacherAuthSubject',
+        JSON.stringify({
+          teacher_id: 'T001',
+          teacher_name: '测试老师',
+          email: 'teacher@example.com',
+        }),
+      )
+      localStorage.setItem('teacherRoutingTeacherId', 'T001')
     })
 
     await page.route('http://localhost:8000/**', async (route) => {

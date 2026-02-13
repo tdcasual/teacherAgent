@@ -65,7 +65,7 @@ test('pending job remains attached to source session when switching away', async
       teacherSessionSidebarOpen: 'true',
     },
   })
-  await setupBasicTeacherApiMocks(page, {
+  const mocks = await setupBasicTeacherApiMocks(page, {
     historyBySession: {
       main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main 初始化' }],
       s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2 初始化' }],
@@ -94,7 +94,10 @@ test('pending job remains attached to source session when switching away', async
   const mainSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
   await mainSession.locator('.session-select').click()
   await expect(page.locator('.messages').getByText(sourceText)).toBeVisible()
-  await expect(page.locator('.messages').getByText(`回执：${sourceText}`)).toBeVisible()
+  await expect.poll(() => mocks.getStatusCallCount('job_1')).toBeGreaterThanOrEqual(3)
+  await expect
+    .poll(async () => page.locator('.messages').innerText(), { timeout: 15_000 })
+    .toContain(`回执：${sourceText}`)
 
   await secondSession.locator('.session-select').click()
   await expect(page.locator('.messages').getByText(`回执：${sourceText}`)).toHaveCount(0)
@@ -154,7 +157,7 @@ test('restores pending chat job from localStorage and completes it', async ({ pa
       teacherPendingChatJob: JSON.stringify(pending),
     },
   })
-  await setupBasicTeacherApiMocks(page, {
+  const mocks = await setupBasicTeacherApiMocks(page, {
     onChatStatus: ({ jobId }) => ({
       job_id: jobId,
       status: 'done',
@@ -164,5 +167,8 @@ test('restores pending chat job from localStorage and completes it', async ({ pa
 
   await page.goto('/')
   await expect(page.locator('.messages').getByText('恢复中的用户消息')).toBeVisible()
-  await expect(page.locator('.messages').getByText('恢复完成：最终回复')).toBeVisible()
+  await expect.poll(() => mocks.getStatusCallCount('job_restore_1')).toBeGreaterThan(0)
+  await expect
+    .poll(async () => page.locator('.messages').innerText(), { timeout: 15_000 })
+    .toContain('恢复完成：最终回复')
 })

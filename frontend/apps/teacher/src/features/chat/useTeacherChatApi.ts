@@ -485,7 +485,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         const lanePos = Number(data.lane_queue_position || 0)
         const laneSize = Number(data.lane_queue_size || 0)
         setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '处理中...')
-        setPendingChatJob({
+        const nextPendingJob: PendingChatJob = {
           job_id: data.job_id,
           request_id: requestId,
           placeholder_id: placeholderId,
@@ -493,7 +493,9 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           session_id: sessionId,
           lane_id: data.lane_id,
           created_at: Date.now(),
-        })
+        }
+        pendingChatJobRef.current = nextPendingJob
+        setPendingChatJob(nextPendingJob)
         return true
       } catch (err: unknown) {
         const errorMessage = toErrorMessage(err)
@@ -506,6 +508,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         )
         setSending(false)
         setChatQueueHint('')
+        pendingChatJobRef.current = null
         setPendingChatJob(null)
         return false
       }
@@ -541,6 +544,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
               msg.id === pendingChatJob.placeholder_id ? { ...msg, content: data.reply || '已收到。', time: nowTime() } : msg,
             )
           })
+          pendingChatJobRef.current = null
           setPendingChatJob(null)
           setChatQueueHint('')
           setSending(false)
@@ -555,6 +559,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
               item.id === pendingChatJob.placeholder_id ? { ...item, content: `抱歉，请求失败：${msg}`, time: nowTime() } : item,
             )
           })
+          pendingChatJobRef.current = null
           setPendingChatJob(null)
           setChatQueueHint('')
           setSending(false)

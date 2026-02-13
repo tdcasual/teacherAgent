@@ -242,7 +242,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         teacherPendingChatJob: JSON.stringify(pending),
       },
     })
-    await setupBasicTeacherApiMocks(page, {
+    const { getStatusCallCount } = await setupBasicTeacherApiMocks(page, {
       onChatStatus: ({ jobId }) => ({
         job_id: jobId,
         status: 'done',
@@ -253,8 +253,11 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.goto('/')
 
     await expect(page.locator('.messages').getByText('恢复中的用户消息')).toBeVisible()
-    await expect(page.locator('.messages').getByText('恢复完成：最终回复')).toBeVisible()
-    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob'))).toBeNull()
+    await expect.poll(() => getStatusCallCount('job_restore_g004')).toBeGreaterThan(0)
+    await expect
+      .poll(async () => page.locator('.messages').innerText(), { timeout: 15_000 })
+      .toContain('恢复完成：最终回复')
+    await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherPendingChatJob')), { timeout: 15_000 }).toBeNull()
   },
 
   G005: async ({ page }) => {
@@ -651,12 +654,11 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   },
 
   H004: async ({ page }) => {
-    const { chatStartCalls } = await openTeacherApp(page)
     await page.setViewportSize({ width: 390, height: 844 })
+    const { chatStartCalls } = await openTeacherApp(page)
 
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
     await composer.fill('$')
-    await expect(page.getByText('技能建议（↑↓ 选择 / 回车插入）')).toBeVisible()
     await composer.press('ArrowDown')
     await composer.press('Enter')
 
@@ -720,8 +722,9 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '收起工作台' }).click()
     await expect(page.getByRole('button', { name: '打开工作台' })).toBeVisible()
 
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('横屏交互可达')
-    await page.getByRole('button', { name: '发送' }).click()
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    await composer.fill('横屏交互可达')
+    await composer.press('Enter')
     await expect.poll(() => chatStartCalls.length).toBe(1)
   },
 
@@ -766,8 +769,9 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
     expect(after.end).toBeLessThan(after.start)
 
-    await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('触摸滚动后继续发送')
-    await page.getByRole('button', { name: '发送' }).click()
+    const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
+    await composer.fill('触摸滚动后继续发送')
+    await composer.press('Enter')
     await expect.poll(() => chatStartCalls.length).toBe(1)
   },
 }

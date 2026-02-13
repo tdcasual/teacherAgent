@@ -41,6 +41,16 @@ const setupTeacherState = async (page: Page) => {
     localStorage.setItem('teacherSkillPinned', 'false')
     localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
+    localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
+    localStorage.setItem(
+      'teacherAuthSubject',
+      JSON.stringify({
+        teacher_id: 'T001',
+        teacher_name: '测试老师',
+        email: 'teacher@example.com',
+      }),
+    )
+    localStorage.setItem('teacherRoutingTeacherId', 'T001')
   })
 }
 
@@ -1115,6 +1125,16 @@ test('keeps draft session in sidebar after page reload before server persists it
     localStorage.setItem('teacherSkillPinned', 'false')
     localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
+    localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
+    localStorage.setItem(
+      'teacherAuthSubject',
+      JSON.stringify({
+        teacher_id: 'T001',
+        teacher_name: '测试老师',
+        email: 'teacher@example.com',
+      }),
+    )
+    localStorage.setItem('teacherRoutingTeacherId', 'T001')
   })
 
   await page.route('http://localhost:8000/**', async (route) => {
