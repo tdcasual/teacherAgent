@@ -91,6 +91,16 @@ class ChartExecToolTest(unittest.TestCase):
             miss = client.get("/chart-runs/not_found/meta")
             self.assertEqual(miss.status_code, 404)
 
+    def test_chart_exec_tool_schema_exposes_optional_execution_profile(self):
+        from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+
+        tool = DEFAULT_TOOL_REGISTRY.require("chart.exec").to_openai()
+        params = tool["function"]["parameters"]["properties"]
+        self.assertIn("execution_profile", params)
+        execution_profile = params["execution_profile"]
+        self.assertEqual(execution_profile.get("default"), "trusted")
+        self.assertIn("sandboxed", execution_profile.get("enum", []))
+
 
 if __name__ == "__main__":
     unittest.main()

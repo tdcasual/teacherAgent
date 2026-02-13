@@ -847,6 +847,13 @@
    - 涉及文件：`llm_gateway.py`。  
    - 验证：扩展 `tests/test_llm_gateway.py` 覆盖 `nan/inf` 与极值夹紧场景并通过；`tests/test_llm_gateway_retry.py` 回归通过。
 
+14. P1：`chart.exec` 显式沙箱切换能力补齐（默认 trusted 保持不变）  
+   - 修复点：  
+     - `services/common/tool_registry.py` 的 `chart.exec` schema 暴露可选参数 `execution_profile`，支持 `trusted/sandboxed/template`；  
+     - 默认值仍为 `trusted`（保持现有行为不变），仅在显式指定时启用 `sandboxed` 路径。  
+   - 涉及文件：`services/common/tool_registry.py`。  
+   - 验证：扩展 `tests/test_chart_exec_tool.py` 校验 schema 已暴露 `execution_profile` 且默认 `trusted`；`tests/test_chart_executor_runtime_paths.py`、`tests/test_tool_registry_sync.py` 回归通过。
+
 ### 最近一次回归结果
 
 - `python3 -m pytest tests/test_grade_submission_security.py tests/test_student_submit_service.py tests/test_student_ops_api_service.py tests/test_security_auth_hardening.py tests/test_student_history_flow.py tests/test_student_routes.py tests/test_skill_routes.py tests/test_student_history_routes_types.py tests/test_student_profile_routes_types.py -q`  
@@ -889,3 +896,5 @@
   结果：`通过`
 - `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_frontend_upload_precheck.py tests/test_student_verify_contract_drift.py tests/test_llm_gateway.py tests/test_llm_gateway_retry.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
   结果：`78 passed, 2 skipped, 1 warning`
+- `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_frontend_upload_precheck.py tests/test_student_verify_contract_drift.py tests/test_llm_gateway.py tests/test_llm_gateway_retry.py tests/test_chart_exec_tool.py tests/test_chart_executor_runtime_paths.py tests/test_tool_registry_sync.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
+  结果：`102 passed, 2 skipped, 1 warning`

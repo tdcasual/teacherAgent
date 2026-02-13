@@ -435,6 +435,12 @@ def build_default_registry() -> ToolRegistry:
                 "python_code": {"type": "string", "description": "Python code to execute. Use save_file(path) to save output files."},
                 "input_data": {"type": "object", "description": "optional JSON object passed to python as input_data"},
                 "chart_hint": {"type": "string", "description": "optional intent/notes"},
+                "execution_profile": {
+                    "type": "string",
+                    "description": "optional execution profile; default keeps trusted behavior",
+                    "enum": ["trusted", "sandboxed", "template"],
+                    "default": "trusted",
+                },
                 "timeout_sec": {"type": "integer", "default": 120},
                 "save_as": {"type": "string", "description": "optional PNG filename, e.g. main.png"},
                 "auto_install": {"type": "boolean", "default": False},
