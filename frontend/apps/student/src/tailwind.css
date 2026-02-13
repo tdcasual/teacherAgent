@@ -199,8 +199,13 @@ body {
   min-height: 0;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   background: var(--color-surface);
+}
+.student-layout > * {
+  min-width: 0;
+  min-height: 0;
 }
 .student-layout.sidebar-collapsed {
   grid-template-columns: 0px minmax(0, 1fr);
@@ -224,6 +229,18 @@ body {
   padding: 0;
   border-right: none;
   overflow: hidden;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+@supports not (scrollbar-gutter: stable) {
+  @media (min-width: 901px) {
+    .messages {
+      overflow-y: scroll;
+    }
+  }
 }
 
 /* ── Responsive ── */

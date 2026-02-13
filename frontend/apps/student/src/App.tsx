@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
-import { useWheelScrollZone } from '../../shared/useWheelScrollZone'
 import type { Message, RenderedMessage } from './appTypes'
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState'
 import { useVerification } from './hooks/useVerification'
@@ -47,23 +46,6 @@ export default function App() {
     dispatch,
   })
 
-  // ── Wheel scroll zone ──
-  useWheelScrollZone({
-    appRef,
-    defaultZone: 'chat' as const,
-    resolveTarget: (zone: string) => {
-      const root = appRef.current
-      if (!root) return null
-      if (zone === 'sidebar') return root.querySelector('.session-groups') as HTMLElement | null
-      return root.querySelector('.messages') as HTMLElement | null
-    },
-    detectors: [
-      { zone: 'sidebar', selector: '.session-sidebar', when: () => state.sidebarOpen },
-      { zone: 'chat', selector: '.chat-shell' },
-    ],
-    resetWhen: [{ zone: 'sidebar', condition: !state.sidebarOpen }],
-  })
-
   // ── Rendered messages (markdown cache) ──
   const renderedMessages = useMemo(() => {
     const cache = refs.markdownCacheRef.current
@@ -98,6 +80,20 @@ export default function App() {
     const next = state.todayAssignment?.assignment_id || `general_${todayDate()}`
     setActiveSession(next)
   }, [state.verifiedStudent?.student_id, state.todayAssignment?.assignment_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
+
+  // ── Keep desktop layout stable: sidebar is default-visible on desktop ──
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(min-width: 901px)')
+    const syncDesktopSidebar = () => {
+      if (!media.matches) return
+      if (state.sidebarOpen) return
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: true })
+    }
+    syncDesktopSidebar()
+    media.addEventListener('change', syncDesktopSidebar)
+    return () => media.removeEventListener('change', syncDesktopSidebar)
+  }, [state.sidebarOpen, dispatch])
 
   // ── Auto-load session messages ──
   useEffect(() => {

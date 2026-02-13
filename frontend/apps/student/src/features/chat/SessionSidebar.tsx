@@ -120,13 +120,13 @@ export default function SessionSidebar(props: Props) {
                   return (
                     <div
                       key={sid}
-                      className={`relative rounded-xl border px-2.5 py-2 transition-[border-color,background] duration-150 max-[900px]:px-[9px] max-[900px]:py-2 ${
+                      className={`session-item relative rounded-xl border px-2.5 py-2 transition-[border-color,background] duration-150 max-[900px]:px-[9px] max-[900px]:py-2 ${
                         isActive ? 'border-[#86d6c4] bg-[#f4fbf8]' : 'border-border bg-white hover:border-[#cfd4dc] hover:bg-[#fcfcfd]'
-                      }`}
+                      } ${isActive ? 'active' : ''}`}
                     >
-                      <button type="button" className="w-full border-none bg-transparent pr-7 text-left cursor-pointer block" onClick={() => onSelectSession(sid)}>
+                      <button type="button" className="session-select w-full border-none bg-transparent pr-7 text-left cursor-pointer block" onClick={() => onSelectSession(sid)}>
                         <div className="grid gap-0.5">
-                          <div className="text-[13px] font-semibold text-ink leading-[1.35] whitespace-nowrap overflow-hidden text-ellipsis">{getSessionTitle(sid)}</div>
+                          <div className="session-id text-[13px] font-semibold text-ink leading-[1.35] whitespace-nowrap overflow-hidden text-ellipsis">{getSessionTitle(sid)}</div>
                           <div className="text-[11px] text-muted leading-[1.3]">
                             {(item.message_count || 0).toString()} 条{updatedLabel ? ` · ${updatedLabel}` : ''}
                           </div>
@@ -138,7 +138,7 @@ export default function SessionSidebar(props: Props) {
                           type="button"
                           id={triggerId}
                           ref={(node) => setSessionMenuTriggerRef(sid, node)}
-                          className="w-[22px] h-[22px] border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151]"
+                          className="session-menu-trigger w-[22px] h-[22px] border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151]"
                           aria-haspopup="menu"
                           aria-expanded={isMenuOpen}
                           aria-controls={menuId}
@@ -152,7 +152,7 @@ export default function SessionSidebar(props: Props) {
                           <div
                             id={menuId}
                             ref={(node) => setSessionMenuRef(sid, node)}
-                            className="absolute top-[26px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-0.5 z-2 max-[900px]:min-w-[112px]"
+                            className="session-menu absolute top-[26px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-0.5 z-2 max-[900px]:min-w-[112px]"
                             role="menu"
                             aria-orientation="vertical"
                             aria-labelledby={triggerId}

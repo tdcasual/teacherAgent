@@ -234,4 +234,69 @@ test.describe('student narrow layout stability', () => {
     expect(viewport).not.toBeNull()
     expect(box!.height).toBeGreaterThan(viewport!.height * 0.6)
   })
+
+  test('desktop layout keeps session sidebar on the left and chat panel on the right', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await setupStudentState(page)
+    await setupStudentApiMocksWithReply(page, '你好')
+    await page.goto('/')
+
+    const sidebar = page.locator('.session-sidebar')
+    const chat = page.getByTestId('student-chat-panel')
+    await expect(sidebar).toBeVisible()
+    await expect(chat).toBeVisible()
+
+    const sidebarRect = await sidebar.boundingBox()
+    const chatRect = await chat.boundingBox()
+    expect(sidebarRect).not.toBeNull()
+    expect(chatRect).not.toBeNull()
+    expect(sidebarRect!.x).toBeLessThan(chatRect!.x)
+    expect(sidebarRect!.width).toBeLessThan(chatRect!.width)
+  })
+
+  test('wheel scrolling messages does not collapse chat panel layout', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const longReply = '用于触发滚动与布局稳定性验证的回复内容。'.repeat(120)
+    await setupStudentState(page)
+    await setupStudentApiMocksWithReply(page, longReply)
+    await page.goto('/')
+
+    const composerInput = page.locator('textarea').first()
+    await expect(composerInput).toBeVisible()
+    for (let i = 1; i <= 6; i += 1) {
+      await composerInput.fill(`滚轮布局稳定性校验 ${i}`)
+      await composerInput.press('Enter')
+      await expect.poll(async () => composerInput.isDisabled()).toBe(false)
+    }
+
+    const chat = page.getByTestId('student-chat-panel')
+    const messages = page.locator('.messages')
+    await expect(chat).toBeVisible()
+    await expect(messages).toBeVisible()
+
+    const before = await chat.boundingBox()
+    expect(before).not.toBeNull()
+
+    const messagesBox = await messages.boundingBox()
+    expect(messagesBox).not.toBeNull()
+    await page.mouse.move(messagesBox!.x + messagesBox!.width / 2, messagesBox!.y + messagesBox!.height / 2)
+    for (let i = 0; i < 12; i += 1) {
+      await page.mouse.wheel(0, 220)
+      await page.waitForTimeout(16)
+    }
+    await page.waitForTimeout(120)
+
+    const after = await chat.boundingBox()
+    expect(after).not.toBeNull()
+    expect(Math.abs(after!.width - before!.width)).toBeLessThanOrEqual(2)
+    expect(Math.abs(after!.height - before!.height)).toBeLessThanOrEqual(2)
+
+    const composerBottomGap = await page.evaluate(() => {
+      const composer = document.querySelector('.composer')
+      const rect = composer?.getBoundingClientRect()
+      return rect ? window.innerHeight - rect.bottom : null
+    })
+    expect(composerBottomGap).not.toBeNull()
+    expect(composerBottomGap!).toBeLessThanOrEqual(2)
+  })
 })
