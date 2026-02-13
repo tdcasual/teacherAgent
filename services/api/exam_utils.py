@@ -240,6 +240,15 @@ def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
     return out
 
 
+def _xlsx_parse_timeout_sec() -> int:
+    raw = str(os.getenv("EXAM_PARSE_XLSX_TIMEOUT_SEC", "300") or "300").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = 300
+    return max(1, min(value, 3600))
+
+
 def _normalize_exam_chart_types(value: Any) -> List[str]:
     raw_items: List[str] = []
     if isinstance(value, list):
@@ -282,7 +291,14 @@ def _parse_xlsx_with_script(
         cmd += ["--class-name", class_name_hint]
     if subject_candidate_id:
         cmd += ["--subject-candidate-id", str(subject_candidate_id)]
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=os.environ.copy(), cwd=str(APP_ROOT))
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+        cwd=str(APP_ROOT),
+        timeout=_xlsx_parse_timeout_sec(),
+    )
     report: Dict[str, Any] = {}
     if report_path.exists():
         try:

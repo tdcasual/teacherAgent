@@ -38,3 +38,18 @@ def test_compose_backup_and_qdrant_have_runtime_safety_baseline() -> None:
     assert "mem_limit:" in qdrant
     assert "cpus:" in qdrant
     assert "healthcheck:" in qdrant
+
+
+def test_compose_backup_services_use_minimum_required_mounts() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    required_mounts = (
+        "./scripts/backup:/workspace/scripts/backup:ro",
+        "./data:/workspace/data:ro",
+        "./uploads:/workspace/uploads:ro",
+        "./output:/workspace/output",
+    )
+    for service in ("backup_scheduler", "backup_daily_full", "backup_verify_weekly"):
+        block = _service_block(text, service)
+        assert "./:/workspace" not in block
+        for mount in required_mounts:
+            assert mount in block, f"{service} missing mount: {mount}"

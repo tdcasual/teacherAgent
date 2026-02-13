@@ -29,10 +29,72 @@ _MAX_PIP_TIMEOUT_SEC = 1200
 _CHART_ENV_META_FILE = ".env_meta.json"
 _CHART_ENV_GC_STATE_FILE = ".gc_state.json"
 _CHART_ENV_LEASE_PREFIX = ".lease_"
+_TRUSTED_ALERT_PATTERNS = [
+    (re.compile(r"\bsubprocess\b"), "subprocess"),
+    (re.compile(r"\bos\.system\s*\("), "os.system"),
+    (re.compile(r"\bos\.popen\s*\("), "os.popen"),
+    (re.compile(r"\beval\s*\("), "eval"),
+    (re.compile(r"\bexec\s*\("), "exec"),
+    (re.compile(r"\b__import__\s*\("), "__import__"),
+    (re.compile(r"\bsocket\b"), "socket"),
+]
 
 
 def _iso_now() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _parse_csv_lower_set(value: Any) -> set[str]:
+    text = str(value or "").strip()
+    if not text:
+        return set()
+    out: set[str] = set()
+    for item in re.split(r"[,\s;；，]+", text):
+        token = str(item or "").strip().lower()
+        if token:
+            out.add(token)
+    return out
+
+
+def _chart_exec_audit_context(args: Dict[str, Any]) -> Dict[str, str]:
+    source = str(args.get("_audit_source") or args.get("source") or "").strip().lower() or "unknown"
+    role = str(args.get("_audit_role") or "").strip().lower()
+    actor = str(args.get("_audit_actor") or "").strip()
+    return {"source": source, "role": role, "actor": actor}
+
+
+def _trusted_risk_alerts(
+    python_code: str,
+    *,
+    auto_install: bool,
+    requested_packages: List[str],
+) -> List[str]:
+    alerts: List[str] = []
+    for pattern, label in _TRUSTED_ALERT_PATTERNS:
+        if pattern.search(python_code or ""):
+            alerts.append(label)
+    if auto_install and requested_packages:
+        alerts.append("auto_install_with_packages")
+    return alerts
+
+
+def _trusted_policy_denial(*, role: str, source: str) -> Optional[str]:
+    allowed_sources = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES"))
+    allowed_roles = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES"))
+    if allowed_sources and source not in allowed_sources:
+        return "trusted_source_not_allowed"
+    if allowed_roles and role not in allowed_roles:
+        return "trusted_role_not_allowed"
+    return None
+
+
+def _audit_log(event: str, payload: Dict[str, Any]) -> None:
+    record = {"ts": _iso_now(), "event": event}
+    record.update(payload)
+    try:
+        _log.info("chart_exec.audit %s", json.dumps(record, ensure_ascii=False, default=str))
+    except Exception:
+        _log.debug("chart exec audit log failed for event=%s", event, exc_info=True)
 
 
 def _safe_run_id(value: Any) -> Optional[str]:
@@ -709,13 +771,63 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
     )
     from .global_limits import GLOBAL_CHART_EXEC_SEMAPHORE
 
-    python_code = str(args.get("python_code") or "")
+    exec_args = dict(args or {})
+    python_code = str(exec_args.get("python_code") or "")
     if not python_code.strip():
         return {"error": "missing_python_code"}
 
-    execution_profile = str(args.get("execution_profile") or "trusted").strip()
+    execution_profile = str(exec_args.get("execution_profile") or "trusted").strip()
     if execution_profile not in ("template", "trusted", "sandboxed"):
         execution_profile = "trusted"
+
+    audit_context = _chart_exec_audit_context(exec_args)
+    auto_install = _normalize_bool(exec_args.get("auto_install"), default=False)
+    requested_packages = _normalize_packages(exec_args.get("packages"))
+    trusted_alerts: List[str] = []
+
+    if execution_profile == "trusted":
+        trusted_alerts = _trusted_risk_alerts(
+            python_code,
+            auto_install=auto_install,
+            requested_packages=requested_packages,
+        )
+        if trusted_alerts:
+            _log.warning("chart.exec trusted profile risk alerts: %s", ",".join(trusted_alerts))
+        denied_reason = _trusted_policy_denial(
+            role=audit_context.get("role") or "",
+            source=audit_context.get("source") or "",
+        )
+        if denied_reason:
+            _audit_log(
+                "chart.exec.policy.denied",
+                {
+                    "execution_profile": execution_profile,
+                    "source": audit_context.get("source"),
+                    "role": audit_context.get("role"),
+                    "actor": audit_context.get("actor"),
+                    "detail": denied_reason,
+                },
+            )
+            return {
+                "error": "chart_exec_trusted_forbidden",
+                "detail": denied_reason,
+                "execution_profile": execution_profile,
+            }
+
+    exec_args["_audit_context"] = audit_context
+    exec_args["_trusted_risk_alerts"] = list(trusted_alerts)
+    _audit_log(
+        "chart.exec.start",
+        {
+            "execution_profile": execution_profile,
+            "source": audit_context.get("source"),
+            "role": audit_context.get("role"),
+            "actor": audit_context.get("actor"),
+            "auto_install": auto_install,
+            "requested_packages": requested_packages,
+            "trusted_risk_alerts": trusted_alerts,
+        },
+    )
 
     # Sandboxed profile: scan code before execution
     if execution_profile == "sandboxed":
@@ -729,9 +841,27 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
         return {"error": "chart_exec_busy", "message": "Too many concurrent chart executions"}
 
     try:
-        return _execute_chart_exec_inner(
-            args, app_root, uploads_dir, python_code, execution_profile,
+        result = _execute_chart_exec_inner(
+            exec_args, app_root, uploads_dir, python_code, execution_profile,
         )
+        _audit_log(
+            "chart.exec.finish",
+            {
+                "execution_profile": execution_profile,
+                "source": audit_context.get("source"),
+                "role": audit_context.get("role"),
+                "actor": audit_context.get("actor"),
+                "ok": bool(result.get("ok")),
+                "run_id": result.get("run_id"),
+                "exit_code": result.get("exit_code"),
+                "timed_out": bool(result.get("timed_out")),
+                "auto_install": bool(result.get("auto_install")),
+                "requested_packages": result.get("requested_packages") or [],
+                "installed_packages": result.get("installed_packages") or [],
+                "trusted_risk_alerts": trusted_alerts,
+            },
+        )
+        return result
     finally:
         GLOBAL_CHART_EXEC_SEMAPHORE.release()
 
@@ -757,6 +887,12 @@ def _execute_chart_exec_inner(
     save_as = _safe_file_name(args.get("save_as"), default="main.png")
     chart_hint = str(args.get("chart_hint") or "").strip()
     input_data = args.get("input_data")
+    raw_audit = args.get("_audit_context") if isinstance(args, dict) else None
+    audit_context = raw_audit if isinstance(raw_audit, dict) else {}
+    audit_source = str(audit_context.get("source") or "unknown").strip().lower() or "unknown"
+    audit_role = str(audit_context.get("role") or "").strip().lower()
+    audit_actor = str(audit_context.get("actor") or "").strip()
+    trusted_risk_alerts = args.get("_trusted_risk_alerts") if isinstance(args.get("_trusted_risk_alerts"), list) else []
 
     chart_root = uploads_dir / "charts"
     run_root = uploads_dir / "chart_runs"
@@ -820,6 +956,13 @@ def _execute_chart_exec_inner(
                     "environment_scope": env_scope,
                     "env_gc": env_gc,
                     "meta_url": f"/chart-runs/{run_id}/meta",
+                    "execution_profile": execution_profile,
+                    "audit": {
+                        "source": audit_source,
+                        "role": audit_role,
+                        "actor": audit_actor,
+                        "trusted_risk_alerts": trusted_risk_alerts,
+                    },
                 }
                 meta_path.write_text(
                     json.dumps({"run_id": run_id, "ok": False, **error_payload}, ensure_ascii=False, indent=2),
@@ -966,6 +1109,7 @@ def _execute_chart_exec_inner(
         "run_id": run_id,
         "started_at": started_at,
         "finished_at": finished_at,
+        "execution_profile": execution_profile,
         "timeout_sec": timeout_sec,
         "timed_out": timed_out,
         "exit_code": exit_code,
@@ -987,12 +1131,19 @@ def _execute_chart_exec_inner(
         "image_url": image_url,
         "artifacts": artifacts,
         "artifacts_markdown": artifacts_markdown,
+        "audit": {
+            "source": audit_source,
+            "role": audit_role,
+            "actor": audit_actor,
+            "trusted_risk_alerts": trusted_risk_alerts,
+        },
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {
         "ok": ok,
         "run_id": run_id,
+        "execution_profile": execution_profile,
         "timed_out": timed_out,
         "timeout_sec": timeout_sec,
         "exit_code": exit_code,
@@ -1010,6 +1161,12 @@ def _execute_chart_exec_inner(
         "install_logs": install_logs,
         "env_gc": env_gc,
         "attempts": attempts,
+        "audit": {
+            "source": audit_source,
+            "role": audit_role,
+            "actor": audit_actor,
+            "trusted_risk_alerts": trusted_risk_alerts,
+        },
         "meta_url": f"/chart-runs/{run_id}/meta",
     }
 

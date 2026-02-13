@@ -367,6 +367,8 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
                 "packages": merged_packages,
                 "max_retries": 2,
                 "execution_profile": "sandboxed",
+                "_audit_source": "chart.agent.run",
+                "_audit_role": "teacher",
             },
             deps.app_root,
             deps.uploads_dir,

@@ -206,7 +206,12 @@ def tool_dispatch(
         denied = _require_teacher(role, "chart.exec requires teacher role")
         if denied:
             return denied
-        return deps.chart_exec(args)
+        chart_exec_args = dict(args or {})
+        chart_exec_args["_audit_source"] = "tool_dispatch.chart.exec"
+        chart_exec_args["_audit_role"] = str(role or "").strip().lower()
+        if teacher_id:
+            chart_exec_args["_audit_actor"] = str(teacher_id).strip()
+        return deps.chart_exec(chart_exec_args)
     if name == "teacher.workspace.init":
         teacher_id = deps.resolve_teacher_id(args.get("teacher_id"))
         base = deps.ensure_teacher_workspace(teacher_id)

@@ -48,7 +48,13 @@ def run_script(args: List[str]) -> str:
     root = str(APP_ROOT)
     current = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{root}{os.pathsep}{current}" if current else root
-    proc = subprocess.run(args, capture_output=True, text=True, env=env, cwd=root)
+    timeout_raw = str(os.getenv("RUN_SCRIPT_TIMEOUT_SEC", "300") or "300").strip()
+    try:
+        timeout_sec = int(timeout_raw)
+    except Exception:
+        timeout_sec = 300
+    timeout_sec = max(1, min(timeout_sec, 3600))
+    proc = subprocess.run(args, capture_output=True, text=True, env=env, cwd=root, timeout=timeout_sec)
     if proc.returncode != 0:
         raise HTTPException(status_code=500, detail=proc.stderr or proc.stdout)
     return proc.stdout

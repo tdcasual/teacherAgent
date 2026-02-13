@@ -87,6 +87,23 @@ class TestLLMGateway(unittest.TestCase):
         )
         self.assertEqual(timeout_sec, (1.0, 1.0))
 
+    def test_resolve_target_formats_gemini_native_model_endpoint(self):
+        previous_key = os.environ.get("GEMINI_API_KEY")
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key"
+        try:
+            gateway = LLMGateway(self.registry_path)
+            target = gateway.resolve_target(
+                provider="gemini",
+                mode="gemini-native",
+                model="gemini-1.5-flash",
+            )
+            self.assertEqual(target.endpoint, "/models/gemini-1.5-flash:generateContent")
+        finally:
+            if previous_key is None:
+                os.environ.pop("GEMINI_API_KEY", None)
+            else:
+                os.environ["GEMINI_API_KEY"] = previous_key
+
 
 if __name__ == "__main__":
     unittest.main()

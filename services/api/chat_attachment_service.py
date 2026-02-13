@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from .fs_atomic import atomic_write_json, atomic_write_text
+
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_MESSAGE = 5
@@ -84,7 +86,7 @@ def _read_meta(path: Path) -> Dict[str, Any]:
 
 
 def _write_meta(path: Path, payload: Dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(path, payload)
 
 
 def _detect_upload_size(upload: Any) -> Optional[int]:
@@ -225,9 +227,7 @@ async def upload_chat_attachments(
                     error_code = "extract_empty"
                     error_detail = "附件解析结果为空"
                 else:
-                    (attachment_dir / "extracted.txt").write_text(
-                        str(extracted_text), encoding="utf-8"
-                    )
+                    atomic_write_text(attachment_dir / "extracted.txt", str(extracted_text), encoding="utf-8")
             except Exception as exc:
                 status = "failed"
                 error_code = "extract_failed"

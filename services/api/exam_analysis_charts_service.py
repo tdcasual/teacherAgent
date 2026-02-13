@@ -414,6 +414,8 @@ def exam_analysis_charts_generate(args: Dict[str, Any], deps: ExamAnalysisCharts
                 "timeout_sec": timeout_sec,
                 "save_as": save_as,
                 "execution_profile": "template",
+                "_audit_source": "exam.analysis.charts.generate",
+                "_audit_role": "teacher",
             },
             app_root=deps.app_root,
             uploads_dir=deps.uploads_dir,

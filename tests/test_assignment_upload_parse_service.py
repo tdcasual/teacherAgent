@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from services.api.assignment_upload_parse_service import AssignmentUploadParseDeps, process_upload_job
 
@@ -108,6 +109,36 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
             self.assertTrue(parsed_path.exists())
             payload = json.loads(parsed_path.read_text(encoding="utf-8"))
             self.assertEqual(payload.get("requirements", {}).get("subject"), "物理")
+
+    def test_success_path_uses_atomic_writers(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job = {"source_files": ["paper.pdf"], "answer_files": ["answer.md"]}
+            deps = self._deps(
+                root,
+                job,
+                writes,
+                llm_parse_assignment_payload=lambda _source_text, _answer_text: {
+                    "questions": [{"stem": "Q1"}],
+                    "requirements": {"subject": "物理"},
+                },
+            )
+
+            def _atomic_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding=encoding)
+
+            def _atomic_json(path: Path, payload: dict) -> None:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+            with patch("services.api.assignment_upload_parse_service.atomic_write_text", side_effect=_atomic_text) as text_writer:
+                with patch("services.api.assignment_upload_parse_service.atomic_write_json", side_effect=_atomic_json) as json_writer:
+                    process_upload_job("job-1", deps)
+            self.assertEqual(writes[-1][1].get("status"), "done")
+            self.assertGreaterEqual(text_writer.call_count, 1)
+            self.assertGreaterEqual(json_writer.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -121,6 +121,65 @@ def test_execute_chart_exec_invalid_profile_falls_back_to_trusted(
     assert sem.release_calls == 1
 
 
+def test_execute_chart_exec_trusted_policy_blocks_disallowed_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", "exam.analysis.charts.generate")
+
+    out = ce.execute_chart_exec(
+        {
+            "python_code": "print(1)",
+            "execution_profile": "trusted",
+            "_audit_source": "tool_dispatch.chart.exec",
+            "_audit_role": "teacher",
+        },
+        tmp_path,
+        tmp_path / "uploads",
+    )
+
+    assert out["error"] == "chart_exec_trusted_forbidden"
+    assert out["detail"] == "trusted_source_not_allowed"
+
+
+def test_execute_chart_exec_passes_trusted_risk_alerts_to_inner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", raising=False)
+    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES", raising=False)
+    sem = _FakeSemaphore(acquire_result=True)
+    monkeypatch.setattr(global_limits, "GLOBAL_CHART_EXEC_SEMAPHORE", sem)
+
+    captured: Dict[str, Any] = {}
+
+    def _fake_inner(args: Dict[str, Any], app_root: Path, uploads_dir: Path, python_code: str, execution_profile: str) -> Dict[str, Any]:
+        captured["args"] = dict(args)
+        return {"ok": True, "run_id": "chr_test"}
+
+    monkeypatch.setattr(ce, "_execute_chart_exec_inner", _fake_inner)
+
+    out = ce.execute_chart_exec(
+        {
+            "python_code": "import subprocess\nsubprocess.run(['echo','ok'])",
+            "execution_profile": "trusted",
+            "auto_install": True,
+            "packages": ["numpy"],
+            "_audit_source": "tool_dispatch.chart.exec",
+            "_audit_role": "teacher",
+        },
+        tmp_path,
+        tmp_path / "uploads",
+    )
+
+    assert out["ok"] is True
+    alerts = (captured.get("args") or {}).get("_trusted_risk_alerts") or []
+    assert isinstance(alerts, list)
+    assert "subprocess" in alerts
+    assert "auto_install_with_packages" in alerts
+    assert sem.release_calls == 1
+
+
 def test_execute_chart_exec_inner_venv_init_failed_writes_meta(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -260,6 +319,49 @@ def test_execute_chart_exec_inner_timeout_result(
     assert out["exit_code"] == -1
     assert "process timed out" in out["stderr"]
     assert out["attempts"][0]["timed_out"] is True
+
+
+def test_execute_chart_exec_inner_meta_contains_audit_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_root = tmp_path / "app"
+    uploads_dir = tmp_path / "uploads"
+    app_root.mkdir(parents=True)
+    uploads_dir.mkdir(parents=True)
+    run_id = _set_fixed_uuid(monkeypatch, "a" * 32)
+    _patch_inner_sandbox(monkeypatch)
+
+    def _run(*args: Any, **kwargs: Any) -> Any:
+        image = uploads_dir / "charts" / run_id / "main.png"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"\x89PNG\r\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(ce.subprocess, "run", _run)
+
+    out = ce._execute_chart_exec_inner(
+        {
+            "python_code": "print(1)",
+            "_audit_context": {
+                "source": "tool_dispatch.chart.exec",
+                "role": "teacher",
+                "actor": "teacher_a",
+            },
+            "_trusted_risk_alerts": ["subprocess"],
+        },
+        app_root,
+        uploads_dir,
+        "print(1)",
+        "trusted",
+    )
+
+    assert out["ok"] is True
+    meta = json.loads((uploads_dir / "chart_runs" / run_id / "meta.json").read_text(encoding="utf-8"))
+    assert meta["execution_profile"] == "trusted"
+    assert (meta.get("audit") or {}).get("source") == "tool_dispatch.chart.exec"
+    assert (meta.get("audit") or {}).get("role") == "teacher"
+    assert (meta.get("audit") or {}).get("trusted_risk_alerts") == ["subprocess"]
 
 
 def test_execute_chart_exec_inner_sandbox_injects_fs_guard(

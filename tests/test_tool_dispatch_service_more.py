@@ -296,6 +296,25 @@ def test_tool_dispatch_chart_tools_and_llm_get_require_teacher_role():
     assert allowed_get["tool"] == "teacher.llm_routing.get"
 
 
+def test_tool_dispatch_chart_exec_attaches_audit_context():
+    deps, calls = _deps({"chart.exec"})
+
+    out = tool_dispatch(
+        "chart.exec",
+        {"python_code": "print(1)"},
+        role="teacher",
+        deps=deps,
+        teacher_id="teacher_a",
+    )
+
+    assert out["tool"] == "chart.exec"
+    payload = calls["chart.exec"]
+    assert isinstance(payload, dict)
+    assert payload.get("_audit_source") == "tool_dispatch.chart.exec"
+    assert payload.get("_audit_role") == "teacher"
+    assert payload.get("_audit_actor") == "teacher_a"
+
+
 def test_tool_dispatch_falls_back_to_unknown_when_registry_accepts_unhandled_name():
     deps, _ = _deps({"custom.unhandled"})
     out = tool_dispatch("custom.unhandled", {"x": 1}, role="teacher", deps=deps)
