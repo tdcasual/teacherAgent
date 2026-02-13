@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from .auth_service import get_current_principal
-
 
 MAX_FILES_PER_UPLOAD_FIELD = 20
 MAX_UPLOAD_FILE_SIZE_BYTES = 20 * 1024 * 1024
@@ -104,8 +103,8 @@ async def _save_uploads(
     saved: List[str] = []
     for upload, filename in files:
         dest = target_dir / filename
-        written = await deps.save_upload_file(upload, dest)
-        size_bytes = int(written if written is not None else dest.stat().st_size)
+        await deps.save_upload_file(upload, dest)
+        size_bytes = int(dest.stat().st_size)
         if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
             dest.unlink(missing_ok=True)
             raise ValueError("单个文件大小不能超过 20MB")

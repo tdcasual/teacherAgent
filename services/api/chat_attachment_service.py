@@ -9,7 +9,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from .fs_atomic import atomic_write_json, atomic_write_text
 
-
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 MAX_FILES_PER_MESSAGE = 5
 MAX_TOTAL_SIZE_BYTES = 30 * 1024 * 1024

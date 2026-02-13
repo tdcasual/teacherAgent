@@ -148,8 +148,8 @@ async def assignment_upload(
         for f, fname in source_inputs:
             dest = source_dir / fname
             existed_before = dest.exists()
-            written = await deps.save_upload_file(f, dest)
-            size_bytes = int(written if written is not None else dest.stat().st_size)
+            await deps.save_upload_file(f, dest)
+            size_bytes = int(dest.stat().st_size)
             if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
                 if not existed_before:
                     dest.unlink(missing_ok=True)
@@ -171,8 +171,8 @@ async def assignment_upload(
         for f, fname in answer_inputs:
             dest = answers_dir / fname
             existed_before = dest.exists()
-            written = await deps.save_upload_file(f, dest)
-            size_bytes = int(written if written is not None else dest.stat().st_size)
+            await deps.save_upload_file(f, dest)
+            size_bytes = int(dest.stat().st_size)
             if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
                 if not existed_before:
                     dest.unlink(missing_ok=True)

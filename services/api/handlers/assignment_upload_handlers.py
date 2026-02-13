@@ -7,13 +7,13 @@ from typing import Any, Callable, Optional
 from fastapi import HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
-from ..auth_service import AuthError, enforce_upload_job_access
 from ..assignment_upload_confirm_gate_service import AssignmentUploadConfirmGateError
 from ..assignment_upload_confirm_service import AssignmentUploadConfirmError
 from ..assignment_upload_draft_save_service import AssignmentUploadDraftSaveError
 from ..assignment_upload_legacy_service import AssignmentUploadLegacyError
 from ..assignment_upload_query_service import AssignmentUploadQueryError
 from ..assignment_upload_start_service import AssignmentUploadStartError
+from ..auth_service import AuthError, enforce_upload_job_access
 
 
 @dataclass

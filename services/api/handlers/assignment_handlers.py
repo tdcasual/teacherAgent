@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 
@@ -53,15 +53,17 @@ async def teacher_assignments_progress(
     deps: AssignmentHandlerDeps,
 ) -> Any:
     date_str = deps.parse_date_str(date)
-    items = []
+    items: List[Dict[str, Any]] = []
     cursor = 0
     while True:
         page = await _maybe_await(deps.list_assignments(100, cursor))
-        page_items = page.get("assignments") or []
+        page_items_raw = page.get("assignments")
+        page_items_any = page_items_raw if isinstance(page_items_raw, list) else []
+        page_items = [item for item in page_items_any if isinstance(item, dict)]
         items.extend(page_items)
         if not page.get("has_more"):
             break
-        cursor = int(page.get("next_cursor") or (cursor + len(page_items)))
+        cursor = int(page.get("next_cursor") or (cursor + len(page_items_any)))
     out = []
     for it in items:
         if (it.get("date") or "") != date_str:

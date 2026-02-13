@@ -15,13 +15,13 @@ from datetime import datetime
 from ..job_repository import _atomic_write_json
 from ..teacher_assignment_preflight_service import TeacherAssignmentPreflightDeps
 from ..teacher_llm_routing_service import TeacherLlmRoutingDeps
+from ..teacher_persona_api_service import TeacherPersonaApiDeps
 from ..teacher_provider_registry_service import (
     TeacherProviderRegistryDeps,
 )
 from ..teacher_provider_registry_service import (
     merged_model_registry as _merged_model_registry_impl,
 )
-from ..teacher_persona_api_service import TeacherPersonaApiDeps
 from ..teacher_routing_api_service import TeacherRoutingApiDeps
 from . import get_app_core as _app_core
 

@@ -405,7 +405,8 @@ def _load_compiled_tools(skill_dir: Path) -> Tuple[str, Dict[str, Dict[str, Any]
             return cached[0], dict(cached[1])
 
     compiled = compile_skill_dynamic_tools(skill_dir)
-    tools = compiled.get("tools") if isinstance(compiled.get("tools"), list) else []
+    tools_raw = compiled.get("tools")
+    tools: List[Any] = tools_raw if isinstance(tools_raw, list) else []
     by_name: Dict[str, Dict[str, Any]] = {}
     for item in tools:
         if not isinstance(item, dict):
@@ -636,4 +637,3 @@ def dispatch_dynamic_tool(
             {"skill_id": skill_name, "tool_name": name, "attempts": attempts, "error": degraded["detail"]},
         )
     return degraded
-
