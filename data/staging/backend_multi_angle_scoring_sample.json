@@ -1,0 +1,65 @@
+{
+  "modules": {
+    "routes": {
+      "kpis": [
+        {"dimension": "correctness", "actual": 0.985, "target": 0.99, "direction": "higher_better", "weight": 2},
+        {"dimension": "security", "actual": 0.97, "target": 0.99, "direction": "higher_better"},
+        {"dimension": "reliability", "actual": 0.006, "target": 0.01, "direction": "lower_better"}
+      ],
+      "trend": {"improvement": 0.3, "stability": 0.2, "regression_events_norm": 0.0},
+      "bonus": 2,
+      "penalty": 0
+    },
+    "services": {
+      "kpis": [
+        {"dimension": "correctness", "actual": 0.98, "target": 0.99, "direction": "higher_better"},
+        {"dimension": "maintainability", "actual": 0, "target": 1, "direction": "lower_better", "weight": 0.5},
+        {"dimension": "maintainability", "actual": 0.95, "target": 1.0, "direction": "higher_better", "weight": 2},
+        {"dimension": "security", "actual": 0.99, "target": 1.0, "direction": "higher_better"}
+      ],
+      "trend": {"improvement": 0.5, "stability": 0.1, "regression_events_norm": 0.0},
+      "bonus": 3,
+      "penalty": 0
+    },
+    "workers": {
+      "kpis": [
+        {"dimension": "reliability", "actual": 0.985, "target": 0.99, "direction": "higher_better"},
+        {"dimension": "cost_performance", "actual": 1.15, "target": 1.0, "direction": "lower_better"},
+        {"dimension": "correctness", "actual": 0.96, "target": 0.99, "direction": "higher_better"}
+      ],
+      "trend": {"improvement": 0.1, "stability": 0.35, "regression_events_norm": 0.2},
+      "bonus": 0,
+      "penalty": 4
+    },
+    "runtime": {
+      "kpis": [
+        {"dimension": "reliability", "actual": 0.012, "target": 0.01, "direction": "lower_better"},
+        {"dimension": "security", "actual": 0.99, "target": 1.0, "direction": "higher_better"},
+        {"dimension": "maintainability", "actual": 0.9, "target": 1.0, "direction": "higher_better"}
+      ],
+      "trend": {"improvement": -0.2, "stability": 0.5, "regression_events_norm": 0.3},
+      "bonus": 0,
+      "penalty": 6
+    },
+    "wiring": {
+      "kpis": [
+        {"dimension": "maintainability", "actual": 0.93, "target": 1.0, "direction": "higher_better"},
+        {"dimension": "correctness", "actual": 0.97, "target": 0.99, "direction": "higher_better"},
+        {"dimension": "reliability", "actual": 0.99, "target": 0.99, "direction": "higher_better"}
+      ],
+      "trend": {"improvement": 0.15, "stability": 0.2, "regression_events_norm": 0.0},
+      "bonus": 1,
+      "penalty": 0
+    },
+    "skills": {
+      "kpis": [
+        {"dimension": "correctness", "actual": 0.95, "target": 0.98, "direction": "higher_better"},
+        {"dimension": "security", "actual": 0.98, "target": 1.0, "direction": "higher_better"},
+        {"dimension": "maintainability", "actual": 0.94, "target": 0.98, "direction": "higher_better"}
+      ],
+      "trend": {"improvement": 0.25, "stability": 0.15, "regression_events_norm": 0.0},
+      "bonus": 2,
+      "penalty": 0
+    }
+  }
+}

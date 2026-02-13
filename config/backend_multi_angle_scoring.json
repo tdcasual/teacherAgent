@@ -1,0 +1,68 @@
+{
+  "state_weight": 0.7,
+  "trend_weight": 0.3,
+  "module_weights": {
+    "routes": {
+      "correctness": 30,
+      "reliability": 20,
+      "maintainability": 15,
+      "security": 25,
+      "delivery": 5,
+      "cost_performance": 5
+    },
+    "services": {
+      "correctness": 30,
+      "reliability": 20,
+      "maintainability": 25,
+      "security": 15,
+      "delivery": 5,
+      "cost_performance": 5
+    },
+    "workers": {
+      "correctness": 20,
+      "reliability": 35,
+      "maintainability": 15,
+      "security": 10,
+      "delivery": 5,
+      "cost_performance": 15
+    },
+    "runtime": {
+      "correctness": 10,
+      "reliability": 40,
+      "maintainability": 20,
+      "security": 25,
+      "delivery": 0,
+      "cost_performance": 5
+    },
+    "wiring": {
+      "correctness": 25,
+      "reliability": 20,
+      "maintainability": 35,
+      "security": 10,
+      "delivery": 10,
+      "cost_performance": 0
+    },
+    "skills": {
+      "correctness": 30,
+      "reliability": 15,
+      "maintainability": 20,
+      "security": 25,
+      "delivery": 10,
+      "cost_performance": 0
+    }
+  },
+  "module_risk_weights": {
+    "routes": 0.2,
+    "services": 0.25,
+    "workers": 0.15,
+    "runtime": 0.2,
+    "wiring": 0.1,
+    "skills": 0.1
+  },
+  "trend": {
+    "base": 50,
+    "improvement_factor": 30,
+    "stability_factor": 15,
+    "regression_factor": 10
+  }
+}
