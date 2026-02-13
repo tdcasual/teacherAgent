@@ -28,13 +28,40 @@ def _ok_response():
 
 
 class TestClientKey(unittest.TestCase):
-    def test_uses_x_forwarded_for_first_ip(self):
+    def setUp(self):
+        self._orig_trust = rl_mod._trust_x_forwarded_for
+        self._orig_trusted = set(rl_mod._trusted_proxy_ips)
+
+    def tearDown(self):
+        rl_mod._trust_x_forwarded_for = self._orig_trust
+        rl_mod._trusted_proxy_ips = set(self._orig_trusted)
+
+    def test_uses_x_forwarded_for_first_ip_when_trusted(self):
+        rl_mod._trust_x_forwarded_for = True
+        rl_mod._trusted_proxy_ips = set()
         req = _make_request(forwarded_for="1.2.3.4, 5.6.7.8")
         self.assertEqual(rl_mod._client_key(req), "1.2.3.4")
 
     def test_strips_whitespace_from_forwarded(self):
+        rl_mod._trust_x_forwarded_for = True
+        rl_mod._trusted_proxy_ips = set()
         req = _make_request(forwarded_for="  9.8.7.6 , 1.1.1.1")
         self.assertEqual(rl_mod._client_key(req), "9.8.7.6")
+
+    def test_does_not_trust_forwarded_for_by_default(self):
+        rl_mod._trust_x_forwarded_for = False
+        rl_mod._trusted_proxy_ips = set()
+        req = _make_request(client_host="192.168.1.1", forwarded_for="9.8.7.6")
+        self.assertEqual(rl_mod._client_key(req), "192.168.1.1")
+
+    def test_trusts_forwarded_for_only_from_trusted_proxy(self):
+        rl_mod._trust_x_forwarded_for = True
+        rl_mod._trusted_proxy_ips = {"127.0.0.1"}
+        req = _make_request(client_host="10.0.0.2", forwarded_for="9.8.7.6")
+        self.assertEqual(rl_mod._client_key(req), "10.0.0.2")
+
+        req_trusted = _make_request(client_host="127.0.0.1", forwarded_for="9.8.7.6")
+        self.assertEqual(rl_mod._client_key(req_trusted), "9.8.7.6")
 
     def test_falls_back_to_client_host(self):
         req = _make_request(client_host="192.168.1.1")
@@ -66,7 +93,11 @@ class TestRateLimitMiddleware(unittest.TestCase):
         # Reset buckets for isolation.
         self._original_rpm = rl_mod._rpm
         self._original_buckets = rl_mod._buckets
+        self._original_last_seen = rl_mod._bucket_last_seen
+        self._original_max_buckets = rl_mod._max_buckets
         rl_mod._buckets = defaultdict(deque)
+        rl_mod._bucket_last_seen = {}
+        rl_mod._max_buckets = 4096
         # Patch os.getenv so PYTEST_CURRENT_TEST returns None inside the middleware
         self._patcher = patch.object(
             rl_mod.os, "getenv", side_effect=lambda k, *a: None if k == "PYTEST_CURRENT_TEST" else os.getenv(k, *a)
@@ -77,6 +108,8 @@ class TestRateLimitMiddleware(unittest.TestCase):
         self._patcher.stop()
         rl_mod._rpm = self._original_rpm
         rl_mod._buckets = self._original_buckets
+        rl_mod._bucket_last_seen = self._original_last_seen
+        rl_mod._max_buckets = self._original_max_buckets
 
     # -- basic pass-through --
 
@@ -211,6 +244,37 @@ class TestRateLimitMiddleware(unittest.TestCase):
         call_next.reset_mock()
         resp = _run(rl_mod.rate_limit_middleware(req_b, call_next))
         self.assertEqual(resp.status_code, 200)
+
+    def test_empty_bucket_is_removed_after_window(self):
+        rl_mod._rpm = 2
+        req = _make_request(client_host="10.0.0.88")
+        call_next = AsyncMock(return_value=_ok_response())
+
+        bucket = rl_mod._buckets["10.0.0.88"]
+        bucket.append(time.monotonic() - 120.0)
+        rl_mod._bucket_last_seen["10.0.0.88"] = time.monotonic() - 120.0
+
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("10.0.0.88", rl_mod._buckets)
+        self.assertEqual(len(rl_mod._buckets["10.0.0.88"]), 1)
+
+    def test_enforces_max_bucket_count_by_evicting_oldest(self):
+        rl_mod._rpm = 10
+        rl_mod._max_buckets = 2
+        now = time.monotonic()
+        rl_mod._buckets["a"].append(now - 2.0)
+        rl_mod._buckets["b"].append(now - 1.0)
+        rl_mod._bucket_last_seen["a"] = now - 2.0
+        rl_mod._bucket_last_seen["b"] = now - 1.0
+
+        req = _make_request(client_host="c")
+        call_next = AsyncMock(return_value=_ok_response())
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("a", rl_mod._buckets)
+        self.assertIn("b", rl_mod._buckets)
+        self.assertIn("c", rl_mod._buckets)
 
 
 if __name__ == "__main__":

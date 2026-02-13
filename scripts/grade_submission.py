@@ -38,6 +38,26 @@ except Exception:
     UnifiedLLMRequest = None
 
 
+SAFE_ID_RE = re.compile(r"^[\w-]+$")
+
+
+def require_safe_id(value: str, field: str) -> str:
+    token = str(value or "").strip()
+    if not token:
+        raise SystemExit(f"{field} is required")
+    if not SAFE_ID_RE.fullmatch(token):
+        raise SystemExit(f"Invalid {field}: only letters, digits, '_' and '-' are allowed")
+    return token
+
+
+def resolve_under(root: Path, *parts: str) -> Path:
+    root_resolved = root.resolve()
+    target = root_resolved.joinpath(*parts).resolve()
+    if target != root_resolved and root_resolved not in target.parents:
+        raise SystemExit(f"Invalid path outside allowed root: {target}")
+    return target
+
+
 def read_assignment_questions(path: Path):
     # assignment file format: csv with columns question_id, kp_id, stem_ref, answer_ref, answer_text(optional)
     with path.open(encoding="utf-8") as f:
@@ -413,7 +433,7 @@ def detect_assignment_id(text: str) -> Optional[str]:
 
 
 def find_assignment_id_by_scan(text: str) -> Optional[str]:
-    assignments_dir = Path("data/assignments")
+    assignments_dir = (ROOT / "data" / "assignments").resolve()
     if not assignments_dir.exists():
         return None
     for folder in assignments_dir.iterdir():
@@ -448,8 +468,10 @@ def main():
 
     load_env_from_dotenv(Path('.env'))
 
+    safe_student_id = require_safe_id(args.student_id, "student_id")
+    out_root = Path(args.out_dir).resolve()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_dir = Path(args.out_dir) / args.student_id / f"submission_{timestamp}"
+    base_dir = resolve_under(out_root, safe_student_id, f"submission_{timestamp}")
     ensure_dir(base_dir)
 
     files = [Path(f) for f in args.files]
@@ -468,15 +490,20 @@ def main():
             assignment_id = find_assignment_id_by_scan(ocr_text)
     if not assignment_id:
         raise SystemExit("Could not detect assignment_id. Provide --assignment-id.")
+    assignment_id = require_safe_id(assignment_id, "assignment_id")
 
     # resolve assignment questions path
-    questions_path = Path(args.assignment_questions) if args.assignment_questions else Path("data/assignments") / assignment_id / "questions.csv"
+    if args.assignment_questions:
+        questions_path = Path(args.assignment_questions).resolve()
+    else:
+        assignments_root = (ROOT / "data" / "assignments").resolve()
+        questions_path = resolve_under(assignments_root, assignment_id, "questions.csv")
     if not questions_path.exists():
         raise SystemExit(f"Assignment questions not found: {questions_path}")
     questions = read_assignment_questions(questions_path)
 
     # move submission into assignment bucket as well
-    assignment_bucket = Path(args.out_dir) / assignment_id / args.student_id / f"submission_{timestamp}"
+    assignment_bucket = resolve_under(out_root, assignment_id, safe_student_id, f"submission_{timestamp}")
     assignment_bucket.mkdir(parents=True, exist_ok=True)
 
     # copy OCR artifacts to assignment bucket
@@ -605,7 +632,7 @@ def main():
                 stat["correct"] += 1
 
     feedback_lines = []
-    feedback_lines.append(f"Student: {args.student_id}")
+    feedback_lines.append(f"Student: {safe_student_id}")
     feedback_lines.append(f"Assignment: {assignment_id}")
     graded_total = len(questions) - ungraded_count
     feedback_lines.append(f"Total matched: {correct_count}/{len(questions)} (graded: {graded_total})")
@@ -638,7 +665,7 @@ def main():
 
     # grading report + review queue
     report = {
-        "student_id": args.student_id,
+        "student_id": safe_student_id,
         "assignment_id": assignment_id,
         "graded_total": graded_total,
         "ungraded": ungraded_count,
@@ -652,7 +679,7 @@ def main():
 
     if review_items:
         review_payload = {
-            "student_id": args.student_id,
+            "student_id": safe_student_id,
             "assignment_id": assignment_id,
             "items": review_items,
         }
@@ -679,7 +706,7 @@ def main():
             medium_kp.append(kp)
 
     profile_lines = []
-    profile_lines.append(f"Student: {args.student_id}")
+    profile_lines.append(f"Student: {safe_student_id}")
     profile_lines.append(f"Assignment: {assignment_id}")
     profile_lines.append(f"Graded: {graded_total} | Ungraded: {ungraded_count}")
     profile_lines.append("")
@@ -711,9 +738,10 @@ def main():
         return
 
     # auto write student profile (derived fields only)
-    profile_store = Path("data/student_profiles") / f"{args.student_id}.json"
+    profiles_root = (ROOT / "data" / "student_profiles").resolve()
+    profile_store = resolve_under(profiles_root, f"{safe_student_id}.json")
     profile = load_profile(profile_store)
-    profile["student_id"] = args.student_id
+    profile["student_id"] = safe_student_id
     profile["last_updated"] = datetime.now().isoformat(timespec="seconds")
     profile["recent_weak_kp"] = weak_kp
     profile["recent_strong_kp"] = strong_kp

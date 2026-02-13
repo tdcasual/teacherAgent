@@ -8,8 +8,8 @@ from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, Up
 from .deps import AssignmentApplicationDeps
 
 
-async def list_assignments(*, deps: AssignmentApplicationDeps) -> Any:
-    return await deps.list_assignments()
+async def list_assignments(*, limit: int = 50, cursor: int = 0, deps: AssignmentApplicationDeps) -> Any:
+    return await deps.list_assignments(int(limit), int(cursor))
 
 
 async def get_teacher_assignment_progress(

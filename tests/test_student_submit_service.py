@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from fastapi import HTTPException
+
 from services.api.student_submit_service import StudentSubmitDeps, submit
 
 
@@ -73,6 +75,48 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("--assignment-id", args)
             self.assertIn("HW_1", args)
             self.assertNotIn("--auto-assignment", args)
+
+    async def test_submit_rejects_invalid_student_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentSubmitDeps(
+                uploads_dir=root / "uploads",
+                app_root=root / "repo",
+                student_submissions_dir=root / "submissions",
+                run_script=lambda _args: "ok",
+            )
+
+            with self.assertRaises(HTTPException) as ctx:
+                await submit(
+                    student_id="../escape",
+                    files=[_Upload(filename="a1.pdf", content=b"1")],
+                    assignment_id="HW_1",
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "invalid_student_id")
+
+    async def test_submit_rejects_invalid_assignment_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentSubmitDeps(
+                uploads_dir=root / "uploads",
+                app_root=root / "repo",
+                student_submissions_dir=root / "submissions",
+                run_script=lambda _args: "ok",
+            )
+
+            with self.assertRaises(HTTPException) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="a1.pdf", content=b"1")],
+                    assignment_id="../escape",
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "invalid_assignment_id")
 
 
 if __name__ == "__main__":

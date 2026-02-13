@@ -8,8 +8,8 @@ from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
 from .deps import ExamApplicationDeps
 
 
-def list_exams(*, deps: ExamApplicationDeps) -> Any:
-    return deps.list_exams()
+def list_exams(*, limit: int = 50, cursor: int = 0, deps: ExamApplicationDeps) -> Any:
+    return deps.list_exams(int(limit), int(cursor))
 
 
 def get_exam_detail(exam_id: str, *, deps: ExamApplicationDeps) -> Any:

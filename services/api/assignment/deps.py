@@ -8,7 +8,7 @@ from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, Up
 
 @dataclass(frozen=True)
 class AssignmentApplicationDeps:
-    list_assignments: Callable[[], Awaitable[Dict[str, Any]]]
+    list_assignments: Callable[[int, int], Awaitable[Dict[str, Any]]]
     teacher_assignment_progress: Callable[[str, bool], Awaitable[Dict[str, Any]]]
     teacher_assignments_progress: Callable[[Optional[str]], Awaitable[Dict[str, Any]]]
     assignment_requirements: Callable[[AssignmentRequirementsRequest], Awaitable[Dict[str, Any]]]
@@ -35,7 +35,9 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         )
 
     return AssignmentApplicationDeps(
-        list_assignments=lambda: core.assignment_handlers.assignments(
+        list_assignments=lambda limit, cursor: core.assignment_handlers.assignments(
+            limit=limit,
+            cursor=cursor,
             deps=core._assignment_handlers_deps()
         ),
         teacher_assignment_progress=lambda assignment_id, include_students: core.assignment_handlers.teacher_assignment_progress(

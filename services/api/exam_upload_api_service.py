@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .auth_service import AuthError, enforce_upload_job_access
+
 _log = logging.getLogger(__name__)
 
 
@@ -43,9 +45,14 @@ def _selected_candidate_id_from_schema(schema: Dict[str, Any]) -> str:
 
 def _load_job_or_raise(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, Any]:
     try:
-        return deps.load_exam_job(job_id)
+        job = deps.load_exam_job(job_id)
     except FileNotFoundError as exc:
         raise ExamUploadApiError(status_code=404, detail="job not found") from exc
+    try:
+        enforce_upload_job_access(job)
+    except AuthError as exc:
+        raise ExamUploadApiError(status_code=exc.status_code, detail=exc.detail) from exc
+    return job
 
 
 def exam_upload_status(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, Any]:

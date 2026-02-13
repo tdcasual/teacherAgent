@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+
+from ..auth_service import AuthError, require_principal
+
+
+def _require_teacher_or_admin() -> None:
+    try:
+        require_principal(roles=("teacher", "admin"))
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def register_assignment_generation_routes(
@@ -24,6 +33,7 @@ def register_assignment_generation_routes(
         source: Optional[str] = Form(""),
         requirements_json: Optional[str] = Form(""),
     ) -> Any:
+        _require_teacher_or_admin()
         return await assignment_app.post_generate_assignment(
             assignment_id=assignment_id,
             kp=kp,
@@ -43,6 +53,7 @@ def register_assignment_generation_routes(
 
     @router.post("/assignment/render")
     async def render_assignment(assignment_id: str = Form(...)) -> Any:
+        _require_teacher_or_admin()
         return await assignment_app.post_render_assignment(assignment_id, deps=app_deps)
 
     @router.post("/assignment/questions/ocr")
@@ -55,6 +66,7 @@ def register_assignment_generation_routes(
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ) -> Any:
+        _require_teacher_or_admin()
         return await assignment_app.post_assignment_questions_ocr(
             assignment_id=assignment_id,
             files=files,

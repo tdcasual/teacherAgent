@@ -95,6 +95,36 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
             self.assertEqual(detail["questions"][0].get("stem_text"), "题干文本")
             self.assertEqual(detail.get("delivery")["files"][0].get("url"), "/assignment/HW_1/download?file=paper%201.pdf")
 
+    def test_list_assignments_supports_pagination_and_limit_cap(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            assignments_dir = root / "data" / "assignments"
+            assignments_dir.mkdir(parents=True, exist_ok=True)
+            for i in range(1, 6):
+                folder = assignments_dir / f"HW_{i}"
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "meta.json").write_text(
+                    json.dumps(
+                        {
+                            "assignment_id": f"HW_{i}",
+                            "generated_at": f"2026-02-0{i}T09:00:00",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+            deps = self._catalog_deps(root)
+
+            page = list_assignments(limit=2, cursor=1, deps=deps)
+            self.assertEqual(page.get("total"), 5)
+            self.assertEqual(page.get("limit"), 2)
+            self.assertEqual(page.get("cursor"), 1)
+            self.assertTrue(page.get("has_more"))
+            self.assertEqual(len(page.get("assignments") or []), 2)
+
+            capped = list_assignments(limit=9999, cursor=0, deps=deps)
+            self.assertEqual(capped.get("limit"), 100)
+
     def test_postprocess_assignment_meta_writes_scope_and_expected_students(self):
         with TemporaryDirectory() as td:
             root = Path(td)

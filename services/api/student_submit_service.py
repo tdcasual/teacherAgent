@@ -2,11 +2,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Callable, Dict, List, Optional
+
+from fastapi import HTTPException
 
 
 def _default_sanitize_filename(name: str) -> str:
     return Path(str(name or "").strip()).name
+
+
+_SAFE_ID_RE = re.compile(r"^[\w-]+$")
+
+
+def _require_safe_id(value: str, field: str) -> str:
+    token = str(value or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail=f"{field} is required")
+    if not _SAFE_ID_RE.fullmatch(token):
+        raise HTTPException(status_code=400, detail=f"invalid_{field}")
+    return token
 
 
 @dataclass(frozen=True)
@@ -27,6 +42,7 @@ async def submit(
     deps: StudentSubmitDeps,
 ) -> Dict[str, Any]:
     deps.uploads_dir.mkdir(parents=True, exist_ok=True)
+    safe_student_id = _require_safe_id(student_id, "student_id")
 
     file_paths: List[str] = []
     for upload_file in files:
@@ -42,14 +58,14 @@ async def submit(
         "python3",
         str(script),
         "--student-id",
-        student_id,
+        safe_student_id,
         "--out-dir",
         str(deps.student_submissions_dir),
         "--files",
         *file_paths,
     ]
     if assignment_id:
-        args += ["--assignment-id", assignment_id]
+        args += ["--assignment-id", _require_safe_id(assignment_id, "assignment_id")]
     if auto_assignment or not assignment_id:
         args += ["--auto-assignment"]
 

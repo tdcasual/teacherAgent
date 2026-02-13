@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 from fastapi import HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
+from ..auth_service import AuthError, enforce_upload_job_access
 from ..assignment_upload_confirm_gate_service import AssignmentUploadConfirmGateError
 from ..assignment_upload_confirm_service import AssignmentUploadConfirmError
 from ..assignment_upload_draft_save_service import AssignmentUploadDraftSaveError
@@ -110,6 +111,10 @@ async def assignment_upload_confirm(req: UploadConfirmRequest, *, deps: Assignme
         job = deps.load_upload_job(req.job_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="job not found")
+    try:
+        enforce_upload_job_access(job)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
     try:
         ready = deps.ensure_assignment_upload_confirm_ready(job)

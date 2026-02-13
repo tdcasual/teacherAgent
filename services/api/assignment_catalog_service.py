@@ -9,6 +9,8 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
 _log = logging.getLogger(__name__)
+_DEFAULT_LIST_LIMIT = 50
+_MAX_LIST_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -86,10 +88,33 @@ def parse_iso_timestamp(value: Optional[str]) -> float:
         return 0.0
 
 
-def list_assignments(*, deps: AssignmentCatalogDeps) -> Dict[str, Any]:
+def _normalize_paging(limit: Any, cursor: Any) -> tuple[int, int]:
+    try:
+        limit_int = int(limit)
+    except Exception:
+        limit_int = _DEFAULT_LIST_LIMIT
+    try:
+        cursor_int = int(cursor)
+    except Exception:
+        cursor_int = 0
+    if limit_int <= 0:
+        limit_int = _DEFAULT_LIST_LIMIT
+    limit_int = min(limit_int, _MAX_LIST_LIMIT)
+    cursor_int = max(0, cursor_int)
+    return limit_int, cursor_int
+
+
+def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps: AssignmentCatalogDeps) -> Dict[str, Any]:
+    limit_int, cursor_int = _normalize_paging(limit, cursor)
     assignments_dir = deps.data_dir / "assignments"
     if not assignments_dir.exists():
-        return {"assignments": []}
+        return {
+            "assignments": [],
+            "total": 0,
+            "limit": limit_int,
+            "cursor": cursor_int,
+            "has_more": False,
+        }
 
     items = []
     for folder in assignments_dir.iterdir():
@@ -118,7 +143,17 @@ def list_assignments(*, deps: AssignmentCatalogDeps) -> Dict[str, Any]:
         )
 
     items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    return {"assignments": items}
+    total = len(items)
+    page = items[cursor_int : cursor_int + limit_int]
+    next_cursor = cursor_int + len(page)
+    return {
+        "assignments": page,
+        "total": total,
+        "limit": limit_int,
+        "cursor": cursor_int,
+        "next_cursor": next_cursor if next_cursor < total else None,
+        "has_more": next_cursor < total,
+    }
 
 
 def find_assignment_for_date(
