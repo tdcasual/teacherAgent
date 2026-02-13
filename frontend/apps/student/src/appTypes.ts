@@ -97,6 +97,12 @@ export type VerifiedStudent = {
   class_name?: string
 }
 
+export type StudentVerifyCandidate = {
+  candidate_id: string
+  student: VerifiedStudent
+  password_set?: boolean
+}
+
 export type StudentPersonaCard = {
   persona_id: string
   name?: string
@@ -122,6 +128,7 @@ export type VerifyResponse = {
   error?: string
   message?: string
   student?: VerifiedStudent
+  candidates?: StudentVerifyCandidate[]
 }
 
 export type StudentIdentifyResponse = {
@@ -131,11 +138,7 @@ export type StudentIdentifyResponse = {
   candidate_id?: string
   student?: VerifiedStudent
   password_set?: boolean
-  candidates?: Array<{
-    candidate_id: string
-    student: VerifiedStudent
-    password_set?: boolean
-  }>
+  candidates?: StudentVerifyCandidate[]
 }
 
 export type StudentLoginResponse = {

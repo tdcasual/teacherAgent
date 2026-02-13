@@ -26,6 +26,17 @@ const identifyStudent = async (apiBase: string, name: string, className: string)
   return (await res.json()) as StudentIdentifyResponse
 }
 
+const buildCandidateHint = (data: StudentIdentifyResponse): string => {
+  const classes = Array.isArray(data.candidates)
+    ? data.candidates
+      .map((item) => String(item?.student?.class_name || '').trim())
+      .filter(Boolean)
+    : []
+  if (!classes.length) return ''
+  const unique = Array.from(new Set(classes)).slice(0, 6)
+  return `候选班级：${unique.join('、')}${classes.length > unique.length ? ' 等' : ''}。`
+}
+
 export function useVerification({ state, dispatch }: UseVerificationParams) {
   const { apiBase, nameInput, classInput, credentialInput, credentialType, newPasswordInput } = state
 
@@ -60,7 +71,12 @@ export function useVerification({ state, dispatch }: UseVerificationParams) {
         const identifyData = await identifyStudent(apiBase, name, className)
         if (!identifyData.ok || !identifyData.candidate_id) {
           if (identifyData.error === 'multiple') {
-            dispatch({ type: 'SET', field: 'verifyError', value: '同名学生，请补充班级。' })
+            const hint = buildCandidateHint(identifyData)
+            dispatch({
+              type: 'SET',
+              field: 'verifyError',
+              value: hint ? `同名学生，请补充班级。${hint}` : '同名学生，请补充班级。',
+            })
           } else {
             dispatch({
               type: 'SET',
@@ -149,10 +165,13 @@ export function useVerification({ state, dispatch }: UseVerificationParams) {
       try {
         const identifyData = await identifyStudent(apiBase, name, className)
         if (!identifyData.ok || !identifyData.candidate_id) {
+          const hint = identifyData.error === 'multiple' ? buildCandidateHint(identifyData) : ''
           dispatch({
             type: 'SET',
             field: 'verifyError',
-            value: identifyData.message || '无法定位学生，请确认姓名和班级。',
+            value: hint
+              ? `同名学生，请补充班级。${hint}`
+              : identifyData.message || '无法定位学生，请确认姓名和班级。',
           })
           return
         }
