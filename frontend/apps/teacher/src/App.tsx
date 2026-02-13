@@ -63,7 +63,6 @@ import type {
   WorkflowIndicator,
 } from './appTypes'
 import 'katex/dist/katex.min.css'
-
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const DESKTOP_BREAKPOINT = 900
 const WORKBENCH_DEFAULT_WIDTH = 320
@@ -71,7 +70,6 @@ const WORKBENCH_MIN_WIDTH = 280
 const WORKBENCH_BASE_MAX_WIDTH = 620
 const WORKBENCH_MAX_WIDTH_RATIO = 0.42
 const WORKBENCH_HARD_MAX_WIDTH = 920
-
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))

@@ -55,6 +55,7 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 run_agent=lambda *_args, **_kwargs: calls.update({"run_agent": calls["run_agent"] + 1}) or {"reply": "OK"},
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+                resolve_student_persona_runtime=lambda _sid, _pid: {},
             )
             req = _Req(assignment_id="")
             req.messages = [_Msg("user", "给出这个文件中所有人的成绩")]

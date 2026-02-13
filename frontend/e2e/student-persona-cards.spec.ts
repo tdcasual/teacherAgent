@@ -331,7 +331,7 @@ test('student custom persona create update and avatar upload form flow works', a
     summary: '轻快但克制，强调步骤感',
   })
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"][accept*=".webp"]').setInputFiles({
     name: 'avatar.png',
     mimeType: 'image/png',
     buffer: Buffer.from('fake-avatar-bytes'),

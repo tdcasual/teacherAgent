@@ -149,7 +149,6 @@ export default function App() {
     pendingChatJob: state.pendingChatJob,
     attachments: readyAttachmentRefs,
     activePersonaId: state.personaEnabled ? state.activePersonaId : '',
-    attachments: readyAttachmentRefs,
     pendingChatKeyPrefix: PENDING_CHAT_KEY_PREFIX,
     todayDate,
     onSendSuccess: keepReadyAttachmentsOnSend,
