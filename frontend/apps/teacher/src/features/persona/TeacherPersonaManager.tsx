@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { TeacherPersona } from '../../appTypes'
 import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
+import { validateAvatarFileBeforeUpload } from '../../../../shared/uploadValidation'
 import {
   assignTeacherPersona,
   createTeacherPersona,
@@ -167,6 +168,11 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
       setError('请先选择角色并选择图片')
       return
     }
+    const avatarError = validateAvatarFileBeforeUpload(avatarFile)
+    if (avatarError) {
+      setError(avatarError)
+      return
+    }
     setLoading(true)
     setError('')
     setStatus('')
@@ -266,6 +272,13 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
                 className="rounded-lg border border-border px-3 py-2 text-[13px]"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null
+                  const avatarError = validateAvatarFileBeforeUpload(file)
+                  if (avatarError) {
+                    setAvatarFile(null)
+                    setError(avatarError)
+                    return
+                  }
+                  setError('')
                   setAvatarFile(file)
                 }}
               />

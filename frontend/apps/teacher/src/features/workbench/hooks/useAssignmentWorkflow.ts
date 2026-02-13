@@ -3,6 +3,13 @@ import { buildAssignmentWorkflowIndicator } from '../workflowIndicators'
 import { formatMissingRequirements, parseLineList } from '../workbenchUtils'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../utils/storage'
 import { toUserFacingErrorMessage } from '../../../../../shared/errorMessage'
+import {
+  ASSIGNMENT_UPLOAD_ALLOWED_SUFFIXES,
+  ASSIGNMENT_UPLOAD_MAX_FILE_BYTES,
+  ASSIGNMENT_UPLOAD_MAX_FILES_PER_FIELD,
+  ASSIGNMENT_UPLOAD_MAX_TOTAL_BYTES,
+  validateFilesBeforeUpload,
+} from '../../../../../shared/uploadValidation'
 import type {
   AssignmentProgress,
   UploadDraft,
@@ -541,6 +548,32 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       }
       if (!uploadFiles.length) {
         setUploadError('请至少上传一份作业文件（文档或图片）')
+        return
+      }
+      const sourceFileCheck = validateFilesBeforeUpload(uploadFiles, {
+        label: '作业文件',
+        maxCount: ASSIGNMENT_UPLOAD_MAX_FILES_PER_FIELD,
+        maxFileBytes: ASSIGNMENT_UPLOAD_MAX_FILE_BYTES,
+        allowedSuffixes: ASSIGNMENT_UPLOAD_ALLOWED_SUFFIXES,
+      })
+      if (sourceFileCheck) {
+        setUploadError(sourceFileCheck)
+        return
+      }
+      const answerFileCheck = validateFilesBeforeUpload(uploadAnswerFiles, {
+        label: '答案文件',
+        maxCount: ASSIGNMENT_UPLOAD_MAX_FILES_PER_FIELD,
+        maxFileBytes: ASSIGNMENT_UPLOAD_MAX_FILE_BYTES,
+        allowedSuffixes: ASSIGNMENT_UPLOAD_ALLOWED_SUFFIXES,
+      })
+      if (answerFileCheck) {
+        setUploadError(answerFileCheck)
+        return
+      }
+      const totalUploadBytes = [...uploadFiles, ...uploadAnswerFiles]
+        .reduce((sum, file) => sum + Math.max(0, Number(file.size || 0)), 0)
+      if (totalUploadBytes > ASSIGNMENT_UPLOAD_MAX_TOTAL_BYTES) {
+        setUploadError(`作业上传总大小不能超过 ${ASSIGNMENT_UPLOAD_MAX_TOTAL_BYTES / (1024 * 1024)}MB`)
         return
       }
       if (uploadScope === 'student' && !uploadStudentIds.trim()) {

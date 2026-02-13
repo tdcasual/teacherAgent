@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { StudentPersonaCard, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
+import { validateAvatarFileBeforeUpload } from '../../../../shared/uploadValidation'
 
 type Props = {
   apiBase: string
@@ -239,6 +240,12 @@ export default function StudentTopbar({
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (!file || !customEditId) return
+                const avatarError = validateAvatarFileBeforeUpload(file)
+                if (avatarError) {
+                  setCustomMsg(avatarError)
+                  e.currentTarget.value = ''
+                  return
+                }
                 setCustomLoading(true)
                 setCustomMsg('')
                 void onUploadCustomPersonaAvatar(customEditId, file)

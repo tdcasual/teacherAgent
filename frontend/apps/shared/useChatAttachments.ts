@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './storage'
+import {
+  CHAT_ATTACHMENT_ALLOWED_SUFFIXES,
+  CHAT_ATTACHMENT_MAX_FILE_BYTES,
+  validateFilesBeforeUpload,
+} from './uploadValidation'
 
 export type AttachmentRef = {
   attachment_id: string
@@ -193,6 +198,25 @@ export function useChatAttachments(params: UseChatAttachmentsParams) {
             sizeBytes: file.size,
             status: 'failed' as const,
             error: reason,
+          })),
+        ])
+        return
+      }
+      const perFileCheck = validateFilesBeforeUpload(selected, {
+        label: '附件',
+        maxFileBytes: CHAT_ATTACHMENT_MAX_FILE_BYTES,
+        allowedSuffixes: CHAT_ATTACHMENT_ALLOWED_SUFFIXES,
+      })
+      if (perFileCheck) {
+        setAttachments((prev) => [
+          ...prev,
+          ...selected.map((file) => ({
+            localId: makeLocalId(),
+            attachmentId: '',
+            fileName: file.name,
+            sizeBytes: file.size,
+            status: 'failed' as const,
+            error: perFileCheck,
           })),
         ])
         return

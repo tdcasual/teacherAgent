@@ -831,6 +831,15 @@
    - 涉及文件：`frontend/apps/student/src/appTypes.ts`、`frontend/apps/student/src/hooks/useVerification.ts`。  
    - 验证：新增 `tests/test_student_verify_contract_drift.py` 并通过；`frontend` TypeScript typecheck 通过。
 
+12. P2：前端上传前置预检补齐（头像/附件/作业上传）  
+   - 修复点：  
+     - 新增 `frontend/apps/shared/uploadValidation.ts`，统一文件数量/单文件大小/总大小/后缀校验逻辑；  
+     - `frontend/apps/shared/useChatAttachments.ts` 增加附件单文件大小（10MB）与后缀白名单预检；  
+     - `frontend/apps/teacher/src/features/workbench/hooks/useAssignmentWorkflow.ts` 增加作业与答案文件的数量/大小/后缀及总上传大小（80MB）前置校验；  
+     - `frontend/apps/teacher/src/features/persona/TeacherPersonaManager.tsx`、`frontend/apps/student/src/features/layout/StudentTopbar.tsx` 增加头像文件前置校验（2MB + 后缀白名单）。  
+   - 涉及文件：`frontend/apps/shared/uploadValidation.ts`、`frontend/apps/shared/useChatAttachments.ts`、`frontend/apps/teacher/src/features/workbench/hooks/useAssignmentWorkflow.ts`、`frontend/apps/teacher/src/features/persona/TeacherPersonaManager.tsx`、`frontend/apps/student/src/features/layout/StudentTopbar.tsx`。  
+   - 验证：新增 `tests/test_frontend_upload_precheck.py` 并通过；`frontend` TypeScript typecheck 通过。
+
 ### 最近一次回归结果
 
 - `python3 -m pytest tests/test_grade_submission_security.py tests/test_student_submit_service.py tests/test_student_ops_api_service.py tests/test_security_auth_hardening.py tests/test_student_history_flow.py tests/test_student_routes.py tests/test_skill_routes.py tests/test_student_history_routes_types.py tests/test_student_profile_routes_types.py -q`  
@@ -865,5 +874,9 @@
   结果：`67 passed, 2 skipped`
 - `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_student_verify_contract_drift.py tests/test_frontend_type_hardening.py tests/test_batch_c_frontend_security_hardening.py tests/test_ci_actions_sha_pin.py -q`  
   结果：`69 passed, 2 skipped`
+- `npm --prefix frontend run typecheck`  
+  结果：`通过`
+- `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_frontend_upload_precheck.py tests/test_student_verify_contract_drift.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
+  结果：`70 passed, 2 skipped`
 - `npm --prefix frontend run typecheck`  
   结果：`通过`
