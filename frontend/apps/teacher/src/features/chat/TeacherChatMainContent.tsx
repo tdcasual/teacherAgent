@@ -1,8 +1,4 @@
-import type {
-  FormEvent,
-  KeyboardEvent,
-  MutableRefObject,
-} from 'react'
+import { useEffect, useRef, type FormEvent, type KeyboardEvent, type MutableRefObject } from 'react'
 import RoutingPage from '../routing/RoutingPage'
 import ChatComposer from './ChatComposer'
 import ChatMessages from './ChatMessages'
@@ -81,9 +77,19 @@ export default function TeacherChatMainContent({
   mentionIndex,
   onInsertMention,
 }: TeacherChatMainContentProps) {
+  const shellRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (inlineRoutingOpen) return
+    const shell = shellRef.current
+    if (!shell) return
+    if (shell.scrollTop !== 0) shell.scrollTop = 0
+  }, [inlineRoutingOpen, renderedMessages.length])
+
   return (
     <main
-      className={`chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 overflow-hidden bg-surface ${inlineRoutingOpen ? 'overflow-auto' : ''}`}
+      ref={shellRef}
+      className={`chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 bg-surface ${inlineRoutingOpen ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'}`}
       style={inlineRoutingOpen ? { overscrollBehavior: 'contain' } : undefined}
     >
       {inlineRoutingOpen ? (

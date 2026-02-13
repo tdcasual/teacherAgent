@@ -25,15 +25,32 @@ export function useSmartAutoScroll() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
-  const scrollToBottom = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const el = messagesRef.current
+    if (!el) return
+    try {
+      el.scrollTo({ top: el.scrollHeight, behavior })
+    } catch {
+      el.scrollTop = el.scrollHeight
+    }
+
+    // Some browsers may scroll overflow-hidden ancestors when using smooth scroll.
+    // Keep chat shell anchored so composer stays at viewport bottom.
+    const chatShell = el.closest('.chat-shell')
+    if (chatShell instanceof HTMLElement && chatShell.scrollTop !== 0) {
+      chatShell.scrollTop = 0
+    }
   }, [])
+
+  const scrollToBottom = useCallback(() => {
+    scrollMessagesToBottom('smooth')
+  }, [scrollMessagesToBottom])
 
   const autoScroll = useCallback(() => {
     if (isNearBottom) {
-      endRef.current?.scrollIntoView({ behavior: 'smooth' })
+      scrollMessagesToBottom('smooth')
     }
-  }, [isNearBottom])
+  }, [isNearBottom, scrollMessagesToBottom])
 
   return { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll }
 }

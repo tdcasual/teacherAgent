@@ -732,3 +732,69 @@ test('malformed local view-state should recover remote active session', async ({
 
   expect(activeSessionId).toBe('legacy_session')
 })
+
+test('switching history sessions keeps chat shell anchored and composer at bottom', async ({ page }) => {
+  await page.setViewportSize({ width: 1292, height: 1169 })
+
+  const longHistory = Array.from({ length: 36 }, (_, i) => ({
+    ts: new Date(Date.now() - (36 - i) * 60_000).toISOString(),
+    role: i % 2 === 0 ? 'assistant' : 'user',
+    content: `MAIN-LONG-${i} ` + '内容'.repeat(48),
+  }))
+  const shortHistory = [
+    { ts: new Date().toISOString(), role: 'assistant', content: 'S2-SHORT-0' },
+  ]
+
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+    apiMocks: {
+      historyBySession: {
+        main: longHistory,
+        s2: shortHistory,
+      },
+    },
+  })
+
+  const readLayout = async () =>
+    page.evaluate(() => {
+      const shell = document.querySelector('[data-testid="student-chat-panel"]') as HTMLElement | null
+      const messages = document.querySelector('.messages') as HTMLElement | null
+      const composer = document.querySelector('.composer') as HTMLElement | null
+      if (!shell || !messages || !composer) return null
+      const shellRect = shell.getBoundingClientRect()
+      const messagesRect = messages.getBoundingClientRect()
+      const composerRect = composer.getBoundingClientRect()
+      return {
+        shellScrollTop: shell.scrollTop,
+        messagesTopOffset: messagesRect.top - shellRect.top,
+        composerBottomGap: window.innerHeight - composerRect.bottom,
+      }
+    })
+
+  const expectAnchored = async () => {
+    await expect.poll(async () => (await readLayout())?.shellScrollTop ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(1)
+    await expect.poll(async () => Math.abs((await readLayout())?.messagesTopOffset ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(1.5)
+    await expect.poll(async () => (await readLayout())?.composerBottomGap ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(2)
+  }
+
+  await expect(page.locator('.message .text').filter({ hasText: 'MAIN-LONG-0' }).first()).toBeVisible()
+  await expectAnchored()
+
+  const s2Session = page.locator('.session-item', { hasText: 's2' }).locator('.session-select').first()
+  const mainSession = page.locator('.session-item', { hasText: 'main' }).locator('.session-select').first()
+
+  await s2Session.click()
+  await expect(page.locator('.message .text').filter({ hasText: 'S2-SHORT-0' }).first()).toBeVisible()
+  await expectAnchored()
+
+  await mainSession.click()
+  await expect(page.locator('.message .text').filter({ hasText: 'MAIN-LONG-0' }).first()).toBeVisible()
+  await expectAnchored()
+})

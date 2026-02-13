@@ -1,5 +1,4 @@
-import { useCallback } from 'react'
-import { useWheelScrollZone as useSharedWheelScrollZone } from '../../../../shared/useWheelScrollZone'
+import { useCallback, useRef } from 'react'
 import type { WheelScrollZone } from '../../appTypes'
 
 export interface UseWheelScrollZoneOptions {
@@ -21,8 +20,10 @@ export function useWheelScrollZone({
   skillsOpen,
   inlineRoutingOpen,
 }: UseWheelScrollZoneOptions): UseWheelScrollZoneReturn {
+  const wheelScrollZoneRef = useRef<WheelScrollZone>('chat')
+
   const resolveTarget = useCallback(
-    (zone: string) => {
+    (zone: WheelScrollZone) => {
       const root = appRef.current
       if (!root) return null
       if (zone === 'session') {
@@ -44,24 +45,13 @@ export function useWheelScrollZone({
     [appRef, inlineRoutingOpen, sessionSidebarOpen, skillsOpen],
   )
 
-  const { zoneRef, setZone } = useSharedWheelScrollZone({
-    appRef,
-    defaultZone: 'chat' as const,
-    resolveTarget,
-    detectors: [
-      { zone: 'session' as const, selector: '.session-sidebar', when: () => sessionSidebarOpen },
-      { zone: 'workbench' as const, selector: '.skills-panel', when: () => skillsOpen },
-      { zone: 'chat' as const, selector: '.chat-shell' },
-    ],
-    resetWhen: [
-      { zone: 'session' as const, condition: !sessionSidebarOpen },
-      { zone: 'workbench' as const, condition: !skillsOpen },
-    ],
-  })
+  const setWheelScrollZone = useCallback((zone: WheelScrollZone) => {
+    wheelScrollZoneRef.current = zone
+  }, [])
 
   return {
-    wheelScrollZoneRef: zoneRef,
-    setWheelScrollZone: setZone,
-    resolveWheelScrollTarget: resolveTarget as (zone: WheelScrollZone) => HTMLElement | null,
+    wheelScrollZoneRef,
+    setWheelScrollZone,
+    resolveWheelScrollTarget: resolveTarget,
   }
 }

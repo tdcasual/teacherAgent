@@ -361,7 +361,7 @@ test('desktop wheel on chat does not move page or side panel anchors', async ({ 
   expect(after.msgTop).toBeLessThan(before.msgTop)
 })
 
-test('desktop defaults wheel to chat until side panel is explicitly activated', async ({ page }) => {
+test('desktop wheel follows native hovered scroll container', async ({ page }) => {
   const denseSkills = buildSkills(60)
   await setupTeacherState(page)
   const { chatStartCalls } = await setupApiMocks(page)
@@ -410,14 +410,16 @@ test('desktop defaults wheel to chat until side panel is explicitly activated', 
   expect(prepared.skMax).toBeGreaterThan(0)
 
   const skillsBox = await page.locator('.skills-body').boundingBox()
+  const messagesBox = await page.locator('.messages').boundingBox()
   if (!skillsBox) throw new Error('skills box missing')
+  if (!messagesBox) throw new Error('messages box missing')
 
   await page.mouse.move(skillsBox.x + skillsBox.width / 2, skillsBox.y + 80)
   for (let i = 0; i < 8; i += 1) {
     await page.mouse.wheel(0, 900)
   }
 
-  const afterDefaultWheel = await page.evaluate(() => {
+  const afterSkillWheel = await page.evaluate(() => {
     const messages = document.querySelector('.messages') as HTMLElement | null
     const skills = document.querySelector('.skills-body') as HTMLElement | null
     return {
@@ -427,47 +429,29 @@ test('desktop defaults wheel to chat until side panel is explicitly activated', 
       skTop: skills?.scrollTop ?? -1,
     }
   })
-  expect(afterDefaultWheel.winY).toBe(0)
-  expect(afterDefaultWheel.bodyY).toBe(0)
-  expect(afterDefaultWheel.msgTop).toBeGreaterThan(0)
-  expect(afterDefaultWheel.skTop).toBe(0)
+  expect(afterSkillWheel.winY).toBe(0)
+  expect(afterSkillWheel.bodyY).toBe(0)
+  expect(afterSkillWheel.skTop).toBeGreaterThan(0)
+  expect(afterSkillWheel.msgTop).toBe(0)
 
-  await page.locator('.skills-body').click({ position: { x: 12, y: 12 } })
+  await page.mouse.move(messagesBox.x + messagesBox.width / 2, messagesBox.y + 80)
   for (let i = 0; i < 6; i += 1) {
     await page.mouse.wheel(0, 900)
   }
 
-  const afterSkillActivated = await page.evaluate(() => {
+  const afterMessagesWheel = await page.evaluate(() => {
     const messages = document.querySelector('.messages') as HTMLElement | null
     const skills = document.querySelector('.skills-body') as HTMLElement | null
     return {
+      winY: window.scrollY,
+      bodyY: document.scrollingElement ? document.scrollingElement.scrollTop : -1,
       msgTop: messages?.scrollTop ?? -1,
       skTop: skills?.scrollTop ?? -1,
     }
   })
-  expect(afterSkillActivated.skTop).toBeGreaterThan(afterDefaultWheel.skTop)
-  expect(afterSkillActivated.msgTop).toBeCloseTo(afterDefaultWheel.msgTop, 1)
-
-  await page.evaluate(() => {
-    const messages = document.querySelector('.messages') as HTMLElement | null
-    if (messages) messages.scrollTop = 0
-  })
-  await page.locator('.messages').click({ position: { x: 20, y: 20 } })
-  await page.mouse.move(skillsBox.x + skillsBox.width / 2, skillsBox.y + 80)
-  for (let i = 0; i < 6; i += 1) {
-    await page.mouse.wheel(0, 900)
-  }
-
-  const afterChatReactivated = await page.evaluate(() => {
-    const messages = document.querySelector('.messages') as HTMLElement | null
-    const skills = document.querySelector('.skills-body') as HTMLElement | null
-    return {
-      msgTop: messages?.scrollTop ?? -1,
-      skTop: skills?.scrollTop ?? -1,
-    }
-  })
-  expect(afterChatReactivated.skTop).toBeCloseTo(afterSkillActivated.skTop, 1)
-  expect(afterChatReactivated.msgTop).toBeGreaterThan(0)
+  expect(afterMessagesWheel.winY).toBe(0)
+  expect(afterMessagesWheel.bodyY).toBe(0)
+  expect(afterMessagesWheel.msgTop).toBeGreaterThan(afterSkillWheel.msgTop)
 })
 
 test('auto route mode omits skill_id and warns on unknown $skill', async ({ page }) => {
