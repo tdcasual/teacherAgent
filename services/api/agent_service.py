@@ -141,7 +141,7 @@ def _default_teacher_tools_to_openai(
     allowed: Set[str],
     skill_runtime: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
-    dynamic_tools = {}
+    dynamic_tools: Dict[str, Any] = {}
     if skill_runtime is not None:
         dynamic_tools = getattr(skill_runtime, "dynamic_tools", {}) or {}
 

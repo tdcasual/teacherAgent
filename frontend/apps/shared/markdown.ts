@@ -107,8 +107,8 @@ const katexSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
-    div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
+    span: [...(defaultSchema.attributes?.span || []), 'className'],
+    div: [...(defaultSchema.attributes?.div || []), 'className'],
     code: [...(defaultSchema.attributes?.code || []), 'className'],
   },
 };

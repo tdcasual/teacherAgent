@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pytest
 
@@ -71,3 +73,32 @@ def test_upload_chat_attachments_rolls_back_all_dirs_on_late_size_error() -> Non
         attachments_root = root / "uploads" / "chat_attachments"
         if attachments_root.exists():
             assert list(attachments_root.iterdir()) == []
+
+
+def test_upload_chat_attachments_uses_atomic_meta_write() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        deps = _make_deps(root / "uploads")
+        uploads = [_Upload("ok.md", b"ok")]
+        written_meta_paths: list[Path] = []
+
+        def _atomic_write(path: Path, payload: dict) -> None:
+            written_meta_paths.append(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+        with patch("services.api.chat_attachment_service.atomic_write_json", side_effect=_atomic_write):
+            result = asyncio.run(
+                upload_chat_attachments(
+                    role="teacher",
+                    teacher_id="t1",
+                    student_id="",
+                    session_id="main",
+                    request_id="r1",
+                    files=uploads,
+                    deps=deps,
+                )
+            )
+        assert result["ok"] is True
+        assert written_meta_paths
+        assert written_meta_paths[0].name == "meta.json"

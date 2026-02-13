@@ -33,6 +33,25 @@ def atomic_write_json(path: Path, payload: Any) -> None:
             pass
 
 
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = _atomic_tmp_path(path)
+    try:
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+        try:
+            os.write(fd, str(content).encode(encoding))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        tmp.replace(path)
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            _log.debug("failed to clean up temp file %s", tmp)
+            pass
+
+
 def atomic_write_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = _atomic_tmp_path(path)

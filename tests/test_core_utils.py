@@ -16,6 +16,7 @@ from services.api.core_utils import (
     count_csv_rows,
     normalize,
     normalize_due_at,
+    run_script,
     resolve_scope,
     safe_slug,
 )
@@ -135,3 +136,44 @@ def test_resolve_app_path_outside(tmp_path: Path):
 def test_resolve_app_path_missing(tmp_path: Path):
     with patch("services.api.core_utils.APP_ROOT", tmp_path):
         assert _resolve_app_path("no_such_file", must_exist=True) is None
+
+
+# --- run_script timeout guards ---
+def test_run_script_uses_default_timeout(monkeypatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    class _Proc:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def _fake_run(args, capture_output, text, env, cwd, timeout):  # type: ignore[no-untyped-def]
+        captured["timeout"] = timeout
+        return _Proc()
+
+    monkeypatch.delenv("RUN_SCRIPT_TIMEOUT_SEC", raising=False)
+    monkeypatch.setattr("services.api.core_utils.subprocess.run", _fake_run)
+    with patch("services.api.core_utils.APP_ROOT", tmp_path):
+        out = run_script(["python3", "-V"])
+    assert out == "ok"
+    assert captured["timeout"] == 300
+
+
+def test_run_script_uses_env_timeout(monkeypatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    class _Proc:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def _fake_run(args, capture_output, text, env, cwd, timeout):  # type: ignore[no-untyped-def]
+        captured["timeout"] = timeout
+        return _Proc()
+
+    monkeypatch.setenv("RUN_SCRIPT_TIMEOUT_SEC", "42")
+    monkeypatch.setattr("services.api.core_utils.subprocess.run", _fake_run)
+    with patch("services.api.core_utils.APP_ROOT", tmp_path):
+        out = run_script(["python3", "-V"])
+    assert out == "ok"
+    assert captured["timeout"] == 42

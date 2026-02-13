@@ -111,3 +111,24 @@ def test_ops_endpoints_require_auth_when_enabled() -> None:
                 slo = client.get("/ops/slo", headers=headers)
                 assert metrics.status_code == 200
                 assert slo.status_code == 200
+
+
+def test_ops_endpoints_restrict_role_to_service_or_admin_when_auth_enabled() -> None:
+    with _env_guard():
+        with TemporaryDirectory() as td:
+            secret = "ops-auth-secret"
+            app_mod = _load_app(Path(td), auth_required="1", auth_secret=secret)
+            with TestClient(app_mod.app) as client:
+                teacher_headers = _auth_headers(actor_id="teacher_a", role="teacher", secret=secret)
+                student_headers = _auth_headers(actor_id="student_a", role="student", secret=secret)
+                service_headers = _auth_headers(actor_id="svc_ops", role="service", secret=secret)
+                admin_headers = _auth_headers(actor_id="admin_a", role="admin", secret=secret)
+
+                assert client.get("/ops/metrics", headers=teacher_headers).status_code == 403
+                assert client.get("/ops/slo", headers=teacher_headers).status_code == 403
+                assert client.get("/ops/metrics", headers=student_headers).status_code == 403
+                assert client.get("/ops/slo", headers=student_headers).status_code == 403
+                assert client.get("/ops/metrics", headers=service_headers).status_code == 200
+                assert client.get("/ops/slo", headers=service_headers).status_code == 200
+                assert client.get("/ops/metrics", headers=admin_headers).status_code == 200
+                assert client.get("/ops/slo", headers=admin_headers).status_code == 200

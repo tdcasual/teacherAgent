@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from .fs_atomic import atomic_write_json, atomic_write_text
 
 _log = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ def _extract_source_text(
             return None
 
     source_text = "\n\n".join([text for text in source_text_parts if text])
-    (job_dir / "source_text.txt").write_text(source_text or "", encoding="utf-8")
+    atomic_write_text(job_dir / "source_text.txt", source_text or "", encoding="utf-8")
     deps.diag_log(
         "upload.extract.done",
         {
@@ -124,7 +125,7 @@ def _extract_answer_text(
             continue
     answer_text = "\n\n".join([text for text in answer_text_parts if text])
     if answer_text:
-        (job_dir / "answer_text.txt").write_text(answer_text, encoding="utf-8")
+        atomic_write_text(job_dir / "answer_text.txt", answer_text, encoding="utf-8")
     return answer_text
 
 
@@ -219,9 +220,7 @@ def _write_parsed_payload(
         "autofilled": autofilled,
         "generated_at": deps.now_iso(),
     }
-    (job_dir / "parsed.json").write_text(
-        json.dumps(parsed_payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    atomic_write_json(job_dir / "parsed.json", parsed_payload)
 
 
 def _build_questions_preview(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

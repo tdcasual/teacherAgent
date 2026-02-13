@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from ..prompt_builder import DEFAULT_PROMPT_VERSION, PROMPTS_DIR
 from ..dynamic_skill_tools import load_dynamic_tools_for_skill_source
+from ..prompt_builder import DEFAULT_PROMPT_VERSION, PROMPTS_DIR
 from .spec import SkillModelPolicy, SkillSpec
 
 

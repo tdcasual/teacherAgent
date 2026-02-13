@@ -25,3 +25,9 @@ def test_student_and_teacher_error_helpers_use_shared_user_facing_mapper() -> No
     teacher = _read("frontend/apps/teacher/src/features/chat/useTeacherChatApi.ts")
     assert "toUserFacingErrorMessage" in student
     assert "toUserFacingErrorMessage" in teacher
+
+
+def test_markdown_katex_schema_disallows_unbounded_style_attrs() -> None:
+    source = _read("frontend/apps/shared/markdown.ts")
+    assert "span: [...(defaultSchema.attributes?.span || []), 'className', 'style']" not in source
+    assert "div: [...(defaultSchema.attributes?.div || []), 'className', 'style']" not in source

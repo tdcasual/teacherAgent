@@ -97,7 +97,7 @@ def create_teacher_skill(
     (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
     dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
     try:
-        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+        from .dynamic_skill_tools import clear_dynamic_tools_cache, compile_skill_dynamic_tools
 
         dynamic_report = compile_skill_dynamic_tools(skill_dir)
         clear_dynamic_tools_cache(skill_dir)
@@ -153,7 +153,7 @@ def update_teacher_skill(
     md_path.write_text(content, encoding="utf-8")
     dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
     try:
-        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+        from .dynamic_skill_tools import clear_dynamic_tools_cache, compile_skill_dynamic_tools
 
         dynamic_report = compile_skill_dynamic_tools(skill_dir)
         clear_dynamic_tools_cache(skill_dir)
@@ -370,7 +370,7 @@ def import_skill_from_github(
 
     dynamic_report = {"compiled_ok": 0, "invalid_count": 0, "shadowed_count": 0}
     try:
-        from .dynamic_skill_tools import compile_skill_dynamic_tools, clear_dynamic_tools_cache
+        from .dynamic_skill_tools import clear_dynamic_tools_cache, compile_skill_dynamic_tools
 
         dynamic_report = compile_skill_dynamic_tools(skill_dir)
         clear_dynamic_tools_cache(skill_dir)

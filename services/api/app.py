@@ -17,6 +17,7 @@ from .app_routes import register_routes
 from .auth_service import (
     AuthError,
     get_current_principal,
+    require_principal,
     reset_current_principal,
     resolve_principal_from_headers,
     set_current_principal,
@@ -161,11 +162,13 @@ async def _set_core_context(
 
 @app.get("/ops/metrics")
 async def ops_metrics():
+    require_principal(roles=("service", "admin"))
     return {"ok": True, "metrics": OBSERVABILITY.snapshot()}
 
 
 @app.get("/ops/slo")
 async def ops_slo():
+    require_principal(roles=("service", "admin"))
     snap = OBSERVABILITY.snapshot()
     return {
         "ok": True,

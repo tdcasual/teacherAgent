@@ -8,7 +8,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from .fs_atomic import atomic_write_json
 
@@ -257,7 +257,7 @@ def student_personas_get_api(student_id: str, *, deps: StudentPersonaApiDeps) ->
     if not sid:
         return {"ok": False, "error": "missing_student_id"}
     profile = _ensure_profile(sid, deps)
-    personas = profile.get("personas") if isinstance(profile.get("personas"), dict) else {}
+    personas = cast(Dict[str, Any], profile.get("personas")) if isinstance(profile.get("personas"), dict) else {}
     custom_raw = personas.get("custom") if isinstance(personas, dict) else []
     custom = custom_raw if isinstance(custom_raw, list) else []
     assigned = _resolve_assigned_personas(sid, deps)
@@ -359,14 +359,15 @@ def student_persona_activate_api(
         return {"ok": False, "error": "missing_student_id"}
     target_persona_id = str(persona_id or "").strip()
     path = _student_profile_path(sid, deps)
-    profile = _ensure_profile(sid, deps)
-    personas = profile["personas"]
     if not target_persona_id:
-        personas["active_persona_id"] = ""
-        return _with_path_lock(
-            path,
-            lambda: (_write_json(path, profile), {"ok": True, "student_id": sid, "active_persona_id": ""})[1],
-        )
+        def _clear_active_locked() -> Dict[str, Any]:
+            profile_locked = _ensure_profile(sid, deps)
+            personas_locked = cast(Dict[str, Any], profile_locked["personas"])
+            personas_locked["active_persona_id"] = ""
+            _write_json(path, profile_locked)
+            return {"ok": True, "student_id": sid, "active_persona_id": ""}
+
+        return _with_path_lock(path, _clear_active_locked)
 
     listing = student_personas_get_api(sid, deps=deps)
     if not listing.get("ok"):
@@ -562,11 +563,12 @@ def resolve_student_persona_runtime(
         return {"ok": False, "error": "persona_not_available"}
 
     profile = _ensure_profile(sid, deps)
-    personas = profile.get("personas") if isinstance(profile.get("personas"), dict) else {}
+    personas = cast(Dict[str, Any], profile.get("personas")) if isinstance(profile.get("personas"), dict) else {}
     notified_raw = personas.get("first_activation_notified_ids") if isinstance(personas, dict) else []
+    notified_list = notified_raw if isinstance(notified_raw, list) else []
     notified_ids = {
         str(item or "").strip()
-        for item in notified_raw
+        for item in notified_list
         if str(item or "").strip()
     }
     first_notice = pid not in notified_ids
@@ -575,11 +577,17 @@ def resolve_student_persona_runtime(
 
         def _mark_locked() -> None:
             profile_locked = _ensure_profile(sid, deps)
-            personas_locked = profile_locked.get("personas") if isinstance(profile_locked.get("personas"), dict) else {}
-            notified_locked_raw = personas_locked.get("first_activation_notified_ids") if isinstance(personas_locked, dict) else []
+            personas_locked_raw = profile_locked.get("personas")
+            if isinstance(personas_locked_raw, dict):
+                personas_locked = personas_locked_raw
+            else:
+                personas_locked = {}
+                profile_locked["personas"] = personas_locked
+            notified_locked_raw = personas_locked.get("first_activation_notified_ids")
+            notified_locked_list = notified_locked_raw if isinstance(notified_locked_raw, list) else []
             notified_locked = {
                 str(item or "").strip()
-                for item in notified_locked_raw
+                for item in notified_locked_list
                 if str(item or "").strip()
             }
             notified_locked.add(pid)

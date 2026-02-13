@@ -8,6 +8,7 @@ import os
 from functools import lru_cache
 import time
 import random
+from urllib.parse import quote
 
 try:
     import yaml  # type: ignore
@@ -198,6 +199,16 @@ def _build_timeout_pair(
     connect_timeout = _clamp_timeout_seconds(connect_candidate, default=connect_default, max_value=120.0)
     connect_timeout = min(connect_timeout, read_timeout)
     return (connect_timeout, read_timeout)
+
+
+def _format_endpoint_with_model(endpoint: str, model: str) -> str:
+    value = str(endpoint or "").strip()
+    if "{model}" not in value:
+        return value
+    model_value = str(model or "").strip()
+    if model_value.startswith("models/"):
+        model_value = model_value[len("models/") :]
+    return value.replace("{model}", quote(model_value, safe="-_.~"))
 
 
 class OpenAIResponsesAdapter:
@@ -415,6 +426,7 @@ class LLMGateway:
         endpoint = mode_cfg.get("endpoint") or ""
         if not endpoint:
             raise ValueError(f"Endpoint not configured for provider={provider} mode={mode}.")
+        endpoint = _format_endpoint_with_model(endpoint, model)
 
         api_key = os.getenv("LLM_API_KEY")
         if not api_key:
@@ -493,6 +505,7 @@ class LLMGateway:
         endpoint = str(override.get("endpoint") or "").strip()
         if not endpoint:
             raise ValueError("target_override.endpoint required")
+        endpoint = _format_endpoint_with_model(endpoint, model_final)
 
         headers_raw = override.get("headers") if isinstance(override.get("headers"), dict) else {}
         headers = {str(k): str(v) for k, v in headers_raw.items() if str(k).strip() and str(v).strip()}

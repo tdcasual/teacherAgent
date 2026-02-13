@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import types
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from services.api.exam_utils import (
     _normalize_exam_chart_types,
     _normalize_question_no_list,
     _parse_question_no_int,
+    _parse_xlsx_with_script,
     _safe_int_arg,
     compute_exam_totals,
     parse_score_value,
@@ -170,3 +172,43 @@ def test_compute_exam_totals_missing_score_skipped(tmp_path):
     _write_csv(csv_path, fields, rows)
     result = compute_exam_totals(csv_path)
     assert result["totals"]["s1"] == 8.0
+
+
+def test_parse_xlsx_with_script_uses_default_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    def _fake_run(cmd, capture_output, text, env, cwd, timeout):  # type: ignore[no-untyped-def]
+        captured["timeout"] = timeout
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+    monkeypatch.delenv("EXAM_PARSE_XLSX_TIMEOUT_SEC", raising=False)
+    monkeypatch.setattr("services.api.exam_utils.subprocess.run", _fake_run)
+    rows, report = _parse_xlsx_with_script(
+        tmp_path / "input.xlsx",
+        tmp_path / "out.csv",
+        "EX1",
+        "ClassA",
+    )
+    assert rows is None
+    assert "error" in report
+    assert captured["timeout"] == 300
+
+
+def test_parse_xlsx_with_script_uses_env_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    captured: dict[str, object] = {}
+
+    def _fake_run(cmd, capture_output, text, env, cwd, timeout):  # type: ignore[no-untyped-def]
+        captured["timeout"] = timeout
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+    monkeypatch.setenv("EXAM_PARSE_XLSX_TIMEOUT_SEC", "75")
+    monkeypatch.setattr("services.api.exam_utils.subprocess.run", _fake_run)
+    rows, report = _parse_xlsx_with_script(
+        tmp_path / "input.xlsx",
+        tmp_path / "out.csv",
+        "EX1",
+        "ClassA",
+    )
+    assert rows is None
+    assert "error" in report
+    assert captured["timeout"] == 75

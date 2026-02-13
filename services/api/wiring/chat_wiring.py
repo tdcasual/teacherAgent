@@ -34,6 +34,8 @@ from ..api_models import ChatRequest
 from ..chat_api_service import ChatApiDeps
 from ..chat_attachment_service import (
     ChatAttachmentDeps,
+)
+from ..chat_attachment_service import (
     resolve_chat_attachment_context as _resolve_chat_attachment_context_impl,
 )
 from ..chat_job_processing_service import (
@@ -72,10 +74,6 @@ from ..handlers import chat_handlers
 from ..job_repository import _atomic_write_json, _release_lockfile, _try_acquire_lockfile
 from ..prompt_builder import compile_system_prompt
 from ..session_history_api_service import SessionHistoryApiDeps
-from ..student_persona_api_service import (
-    StudentPersonaApiDeps,
-    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
-)
 from ..session_view_state import (
     compare_iso_ts as _compare_iso_ts_impl,
 )
@@ -83,6 +81,12 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..student_persona_api_service import (
+    StudentPersonaApiDeps,
+)
+from ..student_persona_api_service import (
+    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
+)
 from ..teacher_llm_routing_service import (
     ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
 )

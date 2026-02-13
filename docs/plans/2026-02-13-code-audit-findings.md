@@ -4,6 +4,12 @@
 分支: `codex/code-audit-batch1`  
 状态: Phase 3 Batch 5 已完成（Task 13-15）
 
+## 接受风险清单（R2 补偿控制）
+
+| 风险ID | 风险描述 | 当前补偿控制 | Owner | 下次复审日期 | 退出条件 |
+|---|---|---|---|---|---|
+| RISK-CHART-TRUSTED-001 | `chart.exec` 默认执行档位保持 `trusted`（业务约束） | 1) 新增审计日志：记录 `execution_profile/source/role/actor` 与安装包行为；2) `trusted` 命中高风险模式触发告警日志；3) 提供可选策略开关（`CHART_EXEC_TRUSTED_ALLOWED_SOURCES` / `CHART_EXEC_TRUSTED_ALLOWED_ROLES`）限制 `trusted` 调用来源与角色 | 后端平台负责人 | 2026-03-13 | 满足任一条件：A) 业务允许默认切换为 `sandboxed`；B) 上线强制策略将 `trusted` 限制到白名单来源与角色，并稳定运行一个迭代周期 |
+
 ## Batch 1 覆盖范围（Task 1-3）
 
 - Task 1（teacher persona）:
