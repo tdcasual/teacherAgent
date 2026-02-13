@@ -8,6 +8,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { visit } from 'unist-util-visit';
 import type { Node } from 'unist';
+import { normalizeApiBase } from './apiBase'
 
 type MarkdownNode = {
   type?: string
@@ -180,7 +181,7 @@ export const renderMarkdown = (content: string) => {
 };
 
 export const absolutizeChartImageUrls = (html: string, apiBase: string) => {
-  const base = (apiBase || '').trim().replace(/\/+$/, '');
+  const base = normalizeApiBase(apiBase)
   if (!base) return html;
   return html
     .replace(

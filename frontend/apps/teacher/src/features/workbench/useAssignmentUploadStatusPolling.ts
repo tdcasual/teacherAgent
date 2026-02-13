@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem } from '../../utils/storage'
 import type { UploadJobStatus } from '../../appTypes'
 
@@ -25,12 +26,7 @@ const isAbortError = (error: unknown): boolean => {
 }
 
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export function useAssignmentUploadStatusPolling({

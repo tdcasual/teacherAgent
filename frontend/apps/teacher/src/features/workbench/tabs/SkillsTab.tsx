@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Skill } from '../../../appTypes'
 import type { InvocationTriggerType } from '../../chat/invocation'
+import { toUserFacingErrorMessage } from '../../../../../shared/errorMessage'
 
 export type SkillsTabProps = {
   apiBase: string
@@ -45,12 +46,7 @@ type SkillDepsResponse = {
 }
 
 const toErrorMessage = (error: unknown, fallback = '网络错误') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export default function SkillsTab(props: SkillsTabProps) {

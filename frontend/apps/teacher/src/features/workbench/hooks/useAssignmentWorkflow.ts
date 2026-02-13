@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, type FormEvent } from 'react'
 import { buildAssignmentWorkflowIndicator } from '../workflowIndicators'
 import { formatMissingRequirements, parseLineList } from '../workbenchUtils'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../utils/storage'
+import { toUserFacingErrorMessage } from '../../../../../shared/errorMessage'
 import type {
   AssignmentProgress,
   UploadDraft,
@@ -13,12 +14,7 @@ import type {
 type UnknownRecord = Record<string, unknown>
 
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 // ---------------------------------------------------------------------------

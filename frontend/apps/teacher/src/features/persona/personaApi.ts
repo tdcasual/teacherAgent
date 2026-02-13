@@ -1,7 +1,8 @@
 import type { TeacherPersona, TeacherPersonaListResponse } from '../../appTypes'
 import { safeLocalStorageGetItem } from '../../utils/storage'
+import { normalizeApiBase } from '../../../../shared/apiBase'
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 
-const normalizeBase = (base: string) => (base || '').trim().replace(/\/+$/, '')
 const readTeacherId = () => (safeLocalStorageGetItem('teacherRoutingTeacherId') || '').trim()
 
 const readDetailField = (value: unknown): unknown => {
@@ -22,14 +23,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const detail = readDetailField(data)
-    const errMsg = typeof detail === 'string' ? detail : JSON.stringify(detail || data || {})
+    const errMsg = toUserFacingErrorMessage(detail ?? data, `请求失败（${res.status}）`)
     throw new Error(errMsg || `状态码 ${res.status}`)
   }
   return data as T
 }
 
 export const fetchTeacherPersonas = async (apiBase: string) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   const query = teacherId ? `?teacher_id=${encodeURIComponent(teacherId)}` : ''
   return requestJson<TeacherPersonaListResponse>(`${base}/teacher/personas${query}`)
@@ -45,7 +46,7 @@ export const createTeacherPersona = async (
     visibility_mode?: string
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   return requestJson<{ ok: boolean; teacher_id: string; persona: TeacherPersona }>(`${base}/teacher/personas`, {
     method: 'POST',
@@ -66,7 +67,7 @@ export const updateTeacherPersona = async (
     lifecycle_status?: string
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   return requestJson<{ ok: boolean; teacher_id: string; persona: TeacherPersona }>(
     `${base}/teacher/personas/${encodeURIComponent(personaId)}`,
@@ -89,7 +90,7 @@ export const assignTeacherPersona = async (
     status?: 'active' | 'inactive'
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   return requestJson<{ ok: boolean; teacher_id: string; persona_id: string; student_id: string; status: string }>(
     `${base}/teacher/personas/${encodeURIComponent(personaId)}/assign`,
@@ -109,7 +110,7 @@ export const setTeacherPersonaVisibility = async (
   personaId: string,
   visibilityMode: 'assigned_only' | 'hidden_all',
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   return requestJson<{ ok: boolean; teacher_id: string; persona: TeacherPersona }>(
     `${base}/teacher/personas/${encodeURIComponent(personaId)}/visibility`,
@@ -129,7 +130,7 @@ export const uploadTeacherPersonaAvatar = async (
   personaId: string,
   file: File,
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const teacherId = readTeacherId()
   const form = new FormData()
   form.append('file', file)

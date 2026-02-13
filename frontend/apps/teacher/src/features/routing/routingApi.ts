@@ -8,8 +8,8 @@ import type {
   RoutingRollbackResult,
   RoutingSimulateResult,
 } from './routingTypes'
-
-const normalizeBase = (base: string) => (base || '').trim().replace(/\/+$/, '')
+import { normalizeApiBase } from '../../../../shared/apiBase'
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 
 const toQuery = (params: Record<string, string | number | undefined>) => {
   const search = new URLSearchParams()
@@ -39,7 +39,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const detail = readDetailField(data)
-    const errMsg = typeof detail === 'string' ? detail : JSON.stringify(detail || data || {})
+    const errMsg = toUserFacingErrorMessage(detail ?? data, `请求失败（${res.status}）`)
     throw new Error(errMsg || `状态码 ${res.status}`)
   }
   return data as T
@@ -49,7 +49,7 @@ export const fetchRoutingOverview = async (
   apiBase: string,
   params?: { teacher_id?: string; history_limit?: number; proposal_limit?: number; proposal_status?: string },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const query = toQuery({
     teacher_id: params?.teacher_id,
     history_limit: params?.history_limit,
@@ -71,7 +71,7 @@ export const simulateRouting = async (
     config?: Record<string, unknown>
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<RoutingSimulateResult>(`${base}/teacher/llm-routing/simulate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,7 +83,7 @@ export const createRoutingProposal = async (
   apiBase: string,
   payload: { teacher_id?: string; note?: string; config: Record<string, unknown> },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<RoutingProposalResult>(`${base}/teacher/llm-routing/proposals`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -96,7 +96,7 @@ export const reviewRoutingProposal = async (
   proposalId: string,
   payload: { teacher_id?: string; approve: boolean },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<RoutingProposalResult>(`${base}/teacher/llm-routing/proposals/${encodeURIComponent(proposalId)}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,7 +105,7 @@ export const reviewRoutingProposal = async (
 }
 
 export const fetchRoutingProposalDetail = async (apiBase: string, proposalId: string, teacherId?: string) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const query = toQuery({ teacher_id: teacherId || undefined })
   return requestJson<RoutingProposalDetail>(`${base}/teacher/llm-routing/proposals/${encodeURIComponent(proposalId)}${query}`)
 }
@@ -114,7 +114,7 @@ export const rollbackRoutingConfig = async (
   apiBase: string,
   payload: { teacher_id?: string; target_version: number; note?: string },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<RoutingRollbackResult>(`${base}/teacher/llm-routing/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -123,7 +123,7 @@ export const rollbackRoutingConfig = async (
 }
 
 export const fetchProviderRegistry = async (apiBase: string, params?: { teacher_id?: string }) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   const query = toQuery({ teacher_id: params?.teacher_id })
   return requestJson<TeacherProviderRegistryOverview>(`${base}/teacher/provider-registry${query}`)
 }
@@ -140,7 +140,7 @@ export const createProviderRegistryItem = async (
     enabled?: boolean
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<TeacherProviderRegistryMutationResult>(`${base}/teacher/provider-registry/providers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -160,7 +160,7 @@ export const updateProviderRegistryItem = async (
     enabled?: boolean
   },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<TeacherProviderRegistryMutationResult>(
     `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}`,
     {
@@ -176,7 +176,7 @@ export const deleteProviderRegistryItem = async (
   providerId: string,
   payload: { teacher_id?: string },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<TeacherProviderRegistryMutationResult>(
     `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}`,
     {
@@ -192,7 +192,7 @@ export const probeProviderRegistryModels = async (
   providerId: string,
   payload: { teacher_id?: string },
 ) => {
-  const base = normalizeBase(apiBase)
+  const base = normalizeApiBase(apiBase)
   return requestJson<TeacherProviderProbeModelsResult>(
     `${base}/teacher/provider-registry/providers/${encodeURIComponent(providerId)}/probe-models`,
     {

@@ -2,6 +2,7 @@ import { useCallback, useReducer, useRef } from 'react'
 import { makeId } from '../../../shared/id'
 import { safeLocalStorageGetItem } from '../../../shared/storage'
 import { nowTime } from '../../../shared/time'
+import { toUserFacingErrorMessage } from '../../../shared/errorMessage'
 import { readStudentAccessToken } from '../features/auth/studentAuth'
 import type {
   AssignmentDetail,
@@ -91,12 +92,7 @@ export const isAbortError = (error: unknown): boolean => {
 }
 
 export const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export type StudentState = {

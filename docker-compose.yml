@@ -11,7 +11,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-physics_edu_2026}@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       - QDRANT_PATH=/app/.qdrant
       - MEM0_DIR=/app/.mem0
       - LLM_MAX_CONCURRENCY_STUDENT=${LLM_MAX_CONCURRENCY_STUDENT:-12}
@@ -22,7 +22,7 @@ services:
       - PROFILE_CACHE_TTL_SEC=${PROFILE_CACHE_TTL_SEC:-10}
       - ASSIGNMENT_DETAIL_CACHE_TTL_SEC=${ASSIGNMENT_DETAIL_CACHE_TTL_SEC:-10}
       - DEFAULT_TEACHER_ID=${DEFAULT_TEACHER_ID:-teacher}
-      - AUTH_REQUIRED=${AUTH_REQUIRED:-0}
+      - AUTH_REQUIRED=${AUTH_REQUIRED:-1}
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant
@@ -73,7 +73,7 @@ services:
       - DATA_DIR=/app/data
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-physics_edu_2026}@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-0}
     volumes:
       - ./data:/app/data
@@ -95,16 +95,16 @@ services:
     image: redis:7-alpine
     command: >
       redis-server
-      --requirepass ${REDIS_PASSWORD:-physics_edu_2026}
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-physics_edu_2026}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5

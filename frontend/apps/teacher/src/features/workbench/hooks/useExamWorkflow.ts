@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type FormEvent } from 'react'
 import { safeLocalStorageSetItem, safeLocalStorageGetItem, safeLocalStorageRemoveItem } from '../../../utils/storage'
+import { toUserFacingErrorMessage } from '../../../../../shared/errorMessage'
 import type {
   ExamUploadDraft,
   ExamUploadJobStatus,
@@ -48,12 +49,7 @@ export type UseExamWorkflowParams = {
 }
 
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export function useExamWorkflow(params: UseExamWorkflowParams) {

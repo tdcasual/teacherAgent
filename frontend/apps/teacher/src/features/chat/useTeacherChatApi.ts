@@ -5,6 +5,7 @@ import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
 import { parseInvocationInput } from './invocation'
 import { decideSkillRouting } from './requestRouting'
 import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 import { safeLocalStorageGetItem } from '../../utils/storage'
 import { TEACHER_AUTH_EVENT, readTeacherAccessToken } from '../auth/teacherAuth'
 import { makeId } from '../../utils/id'
@@ -81,12 +82,7 @@ export type UseTeacherChatApiParams = {
 }
 
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  if (error instanceof Error) {
-    const message = error.message.trim()
-    if (message) return message
-  }
-  const raw = String(error || '').trim()
-  return raw || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export function useTeacherChatApi(params: UseTeacherChatApiParams) {

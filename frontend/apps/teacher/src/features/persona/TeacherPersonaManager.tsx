@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { TeacherPersona } from '../../appTypes'
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 import {
   assignTeacherPersona,
   createTeacherPersona,
@@ -23,9 +24,7 @@ const toLines = (value: string) =>
     .slice(0, 20)
 
 const toErrorMessage = (error: unknown, fallback: string) => {
-  if (error instanceof Error && error.message.trim()) return error.message.trim()
-  const text = String(error || '').trim()
-  return text || fallback
+  return toUserFacingErrorMessage(error, fallback)
 }
 
 export default function TeacherPersonaManager({ open, onClose, apiBase }: Props) {
