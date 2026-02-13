@@ -179,6 +179,13 @@ services:
       - ./uploads:/workspace/uploads:ro
       - ./output:/workspace/output
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /workspace/output || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
 
   backup_daily_full:
     build:
@@ -213,6 +220,13 @@ services:
       - ./uploads:/workspace/uploads:ro
       - ./output:/workspace/output
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /workspace/output || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
 
   backup_verify_weekly:
     build:
@@ -243,6 +257,13 @@ services:
       - ./:/workspace
       - ./output:/workspace/output
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /workspace/output || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
 
   # Optional Qdrant service (enable with: docker compose --profile qdrant up)
   qdrant:
@@ -252,6 +273,14 @@ services:
       - "6333:6333"
     volumes:
       - ./.qdrant:/qdrant/storage
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/readyz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   redis_data:

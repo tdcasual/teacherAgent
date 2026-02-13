@@ -197,6 +197,14 @@ def _resolve_runtime_tool_limits(
     role_hint: Optional[str],
     skill_runtime: Optional[Any],
 ) -> Tuple[Set[str], int, int]:
+    def _clamp_budget(base_limit: int, requested: Any) -> int:
+        try:
+            parsed = max(1, int(requested))
+        except Exception:
+            return base_limit
+        # Skill-level budget can only tighten global limits, never relax them.
+        return min(base_limit, parsed)
+
     allowed = deps.allowed_tools(role_hint)
     max_tool_rounds = deps.max_tool_rounds
     max_tool_calls = deps.max_tool_calls
@@ -206,9 +214,9 @@ def _resolve_runtime_tool_limits(
         if role_hint == "teacher" and isinstance(dynamic_tools, dict):
             allowed |= {str(name) for name in dynamic_tools.keys() if str(name).strip()}
         if skill_runtime.max_tool_rounds is not None:
-            max_tool_rounds = max(1, int(skill_runtime.max_tool_rounds))
+            max_tool_rounds = _clamp_budget(max_tool_rounds, skill_runtime.max_tool_rounds)
         if skill_runtime.max_tool_calls is not None:
-            max_tool_calls = max(1, int(skill_runtime.max_tool_calls))
+            max_tool_calls = _clamp_budget(max_tool_calls, skill_runtime.max_tool_calls)
     return allowed, max_tool_rounds, max_tool_calls
 
 

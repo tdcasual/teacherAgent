@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 import unittest
 
-from services.api.agent_service import AgentRuntimeDeps, parse_tool_json, run_agent_runtime
+from services.api.agent_service import (
+    AgentRuntimeDeps,
+    _resolve_runtime_tool_limits,
+    parse_tool_json,
+    run_agent_runtime,
+)
 
 
 class AgentServiceTest(unittest.TestCase):
@@ -363,6 +368,38 @@ class AgentServiceTest(unittest.TestCase):
         )
         reply = result.get("reply", "")
         self.assertTrue(len(reply) > 0)
+
+    def test_skill_runtime_budget_cannot_relax_global_caps(self):
+        deps = self._make_deps(call_llm=lambda *_args, **_kwargs: {"choices": [{"message": {"content": "ok"}}]})
+
+        class _Runtime:
+            max_tool_rounds = 999
+            max_tool_calls = 999
+            dynamic_tools = {}
+
+            @staticmethod
+            def apply_tool_policy(allowed):
+                return set(allowed)
+
+        _, max_rounds, max_calls = _resolve_runtime_tool_limits(deps, "teacher", _Runtime())
+        self.assertEqual(max_rounds, deps.max_tool_rounds)
+        self.assertEqual(max_calls, deps.max_tool_calls)
+
+    def test_skill_runtime_budget_can_tighten_global_caps(self):
+        deps = self._make_deps(call_llm=lambda *_args, **_kwargs: {"choices": [{"message": {"content": "ok"}}]})
+
+        class _Runtime:
+            max_tool_rounds = 1
+            max_tool_calls = 2
+            dynamic_tools = {}
+
+            @staticmethod
+            def apply_tool_policy(allowed):
+                return set(allowed)
+
+        _, max_rounds, max_calls = _resolve_runtime_tool_limits(deps, "teacher", _Runtime())
+        self.assertEqual(max_rounds, 1)
+        self.assertEqual(max_calls, 2)
 
 
 if __name__ == "__main__":
