@@ -166,10 +166,10 @@ def test_assignment_detail_fingerprint_handles_stat_exception(
 
     orig_stat = Path.stat
 
-    def _patched_stat(path_obj: Path):
+    def _patched_stat(path_obj: Path, *args, **kwargs):
         if path_obj.name == "requirements.json":
             raise OSError("simulated stat failure")
-        return orig_stat(path_obj)
+        return orig_stat(path_obj, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", _patched_stat)
     fp = mod._assignment_detail_fingerprint(tmp_path)

@@ -64,9 +64,7 @@ def _bind_attachment_scope(
     raise HTTPException(status_code=400, detail="role must be teacher or student")
 
 
-def build_router(core: Any) -> APIRouter:
-    router = APIRouter()
-
+def _register_chat_routes(router: APIRouter, core: Any) -> None:
     @router.post("/chat")
     async def chat(req: ChatRequest) -> Any:
         bound = _bind_or_raise(req)
@@ -81,6 +79,8 @@ def build_router(core: Any) -> APIRouter:
     async def chat_status(job_id: str) -> Any:
         return await core.chat_handlers.chat_status(job_id, deps=core._chat_handlers_deps())
 
+
+def _register_chat_attachment_routes(router: APIRouter, core: Any) -> None:
     @router.post("/chat/attachments")
     async def chat_attachment_upload(
         role: str = Form(...),
@@ -168,4 +168,9 @@ def build_router(core: Any) -> APIRouter:
         except ChatAttachmentError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
+
+def build_router(core: Any) -> APIRouter:
+    router = APIRouter()
+    _register_chat_routes(router, core)
+    _register_chat_attachment_routes(router, core)
     return router

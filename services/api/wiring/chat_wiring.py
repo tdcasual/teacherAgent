@@ -101,13 +101,17 @@ from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registr
 from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
 
 
-def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
-    _ac = _app_core()
-    backend = queue_runtime.app_queue_backend(
+def _queue_backend_for_app_core(_ac: Any):
+    return queue_runtime.app_queue_backend(
         tenant_id=_ac.TENANT_ID or None,
         is_pytest=_ac._settings.is_pytest(),
         inline_backend_factory=_ac._inline_backend_factory,
     )
+
+
+def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
+    _ac = _app_core()
+    backend = _queue_backend_for_app_core(_ac)
     return chat_handlers.ChatHandlerDeps(
         compute_chat_reply_sync=lambda req: _ac._compute_chat_reply_sync(req),
         detect_math_delimiters=_ac.detect_math_delimiters,
@@ -128,11 +132,7 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
 
 def _chat_start_deps():
     _ac = _app_core()
-    backend = queue_runtime.app_queue_backend(
-        tenant_id=_ac.TENANT_ID or None,
-        is_pytest=_ac._settings.is_pytest(),
-        inline_backend_factory=_ac._inline_backend_factory,
-    )
+    backend = _queue_backend_for_app_core(_ac)
 
     def _detect_role_hint_nonnull(req: Any) -> str:
         return _detect_role_hint_impl(req, detect_role=_ac.detect_role) or "unknown"
@@ -190,11 +190,7 @@ def _chat_start_deps():
 
 def _chat_status_deps():
     _ac = _app_core()
-    backend = queue_runtime.app_queue_backend(
-        tenant_id=_ac.TENANT_ID or None,
-        is_pytest=_ac._settings.is_pytest(),
-        inline_backend_factory=_ac._inline_backend_factory,
-    )
+    backend = _queue_backend_for_app_core(_ac)
     return ChatStatusDeps(
         load_chat_job=_ac.load_chat_job,
         enqueue_chat_job=lambda job_id, lane_id: queue_runtime.enqueue_chat_job(
@@ -295,11 +291,7 @@ def chat_worker_deps():
 
 def _chat_job_process_deps():
     _ac = _app_core()
-    backend = queue_runtime.app_queue_backend(
-        tenant_id=_ac.TENANT_ID or None,
-        is_pytest=_ac._settings.is_pytest(),
-        inline_backend_factory=_ac._inline_backend_factory,
-    )
+    backend = _queue_backend_for_app_core(_ac)
     return ChatJobProcessDeps(
         chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()) / "claim.lock",
         try_acquire_lockfile=_try_acquire_lockfile,

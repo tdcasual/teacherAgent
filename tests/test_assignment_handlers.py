@@ -7,7 +7,7 @@ from services.api.handlers import assignment_handlers
 
 
 def _deps(tmp_path, **overrides):
-    def list_assignments():
+    def list_assignments(_limit: int = 50, _cursor: int = 0):
         return {"assignments": []}
 
     def compute_assignment_progress(assignment_id: str, include_students: bool = True):
@@ -126,7 +126,7 @@ async def test_teacher_assignments_progress_filters_and_sorts(tmp_path):
     def parse_date_str(_value):
         return "2024-01-02"
 
-    def list_assignments():
+    def list_assignments(_limit: int = 50, _cursor: int = 0):
         return {
             "assignments": [
                 {"assignment_id": "a1", "date": "2024-01-02"},
