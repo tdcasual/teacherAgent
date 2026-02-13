@@ -6,6 +6,7 @@ type TeacherTopbarProps = {
   skillsOpen: boolean
   onToggleSessionSidebar: () => void
   onOpenRoutingSettingsPanel: () => void
+  onOpenPersonaManager: () => void
   onToggleSkillsWorkbench: () => void
   onToggleSettingsPanel: () => void
 }
@@ -16,6 +17,7 @@ export default function TeacherTopbar({
   skillsOpen,
   onToggleSessionSidebar,
   onOpenRoutingSettingsPanel,
+  onOpenPersonaManager,
   onToggleSkillsWorkbench,
   onToggleSettingsPanel,
 }: TeacherTopbarProps) {
@@ -35,6 +37,9 @@ export default function TeacherTopbar({
         <div className="role-badge teacher">身份：老师</div>
         <button className="ghost" type="button" onClick={onOpenRoutingSettingsPanel}>
           模型路由
+        </button>
+        <button className="ghost" type="button" onClick={onOpenPersonaManager}>
+          角色管理
         </button>
         <button className="ghost" type="button" onClick={onToggleSkillsWorkbench}>
           {skillsOpen ? '收起工作台' : '打开工作台'}

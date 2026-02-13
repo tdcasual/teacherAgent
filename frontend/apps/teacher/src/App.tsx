@@ -4,6 +4,7 @@ import type { RoutingSection } from './features/routing/RoutingPage'
 import { isRoutingSection } from './features/routing/routingSections'
 import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
 import TeacherTopbar from './features/layout/TeacherTopbar'
+import TeacherPersonaManager from './features/persona/TeacherPersonaManager'
 import { useChatScroll } from './features/chat/useChatScroll'
 import {
   readTeacherLocalViewState,
@@ -169,6 +170,7 @@ export default function App() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [personaManagerOpen, setPersonaManagerOpen] = useState(false)
   const [settingsLegacyFlat, setSettingsLegacyFlat] = useState(false)
   const [inlineRoutingOpen, setInlineRoutingOpen] = useState(false)
   const [settingsHasUnsavedDraft, setSettingsHasUnsavedDraft] = useState(false)
@@ -539,6 +541,14 @@ export default function App() {
     setSettingsSection,
   })
 
+  const openPersonaManager = useCallback(() => {
+    setPersonaManagerOpen(true)
+  }, [])
+
+  const closePersonaManager = useCallback(() => {
+    setPersonaManagerOpen(false)
+  }, [])
+
   const {
     isWorkbenchResizing,
     startWorkbenchResize,
@@ -623,8 +633,15 @@ export default function App() {
         skillsOpen={skillsOpen}
         onToggleSessionSidebar={toggleSessionSidebar}
         onOpenRoutingSettingsPanel={openRoutingSettingsPanel}
+        onOpenPersonaManager={openPersonaManager}
         onToggleSkillsWorkbench={toggleSkillsWorkbench}
         onToggleSettingsPanel={toggleSettingsPanel}
+      />
+
+      <TeacherPersonaManager
+        open={personaManagerOpen}
+        onClose={closePersonaManager}
+        apiBase={apiBase}
       />
 
       <TeacherSettingsPanel

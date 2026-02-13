@@ -377,6 +377,27 @@ export type Skill = {
   source_type: 'system' | 'teacher' | 'claude'
 }
 
+export type TeacherPersona = {
+  persona_id: string
+  teacher_id?: string
+  name?: string
+  summary?: string
+  style_rules?: string[]
+  few_shot_examples?: string[]
+  avatar_url?: string
+  intensity_cap?: string
+  lifecycle_status?: string
+  visibility_mode?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export type TeacherPersonaListResponse = {
+  ok: boolean
+  teacher_id: string
+  personas: TeacherPersona[]
+}
+
 export type MentionOption = {
   id: string
   title: string
