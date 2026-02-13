@@ -7,10 +7,27 @@ from fastapi.responses import FileResponse
 
 from .teacher_route_helpers import ensure_ok_result, scoped_payload_teacher_id, scoped_teacher_id
 
+_AVATAR_MAX_BYTES = 2 * 1024 * 1024
+_AVATAR_READ_CHUNK = 64 * 1024
+
 
 def _effective_teacher_id(core: Any, teacher_id: Optional[str]) -> str:
     teacher_id_scoped = scoped_teacher_id(teacher_id)
     return core.resolve_teacher_id(str(teacher_id_scoped or "").strip())
+
+
+async def _read_avatar_content_limited(file: UploadFile) -> Optional[bytes]:
+    total = 0
+    chunks: list[bytes] = []
+    while True:
+        chunk = await file.read(_AVATAR_READ_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > _AVATAR_MAX_BYTES:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def register_teacher_persona_routes(router: APIRouter, core: Any) -> None:
@@ -82,16 +99,21 @@ def register_teacher_persona_routes(router: APIRouter, core: Any) -> None:
         file: UploadFile = File(...),
     ) -> Any:
         teacher_id_scoped = _effective_teacher_id(core, teacher_id)
-        content = await file.read()
-        result = core._teacher_persona_avatar_upload_api_impl(
-            teacher_id_scoped or "",
-            persona_id,
-            filename=str(getattr(file, "filename", "") or ""),
-            content=content,
-            deps=core._teacher_persona_api_deps(),
-        )
-        ensure_ok_result(result, not_found_errors={"persona_not_found"})
-        return result
+        try:
+            content = await _read_avatar_content_limited(file)
+            if content is None:
+                ensure_ok_result({"ok": False, "error": "avatar_too_large"})
+            result = core._teacher_persona_avatar_upload_api_impl(
+                teacher_id_scoped or "",
+                persona_id,
+                filename=str(getattr(file, "filename", "") or ""),
+                content=content,
+                deps=core._teacher_persona_api_deps(),
+            )
+            ensure_ok_result(result, not_found_errors={"persona_not_found"})
+            return result
+        finally:
+            await file.close()
 
     @router.get("/teacher/personas/avatar/{teacher_id}/{persona_id}/{file_name}")
     def teacher_persona_avatar_get(teacher_id: str, persona_id: str, file_name: str) -> Any:

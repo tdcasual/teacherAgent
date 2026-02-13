@@ -6,6 +6,9 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from ..auth_service import AuthError, resolve_student_scope
 
+_AVATAR_MAX_BYTES = 2 * 1024 * 1024
+_AVATAR_READ_CHUNK = 64 * 1024
+
 
 def _scoped_student_id(student_id: Optional[str]) -> str:
     try:
@@ -16,6 +19,20 @@ def _scoped_student_id(student_id: Optional[str]) -> str:
     if not sid:
         raise HTTPException(status_code=400, detail={"error": "missing_student_id"})
     return sid
+
+
+async def _read_avatar_content_limited(file: UploadFile) -> Optional[bytes]:
+    total = 0
+    chunks: list[bytes] = []
+    while True:
+        chunk = await file.read(_AVATAR_READ_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > _AVATAR_MAX_BYTES:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def register_student_persona_routes(router: APIRouter, core: Any) -> None:
@@ -91,17 +108,22 @@ def register_student_persona_routes(router: APIRouter, core: Any) -> None:
         file: UploadFile = File(...),
     ) -> Any:
         sid = _scoped_student_id(student_id)
-        content = await file.read()
-        result = core._student_persona_avatar_upload_api_impl(
-            sid,
-            persona_id,
-            filename=str(getattr(file, "filename", "") or ""),
-            content=content,
-            deps=core._student_persona_api_deps(),
-        )
-        if not result.get("ok"):
-            raise HTTPException(status_code=400, detail=result)
-        return result
+        try:
+            content = await _read_avatar_content_limited(file)
+            if content is None:
+                raise HTTPException(status_code=400, detail={"ok": False, "error": "avatar_too_large"})
+            result = core._student_persona_avatar_upload_api_impl(
+                sid,
+                persona_id,
+                filename=str(getattr(file, "filename", "") or ""),
+                content=content,
+                deps=core._student_persona_api_deps(),
+            )
+            if not result.get("ok"):
+                raise HTTPException(status_code=400, detail=result)
+            return result
+        finally:
+            await file.close()
 
     @router.get("/student/personas/avatar/{student_id}/{persona_id}/{file_name}")
     def get_student_persona_avatar(student_id: str, persona_id: str, file_name: str) -> Any:

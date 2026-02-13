@@ -59,14 +59,25 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
         try:
             fd = deps.os_open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
+            pid = 0
             try:
                 pid = _read_lock_pid(path)
-                if pid > 0 and not deps.is_pid_alive(pid):
-                    path.unlink(missing_ok=True)
-                    continue
             except Exception:
                 _log.debug("failed to check/remove stale lock %s", path)
                 pass
+            if pid > 0:
+                try:
+                    if deps.is_pid_alive(pid):
+                        return False
+                except Exception:
+                    _log.debug("failed to check pid liveness for %s", path)
+                    return False
+                try:
+                    path.unlink(missing_ok=True)
+                    continue
+                except Exception:
+                    _log.debug("failed to remove dead-pid lock %s", path)
+                    return False
             try:
                 age = now - float(path.stat().st_mtime)
                 if ttl_sec > 0 and age > float(ttl_sec):

@@ -16,6 +16,7 @@ class _StudentPersonaCoreStub:
     def __init__(self) -> None:
         self.captured_get_student_id = ""
         self.captured_activate_student_id = ""
+        self.avatar_upload_calls = 0
 
     def _student_persona_api_deps(self) -> object:
         return object()
@@ -60,6 +61,7 @@ class _StudentPersonaCoreStub:
         content: bytes,
         deps: Any,
     ) -> Dict[str, Any]:
+        self.avatar_upload_calls += 1
         return {"ok": True, "student_id": student_id, "persona_id": persona_id, "avatar_url": filename}
 
     def _resolve_student_persona_avatar_path_impl(
@@ -74,6 +76,7 @@ class _TeacherPersonaCoreStub:
         self.resolve_teacher_id_arg: Any = None
         self.captured_get_teacher_id = ""
         self.captured_avatar_teacher_id = ""
+        self.avatar_upload_calls = 0
 
     def _teacher_persona_api_deps(self) -> object:
         return object()
@@ -124,6 +127,7 @@ class _TeacherPersonaCoreStub:
         content: bytes,
         deps: Any,
     ) -> Dict[str, Any]:
+        self.avatar_upload_calls += 1
         return {"ok": True, "teacher_id": teacher_id, "persona_id": persona_id, "avatar_url": filename}
 
     def _resolve_teacher_persona_avatar_path_impl(
@@ -215,3 +219,38 @@ def test_teacher_persona_avatar_get_binds_teacher_scope() -> None:
 
         assert response.status_code == 200
         assert core.captured_avatar_teacher_id == "scoped_teacher"
+
+
+def test_student_persona_avatar_upload_rejects_oversized_file_before_service_call() -> None:
+    core = _StudentPersonaCoreStub()
+    client = _build_student_persona_client(core)
+    payload = b"x" * (2 * 1024 * 1024 + 1)
+
+    response = client.post(
+        "/student/personas/avatar/upload",
+        data={"student_id": "S001", "persona_id": "custom_1"},
+        files={"file": ("avatar.png", payload, "image/png")},
+    )
+
+    assert response.status_code == 400
+    assert response.json().get("detail", {}).get("error") == "avatar_too_large"
+    assert core.avatar_upload_calls == 0
+
+
+def test_teacher_persona_avatar_upload_rejects_oversized_file_before_service_call() -> None:
+    with TemporaryDirectory() as td:
+        avatar_path = Path(td) / "avatar.png"
+        avatar_path.write_bytes(b"avatar")
+        core = _TeacherPersonaCoreStub(avatar_path)
+        client = _build_teacher_persona_client(core)
+        payload = b"x" * (2 * 1024 * 1024 + 1)
+
+        response = client.post(
+            "/teacher/personas/pid/avatar/upload",
+            data={"teacher_id": "T001"},
+            files={"file": ("avatar.png", payload, "image/png")},
+        )
+
+        assert response.status_code == 400
+        assert response.json().get("detail", {}).get("error") == "avatar_too_large"
+        assert core.avatar_upload_calls == 0

@@ -96,6 +96,18 @@ class JobRepositoryLockfileTest(unittest.TestCase):
                     self.assertIn("pid", payload)
                     self.assertIn("ts", payload)
 
+    def test_try_acquire_lockfile_does_not_reclaim_alive_pid_even_if_ttl_expired(self):
+        with TemporaryDirectory() as td:
+            path = Path(td) / "claim.lock"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"pid": 8888, "ts": "2026-01-01T00:00:00"}), encoding="utf-8")
+            os.utime(path, (1000.0, 1000.0))
+            with patch("services.api.job_repository.time.time", return_value=2000.0):
+                with patch("services.api.job_repository.os.kill", return_value=None):
+                    self.assertFalse(_try_acquire_lockfile(path, ttl_sec=100))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(int(payload.get("pid") or 0), 8888)
+
     def test_try_acquire_lockfile_success_then_conflict(self):
         with TemporaryDirectory() as td:
             path = Path(td) / "claim.lock"
