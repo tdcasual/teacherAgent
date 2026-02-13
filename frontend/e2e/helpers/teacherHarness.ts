@@ -66,6 +66,12 @@ const defaultLocalStorageState: LocalStorageState = {
   teacherSkillPinned: 'false',
   teacherActiveSkillId: 'physics-teacher-ops',
   apiBaseTeacher: 'http://localhost:8000',
+  teacherAuthAccessToken: 'e2e-teacher-token',
+  teacherAuthSubject: JSON.stringify({
+    teacher_id: 'T001',
+    teacher_name: '测试老师',
+    email: 'teacher@example.com',
+  }),
 }
 
 type ChatStartHookResult = {

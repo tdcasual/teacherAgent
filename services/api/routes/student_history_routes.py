@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
+
 from ..auth_service import AuthError, resolve_student_scope
 
 

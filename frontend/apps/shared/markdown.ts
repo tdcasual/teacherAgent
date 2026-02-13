@@ -8,22 +8,20 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
 import { visit } from 'unist-util-visit';
 import type { Node } from 'unist';
-import { normalizeApiBase } from './apiBase'
+import { normalizeApiBase } from './apiBase';
 
 type MarkdownNode = {
-  type?: string
-  value?: unknown
-  children?: MarkdownNode[]
-}
+  type?: string;
+  value?: unknown;
+  children?: MarkdownNode[];
+};
 
 const asMarkdownNode = (value: unknown): MarkdownNode | null => {
   if (!value || typeof value !== 'object') return null;
   return value as MarkdownNode;
 };
 
-const asMarkdownParent = (
-  value: unknown,
-): (MarkdownNode & { children: MarkdownNode[] }) | null => {
+const asMarkdownParent = (value: unknown): (MarkdownNode & { children: MarkdownNode[] }) | null => {
   const node = asMarkdownNode(value);
   if (!node || !Array.isArray(node.children)) return null;
   return node as MarkdownNode & { children: MarkdownNode[] };
@@ -181,7 +179,7 @@ export const renderMarkdown = (content: string) => {
 };
 
 export const absolutizeChartImageUrls = (html: string, apiBase: string) => {
-  const base = normalizeApiBase(apiBase)
+  const base = normalizeApiBase(apiBase);
   if (!base) return html;
   return html
     .replace(

@@ -224,8 +224,9 @@ def resolve_principal_from_headers(
 
     claims = principal.claims if isinstance(principal.claims, dict) else {}
     if principal.role in {"teacher", "student"} and claims.get("tv") is not None:
+        raw_token_version = claims.get("tv")
         try:
-            token_version = int(claims.get("tv"))
+            token_version = int(str(raw_token_version))
         except Exception:
             raise AuthError(401, "invalid_token_claims")
         try:

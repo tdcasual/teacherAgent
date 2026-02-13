@@ -1,58 +1,58 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-const NEAR_BOTTOM_THRESHOLD = 80
-const CACHE_MAX = 500
+const NEAR_BOTTOM_THRESHOLD = 80;
+const CACHE_MAX = 500;
 
 /**
  * Smart auto-scroll hook: only scrolls to bottom when user is already near
  * the bottom. Exposes isNearBottom state and manual scrollToBottom().
  */
 export function useSmartAutoScroll() {
-  const messagesRef = useRef<HTMLDivElement>(null)
-  const endRef = useRef<HTMLDivElement>(null)
-  const [isNearBottom, setIsNearBottom] = useState(true)
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
 
   useEffect(() => {
-    const el = messagesRef.current
-    if (!el) return
+    const el = messagesRef.current;
+    if (!el) return;
 
     const onScroll = () => {
-      const gap = el.scrollHeight - el.scrollTop - el.clientHeight
-      setIsNearBottom(gap < NEAR_BOTTOM_THRESHOLD)
-    }
+      const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setIsNearBottom(gap < NEAR_BOTTOM_THRESHOLD);
+    };
 
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [])
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const el = messagesRef.current
-    if (!el) return
+    const el = messagesRef.current;
+    if (!el) return;
     try {
-      el.scrollTo({ top: el.scrollHeight, behavior })
+      el.scrollTo({ top: el.scrollHeight, behavior });
     } catch {
-      el.scrollTop = el.scrollHeight
+      el.scrollTop = el.scrollHeight;
     }
 
     // Some browsers may scroll overflow-hidden ancestors when using smooth scroll.
     // Keep chat shell anchored so composer stays at viewport bottom.
-    const chatShell = el.closest('.chat-shell')
+    const chatShell = el.closest('.chat-shell');
     if (chatShell instanceof HTMLElement && chatShell.scrollTop !== 0) {
-      chatShell.scrollTop = 0
+      chatShell.scrollTop = 0;
     }
-  }, [])
+  }, []);
 
   const scrollToBottom = useCallback(() => {
-    scrollMessagesToBottom('smooth')
-  }, [scrollMessagesToBottom])
+    scrollMessagesToBottom('smooth');
+  }, [scrollMessagesToBottom]);
 
   const autoScroll = useCallback(() => {
     if (isNearBottom) {
-      scrollMessagesToBottom('smooth')
+      scrollMessagesToBottom('smooth');
     }
-  }, [isNearBottom, scrollMessagesToBottom])
+  }, [isNearBottom, scrollMessagesToBottom]);
 
-  return { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll }
+  return { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll };
 }
 
 /**
@@ -60,22 +60,22 @@ export function useSmartAutoScroll() {
  * Call saveScrollHeight() before inserting, restoreScrollPosition() after.
  */
 export function useScrollPositionLock(containerRef: React.RefObject<HTMLDivElement | null>) {
-  const savedHeight = useRef(0)
+  const savedHeight = useRef(0);
 
   const saveScrollHeight = useCallback(() => {
     if (containerRef.current) {
-      savedHeight.current = containerRef.current.scrollHeight
+      savedHeight.current = containerRef.current.scrollHeight;
     }
-  }, [containerRef])
+  }, [containerRef]);
 
   const restoreScrollPosition = useCallback(() => {
-    const el = containerRef.current
+    const el = containerRef.current;
     if (el) {
-      el.scrollTop += el.scrollHeight - savedHeight.current
+      el.scrollTop += el.scrollHeight - savedHeight.current;
     }
-  }, [containerRef])
+  }, [containerRef]);
 
-  return { saveScrollHeight, restoreScrollPosition }
+  return { saveScrollHeight, restoreScrollPosition };
 }
 
 /**
@@ -83,12 +83,12 @@ export function useScrollPositionLock(containerRef: React.RefObject<HTMLDivEleme
  * Map preserves insertion order, so we delete the oldest entries.
  */
 export function evictOldestEntries<K, V>(cache: Map<K, V>, max: number = CACHE_MAX) {
-  if (cache.size <= max) return
-  const excess = cache.size - max
-  const iter = cache.keys()
+  if (cache.size <= max) return;
+  const excess = cache.size - max;
+  const iter = cache.keys();
   for (let i = 0; i < excess; i++) {
-    const { value, done } = iter.next()
-    if (done) break
-    cache.delete(value)
+    const { value, done } = iter.next();
+    if (done) break;
+    cache.delete(value);
   }
 }

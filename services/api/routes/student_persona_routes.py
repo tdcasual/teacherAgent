@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+
 from ..auth_service import AuthError, resolve_student_scope
 
 _AVATAR_MAX_BYTES = 2 * 1024 * 1024

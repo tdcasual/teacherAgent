@@ -40,6 +40,9 @@ test('desktop sidebar collapsed state persists after reload', async ({ page }) =
   await page.addInitScript(() => {
     if (!localStorage.getItem('apiBaseStudent')) localStorage.setItem('apiBaseStudent', 'http://localhost:8000')
     if (!localStorage.getItem('studentSidebarOpen')) localStorage.setItem('studentSidebarOpen', 'true')
+    if (!localStorage.getItem('studentAuthAccessToken')) {
+      localStorage.setItem('studentAuthAccessToken', 'e2e-student-token')
+    }
     if (!localStorage.getItem('verifiedStudent')) {
       localStorage.setItem(
         'verifiedStudent',
@@ -182,6 +185,7 @@ test('pending and active-session transitions remain isolated after switching ses
     localStorage.clear()
     localStorage.setItem('apiBaseStudent', 'http://localhost:8000')
     localStorage.setItem('studentSidebarOpen', 'false')
+    localStorage.setItem('studentAuthAccessToken', 'e2e-student-token')
     localStorage.setItem(
       'verifiedStudent',
       JSON.stringify({ student_id: 'S001', student_name: '测试学生', class_name: '高二1班' }),

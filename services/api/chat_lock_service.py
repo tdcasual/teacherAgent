@@ -97,8 +97,11 @@ def _read_lock_pid(path: Path) -> int:
     if not payload:
         _log.warning("failed to read/parse lock file %s", path, exc_info=True)
         return 0
+    raw_pid = payload.get("pid")
     try:
-        return int(payload.get("pid") or 0)
+        if isinstance(raw_pid, (int, float, str, bytes, bytearray)):
+            return int(raw_pid)
+        return 0
     except Exception:
         _log.debug("non-integer pid in lock file %s", path)
         return 0

@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import JSONResponse
+
 from ..auth_service import AuthError, resolve_student_scope
 
 

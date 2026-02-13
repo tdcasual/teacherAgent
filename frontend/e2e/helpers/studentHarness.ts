@@ -23,6 +23,7 @@ type OpenStudentAppOptions = {
 const defaultLocalStorageState: LocalStorageState = {
   apiBaseStudent: 'http://localhost:8000',
   studentSidebarOpen: 'true',
+  studentAuthAccessToken: 'e2e-student-token',
   verifiedStudent: JSON.stringify({
     student_id: 'S001',
     student_name: '测试学生',

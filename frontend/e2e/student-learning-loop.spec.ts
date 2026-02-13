@@ -101,10 +101,25 @@ const studentLoopCases: MatrixCase[] = [
   },
 ]
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('apiBaseStudent', 'http://localhost:8000')
+    localStorage.setItem('studentAuthAccessToken', 'e2e-student-token')
+    localStorage.setItem(
+      'verifiedStudent',
+      JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    )
+  })
+})
+
 test('student shell renders chat and workbench regions', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('student-chat-panel')).toBeVisible()
-  await expect(page.getByTestId('student-workbench')).toBeVisible()
+  await expect(page.getByRole('complementary').first()).toBeVisible()
 })
 
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {

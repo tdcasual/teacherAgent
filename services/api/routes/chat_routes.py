@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
-from ..chat_attachment_service import (
-    ChatAttachmentDeps,
-    ChatAttachmentError,
-    delete_chat_attachment,
-    get_chat_attachment_status,
-    upload_chat_attachments,
-)
 from ..api_models import ChatRequest, ChatStartRequest
 from ..auth_service import (
     AuthError,
     bind_chat_request_to_principal,
     resolve_student_scope,
     resolve_teacher_scope,
+)
+from ..chat_attachment_service import (
+    ChatAttachmentDeps,
+    ChatAttachmentError,
+    delete_chat_attachment,
+    get_chat_attachment_status,
+    upload_chat_attachments,
 )
 
 
