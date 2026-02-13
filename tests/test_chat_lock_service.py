@@ -27,6 +27,9 @@ class ChatLockServiceTest(unittest.TestCase):
             self.assertTrue(try_acquire_lockfile(path, ttl_sec=60, deps=deps))
             self.assertTrue(path.exists())
             self.assertFalse(try_acquire_lockfile(path, ttl_sec=60, deps=deps))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertIsInstance(str(payload.get("owner") or ""), str)
+            self.assertTrue(str(payload.get("owner") or "").strip())
 
     def test_try_acquire_lockfile_reclaims_stale_lock(self):
         with TemporaryDirectory() as td:
@@ -76,6 +79,23 @@ class ChatLockServiceTest(unittest.TestCase):
             self.assertFalse(path.exists())
             release_lockfile(path)
             self.assertFalse(path.exists())
+
+    def test_release_lockfile_keeps_file_when_owner_mismatch(self):
+        with TemporaryDirectory() as td:
+            path = Path(td) / "claim.lock"
+            deps = ChatLockDeps(
+                now_ts=time.time,
+                now_iso=lambda: "2026-01-01T00:00:00",
+                get_pid=lambda: 1234,
+                is_pid_alive=lambda _pid: True,
+            )
+            self.assertTrue(try_acquire_lockfile(path, ttl_sec=60, deps=deps))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["owner"] = "other-owner-token"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            release_lockfile(path)
+            self.assertTrue(path.exists())
 
     def test_chat_job_claim_path_uses_job_directory(self):
         claim = chat_job_claim_path("job_1", lambda job_id: Path("/tmp/chat_jobs") / job_id)

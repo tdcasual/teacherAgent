@@ -737,7 +737,10 @@
 ### 交付状态
 
 - `docs/plans/2026-02-13-code-audit-findings.md` 已完成 Phase 1-5 审计记录与分阶段汇总。
-- 当前为审计阶段，尚未进入修复提交阶段（待你确认后按优先级逐项修复）。
+- 已进入修复提交阶段，按 P0 → P1 → P2 顺序持续修复并回归验证。
+- 已推送修复提交：
+  - `1f44f64` `fix(security): harden frontend api base/errors and pin ci actions`
+  - `8a1e549` `fix(security): cap skill budgets and harden backup services baseline`
 
 ---
 
@@ -795,6 +798,32 @@
    - 涉及文件：`services/api/rate_limit.py`、`services/api/assignment_catalog_service.py`、`services/api/exam_catalog_service.py`、`services/api/routes/assignment_listing_routes.py`、`services/api/routes/exam_query_routes.py`、`services/api/assignment/application.py`、`services/api/exam/application.py`、`services/api/assignment/deps.py`、`services/api/exam/deps.py`、`services/api/handlers/assignment_handlers.py`、`services/api/wiring/assignment_wiring.py`、`services/api/context_application_facade.py`。  
    - 验证：扩展 `tests/test_rate_limit.py`、`tests/test_assignment_catalog_service.py`、`tests/test_exam_catalog_service.py` 并通过。
 
+8. P1/P2：前端稳态与供应链基线修复（Batch C）  
+   - 修复点（前端）：  
+     - 新增 `frontend/apps/shared/apiBase.ts`，对 `apiBase` 做 `http/https`、危险字符、凭据字段约束；  
+     - `shared/markdown.ts` 的 `absolutizeChartImageUrls` 改用安全 `normalizeApiBase`；  
+     - 新增 `frontend/apps/shared/errorMessage.ts`，统一错误码映射与敏感细节过滤，避免直接回显后端原始错误文本。  
+   - 修复点（CI/容器）：  
+     - `.github/workflows/ci.yml`、`.github/workflows/docker.yml`、`.github/workflows/teacher-e2e.yml`、`.github/workflows/mobile-session-menu-e2e.yml` 第三方 Action 全量 SHA pin；  
+     - `docker-compose.yml` 收紧默认：`AUTH_REQUIRED=1`、`REDIS_PASSWORD` 必填、Redis 端口仅本机绑定；  
+     - `frontend/Dockerfile` 切换 `USER nginx` 非 root 运行。  
+   - 涉及文件：`frontend/apps/shared/apiBase.ts`、`frontend/apps/shared/errorMessage.ts`、`frontend/apps/shared/markdown.ts`、`frontend/apps/student/src/hooks/useStudentState.ts`、`frontend/apps/teacher/src/features/chat/useTeacherChatApi.ts`、`frontend/apps/teacher/src/features/routing/routingApi.ts`、`frontend/apps/teacher/src/features/persona/personaApi.ts`、`.github/workflows/ci.yml`、`.github/workflows/docker.yml`、`.github/workflows/teacher-e2e.yml`、`.github/workflows/mobile-session-menu-e2e.yml`、`docker-compose.yml`、`frontend/Dockerfile` 等。  
+   - 验证：新增 `tests/test_batch_c_frontend_security_hardening.py`、`tests/test_ci_actions_sha_pin.py`、`tests/test_docker_security_baseline.py` 并通过。
+
+9. P1：技能预算上限与 backup/qdrant 运行时基线补齐  
+   - 修复点（技能预算）：`services/api/agent_service.py` 中 skill runtime 的 `max_tool_rounds/max_tool_calls` 仅允许收紧全局上限，禁止放大预算。  
+   - 修复点（运维基线）：`docker-compose.yml` 为 `backup_scheduler`、`backup_daily_full`、`backup_verify_weekly`、`qdrant` 补齐 `mem_limit`、`cpus`、`healthcheck`，并为 `qdrant` 增加 `restart`。  
+   - 涉及文件：`services/api/agent_service.py`、`docker-compose.yml`。  
+   - 验证：扩展 `tests/test_agent_service.py`、`tests/test_docker_security_baseline.py` 并通过。
+
+10. P1：chat claim 锁竞态与 owner 校验加固  
+   - 修复点：  
+     - `services/api/chat_lock_service.py` 增加锁 owner token，`release_lockfile` 仅在 owner 匹配时删除锁文件；  
+     - 增加进程内持有态注册（同进程重入直接拒绝）；  
+     - 在“锁文件已存在”路径加入非阻塞 `flock` 探测，避免在活跃持有期误回收锁文件。  
+   - 涉及文件：`services/api/chat_lock_service.py`。  
+   - 验证：扩展 `tests/test_chat_lock_service.py`（owner 写入/owner 不匹配保护）并通过；`tests/test_chat_lock_service_more.py`、`tests/test_job_repository_lockfile.py`、`tests/test_chat_job_processing_service.py` 回归通过。
+
 ### 最近一次回归结果
 
 - `python3 -m pytest tests/test_grade_submission_security.py tests/test_student_submit_service.py tests/test_student_ops_api_service.py tests/test_security_auth_hardening.py tests/test_student_history_flow.py tests/test_student_routes.py tests/test_skill_routes.py tests/test_student_history_routes_types.py tests/test_student_profile_routes_types.py -q`  
@@ -815,3 +844,15 @@
   结果：`29 passed`
 - `python3 -m pytest tests/test_chat_attachment_service.py tests/test_chat_attachment_flow.py tests/test_assignment_upload_start_service.py tests/test_assignment_upload_legacy_service.py tests/test_exam_upload_start_service.py tests/test_assignment_upload_parse_service.py tests/test_assignment_upload_confirm_service.py tests/test_exam_upload_parse_service.py tests/test_exam_upload_flow.py tests/test_grade_submission_security.py tests/test_student_submit_service.py tests/test_security_auth_hardening.py tests/test_student_history_flow.py tests/test_student_routes.py tests/test_skill_routes.py tests/test_student_history_routes_types.py tests/test_student_profile_routes_types.py tests/test_assignment_routes.py tests/test_exam_routes.py tests/test_exam_endpoints.py tests/test_rate_limit.py tests/test_assignment_catalog_service.py tests/test_exam_catalog_service.py tests/test_misc_routes.py -q`  
   结果：`96 passed, 1 warning`
+- `python3 -m pytest tests/test_frontend_type_hardening.py tests/test_ci_workflow_quality.py tests/test_ci_backend_hardening_workflow.py tests/test_ci_smoke_e2e_workflow.py tests/test_docker_publish_workflow.py tests/test_batch_c_frontend_security_hardening.py tests/test_ci_actions_sha_pin.py tests/test_docker_security_baseline.py -q`  
+  结果：`30 passed`
+- `npm --prefix frontend run typecheck`  
+  结果：`通过`
+- `python3 -m pytest tests/test_security_auth_hardening.py tests/test_chat_job_processing_service.py tests/test_chat_lock_service.py tests/test_teacher_persona_api_service.py tests/test_student_persona_api_service.py tests/test_frontend_type_hardening.py -q`  
+  结果：`51 passed, 1 warning`
+- `python3 -m pytest tests/test_agent_service.py tests/test_docker_security_baseline.py -q`  
+  结果：`15 passed`
+- `python3 -m pytest tests/test_agent_service.py tests/test_ci_workflow_quality.py tests/test_ci_backend_hardening_workflow.py tests/test_ci_smoke_e2e_workflow.py tests/test_docker_publish_workflow.py tests/test_docker_security_baseline.py tests/test_batch_c_frontend_security_hardening.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
+  结果：`43 passed`
+- `python3 -m pytest tests/test_chat_lock_service.py tests/test_chat_lock_service_more.py tests/test_job_repository_lockfile.py tests/test_chat_job_processing_service.py tests/test_agent_service.py tests/test_docker_security_baseline.py tests/test_batch_c_frontend_security_hardening.py tests/test_ci_actions_sha_pin.py tests/test_frontend_type_hardening.py -q`  
+  结果：`67 passed, 2 skipped`
