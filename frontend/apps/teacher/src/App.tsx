@@ -38,6 +38,7 @@ import {
   parseLineList,
 } from './features/workbench/workbenchUtils'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
+import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
 import { formatSessionUpdatedLabel, nowTime } from './utils/time'
@@ -432,6 +433,21 @@ export default function App() {
     setExamStatusPollNonce,
   })
 
+  const attachmentTeacherId = (safeLocalStorageGetItem('teacherRoutingTeacherId') || '').trim()
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    clearReadyAttachments,
+    readyAttachmentRefs,
+    hasSendableAttachments,
+    uploading: uploadingAttachments,
+  } = useChatAttachments({
+    apiBase,
+    role: 'teacher',
+    sessionId: activeSessionId || 'main',
+    teacherId: attachmentTeacherId,
+  })
 
   const {
     mention,
@@ -460,6 +476,9 @@ export default function App() {
     chooseSkill,
     setFavorites,
     submitMessage,
+    getAttachmentRefs: () => readyAttachmentRefs,
+    hasSendableAttachments,
+    onSendSuccess: clearReadyAttachments,
     pendingChatJob,
     sending,
   })
@@ -687,6 +706,9 @@ export default function App() {
                 input={input}
                 chatQueueHint={chatQueueHint}
                 composerWarning={composerWarning}
+                attachments={attachments}
+                uploadingAttachments={uploadingAttachments}
+                hasSendableAttachments={hasSendableAttachments}
                 inputRef={inputRef}
                 onSubmit={handleSend}
                 onInputChange={(value, selectionStart) => {
@@ -696,6 +718,8 @@ export default function App() {
                 onInputClick={(selectionStart) => setCursorPos(selectionStart)}
                 onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
                 onInputKeyDown={handleKeyDown}
+                onPickFiles={addFiles}
+                onRemoveAttachment={removeAttachment}
                 mention={mention}
                 mentionIndex={mentionIndex}
                 onInsertMention={insertMention}

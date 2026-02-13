@@ -13,3 +13,6 @@ def test_chat_routes_build_router():
     assert _has_route(router, "POST", "/chat")
     assert _has_route(router, "POST", "/chat/start")
     assert _has_route(router, "GET", "/chat/status")
+    assert _has_route(router, "POST", "/chat/attachments")
+    assert _has_route(router, "GET", "/chat/attachments/status")
+    assert _has_route(router, "DELETE", "/chat/attachments/{attachment_id}")

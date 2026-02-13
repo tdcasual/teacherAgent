@@ -21,6 +21,7 @@ class _FakeRequest:
         self.assignment_date = kwargs.get("assignment_date", "")
         self.auto_generate_assignment = None
         self.messages = kwargs.get("messages", [_FakeMsg("user", "hello")])
+        self.attachments = kwargs.get("attachments", [])
 
 
 class _FakeMsg:
@@ -58,6 +59,11 @@ def _make_deps(**overrides):
         append_teacher_session_message=lambda *a, **kw: None,
         update_teacher_session_index=lambda *a, **kw: None,
         parse_date_str=lambda s: s or "",
+        resolve_chat_attachment_context=lambda **kwargs: {
+            "attachment_context": "",
+            "warnings": [],
+            "ready_attachment_ids": [],
+        },
     )
     defaults.update(overrides)
     return ChatStartDeps(**defaults), jobs

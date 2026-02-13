@@ -5,6 +5,7 @@ import ChatMessages from './ChatMessages'
 import MentionPanel from './MentionPanel'
 import type { MentionOption } from '../../appTypes'
 import type { InvocationTriggerType } from './invocation'
+import type { ComposerAttachment } from '../../../../shared/useChatAttachments'
 
 type MentionState = {
   start: number
@@ -38,12 +39,17 @@ type TeacherChatMainContentProps = {
   input: string
   chatQueueHint: string
   composerWarning: string
+  attachments: ComposerAttachment[]
+  uploadingAttachments: boolean
+  hasSendableAttachments: boolean
   inputRef: MutableRefObject<HTMLTextAreaElement | null>
   onSubmit: (event: FormEvent) => void | Promise<void>
   onInputChange: (value: string, selectionStart: number) => void
   onInputClick: (selectionStart: number) => void
   onInputKeyUp: (selectionStart: number) => void
   onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
+  onPickFiles: (files: File[]) => void | Promise<void>
+  onRemoveAttachment: (localId: string) => void | Promise<void>
   mention: MentionState
   mentionIndex: number
   onInsertMention: (item: MentionOption) => void
@@ -67,12 +73,17 @@ export default function TeacherChatMainContent({
   input,
   chatQueueHint,
   composerWarning,
+  attachments,
+  uploadingAttachments,
+  hasSendableAttachments,
   inputRef,
   onSubmit,
   onInputChange,
   onInputClick,
   onInputKeyUp,
   onInputKeyDown,
+  onPickFiles,
+  onRemoveAttachment,
   mention,
   mentionIndex,
   onInsertMention,
@@ -121,12 +132,17 @@ export default function TeacherChatMainContent({
             sending={sending}
             chatQueueHint={chatQueueHint}
             composerWarning={composerWarning}
+            attachments={attachments}
+            uploadingAttachments={uploadingAttachments}
+            hasSendableAttachments={hasSendableAttachments}
             inputRef={inputRef}
             onSubmit={onSubmit}
             onInputChange={onInputChange}
             onInputClick={onInputClick}
             onInputKeyUp={onInputKeyUp}
             onInputKeyDown={onInputKeyDown}
+            onPickFiles={onPickFiles}
+            onRemoveAttachment={onRemoveAttachment}
           />
 
           <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={onInsertMention} />

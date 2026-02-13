@@ -1,5 +1,6 @@
 import type { FormEvent, KeyboardEvent, RefObject } from 'react'
 import type { RenderedMessage, VerifiedStudent } from '../../appTypes'
+import type { ComposerAttachment } from '../../../../shared/useChatAttachments'
 import ChatMessages from './ChatMessages'
 import ChatComposer from './ChatComposer'
 
@@ -18,6 +19,11 @@ type Props = {
   handleInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
   handleSend: (event: FormEvent) => void
   composerHint: string
+  attachments: ComposerAttachment[]
+  uploadingAttachments: boolean
+  hasSendableAttachments: boolean
+  onPickFiles: (files: File[]) => void | Promise<void>
+  onRemoveAttachment: (localId: string) => void | Promise<void>
 }
 
 export default function ChatPanel(props: Props) {
@@ -40,6 +46,11 @@ export default function ChatPanel(props: Props) {
         handleInputKeyDown={props.handleInputKeyDown}
         handleSend={props.handleSend}
         composerHint={props.composerHint}
+        attachments={props.attachments}
+        uploadingAttachments={props.uploadingAttachments}
+        hasSendableAttachments={props.hasSendableAttachments}
+        onPickFiles={props.onPickFiles}
+        onRemoveAttachment={props.onRemoveAttachment}
       />
     </main>
   )

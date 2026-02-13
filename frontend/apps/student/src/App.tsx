@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
-import type { Message, RenderedMessage } from './appTypes'
+import type { Message, PendingChatJob, RenderedMessage } from './appTypes'
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState'
 import { useVerification } from './hooks/useVerification'
 import { useSessionManager } from './hooks/useSessionManager'
@@ -11,6 +11,7 @@ import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
+import { useChatAttachments } from '../../shared/useChatAttachments'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
 import ChatPanel from './features/chat/ChatPanel'
@@ -107,7 +108,7 @@ export default function App() {
   // ── Send flow (wrapper setters for compatibility) ──
   const setSending = useCallback((v: boolean) => dispatch({ type: 'SET', field: 'sending', value: v }), [dispatch])
   const setInput = useCallback((v: string) => dispatch({ type: 'SET', field: 'input', value: v }), [dispatch])
-  const setPendingChatJob = useCallback((v: Message['id'] extends string ? import('./appTypes').PendingChatJob | null : never) => dispatch({ type: 'SET', field: 'pendingChatJob', value: v }), [dispatch])
+  const setPendingChatJob = useCallback((v: PendingChatJob | null) => dispatch({ type: 'SET', field: 'pendingChatJob', value: v }), [dispatch])
   const setVerifyError = useCallback((v: string) => dispatch({ type: 'SET', field: 'verifyError', value: v }), [dispatch])
   const setVerifyOpen = useCallback((v: boolean) => dispatch({ type: 'SET', field: 'verifyOpen', value: v }), [dispatch])
   const setMessages = useCallback((v: Message[] | ((prev: Message[]) => Message[])) => {
@@ -118,6 +119,22 @@ export default function App() {
     dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => prev.map((m) => m.id === id ? { ...m, ...patch } : m) })
   }, [dispatch])
 
+  const attachmentSessionId = state.activeSessionId || state.todayAssignment?.assignment_id || `general_${todayDate()}`
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    clearReadyAttachments,
+    readyAttachmentRefs,
+    hasSendableAttachments,
+    uploading: uploadingAttachments,
+  } = useChatAttachments({
+    apiBase: state.apiBase,
+    role: 'student',
+    sessionId: attachmentSessionId,
+    studentId: state.verifiedStudent?.student_id || '',
+  })
+
   const { handleSend } = useStudentSendFlow({
     apiBase: state.apiBase,
     input: state.input,
@@ -126,8 +143,10 @@ export default function App() {
     todayAssignment: state.todayAssignment,
     verifiedStudent: state.verifiedStudent,
     pendingChatJob: state.pendingChatJob,
+    attachments: readyAttachmentRefs,
     pendingChatKeyPrefix: PENDING_CHAT_KEY_PREFIX,
     todayDate,
+    onSendSuccess: clearReadyAttachments,
     setVerifyError,
     setVerifyOpen,
     setSending,
@@ -154,9 +173,9 @@ export default function App() {
     event.preventDefault()
     if (!state.verifiedStudent) return
     if (state.sending || state.pendingChatJob?.job_id) return
-    if (!state.input.trim()) return
+    if (!state.input.trim() && !hasSendableAttachments) return
     event.currentTarget.form?.requestSubmit()
-  }, [state.verifiedStudent, state.sending, state.pendingChatJob?.job_id, state.input])
+  }, [state.verifiedStudent, state.sending, state.pendingChatJob?.job_id, state.input, hasSendableAttachments])
 
   // ── Render ──
   return (
@@ -237,6 +256,11 @@ export default function App() {
             handleInputKeyDown={handleInputKeyDown}
             handleSend={handleSend}
             composerHint={composerHint}
+            attachments={attachments}
+            uploadingAttachments={uploadingAttachments}
+            hasSendableAttachments={hasSendableAttachments}
+            onPickFiles={addFiles}
+            onRemoveAttachment={removeAttachment}
           />
         }
       />

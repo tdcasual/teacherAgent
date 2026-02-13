@@ -31,6 +31,7 @@ export type ChatStartResult = {
   ok: boolean
   job_id: string
   status: string
+  warnings?: string[]
   lane_id?: string
   lane_queue_position?: number
   lane_queue_size?: number

@@ -15,8 +15,10 @@ type UseStudentSendFlowParams = {
   todayAssignment: AssignmentDetail | null
   verifiedStudent: VerifiedStudent | null
   pendingChatJob: PendingChatJob | null
+  attachments: Array<{ attachment_id: string }>
   pendingChatKeyPrefix: string
   todayDate: () => string
+  onSendSuccess: () => void
 
   setVerifyError: (value: string) => void
   setVerifyOpen: (value: boolean) => void
@@ -49,8 +51,10 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
     todayAssignment,
     verifiedStudent,
     pendingChatJob,
+    attachments,
     pendingChatKeyPrefix,
     todayDate,
+    onSendSuccess,
     setVerifyError,
     setVerifyOpen,
     setSending,
@@ -73,7 +77,9 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       }
       if (pendingChatJob?.job_id) return
       const trimmed = input.trim()
-      if (!trimmed) return
+      const attachmentRefs = attachments.filter((item) => String(item.attachment_id || '').trim())
+      if (!trimmed && attachmentRefs.length === 0) return
+      const userText = trimmed || '请阅读我上传的附件并回答。'
 
       const studentId = verifiedStudent.student_id
       const pendingKey = `${pendingChatKeyPrefix}${studentId}`
@@ -144,13 +150,13 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
           const next = stripTransientPendingBubbles(prev)
           return [
             ...next,
-            { id: makeId(), role: 'user', content: trimmed, time: nowTime() },
+            { id: makeId(), role: 'user', content: userText, time: nowTime() },
             { id: placeholderId, role: 'assistant', content: '正在生成…', time: nowTime() },
           ]
         })
         setInput('')
 
-        const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: trimmed, time: '' }]
+        const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: userText, time: '' }]
           .slice(-40)
           .map((msg) => ({ role: msg.role, content: msg.content }))
 
@@ -173,6 +179,7 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
               student_id: studentId,
               assignment_id: inferredAssignmentId,
               assignment_date: todayDate(),
+              attachments: attachmentRefs.length ? attachmentRefs : undefined,
             }),
           })
           if (!res.ok) {
@@ -185,13 +192,14 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
             job_id: data.job_id,
             request_id: requestId,
             placeholder_id: placeholderId,
-            user_text: trimmed,
+            user_text: userText,
             session_id: sessionId,
             created_at: Date.now(),
           }
           pendingRecoveredFromStorageRef.current = false
           safeLocalStorageSetItem(pendingKey, JSON.stringify(nextPending))
           setPendingChatJob(nextPending)
+          onSendSuccess()
         } catch (err: unknown) {
           updateMessage(placeholderId, { content: `抱歉，请求失败：${toErrorMessage(err)}`, time: nowTime() })
           setSending(false)
@@ -214,10 +222,12 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       verifiedStudent,
       pendingChatJob?.job_id,
       input,
+      attachments,
       pendingChatKeyPrefix,
       activeSessionId,
       todayAssignment,
       todayDate,
+      onSendSuccess,
       messages,
       apiBase,
       setVerifyError,

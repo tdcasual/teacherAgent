@@ -32,6 +32,10 @@ from services.api.workers.chat_worker_service import (
 
 from ..api_models import ChatRequest
 from ..chat_api_service import ChatApiDeps
+from ..chat_attachment_service import (
+    ChatAttachmentDeps,
+    resolve_chat_attachment_context as _resolve_chat_attachment_context_impl,
+)
 from ..chat_job_processing_service import (
     ChatJobProcessDeps,
     ComputeChatReplyDeps,
@@ -132,6 +136,17 @@ def _chat_start_deps():
             backend=backend,
         )
 
+    attachment_deps = ChatAttachmentDeps(
+        uploads_dir=_ac.UPLOADS_DIR,
+        sanitize_filename=_ac.sanitize_filename,
+        save_upload_file=_ac.save_upload_file,
+        extract_text_from_file=_ac.extract_text_from_file,
+        xlsx_to_table_preview=_ac.xlsx_to_table_preview,
+        xls_to_table_preview=_ac.xls_to_table_preview,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        uuid_hex=lambda: uuid.uuid4().hex,
+    )
+
     return ChatStartDeps(
         http_error=lambda code, detail: HTTPException(status_code=code, detail=detail),
         get_chat_job_id_by_request=_ac.get_chat_job_id_by_request,
@@ -158,6 +173,10 @@ def _chat_start_deps():
         append_teacher_session_message=_ac.append_teacher_session_message,
         update_teacher_session_index=_ac.update_teacher_session_index,
         parse_date_str=_ac.parse_date_str,
+        resolve_chat_attachment_context=lambda **kwargs: _resolve_chat_attachment_context_impl(
+            deps=attachment_deps,
+            **kwargs,
+        ),
     )
 
 

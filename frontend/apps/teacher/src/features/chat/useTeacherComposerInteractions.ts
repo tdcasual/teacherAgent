@@ -27,7 +27,10 @@ type UseTeacherComposerInteractionsParams = {
   setSkillPinned: (value: boolean) => void
   chooseSkill: (skillId: string, pinned?: boolean) => void
   setFavorites: Dispatch<SetStateAction<string[]>>
-  submitMessage: (inputText: string) => Promise<void>
+  submitMessage: (inputText: string, options?: { attachments?: Array<{ attachment_id: string }> }) => Promise<boolean>
+  getAttachmentRefs: () => Array<{ attachment_id: string }>
+  hasSendableAttachments: boolean
+  onSendSuccess: () => void
   pendingChatJob: PendingChatJob | null
   sending: boolean
 }
@@ -49,6 +52,9 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
     chooseSkill,
     setFavorites,
     submitMessage,
+    getAttachmentRefs,
+    hasSendableAttachments,
+    onSendSuccess,
     pendingChatJob,
     sending,
   } = params
@@ -202,9 +208,10 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
     async (event: FormEvent) => {
       event.preventDefault()
       if (sending) return
-      await submitMessage(input.trim())
+      const ok = await submitMessage(input.trim(), { attachments: getAttachmentRefs() })
+      if (ok) onSendSuccess()
     },
-    [sending, submitMessage, input],
+    [sending, submitMessage, input, getAttachmentRefs, onSendSuccess],
   )
 
   const handleKeyDown = useCallback(
@@ -232,12 +239,15 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
       if (event.key === 'Enter' && !event.shiftKey) {
         if (event.nativeEvent.isComposing) return
         event.preventDefault()
-        if (!input.trim()) return
+        if (!input.trim() && !hasSendableAttachments) return
         if (pendingChatJob?.job_id || sending) return
-        void submitMessage(input.trim())
+        ;(async () => {
+          const ok = await submitMessage(input.trim(), { attachments: getAttachmentRefs() })
+          if (ok) onSendSuccess()
+        })()
       }
     },
-    [mention, mentionIndex, insertMention, input, pendingChatJob?.job_id, sending, submitMessage],
+    [mention, mentionIndex, insertMention, input, hasSendableAttachments, pendingChatJob?.job_id, sending, submitMessage, getAttachmentRefs, onSendSuccess],
   )
 
   return {

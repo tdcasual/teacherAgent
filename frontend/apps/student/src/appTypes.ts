@@ -34,6 +34,7 @@ export type ChatStartResult = {
   ok: boolean
   job_id: string
   status: string
+  warnings?: string[]
 }
 
 export type StudentHistorySession = {

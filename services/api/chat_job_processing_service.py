@@ -89,6 +89,7 @@ def compute_chat_reply_sync(
     last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
     requested_skill_id = str(getattr(req, "skill_id", "") or "").strip()
     effective_skill_id = requested_skill_id
+    attachment_context = str(getattr(req, "attachment_context", "") or "").strip()
 
     resolve_payload: Dict[str, Any] = {}
     try:
@@ -183,8 +184,15 @@ def compute_chat_reply_sync(
             extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))
         if extra_parts:
             extra_system = "\n\n".join(extra_parts)
-            if len(extra_system) > deps.chat_extra_system_max_chars:
-                extra_system = extra_system[: deps.chat_extra_system_max_chars] + "…"
+    if attachment_context:
+        attachment_block = f"【附件上下文】\n{attachment_context}"
+        extra_system = (
+            f"{extra_system}\n\n{attachment_block}".strip()
+            if extra_system
+            else attachment_block
+        )
+    if extra_system and len(extra_system) > deps.chat_extra_system_max_chars:
+        extra_system = extra_system[: deps.chat_extra_system_max_chars] + "…"
 
     messages = deps.trim_messages(
         [{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint

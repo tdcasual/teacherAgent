@@ -379,18 +379,24 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
 
   // ── submitMessage ─────────────────────────────────────────────────────
   const submitMessage = useCallback(
-    async (inputText: string) => {
-      if (pendingChatJob?.job_id) return
+    async (inputText: string, options?: { attachments?: Array<{ attachment_id: string }> }) => {
+      if (pendingChatJob?.job_id) return false
+      const attachmentRefs = Array.isArray(options?.attachments)
+        ? options?.attachments.filter((item) => String(item?.attachment_id || '').trim())
+        : []
       const trimmed = inputText.trim()
-      if (!trimmed) return
+      if (!trimmed && attachmentRefs.length === 0) return false
       const parsedInvocation = parseInvocationInput(trimmed, {
         knownSkillIds: skillList.map((item) => item.id),
         activeSkillId: activeSkillId || 'physics-teacher-ops',
       })
-      const cleanedText = parsedInvocation.cleanedInput.trim()
+      let cleanedText = parsedInvocation.cleanedInput.trim()
+      if (!cleanedText && attachmentRefs.length > 0) {
+        cleanedText = '请阅读我上传的附件并回答。'
+      }
       if (!cleanedText) {
         setComposerWarning('请在召唤后补充问题内容。')
-        return
+        return false
       }
       const routingDecision = decideSkillRouting({
         parsedInvocation,
@@ -439,6 +445,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             role: 'teacher',
             teacher_id: routingTeacherId || undefined,
             skill_id: routingDecision.skillIdForRequest,
+            attachments: attachmentRefs.length ? attachmentRefs : undefined,
           }),
         })
         if (!res.ok) {
@@ -447,6 +454,12 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         }
         const data = (await res.json()) as ChatStartResult
         if (!data?.job_id) throw new Error('任务编号缺失')
+        const runtimeWarnings = Array.isArray(data.warnings)
+          ? data.warnings.map((item) => String(item || '').trim()).filter(Boolean)
+          : []
+        if (runtimeWarnings.length) {
+          setComposerWarning(runtimeWarnings.join('；'))
+        }
         const lanePos = Number(data.lane_queue_position || 0)
         const laneSize = Number(data.lane_queue_size || 0)
         setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '处理中...')
@@ -459,6 +472,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           lane_id: data.lane_id,
           created_at: Date.now(),
         })
+        return true
       } catch (err: unknown) {
         const errorMessage = toErrorMessage(err)
         setMessages((prev) =>
@@ -471,6 +485,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         setSending(false)
         setChatQueueHint('')
         setPendingChatJob(null)
+        return false
       }
     },
     [

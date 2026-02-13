@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class ChatStartDeps:
     append_teacher_session_message: Callable[..., None]
     update_teacher_session_index: Callable[..., None]
     parse_date_str: Callable[[Optional[str]], str]
+    resolve_chat_attachment_context: Callable[..., Dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,26 @@ class _StartContext:
     req_payload: Dict[str, Any]
     last_user_text: str
     fingerprint: str
+    attachment_warnings: List[str]
+
+
+def _extract_attachment_ids(req: Any) -> List[str]:
+    raw_items = getattr(req, "attachments", None) or []
+    if not isinstance(raw_items, list):
+        return []
+    ids: List[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        if isinstance(item, dict):
+            raw_id = item.get("attachment_id")
+        else:
+            raw_id = getattr(item, "attachment_id", "")
+        value = str(raw_id or "").strip().lower()
+        if not value or value in seen:
+            continue
+        ids.append(value)
+        seen.add(value)
+    return ids
 
 
 def _load_job_or_stub(job_id: str, *, mode: str, deps: ChatStartDeps) -> Dict[str, Any]:
@@ -109,12 +130,29 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "assignment_date": req.assignment_date,
         "auto_generate_assignment": req.auto_generate_assignment,
     }
+    attachment_ids = _extract_attachment_ids(req)
+    attachment_payload = deps.resolve_chat_attachment_context(
+        role=role_hint,
+        teacher_id=teacher_id if role_hint == "teacher" else req.teacher_id,
+        student_id=req.student_id,
+        session_id=session_id,
+        attachment_ids=attachment_ids,
+    )
+    attachment_context = str(attachment_payload.get("attachment_context") or "").strip()
+    attachment_warnings = [
+        str(item).strip()
+        for item in (attachment_payload.get("warnings") or [])
+        if str(item).strip()
+    ]
+    req_payload["attachments"] = [{"attachment_id": aid} for aid in attachment_ids]
+    req_payload["attachment_context"] = attachment_context
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
             str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
+            ",".join(attachment_ids),
         ]
     )
     fingerprint = deps.chat_text_fingerprint(fingerprint_seed)
@@ -126,6 +164,7 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         req_payload=req_payload,
         last_user_text=last_user_text,
         fingerprint=fingerprint,
+        attachment_warnings=attachment_warnings,
     )
 
 
@@ -291,6 +330,7 @@ def _enqueue_and_finalize_start(
         "lane_queue_position": queue_info.get("lane_queue_position", 0),
         "lane_queue_size": queue_info.get("lane_queue_size", 0),
         "lane_active": bool(queue_info.get("lane_active")),
+        "warnings": context.attachment_warnings,
     }
 
 
