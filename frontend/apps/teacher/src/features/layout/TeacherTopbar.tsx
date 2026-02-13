@@ -41,6 +41,12 @@ type TeacherLoginResponse = {
   }
 }
 
+type TeacherSetPasswordResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+}
+
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export default function TeacherTopbar({
@@ -64,8 +70,10 @@ export default function TeacherTopbar({
   const [emailInput, setEmailInput] = useState('')
   const [credentialInput, setCredentialInput] = useState('')
   const [credentialType, setCredentialType] = useState<'token' | 'password'>('token')
+  const [newPasswordInput, setNewPasswordInput] = useState('')
   const [needEmail, setNeedEmail] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [settingPassword, setSettingPassword] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authInfo, setAuthInfo] = useState('')
 
@@ -177,6 +185,87 @@ export default function TeacherTopbar({
     }
   }
 
+  const handleSetPassword = async (event: FormEvent) => {
+    event.preventDefault()
+    const apiBase = safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL
+    const name = nameInput.trim()
+    const email = emailInput.trim()
+    const credential = credentialInput.trim()
+    const newPassword = newPasswordInput.trim()
+
+    setAuthError('')
+    setAuthInfo('')
+
+    if (!name) {
+      setAuthError('请输入教师姓名。')
+      return
+    }
+    if (!credential) {
+      setAuthError('请先输入用于校验的 token 或当前密码。')
+      return
+    }
+    if (!newPassword) {
+      setAuthError('请输入新密码。')
+      return
+    }
+
+    setSettingPassword(true)
+    try {
+      const identifyRes = await fetch(`${apiBase}/auth/teacher/identify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: email || undefined }),
+      })
+      if (!identifyRes.ok) {
+        const text = await identifyRes.text()
+        throw new Error(text || `状态码 ${identifyRes.status}`)
+      }
+      const identifyData = (await identifyRes.json()) as TeacherIdentifyResponse
+      if (!identifyData.ok || !identifyData.candidate_id) {
+        const needEmailFlag = Boolean(identifyData.need_email_disambiguation)
+        setNeedEmail(needEmailFlag)
+        setAuthError(identifyData.message || (needEmailFlag ? '该姓名存在多个教师，请补充邮箱。' : '未找到该教师。'))
+        return
+      }
+
+      const setPasswordRes = await fetch(`${apiBase}/auth/teacher/set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_id: identifyData.candidate_id,
+          credential_type: credentialType,
+          credential,
+          new_password: newPassword,
+        }),
+      })
+      if (!setPasswordRes.ok) {
+        const text = await setPasswordRes.text()
+        throw new Error(text || `状态码 ${setPasswordRes.status}`)
+      }
+      const setPasswordData = (await setPasswordRes.json()) as TeacherSetPasswordResponse
+      if (!setPasswordData.ok) {
+        const reason = String(setPasswordData.error || '').trim()
+        let message = setPasswordData.message || '设置密码失败。'
+        if (reason === 'weak_password') {
+          message = '密码至少 8 位，且需同时包含字母和数字。'
+        } else if (reason === 'invalid_credential') {
+          message = '当前 token/密码校验失败，请重试。'
+        }
+        setAuthError(message)
+        return
+      }
+
+      setCredentialType('password')
+      setNewPasswordInput('')
+      setAuthInfo('密码设置成功，后续可使用密码登录（token 仍可用）。')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || '设置密码失败')
+      setAuthError(message)
+    } finally {
+      setSettingPassword(false)
+    }
+  }
+
   return (
     <header
       ref={topbarRef}
@@ -278,6 +367,26 @@ export default function TeacherTopbar({
                 disabled={submitting}
               >
                 {submitting ? '认证中…' : '确认认证'}
+              </button>
+            </form>
+            <form className="grid gap-2 border border-border rounded-[10px] p-2.5 bg-surface-soft" onSubmit={handleSetPassword}>
+              <div className="text-xs text-muted">使用当前 token 或密码设置新密码（设置后 token 仍可登录）</div>
+              <div className="grid gap-1">
+                <label className="text-xs text-muted">新密码</label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(event) => setNewPasswordInput(event.target.value)}
+                  placeholder="至少 8 位，含字母和数字"
+                  autoComplete="new-password"
+                />
+              </div>
+              <button
+                type="submit"
+                className="border-none rounded-[10px] px-3 py-[9px] bg-[#0f766e] text-white cursor-pointer"
+                disabled={settingPassword}
+              >
+                {settingPassword ? '设置中…' : '设置密码'}
               </button>
             </form>
             {needEmail ? <div className="text-xs text-muted">检测到同名教师，请补充邮箱后重试。</div> : null}
