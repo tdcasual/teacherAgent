@@ -124,7 +124,6 @@ export default function App() {
     attachments,
     addFiles,
     removeAttachment,
-    clearReadyAttachments,
     readyAttachmentRefs,
     hasSendableAttachments,
     uploading: uploadingAttachments,
@@ -133,7 +132,11 @@ export default function App() {
     role: 'student',
     sessionId: attachmentSessionId,
     studentId: state.verifiedStudent?.student_id || '',
+    persistenceKey: state.verifiedStudent?.student_id
+      ? `student:${state.verifiedStudent.student_id}:${attachmentSessionId}`
+      : '',
   })
+  const keepReadyAttachmentsOnSend = useCallback(() => {}, [])
 
   const { handleSend } = useStudentSendFlow({
     apiBase: state.apiBase,
@@ -146,7 +149,7 @@ export default function App() {
     attachments: readyAttachmentRefs,
     pendingChatKeyPrefix: PENDING_CHAT_KEY_PREFIX,
     todayDate,
-    onSendSuccess: clearReadyAttachments,
+    onSendSuccess: keepReadyAttachmentsOnSend,
     setVerifyError,
     setVerifyOpen,
     setSending,

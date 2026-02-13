@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './storage'
 
 export type AttachmentRef = {
   attachment_id: string
@@ -26,16 +27,28 @@ type UploadAttachmentResponse = {
   attachments?: UploadAttachmentItem[]
 }
 
+type AttachmentStatusResponse = {
+  attachments?: UploadAttachmentItem[]
+}
+
+type PersistedReadyAttachment = {
+  attachmentId: string
+  fileName: string
+  sizeBytes: number
+}
+
 type UseChatAttachmentsParams = {
   apiBase: string
   role: 'teacher' | 'student'
   sessionId: string
   teacherId?: string
   studentId?: string
+  persistenceKey?: string
 }
 
 const MAX_FILES_PER_MESSAGE = 5
 const MAX_TOTAL_SIZE_BYTES = 30 * 1024 * 1024
+const READY_ATTACHMENTS_STORAGE_PREFIX = 'chatReadyAttachments:'
 
 const toErrorMessage = (error: unknown, fallback = '上传失败') => {
   if (error instanceof Error) {
@@ -49,8 +62,120 @@ const toErrorMessage = (error: unknown, fallback = '上传失败') => {
 const makeLocalId = () => `attach_${Date.now()}_${Math.random().toString(16).slice(2)}`
 
 export function useChatAttachments(params: UseChatAttachmentsParams) {
-  const { apiBase, role, sessionId, teacherId = '', studentId = '' } = params
+  const { apiBase, role, sessionId, teacherId = '', studentId = '', persistenceKey = '' } = params
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([])
+  const persistenceStorageKey = persistenceKey
+    ? `${READY_ATTACHMENTS_STORAGE_PREFIX}${persistenceKey}`
+    : ''
+
+  useEffect(() => {
+    let cancelled = false
+
+    const restoreReadyAttachments = async () => {
+      if (!persistenceStorageKey) return
+      setAttachments([])
+
+      const raw = safeLocalStorageGetItem(persistenceStorageKey)
+      if (!raw) return
+
+      let parsed: PersistedReadyAttachment[] = []
+      try {
+        const payload = JSON.parse(raw) as unknown
+        if (Array.isArray(payload)) {
+          parsed = payload
+            .map((item) => {
+              if (!item || typeof item !== 'object') return null
+              const data = item as Record<string, unknown>
+              const attachmentId = String(data.attachmentId || '').trim()
+              if (!attachmentId) return null
+              return {
+                attachmentId,
+                fileName: String(data.fileName || '').trim(),
+                sizeBytes: Number(data.sizeBytes || 0),
+              }
+            })
+            .filter((item): item is PersistedReadyAttachment => Boolean(item))
+        }
+      } catch {
+        parsed = []
+      }
+
+      if (!parsed.length) {
+        safeLocalStorageRemoveItem(persistenceStorageKey)
+        return
+      }
+
+      const attachmentIds = Array.from(new Set(parsed.map((item) => item.attachmentId).filter(Boolean)))
+      if (!attachmentIds.length) {
+        safeLocalStorageRemoveItem(persistenceStorageKey)
+        return
+      }
+
+      try {
+        const query = new URLSearchParams()
+        query.set('role', role)
+        query.set('session_id', sessionId || 'main')
+        if (role === 'teacher') query.set('teacher_id', teacherId)
+        if (role === 'student') query.set('student_id', studentId)
+        for (const attachmentId of attachmentIds) query.append('attachment_ids', attachmentId)
+
+        const res = await fetch(`${apiBase}/chat/attachments/status?${query.toString()}`)
+        if (!res.ok) throw new Error(`状态码 ${res.status}`)
+        const payload = (await res.json()) as AttachmentStatusResponse
+        const statusItems = Array.isArray(payload.attachments) ? payload.attachments : []
+        const statusMap = new Map<string, UploadAttachmentItem>()
+        for (const item of statusItems) {
+          const attachmentId = String(item.attachment_id || '').trim()
+          if (!attachmentId) continue
+          statusMap.set(attachmentId, item)
+        }
+
+        const restored: ComposerAttachment[] = []
+        for (const item of parsed) {
+          const statusItem = statusMap.get(item.attachmentId)
+          if (!statusItem) continue
+          if (String(statusItem.status || '') !== 'ready') continue
+          restored.push({
+            localId: makeLocalId(),
+            attachmentId: item.attachmentId,
+            fileName: String(statusItem.file_name || item.fileName || item.attachmentId),
+            sizeBytes: Number(statusItem.size_bytes || item.sizeBytes || 0),
+            status: 'ready',
+            error: '',
+          })
+        }
+
+        if (cancelled) return
+        setAttachments(restored)
+        if (!restored.length) safeLocalStorageRemoveItem(persistenceStorageKey)
+      } catch {
+        if (cancelled) return
+        setAttachments([])
+        safeLocalStorageRemoveItem(persistenceStorageKey)
+      }
+    }
+
+    void restoreReadyAttachments()
+    return () => {
+      cancelled = true
+    }
+  }, [apiBase, persistenceStorageKey, role, sessionId, studentId, teacherId])
+
+  useEffect(() => {
+    if (!persistenceStorageKey) return
+    const ready = attachments
+      .filter((item) => item.status === 'ready' && item.attachmentId)
+      .map((item) => ({
+        attachmentId: item.attachmentId,
+        fileName: item.fileName,
+        sizeBytes: Number(item.sizeBytes || 0),
+      }))
+    if (!ready.length) {
+      safeLocalStorageRemoveItem(persistenceStorageKey)
+      return
+    }
+    safeLocalStorageSetItem(persistenceStorageKey, JSON.stringify(ready))
+  }, [attachments, persistenceStorageKey])
 
   const addFiles = useCallback(
     async (files: File[]) => {

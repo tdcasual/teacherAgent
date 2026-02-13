@@ -165,6 +165,79 @@ def llm_autofill_requirements(
         return requirements, missing, False
 
 
+def _normalize_preview_cell(value: Any) -> str:
+    return str(value or "").replace("\t", " ").replace("\n", " ").strip()
+
+
+def _is_probable_student_name(value: str) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if any(token in text for token in ("姓名", "考生", "学生", "班级", "总分", "得分", "成绩")):
+        return False
+    if re.fullmatch(r"[\u4e00-\u9fff·]{2,8}", text):
+        return True
+    if re.fullmatch(r"[A-Za-z][A-Za-z\\s'.-]{1,31}", text):
+        return True
+    return False
+
+
+def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_students: int = 500) -> str:
+    if not rows:
+        return ""
+
+    header_row_idx = None
+    header_cells: Dict[int, Any] = {}
+    for row_idx, cells in rows[:15]:
+        cell_values = [_normalize_preview_cell(value) for value in cells.values()]
+        has_name = any("姓名" in value for value in cell_values)
+        has_total = any(("总分" in value) or ("总成绩" in value) for value in cell_values)
+        has_class = any("班级" in value for value in cell_values)
+        if has_name and (has_total or has_class):
+            header_row_idx = row_idx
+            header_cells = cells
+            break
+    if header_row_idx is None:
+        return ""
+
+    name_col = None
+    class_col = None
+    total_col = None
+    for col_idx, value in header_cells.items():
+        text = _normalize_preview_cell(value)
+        if name_col is None and "姓名" in text:
+            name_col = col_idx
+        if class_col is None and any(token in text for token in ("班级", "班别", "行政班", "教学班")):
+            class_col = col_idx
+        if total_col is None and any(token in text for token in ("总分", "总成绩")):
+            total_col = col_idx
+    if name_col is None:
+        return ""
+
+    lines: List[str] = []
+    for row_idx, cells in rows:
+        if row_idx <= header_row_idx:
+            continue
+        name = _normalize_preview_cell(cells.get(name_col, ""))
+        if not _is_probable_student_name(name):
+            continue
+        class_name = _normalize_preview_cell(cells.get(class_col, "")) if class_col is not None else ""
+        total_score = _normalize_preview_cell(cells.get(total_col, "")) if total_col is not None else ""
+        lines.append(f"{len(lines) + 1}\t{name}\t{class_name or '-'}\t{total_score or '-'}")
+        if len(lines) >= max_students:
+            break
+
+    if not lines:
+        return ""
+    return "\n".join(
+        [
+            f"[students_compact] total={len(lines)}",
+            "idx\tname\tclass\ttotal",
+            *lines,
+        ]
+    )
+
+
 def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60, max_cols: int = 30) -> str:
     """Best-effort preview table for LLM fallback when heuristic parsing fails."""
     try:
@@ -181,6 +254,7 @@ def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60
         rows = list(mod.iter_rows(path, sheet_index=0, sheet_name=None))
         if not rows:
             return ""
+        compact_students = _extract_xlsx_students_compact(rows)
         used_cols = set()
         for _, cells in rows[:max_rows]:
             used_cols.update(cells.keys())
@@ -191,9 +265,12 @@ def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60
         for r_idx, cells in rows[:max_rows]:
             line = [str(r_idx)]
             for c in col_list:
-                line.append(str(cells.get(c, "")).replace("\t", " ").replace("\n", " ").strip())
+                line.append(_normalize_preview_cell(cells.get(c, "")))
             lines.append("\t".join(line))
-        return "\n".join(lines)
+        raw_preview = "\n".join(lines)
+        if compact_students:
+            return f"{compact_students}\n\n[raw_preview]\n{raw_preview}"
+        return raw_preview
     except Exception:
         _log.debug("operation failed", exc_info=True)
         return ""

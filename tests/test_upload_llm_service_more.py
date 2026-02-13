@@ -229,6 +229,40 @@ def test_xlsx_to_table_preview_branches(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert xlsx_to_table_preview(fake_file, deps=deps) == ""
 
 
+def test_xlsx_to_table_preview_includes_compact_students_block(tmp_path: Path) -> None:
+    fake_file = tmp_path / "scores.xlsx"
+    fake_file.write_text("x", encoding="utf-8")
+
+    deps, _ = _deps(call_llm=lambda *_args, **_kwargs: {})
+    deps = UploadLlmDeps(
+        app_root=tmp_path,
+        call_llm=deps.call_llm,
+        diag_log=deps.diag_log,
+        parse_list_value=deps.parse_list_value,
+        compute_requirements_missing=deps.compute_requirements_missing,
+        merge_requirements=deps.merge_requirements,
+        normalize_excel_cell=deps.normalize_excel_cell,
+    )
+
+    parser_path = tmp_path / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
+    parser_path.parent.mkdir(parents=True, exist_ok=True)
+    parser_path.write_text(
+        (
+            "def iter_rows(path, sheet_index=0, sheet_name=None):\n"
+            "    rows = [(1, {1: '班级', 2: '姓名', 30: '总分'})]\n"
+            "    for i in range(2, 82):\n"
+            "        rows.append((i, {1: '2401班', 2: '张三', 30: str(300 + i)}))\n"
+            "    return rows\n"
+        ),
+        encoding="utf-8",
+    )
+
+    preview = xlsx_to_table_preview(fake_file, deps=deps)
+    assert "[students_compact] total=80" in preview
+    assert "[raw_preview]" in preview
+    assert "row\tC1\tC2\tC30" in preview
+
+
 def test_xls_to_table_preview_success_and_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     deps, _ = _deps(call_llm=lambda *_args, **_kwargs: {})
 

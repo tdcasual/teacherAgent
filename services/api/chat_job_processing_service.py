@@ -78,6 +78,25 @@ def detect_role_hint(req: Any, *, detect_role: Callable[[str], Optional[str]]) -
     return role_hint
 
 
+def _looks_like_attachment_reference(text: str) -> bool:
+    content = str(text or "").strip()
+    if not content:
+        return False
+    cn_tokens = (
+        "附件",
+        "这个文件",
+        "该文件",
+        "文件中",
+        "表格",
+        "成绩单",
+        "文档",
+        "读取",
+        "解析",
+    )
+    lowered = content.lower()
+    return any(token in content for token in cn_tokens) or any(token in lowered for token in ("pdf", "xlsx", "xls", "ocr"))
+
+
 def compute_chat_reply_sync(
     req: Any,
     *,
@@ -90,6 +109,14 @@ def compute_chat_reply_sync(
     requested_skill_id = str(getattr(req, "skill_id", "") or "").strip()
     effective_skill_id = requested_skill_id
     attachment_context = str(getattr(req, "attachment_context", "") or "").strip()
+
+    if role_hint == "student" and not attachment_context and _looks_like_attachment_reference(last_user_text):
+        return (
+            "我现在没有可读取的附件上下文。请在当前会话重新上传或重新选择文件后再提问。"
+            "学生端支持 PDF、图片 OCR、XLSX、XLS、Markdown 读取。",
+            role_hint,
+            last_user_text,
+        )
 
     resolve_payload: Dict[str, Any] = {}
     try:

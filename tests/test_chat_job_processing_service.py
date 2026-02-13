@@ -30,6 +30,39 @@ def _student_inflight(_student_id):
 
 
 class ChatJobProcessingServiceTest(unittest.TestCase):
+    def test_compute_chat_reply_blocks_student_attachment_reference_without_context(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            calls = {"run_agent": 0}
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=lambda *_args, **_kwargs: calls.update({"run_agent": calls["run_agent"] + 1}) or {"reply": "OK"},
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+            )
+            req = _Req(assignment_id="")
+            req.messages = [_Msg("user", "给出这个文件中所有人的成绩")]
+            reply, role_hint, last_user = compute_chat_reply_sync(req, deps=deps)
+            self.assertIn("没有可读取的附件上下文", reply)
+            self.assertEqual(role_hint, "student")
+            self.assertEqual(last_user, "给出这个文件中所有人的成绩")
+            self.assertEqual(calls["run_agent"], 0)
+
     def test_compute_chat_reply_ignores_invalid_assignment_path(self):
         with TemporaryDirectory() as td:
             root = Path(td)
