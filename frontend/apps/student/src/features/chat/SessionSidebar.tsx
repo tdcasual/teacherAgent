@@ -49,10 +49,16 @@ export default function SessionSidebar(props: SessionSidebarProps) {
           verifiedStudent={props.verifiedStudent}
           verifyOpen={props.verifyOpen}
           handleVerify={props.handleVerify}
+          handleSetPassword={props.handleSetPassword}
           nameInput={props.nameInput}
           classInput={props.classInput}
+          credentialInput={props.credentialInput}
+          credentialType={props.credentialType}
+          newPasswordInput={props.newPasswordInput}
           verifying={props.verifying}
+          settingPassword={props.settingPassword}
           verifyError={props.verifyError}
+          verifyInfo={props.verifyInfo}
           todayAssignment={props.todayAssignment}
           assignmentLoading={props.assignmentLoading}
           assignmentError={props.assignmentError}

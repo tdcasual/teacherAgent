@@ -2,6 +2,7 @@ import { useCallback, useReducer, useRef } from 'react'
 import { makeId } from '../../../shared/id'
 import { safeLocalStorageGetItem } from '../../../shared/storage'
 import { nowTime } from '../../../shared/time'
+import { readStudentAccessToken } from '../features/auth/studentAuth'
 import type {
   AssignmentDetail,
   Message,
@@ -104,8 +105,13 @@ export type StudentState = {
   verifyOpen: boolean
   nameInput: string
   classInput: string
+  credentialInput: string
+  credentialType: 'token' | 'password'
+  newPasswordInput: string
   verifying: boolean
+  settingPassword: boolean
   verifyError: string
+  verifyInfo: string
   sessions: StudentHistorySession[]
   activeSessionId: string
   historyLoading: boolean
@@ -186,6 +192,9 @@ function buildInitialState(): StudentState {
   if (rawVerified) {
     try { verifiedStudent = JSON.parse(rawVerified) as VerifiedStudent } catch { /* ignore */ }
   }
+  if (!readStudentAccessToken()) {
+    verifiedStudent = null
+  }
   let pendingChatJob: PendingChatJob | null = null
   let recentCompletedReplies: RecentCompletedReply[] = []
   const sid = verifiedStudent?.student_id?.trim() || ''
@@ -202,8 +211,13 @@ function buildInitialState(): StudentState {
     verifyOpen: !verifiedStudent,
     nameInput: '',
     classInput: '',
+    credentialInput: '',
+    credentialType: 'token',
+    newPasswordInput: '',
     verifying: false,
+    settingPassword: false,
     verifyError: '',
+    verifyInfo: '',
     sessions: [],
     activeSessionId: '',
     historyLoading: false,

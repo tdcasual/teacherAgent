@@ -58,6 +58,50 @@ class StudentVerifyRequest(BaseModel):
     class_name: Optional[str] = None
 
 
+class StudentIdentifyRequest(BaseModel):
+    name: str
+    class_name: Optional[str] = None
+
+
+class StudentLoginRequest(BaseModel):
+    candidate_id: str
+    credential_type: str
+    credential: str
+
+
+class StudentSetPasswordRequest(BaseModel):
+    candidate_id: str
+    credential_type: str
+    credential: str
+    new_password: str
+
+
+class TeacherIdentifyRequest(BaseModel):
+    name: str
+    email: Optional[str] = None
+
+
+class TeacherLoginRequest(BaseModel):
+    candidate_id: str
+    credential_type: str
+    credential: str
+
+
+class TeacherSetPasswordRequest(BaseModel):
+    candidate_id: str
+    credential_type: str
+    credential: str
+    new_password: str
+
+
+class AuthResetTokenRequest(BaseModel):
+    target_id: str
+
+
+class AuthExportTokensRequest(BaseModel):
+    ids: Optional[List[str]] = None
+
+
 class UploadConfirmRequest(BaseModel):
     job_id: str
     requirements_override: Optional[Dict[str, Any]] = None

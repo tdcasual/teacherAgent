@@ -3,6 +3,7 @@ import { makeId } from '../../../shared/id'
 import { nowTime, timeFromIso } from '../../../shared/time'
 import { stripTransientPendingBubbles } from '../features/chat/pendingOverlay'
 import { selectArchiveDialogMeta, selectGroupedSessions, selectVisibleSessions } from '../features/chat/studentUiSelectors'
+import { clearStudentAccessToken } from '../features/auth/studentAuth'
 import type { Message, PendingChatJob, StudentHistorySessionResponse, StudentHistorySessionsResponse } from '../appTypes'
 import {
   STUDENT_NEW_SESSION_MESSAGE,
@@ -270,11 +271,16 @@ export function useSessionManager({ state, dispatch, refs, setActiveSession, sav
   }, [closeSidebarOnMobile, state.forceSessionLoadToken, setActiveSession, dispatch])
 
   const resetVerification = useCallback(() => {
+    clearStudentAccessToken()
     dispatch({ type: 'BATCH', actions: [
       { type: 'SET', field: 'verifiedStudent', value: null },
       { type: 'SET', field: 'nameInput', value: '' },
       { type: 'SET', field: 'classInput', value: '' },
+      { type: 'SET', field: 'credentialInput', value: '' },
+      { type: 'SET', field: 'credentialType', value: 'token' },
+      { type: 'SET', field: 'newPasswordInput', value: '' },
       { type: 'SET', field: 'verifyError', value: '' },
+      { type: 'SET', field: 'verifyInfo', value: '' },
       { type: 'SET', field: 'verifyOpen', value: true },
     ]})
   }, [dispatch])

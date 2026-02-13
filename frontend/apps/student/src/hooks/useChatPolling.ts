@@ -5,6 +5,7 @@ import { nowTime } from '../../../shared/time'
 import { startVisibilityAwareBackoffPolling } from '../../../shared/visibilityBackoffPolling'
 import { stripTransientPendingBubbles } from '../features/chat/pendingOverlay'
 import { parsePendingChatJobFromStorage, PENDING_CHAT_MAX_AGE_MS } from '../features/chat/pendingChatJob'
+import { clearStudentAccessToken } from '../features/auth/studentAuth'
 import type { ChatJobStatus, PendingChatJob, VerifiedStudent } from '../appTypes'
 import {
   normalizeRecentCompletedReplies,
@@ -121,6 +122,7 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
     }
 
     const clearVerifiedState = () => {
+      clearStudentAccessToken()
       dispatch({ type: 'BATCH', actions: [
         { type: 'SET', field: 'verifiedStudent', value: null },
         { type: 'SET', field: 'verifyOpen', value: true },

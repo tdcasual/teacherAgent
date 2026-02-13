@@ -123,3 +123,35 @@ export type VerifyResponse = {
   message?: string
   student?: VerifiedStudent
 }
+
+export type StudentIdentifyResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+  candidate_id?: string
+  student?: VerifiedStudent
+  password_set?: boolean
+  candidates?: Array<{
+    candidate_id: string
+    student: VerifiedStudent
+    password_set?: boolean
+  }>
+}
+
+export type StudentLoginResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+  access_token?: string
+  expires_in?: number
+  role?: string
+  subject_id?: string
+  student?: VerifiedStudent
+  password_set?: boolean
+}
+
+export type StudentSetPasswordResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+}

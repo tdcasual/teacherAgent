@@ -7,10 +7,16 @@ SessionSidebarProps,
 | 'verifiedStudent'
 | 'verifyOpen'
 | 'handleVerify'
+| 'handleSetPassword'
 | 'nameInput'
 | 'classInput'
+| 'credentialInput'
+| 'credentialType'
+| 'newPasswordInput'
 | 'verifying'
+| 'settingPassword'
 | 'verifyError'
+| 'verifyInfo'
 | 'todayAssignment'
 | 'assignmentLoading'
 | 'assignmentError'
@@ -19,12 +25,31 @@ SessionSidebarProps,
 
 export default function SessionSidebarLearningSection(props: Props) {
   const {
-    apiBase, dispatch, verifiedStudent, verifyOpen, handleVerify, nameInput, classInput,
-    verifying, verifyError, todayAssignment, assignmentLoading, assignmentError, resetVerification,
+    apiBase,
+    dispatch,
+    verifiedStudent,
+    verifyOpen,
+    handleVerify,
+    handleSetPassword,
+    nameInput,
+    classInput,
+    credentialInput,
+    credentialType,
+    newPasswordInput,
+    verifying,
+    settingPassword,
+    verifyError,
+    verifyInfo,
+    todayAssignment,
+    assignmentLoading,
+    assignmentError,
+    resetVerification,
   } = props
   const todayDateStr = new Date().toLocaleDateString('sv-SE')
   const nameInputId = 'student-verify-name'
   const classInputId = 'student-verify-class'
+  const credentialInputId = 'student-verify-credential'
+  const newPasswordInputId = 'student-verify-new-password'
   const verifyPanelId = 'student-verify-panel'
 
   return (
@@ -43,26 +68,98 @@ export default function SessionSidebarLearningSection(props: Props) {
       </div>
       {verifiedStudent ? (
         <div className="text-xs text-muted">
-          已验证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}{verifiedStudent.student_name}
+          已认证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}{verifiedStudent.student_name}
         </div>
       ) : (
-        <div className="text-xs text-muted">请先完成姓名验证后开始提问。</div>
+        <div className="text-xs text-muted">请先完成姓名/班级 + token(或密码)认证后开始提问。</div>
       )}
       {verifyOpen && (
-        <form id={verifyPanelId} className="grid gap-2.5" onSubmit={handleVerify}>
-          <div className="grid gap-1.5">
-            <label htmlFor={nameInputId}>姓名</label>
-            <input id={nameInputId} value={nameInput} onChange={(e) => dispatch({ type: 'SET', field: 'nameInput', value: e.target.value })} placeholder="例如：刘昊然" autoComplete="name" />
-          </div>
-          <div className="grid gap-1.5">
-            <label htmlFor={classInputId}>班级（重名时必填）</label>
-            <input id={classInputId} value={classInput} onChange={(e) => dispatch({ type: 'SET', field: 'classInput', value: e.target.value })} placeholder="例如：高二2403班" autoComplete="organization" />
-          </div>
-          <button type="submit" className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer" disabled={verifying}>
-            {verifying ? '验证中…' : '确认身份'}
-          </button>
+        <div id={verifyPanelId} className="grid gap-2.5">
+          <form className="grid gap-2.5" onSubmit={handleVerify}>
+            <div className="grid gap-1.5">
+              <label htmlFor={nameInputId}>姓名</label>
+              <input
+                id={nameInputId}
+                value={nameInput}
+                onChange={(e) => dispatch({ type: 'SET', field: 'nameInput', value: e.target.value })}
+                placeholder="例如：刘昊然"
+                autoComplete="name"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor={classInputId}>班级（重名时必填）</label>
+              <input
+                id={classInputId}
+                value={classInput}
+                onChange={(e) => dispatch({ type: 'SET', field: 'classInput', value: e.target.value })}
+                placeholder="例如：高二2403班"
+                autoComplete="organization"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <label>认证方式</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={`ghost ${credentialType === 'token' ? 'font-semibold' : ''}`}
+                  onClick={() => dispatch({ type: 'SET', field: 'credentialType', value: 'token' })}
+                >
+                  token
+                </button>
+                <button
+                  type="button"
+                  className={`ghost ${credentialType === 'password' ? 'font-semibold' : ''}`}
+                  onClick={() => dispatch({ type: 'SET', field: 'credentialType', value: 'password' })}
+                >
+                  密码
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <label htmlFor={credentialInputId}>{credentialType === 'token' ? 'token' : '密码'}</label>
+              <input
+                id={credentialInputId}
+                type={credentialType === 'token' ? 'text' : 'password'}
+                value={credentialInput}
+                onChange={(e) => dispatch({ type: 'SET', field: 'credentialInput', value: e.target.value })}
+                placeholder={credentialType === 'token' ? '输入分发的 token' : '输入已设置密码'}
+                autoComplete={credentialType === 'token' ? 'off' : 'current-password'}
+              />
+            </div>
+            <button
+              type="submit"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              disabled={verifying}
+            >
+              {verifying ? '认证中…' : '确认认证'}
+            </button>
+          </form>
+
+          <form className="grid gap-2.5 border border-border rounded-[10px] p-2.5 bg-surface-soft" onSubmit={handleSetPassword}>
+            <div className="text-xs text-muted">使用当前 token 或密码设置新密码（设置后 token 仍可登录）</div>
+            <div className="grid gap-1.5">
+              <label htmlFor={newPasswordInputId}>新密码</label>
+              <input
+                id={newPasswordInputId}
+                type="password"
+                value={newPasswordInput}
+                onChange={(e) => dispatch({ type: 'SET', field: 'newPasswordInput', value: e.target.value })}
+                placeholder="至少 8 位，含字母和数字"
+                autoComplete="new-password"
+              />
+            </div>
+            <button
+              type="submit"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-[#0f766e] text-white cursor-pointer"
+              disabled={settingPassword}
+            >
+              {settingPassword ? '设置中…' : '设置密码'}
+            </button>
+          </form>
+
           {verifyError && <div className="status err">{verifyError}</div>}
-        </form>
+          {verifyInfo && <div className="status ok">{verifyInfo}</div>}
+        </div>
       )}
       {verifiedStudent && (
         <div className="grid gap-1.5">
@@ -94,7 +191,7 @@ export default function SessionSidebarLearningSection(props: Props) {
         </div>
       )}
       {verifiedStudent && (
-        <button type="button" className="ghost" onClick={resetVerification}>重新验证</button>
+        <button type="button" className="ghost" onClick={resetVerification}>重新认证</button>
       )}
     </section>
   )

@@ -55,6 +55,15 @@ def _auth_exempt_path(path: str) -> bool:
     value = str(path or "").strip() or "/"
     if value == "/health":
         return True
+    if value in {
+        "/auth/student/identify",
+        "/auth/student/login",
+        "/auth/student/set-password",
+        "/auth/teacher/identify",
+        "/auth/teacher/login",
+        "/auth/teacher/set-password",
+    }:
+        return True
     if value.startswith("/admin/"):
         return True
     return False
@@ -92,6 +101,15 @@ def validate_auth_secret_policy(*, getenv: Callable[[str, Optional[str]], Option
 
 def _normalize_role(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def access_token_ttl_sec() -> int:
+    raw = str(os.getenv("AUTH_ACCESS_TOKEN_TTL_SEC", "28800") or "28800").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        value = 28800
+    return max(300, value)
 
 
 def mint_test_token(claims: Dict[str, Any], *, secret: str) -> str:
@@ -147,6 +165,35 @@ def _decode_bearer_token(token: str, *, secret: str) -> AuthPrincipal:
     return AuthPrincipal(actor_id=actor_id, role=role, tenant_id=tenant_id, exp=exp, claims=dict(payload))
 
 
+def mint_access_token(
+    *,
+    subject_id: str,
+    role: str,
+    tenant_id: str = "",
+    token_version: Optional[int] = None,
+) -> str:
+    sid = str(subject_id or "").strip()
+    role_norm = _normalize_role(role)
+    if not sid or role_norm not in {"teacher", "student", "admin", "service"}:
+        raise AuthError(400, "invalid_token_claims")
+    secret = _secret()
+    if not secret:
+        raise AuthError(500, "auth_token_secret_missing")
+    now = int(time.time())
+    claims: Dict[str, Any] = {
+        "sub": sid,
+        "role": role_norm,
+        "iat": now,
+        "exp": now + access_token_ttl_sec(),
+    }
+    tid = str(tenant_id or "").strip()
+    if tid:
+        claims["tenant_id"] = tid
+    if token_version is not None:
+        claims["tv"] = int(token_version)
+    return mint_test_token(claims, secret=secret)
+
+
 def resolve_principal_from_headers(
     headers: Mapping[str, Any],
     *,
@@ -173,7 +220,29 @@ def resolve_principal_from_headers(
     if not authz.lower().startswith("bearer "):
         raise AuthError(401, "invalid_authorization_scheme")
     token = authz[7:].strip()
-    return _decode_bearer_token(token, secret=secret)
+    principal = _decode_bearer_token(token, secret=secret)
+
+    claims = principal.claims if isinstance(principal.claims, dict) else {}
+    if principal.role in {"teacher", "student"} and claims.get("tv") is not None:
+        try:
+            token_version = int(claims.get("tv"))
+        except Exception:
+            raise AuthError(401, "invalid_token_claims")
+        try:
+            from .auth_registry_service import validate_subject_token_version
+
+            if not validate_subject_token_version(
+                role=principal.role,
+                subject_id=principal.actor_id,
+                token_version=token_version,
+            ):
+                raise AuthError(401, "token_revoked")
+        except AuthError:
+            raise
+        except Exception:
+            _log.warning("auth token version validation failed", exc_info=True)
+            raise AuthError(401, "invalid_token_claims")
+    return principal
 
 
 def resolve_principal_from_scope(scope: Dict[str, Any], *, allow_exempt: bool = True) -> Optional[AuthPrincipal]:
@@ -374,4 +443,6 @@ __all__ = [
     "enforce_upload_job_access",
     "bind_chat_request_to_principal",
     "mint_test_token",
+    "mint_access_token",
+    "access_token_ttl_sec",
 ]

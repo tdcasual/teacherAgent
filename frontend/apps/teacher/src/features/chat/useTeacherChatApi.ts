@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { absolutizeChartImageUrls, renderMarkdown } from './markdown'
 import { stripTransientPendingBubbles, withPendingChatOverlay } from './pendingOverlay'
 import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
@@ -6,6 +6,7 @@ import { parseInvocationInput } from './invocation'
 import { decideSkillRouting } from './requestRouting'
 import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
 import { safeLocalStorageGetItem } from '../../utils/storage'
+import { TEACHER_AUTH_EVENT, readTeacherAccessToken } from '../auth/teacherAuth'
 import { makeId } from '../../utils/id'
 import { nowTime, timeFromIso } from '../../utils/time'
 import type {
@@ -138,10 +139,21 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   const localDraftSessionIdsRef = useRef<string[]>([])
   const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
+  const [authToken, setAuthToken] = useState(() => readTeacherAccessToken())
 
   // ── Ref sync effects ──────────────────────────────────────────────────
   useEffect(() => { activeSessionRef.current = activeSessionId }, [activeSessionId])
   useEffect(() => { pendingChatJobRef.current = pendingChatJob }, [pendingChatJob])
+  useEffect(() => {
+    const sync = () => setAuthToken(readTeacherAccessToken())
+    sync()
+    window.addEventListener('storage', sync)
+    window.addEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    }
+  }, [])
 
   // Sync historyCursor / historyHasMore / localDraftSessionIds into refs
   // (these are read inside callbacks that must not re-create on every state change)
@@ -169,6 +181,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   // ── refreshTeacherSessions ────────────────────────────────────────────
   const refreshTeacherSessions = useCallback(
     async (mode: 'reset' | 'more' = 'reset') => {
+      if (!authToken) return
       if (mode === 'more' && !historyHasMoreRef.current) return
       const cursor = mode === 'more' ? historyCursorRef.current : 0
       const requestNo = ++historyRequestRef.current
@@ -233,12 +246,13 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         setHistoryLoading(false)
       }
     },
-    [apiBase, setHistoryLoading, setHistoryError, setLocalDraftSessionIds, setHistoryCursor, setHistoryHasMore, setHistorySessions, syncHistoryCursor, syncHistoryHasMore],
+    [apiBase, authToken, setHistoryLoading, setHistoryError, setLocalDraftSessionIds, setHistoryCursor, setHistoryHasMore, setHistorySessions, syncHistoryCursor, syncHistoryHasMore],
   )
 
   // ── loadTeacherSessionMessages ────────────────────────────────────────
   const loadTeacherSessionMessages = useCallback(
     async (sessionId: string, cursor: number, append: boolean) => {
+      if (!authToken) return
       const targetSessionId = (sessionId || '').trim()
       if (!targetSessionId) return
       const requestNo = ++sessionRequestRef.current
@@ -307,11 +321,12 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         setSessionLoading(false)
       }
     },
-    [apiBase, setSessionLoading, setSessionError, setSessionCursor, setSessionHasMore, setMessages],
+    [apiBase, authToken, setSessionLoading, setSessionError, setSessionCursor, setSessionHasMore, setMessages],
   )
 
   // ── refreshMemoryProposals ────────────────────────────────────────────
   const refreshMemoryProposals = useCallback(async () => {
+    if (!authToken) return
     setProposalLoading(true)
     setProposalError('')
     try {
@@ -332,10 +347,11 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     } finally {
       setProposalLoading(false)
     }
-  }, [apiBase, memoryStatusFilter, setProposalLoading, setProposalError, setProposals])
+  }, [apiBase, authToken, memoryStatusFilter, setProposalLoading, setProposalError, setProposals])
 
   // ── refreshMemoryInsights ─────────────────────────────────────────────
   const refreshMemoryInsights = useCallback(async () => {
+    if (!authToken) return
     try {
       const url = new URL(`${apiBase}/teacher/memory/insights`)
       url.searchParams.set('days', '14')
@@ -349,10 +365,16 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     } catch (err) {
       setMemoryInsights(null)
     }
-  }, [apiBase, setMemoryInsights])
+  }, [apiBase, authToken, setMemoryInsights])
 
   // ── fetchSkills ───────────────────────────────────────────────────────
   const fetchSkills = useCallback(async () => {
+    if (!authToken) {
+      setSkillList(fallbackSkills)
+      setSkillsError('')
+      setSkillsLoading(false)
+      return
+    }
     setSkillsLoading(true)
     setSkillsError('')
     try {
@@ -375,11 +397,15 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     } finally {
       setSkillsLoading(false)
     }
-  }, [apiBase, setSkillsLoading, setSkillsError, setSkillList])
+  }, [apiBase, authToken, setSkillsLoading, setSkillsError, setSkillList])
 
   // ── submitMessage ─────────────────────────────────────────────────────
   const submitMessage = useCallback(
     async (inputText: string, options?: { attachments?: Array<{ attachment_id: string }> }) => {
+      if (!authToken) {
+        setComposerWarning('请先在顶部完成教师认证。')
+        return false
+      }
       if (pendingChatJob?.job_id) return false
       const attachmentRefs = Array.isArray(options?.attachments)
         ? options?.attachments.filter((item) => String(item?.attachment_id || '').trim())
@@ -490,6 +516,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     },
     [
       pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
+      authToken,
       setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
       setMessages, setInput, setSending, setChatQueueHint, setPendingChatJob,
     ],
@@ -497,6 +524,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
 
   // ── Pending chat job polling effect ───────────────────────────────────
   useEffect(() => {
+    if (!authToken) return
     if (!pendingChatJob?.job_id) return
     const cleanup = startVisibilityAwareBackoffPolling(
       async () => {
@@ -563,54 +591,61 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       setChatQueueHint('')
       cleanup()
     }
-  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setSending])
+  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setSending])
 
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {
+    if (!authToken) return
     void refreshTeacherSessions()
-  }, [refreshTeacherSessions])
+  }, [authToken, refreshTeacherSessions])
 
   // ── Load messages when activeSessionId changes ────────────────────────
   useEffect(() => {
+    if (!authToken) return
     if (!activeSessionId) return
     void loadTeacherSessionMessages(activeSessionId, -1, false)
-  }, [activeSessionId, loadTeacherSessionMessages])
+  }, [activeSessionId, authToken, loadTeacherSessionMessages])
 
   // ── Session refresh 30s interval ──────────────────────────────────────
   useEffect(() => {
+    if (!authToken) return
     const timer = window.setInterval(() => {
       void refreshTeacherSessions()
     }, 30000)
     return () => window.clearInterval(timer)
-  }, [refreshTeacherSessions])
+  }, [authToken, refreshTeacherSessions])
 
   // ── Memory refresh effects ────────────────────────────────────────────
   useEffect(() => {
+    if (!authToken) return
     if (!skillsOpen) return
     if (workbenchTab !== 'memory') return
     void refreshMemoryProposals()
     void refreshMemoryInsights()
-  }, [skillsOpen, workbenchTab, refreshMemoryInsights, refreshMemoryProposals])
+  }, [skillsOpen, workbenchTab, authToken, refreshMemoryInsights, refreshMemoryProposals])
 
   // ── Skill fetch on mount ──────────────────────────────────────────────
   useEffect(() => {
+    if (!authToken) return
     void fetchSkills()
-  }, [fetchSkills])
+  }, [authToken, fetchSkills])
 
   // ── Skill fetch when workbench skills tab opens ───────────────────────
   useEffect(() => {
+    if (!authToken) return
     if (!skillsOpen || workbenchTab !== 'skills') return
     void fetchSkills()
-  }, [skillsOpen, workbenchTab, fetchSkills])
+  }, [skillsOpen, workbenchTab, authToken, fetchSkills])
 
   // ── Skill polling 30s when skills tab is open ─────────────────────────
   useEffect(() => {
+    if (!authToken) return
     if (!skillsOpen || workbenchTab !== 'skills') return
     const timer = window.setInterval(() => {
       void fetchSkills()
     }, 30000)
     return () => window.clearInterval(timer)
-  }, [skillsOpen, workbenchTab, fetchSkills])
+  }, [skillsOpen, workbenchTab, authToken, fetchSkills])
 
   // ── Return ────────────────────────────────────────────────────────────
   return {
