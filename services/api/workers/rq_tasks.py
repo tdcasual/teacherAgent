@@ -92,7 +92,7 @@ def _scan_pending_jobs(
 ) -> int:
     job_dir.mkdir(parents=True, exist_ok=True)
     count = 0
-    for job_path in job_dir.glob("*/job.json"):
+    for job_path in sorted(job_dir.glob("*/job.json")):
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
