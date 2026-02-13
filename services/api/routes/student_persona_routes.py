@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 
 def register_student_persona_routes(router: APIRouter, core: Any) -> None:
@@ -61,3 +62,32 @@ def register_student_persona_routes(router: APIRouter, core: Any) -> None:
             raise HTTPException(status_code=400, detail=result)
         return result
 
+    @router.post("/student/personas/avatar/upload")
+    async def upload_student_persona_avatar(
+        student_id: str = Form(...),
+        persona_id: str = Form(...),
+        file: UploadFile = File(...),
+    ) -> Any:
+        content = await file.read()
+        result = core._student_persona_avatar_upload_api_impl(
+            student_id,
+            persona_id,
+            filename=str(getattr(file, "filename", "") or ""),
+            content=content,
+            deps=core._student_persona_api_deps(),
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result)
+        return result
+
+    @router.get("/student/personas/avatar/{student_id}/{persona_id}/{file_name}")
+    def get_student_persona_avatar(student_id: str, persona_id: str, file_name: str) -> Any:
+        path = core._resolve_student_persona_avatar_path_impl(
+            student_id,
+            persona_id,
+            file_name,
+            deps=core._student_persona_api_deps(),
+        )
+        if path is None:
+            raise HTTPException(status_code=404, detail="avatar_not_found")
+        return FileResponse(path, filename=path.name)

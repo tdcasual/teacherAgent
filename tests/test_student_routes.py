@@ -20,6 +20,8 @@ def test_student_routes_build_router():
     assert _has_route(router, "POST", "/student/personas/custom")
     assert _has_route(router, "POST", "/student/personas/activate")
     assert _has_route(router, "DELETE", "/student/personas/custom/{persona_id}")
+    assert _has_route(router, "POST", "/student/personas/avatar/upload")
+    assert _has_route(router, "GET", "/student/personas/avatar/{student_id}/{persona_id}/{file_name}")
     assert _has_route(router, "POST", "/student/import")
     assert _has_route(router, "POST", "/student/verify")
     assert _has_route(router, "POST", "/student/submit")

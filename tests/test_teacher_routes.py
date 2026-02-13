@@ -27,3 +27,5 @@ def test_teacher_routes_build_router():
     assert _has_route(router, "PATCH", "/teacher/personas/{persona_id}")
     assert _has_route(router, "POST", "/teacher/personas/{persona_id}/assign")
     assert _has_route(router, "POST", "/teacher/personas/{persona_id}/visibility")
+    assert _has_route(router, "POST", "/teacher/personas/{persona_id}/avatar/upload")
+    assert _has_route(router, "GET", "/teacher/personas/avatar/{teacher_id}/{persona_id}/{file_name}")

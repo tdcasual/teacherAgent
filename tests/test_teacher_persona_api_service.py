@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from services.api.student_persona_api_service import StudentPersonaApiDeps, student_personas_get_api
 from services.api.teacher_persona_api_service import (
     TeacherPersonaApiDeps,
+    teacher_persona_avatar_upload_api,
     teacher_persona_assign_api,
     teacher_persona_create_api,
     teacher_persona_update_api,
@@ -25,12 +26,14 @@ class TeacherPersonaApiServiceTest(unittest.TestCase):
     def _teacher_deps(self, root: Path) -> TeacherPersonaApiDeps:
         return TeacherPersonaApiDeps(
             data_dir=root / "data",
+            uploads_dir=root / "uploads",
             now_iso=lambda: "2026-02-13T14:00:00",
         )
 
     def _student_deps(self, root: Path) -> StudentPersonaApiDeps:
         return StudentPersonaApiDeps(
             data_dir=root / "data",
+            uploads_dir=root / "uploads",
             now_iso=lambda: "2026-02-13T14:00:00",
         )
 
@@ -123,7 +126,33 @@ class TeacherPersonaApiServiceTest(unittest.TestCase):
             assert student_view["ok"] is True
             assert not any(item.get("persona_id") == pid for item in student_view["assigned"])
 
+    def test_teacher_persona_avatar_upload_updates_avatar_url(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._teacher_deps(root)
+            created = teacher_persona_create_api(
+                "T001",
+                {
+                    "name": "图片角色",
+                    "style_rules": ["简洁"],
+                    "few_shot_examples": ["先看已知。"],
+                },
+                deps=deps,
+            )
+            pid = created["persona"]["persona_id"]
+            uploaded = teacher_persona_avatar_upload_api(
+                "T001",
+                pid,
+                filename="avatar.png",
+                content=b"\x89PNG\r\n\x1a\navatar-data",
+                deps=deps,
+            )
+            assert uploaded["ok"] is True
+            assert uploaded["avatar_url"].startswith("/teacher/personas/avatar/")
+            listing = teacher_personas_get_api("T001", deps=deps)
+            persona = next(item for item in listing["personas"] if item["persona_id"] == pid)
+            assert persona.get("avatar_url") == uploaded["avatar_url"]
+
 
 if __name__ == "__main__":
     unittest.main()
-

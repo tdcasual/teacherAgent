@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from services.api.student_persona_api_service import (
     StudentPersonaApiDeps,
     resolve_student_persona_runtime,
+    student_persona_avatar_upload_api,
     student_persona_activate_api,
     student_persona_custom_create_api,
     student_persona_custom_delete_api,
@@ -24,6 +25,7 @@ class StudentPersonaApiServiceTest(unittest.TestCase):
     def _deps(self, root: Path) -> StudentPersonaApiDeps:
         return StudentPersonaApiDeps(
             data_dir=root / "data",
+            uploads_dir=root / "uploads",
             now_iso=lambda: "2026-02-13T12:00:00",
         )
 
@@ -187,6 +189,40 @@ class StudentPersonaApiServiceTest(unittest.TestCase):
             second = resolve_student_persona_runtime("S001", "preset_1", deps=deps)
             assert second["ok"] is True
             assert second["first_notice"] is False
+
+    def test_student_custom_persona_avatar_upload_updates_avatar_url(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {
+                    "student_id": "S001",
+                    "personas": {
+                        "custom": [
+                            {
+                                "persona_id": "custom_1",
+                                "name": "自定义A",
+                                "review_status": "approved",
+                                "style_rules": ["温和"],
+                                "few_shot_examples": ["先看题干。"],
+                            }
+                        ]
+                    },
+                },
+            )
+            uploaded = student_persona_avatar_upload_api(
+                "S001",
+                "custom_1",
+                filename="avatar.webp",
+                content=b"RIFFtestWEBPVP8 ",
+                deps=deps,
+            )
+            assert uploaded["ok"] is True
+            assert uploaded["avatar_url"].startswith("/student/personas/avatar/")
+            listing = student_personas_get_api("S001", deps=deps)
+            custom = next(item for item in listing["custom"] if item["persona_id"] == "custom_1")
+            assert custom.get("avatar_url") == uploaded["avatar_url"]
 
 
 if __name__ == "__main__":

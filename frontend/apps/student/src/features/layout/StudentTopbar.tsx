@@ -3,6 +3,7 @@ import type { StudentPersonaCard, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
 
 type Props = {
+  apiBase: string
   verifiedStudent: VerifiedStudent | null
   sidebarOpen: boolean
   dispatch: Dispatch<StudentAction>
@@ -19,6 +20,7 @@ type Props = {
 }
 
 export default function StudentTopbar({
+  apiBase,
   verifiedStudent,
   sidebarOpen,
   dispatch,
@@ -89,8 +91,21 @@ export default function StudentTopbar({
                 }`}
                 onClick={() => onSelectPersona(item.persona_id)}
               >
-                <div className="text-[13px] font-semibold leading-tight">{item.name || item.persona_id}</div>
-                <div className="text-[12px] text-muted mt-0.5 leading-tight">{item.summary || '风格卡'}</div>
+                <div className="flex items-start gap-2">
+                  {item.avatar_url ? (
+                    <img
+                      src={item.avatar_url.startsWith('http') ? item.avatar_url : `${apiBase}${item.avatar_url}`}
+                      alt={item.name || item.persona_id}
+                      className="w-8 h-8 rounded-full object-cover border border-border shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full border border-border bg-surface-soft shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold leading-tight truncate">{item.name || item.persona_id}</div>
+                    <div className="text-[12px] text-muted mt-0.5 leading-tight">{item.summary || '风格卡'}</div>
+                  </div>
+                </div>
               </button>
             ))}
           </div>

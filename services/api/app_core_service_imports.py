@@ -289,7 +289,9 @@ from .student_profile_api_service import StudentProfileApiDeps, get_profile_api 
 from .student_persona_api_service import (
     StudentPersonaApiDeps,
     resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
+    resolve_student_persona_avatar_path as _resolve_student_persona_avatar_path_impl,
     student_persona_activate_api as _student_persona_activate_api_impl,
+    student_persona_avatar_upload_api as _student_persona_avatar_upload_api_impl,
     student_persona_custom_create_api as _student_persona_custom_create_api_impl,
     student_persona_custom_delete_api as _student_persona_custom_delete_api_impl,
     student_personas_get_api as _student_personas_get_api_impl,
@@ -342,7 +344,9 @@ from .teacher_provider_registry_service import (
 )
 from .teacher_persona_api_service import (
     TeacherPersonaApiDeps,
+    resolve_teacher_persona_avatar_path as _resolve_teacher_persona_avatar_path_impl,
     teacher_persona_assign_api as _teacher_persona_assign_api_impl,
+    teacher_persona_avatar_upload_api as _teacher_persona_avatar_upload_api_impl,
     teacher_persona_create_api as _teacher_persona_create_api_impl,
     teacher_persona_update_api as _teacher_persona_update_api_impl,
     teacher_persona_visibility_api as _teacher_persona_visibility_api_impl,

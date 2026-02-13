@@ -293,6 +293,7 @@ export default function App() {
   return (
     <div className="app flex h-dvh flex-col bg-bg overflow-hidden" ref={appRef}>
       <StudentTopbar
+        apiBase={state.apiBase}
         verifiedStudent={state.verifiedStudent}
         sidebarOpen={state.sidebarOpen}
         dispatch={dispatch}

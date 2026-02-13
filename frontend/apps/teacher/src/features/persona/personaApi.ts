@@ -104,3 +104,19 @@ export const setTeacherPersonaVisibility = async (
   )
 }
 
+export const uploadTeacherPersonaAvatar = async (
+  apiBase: string,
+  personaId: string,
+  file: File,
+) => {
+  const base = normalizeBase(apiBase)
+  const form = new FormData()
+  form.append('file', file)
+  return requestJson<{ ok: boolean; teacher_id: string; persona_id: string; avatar_url: string }>(
+    `${base}/teacher/personas/${encodeURIComponent(personaId)}/avatar/upload`,
+    {
+      method: 'POST',
+      body: form,
+    },
+  )
+}

@@ -5,6 +5,7 @@ import {
   createTeacherPersona,
   fetchTeacherPersonas,
   setTeacherPersonaVisibility,
+  uploadTeacherPersonaAvatar,
   updateTeacherPersona,
 } from './personaApi'
 
@@ -40,6 +41,7 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
   const [assignStudentId, setAssignStudentId] = useState('')
   const [assignStatus, setAssignStatus] = useState<'active' | 'inactive'>('active')
   const [visibilityMode, setVisibilityMode] = useState<'assigned_only' | 'hidden_all'>('assigned_only')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
 
   const selectedPersona = useMemo(
     () => personas.find((item) => item.persona_id === selectedPersonaId) || null,
@@ -161,6 +163,26 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
     }
   }, [apiBase, refresh, selectedPersonaId, visibilityMode])
 
+  const handleAvatarUpload = useCallback(async () => {
+    if (!selectedPersonaId || !avatarFile) {
+      setError('请先选择角色并选择图片')
+      return
+    }
+    setLoading(true)
+    setError('')
+    setStatus('')
+    try {
+      await uploadTeacherPersonaAvatar(apiBase, selectedPersonaId, avatarFile)
+      setStatus('头像上传成功')
+      setAvatarFile(null)
+      await refresh()
+    } catch (err) {
+      setError(toErrorMessage(err, '头像上传失败'))
+    } finally {
+      setLoading(false)
+    }
+  }, [apiBase, avatarFile, refresh, selectedPersonaId])
+
   if (!open) return null
 
   return (
@@ -195,8 +217,21 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
                 }`}
                 onClick={() => setSelectedPersonaId(item.persona_id)}
               >
-                <div className="text-[13px] font-semibold">{item.name || item.persona_id}</div>
-                <div className="text-[12px] text-muted">{item.summary || '未填写摘要'}</div>
+                <div className="flex items-start gap-2">
+                  {item.avatar_url ? (
+                    <img
+                      src={`${apiBase}${item.avatar_url}`}
+                      alt={item.name || item.persona_id}
+                      className="w-8 h-8 rounded-full object-cover border border-border shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full border border-border bg-surface-soft shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold truncate">{item.name || item.persona_id}</div>
+                    <div className="text-[12px] text-muted line-clamp-2">{item.summary || '未填写摘要'}</div>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
@@ -217,8 +252,25 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
             <div className="text-[13px] font-semibold mb-2">编辑/指派（当前选中）</div>
             <div className="grid gap-2">
               <div className="text-[12px] text-muted">当前角色 ID：{selectedPersonaId || '未选择'}</div>
+              {selectedPersona?.avatar_url ? (
+                <img
+                  src={`${apiBase}${selectedPersona.avatar_url}`}
+                  alt={selectedPersona.name || selectedPersona.persona_id || 'avatar'}
+                  className="w-14 h-14 rounded-full object-cover border border-border"
+                />
+              ) : null}
               <input className="rounded-lg border border-border px-3 py-2 text-[13px]" value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="更新摘要" />
               <button className="ghost w-fit" type="button" onClick={() => void handleUpdateSummary()} disabled={loading || !selectedPersonaId}>更新摘要</button>
+              <input
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                className="rounded-lg border border-border px-3 py-2 text-[13px]"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setAvatarFile(file)
+                }}
+              />
+              <button className="ghost w-fit" type="button" onClick={() => void handleAvatarUpload()} disabled={loading || !selectedPersonaId || !avatarFile}>上传头像</button>
               <div className="h-px bg-border my-1" />
               <input className="rounded-lg border border-border px-3 py-2 text-[13px]" value={assignStudentId} onChange={(e) => setAssignStudentId(e.target.value)} placeholder="student_id（精确指派）" />
               <select className="rounded-lg border border-border px-3 py-2 text-[13px]" value={assignStatus} onChange={(e) => setAssignStatus(e.target.value === 'inactive' ? 'inactive' : 'active')}>
@@ -241,4 +293,3 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
     </div>
   )
 }
-

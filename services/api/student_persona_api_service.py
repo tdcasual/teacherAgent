@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 @dataclass(frozen=True)
 class StudentPersonaApiDeps:
     data_dir: Path
+    uploads_dir: Path
     now_iso: Callable[[], str]
 
 
@@ -44,6 +45,18 @@ def _teacher_personas_path(teacher_id: str, deps: StudentPersonaApiDeps) -> Path
     return folder / "personas.json"
 
 
+def _student_avatar_dir(student_id: str, persona_id: str, deps: StudentPersonaApiDeps) -> Path:
+    base = (deps.uploads_dir / "persona_avatars" / "student").resolve()
+    sid = str(student_id or "").strip()
+    pid = str(persona_id or "").strip()
+    if not sid or not pid:
+        raise ValueError("invalid_avatar_owner")
+    folder = (base / sid / pid).resolve()
+    if folder != base and base not in folder.parents:
+        raise ValueError("invalid_avatar_path")
+    return folder
+
+
 def _read_json_dict(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
@@ -71,6 +84,22 @@ def _as_str_list(value: Any, *, limit: int) -> List[str]:
         if len(out) >= limit:
             break
     return out
+
+
+def _validate_avatar_file(filename: str, content: bytes) -> str:
+    if len(content) > 2 * 1024 * 1024:
+        raise ValueError("avatar_too_large")
+    if not content:
+        raise ValueError("avatar_empty")
+    lower = str(filename or "").strip().lower()
+    if "." not in lower:
+        raise ValueError("avatar_invalid_extension")
+    ext = lower.rsplit(".", 1)[-1]
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        raise ValueError("avatar_invalid_extension")
+    if content[:256].lower().find(b"<svg") >= 0:
+        raise ValueError("avatar_svg_not_allowed")
+    return "jpg" if ext == "jpeg" else ext
 
 
 def _ensure_profile(student_id: str, deps: StudentPersonaApiDeps) -> Dict[str, Any]:
@@ -399,3 +428,78 @@ def resolve_student_persona_runtime(
         "persona_prompt": _build_persona_prompt(persona),
         "first_notice": first_notice,
     }
+
+
+def student_persona_avatar_upload_api(
+    student_id: str,
+    persona_id: str,
+    *,
+    filename: str,
+    content: bytes,
+    deps: StudentPersonaApiDeps,
+) -> Dict[str, Any]:
+    sid = str(student_id or "").strip()
+    pid = str(persona_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "missing_student_id"}
+    if not pid:
+        return {"ok": False, "error": "missing_persona_id"}
+
+    profile = _ensure_profile(sid, deps)
+    personas = profile["personas"]
+    custom_raw = personas.get("custom")
+    custom = custom_raw if isinstance(custom_raw, list) else []
+    idx = next(
+        (
+            i
+            for i, item in enumerate(custom)
+            if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid
+        ),
+        -1,
+    )
+    if idx < 0:
+        return {"ok": False, "error": "custom_persona_not_found"}
+
+    try:
+        ext = _validate_avatar_file(filename, content)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    folder = _student_avatar_dir(sid, pid, deps)
+    folder.mkdir(parents=True, exist_ok=True)
+    file_name = f"avatar_{uuid.uuid4().hex[:10]}.{ext}"
+    target = folder / file_name
+    target.write_bytes(content)
+    avatar_url = f"/student/personas/avatar/{sid}/{pid}/{file_name}"
+    updated = dict(custom[idx])
+    updated["avatar_url"] = avatar_url
+    updated["updated_at"] = deps.now_iso()
+    custom[idx] = updated
+    personas["custom"] = custom
+    _write_json(_student_profile_path(sid, deps), profile)
+    return {"ok": True, "student_id": sid, "persona_id": pid, "avatar_url": avatar_url}
+
+
+def resolve_student_persona_avatar_path(
+    student_id: str,
+    persona_id: str,
+    file_name: str,
+    *,
+    deps: StudentPersonaApiDeps,
+) -> Optional[Path]:
+    sid = str(student_id or "").strip()
+    pid = str(persona_id or "").strip()
+    fname = str(file_name or "").strip()
+    if not sid or not pid or not fname:
+        return None
+    if "/" in fname or "\\" in fname:
+        return None
+    try:
+        folder = _student_avatar_dir(sid, pid, deps)
+    except ValueError:
+        return None
+    target = (folder / fname).resolve()
+    if target != folder and folder not in target.parents:
+        return None
+    if not target.exists() or not target.is_file():
+        return None
+    return target

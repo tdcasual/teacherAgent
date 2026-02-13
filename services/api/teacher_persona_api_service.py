@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List
 @dataclass(frozen=True)
 class TeacherPersonaApiDeps:
     data_dir: Path
+    uploads_dir: Path
     now_iso: Callable[[], str]
 
 
@@ -39,6 +40,18 @@ def _student_assignments_path(student_id: str, deps: TeacherPersonaApiDeps) -> P
     return path
 
 
+def _teacher_avatar_dir(teacher_id: str, persona_id: str, deps: TeacherPersonaApiDeps) -> Path:
+    base = (deps.uploads_dir / "persona_avatars" / "teacher").resolve()
+    tid = _safe_id(teacher_id)
+    pid = _safe_id(persona_id)
+    if not tid or not pid:
+        raise ValueError("invalid_avatar_owner")
+    folder = (base / tid / pid).resolve()
+    if folder != base and base not in folder.parents:
+        raise ValueError("invalid_avatar_path")
+    return folder
+
+
 def _read_json_dict(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
@@ -66,6 +79,22 @@ def _as_str_list(value: Any, limit: int) -> List[str]:
         if len(out) >= limit:
             break
     return out
+
+
+def _validate_avatar_file(filename: str, content: bytes) -> str:
+    if len(content) > 2 * 1024 * 1024:
+        raise ValueError("avatar_too_large")
+    if not content:
+        raise ValueError("avatar_empty")
+    lower = str(filename or "").strip().lower()
+    if "." not in lower:
+        raise ValueError("avatar_invalid_extension")
+    ext = lower.rsplit(".", 1)[-1]
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        raise ValueError("avatar_invalid_extension")
+    if content[:256].lower().find(b"<svg") >= 0:
+        raise ValueError("avatar_svg_not_allowed")
+    return "jpg" if ext == "jpeg" else ext
 
 
 def _load_teacher_personas(teacher_id: str, deps: TeacherPersonaApiDeps) -> Dict[str, Any]:
@@ -281,3 +310,67 @@ def teacher_persona_assign_api(
     assign_payload["assignments"] = next_records
     _write_json(assign_path, assign_payload)
     return {"ok": True, "teacher_id": tid, "persona_id": pid, "student_id": sid, "status": status}
+
+
+def teacher_persona_avatar_upload_api(
+    teacher_id: str,
+    persona_id: str,
+    *,
+    filename: str,
+    content: bytes,
+    deps: TeacherPersonaApiDeps,
+) -> Dict[str, Any]:
+    tid = _safe_id(teacher_id)
+    pid = _safe_id(persona_id)
+    if not tid:
+        return {"ok": False, "error": "missing_teacher_id"}
+    if not pid:
+        return {"ok": False, "error": "missing_persona_id"}
+    store = _load_teacher_personas(tid, deps)
+    personas = list(store.get("personas") or [])
+    idx = next((i for i, item in enumerate(personas) if _safe_id(item.get("persona_id")) == pid), -1)
+    if idx < 0:
+        return {"ok": False, "error": "persona_not_found"}
+    try:
+        ext = _validate_avatar_file(filename, content)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    folder = _teacher_avatar_dir(tid, pid, deps)
+    folder.mkdir(parents=True, exist_ok=True)
+    file_name = f"avatar_{uuid.uuid4().hex[:10]}.{ext}"
+    target = folder / file_name
+    target.write_bytes(content)
+    avatar_url = f"/teacher/personas/avatar/{tid}/{pid}/{file_name}"
+    updated = dict(personas[idx])
+    updated["avatar_url"] = avatar_url
+    updated["updated_at"] = deps.now_iso()
+    personas[idx] = updated
+    store["personas"] = personas
+    _write_json(_teacher_personas_path(tid, deps), store)
+    return {"ok": True, "teacher_id": tid, "persona_id": pid, "avatar_url": avatar_url}
+
+
+def resolve_teacher_persona_avatar_path(
+    teacher_id: str,
+    persona_id: str,
+    file_name: str,
+    *,
+    deps: TeacherPersonaApiDeps,
+) -> Path | None:
+    tid = _safe_id(teacher_id)
+    pid = _safe_id(persona_id)
+    fname = _safe_id(file_name)
+    if not tid or not pid or not fname:
+        return None
+    if "/" in fname or "\\" in fname:
+        return None
+    try:
+        folder = _teacher_avatar_dir(tid, pid, deps)
+    except ValueError:
+        return None
+    target = (folder / fname).resolve()
+    if target != folder and folder not in target.parents:
+        return None
+    if not target.exists() or not target.is_file():
+        return None
+    return target

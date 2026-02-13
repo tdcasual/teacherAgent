@@ -371,6 +371,7 @@ def _compute_chat_reply_deps():
             persona_id,
             deps=StudentPersonaApiDeps(
                 data_dir=_ac.DATA_DIR,
+                uploads_dir=_ac.UPLOADS_DIR,
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
             ),
         ),

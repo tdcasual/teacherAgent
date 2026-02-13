@@ -78,5 +78,6 @@ def _teacher_persona_api_deps():
     _ac = _app_core()
     return TeacherPersonaApiDeps(
         data_dir=_ac.DATA_DIR,
+        uploads_dir=_ac.UPLOADS_DIR,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
