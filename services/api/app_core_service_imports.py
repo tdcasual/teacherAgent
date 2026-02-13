@@ -288,6 +288,7 @@ from .session_discussion_service import (
 from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
 from .student_persona_api_service import (
     StudentPersonaApiDeps,
+    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
     student_persona_activate_api as _student_persona_activate_api_impl,
     student_persona_custom_create_api as _student_persona_custom_create_api_impl,
     student_persona_custom_delete_api as _student_persona_custom_delete_api_impl,

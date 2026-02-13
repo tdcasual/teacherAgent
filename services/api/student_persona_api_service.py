@@ -5,7 +5,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -131,6 +131,8 @@ def _resolve_assigned_personas(student_id: str, deps: StudentPersonaApiDeps) -> 
                     "name": str(persona.get("name") or ""),
                     "summary": str(persona.get("summary") or ""),
                     "avatar_url": str(persona.get("avatar_url") or ""),
+                    "style_rules": _as_str_list(persona.get("style_rules"), limit=20),
+                    "few_shot_examples": _as_str_list(persona.get("few_shot_examples"), limit=10),
                     "source": "teacher_assigned",
                     "review_status": "approved",
                 }
@@ -318,3 +320,82 @@ def student_persona_custom_delete_api(
         "active_persona_id": str(personas.get("active_persona_id") or "").strip(),
     }
 
+
+def _build_persona_prompt(persona: Dict[str, Any]) -> str:
+    name = str(persona.get("name") or persona.get("persona_id") or "未命名角色").strip() or "未命名角色"
+    rules = _as_str_list(persona.get("style_rules"), limit=12)
+    examples = _as_str_list(persona.get("few_shot_examples"), limit=5)
+    lines: List[str] = [
+        f"你当前启用了虚拟风格卡「{name}」。",
+        "此风格卡只影响语气和讲解节奏，不改变事实正确性与教学约束。",
+        "禁止声称你是真实历史人物或具备现实身份。",
+        "每次回复最多使用一处角色化措辞；其余内容保持清晰、可执行、分步骤。",
+    ]
+    if rules:
+        lines.append("风格规则：")
+        for idx, item in enumerate(rules, start=1):
+            lines.append(f"{idx}. {item}")
+    if examples:
+        lines.append("风格示例（仅供语气参考，不可照抄）：")
+        for idx, item in enumerate(examples, start=1):
+            lines.append(f"- 示例{idx}: {item}")
+    return "\n".join(lines)
+
+
+def resolve_student_persona_runtime(
+    student_id: str,
+    persona_id: str,
+    *,
+    deps: StudentPersonaApiDeps,
+) -> Dict[str, Any]:
+    sid = str(student_id or "").strip()
+    pid = str(persona_id or "").strip()
+    if not sid:
+        return {"ok": False, "error": "missing_student_id"}
+    if not pid:
+        return {"ok": False, "error": "missing_persona_id"}
+
+    listing = student_personas_get_api(sid, deps=deps)
+    if not listing.get("ok"):
+        return {"ok": False, "error": str(listing.get("error") or "persona_not_available")}
+
+    persona: Optional[Dict[str, Any]] = None
+    for item in listing.get("assigned", []):
+        if isinstance(item, dict) and str(item.get("persona_id") or "").strip() == pid:
+            persona = dict(item)
+            break
+    if persona is None:
+        for item in listing.get("custom", []):
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("persona_id") or "").strip() != pid:
+                continue
+            if str(item.get("review_status") or "").strip().lower() != "approved":
+                continue
+            persona = dict(item)
+            break
+    if persona is None:
+        return {"ok": False, "error": "persona_not_available"}
+
+    profile = _ensure_profile(sid, deps)
+    personas = profile.get("personas") if isinstance(profile.get("personas"), dict) else {}
+    notified_raw = personas.get("first_activation_notified_ids") if isinstance(personas, dict) else []
+    notified_ids = {
+        str(item or "").strip()
+        for item in notified_raw
+        if str(item or "").strip()
+    }
+    first_notice = pid not in notified_ids
+    if first_notice and isinstance(personas, dict):
+        notified_ids.add(pid)
+        personas["first_activation_notified_ids"] = sorted(notified_ids)
+        _write_json(_student_profile_path(sid, deps), profile)
+
+    return {
+        "ok": True,
+        "student_id": sid,
+        "persona_id": pid,
+        "persona_name": str(persona.get("name") or pid),
+        "persona_prompt": _build_persona_prompt(persona),
+        "first_notice": first_notice,
+    }

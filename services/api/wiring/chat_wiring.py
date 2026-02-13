@@ -72,6 +72,10 @@ from ..handlers import chat_handlers
 from ..job_repository import _atomic_write_json, _release_lockfile, _try_acquire_lockfile
 from ..prompt_builder import compile_system_prompt
 from ..session_history_api_service import SessionHistoryApiDeps
+from ..student_persona_api_service import (
+    StudentPersonaApiDeps,
+    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
+)
 from ..session_view_state import (
     compare_iso_ts as _compare_iso_ts_impl,
 )
@@ -361,6 +365,14 @@ def _compute_chat_reply_deps():
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
             teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
+        ),
+        resolve_student_persona_runtime=lambda student_id, persona_id: _resolve_student_persona_runtime_impl(
+            student_id,
+            persona_id,
+            deps=StudentPersonaApiDeps(
+                data_dir=_ac.DATA_DIR,
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+            ),
         ),
     )
 

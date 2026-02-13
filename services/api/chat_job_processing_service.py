@@ -34,6 +34,7 @@ class ComputeChatReplyDeps:
     run_agent: Callable[..., Dict[str, Any]]
     normalize_math_delimiters: Callable[[str], str]
     resolve_effective_skill: Callable[[Optional[str], Optional[str], str], Dict[str, Any]]
+    resolve_student_persona_runtime: Callable[[str, str], Dict[str, Any]]
 
 
 def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
@@ -170,6 +171,8 @@ def compute_chat_reply_sync(
             return preflight, role_hint, last_user_text
 
     extra_system = None
+    persona_first_notice = False
+    persona_notice_name = ""
     last_assistant_text = (
         next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
     )
@@ -209,6 +212,32 @@ def compute_chat_reply_sync(
                 )
         if assignment_detail and study_mode:
             extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))
+        persona_id = str(getattr(req, "persona_id", "") or "").strip()
+        if req.student_id and persona_id:
+            persona_runtime = deps.resolve_student_persona_runtime(req.student_id, persona_id) or {}
+            if bool(persona_runtime.get("ok")):
+                persona_prompt = str(persona_runtime.get("persona_prompt") or "").strip()
+                if persona_prompt:
+                    extra_parts.append(persona_prompt)
+                persona_first_notice = bool(persona_runtime.get("first_notice"))
+                persona_notice_name = str(persona_runtime.get("persona_name") or persona_id).strip() or persona_id
+                deps.diag_log(
+                    "student.persona.applied",
+                    {
+                        "student_id": req.student_id,
+                        "persona_id": persona_id,
+                        "first_notice": persona_first_notice,
+                    },
+                )
+            else:
+                deps.diag_log(
+                    "student.persona.unavailable",
+                    {
+                        "student_id": req.student_id,
+                        "persona_id": persona_id,
+                        "error": str(persona_runtime.get("error") or ""),
+                    },
+                )
         if extra_parts:
             extra_system = "\n\n".join(extra_parts)
     if attachment_context:
@@ -245,6 +274,8 @@ def compute_chat_reply_sync(
         )
 
     reply_text = deps.normalize_math_delimiters(result.get("reply", ""))
+    if role_hint == "student" and persona_first_notice and persona_notice_name:
+        reply_text = f"提示：你当前使用的是「{persona_notice_name}」虚拟风格卡，仅用于表达风格。\n\n{reply_text}"
     result["reply"] = reply_text
     return reply_text, role_hint, last_user_text
 

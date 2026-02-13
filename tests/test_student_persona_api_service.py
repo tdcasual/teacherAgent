@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 
 from services.api.student_persona_api_service import (
     StudentPersonaApiDeps,
+    resolve_student_persona_runtime,
     student_persona_activate_api,
     student_persona_custom_create_api,
     student_persona_custom_delete_api,
@@ -145,7 +146,48 @@ class StudentPersonaApiServiceTest(unittest.TestCase):
             assert listing["active_persona_id"] == ""
             assert listing["custom"] == []
 
+    def test_runtime_resolve_marks_first_notice_once(self) -> None:
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            _write_json(
+                root / "data" / "teacher_personas" / "T001" / "personas.json",
+                {
+                    "personas": [
+                        {
+                            "persona_id": "preset_1",
+                            "name": "林黛玉风格",
+                            "summary": "细腻启发式",
+                            "style_rules": ["先肯定后引导"],
+                            "few_shot_examples": ["你这一步很细，我们再走半步。"],
+                            "lifecycle_status": "active",
+                            "visibility_mode": "assigned_only",
+                        }
+                    ]
+                },
+            )
+            _write_json(
+                root / "data" / "persona_assignments" / "by_student" / "S001.json",
+                {
+                    "assignments": [
+                        {"teacher_id": "T001", "persona_id": "preset_1", "status": "active"},
+                    ]
+                },
+            )
+            _write_json(
+                root / "data" / "student_profiles" / "S001.json",
+                {"student_id": "S001", "personas": {"first_activation_notified_ids": []}},
+            )
+
+            first = resolve_student_persona_runtime("S001", "preset_1", deps=deps)
+            assert first["ok"] is True
+            assert first["first_notice"] is True
+            assert "虚拟风格卡" in str(first["persona_prompt"])
+
+            second = resolve_student_persona_runtime("S001", "preset_1", deps=deps)
+            assert second["ok"] is True
+            assert second["first_notice"] is False
+
 
 if __name__ == "__main__":
     unittest.main()
-
