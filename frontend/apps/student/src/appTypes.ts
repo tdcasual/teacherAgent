@@ -97,6 +97,24 @@ export type VerifiedStudent = {
   class_name?: string
 }
 
+export type StudentPersonaCard = {
+  persona_id: string
+  name?: string
+  summary?: string
+  source?: string
+  teacher_id?: string
+  avatar_url?: string
+  review_status?: string
+}
+
+export type StudentPersonaListResponse = {
+  ok: boolean
+  student_id: string
+  assigned: StudentPersonaCard[]
+  custom: StudentPersonaCard[]
+  active_persona_id: string
+}
+
 export type VerifyResponse = {
   ok: boolean
   error?: string

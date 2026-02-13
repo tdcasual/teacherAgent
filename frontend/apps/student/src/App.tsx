@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
-import type { Message, PendingChatJob, RenderedMessage } from './appTypes'
-import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState'
+import type { Message, RenderedMessage, StudentPersonaCard, StudentPersonaListResponse } from './appTypes'
+import { useStudentState, PENDING_CHAT_KEY_PREFIX, toErrorMessage, todayDate } from './hooks/useStudentState'
+import type { PendingChatJob } from './appTypes'
 import { useVerification } from './hooks/useVerification'
 import { useSessionManager } from './hooks/useSessionManager'
 import { useChatPolling } from './hooks/useChatPolling'
@@ -147,6 +148,8 @@ export default function App() {
     verifiedStudent: state.verifiedStudent,
     pendingChatJob: state.pendingChatJob,
     attachments: readyAttachmentRefs,
+    activePersonaId: state.personaEnabled ? state.activePersonaId : '',
+    attachments: readyAttachmentRefs,
     pendingChatKeyPrefix: PENDING_CHAT_KEY_PREFIX,
     todayDate,
     onSendSuccess: keepReadyAttachmentsOnSend,
@@ -161,6 +164,112 @@ export default function App() {
     pendingRecoveredFromStorageRef: refs.pendingRecoveredFromStorageRef,
     skipAutoSessionLoadIdRef: refs.skipAutoSessionLoadIdRef,
   })
+
+  const loadStudentPersonas = useCallback(async (studentId: string) => {
+    const sid = String(studentId || '').trim()
+    if (!sid) return
+    dispatch({ type: 'SET', field: 'personaLoading', value: true })
+    try {
+      const res = await fetch(`${state.apiBase}/student/personas?student_id=${encodeURIComponent(sid)}`)
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as StudentPersonaListResponse
+      if (!data?.ok) throw new Error('角色卡数据格式错误')
+      const assigned = Array.isArray(data.assigned) ? data.assigned : []
+      const customApproved = (Array.isArray(data.custom) ? data.custom : [])
+        .filter((item) => String(item?.review_status || '').toLowerCase() === 'approved')
+      const cards = [...assigned, ...customApproved] as StudentPersonaCard[]
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'personaCards', value: cards },
+          { type: 'SET', field: 'activePersonaId', value: String(data.active_persona_id || '') },
+          { type: 'SET', field: 'personaError', value: '' },
+          { type: 'SET', field: 'personaLoading', value: false },
+        ],
+      })
+    } catch (error) {
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'personaError', value: toErrorMessage(error, '加载角色卡失败') },
+          { type: 'SET', field: 'personaLoading', value: false },
+        ],
+      })
+    }
+  }, [dispatch, state.apiBase])
+
+  useEffect(() => {
+    if (!state.verifiedStudent?.student_id) {
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'personaCards', value: [] },
+          { type: 'SET', field: 'activePersonaId', value: '' },
+          { type: 'SET', field: 'personaEnabled', value: false },
+          { type: 'SET', field: 'personaPickerOpen', value: false },
+          { type: 'SET', field: 'personaError', value: '' },
+          { type: 'SET', field: 'personaLoading', value: false },
+        ],
+      })
+      return
+    }
+    void loadStudentPersonas(state.verifiedStudent.student_id)
+  }, [state.verifiedStudent?.student_id, dispatch, loadStudentPersonas])
+
+  const handleTogglePersonaEnabled = useCallback((next: boolean) => {
+    if (!state.verifiedStudent?.student_id) return
+    dispatch({
+      type: 'BATCH',
+      actions: [
+        { type: 'SET', field: 'personaEnabled', value: next },
+        { type: 'SET', field: 'personaPickerOpen', value: next },
+      ],
+    })
+  }, [dispatch, state.verifiedStudent?.student_id])
+
+  const handleTogglePersonaPicker = useCallback(() => {
+    if (!state.personaEnabled) return
+    dispatch({ type: 'SET', field: 'personaPickerOpen', value: !state.personaPickerOpen })
+  }, [dispatch, state.personaEnabled, state.personaPickerOpen])
+
+  const handleSelectPersona = useCallback(async (personaId: string) => {
+    const sid = state.verifiedStudent?.student_id
+    const target = String(personaId || '').trim()
+    if (!sid || !target) return
+    dispatch({ type: 'SET', field: 'personaLoading', value: true })
+    try {
+      const res = await fetch(`${state.apiBase}/student/personas/activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: sid, persona_id: target }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'activePersonaId', value: target },
+          { type: 'SET', field: 'personaEnabled', value: true },
+          { type: 'SET', field: 'personaPickerOpen', value: false },
+          { type: 'SET', field: 'personaError', value: '' },
+          { type: 'SET', field: 'personaLoading', value: false },
+        ],
+      })
+    } catch (error) {
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'personaError', value: toErrorMessage(error, '切换角色卡失败') },
+          { type: 'SET', field: 'personaLoading', value: false },
+        ],
+      })
+    }
+  }, [dispatch, state.apiBase, state.verifiedStudent?.student_id])
 
   // ── Composer hint + keyboard ──
   const composerHint = useMemo(() => selectComposerHint({
@@ -188,6 +297,15 @@ export default function App() {
         sidebarOpen={state.sidebarOpen}
         dispatch={dispatch}
         startNewStudentSession={sessionManager.startNewStudentSession}
+        personaEnabled={state.personaEnabled}
+        personaPickerOpen={state.personaPickerOpen}
+        personaCards={state.personaCards}
+        activePersonaId={state.activePersonaId}
+        personaLoading={state.personaLoading}
+        personaError={state.personaError}
+        onTogglePersonaEnabled={handleTogglePersonaEnabled}
+        onTogglePersonaPicker={handleTogglePersonaPicker}
+        onSelectPersona={handleSelectPersona}
       />
       <StudentLayout
         sidebarOpen={state.sidebarOpen}
