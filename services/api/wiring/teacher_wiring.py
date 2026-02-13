@@ -6,6 +6,7 @@ __all__ = [
     "_teacher_llm_routing_deps",
     "_teacher_routing_api_deps",
     "_teacher_assignment_preflight_deps",
+    "_teacher_persona_api_deps",
 ]
 
 import os
@@ -20,6 +21,7 @@ from ..teacher_provider_registry_service import (
 from ..teacher_provider_registry_service import (
     merged_model_registry as _merged_model_registry_impl,
 )
+from ..teacher_persona_api_service import TeacherPersonaApiDeps
 from ..teacher_routing_api_service import TeacherRoutingApiDeps
 from . import get_app_core as _app_core
 
@@ -69,4 +71,12 @@ def _teacher_assignment_preflight_deps():
         assignment_generate=_ac.assignment_generate,
         extract_exam_id=_ac.extract_exam_id,
         exam_get=_ac.exam_get,
+    )
+
+
+def _teacher_persona_api_deps():
+    _ac = _app_core()
+    return TeacherPersonaApiDeps(
+        data_dir=_ac.DATA_DIR,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )

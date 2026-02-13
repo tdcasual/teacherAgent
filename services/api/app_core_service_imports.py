@@ -339,6 +339,14 @@ from .teacher_provider_registry_service import (
     teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
 )
+from .teacher_persona_api_service import (
+    TeacherPersonaApiDeps,
+    teacher_persona_assign_api as _teacher_persona_assign_api_impl,
+    teacher_persona_create_api as _teacher_persona_create_api_impl,
+    teacher_persona_update_api as _teacher_persona_update_api_impl,
+    teacher_persona_visibility_api as _teacher_persona_visibility_api_impl,
+    teacher_personas_get_api as _teacher_personas_get_api_impl,
+)
 from .tool_dispatch_service import ToolDispatchDeps, tool_dispatch as _tool_dispatch_impl
 from .upload_io_service import sanitize_filename_io
 from .chat_lane_store_factory import get_chat_lane_store

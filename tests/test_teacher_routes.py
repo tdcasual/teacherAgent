@@ -22,3 +22,8 @@ def test_teacher_routes_build_router():
     assert _has_route(router, "POST", "/teacher/llm-routing/rollback")
     assert _has_route(router, "GET", "/teacher/provider-registry")
     assert _has_route(router, "POST", "/teacher/provider-registry/providers")
+    assert _has_route(router, "GET", "/teacher/personas")
+    assert _has_route(router, "POST", "/teacher/personas")
+    assert _has_route(router, "PATCH", "/teacher/personas/{persona_id}")
+    assert _has_route(router, "POST", "/teacher/personas/{persona_id}/assign")
+    assert _has_route(router, "POST", "/teacher/personas/{persona_id}/visibility")
