@@ -1,5 +1,6 @@
 """Maintainability guardrails for teacher frontend structure."""
 
+import re
 from pathlib import Path
 
 _TEACHER_APP_PATH = (
@@ -205,6 +206,16 @@ _TEACHER_ROUTING_DERIVED_STATE_HOOK_PATH = (
     / "routing"
     / "useRoutingDerivedState.ts"
 )
+_TEACHER_ROUTING_AUTO_PROBE_MODELS_HOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "useRoutingAutoProbeModels.ts"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -407,3 +418,44 @@ def test_teacher_routing_derived_state_hook_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "useRoutingDerivedState" in source
     assert "useRoutingDerivedState(" in source
+
+
+def test_teacher_routing_auto_probe_models_hook_is_extracted() -> None:
+    assert _TEACHER_ROUTING_AUTO_PROBE_MODELS_HOOK_PATH.exists(), (
+        "Routing channels auto-probe effect should be extracted into "
+        "features/routing/useRoutingAutoProbeModels.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "useRoutingAutoProbeModels" in source
+    assert "useRoutingAutoProbeModels(" in source
+
+
+def test_teacher_routing_page_local_import_boundaries() -> None:
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    local_imports = set(re.findall(r"from './([^']+)'", source))
+    allowed = {
+        "RoutingChannelsSection",
+        "RoutingDraftActionBar",
+        "RoutingHistorySection",
+        "RoutingLiveStatusCard",
+        "RoutingProvidersSection",
+        "RoutingRulesSection",
+        "RoutingSimulateSection",
+        "routingConfigUtils",
+        "routingFormattingUtils",
+        "routingTypes",
+        "useProviderModels",
+        "useRoutingAutoProbeModels",
+        "useRoutingDerivedState",
+        "useRoutingDraftActions",
+        "useRoutingOverviewSync",
+        "useRoutingPersistentUiState",
+        "useRoutingProposalActions",
+        "useRoutingProviderMutations",
+        "useRoutingProviderUiState",
+    }
+    unexpected = sorted(local_imports - allowed)
+    assert not unexpected, (
+        "RoutingPage.tsx should compose pre-extracted modules only; "
+        f"unexpected direct imports: {unexpected}"
+    )

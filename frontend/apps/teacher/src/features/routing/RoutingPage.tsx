@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRoutingDraftActions } from './useRoutingDraftActions'
 import { useRoutingOverviewSync } from './useRoutingOverviewSync'
+import { useRoutingAutoProbeModels } from './useRoutingAutoProbeModels'
 import { useRoutingPersistentUiState } from './useRoutingPersistentUiState'
 import { useRoutingDerivedState } from './useRoutingDerivedState'
 import { useRoutingProviderUiState } from './useRoutingProviderUiState'
@@ -202,21 +203,12 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     setRollbackNote,
   })
 
-  // Auto-probe models when channels tab is active (only configured providers)
-  useEffect(() => {
-    if (activeTab !== 'channels') return
-    const configuredProviders = new Set(
-      (providerOverview?.providers || []).map((p) => p.provider),
-    )
-    const seen = new Set<string>()
-    for (const ch of draft.channels) {
-      const p = ch.target?.provider
-      if (p && !seen.has(p) && configuredProviders.has(p)) {
-        seen.add(p)
-        void fetchModels(p)
-      }
-    }
-  }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+  useRoutingAutoProbeModels({
+    activeTab,
+    providerOverview,
+    channels: draft.channels,
+    fetchModels,
+  })
 
   const {
     pendingProposals,
