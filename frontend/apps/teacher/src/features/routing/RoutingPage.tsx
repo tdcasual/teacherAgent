@@ -14,6 +14,8 @@ import {
 } from './routingApi'
 import { useProviderModels } from './useProviderModels'
 import ModelCombobox from './ModelCombobox'
+import RoutingHistorySection from './RoutingHistorySection'
+import RoutingSimulateSection from './RoutingSimulateSection'
 import type {
   RoutingCatalogProvider,
   RoutingChannel,
@@ -717,9 +719,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     [history],
   )
 
-  const simCandidates = simResult?.decision?.candidates || []
-  const simPrimaryCandidate = simCandidates[0] || null
-
   const ruleOrderHint = draft.rules
     .slice()
     .sort((a, b) => (b.priority || 0) - (a.priority || 0))
@@ -1394,264 +1393,58 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {(activeTab === 'simulate' || isLegacyFlat) && <div className="settings-section routing-sim-panel">
-        <h3>仿真验证（基于当前草稿）</h3>
-        <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-          <div className="grid gap-[6px]">
-            <label>角色</label>
-            <input value={simRole} onChange={(e) => setSimRole(e.target.value)} placeholder="teacher" />
-          </div>
-          <div className="grid gap-[6px]">
-            <label>技能 ID</label>
-            <input value={simSkillId} onChange={(e) => setSimSkillId(e.target.value)} placeholder="physics-teacher-ops" />
-          </div>
-          <div className="grid gap-[6px]">
-            <label>任务类型 kind</label>
-            <input value={simKind} onChange={(e) => setSimKind(e.target.value)} placeholder="chat.agent" />
-          </div>
-          <div className="grid gap-[6px]">
-            <label className="toggle">
-              <input type="checkbox" checked={simNeedsTools} onChange={(e) => setSimNeedsTools(e.target.checked)} />
-              需要工具调用
-            </label>
-          </div>
-          <div className="grid gap-[6px]">
-            <label className="toggle">
-              <input type="checkbox" checked={simNeedsJson} onChange={(e) => setSimNeedsJson(e.target.checked)} />
-              需要 JSON
-            </label>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button type="button" className="secondary-btn" onClick={handleSimulate} disabled={busy}>
-            {busy ? '仿真中…' : '运行仿真'}
-          </button>
-        </div>
-        {simResult && (
-          <div className="grid gap-[10px]">
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[10px]">
-              <div className="border border-[#cde5de] rounded-[12px] p-[10px] bg-[#fcfffe] grid gap-2">
-                <h4 className="m-0 text-[13px]">仿真结论</h4>
-                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
-                  <span className="text-muted">命中规则</span>
-                  <strong className="text-right break-words">{simResult.decision?.matched_rule_id || '未命中，走默认回退'}</strong>
-                </div>
-                {isLegacyFlat && (
-                  <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
-                    <span className="text-muted">{`命中规则：${simResult.decision?.matched_rule_id || '未命中，走默认回退'}`}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
-                  <span className="text-muted">目标模型</span>
-                  <strong className="text-right break-words">
-                    {formatTargetLabel(simPrimaryCandidate?.provider, simPrimaryCandidate?.mode, simPrimaryCandidate?.model)}
-                  </strong>
-                </div>
-                {isLegacyFlat && (
-                  <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
-                    <span className="text-muted">{`候选渠道：${simPrimaryCandidate?.channel_id || '无'}`}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-baseline gap-[10px] text-[13px]">
-                  <span className="text-muted">决策状态</span>
-                  <strong className="text-right break-words">{simResult.decision?.selected ? '已选出候选链路' : '未选出候选链路'}</strong>
-                </div>
-              </div>
-              <div className="border border-border rounded-[12px] p-[10px] bg-white grid gap-2">
-                <h4 className="m-0 text-[13px]">决策原因</h4>
-                <p className="m-0 text-[13px] text-ink leading-[1.45]">{simResult.decision?.reason || '无可用原因信息'}</p>
-              </div>
-            </div>
+      {(activeTab === 'simulate' || isLegacyFlat) && (
+        <RoutingSimulateSection
+          isLegacyFlat={isLegacyFlat}
+          busy={busy}
+          simRole={simRole}
+          simSkillId={simSkillId}
+          simKind={simKind}
+          simNeedsTools={simNeedsTools}
+          simNeedsJson={simNeedsJson}
+          simResult={simResult}
+          onSimRoleChange={setSimRole}
+          onSimSkillIdChange={setSimSkillId}
+          onSimKindChange={setSimKind}
+          onSimNeedsToolsChange={setSimNeedsTools}
+          onSimNeedsJsonChange={setSimNeedsJson}
+          onSimulate={() => {
+            void handleSimulate()
+          }}
+          formatTargetLabel={formatTargetLabel}
+        />
+      )}
 
-            <details className="border border-border rounded-[12px] p-[10px] bg-white grid gap-2 [&>summary]:cursor-pointer [&>summary]:text-accent [&>summary]:select-none">
-              <summary>候选链路（{simCandidates.length}）</summary>
-              {simCandidates.length === 0 ? (
-                <div className="muted">无候选渠道。</div>
-              ) : (
-                <div className="grid gap-2">
-                  {simCandidates.map((candidate, index) => (
-                    <div key={`${candidate.channel_id}_${index}`} className="border border-dashed border-border rounded-[10px] p-2 grid gap-1">
-                      <div className="text-[12px] text-muted">#{index + 1} · {candidate.channel_id || '未命名渠道'}</div>
-                      <div className="text-[13px] text-ink break-words">
-                        {formatTargetLabel(candidate.provider, candidate.mode, candidate.model)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </details>
-
-            {simResult.validation?.errors?.length ? (
-              <div className="status err">校验错误：{simResult.validation.errors.join('；')}</div>
-            ) : null}
-            {simResult.validation?.warnings?.length ? (
-              <div className="status ok">线上配置提示：{simResult.validation.warnings.join('；')}</div>
-            ) : null}
-            {simResult.override_validation?.errors?.length ? (
-              <div className="status err">草稿校验错误：{simResult.override_validation.errors.join('；')}</div>
-            ) : null}
-            {simResult.override_validation?.warnings?.length ? (
-              <div className="status ok">草稿提示：{simResult.override_validation.warnings.join('；')}</div>
-            ) : null}
-
-            <details className="routing-proposal-json">
-              <summary>技术详情 JSON</summary>
-              <pre>{JSON.stringify(simResult, null, 2)}</pre>
-            </details>
-          </div>
-        )}
-      </div>}
-
-      {(activeTab === 'history' || isLegacyFlat) && <div className="settings-section">
-        <h3>提案与回滚</h3>
-        <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-          <div className="grid gap-[6px]">
-            <label>回滚目标版本</label>
-            <input value={rollbackVersion} onChange={(e) => setRollbackVersion(e.target.value)} placeholder="例如：3" />
-          </div>
-          <div className="grid gap-[6px]">
-            <label>回滚备注（可选）</label>
-            <input value={rollbackNote} onChange={(e) => setRollbackNote(e.target.value)} placeholder="例如：线上效果退化，先回退" />
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => {
-              const parsed = Number(rollbackVersion)
-              void handleRollback(parsed)
-            }}
-            disabled={busy}
-          >
-            回滚到指定版本
-          </button>
-        </div>
-
-        <div className="routing-subsection grid gap-2">
-          <div className="flex items-center justify-between gap-[10px] flex-wrap">
-            <h4 className="m-0">待审核提案（高级）</h4>
-            {!isLegacyFlat && (
-              <button type="button" className="ghost" onClick={() => setShowManualReview((prev) => !prev)} disabled={busy}>
-                {showManualReview ? '收起' : `展开${pendingProposals.length ? `（${pendingProposals.length}）` : ''}`}
-              </button>
-            )}
-          </div>
-          {(!showManualReview && !isLegacyFlat) ? (
-            <div className="muted">
-              单管理员模式默认自动生效，仅在需要处理历史遗留提案时再展开手动审核。
-              {pendingProposals.length ? ` 当前有 ${pendingProposals.length} 条待审核提案。` : ''}
-            </div>
-          ) : (
-            <>
-              {pendingProposals.length === 0 ? <div className="muted">暂无待审核提案。</div> : null}
-              {pendingProposals.map((proposal) => {
-                const proposalId = proposal.proposal_id
-                const expanded = Boolean(expandedProposalIds[proposalId])
-                const loadingDetail = Boolean(proposalLoadingMap[proposalId])
-                const detail = proposalDetails[proposalId]
-                const validation = detail?.proposal?.validation
-                const errors = Array.isArray(validation?.errors) ? validation?.errors : []
-                const warnings = Array.isArray(validation?.warnings) ? validation?.warnings : []
-                return (
-                  <div key={proposalId} className="grid gap-2">
-                    <div className="border border-border rounded-[12px] bg-white p-[10px] flex justify-between gap-[10px] items-center max-[900px]:flex-col max-[900px]:items-start">
-                      <div className="grid gap-1 text-[13px]">
-                        <strong>{proposalId}</strong>
-                        <span className="muted"> {proposal.created_at}</span>
-                        {proposal.note ? <div className="muted">{proposal.note}</div> : null}
-                      </div>
-                      <div className="flex gap-2 flex-wrap">
-                        <button type="button" className="secondary-btn" onClick={() => void handleToggleProposalDetail(proposalId)} disabled={busy}>
-                          {expanded ? '收起详情' : '展开详情'}
-                        </button>
-                        <button type="button" className="secondary-btn" onClick={() => void handleReviewProposal(proposalId, true)} disabled={busy}>
-                          生效
-                        </button>
-                        <button type="button" className="secondary-btn" onClick={() => void handleReviewProposal(proposalId, false)} disabled={busy}>
-                          拒绝
-                        </button>
-                      </div>
-                    </div>
-                    {expanded ? (
-                      <div className="border border-dashed border-border rounded-[12px] bg-white p-[10px] grid gap-2">
-                        {loadingDetail ? <div className="muted">正在加载提案详情…</div> : null}
-                        {!loadingDetail && detail?.ok ? (
-                          <>
-                            <div className="text-[12px] text-muted">
-                              状态：{String(detail.proposal?.status || proposal.status || 'pending')}
-                              {detail.proposal?.created_by ? ` ｜ 创建人：${detail.proposal.created_by}` : ''}
-                              {detail.proposal?.reviewed_by ? ` ｜ 审核人：${detail.proposal.reviewed_by}` : ''}
-                            </div>
-                            {errors.length ? <div className="status err">校验错误：{errors.join('；')}</div> : null}
-                            {warnings.length ? <div className="status ok">校验提示：{warnings.join('；')}</div> : null}
-                            <details className="routing-proposal-json">
-                              <summary>候选配置（JSON）</summary>
-                              <pre>{JSON.stringify(detail.proposal?.candidate || {}, null, 2)}</pre>
-                            </details>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </>
-          )}
-        </div>
-
-        <div className="routing-subsection grid gap-2">
-          <div className="flex items-center justify-between gap-[10px] flex-wrap">
-            <h4 className="m-0">历史版本（最近10次）</h4>
-            <button type="button" className="ghost" onClick={() => setShowHistoryVersions((prev) => !prev)} disabled={busy}>
-              {showHistoryVersions ? '收起' : `展开${history.length ? `（${history.length}）` : ''}`}
-            </button>
-          </div>
-          {!showHistoryVersions ? (
-            <div className="muted">
-              默认折叠历史版本以保持界面简洁，按需展开查看或回滚。
-              {history.length ? ` 当前有 ${history.length} 条历史记录。` : ''}
-            </div>
-          ) : (
-            <>
-              {history.length === 0 ? <div className="muted">暂无历史。</div> : null}
-              {historyRows.map(({ item, summary, changes }) => (
-                <div key={item.file} className="grid gap-2">
-                  <div className="border border-border rounded-[12px] bg-white p-[10px] flex justify-between gap-[10px] items-center max-[900px]:flex-col max-[900px]:items-start">
-                    <div className="grid gap-1 text-[13px]">
-                      <strong>v{item.version}</strong>
-                      <span className="muted"> {item.saved_at}</span>
-                      <div className="flex gap-3 flex-wrap text-[12px] text-muted">
-                        <span>
-                          主模型：
-                          {formatTargetLabel(summary?.primary_provider, summary?.primary_mode, summary?.primary_model)}
-                        </span>
-                        <span>规则 {summary?.rule_count ?? '-'} · 渠道 {summary?.channel_count ?? '-'}</span>
-                      </div>
-                      <div className="text-[12px] text-ink font-semibold">变更摘要</div>
-                      <div className="grid gap-1">
-                        {changes.map((change, index) => (
-                          <div key={`${item.file}_${index}`} className="text-[12px] text-muted">{change}</div>
-                        ))}
-                      </div>
-                      {item.note ? <div className="muted">备注：{item.note}</div> : null}
-                    </div>
-                    <div className="flex gap-2 flex-wrap">
-                      <button type="button" className="secondary-btn" onClick={() => void handleRollback(item.version)} disabled={busy}>
-                        回滚到此版本
-                      </button>
-                    </div>
-                  </div>
-                  <details className="routing-proposal-json">
-                    <summary>查看配置 JSON</summary>
-                    <pre>{JSON.stringify(item.config || { summary: summary || null, source: item.source, saved_by: item.saved_by }, null, 2)}</pre>
-                  </details>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-      </div>}
+      {(activeTab === 'history' || isLegacyFlat) && (
+        <RoutingHistorySection
+          isLegacyFlat={isLegacyFlat}
+          busy={busy}
+          rollbackVersion={rollbackVersion}
+          rollbackNote={rollbackNote}
+          pendingProposals={pendingProposals}
+          showManualReview={showManualReview}
+          expandedProposalIds={expandedProposalIds}
+          proposalLoadingMap={proposalLoadingMap}
+          proposalDetails={proposalDetails}
+          showHistoryVersions={showHistoryVersions}
+          history={history}
+          historyRows={historyRows}
+          formatTargetLabel={formatTargetLabel}
+          onRollbackVersionChange={setRollbackVersion}
+          onRollbackNoteChange={setRollbackNote}
+          onRollback={(targetVersion) => {
+            void handleRollback(targetVersion)
+          }}
+          onToggleManualReview={() => setShowManualReview((prev) => !prev)}
+          onToggleProposalDetail={(proposalId) => {
+            void handleToggleProposalDetail(proposalId)
+          }}
+          onReviewProposal={(proposalId, approve) => {
+            void handleReviewProposal(proposalId, approve)
+          }}
+          onToggleHistoryVersions={() => setShowHistoryVersions((prev) => !prev)}
+        />
+      )}
 
       {(!isLegacyFlat && ['general', 'providers', 'channels', 'rules'].includes(activeTab)) && (
         <div className="sticky bottom-0 flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-border rounded-[12px] z-[5]" style={{ background: 'rgba(255,255,255,0.94)', backdropFilter: 'saturate(180%) blur(8px)' }}>

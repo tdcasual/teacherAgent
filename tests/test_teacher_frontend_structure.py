@@ -45,6 +45,26 @@ _TEACHER_ROUTING_PAGE_PATH = (
     / "routing"
     / "RoutingPage.tsx"
 )
+_TEACHER_ROUTING_SIM_SECTION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingSimulateSection.tsx"
+)
+_TEACHER_ROUTING_HISTORY_SECTION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingHistorySection.tsx"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -89,3 +109,19 @@ def test_teacher_routing_page_line_budget() -> None:
         f"teacher RoutingPage.tsx is {line_count} lines (limit 1700). "
         "Split routing sections into focused sub-components and hooks."
     )
+
+
+def test_teacher_routing_simulate_and_history_sections_are_extracted() -> None:
+    assert _TEACHER_ROUTING_SIM_SECTION_PATH.exists(), (
+        "Routing simulate section should be extracted into "
+        "features/routing/RoutingSimulateSection.tsx."
+    )
+    assert _TEACHER_ROUTING_HISTORY_SECTION_PATH.exists(), (
+        "Routing history section should be extracted into "
+        "features/routing/RoutingHistorySection.tsx."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "RoutingSimulateSection" in source
+    assert "<RoutingSimulateSection" in source
+    assert "RoutingHistorySection" in source
+    assert "<RoutingHistorySection" in source
