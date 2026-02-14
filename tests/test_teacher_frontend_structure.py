@@ -105,6 +105,26 @@ _TEACHER_ROUTING_DRAFT_ACTION_BAR_PATH = (
     / "routing"
     / "RoutingDraftActionBar.tsx"
 )
+_TEACHER_ROUTING_LIVE_STATUS_CARD_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingLiveStatusCard.tsx"
+)
+_TEACHER_ROUTING_CONFIG_UTILS_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "routingConfigUtils.ts"
+)
 _TEACHER_ROUTING_OVERVIEW_SYNC_HOOK_PATH = (
     Path(__file__).resolve().parent.parent
     / "frontend"
@@ -195,8 +215,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 560, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 560). "
+    assert line_count < 520, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 520). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -251,6 +271,25 @@ def test_teacher_routing_draft_action_bar_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "RoutingDraftActionBar" in source
     assert "<RoutingDraftActionBar" in source
+
+
+def test_teacher_routing_live_status_card_is_extracted() -> None:
+    assert _TEACHER_ROUTING_LIVE_STATUS_CARD_PATH.exists(), (
+        "Routing live status card should be extracted into "
+        "features/routing/RoutingLiveStatusCard.tsx."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "RoutingLiveStatusCard" in source
+    assert "<RoutingLiveStatusCard" in source
+
+
+def test_teacher_routing_clone_config_is_extracted() -> None:
+    assert _TEACHER_ROUTING_CONFIG_UTILS_PATH.exists(), (
+        "Routing clone helper should be extracted into " "features/routing/routingConfigUtils.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "cloneConfig" in source
+    assert "cloneConfig," in source
 
 
 def test_teacher_routing_overview_sync_hook_is_extracted() -> None:

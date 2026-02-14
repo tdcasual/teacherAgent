@@ -4,11 +4,13 @@ import { useRoutingOverviewSync } from './useRoutingOverviewSync'
 import { useRoutingProviderMutations } from './useRoutingProviderMutations'
 import { useRoutingProposalActions } from './useRoutingProposalActions'
 import { useProviderModels } from './useProviderModels'
+import { cloneConfig } from './routingConfigUtils'
 import { boolMatchFromValue, boolMatchValue, formatList, formatTargetLabel, parseList } from './routingFormattingUtils'
 import { buildHistoryChangeSummary, deriveHistorySummary } from './routingHistoryUtils'
 import RoutingChannelsSection from './RoutingChannelsSection'
 import RoutingDraftActionBar from './RoutingDraftActionBar'
 import RoutingHistorySection from './RoutingHistorySection'
+import RoutingLiveStatusCard from './RoutingLiveStatusCard'
 import RoutingProvidersSection from './RoutingProvidersSection'
 import RoutingRulesSection from './RoutingRulesSection'
 import RoutingSimulateSection from './RoutingSimulateSection'
@@ -34,45 +36,6 @@ type Props = {
   /** Legacy compatibility mode: render all routing/provider panels in one page */
   legacyFlat?: boolean
 }
-
-const cloneConfig = (config: RoutingConfig): RoutingConfig => ({
-  schema_version: config.schema_version,
-  enabled: Boolean(config.enabled),
-  version: Number(config.version || 1),
-  updated_at: config.updated_at || '',
-  updated_by: config.updated_by || '',
-  channels: (config.channels || []).map((channel) => ({
-    id: channel.id || '',
-    title: channel.title || '',
-    target: {
-      provider: channel.target?.provider || '',
-      mode: channel.target?.mode || '',
-      model: channel.target?.model || '',
-    },
-    params: {
-      temperature: channel.params?.temperature ?? null,
-      max_tokens: channel.params?.max_tokens ?? null,
-    },
-    fallback_channels: Array.isArray(channel.fallback_channels) ? [...channel.fallback_channels] : [],
-    capabilities: {
-      tools: channel.capabilities?.tools ?? true,
-      json: channel.capabilities?.json ?? true,
-    },
-  })),
-  rules: (config.rules || []).map((rule) => ({
-    id: rule.id || '',
-    priority: Number(rule.priority || 0),
-    enabled: rule.enabled !== false,
-    match: {
-      roles: Array.isArray(rule.match?.roles) ? [...rule.match.roles] : [],
-      skills: Array.isArray(rule.match?.skills) ? [...rule.match.skills] : [],
-      kinds: Array.isArray(rule.match?.kinds) ? [...rule.match.kinds] : [],
-      needs_tools: rule.match?.needs_tools ?? undefined,
-      needs_json: rule.match?.needs_json ?? undefined,
-    },
-    route: { channel_id: rule.route?.channel_id || '' },
-  })),
-})
 
 
 export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, section, legacyFlat }: Props) {
@@ -319,41 +282,20 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
       {status && <div className="status ok">{status}</div>}
       {error && <div className="status err">{error}</div>}
 
-      <div className="routing-current-card border border-[#d9e8e2] rounded-[14px] p-3 grid gap-[10px]" style={{ background: 'linear-gradient(135deg, #fcfffe 0%, #f4fbf8 100%)' }}>
-        <div className="flex items-start justify-between gap-[10px] flex-wrap">
-          <div className="grid gap-[2px]">
-            <h3 className="m-0">当前生效配置</h3>
-            <span className="text-[12px] text-muted">先看结论：当前实际生效的规则、渠道与模型</span>
-          </div>
-          <span className={`inline-flex items-center px-2 py-[3px] rounded-full text-[12px] font-semibold border ${liveStatusTone === 'ok' ? 'bg-[#dcfce7] text-[#166534] border-[#bbf7d0]' : liveStatusTone === 'warn' ? 'bg-[#fff7ed] text-[#9a3412] border-[#fed7aa]' : 'bg-[#fef2f2] text-[#b91c1c] border-[#fecaca]'}`}>{loading ? '加载中' : liveStatusText}</span>
-        </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
-          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
-            <span className="text-[12px] text-muted">生效规则</span>
-            <strong className="text-[13px] leading-[1.35] break-words">{livePrimaryRule?.id || '默认回退'}</strong>
-          </div>
-          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
-            <span className="text-[12px] text-muted">主渠道</span>
-            <strong className="text-[13px] leading-[1.35] break-words">{livePrimaryChannel?.title || livePrimaryChannel?.id || '未配置'}</strong>
-          </div>
-          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
-            <span className="text-[12px] text-muted">目标模型</span>
-            <strong className="text-[13px] leading-[1.35] break-words">
-              {formatTargetLabel(
-                livePrimaryChannel?.target?.provider,
-                livePrimaryChannel?.target?.mode,
-                livePrimaryChannel?.target?.model,
-              )}
-            </strong>
-          </div>
-          <div className="border border-[#dbe7e2] rounded-[10px] bg-white px-[10px] py-[9px] grid gap-1">
-            <span className="text-[12px] text-muted">版本 / 更新时间</span>
-            <strong className="text-[13px] leading-[1.35] break-words">
-              v{liveRouting?.version || '-'} / {liveRouting?.updated_at || '—'}
-            </strong>
-          </div>
-        </div>
-      </div>
+      <RoutingLiveStatusCard
+        loading={loading}
+        liveStatusText={liveStatusText}
+        liveStatusTone={liveStatusTone}
+        primaryRuleId={livePrimaryRule?.id || ''}
+        primaryChannelLabel={livePrimaryChannel?.title || livePrimaryChannel?.id || ''}
+        targetModelLabel={formatTargetLabel(
+          livePrimaryChannel?.target?.provider,
+          livePrimaryChannel?.target?.mode,
+          livePrimaryChannel?.target?.model,
+        )}
+        versionLabel={`v${liveRouting?.version || '-'}`}
+        updatedAtLabel={liveRouting?.updated_at || '—'}
+      />
 
       {(activeTab === 'general' || isLegacyFlat) && (
         <div className="settings-section">
