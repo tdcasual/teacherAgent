@@ -55,6 +55,7 @@ def test_frontend_package_scripts_enforce_guard_and_verify_chain() -> None:
     payload = json.loads(_PACKAGE_JSON.read_text(encoding="utf-8"))
     scripts = payload.get("scripts") or {}
     assert scripts.get("check:types-install") == "node scripts/check_types_install_integrity.mjs"
+    assert scripts.get("test:unit") == "vitest run"
 
     typecheck = str(scripts.get("typecheck") or "")
     assert "check:types-install" in typecheck
@@ -64,5 +65,6 @@ def test_frontend_package_scripts_enforce_guard_and_verify_chain() -> None:
     assert "npm run lint" in verify
     assert "npm run format:check" in verify
     assert "npm run typecheck" in verify
+    assert "npm run test:unit" in verify
     assert "npm run build:teacher" in verify
     assert "npm run build:student" in verify
