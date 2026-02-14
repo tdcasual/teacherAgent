@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRoutingDraftActions } from './useRoutingDraftActions'
 import { useRoutingOverviewSync } from './useRoutingOverviewSync'
+import { useRoutingPersistentUiState } from './useRoutingPersistentUiState'
 import { useRoutingProviderMutations } from './useRoutingProviderMutations'
 import { useRoutingProposalActions } from './useRoutingProposalActions'
 import { useProviderModels } from './useProviderModels'
@@ -23,7 +24,6 @@ import type {
   RoutingSimulateResult,
 } from './routingTypes'
 import { emptyRoutingConfig } from './routingTypes'
-import { safeLocalStorageGetItem, safeLocalStorageSetItem } from '../../utils/storage'
 
 export type RoutingSection = 'general' | 'providers' | 'channels' | 'rules' | 'simulate' | 'history'
 
@@ -41,9 +41,14 @@ type Props = {
 export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, section, legacyFlat }: Props) {
   const isLegacyFlat = Boolean(legacyFlat)
   const activeTab = section || 'general'
-  const [teacherId, setTeacherId] = useState(() => {
-    return safeLocalStorageGetItem('teacherRoutingTeacherId') || ''
-  })
+  const {
+    teacherId,
+    setTeacherId,
+    showManualReview,
+    setShowManualReview,
+    showHistoryVersions,
+    setShowHistoryVersions,
+  } = useRoutingPersistentUiState()
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -63,8 +68,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   const [expandedProposalIds, setExpandedProposalIds] = useState<Record<string, boolean>>({})
   const [proposalDetails, setProposalDetails] = useState<Record<string, RoutingProposalDetail>>({})
   const [proposalLoadingMap, setProposalLoadingMap] = useState<Record<string, boolean>>({})
-  const [showManualReview, setShowManualReview] = useState(() => safeLocalStorageGetItem('teacherRoutingManualReview') === '1')
-  const [showHistoryVersions, setShowHistoryVersions] = useState(() => safeLocalStorageGetItem('teacherRoutingHistoryExpanded') === '1')
   const [providerOverview, setProviderOverview] = useState<TeacherProviderRegistryOverview | null>(null)
   const [providerBusy, setProviderBusy] = useState(false)
   const [providerProbeMap, setProviderProbeMap] = useState<Record<string, string>>({})
@@ -87,18 +90,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   useEffect(() => {
     onDirtyChange?.(hasLocalEdits)
   }, [hasLocalEdits, onDirtyChange])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('teacherRoutingTeacherId', teacherId)
-  }, [teacherId])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('teacherRoutingManualReview', showManualReview ? '1' : '0')
-  }, [showManualReview])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('teacherRoutingHistoryExpanded', showHistoryVersions ? '1' : '0')
-  }, [showHistoryVersions])
 
   useEffect(() => {
     setExpandedProposalIds({})

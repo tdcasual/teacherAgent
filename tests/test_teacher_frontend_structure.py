@@ -175,6 +175,16 @@ _TEACHER_ROUTING_HISTORY_UTILS_PATH = (
     / "routing"
     / "routingHistoryUtils.ts"
 )
+_TEACHER_ROUTING_PERSISTENT_UI_STATE_HOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "useRoutingPersistentUiState.ts"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -215,8 +225,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 520, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 520). "
+    assert line_count < 500, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 500). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -340,3 +350,13 @@ def test_teacher_routing_history_utils_are_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "deriveHistorySummary" in source
     assert "buildHistoryChangeSummary" in source
+
+
+def test_teacher_routing_persistent_ui_state_hook_is_extracted() -> None:
+    assert _TEACHER_ROUTING_PERSISTENT_UI_STATE_HOOK_PATH.exists(), (
+        "Routing local storage state bindings should be extracted into "
+        "features/routing/useRoutingPersistentUiState.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "useRoutingPersistentUiState" in source
+    assert "useRoutingPersistentUiState(" in source
