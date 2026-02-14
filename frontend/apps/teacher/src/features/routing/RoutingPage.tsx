@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createProviderRegistryItem,
   createRoutingProposal,
   deleteProviderRegistryItem,
-  fetchProviderRegistry,
   fetchRoutingProposalDetail,
-  fetchRoutingOverview,
   probeProviderRegistryModels,
   reviewRoutingProposal,
   rollbackRoutingConfig,
   simulateRouting,
   updateProviderRegistryItem,
 } from './routingApi'
+import { useRoutingOverviewSync } from './useRoutingOverviewSync'
 import { useProviderModels } from './useProviderModels'
 import RoutingChannelsSection from './RoutingChannelsSection'
 import RoutingHistorySection from './RoutingHistorySection'
@@ -220,17 +219,12 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   >({})
   const [providerAddMode, setProviderAddMode] = useState<'' | 'preset' | 'custom'>('')
   const [providerAddPreset, setProviderAddPreset] = useState('')
-  const hasLocalEditsRef = useRef(false)
 
   const { modelsMap, fetchModels } = useProviderModels(apiBase, teacherId)
 
   useEffect(() => {
     onDirtyChange?.(hasLocalEdits)
   }, [hasLocalEdits, onDirtyChange])
-
-  useEffect(() => {
-    hasLocalEditsRef.current = hasLocalEdits
-  }, [hasLocalEdits])
 
   useEffect(() => {
     safeLocalStorageSetItem('teacherRoutingTeacherId', teacherId)
@@ -250,72 +244,20 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     setProposalLoadingMap({})
   }, [teacherId])
 
-  const loadOverview = useCallback(
-    async (options?: { silent?: boolean; forceReplaceDraft?: boolean }) => {
-      const silent = Boolean(options?.silent)
-      const forceReplaceDraft = Boolean(options?.forceReplaceDraft)
-      if (!silent) setLoading(true)
-      setError('')
-      try {
-        let nextError = ''
-
-        try {
-          const data = await fetchRoutingOverview(apiBase, {
-            teacher_id: teacherId || undefined,
-            history_limit: 40,
-            proposal_limit: 40,
-          })
-          setOverview(data)
-          if (forceReplaceDraft || !hasLocalEditsRef.current) {
-            setDraft(cloneConfig(data.routing || emptyRoutingConfig()))
-            setHasLocalEdits(false)
-          }
-        } catch (err) {
-          nextError = (err as Error).message || '加载模型路由失败'
-        }
-
-        try {
-          const providerData = await fetchProviderRegistry(apiBase, { teacher_id: teacherId || undefined })
-          setProviderOverview(providerData)
-        } catch (err) {
-          const providerError = (err as Error).message || '加载 Provider 配置失败'
-          nextError = nextError ? `${nextError}；${providerError}` : providerError
-        }
-
-        if (nextError) setError(nextError)
-      } catch (err) {
-        setError((err as Error).message || '加载模型路由失败')
-      } finally {
-        if (!silent) setLoading(false)
-      }
-    },
-    [apiBase, teacherId],
-  )
-
-  useEffect(() => {
-    void loadOverview({ forceReplaceDraft: true })
-  }, [loadOverview])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void loadOverview({ silent: true })
-    }, 30000)
-    return () => window.clearInterval(timer)
-  }, [loadOverview])
-
-  useEffect(() => {
-    const next: Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string; default_model: string }> = {}
-    ;(providerOverview?.providers || []).forEach((item) => {
-      next[item.provider] = {
-        display_name: item.display_name || '',
-        base_url: item.base_url || '',
-        enabled: item.enabled !== false,
-        api_key: '',
-        default_model: item.default_model || '',
-      }
-    })
-    setProviderEditMap(next)
-  }, [providerOverview?.providers])
+  const { loadOverview } = useRoutingOverviewSync({
+    apiBase,
+    teacherId,
+    hasLocalEdits,
+    providerOverview,
+    cloneConfig,
+    setLoading,
+    setError,
+    setOverview,
+    setDraft,
+    setHasLocalEdits,
+    setProviderOverview,
+    setProviderEditMap,
+  })
 
   const providers = useMemo(() => (overview?.catalog?.providers || []) as RoutingCatalogProvider[], [overview?.catalog?.providers])
   const providerModeMap = useMemo(() => {
