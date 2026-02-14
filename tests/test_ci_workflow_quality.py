@@ -25,3 +25,9 @@ def test_ci_has_backend_quality_budget_check_step() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Check backend quality budget" in text
     assert "python scripts/quality/check_backend_quality_budget.py" in text
+
+
+def test_frontend_ci_has_types_install_integrity_step() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Verify frontend @types install integrity" in text
+    assert "npm run check:types-install" in text

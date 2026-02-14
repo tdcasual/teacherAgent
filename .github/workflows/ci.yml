@@ -135,6 +135,9 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Verify frontend @types install integrity
+        run: npm run check:types-install
+
       - name: Lint frontend
         run: npm run lint
 
