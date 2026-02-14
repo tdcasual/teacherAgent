@@ -85,6 +85,16 @@ _TEACHER_ROUTING_RULES_SECTION_PATH = (
     / "routing"
     / "RoutingRulesSection.tsx"
 )
+_TEACHER_ROUTING_CHANNELS_SECTION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingChannelsSection.tsx"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -125,8 +135,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 1300, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 1300). "
+    assert line_count < 1100, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 1100). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -161,3 +171,13 @@ def test_teacher_routing_providers_and_rules_sections_are_extracted() -> None:
     assert "<RoutingProvidersSection" in source
     assert "RoutingRulesSection" in source
     assert "<RoutingRulesSection" in source
+
+
+def test_teacher_routing_channels_section_is_extracted() -> None:
+    assert _TEACHER_ROUTING_CHANNELS_SECTION_PATH.exists(), (
+        "Routing channels section should be extracted into "
+        "features/routing/RoutingChannelsSection.tsx."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "RoutingChannelsSection" in source
+    assert "<RoutingChannelsSection" in source
