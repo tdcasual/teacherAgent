@@ -264,6 +264,12 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Initialize smoke Playwright artifact directories
+        run: |
+          mkdir -p test-results/teacher test-results/student
+          : > test-results/teacher/.artifact-placeholder
+          : > test-results/student/.artifact-placeholder
+
       - name: Run parallel Playwright isolation check
         run: |
           set -euo pipefail
@@ -286,6 +292,31 @@ jobs:
       - name: Run smoke E2E
         run: npm run e2e:smoke
 
+      - name: Validate smoke Playwright artifact layout on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          missing=0
+
+          for dir in test-results/teacher test-results/student; do
+            if [ ! -d "$dir" ]; then
+              echo "Missing required Playwright artifact directory: $dir"
+              missing=1
+            fi
+          done
+
+          {
+            echo "### Smoke E2E artifact layout (failure)"
+            echo ""
+            echo '```'
+            find test-results -maxdepth 2 -type f | sort || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Upload smoke Playwright report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -300,7 +331,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: smoke-playwright-test-results-${{ github.run_id }}
-          path: frontend/test-results
+          path: |
+            frontend/test-results/teacher
+            frontend/test-results/student
           if-no-files-found: ignore
           retention-days: 14
 
@@ -354,8 +387,30 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Initialize student critical Playwright artifact directories
+        run: |
+          mkdir -p test-results/student
+          : > test-results/student/.artifact-placeholder
+
       - name: Run student critical E2E
         run: npm run e2e:student:critical
+
+      - name: Validate student critical Playwright artifact layout on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          if [ ! -d test-results/student ]; then
+            echo "Missing required Playwright artifact directory: test-results/student"
+            exit 1
+          fi
+
+          {
+            echo "### Student critical E2E artifact layout (failure)"
+            echo ""
+            echo '```'
+            find test-results/student -maxdepth 2 -type f | sort || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload student critical Playwright report
         if: always()
@@ -371,7 +426,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: student-critical-playwright-test-results-${{ github.run_id }}
-          path: frontend/test-results
+          path: frontend/test-results/student
           if-no-files-found: ignore
           retention-days: 14
 
