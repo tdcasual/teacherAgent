@@ -65,6 +65,26 @@ _TEACHER_ROUTING_HISTORY_SECTION_PATH = (
     / "routing"
     / "RoutingHistorySection.tsx"
 )
+_TEACHER_ROUTING_PROVIDERS_SECTION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingProvidersSection.tsx"
+)
+_TEACHER_ROUTING_RULES_SECTION_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingRulesSection.tsx"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -105,8 +125,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 1700, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 1700). "
+    assert line_count < 1300, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 1300). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -125,3 +145,19 @@ def test_teacher_routing_simulate_and_history_sections_are_extracted() -> None:
     assert "<RoutingSimulateSection" in source
     assert "RoutingHistorySection" in source
     assert "<RoutingHistorySection" in source
+
+
+def test_teacher_routing_providers_and_rules_sections_are_extracted() -> None:
+    assert _TEACHER_ROUTING_PROVIDERS_SECTION_PATH.exists(), (
+        "Routing providers section should be extracted into "
+        "features/routing/RoutingProvidersSection.tsx."
+    )
+    assert _TEACHER_ROUTING_RULES_SECTION_PATH.exists(), (
+        "Routing rules section should be extracted into "
+        "features/routing/RoutingRulesSection.tsx."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "RoutingProvidersSection" in source
+    assert "<RoutingProvidersSection" in source
+    assert "RoutingRulesSection" in source
+    assert "<RoutingRulesSection" in source

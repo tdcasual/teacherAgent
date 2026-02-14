@@ -15,6 +15,8 @@ import {
 import { useProviderModels } from './useProviderModels'
 import ModelCombobox from './ModelCombobox'
 import RoutingHistorySection from './RoutingHistorySection'
+import RoutingProvidersSection from './RoutingProvidersSection'
+import RoutingRulesSection from './RoutingRulesSection'
 import RoutingSimulateSection from './RoutingSimulateSection'
 import type {
   RoutingCatalogProvider,
@@ -815,255 +817,35 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       )}
 
-      {(activeTab === 'providers' || isLegacyFlat) && <div className="settings-section">
-        <div className="flex items-center justify-between gap-[10px] flex-wrap">
-          <h3 className="m-0">{isLegacyFlat ? 'Provider 管理（共享 + 私有）' : 'Provider 管理'}</h3>
-        </div>
-
-        {isLegacyFlat && (providerOverview?.providers || []).length === 0 && (
-          <div className="muted">暂无私有 Provider。</div>
-        )}
-
-        {/* Configured providers only */}
-        <div className="flex flex-col gap-2">
-          {(providerOverview?.providers || []).length === 0 && (
-            <div className="muted" style={{ padding: '12px 0' }}>尚未配置任何 Provider，请在下方添加。</div>
-          )}
-          {(providerOverview?.providers || []).map((item) => {
-            const cp = (providerOverview?.catalog?.providers || []).find((c) => c.provider === item.provider)
-            const edit = providerEditMap[item.provider] || {
-              display_name: item.display_name || item.provider,
-              base_url: item.base_url || '',
-              enabled: item.enabled !== false,
-              api_key: '',
-              default_model: item.default_model || '',
-            }
-            return (
-              <details key={item.provider} open={isLegacyFlat} className={isLegacyFlat ? 'routing-item border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm provider-row' : 'routing-item provider-row'}>
-                <summary className="flex items-center gap-2 px-[14px] py-3 cursor-pointer text-[13px] list-none select-none [&::-webkit-details-marker]:hidden">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#22c55e]" />
-                  <span className="font-semibold whitespace-nowrap">{item.display_name || item.provider}</span>
-                  <span className="muted">{item.provider}</span>
-                  <span className="text-muted text-[12px] flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-                    {(cp?.modes || []).map((m) => m.mode).join(', ')}
-                    {cp?.modes?.[0]?.default_model ? ` · ${cp.modes[0].default_model}` : ''}
-                  </span>
-                  <span className="text-[11px] px-[6px] py-[1px] rounded bg-[#dcfce7] text-[#166534] whitespace-nowrap">已配置</span>
-                  {item.api_key_masked && <span className="text-[11px] font-mono whitespace-nowrap text-muted">key: {item.api_key_masked}</span>}
-                </summary>
-                <div className="px-[14px] pb-[14px] flex flex-col gap-[10px]">
-                  <div className={isLegacyFlat ? 'border border-border rounded-[12px] p-3 bg-white shadow-sm grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]' : 'grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]'}>
-                    <div className="routing-field grid gap-[6px]">
-                      <label>显示名称</label>
-                      <input value={edit.display_name} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, display_name: e.target.value } }))} placeholder={item.provider} />
-                    </div>
-                    <div className="routing-field grid gap-[6px]">
-                      <label>Base URL</label>
-                      <input value={edit.base_url} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, base_url: e.target.value } }))} placeholder="留空使用系统默认" />
-                    </div>
-                    <div className="routing-field grid gap-[6px]">
-                      <label>轮换 API Key（可选）</label>
-                      <input type="password" autoComplete="new-password" value={edit.api_key} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, api_key: e.target.value } }))} placeholder="轮换 API Key（可选）" />
-                    </div>
-                    <div className="routing-field grid gap-[6px]">
-                      <label>默认模型</label>
-                      <input
-                        value={edit.default_model}
-                        onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, default_model: e.target.value } }))}
-                        placeholder="例如：gpt-4.1-mini"
-                      />
-                    </div>
-                    <div className="routing-field grid gap-[6px]">
-                      <label className="toggle">
-                        <input type="checkbox" checked={edit.enabled} onChange={(e) => setProviderEditMap((prev) => ({ ...prev, [item.provider]: { ...edit, enabled: e.target.checked } }))} />
-                        启用
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex gap-[6px] flex-wrap">
-                    <button type="button" className="secondary-btn" onClick={() => void handleUpdateProvider(item.provider)} disabled={providerBusy || busy}>保存</button>
-                    <button type="button" className="secondary-btn" onClick={() => void handleProbeProviderModels(item.provider)} disabled={providerBusy || busy}>探测模型</button>
-                    <button type="button" className="ghost" onClick={() => void handleDisableProvider(item.provider)} disabled={providerBusy || busy}>禁用</button>
-                  </div>
-                  {providerProbeMap[item.provider] ? <div className="flex items-baseline gap-[6px] flex-wrap text-[12px]">探测结果：{providerProbeMap[item.provider]}</div> : null}
-                </div>
-              </details>
-            )
-          })}
-        </div>
-
-        {/* Add provider section */}
-        <div className="mt-4 border border-dashed border-[#c9d7d2] rounded-[12px] p-[14px] bg-[#fcfffe]">
-          <div className="font-semibold text-[13px] mb-[10px]">添加 Provider</div>
-          {providerAddMode === '' && (
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                const configuredIds = new Set((providerOverview?.providers || []).map((p) => p.provider))
-                const presets = (providerOverview?.shared_catalog?.providers || []).filter(
-                  (p) => !configuredIds.has(p.provider),
-                )
-                return (
-                  <>
-                    {presets.map((p) => (
-                      <button
-                        key={p.provider}
-                        type="button"
-                        className="px-[14px] py-2 border border-border rounded-[12px] bg-white text-[13px] cursor-pointer font-medium transition-all duration-150 hover:border-accent hover:bg-accent-soft hover:text-accent"
-                        onClick={() => {
-                          setProviderAddMode('preset')
-                          setProviderAddPreset(p.provider)
-                        setProviderCreateForm({
-                          provider_id: p.provider,
-                          display_name: p.provider,
-                          base_url: '',
-                          api_key: '',
-                          default_model: '',
-                          enabled: true,
-                        })
-                        }}
-                      >
-                        {p.provider}
-                      </button>
-                    ))}
-                    {!isLegacyFlat && <button
-                      type="button"
-                      className="px-[14px] py-2 border border-dashed border-border rounded-[12px] bg-white text-[13px] cursor-pointer font-medium text-muted transition-all duration-150 hover:border-accent hover:bg-accent-soft hover:text-accent"
-                      onClick={() => {
-                        setProviderAddMode('custom')
-                        setProviderAddPreset('')
-                        setProviderCreateForm({
-                          provider_id: '',
-                          display_name: '',
-                          base_url: '',
-                          api_key: '',
-                          default_model: '',
-                          enabled: true,
-                        })
-                      }}
-                    >
-                      OpenAI 兼容（自定义）
-                    </button>}
-                  </>
-                )
-              })()}
-            </div>
-          )}
-
-          {isLegacyFlat && providerAddMode === '' && (
-            <div className="flex flex-col gap-[10px]">
-              <div className="flex items-center justify-between font-semibold text-[13px]">新增私有 Provider</div>
-              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                <div className="grid gap-[6px]">
-                  <label>Provider ID（必填）</label>
-                  <input value={providerCreateForm.provider_id} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, provider_id: e.target.value }))} placeholder="例如：tprv_proxy_main" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>显示名称（可选）</label>
-                  <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder="例如：主中转" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>Base URL（必填）</label>
-                  <input value={providerCreateForm.base_url} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))} placeholder="例如：https://proxy.example.com/v1" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>API Key（必填）</label>
-                  <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} placeholder="仅提交时可见，后续仅显示掩码" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>默认模型（可选）</label>
-                  <input
-                    value={providerCreateForm.default_model}
-                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
-                    placeholder="例如：gpt-4.1-mini"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-[6px] flex-wrap">
-                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
-              </div>
-            </div>
-          )}
-
-          {providerAddMode === 'preset' && (
-            <div className="flex flex-col gap-[10px]">
-              <div className="flex items-center justify-between font-semibold text-[13px]">
-                配置 {providerAddPreset}
-                <button type="button" className="ghost" onClick={() => { setProviderAddMode(''); setProviderAddPreset('') }}>取消</button>
-              </div>
-              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                <div className="grid gap-[6px]">
-                  <label>API Key（必填）</label>
-                  <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} placeholder="输入 API Key" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>Base URL（可选）</label>
-                  <input
-                    value={providerCreateForm.base_url}
-                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))}
-                    placeholder={(() => {
-                      const cat = (providerOverview?.shared_catalog?.providers || []).find((p) => p.provider === providerAddPreset)
-                      return cat?.base_url || '使用默认地址'
-                    })()}
-                  />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>显示名称（可选）</label>
-                  <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder={providerAddPreset} />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>默认模型（可选）</label>
-                  <input
-                    value={providerCreateForm.default_model}
-                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
-                    placeholder="例如：gpt-4.1-mini"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-[6px] flex-wrap">
-                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
-              </div>
-            </div>
-          )}
-
-          {providerAddMode === 'custom' && (
-            <div className="flex flex-col gap-[10px]">
-              <div className="flex items-center justify-between font-semibold text-[13px]">
-                自定义 Provider
-                <button type="button" className="ghost" onClick={() => { setProviderAddMode(''); setProviderAddPreset('') }}>取消</button>
-              </div>
-              <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                <div className="grid gap-[6px]">
-                  <label>Provider ID（必填）</label>
-                  <input value={providerCreateForm.provider_id} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, provider_id: e.target.value }))} placeholder="例如：my_proxy" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>Base URL（必填）</label>
-                  <input value={providerCreateForm.base_url} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, base_url: e.target.value }))} placeholder="https://api.example.com/v1" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>API Key（必填）</label>
-                  <input type="password" autoComplete="new-password" value={providerCreateForm.api_key} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, api_key: e.target.value }))} />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>显示名称（可选）</label>
-                  <input value={providerCreateForm.display_name} onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, display_name: e.target.value }))} placeholder="例如：主中转" />
-                </div>
-                <div className="grid gap-[6px]">
-                  <label>默认模型（可选）</label>
-                  <input
-                    value={providerCreateForm.default_model}
-                    onChange={(e) => setProviderCreateForm((prev) => ({ ...prev, default_model: e.target.value }))}
-                    placeholder="例如：gpt-4.1-mini"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-[6px] flex-wrap">
-                <button type="button" className="secondary-btn" onClick={() => void handleCreateProvider()} disabled={providerBusy || busy}>{providerBusy ? '处理中…' : '新增 Provider'}</button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>}
+      {(activeTab === 'providers' || isLegacyFlat) && (
+        <RoutingProvidersSection
+          isLegacyFlat={isLegacyFlat}
+          providerOverview={providerOverview}
+          providerEditMap={providerEditMap}
+          providerProbeMap={providerProbeMap}
+          providerCreateForm={providerCreateForm}
+          providerAddMode={providerAddMode}
+          providerAddPreset={providerAddPreset}
+          providerBusy={providerBusy}
+          busy={busy}
+          setProviderEditMap={setProviderEditMap}
+          setProviderCreateForm={setProviderCreateForm}
+          setProviderAddMode={setProviderAddMode}
+          setProviderAddPreset={setProviderAddPreset}
+          onCreateProvider={() => {
+            void handleCreateProvider()
+          }}
+          onUpdateProvider={(providerId) => {
+            void handleUpdateProvider(providerId)
+          }}
+          onDisableProvider={(providerId) => {
+            void handleDisableProvider(providerId)
+          }}
+          onProbeProviderModels={(providerId) => {
+            void handleProbeProviderModels(providerId)
+          }}
+        />
+      )}
 
       {(activeTab === 'channels' || isLegacyFlat) && <div className="settings-section">
         <div className="flex items-center justify-between gap-[10px] flex-wrap">
@@ -1241,157 +1023,20 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
         </div>
       </div>}
 
-      {(activeTab === 'rules' || isLegacyFlat) && <div className="settings-section">
-        <div className="flex items-center justify-between gap-[10px] flex-wrap">
-          <h3 className="m-0">规则配置</h3>
-          <button type="button" className="secondary-btn" onClick={addRule} disabled={busy}>
-            新增规则
-          </button>
-        </div>
-        <div className="text-[12px] text-muted">命中顺序（按优先级）：{ruleOrderHint || '暂无规则'}</div>
-        {draft.rules.length === 0 && <div className="muted">暂无规则，请先新增。</div>}
-        <div className="grid gap-[10px]">
-          {draft.rules.map((rule, index) => {
-            const channelTitle = draft.channels.find((c) => c.id === rule.route.channel_id)?.title || rule.route.channel_id || '未指定'
-            return (
-            <div key={`${rule.id}_${index}`} className={`routing-item rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
-              <div className="flex items-center gap-2 px-3 py-[10px] text-[13px]">
-                <label className="toggle flex-shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={rule.enabled !== false}
-                    onChange={(e) => updateRule(index, (prev) => ({ ...prev, enabled: e.target.checked }))}
-                  />
-                </label>
-                <span className="font-semibold text-ink whitespace-nowrap">{rule.id || `规则${index + 1}`}</span>
-                <span className="text-muted flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                  {formatList(rule.match.roles || []) || '所有角色'} → {channelTitle}
-                </span>
-                <span className="text-[11px] text-muted bg-surface-soft px-[6px] py-[2px] rounded flex-shrink-0">P{rule.priority}</span>
-                <button type="button" className="ghost" onClick={() => removeRule(index)} disabled={busy}>
-                  删除
-                </button>
-              </div>
-              <details>
-                <summary>编辑规则</summary>
-                <div className="grid gap-[10px] grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-                  <div className="grid gap-[6px]">
-                    <label>规则 ID</label>
-                    <input
-                      value={rule.id}
-                      onChange={(e) => updateRule(index, (prev) => ({ ...prev, id: e.target.value }))}
-                      placeholder="例如：teacher_agent"
-                    />
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>优先级</label>
-                    <input
-                      value={rule.priority}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          priority: Number.isFinite(Number(e.target.value)) ? Number(e.target.value) : 0,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>角色（逗号分隔）</label>
-                    <input
-                      value={formatList(rule.match.roles || [])}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          match: { ...prev.match, roles: parseList(e.target.value) },
-                        }))
-                      }
-                      placeholder="例如：teacher,student"
-                    />
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>目标渠道</label>
-                    <select
-                      value={rule.route.channel_id || ''}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          route: { channel_id: e.target.value },
-                        }))
-                      }
-                    >
-                      <option value="">请选择</option>
-                      {draft.channels.map((channel) => (
-                        <option key={channel.id} value={channel.id}>
-                          {channel.title || channel.id}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>技能 ID（逗号分隔）</label>
-                    <input
-                      value={formatList(rule.match.skills || [])}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          match: { ...prev.match, skills: parseList(e.target.value) },
-                        }))
-                      }
-                      placeholder="例如：physics-homework-generator"
-                    />
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>任务类型 kind（逗号分隔）</label>
-                    <input
-                      value={formatList(rule.match.kinds || [])}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          match: { ...prev.match, kinds: parseList(e.target.value) },
-                        }))
-                      }
-                      placeholder="例如：chat.agent,upload.assignment_parse"
-                    />
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>是否必须工具调用</label>
-                    <select
-                      value={boolMatchValue(rule.match.needs_tools)}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          match: { ...prev.match, needs_tools: boolMatchFromValue(e.target.value) },
-                        }))
-                      }
-                    >
-                      <option value="any">不限</option>
-                      <option value="true">是</option>
-                      <option value="false">否</option>
-                    </select>
-                  </div>
-                  <div className="grid gap-[6px]">
-                    <label>是否必须 JSON</label>
-                    <select
-                      value={boolMatchValue(rule.match.needs_json)}
-                      onChange={(e) =>
-                        updateRule(index, (prev) => ({
-                          ...prev,
-                          match: { ...prev.match, needs_json: boolMatchFromValue(e.target.value) },
-                        }))
-                      }
-                    >
-                      <option value="any">不限</option>
-                      <option value="true">是</option>
-                      <option value="false">否</option>
-                    </select>
-                  </div>
-                </div>
-              </details>
-            </div>
-            )
-          })}
-        </div>
-      </div>}
+      {(activeTab === 'rules' || isLegacyFlat) && (
+        <RoutingRulesSection
+          draft={draft}
+          busy={busy}
+          ruleOrderHint={ruleOrderHint}
+          onAddRule={addRule}
+          onRemoveRule={removeRule}
+          onUpdateRule={updateRule}
+          formatList={formatList}
+          parseList={parseList}
+          boolMatchValue={boolMatchValue}
+          boolMatchFromValue={boolMatchFromValue}
+        />
+      )}
 
       {(activeTab === 'simulate' || isLegacyFlat) && (
         <RoutingSimulateSection
