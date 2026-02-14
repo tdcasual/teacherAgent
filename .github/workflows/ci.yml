@@ -210,6 +210,25 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Run parallel Playwright isolation check
+        run: |
+          set -euo pipefail
+
+          npm run e2e:teacher -- e2e/teacher-session-sidebar.spec.ts --grep "mobile session menu supports keyboard navigation and escape focus return" &
+          teacher_pid=$!
+          npm run e2e:student -- e2e/student-session-sidebar.spec.ts --grep "mobile session menu supports keyboard navigation and escape focus return" &
+          student_pid=$!
+
+          teacher_status=0
+          student_status=0
+          wait $teacher_pid || teacher_status=$?
+          wait $student_pid || student_status=$?
+
+          if [ $teacher_status -ne 0 ] || [ $student_status -ne 0 ]; then
+            echo "Parallel Playwright isolation check failed: teacher=${teacher_status}, student=${student_status}"
+            exit 1
+          fi
+
       - name: Run smoke E2E
         run: npm run e2e:smoke
 
