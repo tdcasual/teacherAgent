@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 _ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -11,6 +10,11 @@ def _read(rel_path: str) -> str:
 def test_eslint_enables_explicit_any_rule() -> None:
     source = _read("frontend/eslint.config.js")
     assert "@typescript-eslint/no-explicit-any" in source
+
+
+def test_eslint_enforces_exhaustive_deps_as_error() -> None:
+    source = _read("frontend/eslint.config.js")
+    assert "'react-hooks/exhaustive-deps': 'error'" in source
 
 
 def test_teacher_state_hooks_do_not_use_any_updater_casts() -> None:

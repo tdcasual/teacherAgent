@@ -3,12 +3,7 @@
 from pathlib import Path
 
 _TEACHER_APP_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "frontend"
-    / "apps"
-    / "teacher"
-    / "src"
-    / "App.tsx"
+    Path(__file__).resolve().parent.parent / "frontend" / "apps" / "teacher" / "src" / "App.tsx"
 )
 _TEACHER_SESSION_RAIL_PATH = (
     Path(__file__).resolve().parent.parent
@@ -40,6 +35,16 @@ _TEACHER_PERSONA_MANAGER_PATH = (
     / "persona"
     / "TeacherPersonaManager.tsx"
 )
+_TEACHER_ROUTING_PAGE_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingPage.tsx"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -53,15 +58,12 @@ def test_teacher_app_line_budget() -> None:
 
 def test_teacher_session_rail_extracted() -> None:
     assert _TEACHER_SESSION_RAIL_PATH.exists(), (
-        "Teacher session rail should be extracted into "
-        "features/chat/TeacherSessionRail.tsx."
+        "Teacher session rail should be extracted into " "features/chat/TeacherSessionRail.tsx."
     )
     app_source = _TEACHER_APP_PATH.read_text(encoding="utf-8")
     assert "TeacherSessionRail" in app_source
     assert "<TeacherSessionRail" in app_source
-    assert "<SessionSidebar" not in app_source, (
-        "App.tsx should not render SessionSidebar directly."
-    )
+    assert "<SessionSidebar" not in app_source, "App.tsx should not render SessionSidebar directly."
 
 
 def test_teacher_topbar_has_persona_manager_entry() -> None:
@@ -78,3 +80,12 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
     app_source = _TEACHER_APP_PATH.read_text(encoding="utf-8")
     assert "TeacherPersonaManager" in app_source
     assert "<TeacherPersonaManager" in app_source
+
+
+def test_teacher_routing_page_line_budget() -> None:
+    lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
+    line_count = len(lines)
+    assert line_count < 1700, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 1700). "
+        "Split routing sections into focused sub-components and hooks."
+    )

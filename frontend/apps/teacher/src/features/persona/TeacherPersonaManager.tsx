@@ -74,7 +74,7 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
     setSummary(String(selectedPersona.summary || ''))
     const mode = String(selectedPersona.visibility_mode || 'assigned_only').toLowerCase()
     setVisibilityMode(mode === 'hidden_all' ? 'hidden_all' : 'assigned_only')
-  }, [selectedPersona?.persona_id])
+  }, [selectedPersona])
 
   const handleCreate = useCallback(async () => {
     const trimmedName = name.trim()
