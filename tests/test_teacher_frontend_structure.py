@@ -95,6 +95,16 @@ _TEACHER_ROUTING_CHANNELS_SECTION_PATH = (
     / "routing"
     / "RoutingChannelsSection.tsx"
 )
+_TEACHER_ROUTING_DRAFT_ACTION_BAR_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "RoutingDraftActionBar.tsx"
+)
 _TEACHER_ROUTING_OVERVIEW_SYNC_HOOK_PATH = (
     Path(__file__).resolve().parent.parent
     / "frontend"
@@ -185,8 +195,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 620, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 620). "
+    assert line_count < 560, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 560). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -231,6 +241,16 @@ def test_teacher_routing_channels_section_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "RoutingChannelsSection" in source
     assert "<RoutingChannelsSection" in source
+
+
+def test_teacher_routing_draft_action_bar_is_extracted() -> None:
+    assert _TEACHER_ROUTING_DRAFT_ACTION_BAR_PATH.exists(), (
+        "Routing draft action bar should be extracted into "
+        "features/routing/RoutingDraftActionBar.tsx."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "RoutingDraftActionBar" in source
+    assert "<RoutingDraftActionBar" in source
 
 
 def test_teacher_routing_overview_sync_hook_is_extracted() -> None:

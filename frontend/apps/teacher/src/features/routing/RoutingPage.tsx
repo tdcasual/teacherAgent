@@ -4,8 +4,10 @@ import { useRoutingOverviewSync } from './useRoutingOverviewSync'
 import { useRoutingProviderMutations } from './useRoutingProviderMutations'
 import { useRoutingProposalActions } from './useRoutingProposalActions'
 import { useProviderModels } from './useProviderModels'
+import { boolMatchFromValue, boolMatchValue, formatList, formatTargetLabel, parseList } from './routingFormattingUtils'
 import { buildHistoryChangeSummary, deriveHistorySummary } from './routingHistoryUtils'
 import RoutingChannelsSection from './RoutingChannelsSection'
+import RoutingDraftActionBar from './RoutingDraftActionBar'
 import RoutingHistorySection from './RoutingHistorySection'
 import RoutingProvidersSection from './RoutingProvidersSection'
 import RoutingRulesSection from './RoutingRulesSection'
@@ -32,14 +34,6 @@ type Props = {
   /** Legacy compatibility mode: render all routing/provider panels in one page */
   legacyFlat?: boolean
 }
-
-const parseList = (value: string) =>
-  value
-    .split(/[，,\n]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-const formatList = (items: string[]) => items.join('，')
 
 const cloneConfig = (config: RoutingConfig): RoutingConfig => ({
   schema_version: config.schema_version,
@@ -80,22 +74,6 @@ const cloneConfig = (config: RoutingConfig): RoutingConfig => ({
   })),
 })
 
-const boolMatchValue = (value: boolean | null | undefined) => {
-  if (value === true) return 'true'
-  if (value === false) return 'false'
-  return 'any'
-}
-
-const boolMatchFromValue = (value: string): boolean | undefined => {
-  if (value === 'true') return true
-  if (value === 'false') return false
-  return undefined
-}
-
-const formatTargetLabel = (provider?: string, mode?: string, model?: string) => {
-  const text = [provider || '', mode || '', model || ''].map((item) => item.trim()).filter(Boolean).join(' / ')
-  return text || '未配置'
-}
 
 export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, section, legacyFlat }: Props) {
   const isLegacyFlat = Boolean(legacyFlat)
@@ -540,44 +518,27 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
       )}
 
       {(!isLegacyFlat && ['general', 'providers', 'channels', 'rules'].includes(activeTab)) && (
-        <div className="sticky bottom-0 flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-border rounded-[12px] z-[5]" style={{ background: 'rgba(255,255,255,0.94)', backdropFilter: 'saturate(180%) blur(8px)' }}>
-          <div className="flex items-center gap-[10px] flex-1 min-w-0">
-            {hasLocalEdits && <span className="text-[12px] text-accent font-semibold whitespace-nowrap">草稿已修改</span>}
-            <input
-              className="max-w-[280px] px-[10px] py-[7px] text-[13px]"
-              value={proposalNote}
-              onChange={(e) => setProposalNote(e.target.value)}
-              placeholder="变更备注（可选）"
-            />
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button type="button" className="secondary-btn" onClick={handleResetDraft} disabled={!hasLocalEdits || busy}>
-              重置草稿
-            </button>
-            <button type="button" className="secondary-btn" onClick={handlePropose} disabled={busy}>
-              {busy ? '处理中…' : '保存并生效'}
-            </button>
-          </div>
-        </div>
+        <RoutingDraftActionBar
+          isLegacyFlat={false}
+          hasLocalEdits={hasLocalEdits}
+          busy={busy}
+          proposalNote={proposalNote}
+          onProposalNoteChange={setProposalNote}
+          onResetDraft={handleResetDraft}
+          onPropose={handlePropose}
+        />
       )}
 
       {isLegacyFlat && (
-        <div className="sticky bottom-0 flex items-center justify-between gap-3 px-[14px] py-[10px] border-t border-border rounded-[12px] z-[5]" style={{ background: 'rgba(255,255,255,0.94)', backdropFilter: 'saturate(180%) blur(8px)' }}>
-          <div className="flex items-center gap-[10px] flex-1 min-w-0">
-            {hasLocalEdits && <span className="text-[12px] text-accent font-semibold whitespace-nowrap">草稿已修改</span>}
-            <input
-              className="max-w-[280px] px-[10px] py-[7px] text-[13px]"
-              value={proposalNote}
-              onChange={(e) => setProposalNote(e.target.value)}
-              placeholder="变更备注（可选）"
-            />
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            <button type="button" className="secondary-btn" onClick={handlePropose} disabled={busy}>
-              {busy ? '处理中…' : '提交提案'}
-            </button>
-          </div>
-        </div>
+        <RoutingDraftActionBar
+          isLegacyFlat
+          hasLocalEdits={hasLocalEdits}
+          busy={busy}
+          proposalNote={proposalNote}
+          onProposalNoteChange={setProposalNote}
+          onResetDraft={handleResetDraft}
+          onPropose={handlePropose}
+        />
       )}
     </div>
   )
