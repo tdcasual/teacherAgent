@@ -135,6 +135,16 @@ _TEACHER_ROUTING_PROPOSAL_ACTIONS_HOOK_PATH = (
     / "routing"
     / "useRoutingProposalActions.ts"
 )
+_TEACHER_ROUTING_HISTORY_UTILS_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "routingHistoryUtils.ts"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -175,8 +185,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 700, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 700). "
+    assert line_count < 620, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 620). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -261,3 +271,13 @@ def test_teacher_routing_proposal_actions_hook_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "useRoutingProposalActions" in source
     assert "useRoutingProposalActions(" in source
+
+
+def test_teacher_routing_history_utils_are_extracted() -> None:
+    assert _TEACHER_ROUTING_HISTORY_UTILS_PATH.exists(), (
+        "Routing history summary/changes helpers should be extracted into "
+        "features/routing/routingHistoryUtils.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "deriveHistorySummary" in source
+    assert "buildHistoryChangeSummary" in source
