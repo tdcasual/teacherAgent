@@ -92,6 +92,21 @@ class AuthRegistryStore:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS admin_auth (
+                    admin_username TEXT PRIMARY KEY,
+                    username_norm TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    password_algo TEXT NOT NULL,
+                    password_set_at TEXT NOT NULL,
+                    failed_count INTEGER NOT NULL DEFAULT 0,
+                    locked_until TEXT,
+                    is_disabled INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS auth_audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     actor_id TEXT,
@@ -112,6 +127,9 @@ class AuthRegistryStore:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_teacher_name_email ON teacher_auth(name_norm, email_norm)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_admin_username_norm ON admin_auth(username_norm)"
             )
 
     def identify_student(self, *, name: str, class_name: Optional[str]) -> Dict[str, Any]:
@@ -330,6 +348,313 @@ class AuthRegistryStore:
                     "email": str(row["email"] or ""),
                 }
             return result
+
+    def bootstrap_admin(self) -> Dict[str, Any]:
+        username = _admin_username()
+        password = str(os.getenv("ADMIN_PASSWORD", "") or "")
+        now = _utc_now()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT admin_username FROM admin_auth WHERE username_norm = ?",
+                (normalize(username),),
+            ).fetchone()
+            if row is not None:
+                return {
+                    "ok": True,
+                    "created": False,
+                    "username": str(row["admin_username"] or ""),
+                    "generated_password": False,
+                    "bootstrap_file": "",
+                }
+
+            generated = False
+            if not password:
+                password = _generate_bootstrap_password()
+                generated = True
+            conn.execute(
+                (
+                    "INSERT INTO admin_auth(admin_username, username_norm, password_hash, "
+                    "password_algo, password_set_at, failed_count, locked_until, is_disabled, "
+                    "updated_at) VALUES (?, ?, ?, ?, ?, 0, NULL, 0, ?)"
+                ),
+                (
+                    username,
+                    normalize(username),
+                    _hash_password(password),
+                    "pbkdf2_sha256",
+                    _iso(now),
+                    _iso(now),
+                ),
+            )
+
+        bootstrap_file = ""
+        if generated:
+            bootstrap_file = self._write_admin_bootstrap_file(username=username, password=password)
+
+        return {
+            "ok": True,
+            "created": True,
+            "username": username,
+            "generated_password": generated,
+            "bootstrap_file": bootstrap_file,
+        }
+
+    def login_admin(self, *, username: str, password: str) -> Dict[str, Any]:
+        bootstrap_result = self.bootstrap_admin()
+        if not bootstrap_result.get("ok"):
+            return {"ok": False, "error": "admin_bootstrap_failed"}
+
+        user_input = str(username or "").strip()
+        pwd_input = str(password or "")
+        if not user_input:
+            return {"ok": False, "error": "missing_username"}
+        if not pwd_input:
+            return {"ok": False, "error": "missing_password"}
+
+        now = _utc_now()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM admin_auth WHERE username_norm = ?",
+                (normalize(user_input),),
+            ).fetchone()
+            if row is None:
+                return {"ok": False, "error": "not_found"}
+            if int(row["is_disabled"] or 0) == 1:
+                return {"ok": False, "error": "disabled"}
+
+            lock_until = _parse_ts(str(row["locked_until"] or ""))
+            if lock_until is not None and lock_until > now:
+                retry_after = int((lock_until - now).total_seconds())
+                return {
+                    "ok": False,
+                    "error": "locked",
+                    "retry_after_sec": max(1, retry_after),
+                }
+
+            pwd_hash = str(row["password_hash"] or "")
+            if not pwd_hash or not _verify_password(pwd_input, pwd_hash):
+                self._record_failed_login(
+                    conn,
+                    table="admin_auth",
+                    id_field="admin_username",
+                    subject_id=str(row["admin_username"] or ""),
+                    current_failed=int(row["failed_count"] or 0),
+                    now=now,
+                )
+                return {"ok": False, "error": "invalid_credential"}
+
+            admin_username = str(row["admin_username"] or "")
+            conn.execute(
+                (
+                    "UPDATE admin_auth SET failed_count = 0, locked_until = NULL, updated_at = ? "
+                    "WHERE admin_username = ?"
+                ),
+                (_iso(now), admin_username),
+            )
+
+        return {
+            "ok": True,
+            "role": "admin",
+            "subject_id": admin_username,
+        }
+
+    def list_teacher_auth_status(self) -> Dict[str, Any]:
+        self.bootstrap_teachers(regenerate_token=False)
+        with self._connect() as conn:
+            rows = list(
+                conn.execute(
+                    (
+                        "SELECT teacher_id, teacher_name, email, token_hint, password_hash, "
+                        "token_version, failed_count, locked_until, is_disabled, updated_at "
+                        "FROM teacher_auth ORDER BY teacher_id"
+                    )
+                ).fetchall()
+            )
+        items: List[Dict[str, Any]] = []
+        for row in rows:
+            items.append(
+                {
+                    "teacher_id": str(row["teacher_id"] or ""),
+                    "teacher_name": str(row["teacher_name"] or ""),
+                    "email": str(row["email"] or ""),
+                    "token_hint": str(row["token_hint"] or ""),
+                    "password_set": bool(str(row["password_hash"] or "").strip()),
+                    "token_version": int(row["token_version"] or 1),
+                    "failed_count": int(row["failed_count"] or 0),
+                    "locked_until": str(row["locked_until"] or ""),
+                    "is_disabled": bool(int(row["is_disabled"] or 0)),
+                    "updated_at": str(row["updated_at"] or ""),
+                }
+            )
+        return {"ok": True, "count": len(items), "items": items}
+
+    def set_teacher_disabled(
+        self,
+        *,
+        target_id: str,
+        is_disabled: bool,
+        actor_id: str,
+        actor_role: str,
+    ) -> Dict[str, Any]:
+        identity = self._get_teacher_identity(target_id)
+        if identity is None:
+            return {"ok": False, "error": "not_found"}
+
+        tid = str(identity.get("teacher_id") or "").strip()
+        ensured = self._ensure_teacher_auth(
+            teacher_id=tid,
+            teacher_name=str(identity.get("teacher_name") or "").strip() or tid,
+            email=str(identity.get("email") or "").strip() or None,
+            regenerate_token=False,
+        )
+        if not ensured:
+            return {"ok": False, "error": "not_found"}
+
+        disabled_val = 1 if bool(is_disabled) else 0
+        now = _utc_now()
+        with self._connect() as conn:
+            conn.execute(
+                (
+                    "UPDATE teacher_auth SET is_disabled = ?, token_version = token_version + 1, "
+                    "failed_count = 0, locked_until = NULL, updated_at = ? WHERE teacher_id = ?"
+                ),
+                (disabled_val, _iso(now), tid),
+            )
+            self._append_audit(
+                conn,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="set_disabled",
+                target_id=tid,
+                target_role="teacher",
+                detail={"is_disabled": bool(disabled_val)},
+            )
+            row = conn.execute(
+                (
+                    "SELECT teacher_id, teacher_name, email, is_disabled, token_version "
+                    "FROM teacher_auth WHERE teacher_id = ?"
+                ),
+                (tid,),
+            ).fetchone()
+        if row is None:
+            return {"ok": False, "error": "not_found"}
+
+        return {
+            "ok": True,
+            "role": "teacher",
+            "target_id": tid,
+            "is_disabled": bool(int(row["is_disabled"] or 0)),
+            "token_version": int(row["token_version"] or 1),
+            "teacher": {
+                "teacher_id": str(row["teacher_id"] or ""),
+                "teacher_name": str(row["teacher_name"] or ""),
+                "email": str(row["email"] or ""),
+            },
+        }
+
+    def reset_teacher_password(
+        self,
+        *,
+        target_id: str,
+        new_password: Optional[str],
+        actor_id: str,
+        actor_role: str,
+    ) -> Dict[str, Any]:
+        identity = self._get_teacher_identity(target_id)
+        if identity is None:
+            return {"ok": False, "error": "not_found"}
+
+        tid = str(identity.get("teacher_id") or "").strip()
+        ensured = self._ensure_teacher_auth(
+            teacher_id=tid,
+            teacher_name=str(identity.get("teacher_name") or "").strip() or tid,
+            email=str(identity.get("email") or "").strip() or None,
+            regenerate_token=False,
+        )
+        if not ensured:
+            return {"ok": False, "error": "not_found"}
+
+        generated_password = False
+        password_value = str(new_password or "").strip()
+        if not password_value:
+            password_value = _generate_bootstrap_password()
+            generated_password = True
+
+        password_error = validate_password_strength(password_value)
+        if password_error:
+            return {
+                "ok": False,
+                "error": password_error,
+                "message": "密码至少 8 位，且需同时包含字母与数字。",
+            }
+
+        now = _utc_now()
+        with self._connect() as conn:
+            conn.execute(
+                (
+                    "UPDATE teacher_auth SET password_hash = ?, password_algo = ?, password_set_at = ?, "
+                    "token_version = token_version + 1, failed_count = 0, locked_until = NULL, "
+                    "updated_at = ? WHERE teacher_id = ?"
+                ),
+                (
+                    _hash_password(password_value),
+                    "pbkdf2_sha256",
+                    _iso(now),
+                    _iso(now),
+                    tid,
+                ),
+            )
+            self._append_audit(
+                conn,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="reset_password",
+                target_id=tid,
+                target_role="teacher",
+                detail={"generated": generated_password},
+            )
+            row = conn.execute(
+                (
+                    "SELECT teacher_id, teacher_name, email, token_version "
+                    "FROM teacher_auth WHERE teacher_id = ?"
+                ),
+                (tid,),
+            ).fetchone()
+        if row is None:
+            return {"ok": False, "error": "not_found"}
+
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "role": "teacher",
+            "target_id": tid,
+            "generated_password": generated_password,
+            "token_version": int(row["token_version"] or 1),
+            "teacher": {
+                "teacher_id": str(row["teacher_id"] or ""),
+                "teacher_name": str(row["teacher_name"] or ""),
+                "email": str(row["email"] or ""),
+            },
+        }
+        if generated_password:
+            payload["temp_password"] = password_value
+        return payload
+
+    def _write_admin_bootstrap_file(self, *, username: str, password: str) -> str:
+        auth_dir = self.data_dir / "auth"
+        auth_dir.mkdir(parents=True, exist_ok=True)
+        path = auth_dir / "admin_bootstrap.txt"
+        content = (
+            "# Generated by auth bootstrap. Rotate password after first login.\n"
+            f"username={str(username or '').strip()}\n"
+            f"password={str(password or '').strip()}\n"
+            f"generated_at={_iso(_utc_now())}\n"
+        )
+        path.write_text(content, encoding="utf-8")
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            _log.warning("failed to chmod admin bootstrap file: %s", path, exc_info=True)
+        return str(path)
 
     def set_password(
         self,
@@ -1057,6 +1382,18 @@ def _hash_token(token: str) -> str:
 
 def _generate_token() -> str:
     return secrets.token_urlsafe(24)
+
+
+def _admin_username() -> str:
+    return str(os.getenv("ADMIN_USERNAME", "admin") or "admin").strip() or "admin"
+
+
+def _generate_bootstrap_password() -> str:
+    for _ in range(8):
+        candidate = secrets.token_urlsafe(18)
+        if validate_password_strength(candidate) is None:
+            return candidate
+    return "Admin1234" + secrets.token_hex(6)
 
 
 def _token_hint(token: str) -> str:

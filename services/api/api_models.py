@@ -94,12 +94,27 @@ class TeacherSetPasswordRequest(BaseModel):
     new_password: str
 
 
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 class AuthResetTokenRequest(BaseModel):
     target_id: str
 
 
 class AuthExportTokensRequest(BaseModel):
     ids: Optional[List[str]] = None
+
+
+class AdminTeacherSetDisabledRequest(BaseModel):
+    target_id: str
+    is_disabled: bool
+
+
+class AdminTeacherResetPasswordRequest(BaseModel):
+    target_id: str
+    new_password: Optional[str] = None
 
 
 class UploadConfirmRequest(BaseModel):

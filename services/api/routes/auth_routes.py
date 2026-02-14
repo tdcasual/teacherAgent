@@ -5,6 +5,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from ..api_models import (
+    AdminLoginRequest,
+    AdminTeacherResetPasswordRequest,
+    AdminTeacherSetDisabledRequest,
     AuthExportTokensRequest,
     AuthResetTokenRequest,
     StudentIdentifyRequest,
@@ -121,6 +124,59 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=req.candidate_id,
             actor_role="teacher",
         )
+
+    @router.post("/auth/admin/login")
+    def auth_admin_login(req: AdminLoginRequest) -> Any:
+        store = build_auth_registry_store(data_dir=core.DATA_DIR)
+        login_result = store.login_admin(username=req.username, password=req.password)
+        if not login_result.get("ok"):
+            return login_result
+        subject_id = str(login_result.get("subject_id") or "").strip()
+        try:
+            token = mint_access_token(subject_id=subject_id, role="admin")
+        except AuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+        return {
+            "ok": True,
+            "access_token": token,
+            "expires_in": access_token_ttl_sec(),
+            "role": "admin",
+            "subject_id": subject_id,
+        }
+
+    @router.get("/auth/admin/teacher/list")
+    def auth_admin_teacher_list() -> Any:
+        _admin_actor()
+        store = build_auth_registry_store(data_dir=core.DATA_DIR)
+        return store.list_teacher_auth_status()
+
+    @router.post("/auth/admin/teacher/set-disabled")
+    def auth_admin_teacher_set_disabled(req: AdminTeacherSetDisabledRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        store = build_auth_registry_store(data_dir=core.DATA_DIR)
+        result = store.set_teacher_disabled(
+            target_id=req.target_id,
+            is_disabled=req.is_disabled,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        if not result.get("ok") and result.get("error") == "not_found":
+            raise HTTPException(status_code=404, detail="not_found")
+        return result
+
+    @router.post("/auth/admin/teacher/reset-password")
+    def auth_admin_teacher_reset_password(req: AdminTeacherResetPasswordRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        store = build_auth_registry_store(data_dir=core.DATA_DIR)
+        result = store.reset_teacher_password(
+            target_id=req.target_id,
+            new_password=req.new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        if not result.get("ok") and result.get("error") == "not_found":
+            raise HTTPException(status_code=404, detail="not_found")
+        return result
 
     @router.post("/auth/admin/student/reset-token")
     def auth_admin_student_reset_token(req: AuthResetTokenRequest) -> Any:

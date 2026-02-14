@@ -47,7 +47,7 @@ class StudentImportServiceTest(unittest.TestCase):
             )
 
             resolved = resolve_responses_file(None, "exports/responses.csv", deps=deps)
-            self.assertEqual(resolved, target)
+            self.assertEqual(resolved, target.resolve())
 
     def test_resolve_responses_file_reads_manifest_responses_path(self):
         with TemporaryDirectory() as td:
@@ -71,7 +71,7 @@ class StudentImportServiceTest(unittest.TestCase):
             )
 
             resolved = resolve_responses_file("EX1", None, deps=deps)
-            self.assertEqual(resolved, target)
+            self.assertEqual(resolved, target.resolve())
 
     def test_resolve_responses_file_rejects_invalid_exam_id_path(self):
         with TemporaryDirectory() as td:
@@ -83,6 +83,46 @@ class StudentImportServiceTest(unittest.TestCase):
                 now_iso=lambda: "2026-02-07T10:00:00",
             )
             resolved = resolve_responses_file("../escape", None, deps=deps)
+            self.assertIsNone(resolved)
+
+    def test_resolve_responses_file_rejects_absolute_path_outside_allowed_roots(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_root = root / "app"
+            data_dir = root / "data"
+            outside = root / "outside.csv"
+            outside.write_text("student_id,student_name,class_name,exam_id\n", encoding="utf-8")
+            deps = StudentImportDeps(
+                app_root=app_root,
+                data_dir=data_dir,
+                load_profile_file=_load_profile_file,
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+
+            resolved = resolve_responses_file(None, str(outside), deps=deps)
+            self.assertIsNone(resolved)
+
+    def test_resolve_responses_file_manifest_rejects_outside_absolute_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_root = root / "app"
+            data_dir = root / "data"
+            outside = root / "outside.csv"
+            outside.write_text("student_id,student_name,class_name,exam_id\n", encoding="utf-8")
+            manifest_path = data_dir / "exams" / "EX1" / "manifest.json"
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text(
+                json.dumps({"files": {"responses": str(outside)}}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            deps = StudentImportDeps(
+                app_root=app_root,
+                data_dir=data_dir,
+                load_profile_file=_load_profile_file,
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+
+            resolved = resolve_responses_file("EX1", None, deps=deps)
             self.assertIsNone(resolved)
 
     def test_import_students_from_responses_creates_and_updates_aliases(self):

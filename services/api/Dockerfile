@@ -28,6 +28,8 @@ ENV UPLOADS_DIR=/app/uploads
 
 RUN adduser --disabled-password --no-create-home appuser \
     && mkdir -p /app/data /app/uploads \
+    && chmod +x /app/scripts/admin_auth_tui.py /app/scripts/admin_manager \
+    && ln -sf /app/scripts/admin_manager /usr/local/bin/admin_manager \
     && chown -R appuser:appuser /app/data /app/uploads
 USER appuser
 

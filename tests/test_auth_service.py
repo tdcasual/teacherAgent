@@ -17,7 +17,6 @@ from services.api.auth_service import (
     mint_test_token,
     principal_can_access_tenant,
     require_principal,
-    reset_current_principal,
     resolve_principal_from_headers,
     resolve_student_scope,
     resolve_teacher_scope,
@@ -147,6 +146,11 @@ class TestResolvePrincipalFromHeaders(unittest.TestCase):
     @patch.dict(os.environ, _AUTH_ON, clear=False)
     def test_exempt_admin_path(self):
         result = resolve_principal_from_headers({}, path="/admin/stats", method="GET")
+        self.assertIsNone(result)
+
+    @patch.dict(os.environ, _AUTH_ON, clear=False)
+    def test_exempt_admin_login_path(self):
+        result = resolve_principal_from_headers({}, path="/auth/admin/login", method="POST")
         self.assertIsNone(result)
 
     @patch.dict(os.environ, _AUTH_ON, clear=False)

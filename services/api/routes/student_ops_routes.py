@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import StudentImportRequest, StudentVerifyRequest
-from ..auth_service import AuthError, resolve_student_scope
+from ..auth_service import AuthError, require_principal, resolve_student_scope
 
 
 def _scoped_student_id(student_id: str | None) -> str:
@@ -19,10 +19,18 @@ def _scoped_student_id(student_id: str | None) -> str:
     return sid
 
 
+def _require_teacher_or_admin() -> None:
+    try:
+        require_principal(roles=("teacher", "admin"))
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
 def register_student_ops_routes(router: APIRouter, core: Any) -> None:
     @router.post("/student/import")
     def import_students(req: StudentImportRequest) -> Any:
-        result = core.student_import(req.dict())
+        _require_teacher_or_admin()
+        result = core.student_import(req.model_dump())
         if result.get("error"):
             raise HTTPException(status_code=400, detail=result["error"])
         return result

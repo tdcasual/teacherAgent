@@ -23,7 +23,13 @@ def _auth_headers(actor_id: str, role: str, *, secret: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _load_app(tmp_path: Path, *, secret: str):
+def _load_app(
+    tmp_path: Path,
+    *,
+    secret: str,
+    admin_username: str = "admin",
+    admin_password: str | None = None,
+):
     import os
 
     os.environ["DATA_DIR"] = str(tmp_path / "data")
@@ -32,6 +38,11 @@ def _load_app(tmp_path: Path, *, secret: str):
     os.environ["MASTER_KEY_DEV_DEFAULT"] = "dev-key"
     os.environ["AUTH_REQUIRED"] = "1"
     os.environ["AUTH_TOKEN_SECRET"] = secret
+    os.environ["ADMIN_USERNAME"] = admin_username
+    if admin_password is None:
+        os.environ.pop("ADMIN_PASSWORD", None)
+    else:
+        os.environ["ADMIN_PASSWORD"] = admin_password
 
     import services.api.app as app_mod
 
@@ -235,3 +246,119 @@ def test_teacher_identify_requires_email_for_duplicate_names(tmp_path: Path):
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert protected.status_code == 200
+
+
+def test_admin_bootstrap_login_and_manage_teacher_accounts(tmp_path: Path):
+    secret = "auth-admin-bootstrap-secret"
+    _write_teacher_profile(
+        tmp_path,
+        teacher_id="teacher_alpha",
+        teacher_name="张老师",
+        email="alpha@example.com",
+    )
+    app_mod = _load_app(
+        tmp_path,
+        secret=secret,
+        admin_username="principal_admin",
+        admin_password=None,
+    )
+    client = TestClient(app_mod.app)
+
+    bootstrap_trigger = client.post(
+        "/auth/admin/login",
+        json={"username": "principal_admin", "password": "wrong-password"},
+    )
+    assert bootstrap_trigger.status_code == 200
+    assert bootstrap_trigger.json().get("ok") is False
+
+    bootstrap_path = tmp_path / "data" / "auth" / "admin_bootstrap.txt"
+    assert bootstrap_path.exists()
+    bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
+    assert "username=principal_admin" in bootstrap_text
+    password_line = next(
+        (line for line in bootstrap_text.splitlines() if line.startswith("password=")),
+        "",
+    )
+    admin_password = password_line.replace("password=", "", 1).strip()
+    assert admin_password
+
+    login_res = client.post(
+        "/auth/admin/login",
+        json={"username": "principal_admin", "password": admin_password},
+    )
+    assert login_res.status_code == 200
+    login_payload = login_res.json()
+    assert login_payload.get("ok") is True
+    assert login_payload.get("role") == "admin"
+    admin_access_token = str(login_payload.get("access_token") or "")
+    assert admin_access_token
+    admin_headers = {"Authorization": f"Bearer {admin_access_token}"}
+
+    teacher_list = client.get("/auth/admin/teacher/list", headers=admin_headers)
+    assert teacher_list.status_code == 200
+    teacher_items = teacher_list.json().get("items") or []
+    teacher_ids = {str(item.get("teacher_id") or "") for item in teacher_items}
+    assert "teacher_alpha" in teacher_ids
+
+    disable_res = client.post(
+        "/auth/admin/teacher/set-disabled",
+        headers=admin_headers,
+        json={"target_id": "teacher_alpha", "is_disabled": True},
+    )
+    assert disable_res.status_code == 200
+    assert disable_res.json().get("ok") is True
+    assert disable_res.json().get("is_disabled") is True
+
+    export_res = client.post(
+        "/auth/admin/teacher/export-tokens",
+        headers=admin_headers,
+        json={"ids": ["teacher_alpha"]},
+    )
+    assert export_res.status_code == 200
+    export_items = export_res.json().get("items") or []
+    teacher_token = str((export_items[0] if export_items else {}).get("token") or "")
+    assert teacher_token
+
+    disabled_login = client.post(
+        "/auth/teacher/login",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "token",
+            "credential": teacher_token,
+        },
+    )
+    assert disabled_login.status_code == 200
+    assert disabled_login.json().get("ok") is False
+    assert disabled_login.json().get("error") == "disabled"
+
+    enable_res = client.post(
+        "/auth/admin/teacher/set-disabled",
+        headers=admin_headers,
+        json={"target_id": "teacher_alpha", "is_disabled": False},
+    )
+    assert enable_res.status_code == 200
+    assert enable_res.json().get("ok") is True
+    assert enable_res.json().get("is_disabled") is False
+
+    reset_pwd_res = client.post(
+        "/auth/admin/teacher/reset-password",
+        headers=admin_headers,
+        json={"target_id": "teacher_alpha"},
+    )
+    assert reset_pwd_res.status_code == 200
+    reset_payload = reset_pwd_res.json()
+    assert reset_payload.get("ok") is True
+    assert reset_payload.get("generated_password") is True
+    temp_password = str(reset_payload.get("temp_password") or "")
+    assert temp_password
+
+    pwd_login_res = client.post(
+        "/auth/teacher/login",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "password",
+            "credential": temp_password,
+        },
+    )
+    assert pwd_login_res.status_code == 200
+    assert pwd_login_res.json().get("ok") is True

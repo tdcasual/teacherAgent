@@ -27,6 +27,21 @@ docker compose up -d
 
 如果你只想先体验老师侧功能，打开老师端就可以开始。
 
+## 管理员 TUI 入口（无前端）
+管理员可通过命令行交互入口管理教师账号（列表、禁用/启用、重置密码）。
+
+```bash
+# 本机运行（走 API 登录模式）
+python3 scripts/admin_auth_tui.py --base-url http://127.0.0.1:8000
+
+# 容器运行（trusted-local 模式，无需再输管理员用户名/密码）
+docker compose exec api admin_manager
+```
+
+说明：
+- `admin_manager` 默认使用容器内 trusted-local 模式（你已进入容器，视为高信任）。
+- 若 `ADMIN_PASSWORD` 未配置，首次启动后仍会在 `/app/data/auth/admin_bootstrap.txt` 生成管理员初始密码记录，便于审计与回溯。
+
 ## 项目结构（先有方向感）
 - `frontend/`：师生双端前端（老师端 / 学生端）
 - `services/api/`：后端 API 聚合与业务服务

@@ -62,6 +62,7 @@ def _auth_exempt_path(path: str) -> bool:
         "/auth/teacher/identify",
         "/auth/teacher/login",
         "/auth/teacher/set-password",
+        "/auth/admin/login",
     }:
         return True
     if value.startswith("/admin/"):

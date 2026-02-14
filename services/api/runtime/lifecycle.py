@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+from services.api.auth_registry_service import build_auth_registry_store
 from services.api.auth_service import validate_auth_secret_policy
 from services.api.container import build_app_container
 from services.api.logging_config import configure_logging
@@ -19,6 +20,18 @@ async def app_lifespan(_app):
         state.container = build_app_container(core=core)
     validate_auth_secret_policy()
     configure_logging()
+    try:
+        core = getattr(state, "core", None) if state is not None else None
+        data_dir = getattr(core, "DATA_DIR", None)
+        if data_dir is not None:
+            result = build_auth_registry_store(data_dir=data_dir).bootstrap_admin()
+            if result.get("generated_password") and result.get("bootstrap_file"):
+                _log.warning(
+                    "Admin bootstrap created; read credentials from %s",
+                    result.get("bootstrap_file"),
+                )
+    except Exception:
+        _log.error("Admin bootstrap failed", exc_info=True)
     try:
         bootstrap.start_runtime()
     except Exception:

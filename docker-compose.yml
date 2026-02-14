@@ -23,6 +23,8 @@ services:
       - ASSIGNMENT_DETAIL_CACHE_TTL_SEC=${ASSIGNMENT_DETAIL_CACHE_TTL_SEC:-10}
       - DEFAULT_TEACHER_ID=${DEFAULT_TEACHER_ID:-teacher}
       - AUTH_REQUIRED=${AUTH_REQUIRED:-1}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant

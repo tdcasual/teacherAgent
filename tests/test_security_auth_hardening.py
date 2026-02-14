@@ -241,6 +241,107 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(denied.status_code, 403)
             self.assertEqual(denied.json().get("detail"), "forbidden_student_scope")
 
+    def test_assignment_download_enforces_student_scope(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            assignment_dir = root / "data" / "assignments" / "HW_SEC_1"
+            source_dir = assignment_dir / "source"
+            source_dir.mkdir(parents=True, exist_ok=True)
+            (source_dir / "paper.txt").write_text("secret paper", encoding="utf-8")
+            (assignment_dir / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_SEC_1",
+                        "scope": "student",
+                        "student_ids": ["student_b"],
+                        "source_files": ["paper.txt"],
+                        "delivery_mode": "txt",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+
+            denied = client.get(
+                "/assignment/HW_SEC_1/download",
+                headers=attacker_headers,
+                params={"file": "paper.txt"},
+            )
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.json().get("detail"), "forbidden_assignment_scope")
+
+    def test_assignment_detail_enforces_student_scope(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            assignment_dir = root / "data" / "assignments" / "HW_SEC_2"
+            assignment_dir.mkdir(parents=True, exist_ok=True)
+            (assignment_dir / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_SEC_2",
+                        "scope": "student",
+                        "student_ids": ["student_b"],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            attacker_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+
+            denied = client.get("/assignment/HW_SEC_2", headers=attacker_headers)
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.json().get("detail"), "forbidden_assignment_scope")
+
+    def test_student_import_forbids_student_role(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            staging = root / "data" / "staging"
+            staging.mkdir(parents=True, exist_ok=True)
+            (staging / "responses.csv").write_text(
+                "student_id,student_name,class_name,exam_id\nS1,Alice,C1,EX1\n",
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+
+            denied = client.post(
+                "/student/import",
+                headers=student_headers,
+                json={"source": "responses"},
+            )
+            self.assertEqual(denied.status_code, 403)
+            self.assertEqual(denied.json().get("detail"), "forbidden")
+
+    def test_student_import_rejects_outside_file_path(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            outside = root / "outside.csv"
+            outside.write_text(
+                "student_id,student_name,class_name,exam_id\nS1,Alice,C1,EX1\n",
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            teacher_headers = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
+
+            blocked = client.post(
+                "/student/import",
+                headers=teacher_headers,
+                json={"source": "responses", "file_path": str(outside)},
+            )
+            self.assertEqual(blocked.status_code, 400)
+            self.assertEqual(blocked.json().get("detail"), "responses file not found")
+
     def test_teacher_skills_routes_forbid_student_role(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)

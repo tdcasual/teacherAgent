@@ -15,6 +15,19 @@ class StudentImportDeps:
     now_iso: Callable[[], str]
 
 
+def _path_within_root(path: Path, root: Path) -> bool:
+    try:
+        resolved_path = path.resolve()
+        resolved_root = root.resolve()
+    except Exception:
+        return False
+    return resolved_path == resolved_root or resolved_root in resolved_path.parents
+
+
+def _path_allowed(path: Path, *, deps: StudentImportDeps) -> bool:
+    return _path_within_root(path, deps.data_dir) or _path_within_root(path, deps.app_root)
+
+
 def _resolve_exam_manifest_path(data_dir: Path, exam_id: str) -> Optional[Path]:
     root = (data_dir / "exams").resolve()
     eid = str(exam_id or "").strip()
@@ -47,7 +60,13 @@ def resolve_responses_file(
         path = Path(file_path)
         if not path.is_absolute():
             path = deps.app_root / path
-        return path if path.exists() else None
+        try:
+            path = path.resolve()
+        except Exception:
+            return None
+        if not _path_allowed(path, deps=deps):
+            return None
+        return path if path.exists() and path.is_file() else None
 
     if exam_id:
         manifest_path = _resolve_exam_manifest_path(deps.data_dir, str(exam_id or ""))
@@ -64,7 +83,13 @@ def resolve_responses_file(
                         candidate = deps.app_root / candidate
                     else:
                         candidate = deps.data_dir / candidate
-                return candidate if candidate.exists() else None
+                try:
+                    candidate = candidate.resolve()
+                except Exception:
+                    return None
+                if not _path_allowed(candidate, deps=deps):
+                    return None
+                return candidate if candidate.exists() and candidate.is_file() else None
 
     staging_dir = deps.data_dir / "staging"
     if staging_dir.exists():
