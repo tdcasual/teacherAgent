@@ -185,6 +185,26 @@ _TEACHER_ROUTING_PERSISTENT_UI_STATE_HOOK_PATH = (
     / "routing"
     / "useRoutingPersistentUiState.ts"
 )
+_TEACHER_ROUTING_PROVIDER_UI_STATE_HOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "useRoutingProviderUiState.ts"
+)
+_TEACHER_ROUTING_DERIVED_STATE_HOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "useRoutingDerivedState.ts"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -225,8 +245,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 500, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 500). "
+    assert line_count < 470, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 470). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -347,9 +367,16 @@ def test_teacher_routing_history_utils_are_extracted() -> None:
         "Routing history summary/changes helpers should be extracted into "
         "features/routing/routingHistoryUtils.ts."
     )
-    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
-    assert "deriveHistorySummary" in source
-    assert "buildHistoryChangeSummary" in source
+    page_source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    derived_source = (
+        _TEACHER_ROUTING_DERIVED_STATE_HOOK_PATH.read_text(encoding="utf-8")
+        if _TEACHER_ROUTING_DERIVED_STATE_HOOK_PATH.exists()
+        else ""
+    )
+    assert "deriveHistorySummary" in page_source or "deriveHistorySummary" in derived_source
+    assert (
+        "buildHistoryChangeSummary" in page_source or "buildHistoryChangeSummary" in derived_source
+    )
 
 
 def test_teacher_routing_persistent_ui_state_hook_is_extracted() -> None:
@@ -360,3 +387,23 @@ def test_teacher_routing_persistent_ui_state_hook_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "useRoutingPersistentUiState" in source
     assert "useRoutingPersistentUiState(" in source
+
+
+def test_teacher_routing_provider_ui_state_hook_is_extracted() -> None:
+    assert _TEACHER_ROUTING_PROVIDER_UI_STATE_HOOK_PATH.exists(), (
+        "Routing provider panel UI state should be extracted into "
+        "features/routing/useRoutingProviderUiState.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "useRoutingProviderUiState" in source
+    assert "useRoutingProviderUiState(" in source
+
+
+def test_teacher_routing_derived_state_hook_is_extracted() -> None:
+    assert _TEACHER_ROUTING_DERIVED_STATE_HOOK_PATH.exists(), (
+        "Routing live/history derived values should be extracted into "
+        "features/routing/useRoutingDerivedState.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "useRoutingDerivedState" in source
+    assert "useRoutingDerivedState(" in source

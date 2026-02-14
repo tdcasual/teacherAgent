@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRoutingDraftActions } from './useRoutingDraftActions'
 import { useRoutingOverviewSync } from './useRoutingOverviewSync'
 import { useRoutingPersistentUiState } from './useRoutingPersistentUiState'
+import { useRoutingDerivedState } from './useRoutingDerivedState'
+import { useRoutingProviderUiState } from './useRoutingProviderUiState'
 import { useRoutingProviderMutations } from './useRoutingProviderMutations'
 import { useRoutingProposalActions } from './useRoutingProposalActions'
 import { useProviderModels } from './useProviderModels'
 import { cloneConfig } from './routingConfigUtils'
 import { boolMatchFromValue, boolMatchValue, formatList, formatTargetLabel, parseList } from './routingFormattingUtils'
-import { buildHistoryChangeSummary, deriveHistorySummary } from './routingHistoryUtils'
 import RoutingChannelsSection from './RoutingChannelsSection'
 import RoutingDraftActionBar from './RoutingDraftActionBar'
 import RoutingHistorySection from './RoutingHistorySection'
@@ -19,7 +20,6 @@ import type {
   RoutingCatalogProvider,
   RoutingConfig,
   RoutingOverview,
-  TeacherProviderRegistryOverview,
   RoutingProposalDetail,
   RoutingSimulateResult,
 } from './routingTypes'
@@ -68,22 +68,22 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
   const [expandedProposalIds, setExpandedProposalIds] = useState<Record<string, boolean>>({})
   const [proposalDetails, setProposalDetails] = useState<Record<string, RoutingProposalDetail>>({})
   const [proposalLoadingMap, setProposalLoadingMap] = useState<Record<string, boolean>>({})
-  const [providerOverview, setProviderOverview] = useState<TeacherProviderRegistryOverview | null>(null)
-  const [providerBusy, setProviderBusy] = useState(false)
-  const [providerProbeMap, setProviderProbeMap] = useState<Record<string, string>>({})
-  const [providerCreateForm, setProviderCreateForm] = useState({
-    provider_id: '',
-    display_name: '',
-    base_url: '',
-    api_key: '',
-    default_model: '',
-    enabled: true,
-  })
-  const [providerEditMap, setProviderEditMap] = useState<
-    Record<string, { display_name: string; base_url: string; enabled: boolean; api_key: string; default_model: string }>
-  >({})
-  const [providerAddMode, setProviderAddMode] = useState<'' | 'preset' | 'custom'>('')
-  const [providerAddPreset, setProviderAddPreset] = useState('')
+  const {
+    providerOverview,
+    setProviderOverview,
+    providerBusy,
+    setProviderBusy,
+    providerProbeMap,
+    setProviderProbeMap,
+    providerCreateForm,
+    setProviderCreateForm,
+    providerEditMap,
+    setProviderEditMap,
+    providerAddMode,
+    setProviderAddMode,
+    providerAddPreset,
+    setProviderAddPreset,
+  } = useRoutingProviderUiState()
 
   const { modelsMap, fetchModels } = useProviderModels(apiBase, teacherId)
 
@@ -218,48 +218,16 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     }
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pendingProposals = (overview?.proposals || []).filter((item) => item.status === 'pending')
-  const history = useMemo(() => overview?.history || [], [overview?.history])
-
-  const liveRouting = overview?.routing || null
-  const liveEnabledRules = useMemo(
-    () =>
-      [...(liveRouting?.rules || [])]
-        .filter((rule) => rule.enabled !== false)
-        .sort((left, right) => (right.priority || 0) - (left.priority || 0)),
-    [liveRouting?.rules],
-  )
-  const livePrimaryRule = liveEnabledRules[0] || null
-  const livePrimaryChannel = useMemo(() => {
-    const channels = liveRouting?.channels || []
-    const routedChannelId = livePrimaryRule?.route?.channel_id || ''
-    if (routedChannelId) {
-      const matched = channels.find((channel) => channel.id === routedChannelId)
-      if (matched) return matched
-    }
-    return channels[0] || null
-  }, [livePrimaryRule?.route?.channel_id, liveRouting?.channels])
-
-  const liveStatusText = overview?.validation?.errors?.length
-    ? '配置异常'
-    : hasLocalEdits
-      ? '草稿未生效'
-      : '已生效'
-  const liveStatusTone = overview?.validation?.errors?.length ? 'danger' : hasLocalEdits ? 'warn' : 'ok'
-
-  const historyRows = useMemo(
-    () =>
-      history.map((item, index) => {
-        const currentSummary = deriveHistorySummary(item)
-        const previousSummary = history[index + 1] ? deriveHistorySummary(history[index + 1]) : null
-        return {
-          item,
-          summary: currentSummary,
-          changes: buildHistoryChangeSummary(currentSummary, previousSummary),
-        }
-      }),
-    [history],
-  )
+  const {
+    pendingProposals,
+    history,
+    liveRouting,
+    livePrimaryRule,
+    livePrimaryChannel,
+    liveStatusText,
+    liveStatusTone,
+    historyRows,
+  } = useRoutingDerivedState({ overview, hasLocalEdits })
 
   const ruleOrderHint = draft.rules
     .slice()
