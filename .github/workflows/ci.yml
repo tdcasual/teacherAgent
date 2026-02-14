@@ -126,6 +126,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Setup Node.js
+        id: setup-node-frontend-quality
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -133,7 +134,33 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend deps
-        run: npm ci
+        id: install-frontend-deps-quality
+        run: |
+          install_start_epoch="$(date +%s)"
+          npm ci
+          install_end_epoch="$(date +%s)"
+          echo "duration_seconds=$((install_end_epoch - install_start_epoch))" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize frontend dependency install metrics
+        if: always()
+        run: |
+          cache_hit="${{ steps.setup-node-frontend-quality.outputs.cache-hit }}"
+          install_seconds="${{ steps.install-frontend-deps-quality.outputs.duration_seconds }}"
+
+          if [ -z "$cache_hit" ]; then
+            cache_hit="unknown"
+          fi
+          if [ -z "$install_seconds" ]; then
+            install_seconds="n/a"
+          fi
+
+          {
+            echo "### Frontend dependency install metrics"
+            echo ""
+            echo "| Job | Node cache hit | npm ci duration (s) |"
+            echo "| --- | --- | --- |"
+            echo "| ${GITHUB_JOB} | ${cache_hit} | ${install_seconds} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify frontend @types install integrity
         run: npm run check:types-install
@@ -198,6 +225,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Setup Node.js
+        id: setup-node-smoke-e2e
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -205,7 +233,33 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend deps
-        run: npm ci
+        id: install-frontend-deps-smoke-e2e
+        run: |
+          install_start_epoch="$(date +%s)"
+          npm ci
+          install_end_epoch="$(date +%s)"
+          echo "duration_seconds=$((install_end_epoch - install_start_epoch))" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize frontend dependency install metrics
+        if: always()
+        run: |
+          cache_hit="${{ steps.setup-node-smoke-e2e.outputs.cache-hit }}"
+          install_seconds="${{ steps.install-frontend-deps-smoke-e2e.outputs.duration_seconds }}"
+
+          if [ -z "$cache_hit" ]; then
+            cache_hit="unknown"
+          fi
+          if [ -z "$install_seconds" ]; then
+            install_seconds="n/a"
+          fi
+
+          {
+            echo "### Frontend dependency install metrics"
+            echo ""
+            echo "| Job | Node cache hit | npm ci duration (s) |"
+            echo "| --- | --- | --- |"
+            echo "| ${GITHUB_JOB} | ${cache_hit} | ${install_seconds} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
@@ -261,6 +315,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Setup Node.js
+        id: setup-node-student-critical-e2e
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -268,7 +323,33 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend deps
-        run: npm ci
+        id: install-frontend-deps-student-critical-e2e
+        run: |
+          install_start_epoch="$(date +%s)"
+          npm ci
+          install_end_epoch="$(date +%s)"
+          echo "duration_seconds=$((install_end_epoch - install_start_epoch))" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize frontend dependency install metrics
+        if: always()
+        run: |
+          cache_hit="${{ steps.setup-node-student-critical-e2e.outputs.cache-hit }}"
+          install_seconds="${{ steps.install-frontend-deps-student-critical-e2e.outputs.duration_seconds }}"
+
+          if [ -z "$cache_hit" ]; then
+            cache_hit="unknown"
+          fi
+          if [ -z "$install_seconds" ]; then
+            install_seconds="n/a"
+          fi
+
+          {
+            echo "### Frontend dependency install metrics"
+            echo ""
+            echo "| Job | Node cache hit | npm ci duration (s) |"
+            echo "| --- | --- | --- |"
+            echo "| ${GITHUB_JOB} | ${cache_hit} | ${install_seconds} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium

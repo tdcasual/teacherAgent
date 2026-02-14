@@ -31,3 +31,25 @@ def test_frontend_ci_has_types_install_integrity_step() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Verify frontend @types install integrity" in text
     assert "npm run check:types-install" in text
+
+
+def test_frontend_jobs_emit_dependency_install_metrics_summary() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "id: setup-node-frontend-quality" in text
+    assert "id: install-frontend-deps-quality" in text
+    assert "steps.setup-node-frontend-quality.outputs.cache-hit" in text
+    assert "steps.install-frontend-deps-quality.outputs.duration_seconds" in text
+
+    assert "id: setup-node-smoke-e2e" in text
+    assert "id: install-frontend-deps-smoke-e2e" in text
+    assert "steps.setup-node-smoke-e2e.outputs.cache-hit" in text
+    assert "steps.install-frontend-deps-smoke-e2e.outputs.duration_seconds" in text
+
+    assert "id: setup-node-student-critical-e2e" in text
+    assert "id: install-frontend-deps-student-critical-e2e" in text
+    assert "steps.setup-node-student-critical-e2e.outputs.cache-hit" in text
+    assert "steps.install-frontend-deps-student-critical-e2e.outputs.duration_seconds" in text
+
+    assert "Frontend dependency install metrics" in text
+    assert "GITHUB_STEP_SUMMARY" in text
