@@ -1,33 +1,10 @@
-import { defineConfig } from '@playwright/test'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
+import { createAppPlaywrightConfig } from './playwright.shared'
 
-const configDir = path.dirname(fileURLToPath(import.meta.url))
-
-export default defineConfig({
-  testDir: './e2e',
+export default createAppPlaywrightConfig({
   testMatch: ['student-*.spec.ts', 'storage-resilience.spec.ts', 'security-markdown-sanitize.spec.ts'],
-  timeout: 60_000,
-  expect: {
-    timeout: 8_000,
-  },
-  fullyParallel: false,
-  retries: 0,
-  reporter: 'list',
   outputDir: './test-results/student',
-  use: {
-    baseURL: 'http://127.0.0.1:4175',
-    headless: true,
-    viewport: { width: 390, height: 844 },
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
-  },
-  webServer: {
-    command: 'npm run dev:student -- --host 127.0.0.1 --port 4175',
-    cwd: configDir,
-    url: 'http://127.0.0.1:4175',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  baseURL: 'http://127.0.0.1:4175',
+  viewport: { width: 390, height: 844 },
+  webServerCommand: 'npm run dev:student -- --host 127.0.0.1 --port 4175',
+  webServerUrl: 'http://127.0.0.1:4175',
 })

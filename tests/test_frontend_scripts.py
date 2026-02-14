@@ -33,3 +33,22 @@ def test_playwright_configs_use_distinct_output_directories() -> None:
     )
     assert teacher_output_dir.startswith("./test-results/")
     assert student_output_dir.startswith("./test-results/")
+
+
+def test_playwright_configs_use_shared_base_factory() -> None:
+    shared_config = Path("frontend/playwright.shared.ts")
+    teacher_config = Path("frontend/playwright.teacher.config.ts")
+    student_config = Path("frontend/playwright.student.config.ts")
+
+    assert (
+        shared_config.exists()
+    ), "Playwright shared config module should exist at frontend/playwright.shared.ts."
+
+    shared_source = shared_config.read_text(encoding="utf-8")
+    assert "createAppPlaywrightConfig" in shared_source
+
+    teacher_source = teacher_config.read_text(encoding="utf-8")
+    student_source = student_config.read_text(encoding="utf-8")
+
+    assert "createAppPlaywrightConfig" in teacher_source
+    assert "createAppPlaywrightConfig" in student_source
