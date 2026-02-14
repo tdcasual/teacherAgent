@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   createRoutingProposal,
   fetchRoutingProposalDetail,
@@ -6,6 +6,7 @@ import {
   rollbackRoutingConfig,
   simulateRouting,
 } from './routingApi'
+import { useRoutingDraftActions } from './useRoutingDraftActions'
 import { useRoutingOverviewSync } from './useRoutingOverviewSync'
 import { useRoutingProviderMutations } from './useRoutingProviderMutations'
 import { useProviderModels } from './useProviderModels'
@@ -16,14 +17,12 @@ import RoutingRulesSection from './RoutingRulesSection'
 import RoutingSimulateSection from './RoutingSimulateSection'
 import type {
   RoutingCatalogProvider,
-  RoutingChannel,
   RoutingConfig,
   RoutingHistoryItem,
   RoutingHistorySummary,
   RoutingOverview,
   TeacherProviderRegistryOverview,
   RoutingProposalDetail,
-  RoutingRule,
   RoutingSimulateResult,
 } from './routingTypes'
 import { emptyRoutingConfig } from './routingTypes'
@@ -40,8 +39,6 @@ type Props = {
   /** Legacy compatibility mode: render all routing/provider panels in one page */
   legacyFlat?: boolean
 }
-
-const makeId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
 
 const parseList = (value: string) =>
   value
@@ -287,6 +284,30 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
     })
     return map
   }, [providers])
+  const {
+    setDraftWithEdit,
+    handleTeacherIdChange,
+    addChannel,
+    removeChannel,
+    updateChannel,
+    addRule,
+    removeRule,
+    updateRule,
+    handleResetDraft,
+  } = useRoutingDraftActions({
+    teacherId,
+    hasLocalEdits,
+    draft,
+    overview,
+    providers,
+    providerModeMap,
+    cloneConfig,
+    setTeacherId,
+    setDraft,
+    setHasLocalEdits,
+    setStatus,
+    setError,
+  })
 
   // Auto-probe models when channels tab is active (only configured providers)
   useEffect(() => {
@@ -303,93 +324,6 @@ export default function RoutingPage({ apiBase, onApiBaseChange, onDirtyChange, s
       }
     }
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const setDraftWithEdit = useCallback((updater: (prev: RoutingConfig) => RoutingConfig) => {
-    setDraft((prev) => updater(prev))
-    setHasLocalEdits(true)
-  }, [])
-
-  const handleTeacherIdChange = (value: string) => {
-    if (value === teacherId) return
-    if (hasLocalEdits && typeof window !== 'undefined') {
-      const confirmed = window.confirm('切换教师标识会丢弃当前本地草稿，是否继续？')
-      if (!confirmed) return
-    }
-    setTeacherId(value)
-    setHasLocalEdits(false)
-    setStatus('')
-    setError('')
-  }
-
-  const addChannel = () => {
-    const defaultProvider = overview?.catalog?.defaults?.provider || providers[0]?.provider || 'siliconflow'
-    const defaultModes = providerModeMap.get(defaultProvider) || []
-    const defaultMode = overview?.catalog?.defaults?.mode || defaultModes[0] || 'openai-chat'
-    const channel: RoutingChannel = {
-      id: makeId('channel'),
-      title: '新渠道',
-      target: {
-        provider: defaultProvider,
-        mode: defaultMode,
-        model: '',
-      },
-      params: { temperature: null, max_tokens: null },
-      fallback_channels: [],
-      capabilities: { tools: true, json: true },
-    }
-    setDraftWithEdit((prev) => ({ ...prev, channels: [...prev.channels, channel] }))
-  }
-
-  const removeChannel = (index: number) => {
-    setDraftWithEdit((prev) => {
-      const removed = prev.channels[index]
-      const nextChannels = prev.channels.filter((_, i) => i !== index)
-      const fallbackChannelId = nextChannels[0]?.id || ''
-      const nextRules = prev.rules.map((rule) => {
-        if ((rule.route?.channel_id || '') !== (removed?.id || '')) return rule
-        return { ...rule, route: { channel_id: fallbackChannelId } }
-      })
-      return { ...prev, channels: nextChannels, rules: nextRules }
-    })
-  }
-
-  const updateChannel = (index: number, updater: (channel: RoutingChannel) => RoutingChannel) => {
-    setDraftWithEdit((prev) => ({
-      ...prev,
-      channels: prev.channels.map((channel, idx) => (idx === index ? updater(channel) : channel)),
-    }))
-  }
-
-  const addRule = () => {
-    const firstChannelId = draft.channels[0]?.id || ''
-    const rule: RoutingRule = {
-      id: makeId('rule'),
-      priority: 100,
-      enabled: true,
-      match: { roles: ['teacher'], skills: [], kinds: [], needs_tools: undefined, needs_json: undefined },
-      route: { channel_id: firstChannelId },
-    }
-    setDraftWithEdit((prev) => ({ ...prev, rules: [...prev.rules, rule] }))
-  }
-
-  const removeRule = (index: number) => {
-    setDraftWithEdit((prev) => ({ ...prev, rules: prev.rules.filter((_, idx) => idx !== index) }))
-  }
-
-  const updateRule = (index: number, updater: (rule: RoutingRule) => RoutingRule) => {
-    setDraftWithEdit((prev) => ({
-      ...prev,
-      rules: prev.rules.map((rule, idx) => (idx === index ? updater(rule) : rule)),
-    }))
-  }
-
-  const handleResetDraft = () => {
-    if (!overview) return
-    setDraft(cloneConfig(overview.routing || emptyRoutingConfig()))
-    setHasLocalEdits(false)
-    setStatus('已恢复为线上配置。')
-    setError('')
-  }
 
   const handleSimulate = async () => {
     setBusy(true)

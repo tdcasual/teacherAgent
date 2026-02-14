@@ -115,6 +115,16 @@ _TEACHER_ROUTING_PROVIDER_MUTATIONS_HOOK_PATH = (
     / "routing"
     / "useRoutingProviderMutations.ts"
 )
+_TEACHER_ROUTING_DRAFT_ACTIONS_HOOK_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "frontend"
+    / "apps"
+    / "teacher"
+    / "src"
+    / "features"
+    / "routing"
+    / "useRoutingDraftActions.ts"
+)
 
 
 def test_teacher_app_line_budget() -> None:
@@ -155,8 +165,8 @@ def test_teacher_persona_manager_component_exists_and_is_mounted() -> None:
 def test_teacher_routing_page_line_budget() -> None:
     lines = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 900, (
-        f"teacher RoutingPage.tsx is {line_count} lines (limit 900). "
+    assert line_count < 780, (
+        f"teacher RoutingPage.tsx is {line_count} lines (limit 780). "
         "Split routing sections into focused sub-components and hooks."
     )
 
@@ -221,3 +231,13 @@ def test_teacher_routing_provider_mutations_hook_is_extracted() -> None:
     source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
     assert "useRoutingProviderMutations" in source
     assert "useRoutingProviderMutations(" in source
+
+
+def test_teacher_routing_draft_actions_hook_is_extracted() -> None:
+    assert _TEACHER_ROUTING_DRAFT_ACTIONS_HOOK_PATH.exists(), (
+        "Routing draft action logic should be extracted into "
+        "features/routing/useRoutingDraftActions.ts."
+    )
+    source = _TEACHER_ROUTING_PAGE_PATH.read_text(encoding="utf-8")
+    assert "useRoutingDraftActions" in source
+    assert "useRoutingDraftActions(" in source
