@@ -319,6 +319,8 @@ class AuthRegistryStore:
             if row is None:
                 if cred_type == "password":
                     _consume_dummy_password_verify(cred)
+                elif cred_type == "token":
+                    _consume_dummy_token_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -330,6 +332,8 @@ class AuthRegistryStore:
             if int(row["is_disabled"] or 0) == 1:
                 if cred_type == "password":
                     _consume_dummy_password_verify(cred)
+                elif cred_type == "token":
+                    _consume_dummy_token_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -344,6 +348,8 @@ class AuthRegistryStore:
                 retry_after = int((lock_until - now).total_seconds())
                 if cred_type == "password":
                     _consume_dummy_password_verify(cred)
+                elif cred_type == "token":
+                    _consume_dummy_token_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -1572,6 +1578,15 @@ def _dummy_password_hash() -> str:
 
 def _consume_dummy_password_verify(candidate_password: str) -> None:
     _verify_password(str(candidate_password or ""), _dummy_password_hash())
+
+
+@lru_cache(maxsize=1)
+def _dummy_token_hash() -> str:
+    return _hash_token("dummy-token-not-used-for-auth")
+
+
+def _consume_dummy_token_verify(candidate_token: str) -> None:
+    _constant_time_eq(_hash_token(str(candidate_token or "")), _dummy_token_hash())
 
 
 def _credential_pepper() -> str:

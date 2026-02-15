@@ -833,6 +833,79 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(res.json().get("error"), "invalid_credential")
             self.assertGreaterEqual(verify_mock.call_count, 1)
 
+    def test_teacher_token_not_found_path_uses_dummy_hash_to_reduce_timing_leak(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            import services.api.auth_registry_service as registry_mod
+
+            with patch(
+                "services.api.auth_registry_service._hash_token",
+                wraps=registry_mod._hash_token,
+            ) as hash_mock:
+                res = client.post(
+                    "/auth/teacher/login",
+                    json={
+                        "candidate_id": "teacher_not_exists",
+                        "credential_type": "token",
+                        "credential": "dummy-token",
+                    },
+                )
+
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json().get("ok"), False)
+            self.assertEqual(res.json().get("error"), "invalid_credential")
+            self.assertGreaterEqual(hash_mock.call_count, 1)
+
+    def test_teacher_token_disabled_path_uses_dummy_hash_to_reduce_timing_leak(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            teacher_root = root / "data" / "teacher_workspaces" / "teacher_alpha"
+            teacher_root.mkdir(parents=True, exist_ok=True)
+            (teacher_root / "USER.md").write_text(
+                "# Teacher Profile\n- name: 张老师\n- email: alpha@example.com\n",
+                encoding="utf-8",
+            )
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+
+            warmup = client.post(
+                "/auth/admin/teacher/export-tokens",
+                headers=admin_headers,
+                json={"ids": ["teacher_alpha"]},
+            )
+            self.assertEqual(warmup.status_code, 200)
+
+            disable_res = client.post(
+                "/auth/admin/teacher/set-disabled",
+                headers=admin_headers,
+                json={"target_id": "teacher_alpha", "is_disabled": True},
+            )
+            self.assertEqual(disable_res.status_code, 200)
+            self.assertEqual(disable_res.json().get("ok"), True)
+
+            import services.api.auth_registry_service as registry_mod
+
+            with patch(
+                "services.api.auth_registry_service._hash_token",
+                wraps=registry_mod._hash_token,
+            ) as hash_mock:
+                res = client.post(
+                    "/auth/teacher/login",
+                    json={
+                        "candidate_id": "teacher_alpha",
+                        "credential_type": "token",
+                        "credential": "dummy-token",
+                    },
+                )
+
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json().get("ok"), False)
+            self.assertEqual(res.json().get("error"), "invalid_credential")
+            self.assertGreaterEqual(hash_mock.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
