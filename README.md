@@ -49,11 +49,14 @@ docker compose up -d api
 ## 进阶文档
 - 快速开始扩展版：`docs/getting-started/quickstart.md`
 - 操作手册总览：`docs/how-to/INDEX.md`
+- 贡献与变更流程：`CONTRIBUTING.md`
+- 安全披露与处置：`SECURITY.md`
 - HTTP API：`docs/http_api.md`
 - MCP API：`docs/mcp_api.md`
 - 权限与认证参考：`docs/reference/permissions-and-security.md`
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`
 - 风险与接受清单：`docs/reference/risk-register.md`
+- 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`

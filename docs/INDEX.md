@@ -21,6 +21,9 @@
 - 模块边界：`docs/architecture/module-boundaries.md`
 - 责任归属：`docs/architecture/ownership-map.md`
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
+- 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
+- 贡献规范：`CONTRIBUTING.md`
+- 安全策略：`SECURITY.md`
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`
 - 风险与接受清单：`docs/reference/risk-register.md`
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
