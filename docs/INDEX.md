@@ -25,6 +25,8 @@
 - 风险与接受清单：`docs/reference/risk-register.md`
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
+- 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
+- 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 
 ## 设计与演进
 - 历史设计与实现文档：`docs/plans/`
