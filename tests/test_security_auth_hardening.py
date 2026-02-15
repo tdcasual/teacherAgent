@@ -586,6 +586,61 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertIn("'=2+3", csv_text)
             self.assertIn("'+classA", csv_text)
 
+    def test_teacher_login_masks_not_found_and_disabled_as_invalid_credential(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            teacher_root = root / "data" / "teacher_workspaces" / "teacher_alpha"
+            teacher_root.mkdir(parents=True, exist_ok=True)
+            (teacher_root / "USER.md").write_text(
+                "# Teacher Profile\n- name: 张老师\n- email: alpha@example.com\n",
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+
+            export_res = client.post(
+                "/auth/admin/teacher/export-tokens",
+                headers=admin_headers,
+                json={"ids": ["teacher_alpha"]},
+            )
+            self.assertEqual(export_res.status_code, 200)
+            token = str((export_res.json().get("items") or [{}])[0].get("token") or "")
+            self.assertTrue(token)
+
+            not_found = client.post(
+                "/auth/teacher/login",
+                json={
+                    "candidate_id": "teacher_not_exist",
+                    "credential_type": "token",
+                    "credential": token,
+                },
+            )
+            self.assertEqual(not_found.status_code, 200)
+            self.assertEqual(not_found.json().get("ok"), False)
+            self.assertEqual(not_found.json().get("error"), "invalid_credential")
+
+            disable_res = client.post(
+                "/auth/admin/teacher/set-disabled",
+                headers=admin_headers,
+                json={"target_id": "teacher_alpha", "is_disabled": True},
+            )
+            self.assertEqual(disable_res.status_code, 200)
+            self.assertEqual(disable_res.json().get("ok"), True)
+
+            disabled = client.post(
+                "/auth/teacher/login",
+                json={
+                    "candidate_id": "teacher_alpha",
+                    "credential_type": "token",
+                    "credential": token,
+                },
+            )
+            self.assertEqual(disabled.status_code, 200)
+            self.assertEqual(disabled.json().get("ok"), False)
+            self.assertEqual(disabled.json().get("error"), "invalid_credential")
+
 
 if __name__ == "__main__":
     unittest.main()

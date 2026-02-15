@@ -21,6 +21,21 @@ from ..auth_registry_service import build_auth_registry_store
 from ..auth_service import AuthError, access_token_ttl_sec, mint_access_token, require_principal
 
 
+def _mask_login_failure(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("ok"):
+        return payload
+    error = str(payload.get("error") or "")
+    if error in {
+        "missing_candidate_id",
+        "invalid_credential_type",
+        "missing_credential",
+        "missing_username",
+        "missing_password",
+    }:
+        return payload
+    return {"ok": False, "error": "invalid_credential"}
+
+
 def _admin_actor() -> tuple[str, str]:
     try:
         principal = require_principal(roles=("admin",))
@@ -48,7 +63,7 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             credential=req.credential,
         )
         if not login_result.get("ok"):
-            return login_result
+            return _mask_login_failure(login_result)
         token_version = int(login_result.get("token_version") or 1)
         subject_id = str(login_result.get("subject_id") or "").strip()
         token = mint_access_token(
@@ -94,7 +109,7 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             credential=req.credential,
         )
         if not login_result.get("ok"):
-            return login_result
+            return _mask_login_failure(login_result)
         token_version = int(login_result.get("token_version") or 1)
         subject_id = str(login_result.get("subject_id") or "").strip()
         token = mint_access_token(
@@ -130,7 +145,7 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
         store = build_auth_registry_store(data_dir=core.DATA_DIR)
         login_result = store.login_admin(username=req.username, password=req.password)
         if not login_result.get("ok"):
-            return login_result
+            return _mask_login_failure(login_result)
         subject_id = str(login_result.get("subject_id") or "").strip()
         try:
             token = mint_access_token(subject_id=subject_id, role="admin")

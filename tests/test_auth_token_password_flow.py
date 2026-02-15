@@ -50,7 +50,9 @@ def _load_app(
     return app_mod
 
 
-def _write_student_profile(base: Path, *, student_id: str, student_name: str, class_name: str) -> None:
+def _write_student_profile(
+    base: Path, *, student_id: str, student_name: str, class_name: str
+) -> None:
     profiles_dir = base / "data" / "student_profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -329,7 +331,7 @@ def test_admin_bootstrap_login_and_manage_teacher_accounts(tmp_path: Path):
     )
     assert disabled_login.status_code == 200
     assert disabled_login.json().get("ok") is False
-    assert disabled_login.json().get("error") == "disabled"
+    assert disabled_login.json().get("error") == "invalid_credential"
 
     enable_res = client.post(
         "/auth/admin/teacher/set-disabled",
