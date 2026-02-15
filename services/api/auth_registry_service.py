@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -316,6 +317,8 @@ class AuthRegistryStore:
                 (sid,),
             ).fetchone()
             if row is None:
+                if cred_type == "password":
+                    _consume_dummy_password_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -325,6 +328,8 @@ class AuthRegistryStore:
                 )
                 return {"ok": False, "error": "not_found"}
             if int(row["is_disabled"] or 0) == 1:
+                if cred_type == "password":
+                    _consume_dummy_password_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -337,6 +342,8 @@ class AuthRegistryStore:
             lock_until = _parse_ts(str(row["locked_until"] or ""))
             if lock_until is not None and lock_until > now:
                 retry_after = int((lock_until - now).total_seconds())
+                if cred_type == "password":
+                    _consume_dummy_password_verify(cred)
                 self._append_login_attempt(
                     conn,
                     role=role_norm,
@@ -357,6 +364,7 @@ class AuthRegistryStore:
             else:
                 pwd_hash = str(row["password_hash"] or "")
                 if not pwd_hash:
+                    _consume_dummy_password_verify(cred)
                     self._append_login_attempt(
                         conn,
                         role=role_norm,
@@ -521,6 +529,7 @@ class AuthRegistryStore:
                 (normalize(user_input),),
             ).fetchone()
             if row is None:
+                _consume_dummy_password_verify(pwd_input)
                 self._append_login_attempt(
                     conn,
                     role="admin",
@@ -530,6 +539,7 @@ class AuthRegistryStore:
                 )
                 return {"ok": False, "error": "not_found"}
             if int(row["is_disabled"] or 0) == 1:
+                _consume_dummy_password_verify(pwd_input)
                 self._append_login_attempt(
                     conn,
                     role="admin",
@@ -542,6 +552,7 @@ class AuthRegistryStore:
             lock_until = _parse_ts(str(row["locked_until"] or ""))
             if lock_until is not None and lock_until > now:
                 retry_after = int((lock_until - now).total_seconds())
+                _consume_dummy_password_verify(pwd_input)
                 self._append_login_attempt(
                     conn,
                     role="admin",
@@ -1551,6 +1562,16 @@ def _audit_subject_id(value: str) -> str:
     if len(text) <= max_len:
         return text
     return text[:max_len]
+
+
+@lru_cache(maxsize=1)
+def _dummy_password_hash() -> str:
+    # Cached once to avoid repeatedly burning CPU just to construct a dummy hash.
+    return _hash_password("dummy-password-not-used-for-auth")
+
+
+def _consume_dummy_password_verify(candidate_password: str) -> None:
+    _verify_password(str(candidate_password or ""), _dummy_password_hash())
 
 
 def _credential_pepper() -> str:

@@ -11,6 +11,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -782,6 +783,55 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(detail.get("result"), "candidate_id_too_long")
             self.assertEqual(detail.get("input_len"), 5006)
             self.assertLessEqual(len(target_id), 128)
+
+    def test_teacher_password_not_found_path_uses_dummy_verify_to_reduce_timing_leak(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            import services.api.auth_registry_service as registry_mod
+
+            with patch(
+                "services.api.auth_registry_service._verify_password",
+                wraps=registry_mod._verify_password,
+            ) as verify_mock:
+                res = client.post(
+                    "/auth/teacher/login",
+                    json={
+                        "candidate_id": "teacher_not_exists",
+                        "credential_type": "password",
+                        "credential": "Abcd1234",
+                    },
+                )
+
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json().get("ok"), False)
+            self.assertEqual(res.json().get("error"), "invalid_credential")
+            self.assertGreaterEqual(verify_mock.call_count, 1)
+
+    def test_admin_not_found_path_uses_dummy_verify_to_reduce_timing_leak(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            import services.api.auth_registry_service as registry_mod
+
+            with patch(
+                "services.api.auth_registry_service._verify_password",
+                wraps=registry_mod._verify_password,
+            ) as verify_mock:
+                res = client.post(
+                    "/auth/admin/login",
+                    json={
+                        "username": "admin_not_exists",
+                        "password": "Abcd1234",
+                    },
+                )
+
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json().get("ok"), False)
+            self.assertEqual(res.json().get("error"), "invalid_credential")
+            self.assertGreaterEqual(verify_mock.call_count, 1)
 
 
 if __name__ == "__main__":
