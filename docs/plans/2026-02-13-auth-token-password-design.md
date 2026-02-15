@@ -1,4 +1,5 @@
 # 学生/教师 Token + 密码认证改造设计
+提炼去向：`docs/reference/auth-and-token-model.md`、`docs/reference/permissions-and-security.md`
 
 日期：2026-02-13  
 状态：已评审确认（设计阶段）  

@@ -1,4 +1,5 @@
 # Backend Quality Hardening Report (Interim)
+提炼去向：`docs/explain/backend-quality-hardening-overview.md`
 
 Date: 2026-02-12
 Scope: Week 1 + Week 2 Task 8 + Phase-2 continuation snapshot

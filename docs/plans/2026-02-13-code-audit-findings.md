@@ -1,4 +1,5 @@
 # 全栈代码审计发现报告（执行中）
+提炼去向：`docs/reference/risk-register.md`
 
 日期: 2026-02-13  
 分支: `codex/code-audit-batch1`  
