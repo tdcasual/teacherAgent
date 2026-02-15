@@ -40,6 +40,8 @@ docker compose exec api admin_manager
 
 说明：
 - `admin_manager` 默认使用容器内 trusted-local 模式（你已进入容器，视为高信任）。
+- 新版是命令面板模式，支持过滤、分页、选择器与批量动作。
+- 常用命令：`h`、`f q 张老师`、`sel add 1,3-5`、`batch disable`、`batch reset auto`、`r`。
 - 若 `ADMIN_PASSWORD` 未配置，首次启动后仍会在 `/app/data/auth/admin_bootstrap.txt` 生成管理员初始密码记录，便于审计与回溯。
 
 ## 项目结构（先有方向感）
