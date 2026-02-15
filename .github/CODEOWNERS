@@ -1,0 +1,15 @@
+# Global fallback
+* @tdcasual
+
+# Backend API
+/services/api/ @tdcasual
+/tests/ @tdcasual
+
+# Frontend applications
+/frontend/ @tdcasual
+
+# Documentation and governance
+/docs/ @tdcasual
+/README.md @tdcasual
+/CONTRIBUTING.md @tdcasual
+/SECURITY.md @tdcasual

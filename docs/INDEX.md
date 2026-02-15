@@ -22,6 +22,7 @@
 - 责任归属：`docs/architecture/ownership-map.md`
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
+- 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
 - 安全策略：`SECURITY.md`
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`

@@ -57,6 +57,7 @@ docker compose up -d api
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`
 - 风险与接受清单：`docs/reference/risk-register.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
+- 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
