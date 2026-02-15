@@ -79,6 +79,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         "MASTER_KEY_DEV_DEFAULT",
         "AUTH_REQUIRED",
         "AUTH_TOKEN_SECRET",
+        "AUTH_CREDENTIAL_MAX_LEN",
+        "AUTH_SUBJECT_ID_MAX_LEN",
         "TENANT_ADMIN_KEY",
         "TENANT_DB_PATH",
     ]
@@ -905,6 +907,18 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(res.json().get("ok"), False)
             self.assertEqual(res.json().get("error"), "invalid_credential")
             self.assertGreaterEqual(hash_mock.call_count, 1)
+
+    def test_credential_max_len_env_is_bounded_to_security_ceiling(self):
+        import services.api.auth_registry_service as registry_mod
+
+        os.environ["AUTH_CREDENTIAL_MAX_LEN"] = "2000000"
+        self.assertEqual(registry_mod._max_credential_len(), 8192)
+
+    def test_subject_id_max_len_env_is_bounded_to_security_ceiling(self):
+        import services.api.auth_registry_service as registry_mod
+
+        os.environ["AUTH_SUBJECT_ID_MAX_LEN"] = "1000000"
+        self.assertEqual(registry_mod._max_subject_id_len(), 512)
 
 
 if __name__ == "__main__":

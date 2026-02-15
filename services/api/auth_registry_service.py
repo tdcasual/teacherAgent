@@ -1549,17 +1549,41 @@ def _lock_minutes() -> int:
 
 
 def _max_credential_len() -> int:
-    try:
-        return max(256, int(str(os.getenv("AUTH_CREDENTIAL_MAX_LEN", "2048") or "2048")))
-    except Exception:
-        return 2048
+    return _bounded_env_int(
+        "AUTH_CREDENTIAL_MAX_LEN",
+        default=2048,
+        min_value=256,
+        max_value=8192,
+    )
 
 
 def _max_subject_id_len() -> int:
+    return _bounded_env_int(
+        "AUTH_SUBJECT_ID_MAX_LEN",
+        default=128,
+        min_value=32,
+        max_value=512,
+    )
+
+
+def _bounded_env_int(
+    name: str,
+    *,
+    default: int,
+    min_value: int,
+    max_value: Optional[int] = None,
+) -> int:
+    base = max(int(min_value), int(default))
+    if max_value is not None:
+        base = min(base, int(max_value))
     try:
-        return max(32, int(str(os.getenv("AUTH_SUBJECT_ID_MAX_LEN", "128") or "128")))
+        parsed = int(str(os.getenv(name, str(default)) or str(default)))
     except Exception:
-        return 128
+        return base
+    bounded = max(int(min_value), parsed)
+    if max_value is not None:
+        bounded = min(bounded, int(max_value))
+    return bounded
 
 
 def _audit_subject_id(value: str) -> str:
