@@ -552,6 +552,40 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertIn("invalid_credential", results)
             self.assertIn("success", results)
 
+    def test_export_tokens_csv_blocks_spreadsheet_formula_injection(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            profiles = root / "data" / "student_profiles"
+            profiles.mkdir(parents=True, exist_ok=True)
+            (profiles / "student_formula.json").write_text(
+                json.dumps(
+                    {
+                        "student_id": "student_formula",
+                        "student_name": "=2+3",
+                        "class_name": "+classA",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+
+            export_res = client.post(
+                "/auth/admin/student/export-tokens",
+                headers=admin_headers,
+                json={"ids": ["student_formula"]},
+            )
+            self.assertEqual(export_res.status_code, 200)
+            payload = export_res.json()
+            self.assertEqual(payload.get("ok"), True)
+            csv_text = str(payload.get("csv") or "")
+            self.assertIn("student_id,student_name,class_name,token", csv_text)
+            self.assertIn("'=2+3", csv_text)
+            self.assertIn("'+classA", csv_text)
+
 
 if __name__ == "__main__":
     unittest.main()

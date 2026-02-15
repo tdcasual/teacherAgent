@@ -1368,10 +1368,10 @@ class AuthRegistryStore:
             for item in items:
                 writer.writerow(
                     [
-                        str(item.get("student_id") or ""),
-                        str(item.get("student_name") or ""),
-                        str(item.get("class_name") or ""),
-                        str(item.get("token") or ""),
+                        _csv_safe(str(item.get("student_id") or "")),
+                        _csv_safe(str(item.get("student_name") or "")),
+                        _csv_safe(str(item.get("class_name") or "")),
+                        _csv_safe(str(item.get("token") or "")),
                     ]
                 )
         else:
@@ -1379,10 +1379,10 @@ class AuthRegistryStore:
             for item in items:
                 writer.writerow(
                     [
-                        str(item.get("teacher_id") or ""),
-                        str(item.get("teacher_name") or ""),
-                        str(item.get("email") or ""),
-                        str(item.get("token") or ""),
+                        _csv_safe(str(item.get("teacher_id") or "")),
+                        _csv_safe(str(item.get("teacher_name") or "")),
+                        _csv_safe(str(item.get("email") or "")),
+                        _csv_safe(str(item.get("token") or "")),
                     ]
                 )
         return output.getvalue()
@@ -1513,6 +1513,15 @@ def _token_hint(token: str) -> str:
 
 def _constant_time_eq(left: str, right: str) -> bool:
     return hmac.compare_digest(str(left or ""), str(right or ""))
+
+
+def _csv_safe(value: str) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+    if text[0] in {"=", "+", "-", "@"}:
+        return f"'{text}"
+    return text
 
 
 def _hash_password(password: str) -> str:
