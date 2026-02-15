@@ -122,9 +122,7 @@ class AuthRegistryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_student_name_class ON student_auth(name_norm, class_norm)"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_teacher_name ON teacher_auth(name_norm)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_teacher_name ON teacher_auth(name_norm)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_teacher_name_email ON teacher_auth(name_norm, email_norm)"
             )
@@ -147,9 +145,7 @@ class AuthRegistryStore:
         ]
         if class_norm:
             profiles = [
-                item
-                for item in profiles
-                if normalize(item.get("class_name", "")) == class_norm
+                item for item in profiles if normalize(item.get("class_name", "")) == class_norm
             ]
 
         if not profiles:
@@ -218,11 +214,7 @@ class AuthRegistryStore:
             )
 
         if email_norm:
-            rows = [
-                row
-                for row in rows
-                if normalize(str(row["email"] or "")) == email_norm
-            ]
+            rows = [row for row in rows if normalize(str(row["email"] or "")) == email_norm]
 
         if not rows:
             msg = "未找到该教师，请检查姓名或邮箱。" if q_email else "未找到该教师，请检查姓名。"
@@ -294,13 +286,35 @@ class AuthRegistryStore:
                 (sid,),
             ).fetchone()
             if row is None:
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="not_found",
+                )
                 return {"ok": False, "error": "not_found"}
             if int(row["is_disabled"] or 0) == 1:
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="disabled",
+                )
                 return {"ok": False, "error": "disabled"}
 
             lock_until = _parse_ts(str(row["locked_until"] or ""))
             if lock_until is not None and lock_until > now:
                 retry_after = int((lock_until - now).total_seconds())
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="locked",
+                    detail={"retry_after_sec": max(1, retry_after)},
+                )
                 return {
                     "ok": False,
                     "error": "locked",
@@ -313,11 +327,33 @@ class AuthRegistryStore:
             else:
                 pwd_hash = str(row["password_hash"] or "")
                 if not pwd_hash:
+                    self._append_login_attempt(
+                        conn,
+                        role=role_norm,
+                        candidate_id=sid,
+                        credential_type=cred_type,
+                        result="password_not_set",
+                    )
                     return {"ok": False, "error": "password_not_set"}
                 valid = _verify_password(cred, pwd_hash)
 
             if not valid:
-                self._record_failed_login(conn, table=table, id_field=id_field, subject_id=sid, current_failed=int(row["failed_count"] or 0), now=now)
+                failed_state = self._record_failed_login(
+                    conn,
+                    table=table,
+                    id_field=id_field,
+                    subject_id=sid,
+                    current_failed=int(row["failed_count"] or 0),
+                    now=now,
+                )
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="invalid_credential",
+                    detail=failed_state,
+                )
                 return {"ok": False, "error": "invalid_credential"}
 
             conn.execute(
@@ -326,6 +362,13 @@ class AuthRegistryStore:
                     f"WHERE {id_field} = ?"
                 ),
                 (_iso(now), sid),
+            )
+            self._append_login_attempt(
+                conn,
+                role=role_norm,
+                candidate_id=sid,
+                credential_type=cred_type,
+                result="success",
             )
 
             result: Dict[str, Any] = {
@@ -418,13 +461,35 @@ class AuthRegistryStore:
                 (normalize(user_input),),
             ).fetchone()
             if row is None:
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=user_input,
+                    credential_type="password",
+                    result="not_found",
+                )
                 return {"ok": False, "error": "not_found"}
             if int(row["is_disabled"] or 0) == 1:
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=str(row["admin_username"] or user_input),
+                    credential_type="password",
+                    result="disabled",
+                )
                 return {"ok": False, "error": "disabled"}
 
             lock_until = _parse_ts(str(row["locked_until"] or ""))
             if lock_until is not None and lock_until > now:
                 retry_after = int((lock_until - now).total_seconds())
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=str(row["admin_username"] or user_input),
+                    credential_type="password",
+                    result="locked",
+                    detail={"retry_after_sec": max(1, retry_after)},
+                )
                 return {
                     "ok": False,
                     "error": "locked",
@@ -433,13 +498,21 @@ class AuthRegistryStore:
 
             pwd_hash = str(row["password_hash"] or "")
             if not pwd_hash or not _verify_password(pwd_input, pwd_hash):
-                self._record_failed_login(
+                failed_state = self._record_failed_login(
                     conn,
                     table="admin_auth",
                     id_field="admin_username",
                     subject_id=str(row["admin_username"] or ""),
                     current_failed=int(row["failed_count"] or 0),
                     now=now,
+                )
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=str(row["admin_username"] or user_input),
+                    credential_type="password",
+                    result="invalid_credential",
+                    detail=failed_state,
                 )
                 return {"ok": False, "error": "invalid_credential"}
 
@@ -450,6 +523,13 @@ class AuthRegistryStore:
                     "WHERE admin_username = ?"
                 ),
                 (_iso(now), admin_username),
+            )
+            self._append_login_attempt(
+                conn,
+                role="admin",
+                candidate_id=admin_username,
+                credential_type="password",
+                result="success",
             )
 
         return {
@@ -801,11 +881,7 @@ class AuthRegistryStore:
         if role_norm not in {"student", "teacher"}:
             return {"ok": False, "error": "invalid_role"}
 
-        id_filter = {
-            str(item or "").strip()
-            for item in (ids or [])
-            if str(item or "").strip()
-        }
+        id_filter = {str(item or "").strip() for item in (ids or []) if str(item or "").strip()}
 
         items: List[Dict[str, Any]] = []
         if role_norm == "student":
@@ -918,7 +994,7 @@ class AuthRegistryStore:
         subject_id: str,
         current_failed: int,
         now: datetime,
-    ) -> None:
+    ) -> Dict[str, Any]:
         threshold = _lock_threshold()
         lock_minutes = _lock_minutes()
         next_failed = max(0, int(current_failed)) + 1
@@ -932,6 +1008,36 @@ class AuthRegistryStore:
                 f"WHERE {id_field} = ?"
             ),
             (next_failed, locked_until, _iso(now), subject_id),
+        )
+        return {
+            "failed_count": int(next_failed),
+            "locked_until": str(locked_until or ""),
+        }
+
+    def _append_login_attempt(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        role: str,
+        candidate_id: str,
+        credential_type: str,
+        result: str,
+        detail: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        payload: Dict[str, Any] = {
+            "credential_type": str(credential_type or "").strip().lower(),
+            "result": str(result or "").strip().lower(),
+        }
+        if detail:
+            payload.update(detail)
+        self._append_audit(
+            conn,
+            actor_id=str(candidate_id or "").strip(),
+            actor_role=str(role or "").strip().lower(),
+            action="login_attempt",
+            target_id=str(candidate_id or "").strip(),
+            target_role=str(role or "").strip().lower(),
+            detail=payload,
         )
 
     def _append_audit(
@@ -1294,7 +1400,9 @@ def build_auth_registry_store(*, data_dir: Optional[Path] = None) -> AuthRegistr
 
 def validate_subject_token_version(*, role: str, subject_id: str, token_version: int) -> bool:
     store = build_auth_registry_store()
-    return store.token_version_matches(role=role, subject_id=subject_id, token_version=token_version)
+    return store.token_version_matches(
+        role=role, subject_id=subject_id, token_version=token_version
+    )
 
 
 def validate_password_strength(password: str) -> Optional[str]:

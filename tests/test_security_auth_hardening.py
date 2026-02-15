@@ -4,6 +4,7 @@ import importlib
 import json
 import os
 import socket
+import sqlite3
 import threading
 import time
 import unittest
@@ -477,6 +478,79 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             )
             self.assertEqual(denied_confirm.status_code, 403)
             self.assertEqual(denied_confirm.json().get("detail"), "forbidden_upload_job")
+
+    def test_student_login_attempts_are_written_to_auth_audit_log(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            profiles = root / "data" / "student_profiles"
+            profiles.mkdir(parents=True, exist_ok=True)
+            (profiles / "student_a.json").write_text(
+                json.dumps(
+                    {
+                        "student_id": "student_a",
+                        "student_name": "小明",
+                        "class_name": "高二(1)班",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+
+            export_res = client.post(
+                "/auth/admin/student/export-tokens",
+                headers=admin_headers,
+                json={"ids": ["student_a"]},
+            )
+            self.assertEqual(export_res.status_code, 200)
+            token = str((export_res.json().get("items") or [{}])[0].get("token") or "")
+            self.assertTrue(token)
+
+            bad_login = client.post(
+                "/auth/student/login",
+                json={
+                    "candidate_id": "student_a",
+                    "credential_type": "token",
+                    "credential": "invalid-token",
+                },
+            )
+            self.assertEqual(bad_login.status_code, 200)
+            self.assertEqual(bad_login.json().get("ok"), False)
+
+            good_login = client.post(
+                "/auth/student/login",
+                json={
+                    "candidate_id": "student_a",
+                    "credential_type": "token",
+                    "credential": token,
+                },
+            )
+            self.assertEqual(good_login.status_code, 200)
+            self.assertEqual(good_login.json().get("ok"), True)
+
+            db_path = root / "data" / "auth" / "auth_registry.sqlite3"
+            self.assertTrue(db_path.exists())
+            with sqlite3.connect(db_path) as conn:
+                rows = conn.execute(
+                    (
+                        "SELECT detail_json FROM auth_audit_log "
+                        "WHERE action = 'login_attempt' "
+                        "AND target_role = 'student' AND target_id = ? "
+                        "ORDER BY id"
+                    ),
+                    ("student_a",),
+                ).fetchall()
+
+            self.assertGreaterEqual(len(rows), 2)
+            results = []
+            for (detail_json,) in rows:
+                detail = json.loads(str(detail_json or "{}"))
+                results.append(str(detail.get("result") or ""))
+            self.assertIn("invalid_credential", results)
+            self.assertIn("success", results)
 
 
 if __name__ == "__main__":
