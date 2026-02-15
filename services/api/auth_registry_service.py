@@ -278,6 +278,36 @@ class AuthRegistryStore:
             return {"ok": False, "error": "invalid_credential_type"}
         if not cred:
             return {"ok": False, "error": "missing_credential"}
+        max_subject_id_len = _max_subject_id_len()
+        if len(sid) > max_subject_id_len:
+            with self._connect() as conn:
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="candidate_id_too_long",
+                    detail={
+                        "max_len": max_subject_id_len,
+                        "input_len": len(sid),
+                    },
+                )
+            return {"ok": False, "error": "invalid_credential"}
+        max_credential_len = _max_credential_len()
+        if len(cred) > max_credential_len:
+            with self._connect() as conn:
+                self._append_login_attempt(
+                    conn,
+                    role=role_norm,
+                    candidate_id=sid,
+                    credential_type=cred_type,
+                    result="credential_too_long",
+                    detail={
+                        "max_len": max_credential_len,
+                        "input_len": len(cred),
+                    },
+                )
+            return {"ok": False, "error": "invalid_credential"}
 
         now = _utc_now()
         with self._connect() as conn:
@@ -453,6 +483,36 @@ class AuthRegistryStore:
             return {"ok": False, "error": "missing_username"}
         if not pwd_input:
             return {"ok": False, "error": "missing_password"}
+        max_subject_id_len = _max_subject_id_len()
+        if len(user_input) > max_subject_id_len:
+            with self._connect() as conn:
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=user_input,
+                    credential_type="password",
+                    result="candidate_id_too_long",
+                    detail={
+                        "max_len": max_subject_id_len,
+                        "input_len": len(user_input),
+                    },
+                )
+            return {"ok": False, "error": "invalid_credential"}
+        max_credential_len = _max_credential_len()
+        if len(pwd_input) > max_credential_len:
+            with self._connect() as conn:
+                self._append_login_attempt(
+                    conn,
+                    role="admin",
+                    candidate_id=user_input,
+                    credential_type="password",
+                    result="credential_too_long",
+                    detail={
+                        "max_len": max_credential_len,
+                        "input_len": len(pwd_input),
+                    },
+                )
+            return {"ok": False, "error": "invalid_credential"}
 
         now = _utc_now()
         with self._connect() as conn:
@@ -1024,6 +1084,7 @@ class AuthRegistryStore:
         result: str,
         detail: Optional[Dict[str, Any]] = None,
     ) -> None:
+        audit_candidate_id = _audit_subject_id(candidate_id)
         payload: Dict[str, Any] = {
             "credential_type": str(credential_type or "").strip().lower(),
             "result": str(result or "").strip().lower(),
@@ -1032,10 +1093,10 @@ class AuthRegistryStore:
             payload.update(detail)
         self._append_audit(
             conn,
-            actor_id=str(candidate_id or "").strip(),
+            actor_id=audit_candidate_id,
             actor_role=str(role or "").strip().lower(),
             action="login_attempt",
-            target_id=str(candidate_id or "").strip(),
+            target_id=audit_candidate_id,
             target_role=str(role or "").strip().lower(),
             detail=payload,
         )
@@ -1468,6 +1529,28 @@ def _lock_minutes() -> int:
         return max(1, int(str(os.getenv("AUTH_LOGIN_LOCK_MINUTES", "15") or "15")))
     except Exception:
         return 15
+
+
+def _max_credential_len() -> int:
+    try:
+        return max(256, int(str(os.getenv("AUTH_CREDENTIAL_MAX_LEN", "2048") or "2048")))
+    except Exception:
+        return 2048
+
+
+def _max_subject_id_len() -> int:
+    try:
+        return max(32, int(str(os.getenv("AUTH_SUBJECT_ID_MAX_LEN", "128") or "128")))
+    except Exception:
+        return 128
+
+
+def _audit_subject_id(value: str) -> str:
+    text = str(value or "").strip()
+    max_len = _max_subject_id_len()
+    if len(text) <= max_len:
+        return text
+    return text[:max_len]
 
 
 def _credential_pepper() -> str:

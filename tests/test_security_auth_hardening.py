@@ -641,6 +641,148 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(disabled.json().get("ok"), False)
             self.assertEqual(disabled.json().get("error"), "invalid_credential")
 
+    def test_teacher_login_rejects_oversized_credential_and_audits_reason(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            teacher_root = root / "data" / "teacher_workspaces" / "teacher_alpha"
+            teacher_root.mkdir(parents=True, exist_ok=True)
+            (teacher_root / "USER.md").write_text(
+                "# Teacher Profile\n- name: 张老师\n- email: alpha@example.com\n",
+                encoding="utf-8",
+            )
+
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+
+            warmup = client.post(
+                "/auth/admin/teacher/export-tokens",
+                headers=admin_headers,
+                json={"ids": ["teacher_alpha"]},
+            )
+            self.assertEqual(warmup.status_code, 200)
+
+            oversized = client.post(
+                "/auth/teacher/login",
+                json={
+                    "candidate_id": "teacher_alpha",
+                    "credential_type": "token",
+                    "credential": "x" * 5000,
+                },
+            )
+            self.assertEqual(oversized.status_code, 200)
+            self.assertEqual(oversized.json().get("ok"), False)
+            self.assertEqual(oversized.json().get("error"), "invalid_credential")
+
+            db_path = root / "data" / "auth" / "auth_registry.sqlite3"
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute(
+                    (
+                        "SELECT detail_json FROM auth_audit_log "
+                        "WHERE action = 'login_attempt' AND target_role = 'teacher' "
+                        "AND target_id = ? ORDER BY id DESC LIMIT 1"
+                    ),
+                    ("teacher_alpha",),
+                ).fetchone()
+            self.assertIsNotNone(row)
+            detail = json.loads(str((row[0] if row else "{}") or "{}"))
+            self.assertEqual(detail.get("result"), "credential_too_long")
+
+    def test_admin_login_rejects_oversized_password_and_audits_reason(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+
+            oversized = client.post(
+                "/auth/admin/login",
+                json={"username": "admin", "password": "p" * 5000},
+            )
+            self.assertEqual(oversized.status_code, 200)
+            self.assertEqual(oversized.json().get("ok"), False)
+            self.assertEqual(oversized.json().get("error"), "invalid_credential")
+
+            db_path = root / "data" / "auth" / "auth_registry.sqlite3"
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute(
+                    (
+                        "SELECT detail_json FROM auth_audit_log "
+                        "WHERE action = 'login_attempt' AND target_role = 'admin' "
+                        "AND target_id = ? ORDER BY id DESC LIMIT 1"
+                    ),
+                    ("admin",),
+                ).fetchone()
+            self.assertIsNotNone(row)
+            detail = json.loads(str((row[0] if row else "{}") or "{}"))
+            self.assertEqual(detail.get("result"), "credential_too_long")
+
+    def test_teacher_login_rejects_oversized_candidate_id_and_audits_reason(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+
+            oversized = client.post(
+                "/auth/teacher/login",
+                json={
+                    "candidate_id": "teacher_" + ("x" * 5000),
+                    "credential_type": "token",
+                    "credential": "demo-token",
+                },
+            )
+            self.assertEqual(oversized.status_code, 200)
+            self.assertEqual(oversized.json().get("ok"), False)
+            self.assertEqual(oversized.json().get("error"), "invalid_credential")
+
+            db_path = root / "data" / "auth" / "auth_registry.sqlite3"
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute(
+                    (
+                        "SELECT target_id, detail_json FROM auth_audit_log "
+                        "WHERE action = 'login_attempt' AND target_role = 'teacher' "
+                        "ORDER BY id DESC LIMIT 1"
+                    )
+                ).fetchone()
+            self.assertIsNotNone(row)
+            target_id = str((row[0] if row else "") or "")
+            detail = json.loads(str((row[1] if row else "{}") or "{}"))
+            self.assertEqual(detail.get("result"), "candidate_id_too_long")
+            self.assertEqual(detail.get("input_len"), 5008)
+            self.assertLessEqual(len(target_id), 128)
+
+    def test_admin_login_rejects_oversized_username_and_audits_reason(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            app_mod = load_app(root, secret=self.SECRET)
+            client = TestClient(app_mod.app)
+
+            oversized = client.post(
+                "/auth/admin/login",
+                json={
+                    "username": "admin_" + ("u" * 5000),
+                    "password": "Admin123456",
+                },
+            )
+            self.assertEqual(oversized.status_code, 200)
+            self.assertEqual(oversized.json().get("ok"), False)
+            self.assertEqual(oversized.json().get("error"), "invalid_credential")
+
+            db_path = root / "data" / "auth" / "auth_registry.sqlite3"
+            with sqlite3.connect(db_path) as conn:
+                row = conn.execute(
+                    (
+                        "SELECT target_id, detail_json FROM auth_audit_log "
+                        "WHERE action = 'login_attempt' AND target_role = 'admin' "
+                        "ORDER BY id DESC LIMIT 1"
+                    )
+                ).fetchone()
+            self.assertIsNotNone(row)
+            target_id = str((row[0] if row else "") or "")
+            detail = json.loads(str((row[1] if row else "{}") or "{}"))
+            self.assertEqual(detail.get("result"), "candidate_id_too_long")
+            self.assertEqual(detail.get("input_len"), 5006)
+            self.assertLessEqual(len(target_id), 128)
+
 
 if __name__ == "__main__":
     unittest.main()
