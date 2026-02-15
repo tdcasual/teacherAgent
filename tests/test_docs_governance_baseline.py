@@ -1,5 +1,6 @@
-from pathlib import Path
 import re
+from datetime import date
+from pathlib import Path
 
 
 def test_governance_artifacts_exist() -> None:
@@ -46,3 +47,16 @@ def test_risk_register_entries_include_owner_review_and_exit() -> None:
         assert "下次复审日期：" in section
         assert "退出条件：" in section
         assert re.search(r"下次复审日期：\d{4}-\d{2}-\d{2}", section)
+
+
+def test_risk_register_review_dates_are_not_expired() -> None:
+    text = Path("docs/reference/risk-register.md").read_text(encoding="utf-8")
+    review_dates = re.findall(r"下次复审日期：(\d{4}-\d{2}-\d{2})", text)
+    assert review_dates, "risk register must include at least one next review date"
+
+    today = date.today()
+    for raw_date in review_dates:
+        review_date = date.fromisoformat(raw_date)
+        assert review_date >= today, (
+            f"risk review date {raw_date} is expired; update docs/reference/risk-register.md"
+        )
