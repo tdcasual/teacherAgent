@@ -24,6 +24,7 @@
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
+- PR 变更模板：`.github/pull_request_template.md`
 - 安全策略：`SECURITY.md`
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`
 - 风险与接受清单：`docs/reference/risk-register.md`

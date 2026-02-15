@@ -50,6 +50,7 @@ docker compose up -d api
 - 快速开始扩展版：`docs/getting-started/quickstart.md`
 - 操作手册总览：`docs/how-to/INDEX.md`
 - 贡献与变更流程：`CONTRIBUTING.md`
+- PR 变更模板：`.github/pull_request_template.md`
 - 安全披露与处置：`SECURITY.md`
 - HTTP API：`docs/http_api.md`
 - MCP API：`docs/mcp_api.md`
