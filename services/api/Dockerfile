@@ -27,10 +27,10 @@ ENV DATA_DIR=/app/data
 ENV UPLOADS_DIR=/app/uploads
 
 RUN adduser --disabled-password --no-create-home appuser \
-    && mkdir -p /app/data /app/uploads \
+    && mkdir -p /app/data /app/uploads /app/config \
     && chmod +x /app/scripts/admin_auth_tui.py /app/scripts/admin_manager \
     && ln -sf /app/scripts/admin_manager /usr/local/bin/admin_manager \
-    && chown -R appuser:appuser /app/data /app/uploads
+    && chown -R appuser:appuser /app/data /app/uploads /app/config
 USER appuser
 
 EXPOSE 8000

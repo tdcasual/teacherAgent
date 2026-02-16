@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from services.api.auth_registry_service import build_auth_registry_store
+from services.api.auth_secret_bootstrap import ensure_auth_token_secret
 from services.api.auth_service import validate_auth_secret_policy
 from services.api.container import build_app_container
 from services.api.logging_config import configure_logging
@@ -18,6 +19,7 @@ async def app_lifespan(_app):
     if state is not None and not hasattr(state, "container"):
         core = getattr(state, "core", None)
         state.container = build_app_container(core=core)
+    ensure_auth_token_secret()
     validate_auth_secret_policy()
     configure_logging()
     try:

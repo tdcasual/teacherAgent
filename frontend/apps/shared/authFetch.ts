@@ -1,8 +1,17 @@
 import { safeLocalStorageGetItem } from './storage';
 
+type AuthFetchUnauthorizedContext = {
+  tokenKey: string;
+  response: Response;
+};
+
+type AuthFetchUnauthorizedHandler = (
+  context: AuthFetchUnauthorizedContext,
+) => void | Promise<void>;
+
 type AuthFetchState = {
   originalFetch: typeof window.fetch;
-  tokenKeys: Set<string>;
+  tokenHandlers: Map<string, AuthFetchUnauthorizedHandler | undefined>;
 };
 
 declare global {
@@ -11,39 +20,62 @@ declare global {
   }
 }
 
-const firstToken = (keys: Set<string>): string => {
-  for (const key of keys) {
+const firstToken = (
+  handlers: Map<string, AuthFetchUnauthorizedHandler | undefined>,
+): { tokenKey: string; token: string; onUnauthorized?: AuthFetchUnauthorizedHandler } | null => {
+  for (const [key, onUnauthorized] of handlers.entries()) {
     const token = String(safeLocalStorageGetItem(key) || '').trim();
-    if (token) return token;
+    if (token) return { tokenKey: key, token, onUnauthorized };
   }
-  return '';
+  return null;
 };
 
-export const installAuthFetchInterceptor = (tokenKey: string) => {
+export const installAuthFetchInterceptor = (
+  tokenKey: string,
+  options?: { onUnauthorized?: AuthFetchUnauthorizedHandler },
+) => {
   if (typeof window === 'undefined') return;
   const key = String(tokenKey || '').trim();
   if (!key) return;
 
   const existing = window.__authFetchState;
   if (existing) {
-    existing.tokenKeys.add(key);
+    existing.tokenHandlers.set(key, options?.onUnauthorized);
     return;
   }
 
   const state: AuthFetchState = {
     originalFetch: window.fetch.bind(window),
-    tokenKeys: new Set<string>([key]),
+    tokenHandlers: new Map<string, AuthFetchUnauthorizedHandler | undefined>([
+      [key, options?.onUnauthorized],
+    ]),
   };
   window.__authFetchState = state;
 
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const token = firstToken(state.tokenKeys);
-    if (!token) return state.originalFetch(input, init);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const authState = firstToken(state.tokenHandlers);
+    if (!authState) return state.originalFetch(input, init);
 
     const headers = new Headers(init?.headers);
     if (!headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${token}`);
+      headers.set('Authorization', `Bearer ${authState.token}`);
     }
-    return state.originalFetch(input, { ...(init || {}), headers });
+
+    const response = await state.originalFetch(input, { ...(init || {}), headers });
+    if (response.status !== 401 || !authState.onUnauthorized) {
+      return response;
+    }
+
+    // Only treat as auth-expired when the same token is still active in storage.
+    // This avoids duplicate callbacks from concurrent requests after the first clear.
+    const activeToken = String(safeLocalStorageGetItem(authState.tokenKey) || '').trim();
+    if (activeToken && activeToken === authState.token) {
+      try {
+        await authState.onUnauthorized({ tokenKey: authState.tokenKey, response: response.clone() });
+      } catch {
+        // keep request flow unaffected when unauthorized callback fails
+      }
+    }
+    return response;
   };
 };

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,3 +74,52 @@ def test_apply_filters_and_sort() -> None:
     # Query works on id/name/email; only zhang@example.com should match.
     out = mod._apply_filters(items, state)
     assert [row["teacher_id"] for row in out] == ["c"]
+
+
+def test_trusted_local_script_entrypoint_works_outside_repo_cwd(tmp_path: Path) -> None:
+    script_path = Path("scripts/admin_auth_tui.py").resolve()
+    env = os.environ.copy()
+    env["DATA_DIR"] = str(tmp_path / "data")
+    env["UPLOADS_DIR"] = str(tmp_path / "uploads")
+    env["AUTH_REQUIRED"] = "0"
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), "--trusted-local"],
+        input="q\n",
+        text=True,
+        capture_output=True,
+        cwd=str(tmp_path),
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "Trusted local mode enabled" in result.stdout
+
+
+def test_record_history_avoids_deprecated_datetime_utcnow(monkeypatch) -> None:
+    mod = _load_module()
+
+    class _FakeNow:
+        def isoformat(self, *, timespec: str = "seconds") -> str:
+            assert timespec == "seconds"
+            return "2026-02-15T16:00:00+00:00"
+
+    class _FakeDateTime:
+        @staticmethod
+        def now(tz=None):
+            assert tz is mod.timezone.utc
+            return _FakeNow()
+
+        @staticmethod
+        def utcnow():
+            raise AssertionError("utcnow should not be called")
+
+    monkeypatch.setattr(mod, "datetime", _FakeDateTime)
+    app = mod.AdminAuthTUI(
+        base_url="http://127.0.0.1:8000",
+        username="",
+        password="",
+        trusted_local=True,
+    )
+
+    app._record_history(action="noop", total=1, success=1, failed=0, detail="ok")
+    assert app.state.history[-1]["ts"] == "2026-02-15T16:00:00Z"

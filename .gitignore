@@ -52,6 +52,9 @@ data/assignments/
 # Uploads
 uploads/
 
+# Runtime-generated auth secret
+config/auth_token_secret
+
 # Local chart artifacts (generated during development/tests)
 main.png
 

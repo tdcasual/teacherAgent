@@ -9,6 +9,12 @@ def test_compose_defaults_require_auth_and_stronger_redis_boundary() -> None:
     assert "127.0.0.1:${REDIS_PORT:-6379}:6379" in text
 
 
+def test_compose_api_mounts_config_for_auth_secret_persistence() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    api_block = _service_block(text, "api")
+    assert "./config:/app/config" in api_block
+
+
 def test_frontend_dockerfile_runs_as_non_root() -> None:
     text = Path("frontend/Dockerfile").read_text(encoding="utf-8")
     assert "USER nginx" in text

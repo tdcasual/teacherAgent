@@ -5,15 +5,27 @@ import getpass
 import json
 import os
 import shlex
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 MAX_HISTORY = 50
 BULK_CONFIRM_THRESHOLD = 5
+
+
+def _ensure_repo_root_on_sys_path() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    root_str = str(repo_root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+
+
+_ensure_repo_root_on_sys_path()
 
 
 @dataclass
@@ -300,8 +312,9 @@ class AdminAuthTUI:
         failed: int,
         detail: str,
     ) -> None:
+        ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         event = {
-            "ts": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "ts": ts,
             "action": action,
             "total": int(total),
             "success": int(success),
