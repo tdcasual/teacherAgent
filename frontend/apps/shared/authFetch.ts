@@ -5,9 +5,7 @@ type AuthFetchUnauthorizedContext = {
   response: Response;
 };
 
-type AuthFetchUnauthorizedHandler = (
-  context: AuthFetchUnauthorizedContext,
-) => void | Promise<void>;
+type AuthFetchUnauthorizedHandler = (context: AuthFetchUnauthorizedContext) => void | Promise<void>;
 
 type AuthFetchState = {
   originalFetch: typeof window.fetch;
@@ -71,7 +69,10 @@ export const installAuthFetchInterceptor = (
     const activeToken = String(safeLocalStorageGetItem(authState.tokenKey) || '').trim();
     if (activeToken && activeToken === authState.token) {
       try {
-        await authState.onUnauthorized({ tokenKey: authState.tokenKey, response: response.clone() });
+        await authState.onUnauthorized({
+          tokenKey: authState.tokenKey,
+          response: response.clone(),
+        });
       } catch {
         // keep request flow unaffected when unauthorized callback fails
       }
