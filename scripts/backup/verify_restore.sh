@@ -2,7 +2,18 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlink entrypoints consistently.
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [ -L "${SCRIPT_PATH}" ]; do
+  LINK_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
+  LINK_TARGET="$(readlink "${SCRIPT_PATH}")"
+  if [[ "${LINK_TARGET}" = /* ]]; then
+    SCRIPT_PATH="${LINK_TARGET}"
+  else
+    SCRIPT_PATH="${LINK_DIR}/${LINK_TARGET}"
+  fi
+done
+SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
 # shellcheck source=scripts/backup/common.sh
 source "${SCRIPT_DIR}/common.sh"
 
@@ -87,4 +98,3 @@ PY
 
 log "restore verify success: target=${TARGET} archive=${ARCHIVE_KEY}"
 log "report=${VERIFY_DIR}/verify_report.json"
-
