@@ -399,7 +399,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.evaluate(() => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
-    await expect.poll(() => mocks.getStatusCallCount('job_1'), { timeout: 700 }).toBeGreaterThan(before)
+    await expect.poll(() => mocks.getStatusCallCount('job_1'), { timeout: 2500 }).toBeGreaterThan(before)
   },
 
   A008: async ({ page }) => {

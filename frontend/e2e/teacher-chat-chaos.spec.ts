@@ -85,15 +85,15 @@ test('pending job remains attached to source session when switching away', async
 
   await composer.fill(sourceText)
   await page.getByRole('button', { name: '发送' }).click()
-  await expect(page.locator('.messages').getByText(sourceText)).toBeVisible()
+  await expect(page.locator('.messages').getByText(sourceText, { exact: true })).toBeVisible()
 
   const secondSession = page.locator('.session-item').filter({ hasText: 's2' }).first()
   await secondSession.locator('.session-select').click()
-  await expect(page.locator('.messages').getByText(sourceText)).toHaveCount(0)
+  await expect(page.locator('.messages').getByText(sourceText, { exact: true })).toHaveCount(0)
 
   const mainSession = page.locator('.session-item').filter({ hasText: 'main' }).first()
   await mainSession.locator('.session-select').click()
-  await expect(page.locator('.messages').getByText(sourceText)).toBeVisible()
+  await expect(page.locator('.messages').getByText(sourceText, { exact: true })).toBeVisible()
   await expect.poll(() => mocks.getStatusCallCount('job_1')).toBeGreaterThanOrEqual(3)
   await expect
     .poll(async () => page.locator('.messages').innerText(), { timeout: 15_000 })
