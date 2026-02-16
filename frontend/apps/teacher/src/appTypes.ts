@@ -49,6 +49,14 @@ export type PendingChatJob = {
   created_at: number
 }
 
+export type PendingToolRun = {
+  key: string
+  name: string
+  status: 'running' | 'ok' | 'failed'
+  durationMs?: number
+  error?: string
+}
+
 export type TeacherHistorySession = {
   session_id: string
   updated_at?: string
@@ -136,6 +144,40 @@ export type TeacherMemoryInsightsResponse = {
     hit_calls: number
     hit_rate: number
   }>
+}
+
+export type StudentMemoryProposal = {
+  proposal_id: string
+  teacher_id?: string
+  student_id?: string
+  memory_type?: string
+  content?: string
+  source?: string
+  status?: string
+  created_at?: string
+  reviewed_at?: string
+  reviewed_by?: string
+  deleted_at?: string
+  deleted_from_status?: string
+  evidence_refs?: string[]
+  risk_flags?: string[]
+}
+
+export type StudentMemoryProposalListResponse = {
+  ok: boolean
+  teacher_id: string
+  student_id?: string | null
+  proposals: StudentMemoryProposal[]
+}
+
+export type StudentMemoryInsightsResponse = {
+  ok: boolean
+  teacher_id: string
+  student_id?: string | null
+  days: number
+  total: number
+  status_counts?: Record<string, number>
+  type_counts?: Record<string, number>
 }
 
 export type UploadJobStatus = {

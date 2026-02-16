@@ -4,6 +4,7 @@ import { stripTransientPendingBubbles, withPendingChatOverlay } from './pendingO
 import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
 import { parseInvocationInput } from './invocation'
 import { decideSkillRouting } from './requestRouting'
+import { CHAT_STREAM_EVENT_VERSION, parseChatStreamEnvelope } from './streamEventProtocol'
 import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
 import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 import { safeLocalStorageGetItem } from '../../utils/storage'
@@ -15,9 +16,13 @@ import type {
   ChatStartResult,
   Message,
   PendingChatJob,
+  PendingToolRun,
   RenderedMessage,
   Skill,
   SkillResponse,
+  StudentMemoryInsightsResponse,
+  StudentMemoryProposal,
+  StudentMemoryProposalListResponse,
   TeacherHistorySession,
   TeacherHistorySessionResponse,
   TeacherHistorySessionsResponse,
@@ -37,6 +42,8 @@ export type UseTeacherChatApiParams = {
   skillList: Skill[]
   pendingChatJob: PendingChatJob | null
   memoryStatusFilter: string
+  studentMemoryStatusFilter: string
+  studentMemoryStudentFilter: string
   skillsOpen: boolean
   workbenchTab: WorkbenchTab
 
@@ -45,6 +52,8 @@ export type UseTeacherChatApiParams = {
   setActiveSessionId: React.Dispatch<React.SetStateAction<string>>
   setPendingChatJob: React.Dispatch<React.SetStateAction<PendingChatJob | null>>
   setChatQueueHint: React.Dispatch<React.SetStateAction<string>>
+  setPendingStreamStage: React.Dispatch<React.SetStateAction<string>>
+  setPendingToolRuns: React.Dispatch<React.SetStateAction<PendingToolRun[]>>
   setComposerWarning: React.Dispatch<React.SetStateAction<string>>
   setInput: React.Dispatch<React.SetStateAction<string>>
 
@@ -69,6 +78,10 @@ export type UseTeacherChatApiParams = {
   setProposalError: (value: string) => void
   setProposals: (value: TeacherMemoryProposal[]) => void
   setMemoryInsights: (value: TeacherMemoryInsightsResponse | null) => void
+  setStudentProposalLoading: (value: boolean) => void
+  setStudentProposalError: (value: string) => void
+  setStudentProposals: (value: StudentMemoryProposal[]) => void
+  setStudentMemoryInsights: (value: StudentMemoryInsightsResponse | null) => void
 
   // Skill setters (from useState — React.Dispatch compatible)
   setSkillList: React.Dispatch<React.SetStateAction<Skill[]>>
@@ -95,6 +108,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     skillList,
     pendingChatJob,
     memoryStatusFilter,
+    studentMemoryStatusFilter,
+    studentMemoryStudentFilter,
     skillsOpen,
     workbenchTab,
     setMessages,
@@ -102,6 +117,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     setActiveSessionId,
     setPendingChatJob,
     setChatQueueHint,
+    setPendingStreamStage,
+    setPendingToolRuns,
     setComposerWarning,
     setInput,
     setHistorySessions,
@@ -118,6 +135,10 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     setProposalError,
     setProposals,
     setMemoryInsights,
+    setStudentProposalLoading,
+    setStudentProposalError,
+    setStudentProposals,
+    setStudentMemoryInsights,
     setSkillList,
     setSkillsLoading,
     setSkillsError,
@@ -363,6 +384,130 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     }
   }, [apiBase, authToken, setMemoryInsights])
 
+  // ── deleteMemoryProposal ──────────────────────────────────────────────
+  const deleteMemoryProposal = useCallback(
+    async (proposalId: string) => {
+      if (!authToken) {
+        throw new Error('请先完成教师认证。')
+      }
+      const pid = String(proposalId || '').trim()
+      if (!pid) throw new Error('proposal_id 缺失')
+      const res = await fetch(`${apiBase}/teacher/memory/proposals/${encodeURIComponent(pid)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      await refreshMemoryProposals()
+      await refreshMemoryInsights()
+    },
+    [apiBase, authToken, refreshMemoryInsights, refreshMemoryProposals],
+  )
+
+  // ── refreshStudentMemoryProposals ─────────────────────────────────────
+  const refreshStudentMemoryProposals = useCallback(async () => {
+    if (!authToken) return
+    setStudentProposalLoading(true)
+    setStudentProposalError('')
+    try {
+      const url = new URL(`${apiBase}/teacher/student-memory/proposals`)
+      if (studentMemoryStatusFilter !== 'all') {
+        url.searchParams.set('status', studentMemoryStatusFilter)
+      }
+      const studentId = String(studentMemoryStudentFilter || '').trim()
+      if (studentId) {
+        url.searchParams.set('student_id', studentId)
+      }
+      url.searchParams.set('limit', '40')
+      const res = await fetch(url.toString())
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as StudentMemoryProposalListResponse
+      setStudentProposals(Array.isArray(data.proposals) ? data.proposals : [])
+    } catch (err: unknown) {
+      setStudentProposalError(toErrorMessage(err))
+    } finally {
+      setStudentProposalLoading(false)
+    }
+  }, [
+    apiBase,
+    authToken,
+    studentMemoryStatusFilter,
+    studentMemoryStudentFilter,
+    setStudentProposalLoading,
+    setStudentProposalError,
+    setStudentProposals,
+  ])
+
+  // ── refreshStudentMemoryInsights ──────────────────────────────────────
+  const refreshStudentMemoryInsights = useCallback(async () => {
+    if (!authToken) return
+    try {
+      const url = new URL(`${apiBase}/teacher/student-memory/insights`)
+      url.searchParams.set('days', '14')
+      const studentId = String(studentMemoryStudentFilter || '').trim()
+      if (studentId) {
+        url.searchParams.set('student_id', studentId)
+      }
+      const res = await fetch(url.toString())
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      const data = (await res.json()) as StudentMemoryInsightsResponse
+      setStudentMemoryInsights(data)
+    } catch (err) {
+      setStudentMemoryInsights(null)
+    }
+  }, [apiBase, authToken, studentMemoryStudentFilter, setStudentMemoryInsights])
+
+  // ── reviewStudentMemoryProposal ───────────────────────────────────────
+  const reviewStudentMemoryProposal = useCallback(
+    async (proposalId: string, approve: boolean) => {
+      if (!authToken) {
+        throw new Error('请先完成教师认证。')
+      }
+      const pid = String(proposalId || '').trim()
+      if (!pid) throw new Error('proposal_id 缺失')
+      const res = await fetch(`${apiBase}/teacher/student-memory/proposals/${encodeURIComponent(pid)}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      await refreshStudentMemoryProposals()
+      await refreshStudentMemoryInsights()
+    },
+    [apiBase, authToken, refreshStudentMemoryInsights, refreshStudentMemoryProposals],
+  )
+
+  // ── deleteStudentMemoryProposal ───────────────────────────────────────
+  const deleteStudentMemoryProposal = useCallback(
+    async (proposalId: string) => {
+      if (!authToken) {
+        throw new Error('请先完成教师认证。')
+      }
+      const pid = String(proposalId || '').trim()
+      if (!pid) throw new Error('proposal_id 缺失')
+      const res = await fetch(`${apiBase}/teacher/student-memory/proposals/${encodeURIComponent(pid)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `状态码 ${res.status}`)
+      }
+      await refreshStudentMemoryProposals()
+      await refreshStudentMemoryInsights()
+    },
+    [apiBase, authToken, refreshStudentMemoryInsights, refreshStudentMemoryProposals],
+  )
+
   // ── fetchSkills ───────────────────────────────────────────────────────
   const fetchSkills = useCallback(async () => {
     if (!authToken) {
@@ -496,6 +641,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         }
         pendingChatJobRef.current = nextPendingJob
         setPendingChatJob(nextPendingJob)
+        setPendingStreamStage('排队中...')
+        setPendingToolRuns([])
         return true
       } catch (err: unknown) {
         const errorMessage = toErrorMessage(err)
@@ -508,6 +655,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         )
         setSending(false)
         setChatQueueHint('')
+        setPendingStreamStage('')
+        setPendingToolRuns([])
         pendingChatJobRef.current = null
         setPendingChatJob(null)
         return false
@@ -517,82 +666,353 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
       authToken,
       setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
-      setMessages, setInput, setSending, setChatQueueHint, setPendingChatJob,
+      setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setPendingChatJob,
     ],
   )
 
-  // ── Pending chat job polling effect ───────────────────────────────────
+  // ── Pending chat job stream effect (fallback to polling) ──────────────
   useEffect(() => {
     if (!authToken) return
     if (!pendingChatJob?.job_id) return
-    const cleanup = startVisibilityAwareBackoffPolling(
-      async ({ signal }) => {
-        if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
-          return 'continue'
-        }
+    let stopped = false
+    let pollCleanup: (() => void) | null = null
+    let pollStarted = false
+    const controller = new AbortController()
+    const targetSessionId = activeSessionId || pendingChatJob.session_id || 'main'
+    const sameSession =
+      !pendingChatJob.session_id || !activeSessionId || pendingChatJob.session_id === activeSessionId
 
-        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
+    const setPlaceholderContent = (content: string) => {
+      if (!sameSession) return
+      setMessages((prev) => {
+        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
+        return overlaid.map((item) =>
+          item.id === pendingChatJob.placeholder_id ? { ...item, content, time: nowTime() } : item,
+        )
+      })
+    }
+
+    const finishSuccess = (replyText: string) => {
+      setMessages((prev) => {
+        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
+        return overlaid.map((item) =>
+          item.id === pendingChatJob.placeholder_id ? { ...item, content: replyText || '已收到。', time: nowTime() } : item,
+        )
+      })
+      pendingChatJobRef.current = null
+      setPendingChatJob(null)
+      setChatQueueHint('')
+      setPendingStreamStage('')
+      setPendingToolRuns([])
+      setSending(false)
+      void refreshTeacherSessions()
+    }
+
+    const finishFailure = (message: string) => {
+      setMessages((prev) => {
+        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
+        return overlaid.map((item) =>
+          item.id === pendingChatJob.placeholder_id
+            ? { ...item, content: `抱歉，请求失败：${message || '请求失败'}`, time: nowTime() }
+            : item,
+        )
+      })
+      pendingChatJobRef.current = null
+      setPendingChatJob(null)
+      setChatQueueHint('')
+      setPendingStreamStage('')
+      setPendingToolRuns([])
+      setSending(false)
+    }
+
+    const startFallbackPolling = () => {
+      if (pollStarted || stopped) return
+      pollStarted = true
+      pollCleanup = startVisibilityAwareBackoffPolling(
+        async ({ signal }) => {
+          if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
+            return 'continue'
+          }
+
+          const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
+          if (!res.ok) {
+            const text = await res.text()
+            throw new Error(text || `状态码 ${res.status}`)
+          }
+          const data = (await res.json()) as ChatJobStatus
+          if (data.status === 'done') {
+            finishSuccess(data.reply || '')
+            return 'stop'
+          }
+          if (data.status === 'failed' || data.status === 'cancelled') {
+            finishFailure(data.error_detail || data.error || '请求失败')
+            return 'stop'
+          }
+          const lanePos = Number(data.lane_queue_position || 0)
+          const laneSize = Number(data.lane_queue_size || 0)
+          if (data.status === 'queued') {
+            setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
+            setPendingStreamStage('排队中...')
+          } else if (data.status === 'processing') {
+            setChatQueueHint('处理中...')
+            setPendingStreamStage('处理中...')
+          } else {
+            setChatQueueHint('')
+            setPendingStreamStage('')
+          }
+          return 'continue'
+        },
+        (err) => {
+          const msg = toErrorMessage(err, '网络错误')
+          setPlaceholderContent(`网络波动，正在重试…（${msg}）`)
+        },
+        { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
+      )
+    }
+
+    const streamSleep = async (ms: number) =>
+      new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+
+    const runStream = async () => {
+      let cursor = 0
+      let reconnectAttempts = 0
+      let assistantText = ''
+      let toolCounter = 0
+      const toolStates: PendingToolRun[] = []
+      let assistantRenderTimer: number | null = null
+      let assistantRenderScheduled = false
+
+      const clearAssistantRenderTimer = () => {
+        if (assistantRenderTimer !== null) {
+          window.clearTimeout(assistantRenderTimer)
+          assistantRenderTimer = null
         }
-        const data = (await res.json()) as ChatJobStatus
-        if (data.status === 'done') {
-          setMessages((prev) => {
-            const overlaid = withPendingChatOverlay(prev, pendingChatJob, activeSessionId || pendingChatJob.session_id || 'main')
-            return overlaid.map((msg) =>
-              msg.id === pendingChatJob.placeholder_id ? { ...msg, content: data.reply || '已收到。', time: nowTime() } : msg,
-            )
-          })
-          pendingChatJobRef.current = null
-          setPendingChatJob(null)
-          setChatQueueHint('')
-          setSending(false)
-          void refreshTeacherSessions()
-          return 'stop'
-        }
-        if (data.status === 'failed' || data.status === 'cancelled') {
-          const msg = data.error_detail || data.error || '请求失败'
-          setMessages((prev) => {
-            const overlaid = withPendingChatOverlay(prev, pendingChatJob, activeSessionId || pendingChatJob.session_id || 'main')
-            return overlaid.map((item) =>
-              item.id === pendingChatJob.placeholder_id ? { ...item, content: `抱歉，请求失败：${msg}`, time: nowTime() } : item,
-            )
-          })
-          pendingChatJobRef.current = null
-          setPendingChatJob(null)
-          setChatQueueHint('')
-          setSending(false)
-          return 'stop'
-        }
-        const lanePos = Number(data.lane_queue_position || 0)
-        const laneSize = Number(data.lane_queue_size || 0)
-        if (data.status === 'queued') {
+        assistantRenderScheduled = false
+      }
+
+      const flushAssistantPlaceholder = () => {
+        assistantRenderTimer = null
+        assistantRenderScheduled = false
+        setPlaceholderContent(assistantText || '正在生成…')
+      }
+
+      const scheduleAssistantPlaceholder = () => {
+        if (assistantRenderScheduled) return
+        assistantRenderScheduled = true
+        assistantRenderTimer = window.setTimeout(() => {
+          flushAssistantPlaceholder()
+        }, 40)
+      }
+
+      const renderStreamingPlaceholder = () => {
+        clearAssistantRenderTimer()
+        setPendingToolRuns([...toolStates])
+        setPlaceholderContent(assistantText || '正在生成…')
+      }
+
+      const applyStreamEvent = (eventType: string, payload: Record<string, unknown>, eventId: number) => {
+        if (eventId > cursor) cursor = eventId
+        if (eventType === 'job.queued') {
+          const lanePos = Number(payload.lane_queue_position || 0)
+          const laneSize = Number(payload.lane_queue_size || 0)
           setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
-        } else if (data.status === 'processing') {
-          setChatQueueHint('处理中...')
-        } else {
-          setChatQueueHint('')
+          setPendingStreamStage('排队中...')
+          return
         }
-        return 'continue'
-      },
-      (err) => {
-        const msg = toErrorMessage(err, '网络错误')
-        setMessages((prev) => {
-          const overlaid = withPendingChatOverlay(prev, pendingChatJob, activeSessionId || pendingChatJob.session_id || 'main')
-          return overlaid.map((item) =>
-            item.id === pendingChatJob.placeholder_id ? { ...item, content: `网络波动，正在重试…（${msg}）`, time: nowTime() } : item,
-          )
-        })
-      },
-      { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
-    )
+        if (eventType === 'job.processing') {
+          setChatQueueHint('处理中...')
+          setPendingStreamStage('处理中...')
+          return
+        }
+        if (eventType === 'tool.start') {
+          toolCounter += 1
+          const toolName = String(payload.tool_name || '').trim() || 'tool'
+          const callId = String(payload.tool_call_id || '').trim()
+          const key = callId || `${toolName}#${toolCounter}`
+          toolStates.push({ key, name: toolName, status: 'running' })
+          renderStreamingPlaceholder()
+          return
+        }
+        if (eventType === 'tool.finish') {
+          const toolName = String(payload.tool_name || '').trim() || 'tool'
+          const callId = String(payload.tool_call_id || '').trim()
+          const byCallId = callId ? toolStates.findIndex((item) => item.key === callId) : -1
+          const byName = toolStates.findIndex((item) => item.status === 'running' && item.name === toolName)
+          const idx = byCallId >= 0 ? byCallId : byName
+          const ok = Boolean(payload.ok)
+          const durationMs = Number(payload.duration_ms || 0)
+          const error = String(payload.error || '').trim()
+          if (idx >= 0) {
+            toolStates[idx] = {
+              ...toolStates[idx],
+              status: ok ? 'ok' : 'failed',
+              durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined,
+              error: error || undefined,
+            }
+          } else {
+            toolStates.push({
+              key: callId || `${toolName}#${toolCounter + 1}`,
+              name: toolName,
+              status: ok ? 'ok' : 'failed',
+              durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined,
+              error: error || undefined,
+            })
+          }
+          renderStreamingPlaceholder()
+          return
+        }
+        if (eventType === 'assistant.delta') {
+          const delta = String(payload.delta || '')
+          if (delta) {
+            assistantText += delta
+            scheduleAssistantPlaceholder()
+          }
+          return
+        }
+        if (eventType === 'assistant.done') {
+          const text = String(payload.text || '')
+          if (text) assistantText = text
+          scheduleAssistantPlaceholder()
+          return
+        }
+        if (eventType === 'job.done') {
+          clearAssistantRenderTimer()
+          const text = String(payload.reply || assistantText || '')
+          finishSuccess(text)
+          stopped = true
+          return
+        }
+        if (eventType === 'job.failed' || eventType === 'job.cancelled') {
+          clearAssistantRenderTimer()
+          const err = String(payload.error_detail || payload.error || '请求失败')
+          finishFailure(err)
+          stopped = true
+        }
+      }
+
+      while (!stopped) {
+        if (!pendingChatJobRef.current?.job_id) return
+        try {
+          const url = new URL(`${apiBase}/chat/stream`)
+          url.searchParams.set('job_id', pendingChatJob.job_id)
+          if (cursor > 0) url.searchParams.set('last_event_id', String(cursor))
+          const res = await fetch(url.toString(), {
+            signal: controller.signal,
+            headers: { Accept: 'text/event-stream' },
+          })
+          if (!res.ok || !res.body) {
+            const text = await res.text()
+            throw new Error(text || `状态码 ${res.status}`)
+          }
+          const reader = res.body.getReader()
+          const decoder = new TextDecoder('utf-8')
+          let buffer = ''
+          let sawEventInCurrentStream = false
+          while (!stopped) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const normalized = buffer.replace(/\r/g, '')
+            const parts = normalized.split('\n\n')
+            buffer = parts.pop() || ''
+            for (const raw of parts) {
+              const block = raw.trim()
+              if (!block || block.startsWith(':')) continue
+              let eventType = ''
+              let eventId = 0
+              const dataLines: string[] = []
+              for (const line of block.split('\n')) {
+                if (line.startsWith('event:')) {
+                  eventType = line.slice(6).trim()
+                } else if (line.startsWith('id:')) {
+                  const parsed = Number(line.slice(3).trim())
+                  if (Number.isFinite(parsed) && parsed > 0) eventId = parsed
+                } else if (line.startsWith('data:')) {
+                  dataLines.push(line.slice(5).trim())
+                }
+              }
+              if (!dataLines.length) continue
+              const rawData = dataLines.join('\n')
+              const payloadEnvelope = parseChatStreamEnvelope(rawData)
+              if (!payloadEnvelope) continue
+              if (payloadEnvelope.eventVersion !== CHAT_STREAM_EVENT_VERSION) {
+                clearAssistantRenderTimer()
+                setPlaceholderContent('检测到新版流协议，已自动切换到稳态轮询…')
+                startFallbackPolling()
+                return
+              }
+              const finalType = String(eventType || payloadEnvelope.eventType || '').trim()
+              if (!finalType) continue
+              const payload = payloadEnvelope.payload
+              const finalEventId = Number(payloadEnvelope.eventId ?? eventId ?? 0)
+              if (!Number.isFinite(finalEventId) || finalEventId <= cursor) continue
+              sawEventInCurrentStream = true
+              applyStreamEvent(finalType, payload, finalEventId)
+              if (stopped) break
+            }
+          }
+          if (stopped || !pendingChatJobRef.current?.job_id) return
+          const statusRes = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, {
+            signal: controller.signal,
+          })
+          if (!statusRes.ok) {
+            const text = await statusRes.text()
+            throw new Error(text || `状态码 ${statusRes.status}`)
+          }
+          const statusData = (await statusRes.json()) as ChatJobStatus
+          if (statusData.status === 'done') {
+            clearAssistantRenderTimer()
+            finishSuccess(statusData.reply || assistantText || '')
+            stopped = true
+            return
+          }
+          if (statusData.status === 'failed' || statusData.status === 'cancelled') {
+            clearAssistantRenderTimer()
+            finishFailure(statusData.error_detail || statusData.error || '请求失败')
+            stopped = true
+            return
+          }
+          const lanePos = Number(statusData.lane_queue_position || 0)
+          const laneSize = Number(statusData.lane_queue_size || 0)
+          if (statusData.status === 'queued') {
+            setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
+            setPendingStreamStage('排队中...')
+          } else if (statusData.status === 'processing') {
+            setChatQueueHint('处理中...')
+            setPendingStreamStage('处理中...')
+          }
+          if (sawEventInCurrentStream) reconnectAttempts = 0
+          reconnectAttempts += 1
+          if (reconnectAttempts >= 4) {
+            startFallbackPolling()
+            return
+          }
+          await streamSleep(Math.min(3000, reconnectAttempts * 800))
+        } catch (err: unknown) {
+          clearAssistantRenderTimer()
+          if (controller.signal.aborted || stopped) return
+          reconnectAttempts += 1
+          if (reconnectAttempts >= 4) {
+            startFallbackPolling()
+            return
+          }
+          await streamSleep(Math.min(3000, reconnectAttempts * 800))
+        }
+      }
+      clearAssistantRenderTimer()
+    }
+
+    void runStream()
 
     return () => {
+      stopped = true
+      controller.abort()
       setChatQueueHint('')
-      cleanup()
+      setPendingStreamStage('')
+      setPendingToolRuns([])
+      if (pollCleanup) pollCleanup()
     }
-  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setSending])
+  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setSending])
 
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {
@@ -623,7 +1043,17 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     if (workbenchTab !== 'memory') return
     void refreshMemoryProposals()
     void refreshMemoryInsights()
-  }, [skillsOpen, workbenchTab, authToken, refreshMemoryInsights, refreshMemoryProposals])
+    void refreshStudentMemoryProposals()
+    void refreshStudentMemoryInsights()
+  }, [
+    skillsOpen,
+    workbenchTab,
+    authToken,
+    refreshMemoryInsights,
+    refreshMemoryProposals,
+    refreshStudentMemoryProposals,
+    refreshStudentMemoryInsights,
+  ])
 
   // ── Skill fetch on mount ──────────────────────────────────────────────
   useEffect(() => {
@@ -654,6 +1084,11 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     loadTeacherSessionMessages,
     refreshMemoryProposals,
     refreshMemoryInsights,
+    deleteMemoryProposal,
+    refreshStudentMemoryProposals,
+    refreshStudentMemoryInsights,
+    reviewStudentMemoryProposal,
+    deleteStudentMemoryProposal,
     submitMessage,
     fetchSkills,
     renderedMessages,

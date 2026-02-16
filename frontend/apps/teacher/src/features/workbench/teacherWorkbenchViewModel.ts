@@ -12,9 +12,12 @@ export type TeacherWorkbenchChromeProps = {
   fetchSkills: SkillsTabProps['fetchSkills']
   refreshMemoryProposals: () => Promise<void>
   refreshMemoryInsights: () => Promise<void>
+  refreshStudentMemoryProposals: () => Promise<void>
+  refreshStudentMemoryInsights: () => Promise<void>
   refreshWorkflowWorkbench: () => void
   skillsLoading: boolean
   proposalLoading: boolean
+  studentProposalLoading: boolean
   progressLoading: boolean
   uploading: boolean
   examUploading: boolean

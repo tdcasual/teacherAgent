@@ -6,6 +6,7 @@ __all__ = [
     "_chat_start_deps",
     "_chat_status_deps",
     "_chat_runtime_deps",
+    "_chat_event_stream_deps",
     "_chat_job_repo_deps",
     "_chat_worker_deps",
     "chat_worker_deps",
@@ -37,6 +38,12 @@ from ..chat_attachment_service import (
 )
 from ..chat_attachment_service import (
     resolve_chat_attachment_context as _resolve_chat_attachment_context_impl,
+)
+from ..chat_event_stream_service import (
+    ChatEventStreamDeps,
+    append_chat_event as _append_chat_event_impl,
+    notify_chat_stream_event as _notify_chat_stream_event_impl,
+    wait_for_chat_stream_event as _wait_for_chat_stream_event_impl,
 )
 from ..chat_job_processing_service import (
     ChatJobProcessDeps,
@@ -81,6 +88,12 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..student_memory_api_service import (
+    StudentMemoryApiDeps,
+)
+from ..student_memory_api_service import (
+    student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
+)
 from ..student_persona_api_service import (
     StudentPersonaApiDeps,
 )
@@ -185,6 +198,12 @@ def _chat_start_deps():
             deps=attachment_deps,
             **kwargs,
         ),
+        append_chat_event=lambda job_id, event_type, payload: _append_chat_event_impl(
+            job_id,
+            event_type,
+            payload,
+            deps=_chat_event_stream_deps(),
+        ),
     )
 
 
@@ -259,6 +278,17 @@ def _chat_job_repo_deps():
     )
 
 
+def _chat_event_stream_deps() -> ChatEventStreamDeps:
+    _ac = _app_core()
+    return ChatEventStreamDeps(
+        chat_job_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()),
+        chat_job_lock=_ac.CHAT_JOB_LOCK,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        notify_job_event=_notify_chat_stream_event_impl,
+        wait_job_event=_wait_for_chat_stream_event_impl,
+    )
+
+
 def _chat_worker_deps():
     _ac = _app_core()
     return ChatWorkerDeps(
@@ -292,6 +322,11 @@ def chat_worker_deps():
 def _chat_job_process_deps():
     _ac = _app_core()
     backend = _queue_backend_for_app_core(_ac)
+    student_memory_deps = StudentMemoryApiDeps(
+        resolve_teacher_id=_ac.resolve_teacher_id,
+        teacher_workspace_dir=_ac.teacher_workspace_dir,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
     return ChatJobProcessDeps(
         chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()) / "claim.lock",
         try_acquire_lockfile=_try_acquire_lockfile,
@@ -299,10 +334,11 @@ def _chat_job_process_deps():
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
         chat_request_model=ChatRequest,
-        compute_chat_reply_sync=lambda req, session_id, teacher_id_override: _ac._compute_chat_reply_sync(
+        compute_chat_reply_sync=lambda req, session_id, teacher_id_override, event_sink=None: _ac._compute_chat_reply_sync(
             req,
             session_id=session_id,
             teacher_id_override=teacher_id_override,
+            event_sink=event_sink,
         ),
         monotonic=time.monotonic,
         build_interaction_note=_ac.build_interaction_note,
@@ -323,8 +359,23 @@ def _chat_job_process_deps():
         teacher_memory_auto_propose_from_turn=_ac.teacher_memory_auto_propose_from_turn,
         teacher_memory_auto_flush_from_session=_ac.teacher_memory_auto_flush_from_session,
         maybe_compact_teacher_session=_ac.maybe_compact_teacher_session,
+        student_memory_auto_propose_from_turn=lambda **kwargs: _student_memory_auto_propose_from_turn_api(
+            deps=student_memory_deps,
+            teacher_id=kwargs.get("teacher_id"),
+            student_id=str(kwargs.get("student_id") or ""),
+            session_id=str(kwargs.get("session_id") or ""),
+            user_text=str(kwargs.get("user_text") or ""),
+            assistant_text=str(kwargs.get("assistant_text") or ""),
+            request_id=(str(kwargs.get("request_id") or "") or None),
+        ),
         diag_log=_ac.diag_log,
         release_lockfile=_release_lockfile,
+        append_chat_event=lambda job_id, event_type, payload: _append_chat_event_impl(
+            job_id,
+            event_type,
+            payload,
+            deps=_chat_event_stream_deps(),
+        ),
     )
 
 

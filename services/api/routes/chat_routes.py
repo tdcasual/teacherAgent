@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from ..api_models import ChatRequest, ChatStartRequest
 from ..auth_service import (
     AuthError,
     bind_chat_request_to_principal,
+    enforce_chat_job_access,
     resolve_student_scope,
     resolve_teacher_scope,
 )
@@ -20,6 +23,7 @@ from ..chat_attachment_service import (
     get_chat_attachment_status,
     upload_chat_attachments,
 )
+from ..chat_event_stream_service import encode_sse_event, load_chat_events_incremental
 
 
 def _bind_or_raise(req: ChatRequest | ChatStartRequest) -> ChatRequest | ChatStartRequest:
@@ -78,6 +82,94 @@ def _register_chat_routes(router: APIRouter, core: Any) -> None:
     @router.get("/chat/status")
     async def chat_status(job_id: str) -> Any:
         return await core.chat_handlers.chat_status(job_id, deps=core._chat_handlers_deps())
+
+    @router.get("/chat/stream")
+    async def chat_stream(
+        request: Request,
+        job_id: str,
+        last_event_id: int = Query(default=0),
+    ) -> Any:
+        try:
+            job = core.load_chat_job(job_id)
+            enforce_chat_job_access(job)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="job not found")
+        except AuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+        deps = core._chat_event_stream_deps()
+        header_last_event_id = str(request.headers.get("last-event-id") or "").strip()
+        if header_last_event_id:
+            try:
+                last_event_id = max(int(last_event_id or 0), int(header_last_event_id))
+            except Exception:
+                pass
+
+        async def _iter_events() -> Any:
+            cursor = max(0, int(last_event_id or 0))
+            log_offset: int | None = None
+            signal_version = 0
+            terminal_idle_loops = 0
+            keepalive_ticks = 0
+            idle_wait_sec = 1.0
+            yield "retry: 1000\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                events, log_offset = load_chat_events_incremental(
+                    job_id,
+                    deps=deps,
+                    after_event_id=cursor,
+                    offset_hint=log_offset,
+                    limit=300,
+                )
+                if events:
+                    for item in events:
+                        event_id = int(item.get("event_id") or 0)
+                        if event_id > cursor:
+                            cursor = event_id
+                        yield encode_sse_event(item)
+                    terminal_idle_loops = 0
+                    keepalive_ticks = 0
+                else:
+                    keepalive_ticks += 1
+                    if keepalive_ticks >= 20:
+                        keepalive_ticks = 0
+                        yield ": keepalive\n\n"
+                try:
+                    status_job = core.load_chat_job(job_id)
+                except FileNotFoundError:
+                    break
+                status = str(status_job.get("status") or "").strip().lower()
+                if status in {"done", "failed", "cancelled"} and not events:
+                    terminal_idle_loops += 1
+                else:
+                    terminal_idle_loops = 0
+                if terminal_idle_loops >= 3:
+                    break
+                if events:
+                    continue
+                if callable(deps.wait_job_event):
+                    try:
+                        signal_version = await asyncio.to_thread(
+                            deps.wait_job_event,
+                            job_id,
+                            signal_version,
+                            idle_wait_sec,
+                        )
+                    except Exception:
+                        await asyncio.sleep(0.25)
+                else:
+                    await asyncio.sleep(0.25)
+
+        return StreamingResponse(
+            _iter_events(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
 
 def _register_chat_attachment_routes(router: APIRouter, core: Any) -> None:

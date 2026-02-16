@@ -1,4 +1,5 @@
-import type { MutableRefObject } from 'react'
+import { useEffect, useMemo, useState, type MutableRefObject } from 'react'
+import type { PendingToolRun } from '../../appTypes'
 
 type RenderedMessage = {
   id: string
@@ -16,6 +17,8 @@ type Props = {
   onMessagesScroll: () => void
   showScrollToBottom: boolean
   onScrollToBottom: () => void
+  pendingStreamStage: string
+  pendingToolRuns: PendingToolRun[]
 }
 
 export default function ChatMessages({
@@ -27,7 +30,27 @@ export default function ChatMessages({
   onMessagesScroll,
   showScrollToBottom,
   onScrollToBottom,
+  pendingStreamStage,
+  pendingToolRuns,
 }: Props) {
+  const [processCollapsed, setProcessCollapsed] = useState(false)
+  const [showOnlyFailed, setShowOnlyFailed] = useState(false)
+
+  const runningCount = pendingToolRuns.filter((item) => item.status === 'running').length
+  const okCount = pendingToolRuns.filter((item) => item.status === 'ok').length
+  const failedCount = pendingToolRuns.filter((item) => item.status === 'failed').length
+
+  const visibleToolRuns = useMemo(() => {
+    if (!showOnlyFailed) return pendingToolRuns
+    return pendingToolRuns.filter((item) => item.status === 'failed')
+  }, [pendingToolRuns, showOnlyFailed])
+
+  useEffect(() => {
+    if (hasPendingChatJob) return
+    setProcessCollapsed(false)
+    setShowOnlyFailed(false)
+  }, [hasPendingChatJob])
+
   return (
     <>
       <div
@@ -58,6 +81,63 @@ export default function ChatMessages({
               <div className="max-w-[var(--chat-assistant-bubble-max-width)] bg-[#f4f7fb] border border-dashed border-[#cfd8e3] rounded-[14px] py-2 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
                 <div className="leading-[1.42] whitespace-normal break-words">正在思考…</div>
+              </div>
+            </div>
+          )}
+          {hasPendingChatJob && (pendingStreamStage || pendingToolRuns.length > 0) && (
+            <div className="flex">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] bg-[#f8fafc] border border-[#d7e3ef] rounded-[12px] px-3 py-2 grid gap-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="grid gap-[2px]">
+                    <div className="text-[11px] text-muted">执行过程 · {pendingStreamStage || '处理中'}</div>
+                    <div className="text-[11px] text-[#64748b]">
+                      进行中 {runningCount} · 成功 {okCount} · 失败 {failedCount}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[#c9d7e5] bg-white text-[#475569]"
+                      disabled={failedCount === 0 && !showOnlyFailed}
+                      onClick={() => setShowOnlyFailed((prev) => !prev)}
+                    >
+                      {showOnlyFailed ? '显示全部' : '仅失败'}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[#c9d7e5] bg-white text-[#475569]"
+                      onClick={() => setProcessCollapsed((prev) => !prev)}
+                    >
+                      {processCollapsed ? '展开' : '收起'}
+                    </button>
+                  </div>
+                </div>
+                {!processCollapsed && (
+                  <div className="grid gap-1">
+                    {visibleToolRuns.length === 0 ? (
+                      <div className="text-[12px] text-muted">当前没有失败工具。</div>
+                    ) : (
+                      visibleToolRuns.map((item) => {
+                        const lineClass =
+                          item.status === 'running'
+                            ? 'bg-[#fff7e6] border-[#fcd9a5] text-[#92400e]'
+                            : item.status === 'ok'
+                              ? 'bg-[#ecfdf5] border-[#bbf7d0] text-[#065f46]'
+                              : 'bg-[#fef2f2] border-[#fecaca] text-[#991b1b]'
+                        return (
+                          <div key={item.key} className={`text-[12px] leading-[1.35] border rounded px-2 py-[6px] ${lineClass}`}>
+                            <div className="font-medium">{item.name}</div>
+                            <div>
+                              {item.status === 'running' ? '进行中' : ''}
+                              {item.status === 'ok' ? `成功${item.durationMs ? `（${item.durationMs}ms）` : ''}` : ''}
+                              {item.status === 'failed' ? `失败${item.error ? `：${item.error}` : ''}` : ''}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

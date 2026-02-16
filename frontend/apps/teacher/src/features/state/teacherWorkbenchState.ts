@@ -3,6 +3,8 @@ import type {
   AssignmentProgress,
   ExamUploadDraft,
   ExamUploadJobStatus,
+  StudentMemoryInsightsResponse,
+  StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
   TeacherMemoryProposal,
   UploadDraft,
@@ -50,6 +52,12 @@ export type TeacherWorkbenchState = {
   proposals: TeacherMemoryProposal[]
   memoryStatusFilter: 'applied' | 'rejected' | 'all'
   memoryInsights: TeacherMemoryInsightsResponse | null
+  studentProposalLoading: boolean
+  studentProposalError: string
+  studentProposals: StudentMemoryProposal[]
+  studentMemoryStatusFilter: 'proposed' | 'applied' | 'rejected' | 'all'
+  studentMemoryStudentFilter: string
+  studentMemoryInsights: StudentMemoryInsightsResponse | null
 
   examId: string
   examDate: string
@@ -122,6 +130,12 @@ export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
     proposals: [],
     memoryStatusFilter: 'applied',
     memoryInsights: null,
+    studentProposalLoading: false,
+    studentProposalError: '',
+    studentProposals: [],
+    studentMemoryStatusFilter: 'proposed',
+    studentMemoryStudentFilter: '',
+    studentMemoryInsights: null,
 
     examId: '',
     examDate: '',
@@ -151,4 +165,3 @@ export const teacherWorkbenchReducer = (state: TeacherWorkbenchState, action: Te
   if (action.type === 'set') return { ...state, [action.key]: action.value } as TeacherWorkbenchState
   return state
 }
-

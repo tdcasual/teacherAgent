@@ -54,10 +54,12 @@ import { useTeacherChatApi } from './features/chat/useTeacherChatApi'
 import { useTeacherComposerInteractions } from './features/chat/useTeacherComposerInteractions'
 import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSessionSidebarModel'
 import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
+import { parsePendingChatJob } from './features/chat/pendingChatJob'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import type {
   Message,
   PendingChatJob,
+  PendingToolRun,
   Skill,
   WorkbenchTab,
   WorkflowIndicator,
@@ -73,35 +75,6 @@ const WORKBENCH_HARD_MAX_WIDTH = 920
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
-}
-
-const parsePendingChatJob = (raw: string | null): PendingChatJob | null => {
-  if (!raw) return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!parsed || typeof parsed !== 'object') return null
-    const record = parsed as Record<string, unknown>
-    const jobId = String(record.job_id || '').trim()
-    const requestId = String(record.request_id || '').trim()
-    const placeholderId = String(record.placeholder_id || '').trim()
-    const userText = String(record.user_text || '').trim()
-    const sessionId = String(record.session_id || '').trim()
-    const createdAt = Number(record.created_at)
-    if (!jobId || !requestId || !placeholderId || !userText || !sessionId) return null
-    if (!Number.isFinite(createdAt)) return null
-    const laneId = String(record.lane_id || '').trim()
-    return {
-      job_id: jobId,
-      request_id: requestId,
-      placeholder_id: placeholderId,
-      user_text: userText,
-      session_id: sessionId,
-      created_at: createdAt,
-      ...(laneId ? { lane_id: laneId } : {}),
-    }
-  } catch {
-    return null
-  }
 }
 
 export default function App() {
@@ -132,7 +105,8 @@ export default function App() {
     uploading, uploadStatus, uploadError, uploadCardCollapsed, uploadJobId, uploadJobInfo, uploadConfirming, uploadStatusPollNonce,
     uploadDraft, draftPanelCollapsed, draftLoading, draftError, questionShowCount, draftSaving, draftActionStatus, draftActionError,
     misconceptionsText, misconceptionsDirty, progressPanelCollapsed, progressAssignmentId, progressLoading, progressError, progressData,
-    progressOnlyIncomplete, proposalLoading, proposalError, proposals, memoryStatusFilter, memoryInsights,
+    progressOnlyIncomplete, proposalLoading, proposalError, proposals, memoryStatusFilter, memoryInsights, studentProposalLoading,
+    studentProposalError, studentProposals, studentMemoryStatusFilter, studentMemoryStudentFilter, studentMemoryInsights,
     examId, examDate, examClassName, examPaperFiles, examScoreFiles, examAnswerFiles, examUploading, examUploadStatus, examUploadError,
     examJobId, examJobInfo, examStatusPollNonce, examDraft, examDraftPanelCollapsed, examDraftLoading, examDraftError, examDraftSaving,
     examDraftActionStatus, examDraftActionError, examConfirming,
@@ -141,7 +115,8 @@ export default function App() {
     setUploadConfirming, setUploadStatusPollNonce, setUploadDraft, setDraftPanelCollapsed, setDraftLoading, setDraftError,
     setQuestionShowCount, setDraftSaving, setDraftActionStatus, setDraftActionError, setMisconceptionsText, setMisconceptionsDirty,
     setProgressPanelCollapsed, setProgressAssignmentId, setProgressLoading, setProgressError, setProgressData, setProgressOnlyIncomplete,
-    setProposalLoading, setProposalError, setProposals, setMemoryStatusFilter, setMemoryInsights,
+    setProposalLoading, setProposalError, setProposals, setMemoryStatusFilter, setMemoryInsights, setStudentProposalLoading,
+    setStudentProposalError, setStudentProposals, setStudentMemoryStatusFilter, setStudentMemoryStudentFilter, setStudentMemoryInsights,
     setExamId, setExamDate, setExamClassName, setExamPaperFiles, setExamScoreFiles, setExamAnswerFiles, setExamUploading,
     setExamUploadStatus, setExamUploadError, setExamJobId, setExamJobInfo, setExamStatusPollNonce, setExamDraft,
     setExamDraftPanelCollapsed, setExamDraftLoading, setExamDraftError, setExamDraftSaving, setExamDraftActionStatus,
@@ -199,6 +174,8 @@ export default function App() {
   const [skillsError, setSkillsError] = useState('')
   const [composerWarning, setComposerWarning] = useState('')
   const [chatQueueHint, setChatQueueHint] = useState('')
+  const [pendingStreamStage, setPendingStreamStage] = useState('')
+  const [pendingToolRuns, setPendingToolRuns] = useState<PendingToolRun[]>([])
   const PENDING_CHAT_KEY = 'teacherPendingChatJob'
   const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() =>
     parsePendingChatJob(safeLocalStorageGetItem(PENDING_CHAT_KEY)),
@@ -239,19 +216,22 @@ export default function App() {
 
   const {
     refreshTeacherSessions, loadTeacherSessionMessages,
-    refreshMemoryProposals, refreshMemoryInsights,
+    refreshMemoryProposals, refreshMemoryInsights, deleteMemoryProposal,
+    refreshStudentMemoryProposals, refreshStudentMemoryInsights, reviewStudentMemoryProposal, deleteStudentMemoryProposal,
     submitMessage, fetchSkills, renderedMessages,
     activeSessionRef, sessionRequestRef,
     historyCursorRef, historyHasMoreRef, localDraftSessionIdsRef,
     pendingChatJobRef, markdownCacheRef,
   } = useTeacherChatApi({
     apiBase, activeSessionId, messages, activeSkillId, skillPinned, skillList,
-    pendingChatJob, memoryStatusFilter, skillsOpen, workbenchTab,
+    pendingChatJob, memoryStatusFilter, studentMemoryStatusFilter, studentMemoryStudentFilter, skillsOpen, workbenchTab,
     setMessages, setSending, setActiveSessionId, setPendingChatJob, setChatQueueHint,
+    setPendingStreamStage, setPendingToolRuns,
     setComposerWarning, setInput,
     setHistorySessions, setHistoryLoading, setHistoryError, setHistoryCursor, setHistoryHasMore,
     setLocalDraftSessionIds, setSessionLoading, setSessionError, setSessionCursor, setSessionHasMore,
     setProposalLoading, setProposalError, setProposals, setMemoryInsights,
+    setStudentProposalLoading, setStudentProposalError, setStudentProposals, setStudentMemoryInsights,
     setSkillList, setSkillsLoading, setSkillsError,
     chooseSkill, enableAutoScroll, setWheelScrollZone,
   })
@@ -335,6 +315,12 @@ export default function App() {
     if (pendingChatJob) safeLocalStorageSetItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
     else safeLocalStorageRemoveItem(PENDING_CHAT_KEY)
   }, [pendingChatJob, PENDING_CHAT_KEY])
+
+  useEffect(() => {
+    if (pendingChatJob?.job_id) return
+    setPendingStreamStage('')
+    setPendingToolRuns([])
+  }, [pendingChatJob?.job_id])
 
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
@@ -594,6 +580,11 @@ export default function App() {
     parseLineList,
     refreshMemoryInsights,
     refreshMemoryProposals,
+    refreshStudentMemoryInsights,
+    refreshStudentMemoryProposals,
+    onDeleteProposal: deleteMemoryProposal,
+    onReviewStudentProposal: reviewStudentMemoryProposal,
+    onDeleteStudentProposal: deleteStudentMemoryProposal,
     refreshWorkflowWorkbench,
     saveDraft,
     saveExamDraft,
@@ -720,6 +711,8 @@ export default function App() {
                 skillPinned={skillPinned}
                 input={input}
                 chatQueueHint={chatQueueHint}
+                pendingStreamStage={pendingStreamStage}
+                pendingToolRuns={pendingToolRuns}
                 composerWarning={composerWarning}
                 attachments={attachments}
                 uploadingAttachments={uploadingAttachments}

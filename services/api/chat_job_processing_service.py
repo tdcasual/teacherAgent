@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -104,6 +105,7 @@ def compute_chat_reply_sync(
     deps: ComputeChatReplyDeps,
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Tuple[str, Optional[str], str]:
     role_hint = detect_role_hint(req, detect_role=deps.detect_role)
     last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
@@ -253,25 +255,32 @@ def compute_chat_reply_sync(
     messages = deps.trim_messages(
         [{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint
     )
-    if role_hint == "student":
-        with deps.student_inflight(req.student_id) as allowed:
-            if not allowed:
-                return "正在生成上一条回复，请稍候再试。", role_hint, last_user_text
-            result = deps.run_agent(
+    def _run_agent_with_optional_events() -> Dict[str, Any]:
+        try:
+            return deps.run_agent(
+                messages,
+                role_hint,
+                extra_system=extra_system,
+                skill_id=req.skill_id,
+                teacher_id=effective_teacher_id or req.teacher_id,
+                event_sink=event_sink,
+            )
+        except TypeError:
+            return deps.run_agent(
                 messages,
                 role_hint,
                 extra_system=extra_system,
                 skill_id=req.skill_id,
                 teacher_id=effective_teacher_id or req.teacher_id,
             )
+
+    if role_hint == "student":
+        with deps.student_inflight(req.student_id) as allowed:
+            if not allowed:
+                return "正在生成上一条回复，请稍候再试。", role_hint, last_user_text
+            result = _run_agent_with_optional_events()
     else:
-        result = deps.run_agent(
-            messages,
-            role_hint,
-            extra_system=extra_system,
-            skill_id=req.skill_id,
-            teacher_id=effective_teacher_id or req.teacher_id,
-        )
+        result = _run_agent_with_optional_events()
 
     reply_text = deps.normalize_math_delimiters(result.get("reply", ""))
     if role_hint == "student" and persona_first_notice and persona_notice_name:
@@ -307,6 +316,12 @@ class ChatJobProcessDeps:
     maybe_compact_teacher_session: Callable[[str, str], None]
     diag_log: Callable[[str, Dict[str, Any]], None]
     release_lockfile: Callable[[Any], None]
+    append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
+        lambda _job_id, _event_type, _payload: {}
+    )
+    student_memory_auto_propose_from_turn: Callable[..., Dict[str, Any]] = (
+        lambda **_kwargs: {"ok": False, "created": False, "reason": "disabled"}
+    )
 
 
 class _ChatJobStatusWriter:
@@ -339,8 +354,80 @@ class _ChatJobStatusWriter:
         payload = dict(updates or {})
         payload["status"] = resolved
         self.deps.write_chat_job(self.job_id, payload)
+        event_type = ""
+        if resolved == "processing":
+            event_type = "job.processing"
+        elif resolved == "done":
+            event_type = "job.done"
+        elif resolved in {"failed", "cancelled"}:
+            event_type = f"job.{resolved}"
+        if event_type:
+            try:
+                self.deps.append_chat_event(
+                    self.job_id,
+                    event_type,
+                    {
+                        "status": resolved,
+                        "step": payload.get("step"),
+                        "reply": payload.get("reply"),
+                        "error": payload.get("error"),
+                        "error_detail": payload.get("error_detail"),
+                    },
+                )
+            except Exception:
+                _log.warning(
+                    "failed to append status event %s for job %s",
+                    event_type,
+                    self.job_id,
+                    exc_info=True,
+                )
         self.current_status = resolved
         return True
+
+
+def _iter_reply_chunks(text: str) -> List[str]:
+    content = str(text or "")
+    if not content:
+        return []
+    step = 24
+    return [content[idx : idx + step] for idx in range(0, len(content), step)]
+
+
+def _emit_assistant_reply_events(
+    *,
+    job_id: str,
+    reply_text: str,
+    deps: ChatJobProcessDeps,
+) -> None:
+    for chunk in _iter_reply_chunks(reply_text):
+        deps.append_chat_event(job_id, "assistant.delta", {"delta": chunk})
+    deps.append_chat_event(job_id, "assistant.done", {"text": str(reply_text or "")})
+
+
+def _call_compute_chat_reply_sync(
+    *,
+    deps: ChatJobProcessDeps,
+    req: Any,
+    session_id: str,
+    teacher_id_override: Optional[str],
+    event_sink: Callable[[str, Dict[str, Any]], None],
+) -> Tuple[str, Optional[str], str]:
+    supports_event_sink = True
+    try:
+        params = inspect.signature(deps.compute_chat_reply_sync).parameters
+        supports_event_sink = "event_sink" in params or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+    except Exception:
+        supports_event_sink = True
+
+    kwargs: Dict[str, Any] = {
+        "session_id": session_id,
+        "teacher_id_override": teacher_id_override,
+    }
+    if supports_event_sink:
+        kwargs["event_sink"] = event_sink
+    return deps.compute_chat_reply_sync(req, **kwargs)
 
 
 def _build_chat_request_for_job(
@@ -564,6 +651,52 @@ def _run_teacher_post_done_side_effects(
         )
 
 
+def _run_student_post_done_side_effects(
+    *,
+    req: Any,
+    job: Dict[str, Any],
+    session_id: str,
+    last_user_text: str,
+    reply_text: str,
+    deps: ChatJobProcessDeps,
+) -> None:
+    student_id = str(getattr(req, "student_id", "") or "").strip()
+    if not student_id:
+        return
+    teacher_id = str(getattr(req, "teacher_id", "") or "").strip()
+    try:
+        auto = deps.student_memory_auto_propose_from_turn(
+            teacher_id=teacher_id or None,
+            student_id=student_id,
+            session_id=str(session_id or ""),
+            user_text=last_user_text,
+            assistant_text=reply_text,
+            request_id=str(job.get("request_id") or ""),
+        )
+        if auto.get("created"):
+            deps.diag_log(
+                "student.memory.auto.proposed",
+                {
+                    "teacher_id": str(auto.get("teacher_id") or teacher_id),
+                    "student_id": student_id,
+                    "session_id": str(session_id or ""),
+                    "proposal_id": auto.get("proposal_id"),
+                    "memory_type": auto.get("memory_type"),
+                },
+            )
+    except Exception as exc:
+        _log.warning("operation failed", exc_info=True)
+        deps.diag_log(
+            "student.memory.auto.failed",
+            {
+                "teacher_id": teacher_id,
+                "student_id": student_id,
+                "session_id": str(session_id or ""),
+                "error": str(exc)[:200],
+            },
+        )
+
+
 def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
     claim_path = deps.chat_job_claim_path(job_id)
     if not deps.try_acquire_lockfile(claim_path, deps.chat_job_claim_ttl_sec):
@@ -583,11 +716,30 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             return
 
         t0 = deps.monotonic()
-        reply_text, role_hint, last_user_text = deps.compute_chat_reply_sync(
-            req,
+        event_state = {"assistant_done": False}
+
+        def _event_sink(event_type: str, payload: Dict[str, Any]) -> None:
+            try:
+                deps.append_chat_event(job_id, event_type, payload)
+                if str(event_type) == "assistant.done":
+                    event_state["assistant_done"] = True
+            except Exception:
+                _log.warning(
+                    "failed to append runtime event %s for job %s",
+                    event_type,
+                    job_id,
+                    exc_info=True,
+                )
+
+        reply_text, role_hint, last_user_text = _call_compute_chat_reply_sync(
+            deps=deps,
+            req=req,
             session_id=str(job.get("session_id") or "main"),
             teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
+            event_sink=_event_sink,
         )
+        if not event_state["assistant_done"]:
+            _emit_assistant_reply_events(job_id=job_id, reply_text=reply_text, deps=deps)
         duration_ms = int((deps.monotonic() - t0) * 1000)
         user_turn_persisted = bool(job.get("user_turn_persisted"))
 
@@ -614,6 +766,11 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
         if role_hint == "student" and req.student_id:
             _update_student_profile_safe(
                 req, last_user_text=last_user_text, reply_text=reply_text, deps=deps
+            )
+            student_session_id = str(job.get("session_id") or "") or deps.resolve_student_session_id(
+                req.student_id,
+                req.assignment_id,
+                req.assignment_date,
             )
             if not _persist_student_history(
                 job_id,
@@ -644,6 +801,15 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
             _run_teacher_post_done_side_effects(
                 teacher_id,
                 session_id,
+                last_user_text=last_user_text,
+                reply_text=reply_text,
+                deps=deps,
+            )
+        if role_hint == "student" and req.student_id:
+            _run_student_post_done_side_effects(
+                req=req,
+                job=job,
+                session_id=student_session_id,
                 last_user_text=last_user_text,
                 reply_text=reply_text,
                 deps=deps,

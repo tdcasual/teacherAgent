@@ -18,8 +18,11 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     skillsLoading,
     refreshMemoryProposals,
     refreshMemoryInsights,
+    refreshStudentMemoryProposals,
+    refreshStudentMemoryInsights,
     refreshWorkflowWorkbench,
     proposalLoading,
+    studentProposalLoading,
     progressLoading,
     uploading,
     examUploading,
@@ -38,6 +41,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
               } else if (workbenchTab === 'memory') {
                 void refreshMemoryProposals()
                 void refreshMemoryInsights()
+                void refreshStudentMemoryProposals()
+                void refreshStudentMemoryInsights()
               } else {
                 refreshWorkflowWorkbench()
               }
@@ -46,7 +51,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
               workbenchTab === 'skills'
                 ? skillsLoading
                 : workbenchTab === 'memory'
-                  ? proposalLoading
+                  ? proposalLoading || studentProposalLoading
                   : progressLoading || uploading || examUploading
             }
           >
@@ -100,6 +105,17 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           proposalError={viewModel.proposalError}
           proposalLoading={viewModel.proposalLoading}
           proposals={viewModel.proposals}
+          onDeleteProposal={viewModel.onDeleteProposal}
+          studentMemoryStatusFilter={viewModel.studentMemoryStatusFilter}
+          setStudentMemoryStatusFilter={viewModel.setStudentMemoryStatusFilter}
+          studentMemoryStudentFilter={viewModel.studentMemoryStudentFilter}
+          setStudentMemoryStudentFilter={viewModel.setStudentMemoryStudentFilter}
+          studentMemoryInsights={viewModel.studentMemoryInsights}
+          studentProposalError={viewModel.studentProposalError}
+          studentProposalLoading={viewModel.studentProposalLoading}
+          studentProposals={viewModel.studentProposals}
+          onReviewStudentProposal={viewModel.onReviewStudentProposal}
+          onDeleteStudentProposal={viewModel.onDeleteStudentProposal}
         />
       )}
     </aside>

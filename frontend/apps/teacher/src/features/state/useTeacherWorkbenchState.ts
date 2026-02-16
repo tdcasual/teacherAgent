@@ -4,7 +4,17 @@ import {
   teacherWorkbenchReducer,
   type TeacherWorkbenchState,
 } from './teacherWorkbenchState'
-import type { AssignmentProgress, ExamUploadDraft, ExamUploadJobStatus, TeacherMemoryInsightsResponse, TeacherMemoryProposal, UploadDraft, UploadJobStatus } from '../../appTypes'
+import type {
+  AssignmentProgress,
+  ExamUploadDraft,
+  ExamUploadJobStatus,
+  StudentMemoryInsightsResponse,
+  StudentMemoryProposal,
+  TeacherMemoryInsightsResponse,
+  TeacherMemoryProposal,
+  UploadDraft,
+  UploadJobStatus,
+} from '../../appTypes'
 
 type StateSetterValue<T> = T | ((prev: T) => T)
 
@@ -130,6 +140,18 @@ export function useTeacherWorkbenchState() {
   const setProposals = useCallback((value: TeacherMemoryProposal[]) => setField('proposals', value), [setField])
   const setMemoryStatusFilter = useCallback((value: 'applied' | 'rejected' | 'all') => setField('memoryStatusFilter', value), [setField])
   const setMemoryInsights = useCallback((value: TeacherMemoryInsightsResponse | null) => setField('memoryInsights', value), [setField])
+  const setStudentProposalLoading = useCallback((value: boolean) => setField('studentProposalLoading', value), [setField])
+  const setStudentProposalError = useCallback((value: string) => setField('studentProposalError', value), [setField])
+  const setStudentProposals = useCallback((value: StudentMemoryProposal[]) => setField('studentProposals', value), [setField])
+  const setStudentMemoryStatusFilter = useCallback(
+    (value: 'proposed' | 'applied' | 'rejected' | 'all') => setField('studentMemoryStatusFilter', value),
+    [setField],
+  )
+  const setStudentMemoryStudentFilter = useCallback((value: string) => setField('studentMemoryStudentFilter', value), [setField])
+  const setStudentMemoryInsights = useCallback(
+    (value: StudentMemoryInsightsResponse | null) => setField('studentMemoryInsights', value),
+    [setField],
+  )
 
   const setExamId = useCallback((value: string) => setField('examId', value), [setField])
   const setExamDate = useCallback((value: string) => setField('examDate', value), [setField])
@@ -203,6 +225,12 @@ export function useTeacherWorkbenchState() {
     setProposals,
     setMemoryStatusFilter,
     setMemoryInsights,
+    setStudentProposalLoading,
+    setStudentProposalError,
+    setStudentProposals,
+    setStudentMemoryStatusFilter,
+    setStudentMemoryStudentFilter,
+    setStudentMemoryInsights,
     setExamId,
     setExamDate,
     setExamClassName,

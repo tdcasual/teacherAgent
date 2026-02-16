@@ -3,7 +3,7 @@ import RoutingPage from '../routing/RoutingPage'
 import ChatComposer from './ChatComposer'
 import ChatMessages from './ChatMessages'
 import MentionPanel from './MentionPanel'
-import type { MentionOption } from '../../appTypes'
+import type { MentionOption, PendingToolRun } from '../../appTypes'
 import type { InvocationTriggerType } from './invocation'
 import type { ComposerAttachment } from '../../../../shared/useChatAttachments'
 
@@ -38,6 +38,8 @@ type TeacherChatMainContentProps = {
   skillPinned: boolean
   input: string
   chatQueueHint: string
+  pendingStreamStage: string
+  pendingToolRuns: PendingToolRun[]
   composerWarning: string
   attachments: ComposerAttachment[]
   uploadingAttachments: boolean
@@ -72,6 +74,8 @@ export default function TeacherChatMainContent({
   skillPinned,
   input,
   chatQueueHint,
+  pendingStreamStage,
+  pendingToolRuns,
   composerWarning,
   attachments,
   uploadingAttachments,
@@ -122,6 +126,8 @@ export default function TeacherChatMainContent({
             onMessagesScroll={onMessagesScroll}
             showScrollToBottom={showScrollToBottom}
             onScrollToBottom={onScrollToBottom}
+            pendingStreamStage={pendingStreamStage}
+            pendingToolRuns={pendingToolRuns}
           />
 
           <ChatComposer
