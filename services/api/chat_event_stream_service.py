@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 import time
+from collections import OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +28,7 @@ class _StreamSignal:
 
 
 _STREAM_SIGNAL_LOCK = threading.Lock()
-_STREAM_SIGNALS: Dict[str, _StreamSignal] = {}
+_STREAM_SIGNALS: "OrderedDict[str, _StreamSignal]" = OrderedDict()
 _STREAM_SIGNAL_LAST_SWEEP_TS = 0.0
 
 
@@ -38,23 +39,24 @@ def _job_signal_key(job_id: str) -> str:
 def _trim_signal_capacity_locked() -> None:
     cap = max(1, int(CHAT_STREAM_SIGNAL_MAX_ENTRIES))
     while len(_STREAM_SIGNALS) > cap:
-        oldest_key = ""
-        oldest_ts = float("inf")
-        for key, signal in _STREAM_SIGNALS.items():
-            if signal.last_touched < oldest_ts:
-                oldest_key = key
-                oldest_ts = signal.last_touched
-        if not oldest_key:
+        try:
+            _STREAM_SIGNALS.popitem(last=False)
+        except Exception:
             break
-        _STREAM_SIGNALS.pop(oldest_key, None)
 
 
 def _evict_stream_signals_locked(now: float) -> None:
     global _STREAM_SIGNAL_LAST_SWEEP_TS
     ttl = max(1.0, float(CHAT_STREAM_SIGNAL_TTL_SEC))
-    stale_keys = [key for key, signal in _STREAM_SIGNALS.items() if (now - signal.last_touched) >= ttl]
-    for key in stale_keys:
-        _STREAM_SIGNALS.pop(key, None)
+    while _STREAM_SIGNALS:
+        oldest_key = next(iter(_STREAM_SIGNALS.keys()))
+        oldest = _STREAM_SIGNALS.get(oldest_key)
+        if oldest is None:
+            _STREAM_SIGNALS.pop(oldest_key, None)
+            continue
+        if (now - oldest.last_touched) < ttl:
+            break
+        _STREAM_SIGNALS.pop(oldest_key, None)
     _trim_signal_capacity_locked()
     _STREAM_SIGNAL_LAST_SWEEP_TS = now
 
@@ -63,17 +65,28 @@ def _signal_for_job(job_id: str) -> _StreamSignal:
     key = _job_signal_key(job_id)
     with _STREAM_SIGNAL_LOCK:
         now = time.monotonic()
-        sweep_interval = max(0.05, float(CHAT_STREAM_SIGNAL_SWEEP_INTERVAL_SEC))
-        cap = max(1, int(CHAT_STREAM_SIGNAL_MAX_ENTRIES))
-        should_sweep = (now - _STREAM_SIGNAL_LAST_SWEEP_TS) >= sweep_interval
-        if should_sweep or len(_STREAM_SIGNALS) > cap:
-            _evict_stream_signals_locked(now)
         signal = _STREAM_SIGNALS.get(key)
         if signal is None:
             signal = _StreamSignal()
             _STREAM_SIGNALS[key] = signal
         signal.touch(now)
-        _trim_signal_capacity_locked()
+        _STREAM_SIGNALS.move_to_end(key, last=True)
+
+        cap = max(1, int(CHAT_STREAM_SIGNAL_MAX_ENTRIES))
+        if len(_STREAM_SIGNALS) > cap:
+            _trim_signal_capacity_locked()
+
+        sweep_interval = max(0.05, float(CHAT_STREAM_SIGNAL_SWEEP_INTERVAL_SEC))
+        if (now - _STREAM_SIGNAL_LAST_SWEEP_TS) >= sweep_interval:
+            _evict_stream_signals_locked(now)
+            current = _STREAM_SIGNALS.get(key)
+            if current is None:
+                signal = _StreamSignal()
+                _STREAM_SIGNALS[key] = signal
+                signal.touch(now)
+                _STREAM_SIGNALS.move_to_end(key, last=True)
+            else:
+                signal = current
         return signal
 
 

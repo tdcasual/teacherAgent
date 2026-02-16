@@ -127,6 +127,7 @@ def test_chat_stream_signal_clear_resets_signal_state() -> None:
 def test_chat_stream_signal_registry_evicts_when_over_capacity(monkeypatch) -> None:
     with stream_service._STREAM_SIGNAL_LOCK:
         stream_service._STREAM_SIGNALS.clear()
+        stream_service._STREAM_SIGNAL_LAST_SWEEP_TS = 0.0
     monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_MAX_ENTRIES", 3)
     monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_TTL_SEC", 3600.0)
 
@@ -135,6 +136,28 @@ def test_chat_stream_signal_registry_evicts_when_over_capacity(monkeypatch) -> N
 
     with stream_service._STREAM_SIGNAL_LOCK:
         assert len(stream_service._STREAM_SIGNALS) <= 3
+
+
+def test_chat_stream_signal_registry_keeps_recently_touched_entries(monkeypatch) -> None:
+    with stream_service._STREAM_SIGNAL_LOCK:
+        stream_service._STREAM_SIGNALS.clear()
+        stream_service._STREAM_SIGNAL_LAST_SWEEP_TS = 0.0
+    monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_MAX_ENTRIES", 3)
+    monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_TTL_SEC", 3600.0)
+
+    notify_chat_stream_event("signal-lru-a")
+    notify_chat_stream_event("signal-lru-b")
+    notify_chat_stream_event("signal-lru-c")
+    # Touch A again so B becomes the oldest entry.
+    notify_chat_stream_event("signal-lru-a")
+    notify_chat_stream_event("signal-lru-d")
+
+    with stream_service._STREAM_SIGNAL_LOCK:
+        keys = set(stream_service._STREAM_SIGNALS.keys())
+    assert "signal-lru-a" in keys
+    assert "signal-lru-c" in keys
+    assert "signal-lru-d" in keys
+    assert "signal-lru-b" not in keys
 
 
 def test_chat_stream_signal_evict_is_not_run_on_every_notify(monkeypatch) -> None:
@@ -148,6 +171,7 @@ def test_chat_stream_signal_evict_is_not_run_on_every_notify(monkeypatch) -> Non
 
     with stream_service._STREAM_SIGNAL_LOCK:
         stream_service._STREAM_SIGNALS.clear()
+        stream_service._STREAM_SIGNAL_LAST_SWEEP_TS = 0.0
     monkeypatch.setattr(stream_service, "_evict_stream_signals_locked", _counting_evict)
     monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_MAX_ENTRIES", 1024)
     monkeypatch.setattr(stream_service, "CHAT_STREAM_SIGNAL_TTL_SEC", 3600.0)
