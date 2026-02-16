@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .agent_service import (
     parse_tool_json as _parse_tool_json_impl,
@@ -401,6 +401,7 @@ def run_agent(
     agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     return _run_agent_runtime_impl(
         messages,
@@ -410,6 +411,7 @@ def run_agent(
         agent_id=agent_id,
         skill_id=skill_id,
         teacher_id=teacher_id,
+        event_sink=event_sink,
     )
 
 
@@ -421,12 +423,14 @@ def _compute_chat_reply_sync(
     req: ChatRequest,
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Tuple[str, Optional[str], str]:
     return _compute_chat_reply_sync_impl(
         req,
         deps=_compute_chat_reply_deps(),
         session_id=session_id,
         teacher_id_override=teacher_id_override,
+        event_sink=event_sink,
     )
 
 

@@ -35,6 +35,9 @@ class ChatStartDeps:
     update_teacher_session_index: Callable[..., None]
     parse_date_str: Callable[[Optional[str]], str]
     resolve_chat_attachment_context: Callable[..., Dict[str, Any]]
+    append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
+        lambda _job_id, _event_type, _payload: {}
+    )
 
 
 @dataclass(frozen=True)
@@ -325,6 +328,20 @@ def _enqueue_and_finalize_start(
         },
         False,
     )
+    try:
+        deps.append_chat_event(
+            job_id,
+            "job.queued",
+            {
+                "status": "queued",
+                "lane_id": context.lane_id,
+                "lane_queue_position": queue_info.get("lane_queue_position", 0),
+                "lane_queue_size": queue_info.get("lane_queue_size", 0),
+                "lane_active": bool(queue_info.get("lane_active")),
+            },
+        )
+    except Exception:
+        _log.warning("failed to append queued event for chat job %s", job_id, exc_info=True)
     return {
         "ok": True,
         "job_id": job_id,

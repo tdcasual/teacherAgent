@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -387,6 +388,14 @@ def _dispatch_tool_safely(
         return {"error": f"tool_dispatch failed: {exc}"}
 
 
+def _iter_reply_chunks(text: str) -> List[str]:
+    content = str(text or "")
+    if not content:
+        return []
+    step = 24
+    return [content[idx : idx + step] for idx in range(0, len(content), step)]
+
+
 def _handle_structured_tool_calls(
     *,
     deps: AgentRuntimeDeps,
@@ -399,6 +408,7 @@ def _handle_structured_tool_calls(
     teacher_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Tuple[int, bool]:
     remaining = max_tool_calls - tool_calls_total
     if remaining <= 0:
@@ -406,6 +416,16 @@ def _handle_structured_tool_calls(
     convo.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
     for call in tool_calls[:remaining]:
         name = call["function"]["name"]
+        call_id = str(call.get("id") or "")
+        t0 = time.monotonic()
+        if callable(event_sink):
+            event_sink(
+                "tool.start",
+                {
+                    "tool_name": str(name),
+                    "tool_call_id": call_id,
+                },
+            )
         if name not in allowed:
             result = {"error": "permission denied", "tool": name}
             convo.append(
@@ -415,6 +435,17 @@ def _handle_structured_tool_calls(
                     "content": json.dumps(result, ensure_ascii=False),
                 }
             )
+            if callable(event_sink):
+                event_sink(
+                    "tool.finish",
+                    {
+                        "tool_name": str(name),
+                        "tool_call_id": call_id,
+                        "ok": False,
+                        "duration_ms": int((time.monotonic() - t0) * 1000),
+                        "error": "permission denied",
+                    },
+                )
             continue
         args = call["function"].get("arguments") or "{}"
         try:
@@ -439,6 +470,18 @@ def _handle_structured_tool_calls(
                 "content": json.dumps(result, ensure_ascii=False),
             }
         )
+        if callable(event_sink):
+            ok = not (isinstance(result, dict) and str(result.get("error") or "").strip())
+            event_sink(
+                "tool.finish",
+                {
+                    "tool_name": str(name),
+                    "tool_call_id": call_id,
+                    "ok": bool(ok),
+                    "duration_ms": int((time.monotonic() - t0) * 1000),
+                    "error": str(result.get("error") or "") if isinstance(result, dict) else "",
+                },
+            )
         tool_calls_total += 1
     if len(tool_calls) > remaining:
         for call in tool_calls[remaining:]:
@@ -466,6 +509,7 @@ def _handle_json_tool_request(
     teacher_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Tuple[int, bool]:
     if tool_calls_total >= max_tool_calls:
         return tool_calls_total, True
@@ -480,6 +524,15 @@ def _handle_json_tool_request(
         )
         return tool_calls_total, False
     args_dict = tool_request.get("arguments") or {}
+    t0 = time.monotonic()
+    if callable(event_sink):
+        event_sink(
+            "tool.start",
+            {
+                "tool_name": str(name),
+                "tool_call_id": "",
+            },
+        )
     result = _dispatch_tool_safely(
         deps,
         name,
@@ -502,6 +555,18 @@ def _handle_json_tool_request(
             ),
         }
     )
+    if callable(event_sink):
+        ok = not (isinstance(result, dict) and str(result.get("error") or "").strip())
+        event_sink(
+            "tool.finish",
+            {
+                "tool_name": str(name),
+                "tool_call_id": "",
+                "ok": bool(ok),
+                "duration_ms": int((time.monotonic() - t0) * 1000),
+                "error": str(result.get("error") or "") if isinstance(result, dict) else "",
+            },
+        )
     return tool_calls_total + 1, False
 
 
@@ -517,10 +582,16 @@ def _run_tool_loop(
     allowed: Set[str],
     max_tool_rounds: int,
     max_tool_calls: int,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Tuple[Optional[str], bool]:
     tool_calls_total = 0
     tool_budget_exhausted = False
-    for _ in range(max_tool_rounds):
+    for round_index in range(max_tool_rounds):
+        if callable(event_sink):
+            event_sink(
+                "llm.round.start",
+                {"round": int(round_index + 1), "tools_enabled": bool(tools)},
+            )
         resp = deps.call_llm(
             convo,
             tools=tools,
@@ -545,6 +616,7 @@ def _run_tool_loop(
                 teacher_id=teacher_id,
                 max_tool_calls=max_tool_calls,
                 tool_calls_total=tool_calls_total,
+                event_sink=event_sink,
             )
             if tool_budget_exhausted:
                 break
@@ -562,10 +634,15 @@ def _run_tool_loop(
                 teacher_id=teacher_id,
                 max_tool_calls=max_tool_calls,
                 tool_calls_total=tool_calls_total,
+                event_sink=event_sink,
             )
             if tool_budget_exhausted:
                 break
             continue
+        if callable(event_sink):
+            for chunk in _iter_reply_chunks(content or ""):
+                event_sink("assistant.delta", {"delta": chunk})
+            event_sink("assistant.done", {"text": content or ""})
         return content or "", tool_budget_exhausted
     return None, tool_budget_exhausted
 
@@ -620,6 +697,7 @@ def run_agent_runtime(
     agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     convo = [{"role": "system", "content": deps.build_system_prompt(role_hint)}]
     skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
@@ -670,6 +748,7 @@ def run_agent_runtime(
         allowed=allowed,
         max_tool_rounds=max_tool_rounds,
         max_tool_calls=max_tool_calls,
+        event_sink=event_sink,
     )
     if reply is not None:
         return {"reply": reply}
