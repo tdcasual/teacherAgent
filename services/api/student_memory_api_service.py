@@ -320,11 +320,12 @@ def student_memory_auto_propose_from_turn_api(
         limit=300,
         deps=deps,
     )
-    existing = (
-        existing_resp.get("proposals")
-        if bool(existing_resp.get("ok")) and isinstance(existing_resp.get("proposals"), list)
-        else []
-    )
+    existing: List[Dict[str, Any]] = []
+    existing_raw = existing_resp.get("proposals")
+    if bool(existing_resp.get("ok")) and isinstance(existing_raw, list):
+        for item in existing_raw:
+            if isinstance(item, dict):
+                existing.append(item)
     today = str(deps.now_iso() or "").strip().split("T", 1)[0]
     if _auto_daily_quota_reached(existing, today=today):
         return {"ok": False, "created": False, "reason": "daily_quota_reached"}
