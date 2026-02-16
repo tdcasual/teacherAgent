@@ -9,6 +9,7 @@ class TeacherMemoryApiDeps:
     resolve_teacher_id: Callable[[Optional[str]], str]
     teacher_memory_list_proposals: Callable[..., Dict[str, Any]]
     teacher_memory_apply: Callable[..., Dict[str, Any]]
+    teacher_memory_delete: Callable[..., Dict[str, Any]]
 
 
 def list_proposals_api(
@@ -34,4 +35,17 @@ def review_proposal_api(
         teacher_id_final,
         proposal_id=str(proposal_id or "").strip(),
         approve=bool(approve),
+    )
+
+
+def delete_proposal_api(
+    proposal_id: str,
+    *,
+    teacher_id: Optional[str],
+    deps: TeacherMemoryApiDeps,
+) -> Dict[str, Any]:
+    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    return deps.teacher_memory_delete(
+        teacher_id_final,
+        proposal_id=str(proposal_id or "").strip(),
     )

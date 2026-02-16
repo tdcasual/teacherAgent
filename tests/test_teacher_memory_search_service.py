@@ -29,7 +29,7 @@ class TeacherMemorySearchServiceTest(unittest.TestCase):
             ensure_teacher_workspace=lambda teacher_id: None,
             mem0_search=lambda teacher_id, query, limit: {"ok": True, "matches": [{"proposal_id": "p1", "content": "x"}]},
             search_filter_expired=True,
-            load_record=lambda teacher_id, proposal_id: {"proposal_id": proposal_id},
+            load_record=lambda teacher_id, proposal_id: {"proposal_id": proposal_id, "status": "applied"},
             is_expired_record=lambda rec: False,
             diag_log=lambda *_args, **_kwargs: None,
             log_event=lambda teacher_id, event, payload: events.append((teacher_id, event, payload)),
@@ -40,6 +40,22 @@ class TeacherMemorySearchServiceTest(unittest.TestCase):
         self.assertEqual(result.get("mode"), "mem0")
         self.assertEqual(len(result.get("matches") or []), 1)
         self.assertEqual(events[-1][1], "search")
+
+    def test_mem0_hits_are_dropped_when_record_deleted(self):
+        deps = TeacherMemorySearchDeps(
+            ensure_teacher_workspace=lambda teacher_id: None,
+            mem0_search=lambda teacher_id, query, limit: {"ok": True, "matches": [{"proposal_id": "p_deleted", "content": "x"}]},
+            search_filter_expired=True,
+            load_record=lambda teacher_id, proposal_id: {"proposal_id": proposal_id, "status": "deleted"},
+            is_expired_record=lambda rec: False,
+            diag_log=lambda *_args, **_kwargs: None,
+            log_event=lambda *_args, **_kwargs: None,
+            teacher_workspace_file=lambda teacher_id, name: Path("/tmp") / name,
+            teacher_daily_memory_dir=lambda teacher_id: Path("/tmp"),
+        )
+        result = teacher_memory_search("teacher_1", "查找", deps=deps, limit=3)
+        self.assertEqual(result.get("mode"), "keyword")
+        self.assertEqual(result.get("matches"), [])
 
     def test_keyword_fallback_searches_workspace_files(self):
         with TemporaryDirectory() as td:

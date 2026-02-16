@@ -39,6 +39,20 @@ class TeacherMemoryProposalReviewRequest(BaseModel):
     approve: bool = True
 
 
+class StudentMemoryProposalCreateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    student_id: str
+    memory_type: str
+    content: str
+    evidence_refs: Optional[List[str]] = None
+    source: Optional[str] = None
+
+
+class StudentMemoryProposalReviewRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    approve: bool = True
+
+
 class StudentImportRequest(BaseModel):
     source: Optional[str] = None
     exam_id: Optional[str] = None

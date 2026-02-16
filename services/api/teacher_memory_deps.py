@@ -278,4 +278,5 @@ def _teacher_memory_api_deps():
         resolve_teacher_id=_app_core().resolve_teacher_id,
         teacher_memory_list_proposals=tmc.teacher_memory_list_proposals,
         teacher_memory_apply=tmc.teacher_memory_apply,
+        teacher_memory_delete=tmc.teacher_memory_delete_proposal,
     )

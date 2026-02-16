@@ -73,6 +73,31 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 self.assertTrue(captured.get("approve"))
                 self.assertIs(captured.get("deps"), sentinel)
 
+    def test_delete_endpoint_uses_teacher_memory_api_deps(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td), auto_apply_enabled=False)
+            sentinel = object()
+            captured = {}
+
+            def fake_delete(proposal_id, *, teacher_id, deps):  # type: ignore[no-untyped-def]
+                captured["proposal_id"] = proposal_id
+                captured["teacher_id"] = teacher_id
+                captured["deps"] = deps
+                return {"ok": True, "status": "deleted"}
+
+            app_mod._delete_teacher_memory_proposal_api_impl = fake_delete  # type: ignore[attr-defined]
+            app_mod._teacher_memory_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+
+            with TestClient(app_mod.app) as client:
+                deleted = client.delete(
+                    "/teacher/memory/proposals/p123",
+                    params={"teacher_id": "teacher_y"},
+                )
+                self.assertEqual(deleted.status_code, 200)
+                self.assertEqual(captured.get("proposal_id"), "p123")
+                self.assertEqual(captured.get("teacher_id"), "teacher_y")
+                self.assertIs(captured.get("deps"), sentinel)
+
     def test_list_and_review_proposals_when_manual_mode(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=False)
@@ -132,6 +157,39 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 )
                 self.assertEqual(review.status_code, 200)
                 self.assertEqual(review.json().get("status"), "applied")
+
+    def test_delete_applied_proposal_hides_it_from_list(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td), auto_apply_enabled=True)
+            teacher_id = app_mod.resolve_teacher_id("teacher")
+            prop = app_mod.teacher_memory_propose(
+                teacher_id,
+                target="MEMORY",
+                title="偏好C",
+                content="请先给结论再给步骤。",
+            )
+            proposal_id = prop["proposal_id"]
+            self.assertEqual(prop.get("status"), "applied")
+
+            with TestClient(app_mod.app) as client:
+                before = client.get("/teacher/memory/proposals", params={"teacher_id": teacher_id, "status": "applied"})
+                self.assertEqual(before.status_code, 200)
+                self.assertTrue(any(p.get("proposal_id") == proposal_id for p in before.json().get("proposals") or []))
+
+                deleted = client.delete(
+                    f"/teacher/memory/proposals/{proposal_id}",
+                    params={"teacher_id": teacher_id},
+                )
+                self.assertEqual(deleted.status_code, 200)
+                self.assertEqual(deleted.json().get("status"), "deleted")
+                memory_path = app_mod.teacher_workspace_file(teacher_id, "MEMORY.md")
+                memory_text = memory_path.read_text(encoding="utf-8")
+                self.assertNotIn(f"- entry_id: {proposal_id}", memory_text)
+                self.assertNotIn("请先给结论再给步骤。", memory_text)
+
+                after = client.get("/teacher/memory/proposals", params={"teacher_id": teacher_id, "status": "applied"})
+                self.assertEqual(after.status_code, 200)
+                self.assertFalse(any(p.get("proposal_id") == proposal_id for p in after.json().get("proposals") or []))
 
     def test_invalid_status_returns_400(self):
         with TemporaryDirectory() as td:

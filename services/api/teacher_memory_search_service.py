@@ -40,6 +40,8 @@ def teacher_memory_search(
             raw_matches = list(mem0_res.get("matches") or [])
             matches: List[Dict[str, Any]] = []
             dropped_expired = 0
+            dropped_inactive = 0
+            dropped_missing = 0
             for item in raw_matches:
                 if not isinstance(item, dict):
                     continue
@@ -47,7 +49,14 @@ def teacher_memory_search(
                     pid = str(item.get("proposal_id") or "").strip()
                     if pid:
                         rec = deps.load_record(teacher_id, pid)
-                        if isinstance(rec, dict) and deps.is_expired_record(rec):
+                        if not isinstance(rec, dict):
+                            dropped_missing += 1
+                            continue
+                        status = str(rec.get("status") or "").strip().lower()
+                        if status != "applied" or rec.get("superseded_by"):
+                            dropped_inactive += 1
+                            continue
+                        if deps.is_expired_record(rec):
                             dropped_expired += 1
                             continue
                 matches.append(item)
@@ -55,7 +64,14 @@ def teacher_memory_search(
                     break
             deps.diag_log(
                 "teacher.mem0.search.hit",
-                {"teacher_id": teacher_id, "query_len": len(q), "matches": len(matches), "dropped_expired": dropped_expired},
+                {
+                    "teacher_id": teacher_id,
+                    "query_len": len(q),
+                    "matches": len(matches),
+                    "dropped_expired": dropped_expired,
+                    "dropped_inactive": dropped_inactive,
+                    "dropped_missing": dropped_missing,
+                },
             )
             deps.log_event(
                 teacher_id,
@@ -66,6 +82,8 @@ def teacher_memory_search(
                     "hits": len(matches),
                     "raw_hits": len(raw_matches),
                     "dropped_expired": dropped_expired,
+                    "dropped_inactive": dropped_inactive,
+                    "dropped_missing": dropped_missing,
                 },
             )
             if matches:
