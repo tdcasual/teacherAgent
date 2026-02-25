@@ -103,12 +103,17 @@ const remarkLatexBrackets = () => {
   };
 };
 
+// KaTeX relies on inline styles for baseline/offset geometry (subscript/superscript layout).
+// Allow only numeric positioning-related declarations instead of unbounded style attrs.
+const KATEX_STYLE_RE =
+  /^(?:\s*(?:height|width|min-width|left|top|margin-left|margin-right|padding-left|vertical-align|border-bottom-width)\s*:\s*-?\d*\.?\d+(?:em|ex|px|pt|pc|in|cm|mm|mu|%)?\s*;|\s*position\s*:\s*relative\s*;)+\s*$/;
+
 const katexSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span || []), 'className'],
-    div: [...(defaultSchema.attributes?.div || []), 'className'],
+    span: [...(defaultSchema.attributes?.span || []), 'className', ['style', KATEX_STYLE_RE]],
+    div: [...(defaultSchema.attributes?.div || []), 'className', ['style', KATEX_STYLE_RE]],
     code: [...(defaultSchema.attributes?.code || []), 'className'],
   },
 };
