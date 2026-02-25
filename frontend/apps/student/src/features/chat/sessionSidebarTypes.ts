@@ -34,14 +34,10 @@ export type SessionSidebarProps = {
   sessionError: string
   verifyOpen: boolean
   handleVerify: (event: FormEvent) => void
-  handleSetPassword: (event: FormEvent) => void
   nameInput: string
   classInput: string
   credentialInput: string
-  credentialType: 'token' | 'password'
-  newPasswordInput: string
   verifying: boolean
-  settingPassword: boolean
   verifyError: string
   verifyInfo: string
   todayAssignment: AssignmentDetail | null

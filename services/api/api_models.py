@@ -131,6 +131,13 @@ class AdminTeacherResetPasswordRequest(BaseModel):
     new_password: Optional[str] = None
 
 
+class TeacherStudentPasswordResetRequest(BaseModel):
+    scope: str = "student"
+    student_id: Optional[str] = None
+    class_name: Optional[str] = None
+    new_password: Optional[str] = None
+
+
 class UploadConfirmRequest(BaseModel):
     job_id: str
     requirements_override: Optional[Dict[str, Any]] = None

@@ -277,8 +277,6 @@ export function useSessionManager({ state, dispatch, refs, setActiveSession, sav
       { type: 'SET', field: 'nameInput', value: '' },
       { type: 'SET', field: 'classInput', value: '' },
       { type: 'SET', field: 'credentialInput', value: '' },
-      { type: 'SET', field: 'credentialType', value: 'token' },
-      { type: 'SET', field: 'newPasswordInput', value: '' },
       { type: 'SET', field: 'verifyError', value: '' },
       { type: 'SET', field: 'verifyInfo', value: '' },
       { type: 'SET', field: 'verifyOpen', value: true },

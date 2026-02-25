@@ -28,6 +28,13 @@ type TeacherIdentifyResponse = {
   need_email_disambiguation?: boolean
 }
 
+type StudentIdentifyResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+  candidate_id?: string
+}
+
 type TeacherLoginResponse = {
   ok: boolean
   error?: string
@@ -47,7 +54,47 @@ type TeacherSetPasswordResponse = {
   message?: string
 }
 
+type StudentPasswordResetScope = 'student' | 'class' | 'all'
+
+type StudentPasswordResetItem = {
+  student_id?: string
+  student_name?: string
+  class_name?: string
+  temp_password?: string
+}
+
+type TeacherStudentPasswordResetResponse = {
+  ok: boolean
+  error?: string
+  message?: string
+  count?: number
+  items?: StudentPasswordResetItem[]
+}
+
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+const toText = (value: unknown): string => String(value ?? '').trim()
+
+const mapStudentResetError = (errorCode: string, fallback: string): string => {
+  if (errorCode === 'missing_student_id') return '请先填写学生姓名和班级。'
+  if (errorCode === 'missing_class_name') return '请先填写班级名称。'
+  if (errorCode === 'not_found') return '未找到匹配学生，请检查输入条件。'
+  if (errorCode === 'weak_password') return '密码至少 8 位，且需同时包含字母与数字。'
+  if (errorCode === 'forbidden') return '当前账号没有执行该操作的权限。'
+  return fallback
+}
+
+const buildStudentPasswordRows = (items: StudentPasswordResetItem[]): string =>
+  items
+    .map((item) =>
+      [
+        toText(item.student_id),
+        toText(item.student_name),
+        toText(item.class_name),
+        toText(item.temp_password),
+      ].join(','),
+    )
+    .join('\n')
 
 export default function TeacherTopbar({
   topbarRef,
@@ -76,6 +123,17 @@ export default function TeacherTopbar({
   const [settingPassword, setSettingPassword] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authInfo, setAuthInfo] = useState('')
+
+  const [studentResetScope, setStudentResetScope] = useState<StudentPasswordResetScope>('student')
+  const [studentNameInput, setStudentNameInput] = useState('')
+  const [studentClassInput, setStudentClassInput] = useState('')
+  const [targetClassNameInput, setTargetClassNameInput] = useState('')
+  const [studentResetPasswordInput, setStudentResetPasswordInput] = useState('')
+  const [confirmResetAll, setConfirmResetAll] = useState(false)
+  const [studentResetSubmitting, setStudentResetSubmitting] = useState(false)
+  const [studentResetError, setStudentResetError] = useState('')
+  const [studentResetInfo, setStudentResetInfo] = useState('')
+  const [studentResetItems, setStudentResetItems] = useState<StudentPasswordResetItem[]>([])
 
   useEffect(() => {
     const sync = () => {
@@ -149,7 +207,7 @@ export default function TeacherTopbar({
       }
       const loginData = (await loginRes.json()) as TeacherLoginResponse
       if (!loginData.ok || !loginData.access_token) {
-        const reason = String(loginData.error || '').trim()
+        const reason = toText(loginData.error)
         let message = loginData.message || '教师认证失败。'
         if (reason === 'invalid_credential') {
           message = credentialType === 'token' ? 'token 不正确，请重试。' : '密码不正确，请重试。'
@@ -163,9 +221,9 @@ export default function TeacherTopbar({
       }
 
       const teacher = loginData.teacher || {}
-      const teacherId = String(loginData.subject_id || teacher.teacher_id || identifyData.candidate_id || '').trim()
-      const teacherName = String(teacher.teacher_name || name || teacherId).trim()
-      const teacherEmail = String(teacher.email || email || '').trim()
+      const teacherId = toText(loginData.subject_id || teacher.teacher_id || identifyData.candidate_id)
+      const teacherName = toText(teacher.teacher_name || name || teacherId)
+      const teacherEmail = toText(teacher.email || email)
       writeTeacherAuthSession({
         accessToken: loginData.access_token,
         teacherId,
@@ -244,7 +302,7 @@ export default function TeacherTopbar({
       }
       const setPasswordData = (await setPasswordRes.json()) as TeacherSetPasswordResponse
       if (!setPasswordData.ok) {
-        const reason = String(setPasswordData.error || '').trim()
+        const reason = toText(setPasswordData.error)
         let message = setPasswordData.message || '设置密码失败。'
         if (reason === 'weak_password') {
           message = '密码至少 8 位，且需同时包含字母和数字。'
@@ -263,6 +321,123 @@ export default function TeacherTopbar({
       setAuthError(message)
     } finally {
       setSettingPassword(false)
+    }
+  }
+
+  const handleStudentPasswordReset = async (event: FormEvent) => {
+    event.preventDefault()
+    const apiBase = safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL
+    const accessToken = readTeacherAccessToken()
+    if (!accessToken) {
+      setStudentResetError('请先完成教师认证。')
+      return
+    }
+
+    setStudentResetError('')
+    setStudentResetInfo('')
+    setStudentResetItems([])
+    setStudentResetSubmitting(true)
+    try {
+      const payload: Record<string, string> = { scope: studentResetScope }
+      const requestedPassword = studentResetPasswordInput.trim()
+      if (requestedPassword) payload.new_password = requestedPassword
+
+      if (studentResetScope === 'student') {
+        const name = studentNameInput.trim()
+        const className = studentClassInput.trim()
+        if (!name) {
+          setStudentResetError('请先填写学生姓名。')
+          return
+        }
+        if (!className) {
+          setStudentResetError('请先填写学生班级。')
+          return
+        }
+        const identifyRes = await fetch(`${apiBase}/auth/student/identify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, class_name: className }),
+        })
+        if (!identifyRes.ok) {
+          const text = await identifyRes.text()
+          throw new Error(text || `状态码 ${identifyRes.status}`)
+        }
+        const identifyData = (await identifyRes.json()) as StudentIdentifyResponse
+        if (!identifyData.ok || !identifyData.candidate_id) {
+          const errorCode = toText(identifyData.error)
+          if (errorCode === 'multiple') {
+            setStudentResetError('同名学生，请补充准确班级后重试。')
+          } else {
+            setStudentResetError(identifyData.message || '未找到该学生。')
+          }
+          return
+        }
+        payload.student_id = identifyData.candidate_id
+      } else if (studentResetScope === 'class') {
+        const className = targetClassNameInput.trim()
+        if (!className) {
+          setStudentResetError('请先填写班级名称。')
+          return
+        }
+        payload.class_name = className
+      } else if (!confirmResetAll) {
+        setStudentResetError('请勾选“确认重置全部学生密码”。')
+        return
+      }
+
+      const resetRes = await fetch(`${apiBase}/auth/teacher/student/reset-passwords`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      let resetData: TeacherStudentPasswordResetResponse | null = null
+      try {
+        resetData = (await resetRes.json()) as TeacherStudentPasswordResetResponse
+      } catch {
+        resetData = null
+      }
+      if (!resetRes.ok) {
+        const detail = toText((resetData as Record<string, unknown> | null)?.error) || toText((resetData as Record<string, unknown> | null)?.message)
+        const raw = detail || toText((resetData as Record<string, unknown> | null)?.detail) || `状态码 ${resetRes.status}`
+        throw new Error(mapStudentResetError(raw, raw))
+      }
+      if (!resetData?.ok) {
+        const code = toText(resetData?.error)
+        const message = mapStudentResetError(code, resetData?.message || '重置学生密码失败。')
+        setStudentResetError(message)
+        return
+      }
+
+      const items = Array.isArray(resetData.items) ? resetData.items : []
+      const count = Number(resetData.count || items.length || 0)
+      if (!items.length) {
+        setStudentResetError('未返回可分发密码，请重试。')
+        return
+      }
+      setStudentResetItems(items)
+      setStudentResetInfo(`已重置 ${count} 个学生密码。请立即保存下方新密码。`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || '重置学生密码失败')
+      setStudentResetError(message)
+    } finally {
+      setStudentResetSubmitting(false)
+    }
+  }
+
+  const handleCopyStudentPasswords = async () => {
+    if (!studentResetItems.length) {
+      setStudentResetError('当前没有可复制的密码结果。')
+      return
+    }
+    try {
+      const rows = buildStudentPasswordRows(studentResetItems)
+      await navigator.clipboard.writeText(rows)
+      setStudentResetInfo('密码结果已复制。')
+    } catch {
+      setStudentResetError('复制失败，请手动复制列表内容。')
     }
   }
 
@@ -314,7 +489,7 @@ export default function TeacherTopbar({
         </button>
 
         {authOpen ? (
-          <div className="absolute right-0 top-[calc(100%+8px)] w-[320px] rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-3 z-40 grid gap-2.5">
+          <div className="absolute right-0 top-[calc(100%+8px)] w-[360px] max-h-[min(80vh,720px)] overflow-y-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-3 z-40 grid gap-2.5">
             <div className="text-sm font-semibold">教师认证</div>
             <form className="grid gap-2" onSubmit={handleAuthSubmit}>
               <div className="grid gap-1">
@@ -389,9 +564,122 @@ export default function TeacherTopbar({
                 {settingPassword ? '设置中…' : '设置密码'}
               </button>
             </form>
+
+            {authed ? (
+              <form className="grid gap-2 border border-border rounded-[10px] p-2.5 bg-[#f8fafc]" onSubmit={handleStudentPasswordReset}>
+                <div className="text-sm font-semibold">学生密码管理</div>
+                <div className="text-xs text-muted">支持按单个学生、班级或全部学生重置密码，并回显新密码。</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className={`ghost ${studentResetScope === 'student' ? 'font-semibold' : ''}`}
+                    onClick={() => setStudentResetScope('student')}
+                  >
+                    单个学生
+                  </button>
+                  <button
+                    type="button"
+                    className={`ghost ${studentResetScope === 'class' ? 'font-semibold' : ''}`}
+                    onClick={() => setStudentResetScope('class')}
+                  >
+                    按班级
+                  </button>
+                  <button
+                    type="button"
+                    className={`ghost ${studentResetScope === 'all' ? 'font-semibold' : ''}`}
+                    onClick={() => setStudentResetScope('all')}
+                  >
+                    全部学生
+                  </button>
+                </div>
+                {studentResetScope === 'student' ? (
+                  <>
+                    <div className="grid gap-1">
+                      <label className="text-xs text-muted">学生姓名</label>
+                      <input
+                        value={studentNameInput}
+                        onChange={(event) => setStudentNameInput(event.target.value)}
+                        placeholder="例如：刘昊然"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <label className="text-xs text-muted">学生班级</label>
+                      <input
+                        value={studentClassInput}
+                        onChange={(event) => setStudentClassInput(event.target.value)}
+                        placeholder="例如：高二2403班"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </>
+                ) : null}
+                {studentResetScope === 'class' ? (
+                  <div className="grid gap-1">
+                    <label className="text-xs text-muted">目标班级</label>
+                    <input
+                      value={targetClassNameInput}
+                      onChange={(event) => setTargetClassNameInput(event.target.value)}
+                      placeholder="例如：高二2403班"
+                      autoComplete="off"
+                    />
+                  </div>
+                ) : null}
+                {studentResetScope === 'all' ? (
+                  <label className="text-xs text-muted flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={confirmResetAll}
+                      onChange={(event) => setConfirmResetAll(event.target.checked)}
+                    />
+                    我确认重置全部学生密码
+                  </label>
+                ) : null}
+                <div className="grid gap-1">
+                  <label className="text-xs text-muted">指定密码（可选）</label>
+                  <input
+                    type="password"
+                    value={studentResetPasswordInput}
+                    onChange={(event) => setStudentResetPasswordInput(event.target.value)}
+                    placeholder="留空则系统生成默认密码"
+                    autoComplete="new-password"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="border-none rounded-[10px] px-3 py-[9px] bg-[#2563eb] text-white cursor-pointer"
+                  disabled={studentResetSubmitting}
+                >
+                  {studentResetSubmitting ? '重置中…' : '重置学生密码'}
+                </button>
+                {studentResetItems.length ? (
+                  <div className="grid gap-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs text-muted">结果列表（{studentResetItems.length}）</div>
+                      <button type="button" className="ghost" onClick={() => void handleCopyStudentPasswords()}>
+                        复制结果
+                      </button>
+                    </div>
+                    <div className="max-h-[180px] overflow-auto rounded-lg border border-border bg-white p-2 text-[12px] leading-5">
+                      {studentResetItems.slice(0, 80).map((item, index) => (
+                        <div key={`${toText(item.student_id)}-${index}`} className="font-mono break-all">
+                          {toText(item.student_id)},{toText(item.student_name)},{toText(item.class_name)},{toText(item.temp_password)}
+                        </div>
+                      ))}
+                    </div>
+                    {studentResetItems.length > 80 ? (
+                      <div className="text-xs text-muted">仅展示前 80 条，复制可获取完整结果。</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </form>
+            ) : null}
+
             {needEmail ? <div className="text-xs text-muted">检测到同名教师，请补充邮箱后重试。</div> : null}
             {authError ? <div className="status err">{authError}</div> : null}
             {authInfo ? <div className="status ok">{authInfo}</div> : null}
+            {studentResetError ? <div className="status err">{studentResetError}</div> : null}
+            {studentResetInfo ? <div className="status ok">{studentResetInfo}</div> : null}
             {authed ? (
               <button
                 type="button"
@@ -400,6 +688,9 @@ export default function TeacherTopbar({
                   clearTeacherAuthSession()
                   setAuthInfo('')
                   setAuthError('')
+                  setStudentResetError('')
+                  setStudentResetInfo('')
+                  setStudentResetItems([])
                 }}
               >
                 退出认证

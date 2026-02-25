@@ -152,9 +152,3 @@ export type StudentLoginResponse = {
   student?: VerifiedStudent
   password_set?: boolean
 }
-
-export type StudentSetPasswordResponse = {
-  ok: boolean
-  error?: string
-  message?: string
-}

@@ -250,6 +250,139 @@ def test_teacher_identify_requires_email_for_duplicate_names(tmp_path: Path):
     assert protected.status_code == 200
 
 
+def test_teacher_can_reset_student_passwords_by_scope(tmp_path: Path):
+    secret = "auth-teacher-reset-student-passwords-secret"
+    _write_student_profile(
+        tmp_path,
+        student_id="S001",
+        student_name="刘昊然",
+        class_name="高二2403班",
+    )
+    _write_student_profile(
+        tmp_path,
+        student_id="S002",
+        student_name="畅爽",
+        class_name="高二2403班",
+    )
+    _write_student_profile(
+        tmp_path,
+        student_id="S003",
+        student_name="武熙语",
+        class_name="高二2404班",
+    )
+    _write_teacher_profile(
+        tmp_path,
+        teacher_id="teacher_alpha",
+        teacher_name="张老师",
+        email="alpha@example.com",
+    )
+
+    app_mod = _load_app(tmp_path, secret=secret)
+    client = TestClient(app_mod.app)
+    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+
+    export_teacher_res = client.post(
+        "/auth/admin/teacher/export-tokens",
+        headers=admin_headers,
+        json={"ids": ["teacher_alpha"]},
+    )
+    assert export_teacher_res.status_code == 200
+    teacher_token = str(
+        ((export_teacher_res.json().get("items") or [{}])[0].get("token") or "")
+    )
+    assert teacher_token
+
+    teacher_login_res = client.post(
+        "/auth/teacher/login",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "token",
+            "credential": teacher_token,
+        },
+    )
+    assert teacher_login_res.status_code == 200
+    teacher_access_token = str(teacher_login_res.json().get("access_token") or "")
+    assert teacher_access_token
+    teacher_headers = {"Authorization": f"Bearer {teacher_access_token}"}
+
+    reset_one_res = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=teacher_headers,
+        json={"scope": "student", "student_id": "S001"},
+    )
+    assert reset_one_res.status_code == 200
+    reset_one_payload = reset_one_res.json()
+    assert reset_one_payload.get("ok") is True
+    assert int(reset_one_payload.get("count") or 0) == 1
+    first_temp_password = str(
+        ((reset_one_payload.get("items") or [{}])[0].get("temp_password") or "")
+    )
+    assert first_temp_password
+
+    first_student_login = client.post(
+        "/auth/student/login",
+        json={
+            "candidate_id": "S001",
+            "credential_type": "password",
+            "credential": first_temp_password,
+        },
+    )
+    assert first_student_login.status_code == 200
+    assert first_student_login.json().get("ok") is True
+    first_student_access_token = str(first_student_login.json().get("access_token") or "")
+    assert first_student_access_token
+
+    reset_class_res = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=teacher_headers,
+        json={
+            "scope": "class",
+            "class_name": "高二2403班",
+            "new_password": "ClassPwd123",
+        },
+    )
+    assert reset_class_res.status_code == 200
+    reset_class_payload = reset_class_res.json()
+    assert reset_class_payload.get("ok") is True
+    class_items = reset_class_payload.get("items") or []
+    class_ids = {str(item.get("student_id") or "") for item in class_items}
+    assert class_ids == {"S001", "S002"}
+    assert all(str(item.get("temp_password") or "") == "ClassPwd123" for item in class_items)
+
+    revoked_after_class_reset = client.get(
+        "/student/history/sessions",
+        headers={"Authorization": f"Bearer {first_student_access_token}"},
+        params={"student_id": "S001"},
+    )
+    assert revoked_after_class_reset.status_code == 401
+    assert revoked_after_class_reset.json().get("detail") == "token_revoked"
+
+    for sid in ("S001", "S002"):
+        class_login_res = client.post(
+            "/auth/student/login",
+            json={
+                "candidate_id": sid,
+                "credential_type": "password",
+                "credential": "ClassPwd123",
+            },
+        )
+        assert class_login_res.status_code == 200
+        assert class_login_res.json().get("ok") is True
+
+    reset_all_res = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=teacher_headers,
+        json={"scope": "all"},
+    )
+    assert reset_all_res.status_code == 200
+    reset_all_payload = reset_all_res.json()
+    assert reset_all_payload.get("ok") is True
+    all_items = reset_all_payload.get("items") or []
+    all_ids = {str(item.get("student_id") or "") for item in all_items}
+    assert all_ids == {"S001", "S002", "S003"}
+    assert all(str(item.get("temp_password") or "").strip() for item in all_items)
+
+
 def test_admin_bootstrap_login_and_manage_teacher_accounts(tmp_path: Path):
     secret = "auth-admin-bootstrap-secret"
     _write_teacher_profile(

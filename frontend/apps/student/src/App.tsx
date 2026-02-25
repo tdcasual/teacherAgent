@@ -28,7 +28,7 @@ export default function App() {
 
   // ── Hooks ──
   const { viewStateSyncReady } = useStudentSessionViewStateSync({ state, dispatch, setActiveSession })
-  const { handleVerify, handleSetPassword } = useVerification({ state, dispatch })
+  const { handleVerify } = useVerification({ state, dispatch })
   useAssignment({ state, dispatch })
 
   const sessionManager = useSessionManager({
@@ -427,14 +427,10 @@ export default function App() {
             sessionError={state.sessionError}
             verifyOpen={state.verifyOpen}
             handleVerify={handleVerify}
-            handleSetPassword={handleSetPassword}
             nameInput={state.nameInput}
             classInput={state.classInput}
             credentialInput={state.credentialInput}
-            credentialType={state.credentialType}
-            newPasswordInput={state.newPasswordInput}
             verifying={state.verifying}
-            settingPassword={state.settingPassword}
             verifyError={state.verifyError}
             verifyInfo={state.verifyInfo}
             todayAssignment={state.todayAssignment}

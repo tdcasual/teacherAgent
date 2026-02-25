@@ -102,10 +102,7 @@ export type StudentState = {
   nameInput: string
   classInput: string
   credentialInput: string
-  credentialType: 'token' | 'password'
-  newPasswordInput: string
   verifying: boolean
-  settingPassword: boolean
   verifyError: string
   verifyInfo: string
   sessions: StudentHistorySession[]
@@ -208,10 +205,7 @@ function buildInitialState(): StudentState {
     nameInput: '',
     classInput: '',
     credentialInput: '',
-    credentialType: 'token',
-    newPasswordInput: '',
     verifying: false,
-    settingPassword: false,
     verifyError: '',
     verifyInfo: '',
     sessions: [],

@@ -796,6 +796,122 @@ class AuthRegistryStore:
             payload["temp_password"] = password_value
         return payload
 
+    def reset_student_passwords(
+        self,
+        *,
+        scope: str,
+        student_id: Optional[str],
+        class_name: Optional[str],
+        new_password: Optional[str],
+        actor_id: str,
+        actor_role: str,
+    ) -> Dict[str, Any]:
+        scope_norm = str(scope or "").strip().lower() or "student"
+        targets_result = self._resolve_student_password_targets(
+            scope=scope_norm,
+            student_id=student_id,
+            class_name=class_name,
+        )
+        if not targets_result.get("ok"):
+            return targets_result
+        targets = targets_result.get("items") or []
+        if not targets:
+            return {"ok": False, "error": "not_found"}
+
+        requested_password = str(new_password or "").strip()
+        if requested_password:
+            password_error = validate_password_strength(requested_password)
+            if password_error:
+                return {
+                    "ok": False,
+                    "error": password_error,
+                    "message": "密码至少 8 位，且需同时包含字母与数字。",
+                }
+
+        ensured_targets: List[Dict[str, str]] = []
+        for target in targets:
+            sid = str(target.get("student_id") or "").strip()
+            if not sid:
+                continue
+            row = self._ensure_student_auth(
+                student_id=sid,
+                student_name=str(target.get("student_name") or "").strip(),
+                class_name=str(target.get("class_name") or "").strip(),
+                regenerate_token=False,
+            )
+            if not row:
+                continue
+            ensured_targets.append(
+                {
+                    "student_id": sid,
+                    "student_name": str(row.get("student_name") or "").strip(),
+                    "class_name": str(row.get("class_name") or "").strip(),
+                }
+            )
+
+        if not ensured_targets:
+            return {"ok": False, "error": "not_found"}
+
+        now = _utc_now()
+        generated_password = not bool(requested_password)
+        items: List[Dict[str, Any]] = []
+        with self._connect() as conn:
+            for target in ensured_targets:
+                sid = str(target.get("student_id") or "").strip()
+                if not sid:
+                    continue
+                password_value = requested_password or _generate_bootstrap_password()
+                conn.execute(
+                    (
+                        "UPDATE student_auth SET password_hash = ?, password_algo = ?, "
+                        "password_set_at = ?, token_version = token_version + 1, failed_count = 0, "
+                        "locked_until = NULL, updated_at = ? WHERE student_id = ?"
+                    ),
+                    (
+                        _hash_password(password_value),
+                        "pbkdf2_sha256",
+                        _iso(now),
+                        _iso(now),
+                        sid,
+                    ),
+                )
+                row = conn.execute(
+                    (
+                        "SELECT student_id, student_name, class_name, token_version "
+                        "FROM student_auth WHERE student_id = ?"
+                    ),
+                    (sid,),
+                ).fetchone()
+                if row is None:
+                    continue
+                self._append_audit(
+                    conn,
+                    actor_id=actor_id,
+                    actor_role=actor_role,
+                    action="reset_password",
+                    target_id=sid,
+                    target_role="student",
+                    detail={"scope": scope_norm, "generated": generated_password},
+                )
+                items.append(
+                    {
+                        "student_id": str(row["student_id"] or ""),
+                        "student_name": str(row["student_name"] or ""),
+                        "class_name": str(row["class_name"] or ""),
+                        "token_version": int(row["token_version"] or 1),
+                        "generated_password": generated_password,
+                        "temp_password": password_value,
+                    }
+                )
+
+        return {
+            "ok": True,
+            "scope": scope_norm,
+            "count": len(items),
+            "generated_password": generated_password,
+            "items": items,
+        }
+
     def _write_admin_bootstrap_file(self, *, username: str, password: str) -> str:
         auth_dir = self.data_dir / "auth"
         auth_dir.mkdir(parents=True, exist_ok=True)
@@ -1360,6 +1476,41 @@ class AuthRegistryStore:
             )
         return out
 
+    def _list_student_identities(self) -> List[Dict[str, str]]:
+        out: Dict[str, Dict[str, str]] = {}
+
+        for profile in self._list_student_profiles():
+            sid = str(profile.get("student_id") or "").strip()
+            if not sid:
+                continue
+            out[sid] = {
+                "student_id": sid,
+                "student_name": str(profile.get("student_name") or "").strip(),
+                "class_name": str(profile.get("class_name") or "").strip(),
+            }
+
+        with self._connect() as conn:
+            for row in conn.execute(
+                "SELECT student_id, student_name, class_name FROM student_auth ORDER BY student_id"
+            ).fetchall():
+                sid = str(row["student_id"] or "").strip()
+                if not sid:
+                    continue
+                existing = out.get(sid)
+                if existing is None:
+                    out[sid] = {
+                        "student_id": sid,
+                        "student_name": str(row["student_name"] or "").strip(),
+                        "class_name": str(row["class_name"] or "").strip(),
+                    }
+                    continue
+                if not str(existing.get("student_name") or "").strip():
+                    existing["student_name"] = str(row["student_name"] or "").strip()
+                if not str(existing.get("class_name") or "").strip():
+                    existing["class_name"] = str(row["class_name"] or "").strip()
+
+        return [out[key] for key in sorted(out.keys())]
+
     def _list_teacher_identities(self) -> List[Dict[str, str]]:
         out: Dict[str, Dict[str, str]] = {}
 
@@ -1437,6 +1588,44 @@ class AuthRegistryStore:
             if str(item.get("teacher_id") or "").strip() == tid:
                 return item
         return None
+
+    def _resolve_student_password_targets(
+        self,
+        *,
+        scope: str,
+        student_id: Optional[str],
+        class_name: Optional[str],
+    ) -> Dict[str, Any]:
+        if scope not in {"student", "class", "all"}:
+            return {"ok": False, "error": "invalid_scope"}
+
+        if scope == "student":
+            sid = str(student_id or "").strip()
+            if not sid:
+                return {"ok": False, "error": "missing_student_id"}
+            identity = self._get_student_identity(sid)
+            if identity is None:
+                return {"ok": False, "error": "not_found"}
+            return {"ok": True, "scope": scope, "items": [identity]}
+
+        all_students = self._list_student_identities()
+        if scope == "all":
+            if not all_students:
+                return {"ok": False, "error": "not_found"}
+            return {"ok": True, "scope": scope, "items": all_students}
+
+        class_text = str(class_name or "").strip()
+        if not class_text:
+            return {"ok": False, "error": "missing_class_name"}
+        class_norm = normalize(class_text)
+        class_students = [
+            item
+            for item in all_students
+            if normalize(str(item.get("class_name") or "").strip()) == class_norm
+        ]
+        if not class_students:
+            return {"ok": False, "error": "not_found"}
+        return {"ok": True, "scope": scope, "items": class_students}
 
     def _to_csv(self, role: str, items: Sequence[Dict[str, Any]]) -> str:
         output = StringIO()

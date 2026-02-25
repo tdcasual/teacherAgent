@@ -16,6 +16,7 @@ from ..api_models import (
     TeacherIdentifyRequest,
     TeacherLoginRequest,
     TeacherSetPasswordRequest,
+    TeacherStudentPasswordResetRequest,
 )
 from ..auth_registry_service import build_auth_registry_store
 from ..auth_service import AuthError, access_token_ttl_sec, mint_access_token, require_principal
@@ -44,6 +45,17 @@ def _admin_actor() -> tuple[str, str]:
     if principal is None:
         # auth disabled: keep local development flow available
         return "admin_local", "admin"
+    return principal.actor_id, principal.role
+
+
+def _teacher_or_admin_actor() -> tuple[str, str]:
+    try:
+        principal = require_principal(roles=("teacher", "admin"))
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if principal is None:
+        # auth disabled: keep local development flow available
+        return "teacher_local", "teacher"
     return principal.actor_id, principal.role
 
 
@@ -139,6 +151,22 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=req.candidate_id,
             actor_role="teacher",
         )
+
+    @router.post("/auth/teacher/student/reset-passwords")
+    def auth_teacher_student_reset_passwords(req: TeacherStudentPasswordResetRequest) -> Any:
+        actor_id, actor_role = _teacher_or_admin_actor()
+        store = build_auth_registry_store(data_dir=core.DATA_DIR)
+        result = store.reset_student_passwords(
+            scope=req.scope,
+            student_id=req.student_id,
+            class_name=req.class_name,
+            new_password=req.new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        if not result.get("ok") and result.get("error") == "not_found":
+            raise HTTPException(status_code=404, detail="not_found")
+        return result
 
     @router.post("/auth/admin/login")
     def auth_admin_login(req: AdminLoginRequest) -> Any:
