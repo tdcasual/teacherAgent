@@ -208,6 +208,97 @@ test('closing settings with local draft asks for confirmation', async ({ page })
   await expect(page.locator('.settings-overlay')).toBeVisible()
 })
 
+test('rules section keeps edit panel expanded while typing rule id', async ({ page }) => {
+  await openTeacherApp(page)
+  await setupRoutingSettingsMocks(page)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '路由规则' }).click()
+  await page.getByRole('button', { name: '新增规则' }).click()
+
+  const ruleDetails = page.locator('.rule-card details').first()
+  await ruleDetails.locator('summary', { hasText: '编辑规则' }).click()
+  await expect(ruleDetails).toHaveAttribute('open', '')
+
+  const ruleIdInput = ruleDetails
+    .locator('.grid.gap-\\[6px\\]')
+    .filter({ hasText: '规则 ID' })
+    .locator('input')
+    .first()
+  await ruleIdInput.click()
+  await ruleIdInput.pressSequentially('abc')
+
+  await expect(ruleDetails).toHaveAttribute('open', '')
+  await expect(ruleIdInput).toHaveValue(/abc/)
+})
+
+test('rules section keeps edit panel expanded while typing role filters', async ({ page }) => {
+  await openTeacherApp(page)
+  await setupRoutingSettingsMocks(page)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '路由规则' }).click()
+  await page.getByRole('button', { name: '新增规则' }).click()
+
+  const ruleDetails = page.locator('.rule-card details').first()
+  await ruleDetails.locator('summary', { hasText: '编辑规则' }).click()
+  await expect(ruleDetails).toHaveAttribute('open', '')
+
+  const rolesInput = ruleDetails
+    .locator('.grid.gap-\\[6px\\]')
+    .filter({ hasText: '角色（逗号分隔）' })
+    .locator('input')
+    .first()
+  await rolesInput.fill('')
+  await rolesInput.pressSequentially('teacher,student')
+
+  await expect(ruleDetails).toHaveAttribute('open', '')
+  await expect(rolesInput).toHaveValue(/student/)
+})
+
+test('channels section keeps advanced panel expanded while typing channel id', async ({ page }) => {
+  await openTeacherApp(page)
+  await setupRoutingSettingsMocks(page)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '渠道' }).click()
+
+  const channelDetails = page.locator('.routing-item details').first()
+  await channelDetails.locator('summary', { hasText: '高级设置' }).click()
+  await expect(channelDetails).toHaveAttribute('open', '')
+
+  const channelIdInput = channelDetails
+    .locator('.routing-field')
+    .filter({ hasText: '渠道 ID' })
+    .locator('input')
+    .first()
+  await channelIdInput.click()
+  await channelIdInput.pressSequentially('abc')
+
+  await expect(channelDetails).toHaveAttribute('open', '')
+  await expect(channelIdInput).toHaveValue(/abc/)
+})
+
+test('channels section keeps advanced panel expanded while typing channel title', async ({ page }) => {
+  await openTeacherApp(page)
+  await setupRoutingSettingsMocks(page)
+
+  await page.getByRole('button', { name: '设置' }).click()
+  await page.getByRole('button', { name: '渠道' }).click()
+
+  const channelDetails = page.locator('.routing-item details').first()
+  await channelDetails.locator('summary', { hasText: '高级设置' }).click()
+  await expect(channelDetails).toHaveAttribute('open', '')
+
+  const firstChannel = page.locator('.routing-item').first()
+  const channelTitleInput = firstChannel.locator('.routing-field').filter({ hasText: '名称' }).locator('input').first()
+  await channelTitleInput.click()
+  await channelTitleInput.pressSequentially('渠道-稳定输入')
+
+  await expect(channelDetails).toHaveAttribute('open', '')
+  await expect(channelTitleInput).toHaveValue(/渠道-稳定输入/)
+})
+
 test('provider tab still renders when routing overview request fails', async ({ page }) => {
   await openTeacherApp(page)
 

@@ -304,6 +304,8 @@ def test_run_chat_job_requeues_next_job(monkeypatch: pytest.MonkeyPatch) -> None
 def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     queue = _FakeQueue()
     finish_calls: List[str] = []
+    failed_writes: List[Dict[str, str]] = []
+    failed_events: List[Dict[str, str]] = []
 
     class _Store:
         def finish(self, job_id: str, lane_id: str) -> str | None:
@@ -311,7 +313,24 @@ def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch
             return None
 
     mod = SimpleNamespace(
-        process_chat_job=lambda _job_id: (_ for _ in ()).throw(RuntimeError("process failed"))
+        process_chat_job=lambda _job_id: (_ for _ in ()).throw(RuntimeError("process failed")),
+        write_chat_job=lambda job_id, updates: failed_writes.append(
+            {
+                "job_id": str(job_id),
+                "status": str((updates or {}).get("status") or ""),
+                "error": str((updates or {}).get("error") or ""),
+                "error_detail": str((updates or {}).get("error_detail") or ""),
+            }
+        ),
+        append_chat_event=lambda job_id, event_type, payload: failed_events.append(
+            {
+                "job_id": str(job_id),
+                "type": str(event_type),
+                "status": str((payload or {}).get("status") or ""),
+                "error": str((payload or {}).get("error") or ""),
+                "error_detail": str((payload or {}).get("error_detail") or ""),
+            }
+        ),
     )
 
     monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
@@ -321,5 +340,22 @@ def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(RuntimeError, match="process failed"):
         rq_tasks.run_chat_job("chat-2", "lane-2", tenant_id="t")
 
+    assert failed_writes == [
+        {
+            "job_id": "chat-2",
+            "status": "failed",
+            "error": "chat_job_failed",
+            "error_detail": "process failed",
+        }
+    ]
+    assert failed_events == [
+        {
+            "job_id": "chat-2",
+            "type": "job.failed",
+            "status": "failed",
+            "error": "chat_job_failed",
+            "error_detail": "process failed",
+        }
+    ]
     assert finish_calls == ["chat-2:lane-2"]
     assert queue.calls == []

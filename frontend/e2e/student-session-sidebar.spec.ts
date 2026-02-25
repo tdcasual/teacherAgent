@@ -462,6 +462,192 @@ test('switching sessions while pending loads target session history', async ({ p
     })
 })
 
+test('switching away and back to pending session reloads correct history without cross-session mix', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await setupStudentState(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  let startSessionId = ''
+  const historyCallsBySession: Record<string, number> = {}
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [
+            { session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' },
+            { session_id: 's2', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-s2' },
+          ],
+          next_cursor: null,
+          total: 2,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = url.searchParams.get('session_id') || 'main'
+      historyCallsBySession[sessionId] = (historyCallsBySession[sessionId] || 0) + 1
+      const content = sessionId === 's2' ? 'history-s2' : 'history-main'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'POST' && path === '/chat/start') {
+      const body = JSON.parse(request.postData() || '{}') as { session_id?: string }
+      startSessionId = String(body.session_id || '')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, job_id: 'student_pending_switch_back', status: 'queued' }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/stream') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: '',
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_pending_switch_back', status: 'processing' }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
+
+  const userText = '待处理问题-切走再切回'
+  await page.locator('textarea').fill(userText)
+  await page.locator('textarea').press('Enter')
+  await expect(page.locator('.message.user .text').filter({ hasText: userText }).first()).toBeVisible()
+  await expect.poll(() => startSessionId).toBe('main')
+
+  const s2Session = page.locator('.session-item .session-select').filter({ hasText: 's2' }).first()
+  const mainSession = page.locator('.session-item .session-select').filter({ hasText: 'main' }).first()
+
+  await s2Session.click()
+  await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-s2' }).first()).toBeVisible()
+  await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' })).toHaveCount(0)
+
+  const mainCallsBeforeSwitchBack = historyCallsBySession.main || 0
+  await mainSession.click()
+
+  await expect.poll(() => historyCallsBySession.main || 0).toBeGreaterThan(mainCallsBeforeSwitchBack)
+
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => {
+        const activeIds = Array.from(document.querySelectorAll('.session-item.active .session-id')).map((el) =>
+          String((el as HTMLElement).innerText || '').trim(),
+        )
+        const assistantTexts = Array.from(document.querySelectorAll('.message.assistant .text')).map((el) =>
+          String((el as HTMLElement).innerText || '').trim(),
+        )
+        return {
+          activeIds,
+          hasHistoryMain: assistantTexts.some((text) => text.includes('history-main')),
+          hasHistoryS2: assistantTexts.some((text) => text.includes('history-s2')),
+        }
+      })
+    })
+    .toEqual({
+      activeIds: ['main'],
+      hasHistoryMain: true,
+      hasHistoryS2: false,
+    })
+})
+
 test('sending one pending request keeps only one user bubble', async ({ page }) => {
   await setupStudentState(page, {
     stateOverrides: {

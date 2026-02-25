@@ -184,3 +184,88 @@ def test_worker_loop_skips_pick_when_event_not_set(tmp_path):
 
     chat_job_worker_loop(deps=deps)
     assert pick_calls["count"] == 0
+
+
+def test_worker_loop_marks_failed_and_emits_terminal_event_on_processing_error(tmp_path):
+    stop_event = threading.Event()
+    write_calls = []
+    append_calls = []
+
+    class _OneShotEvent:
+        def __init__(self):
+            self.calls = 0
+
+        def set(self):
+            return None
+
+        def clear(self):
+            return None
+
+        def wait(self, timeout=0.1):
+            self.calls += 1
+            if self.calls == 1:
+                return True
+            stop_event.set()
+            return False
+
+    event = _OneShotEvent()
+
+    picked = {"done": False}
+
+    def _pick_next():
+        if picked["done"]:
+            return "", ""
+        picked["done"] = True
+        return "cjob_err_1", "lane:test"
+
+    deps = ChatWorkerDeps(
+        chat_job_dir=tmp_path / "jobs",
+        chat_job_lock=threading.Lock(),
+        chat_job_event=event,
+        chat_worker_threads=[],
+        chat_worker_pool_size=1,
+        worker_started_get=lambda: True,
+        worker_started_set=lambda value: None,
+        load_chat_job=lambda job_id: {"job_id": job_id},
+        write_chat_job=lambda job_id, updates: write_calls.append(
+            {
+                "job_id": str(job_id),
+                "status": str((updates or {}).get("status") or ""),
+                "error": str((updates or {}).get("error") or ""),
+            }
+        ),
+        resolve_chat_lane_id_from_job=lambda job: "lane:test",
+        chat_enqueue_locked=lambda job_id, lane_id: 1,
+        chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+        chat_pick_next_locked=_pick_next,
+        chat_mark_done_locked=lambda job_id, lane_id: None,
+        chat_has_pending_locked=lambda: False,
+        process_chat_job=lambda _job_id: (_ for _ in ()).throw(RuntimeError("boom")),
+        diag_log=lambda *_args, **_kwargs: None,
+        sleep=lambda _seconds: None,
+        thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+        append_chat_event=lambda job_id, event_type, payload: append_calls.append(
+            {
+                "job_id": str(job_id),
+                "type": str(event_type),
+                "status": str((payload or {}).get("status") or ""),
+                "error": str((payload or {}).get("error") or ""),
+            }
+        )
+        or {},
+        stop_event=stop_event,
+    )
+
+    chat_job_worker_loop(deps=deps)
+
+    assert write_calls == [
+        {"job_id": "cjob_err_1", "status": "failed", "error": "chat_job_failed"}
+    ]
+    assert append_calls == [
+        {
+            "job_id": "cjob_err_1",
+            "type": "job.failed",
+            "status": "failed",
+            "error": "chat_job_failed",
+        }
+    ]

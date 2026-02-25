@@ -1061,6 +1061,468 @@ test('near-simultaneous cross-tab sends stay single-shot even without Web Locks 
   await pageB.close()
 })
 
+test('pending recovery keeps both history and pending bubble on initial load', async ({ page }) => {
+  await setupStudentState(page, {
+    stateOverrides: {
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  await page.addInitScript(() => {
+    const sid = 'S001'
+    const sessionId = 'main'
+    localStorage.setItem(
+      `studentPendingChatJob:${sid}`,
+      JSON.stringify({
+        job_id: 'student_probe_pending',
+        request_id: 'req_student_probe_pending',
+        placeholder_id: 'asst_student_probe_pending_1',
+        user_text: '待恢复消息',
+        session_id: sessionId,
+        created_at: Date.now(),
+      }),
+    )
+    localStorage.setItem(
+      `studentSessionViewState:${sid}`,
+      JSON.stringify({
+        title_map: {},
+        hidden_ids: [],
+        active_session_id: sessionId,
+        updated_at: new Date().toISOString(),
+      }),
+    )
+    localStorage.setItem(`studentActiveSession:${sid}`, sessionId)
+  })
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'history-main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      const sessionId = url.searchParams.get('session_id') || 'main'
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: sessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'HISTORY_SHOULD_SHOW' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'GET' && path === '/chat/stream') {
+      await route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_probe_pending', status: 'processing' }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const assistantTexts = Array.from(document.querySelectorAll('.message.assistant .text')).map((el) =>
+          String((el as HTMLElement).innerText || '').trim(),
+        )
+        return {
+          hasHistory: assistantTexts.some((text) => text.includes('HISTORY_SHOULD_SHOW')),
+          hasPending: assistantTexts.some((text) => text.includes('正在回复中') || text.includes('正在恢复上一条回复')),
+        }
+      }),
+    )
+    .toEqual({ hasHistory: true, hasPending: true })
+})
+
+test('ignores student history payload when session_id mismatches active request', async ({ page }) => {
+  await setupStudentState(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  let historySessionCalls = 0
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [
+            { session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'main' },
+            { session_id: 's2', updated_at: new Date().toISOString(), message_count: 1, preview: 's2' },
+          ],
+          next_cursor: null,
+          total: 2,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      historySessionCalls += 1
+      const requestedSessionId = String(url.searchParams.get('session_id') || '')
+      if (requestedSessionId === 'main') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            session_id: 's2',
+            messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'MISMATCH_FROM_S2_FOR_main' }],
+            next_cursor: -1,
+          }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: requestedSessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'NORMAL_FOR_S2' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect.poll(() => historySessionCalls).toBeGreaterThan(0)
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll('.message.assistant .text')).map((el) =>
+          String((el as HTMLElement).innerText || '').trim(),
+        ),
+      ),
+    )
+    .toEqual(['学生端已就绪。请先填写姓名完成验证，然后开始提问或进入作业讨论。'])
+})
+
+test('fallback polling starts quickly when stream has no events', async ({ page }) => {
+  await setupStudentState(page, {
+    stateOverrides: {
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+  })
+
+  await page.addInitScript(() => {
+    const sid = 'S001'
+    const sessionId = 'main'
+    localStorage.setItem(
+      `studentPendingChatJob:${sid}`,
+      JSON.stringify({
+        job_id: 'student_probe_fallback_delay',
+        request_id: 'req_student_probe_fallback_delay',
+        placeholder_id: 'asst_student_probe_fallback_delay_1',
+        user_text: '等待恢复',
+        session_id: sessionId,
+        created_at: Date.now(),
+      }),
+    )
+    localStorage.setItem(
+      `studentSessionViewState:${sid}`,
+      JSON.stringify({
+        title_map: {},
+        hidden_ids: [],
+        active_session_id: sessionId,
+        updated_at: new Date().toISOString(),
+      }),
+    )
+    localStorage.setItem(`studentActiveSession:${sid}`, sessionId)
+  })
+
+  let streamCalls = 0
+  let statusCalls = 0
+  let firstStatusAt = 0
+  let streamCallsBeforeFirstStatus = 0
+  let firstStreamAt = 0
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/assignment/today') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, assignment: null }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          sessions: [{ session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'main' }],
+          next_cursor: null,
+          total: 1,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/student/history/session') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          student_id: 'S001',
+          session_id: 'main',
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'history-main' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/student/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}')
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            student_id: 'S001',
+            state: body.state || {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: '',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'GET' && path === '/chat/stream') {
+      streamCalls += 1
+      if (!firstStreamAt) firstStreamAt = Date.now()
+      await route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      statusCalls += 1
+      if (!firstStatusAt) {
+        firstStatusAt = Date.now()
+        streamCallsBeforeFirstStatus = streamCalls
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ job_id: 'student_probe_fallback_delay', status: 'processing' }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.message.assistant .text').filter({ hasText: '正在回复中' }).first()).toBeVisible()
+
+  await expect.poll(() => statusCalls, { timeout: 12000 }).toBeGreaterThan(0)
+  const delayFromFirstStreamMs = firstStatusAt - firstStreamAt
+
+  expect(firstStreamAt).toBeGreaterThan(0)
+  expect(firstStatusAt).toBeGreaterThanOrEqual(firstStreamAt)
+  expect(streamCallsBeforeFirstStatus).toBeLessThanOrEqual(6)
+  expect(delayFromFirstStreamMs).toBeLessThanOrEqual(2500)
+})
+
 test('pending completion reply survives hard reload and laggy history during session switches', async ({ page }) => {
   await setupStudentState(page, {
     clearLocalStorage: false,

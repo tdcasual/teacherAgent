@@ -1112,6 +1112,266 @@ test('restoring pending job keeps only one pending status bubble', async ({ page
   expect(maxPendingStatusCount).toBeLessThanOrEqual(1)
 })
 
+test('ignores teacher history payload when session_id mismatches active request', async ({ page }) => {
+  await setupTeacherState(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('teacherSessionSidebarOpen', 'true')
+  })
+
+  let historySessionCalls = 0
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/skills') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ skills: mockSkills }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          sessions: [
+            { session_id: 'main', updated_at: new Date().toISOString(), message_count: 1, preview: 'main' },
+            { session_id: 's2', updated_at: new Date().toISOString(), message_count: 1, preview: 's2' },
+          ],
+          next_cursor: null,
+          total: 2,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/session') {
+      historySessionCalls += 1
+      const requestedSessionId = String(url.searchParams.get('session_id') || '')
+      if (requestedSessionId === 'main') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            teacher_id: 'T001',
+            session_id: 's2',
+            messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'TEACHER_MISMATCH_FROM_S2_FOR_main' }],
+            next_cursor: -1,
+          }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          session_id: requestedSessionId,
+          messages: [{ ts: new Date().toISOString(), role: 'assistant', content: 'NORMAL_S2' }],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/teacher/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect.poll(() => historySessionCalls).toBeGreaterThan(0)
+  await expect(page.locator('.messages').getByText('TEACHER_MISMATCH_FROM_S2_FOR_main')).toHaveCount(0)
+})
+
+test('switching to empty session does not retain pending bubbles from another session', async ({ page }) => {
+  await setupTeacherState(page)
+  await page.addInitScript(() => {
+    localStorage.setItem('teacherSessionSidebarOpen', 'true')
+    localStorage.setItem(
+      'teacherPendingChatJob',
+      JSON.stringify({
+        job_id: 'teacher_pending_leak_1',
+        request_id: 'req_teacher_pending_leak_1',
+        placeholder_id: 'asst_teacher_pending_leak_1',
+        user_text: 'MAIN_PENDING_USER',
+        session_id: 'main',
+        created_at: Date.now(),
+      }),
+    )
+  })
+
+  await page.route('http://localhost:8000/**', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const method = request.method().toUpperCase()
+    const path = url.pathname
+
+    if (method === 'GET' && path === '/skills') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ skills: mockSkills }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/sessions') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          sessions: [
+            { session_id: 'main', updated_at: new Date().toISOString(), message_count: 0, preview: '' },
+            { session_id: 's_empty', updated_at: new Date().toISOString(), message_count: 0, preview: '' },
+          ],
+          next_cursor: null,
+          total: 2,
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/teacher/history/session') {
+      const sessionId = String(url.searchParams.get('session_id') || 'main')
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          teacher_id: 'T001',
+          session_id: sessionId,
+          messages: [],
+          next_cursor: -1,
+        }),
+      })
+      return
+    }
+
+    if (path === '/teacher/session/view-state') {
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: {},
+              hidden_ids: [],
+              active_session_id: 'main',
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(request.postData() || '{}') as { state?: Record<string, unknown> }
+        const state = body?.state && typeof body.state === 'object' ? body.state : {}
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            state: {
+              title_map: (state.title_map as Record<string, string>) || {},
+              hidden_ids: Array.isArray(state.hidden_ids) ? (state.hidden_ids as string[]) : [],
+              active_session_id: String(state.active_session_id || ''),
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
+        return
+      }
+    }
+
+    if (method === 'GET' && path === '/chat/stream') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: '',
+      })
+      return
+    }
+
+    if (method === 'GET' && path === '/chat/status') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          job_id: 'teacher_pending_leak_1',
+          status: 'processing',
+        }),
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.messages').getByText('MAIN_PENDING_USER')).toBeVisible()
+
+  const emptySession = page.locator('.session-item').filter({ hasText: 's_empty' }).first()
+  await emptySession.locator('.session-select').click()
+
+  await expect(page.locator('.messages').getByText('MAIN_PENDING_USER')).toHaveCount(0)
+  await expect(page.locator('.messages').getByText('正在生成…')).toHaveCount(0)
+})
+
 test('keeps draft session in sidebar after page reload before server persists it', async ({ page }) => {
   await page.addInitScript(() => {
     const FLAG = '__teacher_reload_test_bootstrapped__'
