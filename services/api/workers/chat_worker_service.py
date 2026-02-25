@@ -13,6 +13,10 @@ _log = logging.getLogger(__name__)
 
 CHAT_PENDING_RESCAN_INTERVAL_SEC = 15.0
 
+
+def _noop_append_chat_event(_job_id: str, _event_type: str, _payload: Dict[str, Any]) -> Dict[str, Any]:
+    return {}
+
 @dataclass(frozen=True)
 class ChatWorkerDeps:
     chat_job_dir: Path
@@ -34,6 +38,7 @@ class ChatWorkerDeps:
     diag_log: Callable[[str, Dict[str, Any]], None]
     sleep: Callable[[float], None]
     thread_factory: Callable[..., Any]
+    append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = _noop_append_chat_event
     stop_event: Any = field(default_factory=threading.Event)
 
 
@@ -115,6 +120,18 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
                     "error_detail": detail,
                 },
             )
+            try:
+                deps.append_chat_event(
+                    job_id,
+                    "job.failed",
+                    {
+                        "status": "failed",
+                        "error": "chat_job_failed",
+                        "error_detail": detail,
+                    },
+                )
+            except Exception:
+                _log.warning("failed to append job.failed event for chat job %s", job_id, exc_info=True)
         finally:
             with deps.chat_job_lock:
                 deps.chat_mark_done_locked(job_id, lane_id)

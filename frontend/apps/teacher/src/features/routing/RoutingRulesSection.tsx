@@ -39,7 +39,7 @@ export default function RoutingRulesSection({
         {draft.rules.map((rule, index) => {
           const channelTitle = draft.channels.find((c) => c.id === rule.route.channel_id)?.title || rule.route.channel_id || '未指定'
           return (
-            <div key={`${rule.id}_${index}`} className={`routing-item rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
+            <div key={`rule_${index}`} className={`routing-item rule-card ${rule.enabled !== false ? 'rule-enabled' : 'rule-disabled'}`}>
               <div className="flex items-center gap-2 px-3 py-[10px] text-[13px]">
                 <label className="toggle flex-shrink-0">
                   <input

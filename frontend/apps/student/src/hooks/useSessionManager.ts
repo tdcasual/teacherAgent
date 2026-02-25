@@ -124,6 +124,10 @@ export function useSessionManager({ state, dispatch, refs, setActiveSession, sav
       }
       const data = (await res.json()) as StudentHistorySessionResponse
       if (requestNo !== sessionRequestRef.current) return
+      const responseSessionId = String(data.session_id || '').trim()
+      if (responseSessionId && responseSessionId !== targetSessionId) {
+        throw new Error(`会话响应不匹配（请求=${targetSessionId}，返回=${responseSessionId}）`)
+      }
       const raw = Array.isArray(data.messages) ? data.messages : []
       const mapped: Message[] = raw
         .map((m, idx) => {

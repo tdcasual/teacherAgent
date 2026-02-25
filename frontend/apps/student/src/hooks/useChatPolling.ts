@@ -361,7 +361,7 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
           const msg = toErrorMessage(err)
           setPlaceholderContent(`网络波动，正在重试…（${msg}）`)
         },
-        { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
+        { kickMode: 'direct', initialDelayMs: 500, pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
       )
     }
 

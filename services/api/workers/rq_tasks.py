@@ -154,7 +154,44 @@ def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) 
     mod = load_tenant_module(tenant_id)
     store = _lane_store(mod, tenant_id)
     try:
-        mod.process_chat_job(job_id)
+        try:
+            mod.process_chat_job(job_id)
+        except Exception as exc:
+            detail = str(exc)[:200]
+            if callable(getattr(mod, "write_chat_job", None)):
+                try:
+                    mod.write_chat_job(
+                        job_id,
+                        {
+                            "status": "failed",
+                            "error": "chat_job_failed",
+                            "error_detail": detail,
+                        },
+                    )
+                except Exception:
+                    _log.warning(
+                        "failed to persist chat failure status for job %s",
+                        job_id,
+                        exc_info=True,
+                    )
+            if callable(getattr(mod, "append_chat_event", None)):
+                try:
+                    mod.append_chat_event(
+                        job_id,
+                        "job.failed",
+                        {
+                            "status": "failed",
+                            "error": "chat_job_failed",
+                            "error_detail": detail,
+                        },
+                    )
+                except Exception:
+                    _log.warning(
+                        "failed to append chat failure event for job %s",
+                        job_id,
+                        exc_info=True,
+                    )
+            raise
     finally:
         next_job_id = store.finish(job_id, lane_id)
         if next_job_id:

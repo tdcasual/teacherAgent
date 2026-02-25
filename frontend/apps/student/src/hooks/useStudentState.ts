@@ -253,6 +253,7 @@ export function useStudentState() {
   const recentCompletedRepliesRef = useRef<RecentCompletedReply[]>(state.recentCompletedReplies)
   const pendingRecoveredFromStorageRef = useRef(false)
   const skipAutoSessionLoadIdRef = useRef('')
+  const lastHandledForceSessionLoadTokenRef = useRef(0)
   const historyRequestRef = useRef(0)
   const sessionRequestRef = useRef(0)
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
@@ -272,6 +273,7 @@ export function useStudentState() {
       recentCompletedRepliesRef,
       pendingRecoveredFromStorageRef,
       skipAutoSessionLoadIdRef,
+      lastHandledForceSessionLoadTokenRef,
       historyRequestRef,
       sessionRequestRef,
       markdownCacheRef,

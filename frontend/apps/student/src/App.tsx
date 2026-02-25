@@ -94,20 +94,24 @@ export default function App() {
   useEffect(() => {
     if (!state.verifiedStudent?.student_id) return
     if (!state.activeSessionId) return
+    const forceTriggeredBySessionSelect = state.forceSessionLoadToken !== refs.lastHandledForceSessionLoadTokenRef.current
+    if (forceTriggeredBySessionSelect) refs.lastHandledForceSessionLoadTokenRef.current = state.forceSessionLoadToken
     if (refs.skipAutoSessionLoadIdRef.current) {
       const skippedSessionId = refs.skipAutoSessionLoadIdRef.current
       refs.skipAutoSessionLoadIdRef.current = ''
       if (skippedSessionId === state.activeSessionId) return
     }
     if (state.pendingChatJob?.job_id) {
-      if (state.pendingChatJob.session_id === state.activeSessionId) return
+      const pendingMatchesActiveSession = state.pendingChatJob.session_id === state.activeSessionId
+      const hasLoadedActiveSessionHistory = state.sessionCursor !== 0
+      if (pendingMatchesActiveSession && !forceTriggeredBySessionSelect && hasLoadedActiveSessionHistory) return
       void sessionManager.loadSessionMessages(state.activeSessionId, -1, false)
       return
     }
     if (state.sending) return
     void sessionManager.loadSessionMessages(state.activeSessionId, -1, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.activeSessionId, state.verifiedStudent?.student_id, state.apiBase, state.pendingChatJob?.job_id, state.pendingChatJob?.session_id, state.forceSessionLoadToken])
+  }, [state.activeSessionId, state.verifiedStudent?.student_id, state.apiBase, state.pendingChatJob?.job_id, state.pendingChatJob?.session_id, state.forceSessionLoadToken, state.sessionCursor])
 
   // ── Sync activeSessionRef ──
   useEffect(() => { refs.activeSessionRef.current = state.activeSessionId }, [state.activeSessionId, refs.activeSessionRef])

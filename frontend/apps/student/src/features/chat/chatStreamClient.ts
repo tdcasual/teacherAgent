@@ -74,6 +74,7 @@ export const runStudentChatStream = async ({
   let cursor = Math.max(0, Number(initialCursor) || 0)
   let reconnectAttempts = 0
   const reconnectCap = Math.max(1, Number(maxReconnects) || 4)
+  const noEventReconnectCap = Math.min(2, reconnectCap)
 
   while (!signal.aborted && !shouldStop()) {
     try {
@@ -143,22 +144,31 @@ export const runStudentChatStream = async ({
       }
       if (sawEventInCurrentStream) reconnectAttempts = 0
       reconnectAttempts += 1
-      if (reconnectAttempts >= reconnectCap) {
+      const usingNoEventCap = cursor <= initialCursor
+      const activeReconnectCap = usingNoEventCap ? noEventReconnectCap : reconnectCap
+      if (reconnectAttempts >= activeReconnectCap) {
         return { cursor, protocolMismatch: false, needsFallback: true }
       }
-      await sleep(Math.min(3000, reconnectAttempts * 800))
+      const backoffMs = usingNoEventCap
+        ? Math.min(1000, reconnectAttempts * 300)
+        : Math.min(3000, reconnectAttempts * 800)
+      await sleep(backoffMs)
     } catch {
       if (signal.aborted || shouldStop()) {
         return { cursor, protocolMismatch: false, needsFallback: false }
       }
       reconnectAttempts += 1
-      if (reconnectAttempts >= reconnectCap) {
+      const usingNoEventCap = cursor <= initialCursor
+      const activeReconnectCap = usingNoEventCap ? noEventReconnectCap : reconnectCap
+      if (reconnectAttempts >= activeReconnectCap) {
         return { cursor, protocolMismatch: false, needsFallback: true }
       }
-      await sleep(Math.min(3000, reconnectAttempts * 800))
+      const backoffMs = usingNoEventCap
+        ? Math.min(1000, reconnectAttempts * 300)
+        : Math.min(3000, reconnectAttempts * 800)
+      await sleep(backoffMs)
     }
   }
 
   return { cursor, protocolMismatch: false, needsFallback: false }
 }
-

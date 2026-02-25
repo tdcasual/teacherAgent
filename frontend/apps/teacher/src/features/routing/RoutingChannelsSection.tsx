@@ -54,7 +54,7 @@ export default function RoutingChannelsSection({
         {draft.channels.map((channel, index) => {
           const modeOptions = providerModeMap.get(channel.target.provider) || []
           return (
-            <div key={`${channel.id}_${index}`} className="routing-item border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm">
+            <div key={`channel_${index}`} className="routing-item border border-border rounded-[12px] p-3 bg-white grid gap-[10px] shadow-sm">
               <div className="flex justify-between items-center gap-[10px]">
                 <strong>{channel.title || channel.id || `渠道${index + 1}`}</strong>
                 <button type="button" className="ghost" onClick={() => onRemoveChannel(index)} disabled={busy}>

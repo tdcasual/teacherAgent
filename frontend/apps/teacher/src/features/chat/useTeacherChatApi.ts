@@ -293,6 +293,10 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         }
         const data = (await res.json()) as TeacherHistorySessionResponse
         if (requestNo !== sessionRequestRef.current || activeSessionRef.current !== targetSessionId) return
+        const responseSessionId = String(data.session_id || '').trim()
+        if (responseSessionId && responseSessionId !== targetSessionId) {
+          throw new Error(`会话响应不匹配（请求=${targetSessionId}，返回=${responseSessionId}）`)
+        }
         const raw = Array.isArray(data.messages) ? data.messages : []
         const mapped: Message[] = raw
           .map((m, idx) => {
@@ -320,8 +324,12 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           setMessages((prev) => {
             if (mappedWithPending.length) return mappedWithPending
             // Guard against startup races during pending-job restore:
-            // keep recovered pending bubbles if current payload is empty.
-            if (prev.some((item) => String(item.id || '').startsWith('pending_user_'))) {
+            // keep recovered pending bubbles only when they belong to this session.
+            const pending = pendingChatJobRef.current
+            const pendingBelongsToTargetSession = Boolean(
+              pending?.job_id && (!pending.session_id || pending.session_id === targetSessionId),
+            )
+            if (pendingBelongsToTargetSession && prev.some((item) => String(item.id || '').startsWith('pending_user_'))) {
               return prev
             }
             return [
