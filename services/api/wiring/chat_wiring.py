@@ -114,7 +114,7 @@ from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registr
 from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
 
 
-def _queue_backend_for_app_core(_ac: Any):
+def _queue_backend_for_app_core(_ac: Any) -> Any:
     return queue_runtime.app_queue_backend(
         tenant_id=_ac.TENANT_ID or None,
         is_pytest=_ac._settings.is_pytest(),

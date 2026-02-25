@@ -107,7 +107,7 @@ def _is_chart_asset_path(path: str) -> bool:
     return value.startswith("/charts/") or value.startswith("/chart-runs/")
 
 
-def _resolve_chart_query_principal(request: Request):
+def _resolve_chart_query_principal(request: Request) -> Any:
     path = str(request.url.path)
     if not _is_chart_asset_path(path):
         return None

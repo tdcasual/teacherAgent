@@ -187,7 +187,9 @@ const escapeHtml = (text: string) =>
     .replace(/'/g, '&#39;');
 
 export const renderStreamingPlainText = (content: string) => {
-  const normalized = String(content || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalized = String(content || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
   return escapeHtml(normalized).replace(/\n/g, '<br/>');
 };
 
