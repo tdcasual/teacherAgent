@@ -435,23 +435,6 @@ def clear_dynamic_tools_cache(skill_dir: Optional[Path] = None) -> None:
         _CACHE.pop(str(skill_dir.resolve()), None)
 
 
-def build_dynamic_openai_tools(
-    allowed: Iterable[str],
-    dynamic_tools: Dict[str, Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    for name in sorted(set(str(x) for x in allowed)):
-        spec = dynamic_tools.get(name)
-        if not isinstance(spec, dict):
-            continue
-        schema = spec.get("input_schema")
-        if not isinstance(schema, dict):
-            schema = {"type": "object", "properties": {}, "additionalProperties": True}
-        description = _as_str(spec.get("description")) or name
-        out.append(ToolDef(name=name, description=description, parameters=schema).to_openai())
-    return out
-
-
 def validate_dynamic_arguments(name: str, spec: Dict[str, Any], args: Any) -> List[str]:
     schema = spec.get("input_schema")
     if not isinstance(schema, dict):

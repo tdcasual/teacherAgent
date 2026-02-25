@@ -401,6 +401,37 @@ class AgentServiceTest(unittest.TestCase):
         self.assertEqual(max_rounds, 1)
         self.assertEqual(max_calls, 2)
 
+    def test_run_agent_runtime_event_sink_uses_native_token_stream_chunks(self):
+        event_records = []
+
+        def event_sink(event_type, payload):
+            event_records.append((str(event_type), dict(payload or {})))
+
+        def fake_call_llm(messages, **kwargs):  # type: ignore[no-untyped-def]
+            sink = kwargs.get("token_sink")
+            if callable(sink):
+                sink("第一段")
+                self.assertTrue(
+                    any(et == "assistant.delta" for et, _ in event_records),
+                    "assistant.delta should be emitted during token callback",
+                )
+                sink("第二段")
+            return {"choices": [{"message": {"content": "第一段第二段"}}]}
+
+        deps = self._make_deps(call_llm=fake_call_llm, allowed=set())
+        result = run_agent_runtime(
+            [{"role": "user", "content": "hello"}],
+            "student",
+            deps=deps,
+            event_sink=event_sink,
+        )
+
+        self.assertEqual(result.get("reply"), "第一段第二段")
+        delta_payloads = [payload.get("delta") for et, payload in event_records if et == "assistant.delta"]
+        done_payloads = [payload.get("text") for et, payload in event_records if et == "assistant.done"]
+        self.assertEqual(delta_payloads, ["第一段", "第二段"])
+        self.assertEqual(done_payloads, ["第一段第二段"])
+
 
 if __name__ == "__main__":
     unittest.main()

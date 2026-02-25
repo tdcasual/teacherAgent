@@ -396,6 +396,32 @@ def _iter_reply_chunks(text: str) -> List[str]:
     return [content[idx : idx + step] for idx in range(0, len(content), step)]
 
 
+def _coerce_llm_message_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        out: List[str] = []
+        for item in content:
+            if isinstance(item, str):
+                out.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "")
+            if item_type in {"text", "output_text", "input_text"}:
+                text = item.get("text")
+                if text:
+                    out.append(str(text))
+                continue
+            text = item.get("content")
+            if isinstance(text, str) and text:
+                out.append(text)
+        return "".join(out)
+    if content is None:
+        return ""
+    return str(content)
+
+
 def _handle_structured_tool_calls(
     *,
     deps: AgentRuntimeDeps,
@@ -587,6 +613,15 @@ def _run_tool_loop(
     tool_calls_total = 0
     tool_budget_exhausted = False
     for round_index in range(max_tool_rounds):
+        round_stream_chunks: List[str] = []
+
+        def _round_token_sink(delta: str) -> None:
+            piece = str(delta or "")
+            if piece:
+                round_stream_chunks.append(piece)
+                if callable(event_sink):
+                    event_sink("assistant.delta", {"delta": piece})
+
         if callable(event_sink):
             event_sink(
                 "llm.round.start",
@@ -600,9 +635,11 @@ def _run_tool_loop(
             kind="chat.skill",
             teacher_id=teacher_id,
             skill_runtime=skill_runtime,
+            stream=bool(event_sink),
+            token_sink=_round_token_sink if callable(event_sink) else None,
         )
         message = resp["choices"][0]["message"]
-        content = message.get("content")
+        content = _coerce_llm_message_content(message.get("content"))
         tool_calls = message.get("tool_calls")
         if tool_calls:
             tool_calls_total, tool_budget_exhausted = _handle_structured_tool_calls(
@@ -640,6 +677,10 @@ def _run_tool_loop(
                 break
             continue
         if callable(event_sink):
+            if round_stream_chunks:
+                final_text = content or "".join(round_stream_chunks)
+                event_sink("assistant.done", {"text": final_text})
+                return final_text, tool_budget_exhausted
             for chunk in _iter_reply_chunks(content or ""):
                 event_sink("assistant.delta", {"delta": chunk})
             event_sink("assistant.done", {"text": content or ""})
@@ -658,6 +699,7 @@ def _final_teacher_reply_without_tools(
     max_tool_rounds: int,
     max_tool_calls: int,
     tool_budget_exhausted: bool,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Optional[str]:
     reason = (
         f"工具调用预算已达到上限（轮次≤{max_tool_rounds}，调用数≤{max_tool_calls}）。"
@@ -674,6 +716,15 @@ def _final_teacher_reply_without_tools(
             ),
         }
     )
+    stream_chunks: List[str] = []
+
+    def _token_sink(delta: str) -> None:
+        text = str(delta or "")
+        if text:
+            stream_chunks.append(text)
+            if callable(event_sink):
+                event_sink("assistant.delta", {"delta": text})
+
     resp = deps.call_llm(
         convo,
         tools=None,
@@ -683,8 +734,18 @@ def _final_teacher_reply_without_tools(
         kind="chat.skill_no_tools",
         teacher_id=teacher_id,
         skill_runtime=skill_runtime,
+        stream=bool(event_sink),
+        token_sink=_token_sink if callable(event_sink) else None,
     )
-    content = resp.get("choices", [{}])[0].get("message", {}).get("content") or ""
+    content = _coerce_llm_message_content(resp.get("choices", [{}])[0].get("message", {}).get("content"))
+    if callable(event_sink):
+        if stream_chunks:
+            final_text = content or "".join(stream_chunks)
+            event_sink("assistant.done", {"text": final_text})
+            return final_text or None
+        for chunk in _iter_reply_chunks(content):
+            event_sink("assistant.delta", {"delta": chunk})
+        event_sink("assistant.done", {"text": content})
     return content or None
 
 
@@ -764,6 +825,7 @@ def run_agent_runtime(
             max_tool_rounds=max_tool_rounds,
             max_tool_calls=max_tool_calls,
             tool_budget_exhausted=tool_budget_exhausted,
+            event_sink=event_sink,
         )
         if no_tools_reply:
             return {"reply": no_tools_reply}

@@ -5,6 +5,7 @@ import { nowTime } from '../../../shared/time'
 import { startVisibilityAwareBackoffPolling } from '../../../shared/visibilityBackoffPolling'
 import { stripTransientPendingBubbles } from '../features/chat/pendingOverlay'
 import { parsePendingChatJobFromStorage, PENDING_CHAT_MAX_AGE_MS } from '../features/chat/pendingChatJob'
+import { runStudentChatStream } from '../features/chat/chatStreamClient'
 import { clearStudentAccessToken } from '../features/auth/studentAuth'
 import type { ChatJobStatus, PendingChatJob, VerifiedStudent } from '../appTypes'
 import {
@@ -13,7 +14,6 @@ import {
   PENDING_CHAT_KEY_PREFIX,
   RECENT_COMPLETION_KEY_PREFIX,
   recentCompletionKeyOf,
-  RECENT_COMPLETION_TTL_MS,
   toErrorMessage,
   type RecentCompletedReply,
   type StudentAction,
@@ -197,88 +197,234 @@ export function useChatPolling({ state, dispatch, refs, setActiveSession, refres
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, pendingChatJob?.job_id, pendingChatJob?.session_id, dispatch])
 
-  // Main polling effect
+  // Main stream effect (fallback to polling)
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
-    const cleanup = startVisibilityAwareBackoffPolling(
-      async ({ signal }) => {
-        const pendingAgeMs = Date.now() - Number(pendingChatJob.created_at || 0)
-        if (!Number.isFinite(pendingAgeMs) || pendingAgeMs > PENDING_CHAT_MAX_AGE_MS) {
-          const staleMsg = '上一条请求已过期，请重新发送。'
-          dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => {
-            const base = stripTransientPendingBubbles(prev)
-            const hasPlaceholder = base.some((item) => item.id === pendingChatJob.placeholder_id)
-            if (!hasPlaceholder) return base
-            return base.map((item) => item.id === pendingChatJob.placeholder_id ? { ...item, content: staleMsg, time: nowTime() } : item)
-          }})
-          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
-          dispatch({ type: 'BATCH', actions: [{ type: 'SET', field: 'pendingChatJob', value: null }, { type: 'SET', field: 'sending', value: false }] })
-          return 'stop'
-        }
-        if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) return 'continue'
-        const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
-        if (res.status === 404) {
-          dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => stripTransientPendingBubbles(prev) })
-          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
-          dispatch({ type: 'BATCH', actions: [{ type: 'SET', field: 'pendingChatJob', value: null }, { type: 'SET', field: 'sending', value: false }] })
-          return 'stop'
-        }
-        if (!res.ok) { const text = await res.text(); throw new Error(text || `状态码 ${res.status}`) }
-        const data = (await res.json()) as ChatJobStatus
-        if (data.status === 'done') {
-          const resolvedReply = data.reply || '已收到。'
-          dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => {
-            const base = stripTransientPendingBubbles(prev)
-            const hasUserText = pendingChatJob.user_text ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text) : true
-            const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
-            const next = [...base]
-            if (!hasUserText && pendingChatJob.user_text) next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
-            if (!hasPlaceholder) next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
-            return next.map((m) => m.id === pendingChatJob.placeholder_id ? { ...m, content: resolvedReply, time: nowTime() } : m)
-          }})
-          if (pendingChatJob.session_id) {
-            const nextRecent: RecentCompletedReply = { session_id: pendingChatJob.session_id, user_text: pendingChatJob.user_text || '', reply_text: resolvedReply, completed_at: Date.now() }
-            dispatch({ type: 'UPDATE_RECENT_COMPLETED_REPLIES', updater: (prev) => normalizeRecentCompletedReplies([...prev, nextRecent]) })
-          }
-          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
-          dispatch({ type: 'BATCH', actions: [{ type: 'SET', field: 'pendingChatJob', value: null }, { type: 'SET', field: 'sending', value: false }] })
-          void refreshSessions()
-          return 'stop'
-        }
-        if (data.status === 'failed' || data.status === 'cancelled') {
-          const msg = data.error_detail || data.error || '请求失败'
-          dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => {
-            const base = stripTransientPendingBubbles(prev)
-            const hasUserText = pendingChatJob.user_text ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text) : true
-            const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
-            const next = [...base]
-            if (!hasUserText && pendingChatJob.user_text) next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
-            if (!hasPlaceholder) next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
-            return next.map((m) => m.id === pendingChatJob.placeholder_id ? { ...m, content: `抱歉，请求失败：${msg}`, time: nowTime() } : m)
-          }})
-          skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
-          dispatch({ type: 'BATCH', actions: [{ type: 'SET', field: 'pendingChatJob', value: null }, { type: 'SET', field: 'sending', value: false }] })
-          return 'stop'
-        }
-        return 'continue'
-      },
-      (err) => {
-        const msg = toErrorMessage(err)
-        dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => {
+    if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) return
+
+    const controller = new AbortController()
+    let stopped = false
+    let pollCleanup: (() => void) | null = null
+    let staleTimer = 0
+    let assistantText = ''
+    let assistantRenderTimer: number | null = null
+    let assistantRenderScheduled = false
+
+    const clearAssistantRenderTimer = () => {
+      if (assistantRenderTimer !== null) {
+        window.clearTimeout(assistantRenderTimer)
+        assistantRenderTimer = null
+      }
+      assistantRenderScheduled = false
+    }
+
+    const flushAssistantPlaceholder = () => {
+      assistantRenderTimer = null
+      assistantRenderScheduled = false
+      if (stopped) return
+      setPlaceholderContent(assistantText || '正在回复中…')
+    }
+
+    const scheduleAssistantPlaceholder = () => {
+      if (assistantRenderScheduled) return
+      assistantRenderScheduled = true
+      assistantRenderTimer = window.setTimeout(() => {
+        flushAssistantPlaceholder()
+      }, 40)
+    }
+
+    const setPlaceholderContent = (content: string) => {
+      dispatch({
+        type: 'UPDATE_MESSAGES',
+        updater: (prev) => {
           const base = stripTransientPendingBubbles(prev)
-          const hasUserText = pendingChatJob.user_text ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text) : true
+          const hasUserText = pendingChatJob.user_text
+            ? base.some((m) => m.role === 'user' && m.content === pendingChatJob.user_text)
+            : true
           const hasPlaceholder = base.some((m) => m.id === pendingChatJob.placeholder_id)
           const next = [...base]
-          if (!hasUserText && pendingChatJob.user_text) next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
-          if (!hasPlaceholder) next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
-          return next.map((m) => m.id === pendingChatJob.placeholder_id ? { ...m, content: `网络波动，正在重试…（${msg}）`, time: nowTime() } : m)
-        }})
-      },
-      { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
-    )
-    return cleanup
+          if (!hasUserText && pendingChatJob.user_text) {
+            next.push({ id: makeId(), role: 'user' as const, content: pendingChatJob.user_text, time: nowTime() })
+          }
+          if (!hasPlaceholder) {
+            next.push({ id: pendingChatJob.placeholder_id, role: 'assistant' as const, content: '正在回复中…', time: nowTime() })
+          }
+          return next.map((m) =>
+            m.id === pendingChatJob.placeholder_id ? { ...m, content, time: nowTime() } : m,
+          )
+        },
+      })
+    }
+
+    const finishSuccess = (replyText: string) => {
+      if (stopped) return
+      clearAssistantRenderTimer()
+      const resolvedReply = String(replyText || '已收到。')
+      setPlaceholderContent(resolvedReply)
+      if (pendingChatJob.session_id) {
+        const nextRecent: RecentCompletedReply = {
+          session_id: pendingChatJob.session_id,
+          user_text: pendingChatJob.user_text || '',
+          reply_text: resolvedReply,
+          completed_at: Date.now(),
+        }
+        dispatch({
+          type: 'UPDATE_RECENT_COMPLETED_REPLIES',
+          updater: (prev) => normalizeRecentCompletedReplies([...prev, nextRecent]),
+        })
+      }
+      skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'pendingChatJob', value: null },
+          { type: 'SET', field: 'sending', value: false },
+        ],
+      })
+      void refreshSessions()
+      stopped = true
+    }
+
+    const finishFailure = (message: string) => {
+      if (stopped) return
+      clearAssistantRenderTimer()
+      setPlaceholderContent(`抱歉，请求失败：${message}`)
+      skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'pendingChatJob', value: null },
+          { type: 'SET', field: 'sending', value: false },
+        ],
+      })
+      stopped = true
+    }
+
+    const dropStalePendingIfNeeded = () => {
+      const pendingAgeMs = Date.now() - Number(pendingChatJob.created_at || 0)
+      if (Number.isFinite(pendingAgeMs) && pendingAgeMs <= PENDING_CHAT_MAX_AGE_MS) return false
+      if (stopped) return true
+      clearAssistantRenderTimer()
+      setPlaceholderContent('上一条请求已过期，请重新发送。')
+      skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+      dispatch({
+        type: 'BATCH',
+        actions: [
+          { type: 'SET', field: 'pendingChatJob', value: null },
+          { type: 'SET', field: 'sending', value: false },
+        ],
+      })
+      stopped = true
+      return true
+    }
+
+    const startFallbackPolling = () => {
+      if (pollCleanup) return
+      pollCleanup = startVisibilityAwareBackoffPolling(
+        async ({ signal }) => {
+          if (dropStalePendingIfNeeded()) return 'stop'
+          if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) return 'continue'
+          const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, {
+            signal,
+          })
+          if (res.status === 404) {
+            dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => stripTransientPendingBubbles(prev) })
+            skipAutoSessionLoadIdRef.current = pendingChatJob.session_id || ''
+            dispatch({
+              type: 'BATCH',
+              actions: [
+                { type: 'SET', field: 'pendingChatJob', value: null },
+                { type: 'SET', field: 'sending', value: false },
+              ],
+            })
+            stopped = true
+            return 'stop'
+          }
+          if (!res.ok) {
+            const text = await res.text()
+            throw new Error(text || `状态码 ${res.status}`)
+          }
+          const data = (await res.json()) as ChatJobStatus
+          if (data.status === 'done') {
+            finishSuccess(data.reply || assistantText || '已收到。')
+            return 'stop'
+          }
+          if (data.status === 'failed' || data.status === 'cancelled') {
+            finishFailure(data.error_detail || data.error || '请求失败')
+            return 'stop'
+          }
+          return 'continue'
+        },
+        (err) => {
+          if (stopped) return
+          clearAssistantRenderTimer()
+          const msg = toErrorMessage(err)
+          setPlaceholderContent(`网络波动，正在重试…（${msg}）`)
+        },
+        { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
+      )
+    }
+
+    const applyStreamEvent = (eventType: string, payload: Record<string, unknown>) => {
+      if (stopped) return
+      if (eventType === 'assistant.delta') {
+        const delta = String(payload.delta || '')
+        if (!delta) return
+        assistantText += delta
+        scheduleAssistantPlaceholder()
+        return
+      }
+      if (eventType === 'assistant.done') {
+        const text = String(payload.text || '')
+        if (text) assistantText = text
+        scheduleAssistantPlaceholder()
+        return
+      }
+      if (eventType === 'job.done') {
+        const text = String(payload.reply || assistantText || '')
+        finishSuccess(text)
+        return
+      }
+      if (eventType === 'job.failed' || eventType === 'job.cancelled') {
+        finishFailure(String(payload.error_detail || payload.error || '请求失败'))
+      }
+    }
+
+    const runStream = async () => {
+      if (dropStalePendingIfNeeded()) return
+      staleTimer = window.setInterval(() => {
+        void dropStalePendingIfNeeded()
+      }, 1200)
+      const streamResult = await runStudentChatStream({
+        apiBase,
+        jobId: pendingChatJob.job_id,
+        signal: controller.signal,
+        shouldStop: () => stopped || dropStalePendingIfNeeded(),
+        onEvent: (event) => {
+          applyStreamEvent(event.eventType, event.payload)
+        },
+      })
+      if (stopped || controller.signal.aborted) return
+      if (streamResult.protocolMismatch) {
+        clearAssistantRenderTimer()
+        setPlaceholderContent('检测到新版流协议，已自动切换到稳态轮询…')
+      }
+      if (streamResult.protocolMismatch || streamResult.needsFallback) {
+        startFallbackPolling()
+      }
+    }
+
+    void runStream()
+
+    return () => {
+      stopped = true
+      controller.abort()
+      clearAssistantRenderTimer()
+      if (staleTimer) window.clearInterval(staleTimer)
+      if (pollCleanup) pollCleanup()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChatJob?.job_id, activeSessionId, apiBase, dispatch])
+  }, [pendingChatJob, pendingChatJob?.job_id, pendingChatJob?.session_id, activeSessionId, apiBase, dispatch, refreshSessions])
 
   // Recover pending session on storage recovery
   useEffect(() => {

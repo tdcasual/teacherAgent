@@ -121,8 +121,6 @@ from .assignment_upload_query_service import (
 from .assignment_submission_attempt_service import (
     AssignmentSubmissionAttemptDeps,
     best_submission_attempt as _best_submission_attempt_impl,
-    compute_submission_attempt as _compute_submission_attempt_impl,
-    counted_grade_item as _counted_grade_item_impl,
     list_submission_attempts as _list_submission_attempts_impl,
 )
 from .assignment_today_service import AssignmentTodayDeps, assignment_today as _assignment_today_impl
@@ -224,7 +222,6 @@ from .exam_catalog_service import ExamCatalogDeps, list_exams as _list_exams_imp
 from .exam_longform_service import (
     ExamLongformDeps,
     build_exam_longform_context as _build_exam_longform_context_impl,
-    calc_longform_max_tokens as _calc_longform_max_tokens_impl,
     generate_longform_reply as _generate_longform_reply_impl,
     summarize_exam_students as _summarize_exam_students_impl,
 )
@@ -264,7 +261,6 @@ from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt
 from .session_view_state import (
     compare_iso_ts as _compare_iso_ts_impl,
-    default_session_view_state as _default_session_view_state_impl,
     load_session_view_state as _load_session_view_state_impl,
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
     save_session_view_state as _save_session_view_state_impl,

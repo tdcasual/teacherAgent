@@ -1,1 +1,1 @@
-export { absolutizeChartImageUrls, renderMarkdown } from '../../../../shared/markdown'
+export { absolutizeChartImageUrls, renderMarkdown, renderStreamingPlainText } from '../../../../shared/markdown'

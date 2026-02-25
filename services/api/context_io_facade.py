@@ -90,9 +90,6 @@ from .upload_text_service import (
     clean_ocr_text as _clean_ocr_text_impl,
 )
 from .upload_text_service import (
-    ensure_ocr_api_key_aliases as _ensure_ocr_api_key_aliases_impl,
-)
-from .upload_text_service import (
     extract_text_from_file as _extract_text_from_file_impl,
 )
 from .upload_text_service import (
@@ -117,10 +114,6 @@ from .wiring.misc_wiring import _upload_llm_deps, _upload_text_deps
 
 def parse_timeout_env(name: str) -> Optional[float]:
     return _parse_timeout_env_impl(name)
-
-
-def _ensure_ocr_api_key_aliases() -> None:
-    _ensure_ocr_api_key_aliases_impl()
 
 
 def load_ocr_utils():

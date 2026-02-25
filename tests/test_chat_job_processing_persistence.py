@@ -24,7 +24,15 @@ class _Req:
 
 
 class ChatJobProcessingPersistenceTest(unittest.TestCase):
-    def _deps(self, *, events, append_error: Optional[Exception] = None):
+    def _deps(
+        self,
+        *,
+        events,
+        append_error: Optional[Exception] = None,
+        compute_chat_reply_sync=None,
+        append_chat_event=None,
+        monotonic=None,
+    ):
         state = {
             "job_id": "cjob_test_001",
             "status": "queued",
@@ -67,8 +75,11 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: ("回复内容", "teacher", "列出考试"),
-            monotonic=lambda: 0.0,
+            compute_chat_reply_sync=(
+                compute_chat_reply_sync
+                or (lambda _req, session_id=None, teacher_id_override=None: ("回复内容", "teacher", "列出考试"))
+            ),
+            monotonic=monotonic or (lambda: 0.0),
             build_interaction_note=lambda _u, _a, assignment_id=None: "",
             profile_update_async=False,
             enqueue_profile_update=lambda _payload: None,
@@ -86,6 +97,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
             diag_log=lambda *_args, **_kwargs: None,
             release_lockfile=lambda _path: None,
+            append_chat_event=append_chat_event or (lambda _job_id, _event_type, _payload: {}),
         )
         return deps
 
@@ -104,6 +116,36 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
         process_chat_job("cjob_test_001", deps=deps)
         self.assertIn("write:failed", events)
         self.assertNotIn("write:done", events)
+
+    def test_stream_delta_events_are_coalesced_before_persist(self):
+        events: list[str] = []
+        appended: list[tuple[str, dict]] = []
+
+        def _append_chat_event(_job_id, event_type, payload):
+            appended.append((str(event_type), dict(payload or {})))
+            return {}
+
+        def _compute(_req, session_id=None, teacher_id_override=None, event_sink=None):
+            del session_id, teacher_id_override
+            if callable(event_sink):
+                event_sink("assistant.delta", {"delta": "你"})
+                event_sink("assistant.delta", {"delta": "好"})
+                event_sink("assistant.delta", {"delta": "！"})
+                event_sink("assistant.done", {"text": "你好！"})
+            return ("你好！", "teacher", "列出考试")
+
+        deps = self._deps(
+            events=events,
+            compute_chat_reply_sync=_compute,
+            append_chat_event=_append_chat_event,
+            monotonic=lambda: 0.0,
+        )
+        process_chat_job("cjob_test_001", deps=deps)
+
+        delta_payloads = [payload.get("delta") for event_type, payload in appended if event_type == "assistant.delta"]
+        done_payloads = [payload.get("text") for event_type, payload in appended if event_type == "assistant.done"]
+        self.assertEqual(delta_payloads, ["你好！"])
+        self.assertEqual(done_payloads, ["你好！"])
 
     def test_student_history_persist_failure_marks_failed(self):
         events: list[str] = []

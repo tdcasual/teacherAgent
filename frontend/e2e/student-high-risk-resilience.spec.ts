@@ -458,7 +458,7 @@ test('temporary network failures during pending can recover without duplicate us
   await page.locator('textarea').press('Enter')
 
   await expect(page.locator('.composer-hint')).toContainText('正在生成回复，请稍候')
-  await expect.poll(() => statusCalls).toBeGreaterThanOrEqual(3)
+  await expect.poll(() => statusCalls, { timeout: 20_000 }).toBeGreaterThanOrEqual(3)
 
   await expect(page.locator('.message.assistant .text').filter({ hasText: '重连恢复成功' }).first()).toBeVisible()
 

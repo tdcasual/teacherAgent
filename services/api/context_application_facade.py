@@ -102,12 +102,6 @@ from .assignment_submission_attempt_service import (
     best_submission_attempt as _best_submission_attempt_impl,
 )
 from .assignment_submission_attempt_service import (
-    compute_submission_attempt as _compute_submission_attempt_impl,
-)
-from .assignment_submission_attempt_service import (
-    counted_grade_item as _counted_grade_item_impl,
-)
-from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
 from .config import DISCUSSION_COMPLETE_MARKER
@@ -479,14 +473,6 @@ def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, A
             student_session_file=student_session_file,
         ),
     )
-
-
-def _counted_grade_item(item: Dict[str, Any]) -> bool:
-    return _counted_grade_item_impl(item, deps=_assignment_submission_attempt_deps())
-
-
-def _compute_submission_attempt(attempt_dir: Path) -> Optional[Dict[str, Any]]:
-    return _compute_submission_attempt_impl(attempt_dir, deps=_assignment_submission_attempt_deps())
 
 
 def _list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:

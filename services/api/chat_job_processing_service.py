@@ -12,6 +12,8 @@ from .chat_job_state_machine import (
 )
 
 _log = logging.getLogger(__name__)
+_ASSISTANT_DELTA_COALESCE_WINDOW_SEC = 0.04
+_ASSISTANT_DELTA_COALESCE_MAX_CHARS = 96
 
 
 @dataclass(frozen=True)
@@ -404,6 +406,62 @@ def _emit_assistant_reply_events(
     deps.append_chat_event(job_id, "assistant.done", {"text": str(reply_text or "")})
 
 
+class _BufferedRuntimeEventWriter:
+    def __init__(self, *, job_id: str, deps: ChatJobProcessDeps, event_state: Dict[str, bool]) -> None:
+        self.job_id = job_id
+        self.deps = deps
+        self.event_state = event_state
+        self._delta_parts: List[str] = []
+        self._delta_chars = 0
+        self._last_flush_ts = float(self.deps.monotonic())
+
+    def _append(self, event_type: str, payload: Dict[str, Any]) -> None:
+        try:
+            self.deps.append_chat_event(self.job_id, event_type, payload)
+            if event_type == "assistant.done":
+                self.event_state["assistant_done"] = True
+        except Exception:
+            _log.warning(
+                "failed to append runtime event %s for job %s",
+                event_type,
+                self.job_id,
+                exc_info=True,
+            )
+
+    def _flush_delta(self) -> None:
+        if not self._delta_parts:
+            return
+        text = "".join(self._delta_parts)
+        self._delta_parts = []
+        self._delta_chars = 0
+        self._append("assistant.delta", {"delta": text})
+
+    def emit(self, event_type: str, payload: Dict[str, Any]) -> None:
+        event_name = str(event_type or "")
+        body = payload if isinstance(payload, dict) else {}
+        if event_name == "assistant.delta":
+            delta = str(body.get("delta") or "")
+            if not delta:
+                return
+            self._delta_parts.append(delta)
+            self._delta_chars += len(delta)
+            now = float(self.deps.monotonic())
+            should_flush = self._delta_chars >= _ASSISTANT_DELTA_COALESCE_MAX_CHARS
+            if not should_flush:
+                should_flush = (now - self._last_flush_ts) >= _ASSISTANT_DELTA_COALESCE_WINDOW_SEC
+            if should_flush:
+                self._flush_delta()
+                self._last_flush_ts = now
+            return
+
+        self._flush_delta()
+        self._append(event_name, body)
+        self._last_flush_ts = float(self.deps.monotonic())
+
+    def flush(self) -> None:
+        self._flush_delta()
+
+
 def _call_compute_chat_reply_sync(
     *,
     deps: ChatJobProcessDeps,
@@ -717,27 +775,25 @@ def process_chat_job(job_id: str, *, deps: ChatJobProcessDeps) -> None:
 
         t0 = deps.monotonic()
         event_state = {"assistant_done": False}
+        runtime_event_writer = _BufferedRuntimeEventWriter(
+            job_id=job_id,
+            deps=deps,
+            event_state=event_state,
+        )
 
         def _event_sink(event_type: str, payload: Dict[str, Any]) -> None:
-            try:
-                deps.append_chat_event(job_id, event_type, payload)
-                if str(event_type) == "assistant.done":
-                    event_state["assistant_done"] = True
-            except Exception:
-                _log.warning(
-                    "failed to append runtime event %s for job %s",
-                    event_type,
-                    job_id,
-                    exc_info=True,
-                )
+            runtime_event_writer.emit(event_type, payload)
 
-        reply_text, role_hint, last_user_text = _call_compute_chat_reply_sync(
-            deps=deps,
-            req=req,
-            session_id=str(job.get("session_id") or "main"),
-            teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
-            event_sink=_event_sink,
-        )
+        try:
+            reply_text, role_hint, last_user_text = _call_compute_chat_reply_sync(
+                deps=deps,
+                req=req,
+                session_id=str(job.get("session_id") or "main"),
+                teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
+                event_sink=_event_sink,
+            )
+        finally:
+            runtime_event_writer.flush()
         if not event_state["assistant_done"]:
             _emit_assistant_reply_events(job_id=job_id, reply_text=reply_text, deps=deps)
         duration_ms = int((deps.monotonic() - t0) * 1000)

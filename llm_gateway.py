@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 import math
 import os
+import json
 from functools import lru_cache
 import time
 import random
@@ -211,16 +212,111 @@ def _format_endpoint_with_model(endpoint: str, model: str) -> str:
     return value.replace("{model}", quote(model_value, safe="-_.~"))
 
 
+def _iter_text_chunks(text: str, *, chunk_size: int = 24) -> List[str]:
+    content = str(text or "")
+    if not content:
+        return []
+    step = max(1, int(chunk_size))
+    return [content[idx : idx + step] for idx in range(0, len(content), step)]
+
+
+def _extract_openai_content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        out: List[str] = []
+        for item in content:
+            if isinstance(item, str):
+                out.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            item_type = str(item.get("type") or "")
+            if item_type in {"text", "output_text", "input_text"}:
+                text = item.get("text")
+                if text:
+                    out.append(str(text))
+                continue
+            text = item.get("content")
+            if isinstance(text, str) and text:
+                out.append(text)
+        return "".join(out)
+    if content is None:
+        return ""
+    return str(content)
+
+
+def _merge_openai_stream_tool_calls(
+    state: Dict[int, Dict[str, Any]],
+    delta_tool_calls: Any,
+) -> None:
+    if not isinstance(delta_tool_calls, list):
+        return
+    for pos, item in enumerate(delta_tool_calls):
+        if not isinstance(item, dict):
+            continue
+        try:
+            index = int(item.get("index"))
+        except Exception:
+            index = int(pos)
+        current = state.get(index)
+        if not isinstance(current, dict):
+            current = {
+                "id": "",
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            }
+            state[index] = current
+        call_id = str(item.get("id") or "").strip()
+        if call_id:
+            current["id"] = call_id
+        call_type = str(item.get("type") or "").strip()
+        if call_type:
+            current["type"] = call_type
+        function = item.get("function")
+        if not isinstance(function, dict):
+            continue
+        current_fn = current.get("function")
+        if not isinstance(current_fn, dict):
+            current_fn = {"name": "", "arguments": ""}
+            current["function"] = current_fn
+        name_part = str(function.get("name") or "")
+        args_part = str(function.get("arguments") or "")
+        if name_part:
+            current_fn["name"] = f"{current_fn.get('name', '')}{name_part}"
+        if args_part:
+            current_fn["arguments"] = f"{current_fn.get('arguments', '')}{args_part}"
+
+
+def _iter_sse_data_payloads(response: Any) -> Iterator[str]:
+    # requests may decode stream lines as latin-1 when charset is missing.
+    # Keep raw bytes and decode as UTF-8 to avoid mojibake in CJK output.
+    for raw_line in response.iter_lines(decode_unicode=False):
+        if raw_line is None:
+            continue
+        if isinstance(raw_line, bytes):
+            line = raw_line.decode("utf-8", errors="replace")
+        else:
+            line = str(raw_line)
+        if line == "":
+            continue
+        if line.startswith(":"):
+            continue
+        if not line.lower().startswith("data:"):
+            continue
+        yield line[5:].lstrip()
+
+
 class OpenAIResponsesAdapter:
     def __init__(self, target: Target, session: requests.Session):
         self.target = target
         self.session = session
 
-    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+    def _build_payload(self, req: UnifiedLLMRequest, *, stream: bool) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "model": self.target.model,
             "temperature": req.temperature,
-            "stream": req.stream,
+            "stream": bool(stream),
         }
         if req.max_tokens is not None:
             payload["max_output_tokens"] = req.max_tokens
@@ -238,6 +334,10 @@ class OpenAIResponsesAdapter:
             payload["tool_choice"] = req.tool_choice
         if req.json_schema:
             payload["text"] = {"format": _build_json_schema_payload(req.json_schema)}
+        return payload
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=req.stream)
 
         resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
@@ -257,18 +357,76 @@ class OpenAIResponsesAdapter:
             raw=data,
         )
 
+    def generate_stream(
+        self,
+        req: UnifiedLLMRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=True)
+        resp = self.session.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+            stream=True,
+        )
+        resp.raise_for_status()
+        text_parts: List[str] = []
+        usage: Dict[str, Any] = {}
+        raw_events: List[Dict[str, Any]] = []
+        finish_reason: Optional[str] = None
+        for data_line in _iter_sse_data_payloads(resp):
+            if str(data_line).strip() == "[DONE]":
+                break
+            try:
+                event = json.loads(data_line)
+            except Exception:
+                continue
+            if not isinstance(event, dict):
+                continue
+            raw_events.append(event)
+            event_type = str(event.get("type") or "")
+            if isinstance(event.get("usage"), dict):
+                usage = event.get("usage") or usage
+            if event_type in {"response.completed", "response.failed", "response.incomplete"}:
+                finish_reason = event_type.split(".")[-1]
+            delta = event.get("delta")
+            if not isinstance(delta, str):
+                continue
+            if not delta:
+                continue
+            text_parts.append(delta)
+            if callable(on_delta):
+                on_delta(delta)
+        text = "".join(text_parts)
+        if not text:
+            # Graceful fallback for providers that ignore Responses streaming events.
+            fallback = self.generate(replace(req, stream=False))
+            if callable(on_delta):
+                for chunk in _iter_text_chunks(fallback.text):
+                    on_delta(chunk)
+            return fallback
+        return UnifiedLLMResponse(
+            text=text,
+            tool_calls=[],
+            usage=usage,
+            finish_reason=finish_reason,
+            raw={"events": raw_events},
+        )
+
 
 class OpenAIChatAdapter:
     def __init__(self, target: Target, session: requests.Session):
         self.target = target
         self.session = session
 
-    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+    def _build_payload(self, req: UnifiedLLMRequest, *, stream: bool) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "model": self.target.model,
             "messages": req.messages or [{"role": "user", "content": req.input_text or ""}],
             "temperature": req.temperature,
-            "stream": req.stream,
+            "stream": bool(stream),
         }
         if req.max_tokens is not None:
             payload["max_tokens"] = req.max_tokens
@@ -278,6 +436,10 @@ class OpenAIChatAdapter:
             payload["tool_choice"] = req.tool_choice
         if req.json_schema:
             payload["response_format"] = _build_json_schema_payload(req.json_schema)
+        return payload
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=req.stream)
 
         resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
@@ -299,21 +461,92 @@ class OpenAIChatAdapter:
             raw=data,
         )
 
+    def generate_stream(
+        self,
+        req: UnifiedLLMRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=True)
+        resp = self.session.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+            stream=True,
+        )
+        resp.raise_for_status()
+        text_parts: List[str] = []
+        usage: Dict[str, Any] = {}
+        raw_events: List[Dict[str, Any]] = []
+        finish_reason: Optional[str] = None
+        tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
+        for data_line in _iter_sse_data_payloads(resp):
+            if str(data_line).strip() == "[DONE]":
+                break
+            try:
+                event = json.loads(data_line)
+            except Exception:
+                continue
+            if not isinstance(event, dict):
+                continue
+            raw_events.append(event)
+            if isinstance(event.get("usage"), dict):
+                usage = event.get("usage") or usage
+            choices = event.get("choices")
+            if not isinstance(choices, list):
+                continue
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                delta = choice.get("delta")
+                if isinstance(delta, dict):
+                    text_delta = _extract_openai_content_text(delta.get("content"))
+                    if text_delta:
+                        text_parts.append(text_delta)
+                        if callable(on_delta):
+                            on_delta(text_delta)
+                    _merge_openai_stream_tool_calls(tool_calls_by_index, delta.get("tool_calls"))
+                message = choice.get("message")
+                if isinstance(message, dict):
+                    _merge_openai_stream_tool_calls(tool_calls_by_index, message.get("tool_calls"))
+                    message_text = _extract_openai_content_text(message.get("content"))
+                    if message_text and not text_parts:
+                        text_parts.append(message_text)
+                        if callable(on_delta):
+                            for chunk in _iter_text_chunks(message_text):
+                                on_delta(chunk)
+                fr = choice.get("finish_reason")
+                if fr is not None:
+                    finish_reason = str(fr)
+        tool_calls = [tool_calls_by_index[key] for key in sorted(tool_calls_by_index.keys())]
+        return UnifiedLLMResponse(
+            text="".join(text_parts),
+            tool_calls=tool_calls,
+            usage=usage,
+            finish_reason=finish_reason,
+            raw={"events": raw_events},
+        )
+
 
 class OpenAICompletionsAdapter:
     def __init__(self, target: Target, session: requests.Session):
         self.target = target
         self.session = session
 
-    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+    def _build_payload(self, req: UnifiedLLMRequest, *, stream: bool) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "model": self.target.model,
             "prompt": req.input_text or "",
             "temperature": req.temperature,
-            "stream": req.stream,
+            "stream": bool(stream),
         }
         if req.max_tokens is not None:
             payload["max_tokens"] = req.max_tokens
+        return payload
+
+    def generate(self, req: UnifiedLLMRequest) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=req.stream)
 
         resp = self.session.post(
             f"{self.target.base_url}{self.target.endpoint}",
@@ -330,6 +563,58 @@ class OpenAICompletionsAdapter:
             usage=data.get("usage", {}),
             finish_reason=finish_reason,
             raw=data,
+        )
+
+    def generate_stream(
+        self,
+        req: UnifiedLLMRequest,
+        *,
+        on_delta: Optional[Callable[[str], None]] = None,
+    ) -> UnifiedLLMResponse:
+        payload = self._build_payload(req, stream=True)
+        resp = self.session.post(
+            f"{self.target.base_url}{self.target.endpoint}",
+            headers=self.target.headers,
+            json=payload,
+            timeout=self.target.timeout_sec,
+            stream=True,
+        )
+        resp.raise_for_status()
+        text_parts: List[str] = []
+        usage: Dict[str, Any] = {}
+        raw_events: List[Dict[str, Any]] = []
+        finish_reason: Optional[str] = None
+        for data_line in _iter_sse_data_payloads(resp):
+            if str(data_line).strip() == "[DONE]":
+                break
+            try:
+                event = json.loads(data_line)
+            except Exception:
+                continue
+            if not isinstance(event, dict):
+                continue
+            raw_events.append(event)
+            if isinstance(event.get("usage"), dict):
+                usage = event.get("usage") or usage
+            choices = event.get("choices")
+            if not isinstance(choices, list):
+                continue
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                delta = str(choice.get("text") or "")
+                if delta:
+                    text_parts.append(delta)
+                    if callable(on_delta):
+                        on_delta(delta)
+                fr = choice.get("finish_reason")
+                if fr is not None:
+                    finish_reason = str(fr)
+        return UnifiedLLMResponse(
+            text="".join(text_parts),
+            usage=usage,
+            finish_reason=finish_reason,
+            raw={"events": raw_events},
         )
 
 
@@ -581,6 +866,7 @@ class LLMGateway:
         model: Optional[str] = None,
         allow_fallback: bool = True,
         target_override: Optional[Dict[str, Any]] = None,
+        token_sink: Optional[Callable[[str], None]] = None,
     ) -> UnifiedLLMResponse:
         errors: List[Exception] = []
         targets: List[Target] = []
@@ -614,6 +900,17 @@ class LLMGateway:
             attempts = max(1, int(target.retry or 1))
             for attempt in range(attempts):
                 try:
+                    if req.stream:
+                        stream_fn = getattr(adapter, "generate_stream", None)
+                        if callable(stream_fn):
+                            return stream_fn(req, on_delta=token_sink)
+                        # Adapter has no streaming implementation; degrade gracefully.
+                        fallback_req = replace(req, stream=False)
+                        response = adapter.generate(fallback_req)
+                        if callable(token_sink):
+                            for chunk in _iter_text_chunks(response.text):
+                                token_sink(chunk)
+                        return response
                     return adapter.generate(req)
                 except Exception as exc:
                     # Retry transient failures on the same target; otherwise fall back to next target.

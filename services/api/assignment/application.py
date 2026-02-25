@@ -134,10 +134,6 @@ async def get_assignment_today(
     )
 
 
-async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
-    return await deps.assignment_detail(assignment_id)
-
-
 async def post_generate_assignment(
     *,
     assignment_id: str,

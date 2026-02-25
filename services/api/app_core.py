@@ -239,9 +239,6 @@ def load_chat_job(job_id: str) -> Dict[str, Any]:
 def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     return _write_chat_job_impl(job_id, updates, deps=_chat_job_repo_deps(), overwrite=overwrite)
 
-def _chat_job_claim_path(job_id: str) -> Path:
-    return chat_job_path(job_id) / "claim.lock"
-
 def _inline_backend_factory():
     upload_deps = upload_worker_deps()
     exam_deps = exam_worker_deps()

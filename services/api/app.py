@@ -102,6 +102,27 @@ register_routes(app, _core)
 logging.getLogger().addFilter(RequestIdFilter())
 
 
+def _is_chart_asset_path(path: str) -> bool:
+    value = str(path or "").strip()
+    return value.startswith("/charts/") or value.startswith("/chart-runs/")
+
+
+def _resolve_chart_query_principal(request: Request):
+    path = str(request.url.path)
+    if not _is_chart_asset_path(path):
+        return None
+    token = str(request.query_params.get("access_token") or "").strip()
+    if not token:
+        return None
+    synthetic_headers = {"authorization": f"Bearer {token}"}
+    return resolve_principal_from_headers(
+        synthetic_headers,
+        path=path,
+        method=request.method,
+        allow_exempt=True,
+    )
+
+
 @app.middleware("http")
 async def _set_core_context(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -122,12 +143,19 @@ async def _set_core_context(
     try:
         principal = get_current_principal()
         if principal is None:
-            principal = resolve_principal_from_headers(
-                request.headers,
-                path=str(request.url.path),
-                method=request.method,
-                allow_exempt=True,
-            )
+            try:
+                principal = resolve_principal_from_headers(
+                    request.headers,
+                    path=str(request.url.path),
+                    method=request.method,
+                    allow_exempt=True,
+                )
+            except AuthError as exc:
+                if exc.detail != "missing_authorization":
+                    raise
+                principal = _resolve_chart_query_principal(request)
+                if principal is None:
+                    raise
             if principal is not None:
                 principal_token = set_current_principal(principal)
         response = await call_next(request)

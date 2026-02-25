@@ -38,8 +38,16 @@ def call_llm_runtime(
     kind: Optional[str] = None,
     teacher_id: Optional[str] = None,
     skill_runtime: Optional[Any] = None,
+    stream: bool = False,
+    token_sink: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
-    req = UnifiedLLMRequest(messages=messages, tools=tools, tool_choice="auto" if tools else None, max_tokens=max_tokens)
+    req = UnifiedLLMRequest(
+        messages=messages,
+        tools=tools,
+        tool_choice="auto" if tools else None,
+        max_tokens=max_tokens,
+        stream=bool(stream),
+    )
     t0 = deps.monotonic()
     if role_hint == "student":
         limiter = deps.student_limiter
@@ -77,6 +85,38 @@ def call_llm_runtime(
     route_attempt_errors: List[Dict[str, str]] = []
     route_validation_errors: List[str] = []
     route_validation_warnings: List[str] = []
+
+    def _gateway_generate(
+        request: UnifiedLLMRequest,
+        *,
+        provider: Optional[str] = None,
+        mode: Optional[str] = None,
+        model: Optional[str] = None,
+        allow_fallback: bool,
+        target_override: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        if bool(stream) and callable(token_sink):
+            try:
+                return deps.gateway.generate(
+                    request,
+                    provider=provider,
+                    mode=mode,
+                    model=model,
+                    allow_fallback=allow_fallback,
+                    target_override=target_override,
+                    token_sink=token_sink,
+                )
+            except TypeError:
+                # Backward compatibility for test doubles or custom gateways.
+                pass
+        return deps.gateway.generate(
+            request,
+            provider=provider,
+            mode=mode,
+            model=model,
+            allow_fallback=allow_fallback,
+            target_override=target_override,
+        )
 
     with deps.limit(limiter):
         result = None
@@ -130,9 +170,13 @@ def call_llm_runtime(
                             )
                     try:
                         if isinstance(target_override, dict):
-                            result = deps.gateway.generate(route_req, allow_fallback=False, target_override=target_override)
+                            result = _gateway_generate(
+                                route_req,
+                                allow_fallback=False,
+                                target_override=target_override,
+                            )
                         else:
-                            result = deps.gateway.generate(
+                            result = _gateway_generate(
                                 route_req,
                                 provider=candidate.provider,
                                 mode=candidate.mode,
@@ -208,9 +252,13 @@ def call_llm_runtime(
                             )
                     try:
                         if isinstance(target_override, dict):
-                            result = deps.gateway.generate(route_req, allow_fallback=False, target_override=target_override)
+                            result = _gateway_generate(
+                                route_req,
+                                allow_fallback=False,
+                                target_override=target_override,
+                            )
                         else:
-                            result = deps.gateway.generate(
+                            result = _gateway_generate(
                                 route_req,
                                 provider=provider,
                                 mode=mode,
@@ -240,7 +288,7 @@ def call_llm_runtime(
         if result is None:
             if not route_reason:
                 route_reason = "gateway_fallback"
-            result = deps.gateway.generate(req, allow_fallback=True)
+            result = _gateway_generate(req, allow_fallback=True)
 
     deps.diag_log(
         "llm.call.done",
@@ -250,6 +298,7 @@ def call_llm_runtime(
             "skill_id": skill_id or "",
             "kind": kind or "",
             "tools": bool(tools),
+            "stream": bool(stream),
             "route_selected": route_selected,
             "route_reason": route_reason,
             "route_rule_id": route_rule_id,

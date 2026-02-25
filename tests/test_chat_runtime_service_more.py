@@ -306,3 +306,60 @@ def test_runtime_skill_policy_target_override_dict_path(monkeypatch) -> None:
     assert gateway.calls[0]["allow_fallback"] is False
     payload = logs[-1][1]
     assert payload["route_source"] == "skill_policy"
+
+
+def test_runtime_stream_forwards_token_sink_to_gateway(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _StreamGateway(_FakeGateway):
+        def __init__(self):
+            super().__init__(["stream-ok"])
+            self.stream_calls: List[Dict[str, Any]] = []
+
+        def generate(  # type: ignore[override]
+            self,
+            req,
+            provider=None,
+            mode=None,
+            model=None,
+            allow_fallback=True,
+            target_override=None,
+            token_sink=None,
+        ):
+            self.stream_calls.append(
+                {
+                    "stream": bool(getattr(req, "stream", False)),
+                    "provider": provider,
+                    "mode": mode,
+                    "model": model,
+                    "allow_fallback": allow_fallback,
+                }
+            )
+            if callable(token_sink):
+                token_sink("A")
+                token_sink("B")
+            return _FakeResponse("AB")
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _StreamGateway()
+    deps, _, _, _ = _deps(
+        gateway,
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    chunks: List[str] = []
+    out = call_llm_runtime(
+        [{"role": "user", "content": "hello"}],
+        deps=deps,
+        stream=True,
+        token_sink=lambda chunk: chunks.append(str(chunk)),
+    )
+
+    assert out["choices"][0]["message"]["content"] == "AB"
+    assert chunks == ["A", "B"]
+    assert gateway.stream_calls and gateway.stream_calls[0]["stream"] is True

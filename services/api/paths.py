@@ -6,7 +6,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from . import settings as _settings
 from .config import (
@@ -235,10 +235,3 @@ def resolve_manifest_path(path_value: Any) -> Optional[Path]:
     if not path.is_absolute():
         path = (APP_ROOT / path).resolve()
     return path
-
-
-def exam_file_path(manifest: Dict[str, Any], key: str) -> Optional[Path]:
-    files = manifest.get("files") or {}
-    if not isinstance(files, dict):
-        return None
-    return resolve_manifest_path(files.get(key))

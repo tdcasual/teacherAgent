@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
-import { renderMarkdown, absolutizeChartImageUrls } from '../../shared/markdown'
+import { renderMarkdown, absolutizeChartImageUrls, renderStreamingPlainText } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
 import type { Message, RenderedMessage, StudentPersonaCard, StudentPersonaListResponse } from './appTypes'
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, toErrorMessage, todayDate } from './hooks/useStudentState'
@@ -53,14 +53,20 @@ export default function App() {
   const renderedMessages = useMemo(() => {
     const cache = refs.markdownCacheRef.current
     evictOldestEntries(cache)
+    const pendingPlaceholderId = state.pendingChatJob?.job_id
+      ? String(state.pendingChatJob.placeholder_id || '').trim()
+      : ''
     return state.messages.map((msg): RenderedMessage => {
+      if (pendingPlaceholderId && msg.id === pendingPlaceholderId) {
+        return { ...msg, html: renderStreamingPlainText(msg.content) }
+      }
       const cached = cache.get(msg.id)
       if (cached && cached.content === msg.content && cached.apiBase === state.apiBase) return { ...msg, html: cached.html }
       const html = absolutizeChartImageUrls(renderMarkdown(msg.content), state.apiBase)
       cache.set(msg.id, { content: msg.content, html, apiBase: state.apiBase })
       return { ...msg, html }
     })
-  }, [state.messages, state.apiBase, refs.markdownCacheRef])
+  }, [state.messages, state.apiBase, state.pendingChatJob?.job_id, state.pendingChatJob?.placeholder_id, refs.markdownCacheRef])
 
   // ── Auto-scroll on new messages ──
   useEffect(() => { autoScroll() }, [state.messages, state.sending, autoScroll])

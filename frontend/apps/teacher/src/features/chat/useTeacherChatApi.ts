@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { absolutizeChartImageUrls, renderMarkdown } from './markdown'
+import { absolutizeChartImageUrls, renderMarkdown, renderStreamingPlainText } from './markdown'
 import { stripTransientPendingBubbles, withPendingChatOverlay } from './pendingOverlay'
 import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
 import { parseInvocationInput } from './invocation'
@@ -155,7 +155,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   const historyHasMoreRef = useRef(false)
   const localDraftSessionIdsRef = useRef<string[]>([])
   const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
-  const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string }>())
+  const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string; authToken: string }>())
   const [authToken, setAuthToken] = useState(() => readTeacherAccessToken())
 
   // ── Ref sync effects ──────────────────────────────────────────────────
@@ -178,22 +178,26 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   const syncHistoryHasMore = useCallback((val: boolean) => { historyHasMoreRef.current = val }, [])
   const syncLocalDraftSessionIds = useCallback((val: string[]) => { localDraftSessionIdsRef.current = val }, [])
 
-  // Clear markdown cache when apiBase changes
-  useEffect(() => { markdownCacheRef.current.clear() }, [apiBase])
+  // Clear markdown cache when apiBase or auth token changes
+  useEffect(() => { markdownCacheRef.current.clear() }, [apiBase, authToken])
 
   // ── renderedMessages memo ─────────────────────────────────────────────
   const renderedMessages = useMemo(() => {
     const cache = markdownCacheRef.current
+    const pendingPlaceholderId = pendingChatJob?.job_id ? String(pendingChatJob.placeholder_id || '').trim() : ''
     return messages.map((msg): RenderedMessage => {
+      if (pendingPlaceholderId && msg.id === pendingPlaceholderId) {
+        return { ...msg, html: renderStreamingPlainText(msg.content) }
+      }
       const cached = cache.get(msg.id)
-      if (cached && cached.content === msg.content && cached.apiBase === apiBase) {
+      if (cached && cached.content === msg.content && cached.apiBase === apiBase && cached.authToken === authToken) {
         return { ...msg, html: cached.html }
       }
-      const html = absolutizeChartImageUrls(renderMarkdown(msg.content), apiBase)
-      cache.set(msg.id, { content: msg.content, html, apiBase })
+      const html = absolutizeChartImageUrls(renderMarkdown(msg.content), apiBase, authToken)
+      cache.set(msg.id, { content: msg.content, html, apiBase, authToken })
       return { ...msg, html }
     })
-  }, [messages, apiBase])
+  }, [messages, apiBase, authToken, pendingChatJob?.job_id, pendingChatJob?.placeholder_id])
 
   // ── refreshTeacherSessions ────────────────────────────────────────────
   const refreshTeacherSessions = useCallback(

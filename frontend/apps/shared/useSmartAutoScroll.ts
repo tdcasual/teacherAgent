@@ -48,7 +48,8 @@ export function useSmartAutoScroll() {
 
   const autoScroll = useCallback(() => {
     if (isNearBottom) {
-      scrollMessagesToBottom('smooth');
+      // During token streaming, smooth scrolling on every update causes jank.
+      scrollMessagesToBottom('auto');
     }
   }, [isNearBottom, scrollMessagesToBottom]);
 

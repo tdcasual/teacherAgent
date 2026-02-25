@@ -9,20 +9,16 @@ from .agent_service import (
 from .agent_service import (
     run_agent_runtime as _run_agent_runtime_impl,
 )
-from .api_models import ChatRequest, ChatStartRequest
+from .api_models import ChatRequest
 from .chart_agent_run_service import chart_agent_run as _chart_agent_run_impl
 from .chat_job_processing_service import (
     compute_chat_reply_sync as _compute_chat_reply_sync_impl,
-)
-from .chat_job_processing_service import (
-    detect_role_hint as _detect_role_hint_impl,
 )
 from .chat_job_processing_service import (
     process_chat_job as _process_chat_job_impl,
 )
 from .chat_runtime_service import call_llm_runtime as _call_llm_runtime_impl
 from .chat_session_utils import resolve_student_session_id as _resolve_student_session_id_impl
-from .chat_start_service import start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_support_service import (
     allowed_tools as _allowed_tools_impl,
 )
@@ -75,17 +71,10 @@ from .exam_longform_service import (
     build_exam_longform_context as _build_exam_longform_context_impl,
 )
 from .exam_longform_service import (
-    calc_longform_max_tokens as _calc_longform_max_tokens_impl,
-)
-from .exam_longform_service import (
-    generate_longform_reply as _generate_longform_reply_impl,
-)
-from .exam_longform_service import (
     summarize_exam_students as _summarize_exam_students_impl,
 )
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
 from .paths import DATA_DIR, parse_date_str
-from .profile_service import detect_role
 from .student_import_service import (
     import_students_from_responses as _import_students_from_responses_impl,
 )
@@ -115,7 +104,6 @@ from .wiring.assignment_wiring import _assignment_generate_tool_deps
 from .wiring.chat_wiring import (
     _chat_job_process_deps,
     _chat_runtime_deps,
-    _chat_start_deps,
     _chat_support_deps,
     _compute_chat_reply_deps,
 )
@@ -313,6 +301,8 @@ def call_llm(
     kind: Optional[str] = None,
     teacher_id: Optional[str] = None,
     skill_runtime: Optional[Any] = None,
+    stream: bool = False,
+    token_sink: Optional[Callable[[str], None]] = None,
 ) -> Dict[str, Any]:
     return _call_llm_runtime_impl(
         messages,
@@ -324,6 +314,8 @@ def call_llm(
         kind=kind,
         teacher_id=teacher_id,
         skill_runtime=skill_runtime,
+        stream=stream,
+        token_sink=token_sink,
     )
 
 
@@ -371,29 +363,6 @@ def build_exam_longform_context(exam_id: str) -> Dict[str, Any]:
     return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps())
 
 
-def _calc_longform_max_tokens(min_chars: int) -> int:
-    return _calc_longform_max_tokens_impl(min_chars)
-
-
-def _generate_longform_reply(
-    convo: List[Dict[str, Any]],
-    min_chars: int,
-    role_hint: Optional[str],
-    skill_id: Optional[str] = None,
-    teacher_id: Optional[str] = None,
-    skill_runtime: Optional[Any] = None,
-) -> str:
-    return _generate_longform_reply_impl(
-        convo,
-        min_chars,
-        role_hint,
-        skill_id,
-        teacher_id,
-        skill_runtime,
-        deps=_exam_longform_deps(),
-    )
-
-
 def run_agent(
     messages: List[Dict[str, Any]],
     role_hint: Optional[str],
@@ -413,10 +382,6 @@ def run_agent(
         teacher_id=teacher_id,
         event_sink=event_sink,
     )
-
-
-def _detect_role_hint(req: ChatRequest) -> Optional[str]:
-    return _detect_role_hint_impl(req, detect_role=detect_role)
 
 
 def _compute_chat_reply_sync(
@@ -449,7 +414,3 @@ def resolve_student_session_id(
 
 def process_chat_job(job_id: str) -> None:
     _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
-
-
-def _chat_start_orchestration(req: ChatStartRequest) -> Dict[str, Any]:
-    return _start_chat_orchestration_impl(req, deps=_chat_start_deps())
