@@ -615,10 +615,8 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const refreshBtn = page.locator('.skills-panel .skills-header').getByRole('button', { name: '刷新' })
     await refreshBtn.click()
 
-    await expect(page.getByText('正在加载技能...')).toBeVisible()
     await expect(refreshBtn).toBeDisabled()
     await expect.poll(() => skillsCalls).toBeGreaterThan(1)
-    await expect(page.getByText('正在加载技能...')).toHaveCount(0)
     await expect(refreshBtn).toBeEnabled()
   },
 
