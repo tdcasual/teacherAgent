@@ -95,28 +95,34 @@ def call_llm_runtime(
         allow_fallback: bool,
         target_override: Optional[Dict[str, Any]] = None,
     ) -> Any:
+        base_kwargs: Dict[str, Any] = {
+            "provider": provider,
+            "mode": mode,
+            "model": model,
+            "allow_fallback": allow_fallback,
+            "target_override": target_override,
+        }
         if bool(stream) and callable(token_sink):
+            base_kwargs["token_sink"] = token_sink
+        try:
+            return deps.gateway.generate(request, **base_kwargs)
+        except TypeError:
+            # Backward compatibility for test doubles or custom gateways that do
+            # not support `target_override` and/or `token_sink`.
+            pass
+        compat_kwargs = dict(base_kwargs)
+        compat_kwargs.pop("target_override", None)
+        try:
+            return deps.gateway.generate(request, **compat_kwargs)
+        except TypeError:
+            pass
+        compat_kwargs.pop("token_sink", None)
+        if compat_kwargs != base_kwargs:
             try:
-                return deps.gateway.generate(
-                    request,
-                    provider=provider,
-                    mode=mode,
-                    model=model,
-                    allow_fallback=allow_fallback,
-                    target_override=target_override,
-                    token_sink=token_sink,
-                )
+                return deps.gateway.generate(request, **compat_kwargs)
             except TypeError:
-                # Backward compatibility for test doubles or custom gateways.
                 pass
-        return deps.gateway.generate(
-            request,
-            provider=provider,
-            mode=mode,
-            model=model,
-            allow_fallback=allow_fallback,
-            target_override=target_override,
-        )
+        raise
 
     with deps.limit(limiter):
         result = None
