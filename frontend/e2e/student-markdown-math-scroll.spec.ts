@@ -52,7 +52,7 @@ test.describe('math formula overflow', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
   test('long display math has overflow-x: auto', async ({ page }) => {
-    const longFormula = '$$' + Array(30).fill('a_i').join(' + ') + ' = 0$$'
+    const longFormula = ['$$', Array(30).fill('a_i').join(' + ') + ' = 0', '$$'].join('\n')
     await setupStudentState(page)
     await setupMocks(page, longFormula)
     await page.goto('/')
@@ -62,7 +62,7 @@ test.describe('math formula overflow', () => {
     await input.fill('长公式')
     await input.press('Enter')
 
-    const katexDisplay = page.locator('.message.assistant .katex-display').last()
+    const katexDisplay = page.locator('.message.assistant .markdown .katex-display').last()
     await expect(katexDisplay).toBeVisible()
 
     const overflow = await katexDisplay.evaluate((el) => window.getComputedStyle(el).overflowX)
@@ -70,7 +70,7 @@ test.describe('math formula overflow', () => {
   })
 
   test('inline math renders correctly', async ({ page }) => {
-    const reply = '行内公式 \\\\(E = mc^2\\\\) 和 \\\\(F = ma\\\\) 在同一行。'
+    const reply = '行内公式 \\(E = mc^2\\) 和 \\(F = ma\\) 在同一行。'
     await setupStudentState(page)
     await setupMocks(page, reply)
     await page.goto('/')
