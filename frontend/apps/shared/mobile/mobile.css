@@ -51,9 +51,16 @@
   border: 1px solid #e5e7eb;
   background: #fff;
   border-radius: 999px;
-  padding: 4px 10px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 12px;
   cursor: pointer;
   font-size: 12px;
+}
+
+.mobile-sheet-close:focus-visible {
+  outline: 2px solid #10a37f;
+  outline-offset: 2px;
 }
 
 .mobile-sheet-body {
@@ -93,6 +100,7 @@
 
 .mobile-tabbar-button {
   width: 100%;
+  min-height: 44px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #fff;
@@ -115,6 +123,11 @@
 
 .mobile-tabbar-button:active {
   transform: translateY(1px) scale(0.98);
+}
+
+.mobile-tabbar-button:focus-visible {
+  outline: 2px solid #10a37f;
+  outline-offset: 2px;
 }
 
 .mobile-tabbar-label {
