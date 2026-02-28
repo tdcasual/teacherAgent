@@ -176,12 +176,22 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
 
     deadline = time.monotonic() + max(0.0, float(timeout_sec or 0.0))
     for thread in list(deps.chat_worker_threads):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
+        remaining = max(0.0, deadline - time.monotonic())
         try:
             thread.join(remaining)
         except Exception:
             _log.warning("operation failed", exc_info=True)
             pass
-    deps.worker_started_set(False)
+    alive_threads: List[Any] = []
+    for thread in list(deps.chat_worker_threads):
+        is_alive = False
+        try:
+            is_alive_method = getattr(thread, "is_alive", None)
+            is_alive = bool(is_alive_method()) if callable(is_alive_method) else False
+        except Exception:
+            _log.warning("operation failed", exc_info=True)
+            is_alive = False
+        if is_alive:
+            alive_threads.append(thread)
+    deps.chat_worker_threads[:] = alive_threads
+    deps.worker_started_set(bool(alive_threads))

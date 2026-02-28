@@ -158,3 +158,18 @@
 - Root cause: `StudentVerifyCandidate` was flagged by `ts-prune` as module-local usage, but repository policy includes a drift guard requiring this symbol to remain an explicit exported contract type.
 - Fix status: `fixed`
 - Notes: restored `export type StudentVerifyCandidate` while keeping other safe export reductions.
+
+### BUG-0010: `stop_chat_worker` could mark worker stopped while thread still alive
+
+- Discovered at: `2026-02-28T14:57:00Z`
+- Area: `services/api/workers/chat_worker_service.py`
+- Symptom: stop path unconditionally set `worker_started=False`, even when join timeout expired and worker thread remained alive, allowing duplicate worker startup and lane-processing conflicts.
+- Repro steps:
+  1. Add/execute `test_stop_chat_worker_keeps_started_flag_when_thread_still_alive`.
+  2. Run `python3 -m pytest -q tests/test_chat_worker_service.py -k still_alive`.
+- Evidence:
+  - Before fix: assertion failed (`assert started["value"] is True`) because stop path forced `False`.
+  - After fix: same test passes and keeps `worker_started=True` when thread remains alive.
+- Root cause: `stop_chat_worker()` joined threads with timeout but always cleared started flag without checking `thread.is_alive()`.
+- Fix status: `fixed`
+- Notes: stop path now inspects liveness, retains alive thread references, and sets `worker_started` from actual alive-thread state.

@@ -10,6 +10,7 @@ from services.api.workers.chat_worker_service import (
     chat_job_worker_loop,
     enqueue_chat_job,
     start_chat_worker,
+    stop_chat_worker,
 )
 
 
@@ -35,6 +36,23 @@ class _FakeThread:
 
     def start(self):
         self.started = True
+
+
+class _JoinAwareThread:
+    def __init__(self, *, alive: bool):
+        self._alive = alive
+        self.join_calls = 0
+        self.join_timeouts = []
+
+    def start(self):
+        return None
+
+    def join(self, timeout=None):
+        self.join_calls += 1
+        self.join_timeouts.append(timeout)
+
+    def is_alive(self):
+        return self._alive
 
 
 class ChatWorkerServiceTest(unittest.TestCase):
@@ -108,6 +126,38 @@ class ChatWorkerServiceTest(unittest.TestCase):
             self.assertTrue(started["value"])
             self.assertEqual(len(threads), 2)
             self.assertTrue(all(getattr(t, "started", False) for t in threads))
+
+    def test_stop_chat_worker_keeps_started_flag_when_thread_still_alive(self):
+        started = {"value": True}
+        chat_worker_threads = [_JoinAwareThread(alive=True)]
+        event = _FakeEvent()
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=event,
+            chat_worker_threads=chat_worker_threads,
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: started["value"],
+            worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+        )
+
+        stop_chat_worker(deps=deps, timeout_sec=0.01)
+
+        assert started["value"] is True
+        assert len(chat_worker_threads) == 1
+        assert event.set_calls == 1
 
 
 if __name__ == "__main__":
