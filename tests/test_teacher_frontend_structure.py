@@ -234,7 +234,12 @@ def test_teacher_session_rail_extracted() -> None:
     app_source = _TEACHER_APP_PATH.read_text(encoding="utf-8")
     assert "TeacherSessionRail" in app_source
     assert "<TeacherSessionRail" in app_source
-    assert "<SessionSidebar" not in app_source, "App.tsx should not render SessionSidebar directly."
+    assert "<SessionSidebar" in app_source, (
+        "App.tsx should keep SessionSidebar wiring for mobile sheet presentation."
+    )
+    assert 'mobilePresentation="sheet"' in app_source, (
+        "SessionSidebar usage in App.tsx should remain mobile-sheet scoped."
+    )
 
 
 def test_teacher_topbar_has_persona_manager_entry() -> None:
