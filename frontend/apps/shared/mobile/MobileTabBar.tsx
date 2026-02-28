@@ -21,7 +21,7 @@ export function MobileTabBar({
 }: MobileTabBarProps) {
   return (
     <nav className="mobile-tabbar" aria-label={ariaLabel}>
-      <ul className="mobile-tabbar-list">
+      <ul className="mobile-tabbar-list" style={{ gridTemplateColumns: `repeat(${Math.max(1, items.length)}, minmax(0, 1fr))` }}>
         {items.map((item) => {
           const selected = item.id === activeId
           return (

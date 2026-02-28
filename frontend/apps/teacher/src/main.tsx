@@ -6,6 +6,7 @@ import { installAuthFetchInterceptor } from '../../shared/authFetch'
 import { clearTeacherAuthSession } from './features/auth/teacherAuth'
 import './tailwind.css'
 import '../../shared/dialog.css'
+import '../../shared/mobile/mobile.css'
 
 installAuthFetchInterceptor('teacherAuthAccessToken', {
   onUnauthorized: () => {

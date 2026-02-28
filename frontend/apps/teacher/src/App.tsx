@@ -40,6 +40,8 @@ import {
 } from './features/workbench/workbenchUtils'
 import { readFeatureFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
+import { BottomSheet } from '../../shared/mobile/BottomSheet'
+import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -73,6 +75,11 @@ const WORKBENCH_MIN_WIDTH = 280
 const WORKBENCH_BASE_MAX_WIDTH = 620
 const WORKBENCH_MAX_WIDTH_RATIO = 0.42
 const WORKBENCH_HARD_MAX_WIDTH = 920
+const TEACHER_MOBILE_TAB_ITEMS: MobileTabItem[] = [
+  { id: 'chat', label: '聊天' },
+  { id: 'sessions', label: '会话' },
+  { id: 'workbench', label: '工作台' },
+]
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
@@ -100,6 +107,7 @@ export default function App() {
     }
     return readFeatureFlag('mobileShellV2', false, source)
   }, [])
+  const teacherUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
   const [initialWorkbenchWidth] = useState(() => {
     if (typeof window === 'undefined') return WORKBENCH_DEFAULT_WIDTH
     const initialViewportWidth = window.innerWidth
@@ -167,6 +175,7 @@ export default function App() {
   })
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => safeLocalStorageGetItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => safeLocalStorageGetItem('teacherSkillsOpen') !== 'false')
+  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'workbench'>('chat')
   const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>(() => {
     const raw = safeLocalStorageGetItem('teacherWorkbenchTab')
     return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
@@ -539,6 +548,37 @@ export default function App() {
     setSettingsSection,
   })
 
+  useEffect(() => {
+    if (!teacherUseMobileShellV2) return
+    if (skillsOpen) {
+      if (mobileTab !== 'workbench') setMobileTab('workbench')
+      return
+    }
+    if (sessionSidebarOpen) {
+      if (mobileTab !== 'sessions') setMobileTab('sessions')
+      return
+    }
+    if (mobileTab !== 'chat') setMobileTab('chat')
+  }, [teacherUseMobileShellV2, skillsOpen, sessionSidebarOpen, mobileTab])
+
+  const handleTeacherMobileTabChange = useCallback((tabId: string) => {
+    if (tabId !== 'chat' && tabId !== 'sessions' && tabId !== 'workbench') return
+    setMobileTab(tabId)
+    if (!teacherUseMobileShellV2) return
+    if (tabId === 'chat') {
+      setSessionSidebarOpen(false)
+      setSkillsOpen(false)
+      return
+    }
+    if (tabId === 'sessions') {
+      setSessionSidebarOpen(true)
+      setSkillsOpen(false)
+      return
+    }
+    setSessionSidebarOpen(false)
+    setSkillsOpen(true)
+  }, [teacherUseMobileShellV2, setSessionSidebarOpen, setSkillsOpen])
+
   const openPersonaManager = useCallback(() => {
     setPersonaManagerOpen(true)
   }, [])
@@ -631,7 +671,7 @@ export default function App() {
   return (
     <div
       ref={appRef}
-      className="app teacher h-dvh flex flex-col bg-bg overflow-hidden"
+      className={`app teacher h-dvh flex flex-col bg-bg overflow-hidden ${teacherUseMobileShellV2 ? 'teacher-mobile-shell-v2' : ''}`.trim()}
       style={appStyle}
       data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
     >
@@ -752,38 +792,62 @@ export default function App() {
                 onInsertMention={insertMention}
               />
             </Panel>
-            <Separator
-              className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[rgba(16,163,127,0.08)] ${isWorkbenchResizing ? 'bg-[rgba(16,163,127,0.08)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
-              onPointerDown={startWorkbenchResize}
-              onDoubleClick={handleWorkbenchResizeReset}
-            >
-              <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-[#10a37f]' : 'bg-[#d1d5db] group-hover:bg-[#10a37f]'}`} />
-            </Separator>
-            <Panel
-              panelRef={workbenchPanelRef}
-              className="min-w-0 min-h-0 overflow-hidden flex"
-              minSize={WORKBENCH_MIN_WIDTH}
-              maxSize={workbenchMaxWidth}
-              defaultSize={initialWorkbenchWidth}
-              collapsible
-              collapsedSize={0}
-              onResize={(panelSize) => {
-                if (isMobileLayout) return
-                const width = Math.round(panelSize.inPixels || 0)
-                if (!Number.isFinite(width) || width <= 0) return
-                const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, width))
-                try {
-                  window.localStorage.setItem('teacherWorkbenchWidth', String(clamped))
-                } catch {
-                  // ignore
-                }
-              }}
-            >
-                      <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
-            </Panel>
+            {teacherUseMobileShellV2 ? null : (
+              <>
+                <Separator
+                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[rgba(16,163,127,0.08)] ${isWorkbenchResizing ? 'bg-[rgba(16,163,127,0.08)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
+                  onPointerDown={startWorkbenchResize}
+                  onDoubleClick={handleWorkbenchResizeReset}
+                >
+                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-[#10a37f]' : 'bg-[#d1d5db] group-hover:bg-[#10a37f]'}`} />
+                </Separator>
+                <Panel
+                  panelRef={workbenchPanelRef}
+                  className="min-w-0 min-h-0 overflow-hidden flex"
+                  minSize={WORKBENCH_MIN_WIDTH}
+                  maxSize={workbenchMaxWidth}
+                  defaultSize={initialWorkbenchWidth}
+                  collapsible
+                  collapsedSize={0}
+                  onResize={(panelSize) => {
+                    if (isMobileLayout) return
+                    const width = Math.round(panelSize.inPixels || 0)
+                    if (!Number.isFinite(width) || width <= 0) return
+                    const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, width))
+                    try {
+                      window.localStorage.setItem('teacherWorkbenchWidth', String(clamped))
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
+                </Panel>
+              </>
+            )}
           </Group>
         </div>
       </div>
+
+      <BottomSheet
+        open={teacherUseMobileShellV2 && mobileTab === 'workbench'}
+        onClose={() => {
+          setMobileTab('chat')
+          setSkillsOpen(false)
+        }}
+        title="工作台"
+      >
+        <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
+      </BottomSheet>
+
+      {teacherUseMobileShellV2 ? (
+        <MobileTabBar
+          items={TEACHER_MOBILE_TAB_ITEMS}
+          activeId={mobileTab}
+          onChange={handleTeacherMobileTabChange}
+          ariaLabel="教师端移动导航"
+        />
+      ) : null}
 
       <PromptDialog
         open={Boolean(renameDialogSessionId)}
