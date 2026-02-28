@@ -6,6 +6,7 @@ import remarkRehype from 'remark-rehype';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
+import type { Schema } from 'hast-util-sanitize';
 import { visit } from 'unist-util-visit';
 import type { Node } from 'unist';
 import { normalizeApiBase } from './apiBase';
@@ -108,13 +109,20 @@ const remarkLatexBrackets = () => {
 const KATEX_STYLE_RE =
   /^(?:\s*(?:height|width|min-width|left|top|margin-left|margin-right|padding-left|vertical-align|border-bottom-width)\s*:\s*-?\d*\.?\d+(?:em|ex|px|pt|pc|in|cm|mm|mu|%)?\s*;|\s*position\s*:\s*relative\s*;)+\s*$/;
 
-const katexSchema = {
+type SanitizeAttributes = NonNullable<Schema['attributes']>;
+type SanitizeAttribute = SanitizeAttributes[string][number];
+
+const defaultAttributes = (defaultSchema.attributes ?? {}) as SanitizeAttributes;
+const classNameAttribute: SanitizeAttribute = 'className';
+const katexStyleAttribute: SanitizeAttribute = ['style', KATEX_STYLE_RE];
+
+const katexSchema: Schema = {
   ...defaultSchema,
   attributes: {
-    ...defaultSchema.attributes,
-    span: [...(defaultSchema.attributes?.span || []), 'className', ['style', KATEX_STYLE_RE]],
-    div: [...(defaultSchema.attributes?.div || []), 'className', ['style', KATEX_STYLE_RE]],
-    code: [...(defaultSchema.attributes?.code || []), 'className'],
+    ...defaultAttributes,
+    span: [...(defaultAttributes.span ?? []), classNameAttribute, katexStyleAttribute],
+    div: [...(defaultAttributes.div ?? []), classNameAttribute, katexStyleAttribute],
+    code: [...(defaultAttributes.code ?? []), classNameAttribute],
   },
 };
 
