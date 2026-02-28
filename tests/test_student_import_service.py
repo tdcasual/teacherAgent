@@ -198,6 +198,42 @@ class StudentImportServiceTest(unittest.TestCase):
             self.assertTrue((root / "data" / "student_profiles" / "S1.json").exists())
             self.assertFalse((root / "data" / "escape.json").exists())
 
+    def test_import_tolerates_non_list_import_history(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentImportDeps(
+                app_root=root / "app",
+                data_dir=root / "data",
+                load_profile_file=_load_profile_file,
+                now_iso=lambda: "2026-02-07T10:00:00",
+            )
+            profile_path = root / "data" / "student_profiles" / "S1.json"
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "student_id": "S1",
+                        "student_name": "Bob",
+                        "import_history": {},
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            source = root / "inputs" / "normal.csv"
+            _write_csv(
+                source,
+                [{"student_id": "S1", "student_name": "Bob", "class_name": "C2", "exam_id": "EX1"}],
+            )
+
+            result = import_students_from_responses(source, deps=deps, mode="merge")
+
+            self.assertTrue(result.get("ok"))
+            profile = _load_profile_file(profile_path)
+            self.assertIsInstance(profile.get("import_history"), list)
+            self.assertEqual(len(profile.get("import_history") or []), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

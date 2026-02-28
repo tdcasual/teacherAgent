@@ -43,10 +43,12 @@ def _truthy(value: Any) -> bool:
 def auth_required() -> bool:
     raw = os.getenv("AUTH_REQUIRED")
     if raw is None:
-        # Auto-detect: require auth only when secret is configured (or in test mode, skip)
+        # Auto-detect: production defaults to required; test mode keeps auth off.
         if bool(os.getenv("PYTEST_CURRENT_TEST")):
             return False
-        # If AUTH_TOKEN_SECRET is not set, auth cannot work — disable it for dev mode
+        if _is_production():
+            return True
+        # If AUTH_TOKEN_SECRET is not set, auth cannot work — disable it for dev mode.
         return bool(_secret())
     return _truthy(raw)
 
@@ -92,7 +94,9 @@ def _is_production(getenv: Callable[[str, Optional[str]], Optional[str]] = os.ge
 
 
 def validate_auth_secret_policy(*, getenv: Callable[[str, Optional[str]], Optional[str]] = os.getenv) -> None:
-    if not _truthy(getenv("AUTH_REQUIRED", None)):
+    auth_required_raw = getenv("AUTH_REQUIRED", None)
+    auth_enabled = _truthy(auth_required_raw) if auth_required_raw is not None else _is_production(getenv)
+    if not auth_enabled:
         return
     if str(getenv("AUTH_TOKEN_SECRET", None) or "").strip():
         return

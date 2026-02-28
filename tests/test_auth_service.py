@@ -129,6 +129,15 @@ class TestAuthRequired(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             self.assertFalse(auth_required())
 
+    def test_unset_in_production_requires_auth(self):
+        env = os.environ.copy()
+        env.pop("AUTH_REQUIRED", None)
+        env.pop("AUTH_TOKEN_SECRET", None)
+        env.pop("PYTEST_CURRENT_TEST", None)
+        env["APP_ENV"] = "production"
+        with patch.dict(os.environ, env, clear=True):
+            self.assertTrue(auth_required())
+
 
 class TestResolvePrincipalFromHeaders(unittest.TestCase):
     """resolve_principal_from_headers with various header/path combos."""

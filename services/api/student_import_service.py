@@ -171,6 +171,8 @@ def import_students_from_responses(
             profile["class_name"] = info["class_name"]
 
         history = profile.get("import_history", [])
+        if not isinstance(history, list):
+            history = []
         history.append(
             {
                 "timestamp": deps.now_iso(),

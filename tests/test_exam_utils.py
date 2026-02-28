@@ -174,6 +174,11 @@ def test_compute_exam_totals_missing_score_skipped(tmp_path):
     assert result["totals"]["s1"] == 8.0
 
 
+def test_compute_exam_totals_missing_file_returns_empty(tmp_path):
+    result = compute_exam_totals(tmp_path / "nope.csv")
+    assert result == {"totals": {}, "students": {}}
+
+
 def test_parse_xlsx_with_script_uses_default_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     captured: dict[str, object] = {}
 

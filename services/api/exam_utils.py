@@ -75,22 +75,25 @@ def read_questions_csv(path: Path) -> Dict[str, Dict[str, Any]]:
 def compute_exam_totals(responses_path: Path) -> Dict[str, Any]:
     totals: Dict[str, float] = {}
     student_meta: Dict[str, Dict[str, str]] = {}
-    with responses_path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            score = parse_score_value(row.get("score"))
-            if score is None:
-                continue
-            student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
-            if not student_id:
-                continue
-            totals[student_id] = totals.get(student_id, 0.0) + score
-            if student_id not in student_meta:
-                student_meta[student_id] = {
-                    "student_id": student_id,
-                    "student_name": str(row.get("student_name") or "").strip(),
-                    "class_name": str(row.get("class_name") or "").strip(),
-                }
+    try:
+        with responses_path.open(encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                score = parse_score_value(row.get("score"))
+                if score is None:
+                    continue
+                student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
+                if not student_id:
+                    continue
+                totals[student_id] = totals.get(student_id, 0.0) + score
+                if student_id not in student_meta:
+                    student_meta[student_id] = {
+                        "student_id": student_id,
+                        "student_name": str(row.get("student_name") or "").strip(),
+                        "class_name": str(row.get("class_name") or "").strip(),
+                    }
+    except FileNotFoundError:
+        return {"totals": totals, "students": student_meta}
     return {"totals": totals, "students": student_meta}
 
 

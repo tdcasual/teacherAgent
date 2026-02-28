@@ -54,6 +54,15 @@ def test_auth_required_true_without_secret_raises_startup_error(monkeypatch) -> 
         validate_auth_secret_policy()
 
 
+def test_auth_required_unset_without_secret_raises_startup_error(monkeypatch) -> None:
+    monkeypatch.delenv("AUTH_REQUIRED", raising=False)
+    monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    with pytest.raises(RuntimeError, match="AUTH_TOKEN_SECRET"):
+        validate_auth_secret_policy()
+
+
 class _ProbeHandler(BaseHTTPRequestHandler):
     hits = []
 
