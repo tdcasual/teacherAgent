@@ -111,7 +111,7 @@ export default function StudentTopbar({
   const personaPickerMenuLabel = activePersonaId ? `已选：${activePersonaName}` : '选择角色卡'
 
   return (
-    <header className={`relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
+    <header className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
       <div className={`flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className="flex items-center gap-2 min-w-0">
           {!compactMobile ? (
@@ -122,7 +122,7 @@ export default function StudentTopbar({
               draggable={false}
             />
           ) : null}
-          <div className={`font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}>{titleText}</div>
+          <div className={`mobile-topbar-title font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}>{titleText}</div>
         </div>
         <button
           className="ghost"
