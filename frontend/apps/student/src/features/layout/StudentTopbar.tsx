@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { StudentPersonaCard, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
@@ -48,6 +48,8 @@ export default function StudentTopbar({
 }: Props) {
   const pickerButtonRef = useRef<HTMLButtonElement | null>(null)
   const pickerPanelRef = useRef<HTMLDivElement | null>(null)
+  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
   const activePersonaName = personaCards.find((item) => item.persona_id === activePersonaId)?.name || '未选择'
   const customPersonas = useMemo(
     () => personaCards.filter((item) => String(item.source || '') === 'student_custom'),
@@ -60,11 +62,19 @@ export default function StudentTopbar({
   const [customEditId, setCustomEditId] = useState('')
   const [customLoading, setCustomLoading] = useState(false)
   const [customMsg, setCustomMsg] = useState('')
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false)
   const closePicker = useCallback(() => {
     dispatch({ type: 'SET', field: 'personaPickerOpen', value: false })
   }, [dispatch])
+  const closeQuickActions = useCallback(() => {
+    setQuickActionsOpen(false)
+  }, [])
   const pickerLayerRefs = useMemo(
     () => [pickerPanelRef, pickerButtonRef] as const,
+    [],
+  )
+  const quickActionsLayerRefs = useMemo(
+    () => [quickActionsPanelRef, quickActionsButtonRef] as const,
     [],
   )
 
@@ -78,11 +88,27 @@ export default function StudentTopbar({
     refs: pickerLayerRefs,
   })
 
+  useDismissibleLayer({
+    open: quickActionsOpen,
+    onDismiss: closeQuickActions,
+    refs: quickActionsLayerRefs,
+  })
+
+  useEffect(() => {
+    if (!compactMobile && quickActionsOpen) setQuickActionsOpen(false)
+  }, [compactMobile, quickActionsOpen])
+
+  useEffect(() => {
+    if (personaPickerOpen && quickActionsOpen) setQuickActionsOpen(false)
+  }, [personaPickerOpen, quickActionsOpen])
+
   const titleText = compactMobile ? '物理学习助手' : '物理学习助手 · 学生端'
   const sidebarLabel = compactMobile ? (sidebarOpen ? '会话开' : '会话') : (sidebarOpen ? '收起会话' : '展开会话')
   const newSessionLabel = compactMobile ? '新建' : '新会话'
   const personaEnabledLabel = compactMobile ? `角色${personaEnabled ? '开' : '关'}` : `角色卡：${personaEnabled ? '开' : '关'}`
   const personaPickerLabel = compactMobile ? (activePersonaId ? `角色：${activePersonaName}` : '角色') : (activePersonaId ? `已选：${activePersonaName}` : '选择角色卡')
+  const personaEnabledMenuLabel = `角色卡：${personaEnabled ? '开' : '关'}`
+  const personaPickerMenuLabel = activePersonaId ? `已选：${activePersonaName}` : '选择角色卡'
 
   return (
     <header className={`relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
@@ -110,41 +136,94 @@ export default function StudentTopbar({
         <button className="ghost" onClick={startNewStudentSession}>
           {newSessionLabel}
         </button>
-      </div>
-      <div className={`flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between relative ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => onTogglePersonaEnabled(!personaEnabled)}
-          disabled={!verifiedStudent || personaLoading}
-          aria-pressed={personaEnabled}
-        >
-          {personaEnabledLabel}
-        </button>
-        <button
-          ref={pickerButtonRef}
-          type="button"
-          className="ghost"
-          onClick={onTogglePersonaPicker}
-          aria-haspopup="dialog"
-          aria-expanded={personaPickerOpen}
-          disabled={!verifiedStudent || !personaEnabled || personaLoading}
-        >
-          {personaPickerLabel}
-        </button>
-        {!compactMobile ? <div className="role-badge student">身份：学生</div> : null}
-        {!compactMobile && verifiedStudent?.student_id ? (
-          <span className="muted">
-            当前学生：{verifiedStudent.student_id}
-          </span>
-        ) : null}
-        {personaPickerOpen ? (
-          <div
-            ref={pickerPanelRef}
-            className="absolute right-0 top-[calc(100%+8px)] w-[300px] max-h-[320px] overflow-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-2 z-40"
-            role="dialog"
-            aria-label="角色卡选择"
+        {compactMobile ? (
+          <button
+            ref={quickActionsButtonRef}
+            className="ghost"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={quickActionsOpen}
+            onClick={() => setQuickActionsOpen((prev) => !prev)}
           >
+            更多
+          </button>
+        ) : null}
+      </div>
+      {!compactMobile ? (
+        <div className="flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between relative">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => onTogglePersonaEnabled(!personaEnabled)}
+            disabled={!verifiedStudent || personaLoading}
+            aria-pressed={personaEnabled}
+          >
+            {personaEnabledLabel}
+          </button>
+          <button
+            ref={pickerButtonRef}
+            type="button"
+            className="ghost"
+            onClick={onTogglePersonaPicker}
+            aria-haspopup="dialog"
+            aria-expanded={personaPickerOpen}
+            disabled={!verifiedStudent || !personaEnabled || personaLoading}
+          >
+            {personaPickerLabel}
+          </button>
+          <div className="role-badge student">身份：学生</div>
+          {verifiedStudent?.student_id ? (
+            <span className="muted">
+              当前学生：{verifiedStudent.student_id}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {compactMobile && quickActionsOpen ? (
+        <div
+          ref={quickActionsPanelRef}
+          className="absolute right-0 top-[calc(100%+8px)] z-40 min-w-[188px] rounded-xl border border-border bg-white p-2 shadow-[0_12px_28px_rgba(15,23,42,0.14)] grid gap-1"
+          role="menu"
+          aria-label="移动端更多操作"
+        >
+          <button
+            type="button"
+            className="ghost justify-start"
+            onClick={() => {
+              onTogglePersonaEnabled(!personaEnabled)
+              setQuickActionsOpen(false)
+            }}
+            disabled={!verifiedStudent || personaLoading}
+            aria-pressed={personaEnabled}
+          >
+            {personaEnabledMenuLabel}
+          </button>
+          <button
+            ref={pickerButtonRef}
+            type="button"
+            className="ghost justify-start"
+            onClick={() => {
+              onTogglePersonaPicker()
+              setQuickActionsOpen(false)
+            }}
+            aria-haspopup="dialog"
+            aria-expanded={personaPickerOpen}
+            disabled={!verifiedStudent || !personaEnabled || personaLoading}
+          >
+            {personaPickerMenuLabel}
+          </button>
+          {verifiedStudent?.student_id ? (
+            <div className="text-[12px] text-muted px-1 py-0.5">当前学生：{verifiedStudent.student_id}</div>
+          ) : null}
+        </div>
+      ) : null}
+      {personaPickerOpen ? (
+        <div
+          ref={pickerPanelRef}
+          className="absolute right-0 top-[calc(100%+8px)] w-[300px] max-h-[320px] overflow-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-2 z-40"
+          role="dialog"
+          aria-label="角色卡选择"
+        >
             {personaError ? <div className="text-[12px] text-[#b91c1c] px-2 py-1">{personaError}</div> : null}
             {!personaCards.length ? <div className="text-[12px] text-muted px-2 py-2">暂无可用角色卡</div> : null}
             {personaCards.map((item) => (
@@ -304,9 +383,8 @@ export default function StudentTopbar({
               />
             ) : null}
             {customMsg ? <div className="text-[12px] text-muted mt-1">{customMsg}</div> : null}
-          </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </header>
   )
 }

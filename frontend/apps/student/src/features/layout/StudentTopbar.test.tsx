@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudentTopbar from './StudentTopbar';
 
@@ -51,6 +51,20 @@ describe('StudentTopbar compact mobile mode', () => {
     expect(screen.queryByText('物理学习助手 · 学生端')).toBeNull();
     expect(screen.getByRole('button', { name: '会话' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '新建' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '更多' })).toBeTruthy();
     expect(screen.queryByText('身份：学生')).toBeNull();
+    expect(screen.queryByRole('button', { name: '角色卡：关' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '选择角色卡' })).toBeNull();
+  });
+
+  it('moves persona actions into compact more menu', () => {
+    const props = buildProps();
+    render(<StudentTopbar {...props} compactMobile />);
+
+    fireEvent.click(screen.getByRole('button', { name: '更多' }));
+
+    expect(screen.getByRole('menu', { name: '移动端更多操作' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '角色卡：关' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '选择角色卡' })).toBeTruthy();
   });
 });
