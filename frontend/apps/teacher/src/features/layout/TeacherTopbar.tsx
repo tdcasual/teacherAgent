@@ -494,8 +494,18 @@ export default function TeacherTopbar({
       style={{ backdropFilter: 'saturate(180%) blur(8px)' }}
     >
       <div className={`flex items-center gap-[10px] flex-wrap ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
-        <div className={`font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
-          {compactMobile ? '物理教学助手' : '物理教学助手 · 老师端'}
+        <div className="flex items-center gap-2 min-w-0">
+          {!compactMobile ? (
+            <img
+              src="/ai-entry-logo.png"
+              alt="AI入口图标"
+              className="w-[30px] h-[30px] object-contain shrink-0 select-none"
+              draggable={false}
+            />
+          ) : null}
+          <div className={`font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
+            {compactMobile ? '物理教学助手' : '物理教学助手 · 老师端'}
+          </div>
         </div>
         <button className="ghost" type="button" onClick={onToggleSessionSidebar}>
           {compactMobile ? (sessionSidebarOpen ? '会话开' : '会话') : sessionSidebarOpen ? '收起会话' : '展开会话'}

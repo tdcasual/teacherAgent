@@ -110,7 +110,7 @@ export default function App() {
         // ignore localStorage read failures
       }
     }
-    return readFeatureFlag('mobileShellV2', false, source)
+    return readFeatureFlag('mobileShellV2', true, source)
   }, [])
   const teacherUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
   const [initialWorkbenchWidth] = useState(() => {

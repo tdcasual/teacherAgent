@@ -1,0 +1,56 @@
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import StudentTopbar from './StudentTopbar';
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+const buildProps = () => ({
+  apiBase: 'http://localhost:8000',
+  verifiedStudent: null,
+  sidebarOpen: false,
+  dispatch: vi.fn(),
+  startNewStudentSession: vi.fn(),
+  personaEnabled: false,
+  personaPickerOpen: false,
+  personaCards: [],
+  activePersonaId: '',
+  personaLoading: false,
+  personaError: '',
+  onTogglePersonaEnabled: vi.fn(),
+  onTogglePersonaPicker: vi.fn(),
+  onSelectPersona: vi.fn(),
+  onCreateCustomPersona: vi.fn(async () => {}),
+  onUpdateCustomPersona: vi.fn(async () => {}),
+  onUploadCustomPersonaAvatar: vi.fn(async () => {}),
+});
+
+describe('StudentTopbar compact mobile mode', () => {
+  it('renders AI entry logo on desktop mode', () => {
+    const props = buildProps();
+    render(<StudentTopbar {...props} />);
+
+    const logo = screen.getByAltText('AI入口图标');
+    expect(logo.getAttribute('src')).toBe('/ai-entry-logo.png');
+  });
+
+  it('hides AI entry logo on compact mobile mode', () => {
+    const props = buildProps();
+    render(<StudentTopbar {...props} compactMobile />);
+
+    expect(screen.queryByAltText('AI入口图标')).toBeNull();
+  });
+
+  it('uses compact labels and hides low-priority identity text', () => {
+    const props = buildProps();
+    render(<StudentTopbar {...props} compactMobile />);
+
+    expect(screen.getByText('物理学习助手')).toBeTruthy();
+    expect(screen.queryByText('物理学习助手 · 学生端')).toBeNull();
+    expect(screen.getByRole('button', { name: '会话' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '新建' })).toBeTruthy();
+    expect(screen.queryByText('身份：学生')).toBeNull();
+  });
+});

@@ -111,6 +111,7 @@ test('mobile selecting a session collapses sidebar', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page, {
     stateOverrides: {
+      teacherMobileShellV2: '0',
       teacherSessionSidebarOpen: 'true',
     },
     apiMocks: {
@@ -144,6 +145,7 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page, {
     stateOverrides: {
+      teacherMobileShellV2: '0',
       teacherSessionSidebarOpen: 'true',
       teacherSkillsOpen: 'false',
     },
@@ -184,6 +186,7 @@ test('mobile session menu closes on pointerdown outside', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page, {
     stateOverrides: {
+      teacherMobileShellV2: '0',
       teacherSessionSidebarOpen: 'true',
       teacherSkillsOpen: 'false',
     },

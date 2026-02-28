@@ -49,7 +49,7 @@ export default function App() {
         // ignore localStorage read failures
       }
     }
-    return readFeatureFlag('mobileShellV2', false, source)
+    return readFeatureFlag('mobileShellV2', true, source)
   }, [])
   const studentUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
   const mobileTabItems = useMemo<MobileTabItem[]>(
@@ -450,6 +450,7 @@ export default function App() {
         apiBase={state.apiBase}
         verifiedStudent={state.verifiedStudent}
         sidebarOpen={state.sidebarOpen}
+        compactMobile={studentUseMobileShellV2}
         dispatch={dispatch}
         startNewStudentSession={sessionManager.startNewStudentSession}
         personaEnabled={state.personaEnabled}

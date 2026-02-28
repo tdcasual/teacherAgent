@@ -86,10 +86,17 @@ body {
 /* ── Shared component classes ── */
 @layer components {
   .ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--color-border);
     background: #fff;
     padding: 6px 11px;
+    min-height: 32px;
     border-radius: 8px;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
     cursor: pointer;
     color: #3f4551;
     font-size: 12px;

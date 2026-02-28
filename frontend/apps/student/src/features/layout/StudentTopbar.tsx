@@ -9,6 +9,7 @@ type Props = {
   apiBase: string
   verifiedStudent: VerifiedStudent | null
   sidebarOpen: boolean
+  compactMobile?: boolean
   dispatch: Dispatch<StudentAction>
   startNewStudentSession: () => void
   personaEnabled: boolean
@@ -29,6 +30,7 @@ export default function StudentTopbar({
   apiBase,
   verifiedStudent,
   sidebarOpen,
+  compactMobile = false,
   dispatch,
   startNewStudentSession,
   personaEnabled,
@@ -76,10 +78,26 @@ export default function StudentTopbar({
     refs: pickerLayerRefs,
   })
 
+  const titleText = compactMobile ? '物理学习助手' : '物理学习助手 · 学生端'
+  const sidebarLabel = compactMobile ? (sidebarOpen ? '会话开' : '会话') : (sidebarOpen ? '收起会话' : '展开会话')
+  const newSessionLabel = compactMobile ? '新建' : '新会话'
+  const personaEnabledLabel = compactMobile ? `角色${personaEnabled ? '开' : '关'}` : `角色卡：${personaEnabled ? '开' : '关'}`
+  const personaPickerLabel = compactMobile ? (activePersonaId ? `角色：${activePersonaName}` : '角色') : (activePersonaId ? `已选：${activePersonaName}` : '选择角色卡')
+
   return (
-    <header className="relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap">
-      <div className="flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between">
-        <div className="font-bold text-base tracking-[0.2px] max-[900px]:text-sm">物理学习助手 · 学生端</div>
+    <header className={`relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
+      <div className={`flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
+        <div className="flex items-center gap-2 min-w-0">
+          {!compactMobile ? (
+            <img
+              src="/ai-entry-logo.png"
+              alt="AI入口图标"
+              className="w-[30px] h-[30px] object-contain shrink-0 select-none"
+              draggable={false}
+            />
+          ) : null}
+          <div className={`font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}>{titleText}</div>
+        </div>
         <button
           className="ghost"
           type="button"
@@ -87,13 +105,13 @@ export default function StudentTopbar({
           aria-controls="student-session-sidebar"
           onClick={() => dispatch({ type: 'SET', field: 'sidebarOpen', value: !sidebarOpen })}
         >
-          {sidebarOpen ? '收起会话' : '展开会话'}
+          {sidebarLabel}
         </button>
         <button className="ghost" onClick={startNewStudentSession}>
-          新会话
+          {newSessionLabel}
         </button>
       </div>
-      <div className="flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between relative">
+      <div className={`flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between relative ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <button
           type="button"
           className="ghost"
@@ -101,7 +119,7 @@ export default function StudentTopbar({
           disabled={!verifiedStudent || personaLoading}
           aria-pressed={personaEnabled}
         >
-          角色卡：{personaEnabled ? '开' : '关'}
+          {personaEnabledLabel}
         </button>
         <button
           ref={pickerButtonRef}
@@ -112,10 +130,10 @@ export default function StudentTopbar({
           aria-expanded={personaPickerOpen}
           disabled={!verifiedStudent || !personaEnabled || personaLoading}
         >
-          {activePersonaId ? `已选：${activePersonaName}` : '选择角色卡'}
+          {personaPickerLabel}
         </button>
-        <div className="role-badge student">身份：学生</div>
-        {verifiedStudent?.student_id ? (
+        {!compactMobile ? <div className="role-badge student">身份：学生</div> : null}
+        {!compactMobile && verifiedStudent?.student_id ? (
           <span className="muted">
             当前学生：{verifiedStudent.student_id}
           </span>

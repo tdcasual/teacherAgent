@@ -148,11 +148,16 @@
   border-radius: 10px;
   background: #fff;
   color: #475569;
-  display: grid;
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-content: center;
   gap: 2px;
   padding: 7px 4px;
   font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
   transition:
     transform 120ms ease,
@@ -178,6 +183,10 @@
 }
 
 .mobile-tabbar-label {
+  display: block;
+  width: 100%;
+  text-align: center;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

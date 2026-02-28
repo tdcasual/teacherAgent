@@ -1,0 +1,40 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const extractRuleBlock = (cssText: string, selector: string): string => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`${escapedSelector}\\s*\\{([\\s\\S]*?)\\}`, 'm');
+  const match = cssText.match(pattern);
+  return match ? match[1] : '';
+};
+
+describe('mobile shared style guardrails', () => {
+  it('keeps mobile tab labels visually centered', () => {
+    const cssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
+    const css = readFileSync(cssPath, 'utf8');
+    const buttonBlock = extractRuleBlock(css, '.mobile-tabbar-button');
+    const labelBlock = extractRuleBlock(css, '.mobile-tabbar-label');
+
+    expect(buttonBlock).toContain('align-items: center;');
+    expect(buttonBlock).toContain('justify-content: center;');
+    expect(labelBlock).toContain('text-align: center;');
+    expect(labelBlock).toContain('line-height: 1.2;');
+  });
+
+  it('keeps ghost buttons text vertically and horizontally centered', () => {
+    const teacherCssPath = path.resolve(process.cwd(), 'apps/teacher/src/tailwind.css');
+    const studentCssPath = path.resolve(process.cwd(), 'apps/student/src/tailwind.css');
+    const teacherCss = readFileSync(teacherCssPath, 'utf8');
+    const studentCss = readFileSync(studentCssPath, 'utf8');
+    const teacherGhostBlock = extractRuleBlock(teacherCss, '.ghost');
+    const studentGhostBlock = extractRuleBlock(studentCss, '.ghost');
+
+    expect(teacherGhostBlock).toContain('display: inline-flex;');
+    expect(teacherGhostBlock).toContain('align-items: center;');
+    expect(teacherGhostBlock).toContain('justify-content: center;');
+    expect(studentGhostBlock).toContain('display: inline-flex;');
+    expect(studentGhostBlock).toContain('align-items: center;');
+    expect(studentGhostBlock).toContain('justify-content: center;');
+  });
+});
