@@ -1,4 +1,12 @@
-import { useEffect, useState, type FormEvent, type MutableRefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type MutableRefObject,
+} from 'react'
 
 import { safeLocalStorageGetItem } from '../../utils/storage'
 import {
@@ -8,6 +16,7 @@ import {
   readTeacherAuthSubject,
   writeTeacherAuthSession,
 } from '../auth/teacherAuth'
+import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
 
 type TeacherTopbarProps = {
   topbarRef: MutableRefObject<HTMLElement | null>
@@ -108,6 +117,10 @@ export default function TeacherTopbar({
   onToggleSkillsWorkbench,
   onToggleSettingsPanel,
 }: TeacherTopbarProps) {
+  const authButtonRef = useRef<HTMLButtonElement | null>(null)
+  const authPanelRef = useRef<HTMLDivElement | null>(null)
+  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
+  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
   const [authOpen, setAuthOpen] = useState(() => !readTeacherAccessToken())
   const [authed, setAuthed] = useState(() => Boolean(readTeacherAccessToken()))
   const [authSubjectLabel, setAuthSubjectLabel] = useState(() => {
@@ -137,6 +150,16 @@ export default function TeacherTopbar({
   const [studentResetInfo, setStudentResetInfo] = useState('')
   const [studentResetItems, setStudentResetItems] = useState<StudentPasswordResetItem[]>([])
   const [quickActionsOpen, setQuickActionsOpen] = useState(false)
+  const closeQuickActions = useCallback(() => setQuickActionsOpen(false), [])
+  const closeAuthPanel = useCallback(() => setAuthOpen(false), [])
+  const quickActionsLayerRefs = useMemo(
+    () => [quickActionsPanelRef, quickActionsButtonRef] as const,
+    [],
+  )
+  const authLayerRefs = useMemo(
+    () => [authPanelRef, authButtonRef] as const,
+    [],
+  )
 
   useEffect(() => {
     const sync = () => {
@@ -164,6 +187,18 @@ export default function TeacherTopbar({
   useEffect(() => {
     if (authOpen && quickActionsOpen) setQuickActionsOpen(false)
   }, [authOpen, quickActionsOpen])
+
+  useDismissibleLayer({
+    open: quickActionsOpen,
+    onDismiss: closeQuickActions,
+    refs: quickActionsLayerRefs,
+  })
+
+  useDismissibleLayer({
+    open: authOpen,
+    onDismiss: closeAuthPanel,
+    refs: authLayerRefs,
+  })
 
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -469,11 +504,25 @@ export default function TeacherTopbar({
       <div className={`flex gap-[10px] items-center flex-wrap relative ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className={`role-badge teacher ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>身份：老师</div>
         {authed ? <span className={`text-xs text-muted ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>已认证：{authSubjectLabel || '教师'}</span> : null}
-        <button className="ghost" type="button" onClick={() => setAuthOpen((prev) => !prev)}>
+        <button
+          ref={authButtonRef}
+          className="ghost"
+          type="button"
+          onClick={() => setAuthOpen((prev) => !prev)}
+          aria-haspopup="dialog"
+          aria-expanded={authOpen}
+        >
           {authed ? (compactMobile ? '认证' : '认证信息') : '教师认证'}
         </button>
         {compactMobile ? (
-          <button className="ghost" type="button" onClick={() => setQuickActionsOpen((prev) => !prev)}>
+          <button
+            ref={quickActionsButtonRef}
+            className="ghost"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={quickActionsOpen}
+            onClick={() => setQuickActionsOpen((prev) => !prev)}
+          >
             更多
           </button>
         ) : (
@@ -510,7 +559,12 @@ export default function TeacherTopbar({
         )}
 
         {compactMobile && quickActionsOpen ? (
-          <div className="absolute right-0 top-[calc(100%+8px)] z-40 min-w-[180px] rounded-xl border border-border bg-white p-2 shadow-[0_12px_28px_rgba(15,23,42,0.14)] grid gap-1">
+          <div
+            ref={quickActionsPanelRef}
+            className="absolute right-0 top-[calc(100%+8px)] z-40 min-w-[180px] rounded-xl border border-border bg-white p-2 shadow-[0_12px_28px_rgba(15,23,42,0.14)] grid gap-1"
+            role="menu"
+            aria-label="移动端更多操作"
+          >
             <button className="ghost justify-start" type="button" onClick={() => { onOpenRoutingSettingsPanel(); setQuickActionsOpen(false) }}>
               模型路由
             </button>
@@ -527,7 +581,12 @@ export default function TeacherTopbar({
         ) : null}
 
         {authOpen ? (
-          <div className="absolute right-0 top-[calc(100%+8px)] w-[360px] max-h-[min(80vh,720px)] overflow-y-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-3 z-40 grid gap-2.5">
+          <div
+            ref={authPanelRef}
+            className="absolute right-0 top-[calc(100%+8px)] w-[min(360px,calc(100vw-16px))] max-w-[calc(100vw-16px)] max-h-[min(80vh,720px)] overflow-y-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-3 z-40 grid gap-2.5"
+            role="dialog"
+            aria-label="教师认证面板"
+          >
             <div className="text-sm font-semibold">教师认证</div>
             <form className="grid gap-2" onSubmit={handleAuthSubmit}>
               <div className="grid gap-1">

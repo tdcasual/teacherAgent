@@ -245,6 +245,91 @@ test('mobile shell v2 tab switching does not trigger runtime errors', async ({ p
   expect(runtimeErrors).toHaveLength(0)
 })
 
+test('mobile auth panel stays within viewport on narrow width', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '认证' }).click()
+  const panel = page.getByText('教师认证').locator('..').first()
+  await expect(panel).toBeVisible()
+
+  const box = await panel.boundingBox()
+  expect(box).not.toBeNull()
+  if (!box) return
+
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(320)
+})
+
+test('mobile more menu closes when tapping outside', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '更多' }).click()
+  const menuItem = page.getByRole('button', { name: '模型路由' }).first()
+  await expect(menuItem).toBeVisible()
+
+  await page.mouse.click(8, 220)
+  await expect(menuItem).toBeHidden()
+})
+
+test('mobile auth panel closes on Escape', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '认证' }).click()
+  const panel = page.getByText('教师认证').first()
+  await expect(panel).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+})
+
+test('mobile auth panel closes when tapping outside', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '认证' }).click()
+  const panel = page.getByText('教师认证').first()
+  await expect(panel).toBeVisible()
+
+  await page.mouse.click(8, 220)
+  await expect(panel).toBeHidden()
+})
+
+test('mobile auth panel closes when switching tabs', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '认证' }).click()
+  const panel = page.getByText('教师认证').first()
+  await expect(panel).toBeVisible()
+
+  await page.getByRole('tab', { name: '会话' }).click()
+  await expect(page.locator('.mobile-sheet-title')).toHaveText('历史会话')
+  await expect(panel).toBeHidden()
+})
+
 test('new session is created with session_* id and becomes active', async ({ page }) => {
   await openTeacherApp(page, {
     stateOverrides: {

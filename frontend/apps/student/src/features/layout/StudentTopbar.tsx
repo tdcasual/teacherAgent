@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type { Dispatch } from 'react'
 import type { StudentPersonaCard, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
 import { validateAvatarFileBeforeUpload } from '../../../../shared/uploadValidation'
+import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
 
 type Props = {
   apiBase: string
@@ -43,6 +44,8 @@ export default function StudentTopbar({
   onUpdateCustomPersona,
   onUploadCustomPersonaAvatar,
 }: Props) {
+  const pickerButtonRef = useRef<HTMLButtonElement | null>(null)
+  const pickerPanelRef = useRef<HTMLDivElement | null>(null)
   const activePersonaName = personaCards.find((item) => item.persona_id === activePersonaId)?.name || '未选择'
   const customPersonas = useMemo(
     () => personaCards.filter((item) => String(item.source || '') === 'student_custom'),
@@ -55,10 +58,23 @@ export default function StudentTopbar({
   const [customEditId, setCustomEditId] = useState('')
   const [customLoading, setCustomLoading] = useState(false)
   const [customMsg, setCustomMsg] = useState('')
+  const closePicker = useCallback(() => {
+    dispatch({ type: 'SET', field: 'personaPickerOpen', value: false })
+  }, [dispatch])
+  const pickerLayerRefs = useMemo(
+    () => [pickerPanelRef, pickerButtonRef] as const,
+    [],
+  )
 
   const customTarget = customPersonas.find((item) => item.persona_id === customEditId) || null
   const parseLines = (value: string) =>
     value.split('\n').map((item) => item.trim()).filter(Boolean).slice(0, 20)
+
+  useDismissibleLayer({
+    open: personaPickerOpen,
+    onDismiss: closePicker,
+    refs: pickerLayerRefs,
+  })
 
   return (
     <header className="relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap">
@@ -88,9 +104,12 @@ export default function StudentTopbar({
           角色卡：{personaEnabled ? '开' : '关'}
         </button>
         <button
+          ref={pickerButtonRef}
           type="button"
           className="ghost"
           onClick={onTogglePersonaPicker}
+          aria-haspopup="dialog"
+          aria-expanded={personaPickerOpen}
           disabled={!verifiedStudent || !personaEnabled || personaLoading}
         >
           {activePersonaId ? `已选：${activePersonaName}` : '选择角色卡'}
@@ -102,7 +121,12 @@ export default function StudentTopbar({
           </span>
         ) : null}
         {personaPickerOpen ? (
-          <div className="absolute right-0 top-[calc(100%+8px)] w-[300px] max-h-[320px] overflow-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-2 z-40">
+          <div
+            ref={pickerPanelRef}
+            className="absolute right-0 top-[calc(100%+8px)] w-[300px] max-h-[320px] overflow-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-2 z-40"
+            role="dialog"
+            aria-label="角色卡选择"
+          >
             {personaError ? <div className="text-[12px] text-[#b91c1c] px-2 py-1">{personaError}</div> : null}
             {!personaCards.length ? <div className="text-[12px] text-muted px-2 py-2">暂无可用角色卡</div> : null}
             {personaCards.map((item) => (

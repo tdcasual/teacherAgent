@@ -89,6 +89,25 @@ test('mobile shell v2 keeps tab state stable without render loop errors', async 
   expect(runtimeErrors).toHaveLength(0)
 })
 
+test('mobile persona picker closes when tapping outside on chat tab', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentMobileShellV2: '1',
+      studentSidebarOpen: 'false',
+    },
+  })
+
+  await page.getByRole('tab', { name: '聊天' }).click()
+  await page.getByRole('button', { name: /角色卡：关/ }).click()
+
+  const picker = page.getByText('自定义角色').first()
+  await expect(picker).toBeVisible()
+
+  await page.locator('.messages').click({ position: { x: 24, y: 24 }, force: true })
+  await expect(picker).toBeHidden()
+})
+
 test('rename dialog escape restores focus to session menu trigger', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openStudentApp(page, {
