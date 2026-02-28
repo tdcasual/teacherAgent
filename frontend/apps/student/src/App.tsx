@@ -20,6 +20,11 @@ import {
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { readFeatureFlag } from '../../shared/featureFlags'
 import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
+import {
+  MobileTabChatIcon,
+  MobileTabLearningIcon,
+  MobileTabSessionIcon,
+} from '../../shared/mobile/tabIcons'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
 import ChatPanel from './features/chat/ChatPanel'
@@ -54,9 +59,9 @@ export default function App() {
   const studentUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
   const mobileTabItems = useMemo<MobileTabItem[]>(
     () => [
-      { id: 'chat', label: '聊天' },
-      { id: 'sessions', label: '会话' },
-      { id: 'learning', label: '学习' },
+      { id: 'chat', label: '聊天', icon: <MobileTabChatIcon /> },
+      { id: 'sessions', label: '会话', icon: <MobileTabSessionIcon /> },
+      { id: 'learning', label: '学习', icon: <MobileTabLearningIcon /> },
     ],
     [],
   )

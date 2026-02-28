@@ -64,7 +64,11 @@ export function MobileTabBar({
                 onKeyDown={(event) => handleKeyDown(event, index)}
                 onClick={() => onChange(item.id)}
               >
-                {item.icon ? <span className="mobile-tabbar-icon">{item.icon}</span> : null}
+                {item.icon ? (
+                  <span className="mobile-tabbar-icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                ) : null}
                 <span className="mobile-tabbar-label">{item.label}</span>
               </button>
             </li>

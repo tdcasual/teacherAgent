@@ -70,4 +70,29 @@ describe('MobileTabBar', () => {
     expect(onChange).toHaveBeenCalledWith('sessions');
     expect(onChange).toHaveBeenCalledWith('learning');
   });
+
+  it('renders decorative icons without affecting tab accessible labels', () => {
+    render(
+      <MobileTabBar
+        items={[
+          {
+            id: 'chat',
+            label: '聊天',
+            icon: (
+              <svg data-testid="chat-icon" viewBox="0 0 16 16">
+                <circle cx="8" cy="8" r="7" />
+              </svg>
+            ),
+          },
+          { id: 'sessions', label: '会话' },
+        ]}
+        activeId="chat"
+        onChange={() => {}}
+      />,
+    );
+
+    const tab = screen.getByRole('tab', { name: '聊天' });
+    expect(tab.querySelector('.mobile-tabbar-icon')?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.getByTestId('chat-icon')).toBeTruthy();
+  });
 });

@@ -43,6 +43,11 @@ import { readFeatureFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
 import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
+import {
+  MobileTabChatIcon,
+  MobileTabSessionIcon,
+  MobileTabWorkbenchIcon,
+} from '../../shared/mobile/tabIcons'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -81,9 +86,9 @@ const WORKBENCH_BASE_MAX_WIDTH = 620
 const WORKBENCH_MAX_WIDTH_RATIO = 0.42
 const WORKBENCH_HARD_MAX_WIDTH = 920
 const TEACHER_MOBILE_TAB_ITEMS: MobileTabItem[] = [
-  { id: 'chat', label: '聊天' },
-  { id: 'sessions', label: '会话' },
-  { id: 'workbench', label: '工作台' },
+  { id: 'chat', label: '聊天', icon: <MobileTabChatIcon /> },
+  { id: 'sessions', label: '会话', icon: <MobileTabSessionIcon /> },
+  { id: 'workbench', label: '工作台', icon: <MobileTabWorkbenchIcon /> },
 ]
 const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)

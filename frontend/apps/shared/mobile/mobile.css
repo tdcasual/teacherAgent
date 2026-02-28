@@ -192,6 +192,21 @@
   white-space: nowrap;
 }
 
+.mobile-tabbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.mobile-tabbar-icon > svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 @keyframes mobile-sheet-overlay-in {
   from {
     opacity: 0;

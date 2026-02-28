@@ -37,4 +37,14 @@ describe('mobile shared style guardrails', () => {
     expect(studentGhostBlock).toContain('align-items: center;');
     expect(studentGhostBlock).toContain('justify-content: center;');
   });
+
+  it('keeps tab icons at a stable touch-friendly visual size', () => {
+    const cssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
+    const css = readFileSync(cssPath, 'utf8');
+    const iconBlock = extractRuleBlock(css, '.mobile-tabbar-icon');
+
+    expect(iconBlock).toContain('width: 16px;');
+    expect(iconBlock).toContain('height: 16px;');
+    expect(iconBlock).toContain('justify-content: center;');
+  });
 });
