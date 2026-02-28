@@ -54,6 +54,15 @@ uploads/
 
 # Runtime-generated auth secret
 config/auth_token_secret
+data/auth/*.sqlite3-shm
+data/auth/*.sqlite3-wal
+data/auth/*.sqlite3-journal
+data/auth/*.sqlite3.lock
+
+# Runtime persona assignment state
+data/persona_assignments/
+data/teacher_personas/
+*.lock
 
 # Local chart artifacts (generated during development/tests)
 main.png
