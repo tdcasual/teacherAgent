@@ -16,6 +16,7 @@ type HistorySessionGroup = {
 
 type Props = {
   open: boolean
+  mobilePresentation?: 'drawer' | 'sheet'
   historyQuery: string
   historyLoading: boolean
   historyError: string
@@ -44,6 +45,7 @@ type Props = {
 
 export default function SessionSidebar({
   open,
+  mobilePresentation = 'drawer',
   historyQuery,
   historyLoading,
   historyError,
@@ -69,6 +71,7 @@ export default function SessionSidebar({
   getSessionTitle,
   formatSessionUpdatedLabel,
 }: Props) {
+  const isSheetPresentation = mobilePresentation === 'sheet'
   const menuRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 
@@ -161,8 +164,12 @@ export default function SessionSidebar({
     [onToggleSessionMenu],
   )
 
+  const baseClassName = isSheetPresentation
+    ? 'session-sidebar border-none bg-transparent p-0 flex flex-col gap-2 min-h-0 h-full overflow-hidden'
+    : `session-sidebar border-r border-border bg-[#fbfbfc] p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out max-[900px]:fixed max-[900px]:left-0 max-[900px]:top-0 max-[900px]:bottom-0 max-[900px]:w-[min(90vw,360px)] max-[900px]:max-w-[100vw] max-[900px]:h-dvh max-[900px]:z-20 max-[900px]:shadow-md max-[900px]:bg-white max-[900px]:p-[calc(10px+env(safe-area-inset-top))_10px_calc(10px+env(safe-area-inset-bottom))] ${open ? 'open max-[900px]:translate-x-0 max-[900px]:pointer-events-auto' : 'collapsed max-[900px]:-translate-x-full max-[900px]:pointer-events-none'}`
+
   return (
-    <aside className={`session-sidebar border-r border-border bg-[#fbfbfc] p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out max-[900px]:fixed max-[900px]:left-0 max-[900px]:top-0 max-[900px]:bottom-0 max-[900px]:w-[min(90vw,360px)] max-[900px]:max-w-[100vw] max-[900px]:h-dvh max-[900px]:z-20 max-[900px]:shadow-md max-[900px]:bg-white max-[900px]:p-[calc(10px+env(safe-area-inset-top))_10px_calc(10px+env(safe-area-inset-bottom))] ${open ? 'open max-[900px]:translate-x-0 max-[900px]:pointer-events-auto' : 'collapsed max-[900px]:-translate-x-full max-[900px]:pointer-events-none'}`}>
+    <aside className={baseClassName}>
       <div className="flex justify-between items-center gap-[6px] flex-none">
         <strong>历史会话</strong>
         <div className="flex items-center gap-[6px]">
