@@ -23,26 +23,26 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from services.api.teacher_memory_apply_service import (
+from services.api.teacher_memory_apply_service import (  # noqa: E402
     TeacherMemoryApplyDeps,
     teacher_memory_apply,
 )
-from services.api.teacher_memory_propose_service import (
+from services.api.teacher_memory_propose_service import (  # noqa: E402
     TeacherMemoryProposeDeps,
     teacher_memory_propose,
 )
-from services.api.teacher_memory_search_service import (
+from services.api.teacher_memory_search_service import (  # noqa: E402
     TeacherMemorySearchDeps,
     teacher_memory_search,
 )
-from services.api.teacher_session_compaction_helpers import (
+from services.api.teacher_session_compaction_helpers import (  # noqa: E402
     _teacher_compact_allowed,
     _teacher_compact_key,
     _teacher_compact_transcript,
     _write_teacher_session_records,
     reset_compact_state,
 )
-from services.api.teacher_session_compaction_service import (
+from services.api.teacher_session_compaction_service import (  # noqa: E402
     TeacherSessionCompactionDeps,
     maybe_compact_teacher_session,
 )

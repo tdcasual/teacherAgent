@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import services.api.chat_event_stream_service as stream_service
-from services.api.chat_event_stream_service import (
+import services.api.chat_event_stream_service as stream_service  # noqa: E402
+from services.api.chat_event_stream_service import (  # noqa: E402
     ChatEventStreamDeps,
     append_chat_event,
     clear_chat_stream_signal,

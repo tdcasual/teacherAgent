@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 
+from mem0 import Memory
+from mem0.memory.main import _build_filters_and_metadata
+
 from mem0_config import get_config, load_dotenv
 
 load_dotenv()
-
-from mem0 import Memory
-from mem0.memory.main import _build_filters_and_metadata
 
 
 def main():

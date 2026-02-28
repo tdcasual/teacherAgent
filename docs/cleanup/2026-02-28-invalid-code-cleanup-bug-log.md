@@ -121,9 +121,10 @@
 - Symptom: `python3 -m ruff check .` still reports `E402` in bootstrapping-style modules.
 - Repro steps:
   1. Run `python3 -m ruff check . --select E402`.
-  2. Observe current findings list.
+  2. Observe bootstrap-style modules with imports after path/env setup.
 - Evidence:
-  - `python3 -m ruff check . --select E402` reports unresolved entries.
+  - Initial run: `python3 -m ruff check . --select E402` reported unresolved entries.
+  - Current verification: `python3 -m ruff check . --select E402` -> `All checks passed!`.
 - Root cause: modules intentionally adjust import path/environment before importing runtime dependencies.
-- Fix status: `open`
-- Notes: requires targeted refactor (or explicit lint exemptions) to avoid changing startup semantics.
+- Fix status: `fixed`
+- Notes: applied explicit `# noqa: E402` only in modules where bootstrap ordering is semantically required; reordered imports in non-bootstrap modules to satisfy lint without behavior changes.

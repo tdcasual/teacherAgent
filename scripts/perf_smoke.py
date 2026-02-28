@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm_gateway import LLMGateway, UnifiedLLMRequest
+from llm_gateway import LLMGateway, UnifiedLLMRequest  # noqa: E402
 
 
 def find_free_port() -> int:

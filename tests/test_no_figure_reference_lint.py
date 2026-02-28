@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "physics-student-coach" / "scripts"
 sys.path.insert(0, str(SCRIPT))
-import select_practice  # type: ignore
+import select_practice  # type: ignore  # noqa: E402
 
 
 class TestNoFigureReferenceLint(unittest.TestCase):
