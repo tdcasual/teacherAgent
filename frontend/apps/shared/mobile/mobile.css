@@ -4,6 +4,10 @@
   --mobile-shell-code-lh: 1.36;
   --mobile-shell-composer-lh: 1.32;
   --mobile-shell-message-gap: 12px;
+  --mobile-topbar-compact-height: 52px;
+  --mobile-topbar-compact-btn-height: 30px;
+  --mobile-topbar-compact-hpad: 10px;
+  --mobile-topbar-compact-gap: 8px;
   --mobile-tabbar-offset: calc(58px + env(safe-area-inset-bottom));
   --layer-mobile-sheet: 80;
   --layer-mobile-tabbar: 110;
@@ -249,6 +253,24 @@
 
   .app[data-mobile-shell-v2='1'] .mobile-tabbar {
     z-index: var(--layer-mobile-tabbar);
+  }
+
+  .app[data-mobile-shell-v2='1'] .mobile-topbar-compact {
+    min-height: var(--mobile-topbar-compact-height);
+    padding-left: var(--mobile-topbar-compact-hpad);
+    padding-right: var(--mobile-topbar-compact-hpad);
+    gap: var(--mobile-topbar-compact-gap);
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .app[data-mobile-shell-v2='1'] .mobile-topbar-compact .ghost {
+    min-height: var(--mobile-topbar-compact-btn-height);
+    padding: 4px 9px;
+  }
+
+  .app[data-mobile-shell-v2='1'] .mobile-topbar-compact .mobile-topbar-title {
+    max-width: min(44vw, 180px);
   }
 
   .app[data-mobile-shell-v2='1'] .messages,

@@ -47,4 +47,22 @@ describe('mobile shared style guardrails', () => {
     expect(iconBlock).toContain('height: 16px;');
     expect(iconBlock).toContain('justify-content: center;');
   });
+
+  it('defines shared compact topbar density tokens and rules', () => {
+    const cssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
+    const css = readFileSync(cssPath, 'utf8');
+    const compactHeaderBlock = extractRuleBlock(
+      css,
+      ".app[data-mobile-shell-v2='1'] .mobile-topbar-compact",
+    );
+    const compactGhostBlock = extractRuleBlock(
+      css,
+      ".app[data-mobile-shell-v2='1'] .mobile-topbar-compact .ghost",
+    );
+
+    expect(css).toContain('--mobile-topbar-compact-height:');
+    expect(css).toContain('--mobile-topbar-compact-btn-height:');
+    expect(compactHeaderBlock).toContain('min-height: var(--mobile-topbar-compact-height);');
+    expect(compactGhostBlock).toContain('min-height: var(--mobile-topbar-compact-btn-height);');
+  });
 });
