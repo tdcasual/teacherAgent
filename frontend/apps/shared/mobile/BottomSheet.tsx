@@ -1,13 +1,13 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 type BottomSheetProps = {
-  open: boolean
-  onClose: () => void
-  title?: string
-  children: ReactNode
-  footer?: ReactNode
-  className?: string
-}
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  className?: string;
+};
 
 export function BottomSheet({
   open,
@@ -17,64 +17,64 @@ export function BottomSheet({
   footer,
   className = '',
 }: BottomSheetProps) {
-  const titleId = useId()
-  const panelRef = useRef<HTMLElement | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
-  const lastFocusedRef = useRef<HTMLElement | null>(null)
+  const titleId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     lastFocusedRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => closeButtonRef.current?.focus(), 0);
 
     const getFocusableElements = () => {
-      const panel = panelRef.current
-      if (!panel) return [] as HTMLElement[]
+      const panel = panelRef.current;
+      if (!panel) return [] as HTMLElement[];
       return Array.from(
         panel.querySelectorAll<HTMLElement>(
           'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
         ),
-      ).filter((element) => !element.hasAttribute('disabled'))
-    }
+      ).filter((element) => !element.hasAttribute('disabled'));
+    };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose()
-        return
+        onClose();
+        return;
       }
-      if (event.key !== 'Tab') return
-      const focusable = getFocusableElements()
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusableElements();
       if (!focusable.length) {
-        event.preventDefault()
-        return
+        event.preventDefault();
+        return;
       }
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      const activeElement = document.activeElement as HTMLElement | null
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeElement = document.activeElement as HTMLElement | null;
       if (event.shiftKey) {
         if (activeElement === first || !activeElement) {
-          event.preventDefault()
-          last.focus()
+          event.preventDefault();
+          last.focus();
         }
-        return
+        return;
       }
       if (activeElement === last) {
-        event.preventDefault()
-        first.focus()
+        event.preventDefault();
+        first.focus();
       }
-    }
-    document.addEventListener('keydown', onKeyDown)
+    };
+    document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = previousOverflow
-      lastFocusedRef.current?.focus()
-    }
-  }, [open, onClose])
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      lastFocusedRef.current?.focus();
+    };
+  }, [open, onClose]);
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div className="mobile-sheet-layer">
@@ -93,7 +93,9 @@ export function BottomSheet({
         aria-labelledby={titleId}
       >
         <header className="mobile-sheet-header">
-          <h2 id={titleId} className="mobile-sheet-title">{title}</h2>
+          <h2 id={titleId} className="mobile-sheet-title">
+            {title}
+          </h2>
           <button
             ref={closeButtonRef}
             type="button"
@@ -108,5 +110,5 @@ export function BottomSheet({
         {footer ? <footer className="mobile-sheet-footer">{footer}</footer> : null}
       </section>
     </div>
-  )
+  );
 }

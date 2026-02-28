@@ -154,7 +154,11 @@
   padding: 7px 4px;
   font-size: 12px;
   cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .mobile-tabbar-button.active {
