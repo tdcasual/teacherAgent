@@ -1,9 +1,8 @@
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from services.api.assignment_intent_service import detect_assignment_intent
 from services.api.skill_auto_router import resolve_effective_skill
-
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 

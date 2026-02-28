@@ -1,7 +1,6 @@
 import re
 from pathlib import Path
 
-
 WORKFLOWS = [
     ".github/workflows/ci.yml",
     ".github/workflows/docker.yml",

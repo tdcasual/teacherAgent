@@ -3,8 +3,8 @@ import argparse
 import csv
 import json
 import re
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 

@@ -12,7 +12,11 @@ import pytest
 
 from services.api.chat_lock_service import (
     ChatLockDeps,
+)
+from services.api.chat_lock_service import (
     release_lockfile as _shared_release_lockfile,
+)
+from services.api.chat_lock_service import (
     try_acquire_lockfile as _shared_try_acquire_lockfile,
 )
 from services.api.job_repository import _release_lockfile, _try_acquire_lockfile

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from services.api.subject_score_guard_service import (
     _contains_token,
     _detect_subject_keys,
@@ -13,7 +11,6 @@ from services.api.subject_score_guard_service import (
     should_guard_total_mode_subject_request,
     subject_display,
 )
-
 
 # ── subject_display ──────────────────────────────────────────────────
 

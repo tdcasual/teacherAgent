@@ -7,7 +7,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 # Ensure project root and skill script path available
 ROOT = Path(__file__).resolve().parents[1]

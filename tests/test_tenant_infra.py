@@ -1,19 +1,16 @@
 """Tests for tenant infrastructure layer fixes (Phase 3 audit)."""
 from __future__ import annotations
 
-import fcntl
 import gc
-import json
 import os
 import sqlite3
 import threading
 import weakref
 from pathlib import Path
-from typing import Any, Dict
+from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -198,8 +195,9 @@ def test_config_store_logs_corrupt_json(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_path_traversal_guard_blocks():
-    from services.api.tenant_admin_api import _validate_tenant_path
     from fastapi import HTTPException
+
+    from services.api.tenant_admin_api import _validate_tenant_path
     with patch.dict(os.environ, {"TENANT_DATA_BASE_DIR": "/data/tenants"}):
         with pytest.raises(HTTPException) as exc_info:
             _validate_tenant_path("/etc/passwd", "data_dir")
@@ -267,7 +265,7 @@ def test_session_locks_are_weak():
 
 
 def test_session_lock_gc():
-    from services.api.session_store import _session_index_lock, _SESSION_INDEX_LOCKS
+    from services.api.session_store import _SESSION_INDEX_LOCKS, _session_index_lock
     fake = Path("/tmp/_test_gc_lock_unique/index.json")
     lock = _session_index_lock(fake)
     key = str(fake.resolve())
@@ -327,6 +325,7 @@ def test_rq_runtime_thread_safe():
 
 def test_shutdown_logs_error():
     import types as _types
+
     from services.api.tenant_app_factory import TenantAppInstance
     mod = _types.ModuleType("test_mod")
     mod._APP_CORE = None

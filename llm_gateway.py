@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+import json
 import math
 import os
-import json
-from functools import lru_cache
-import time
 import random
+import time
+from dataclasses import dataclass, field, replace
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import quote
 
 try:
@@ -17,7 +17,6 @@ except Exception:
     yaml = None
 
 import requests
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_REGISTRY_PATH = PROJECT_ROOT / "config" / "model_registry.yaml"

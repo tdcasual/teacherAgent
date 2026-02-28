@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import unittest
+from datetime import datetime, timedelta
 
-from services.api.teacher_memory_insights_service import TeacherMemoryInsightsDeps, teacher_memory_insights
+from services.api.teacher_memory_insights_service import (
+    TeacherMemoryInsightsDeps,
+    teacher_memory_insights,
+)
 
 
 class TeacherMemoryInsightsServiceTest(unittest.TestCase):

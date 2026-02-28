@@ -15,7 +15,6 @@ from services.api.api_models import (
     TeacherSkillImportRequest,
 )
 
-
 # ── ChatMessage ──────────────────────────────────────────────────────
 
 class TestChatMessage:

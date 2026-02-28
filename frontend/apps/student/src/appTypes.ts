@@ -16,10 +16,6 @@ export type PendingChatJob = {
   created_at: number
 }
 
-export type ChatResponse = {
-  reply: string
-}
-
 export type ChatJobStatus = {
   job_id: string
   status: 'queued' | 'processing' | 'done' | 'failed' | 'cancelled' | string
@@ -121,14 +117,6 @@ export type StudentPersonaListResponse = {
   assigned: StudentPersonaCard[]
   custom: StudentPersonaCard[]
   active_persona_id: string
-}
-
-export type VerifyResponse = {
-  ok: boolean
-  error?: string
-  message?: string
-  student?: VerifiedStudent
-  candidates?: StudentVerifyCandidate[]
 }
 
 export type StudentIdentifyResponse = {

@@ -10,10 +10,8 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List
@@ -25,9 +23,21 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from services.api.teacher_memory_apply_service import (
+    TeacherMemoryApplyDeps,
+    teacher_memory_apply,
+)
+from services.api.teacher_memory_propose_service import (
+    TeacherMemoryProposeDeps,
+    teacher_memory_propose,
+)
+from services.api.teacher_memory_search_service import (
+    TeacherMemorySearchDeps,
+    teacher_memory_search,
+)
 from services.api.teacher_session_compaction_helpers import (
-    _teacher_compact_key,
     _teacher_compact_allowed,
+    _teacher_compact_key,
     _teacher_compact_transcript,
     _write_teacher_session_records,
     reset_compact_state,
@@ -36,19 +46,6 @@ from services.api.teacher_session_compaction_service import (
     TeacherSessionCompactionDeps,
     maybe_compact_teacher_session,
 )
-from services.api.teacher_memory_search_service import (
-    TeacherMemorySearchDeps,
-    teacher_memory_search,
-)
-from services.api.teacher_memory_propose_service import (
-    TeacherMemoryProposeDeps,
-    teacher_memory_propose,
-)
-from services.api.teacher_memory_apply_service import (
-    TeacherMemoryApplyDeps,
-    teacher_memory_apply,
-)
-
 
 # ===================================================================
 # Helpers

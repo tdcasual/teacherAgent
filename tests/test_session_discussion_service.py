@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from services.api.session_discussion_service import (
     SessionDiscussionDeps,
     session_discussion_pass,

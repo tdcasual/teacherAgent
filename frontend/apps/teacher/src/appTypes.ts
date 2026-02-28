@@ -9,10 +9,6 @@ export type Message = {
 
 export type RenderedMessage = Message & { html: string }
 
-export type ChatResponse = {
-  reply: string
-}
-
 export type ChatJobStatus = {
   job_id: string
   status: 'queued' | 'processing' | 'done' | 'failed' | 'cancelled' | string

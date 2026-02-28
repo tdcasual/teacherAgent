@@ -20,7 +20,6 @@ from services.api.exam_utils import (
     read_questions_csv,
 )
 
-
 # -- parse_score_value --------------------------------------------------------
 
 @pytest.mark.parametrize("inp,expected", [

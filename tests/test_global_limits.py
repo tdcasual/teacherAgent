@@ -8,7 +8,6 @@ import pytest
 
 from services.api.global_limits import _env_int
 
-
 # -- _env_int -----------------------------------------------------------------
 
 class TestEnvInt:

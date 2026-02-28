@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-import pytest
+from typing import Any, Dict, List
 
 from services.api.assignment_progress_service import (
     AssignmentProgressDeps,
     _resolve_assignment_dir,
     compute_assignment_progress,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers

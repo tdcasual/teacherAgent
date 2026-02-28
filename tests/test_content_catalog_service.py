@@ -8,8 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict
 
-import pytest
-
 from services.api.content_catalog_service import (
     ContentCatalogDeps,
     list_lessons,

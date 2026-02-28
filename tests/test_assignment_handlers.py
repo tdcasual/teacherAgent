@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
-from pathlib import Path
 
 from services.api.api_models import AssignmentRequirementsRequest
 from services.api.handlers import assignment_handlers

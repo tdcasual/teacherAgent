@@ -2,8 +2,8 @@ import json
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 
 class SkillRouteReportScriptTest(unittest.TestCase):

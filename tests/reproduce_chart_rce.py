@@ -1,13 +1,12 @@
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Any, Dict
-
-import sys
 import os
+import shutil
+import sys
+from pathlib import Path
+
 sys.path.append(os.getcwd())
 
 from services.api.chart_executor import execute_chart_exec
+
 
 def reproduce_chart_rce():
     print("--- Starting Reproduction of Remote Code Execution in Chart Executor ---")

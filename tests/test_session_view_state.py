@@ -3,7 +3,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.session_view_state import compare_iso_ts, load_session_view_state, normalize_session_view_state_payload, save_session_view_state
+from services.api.session_view_state import (
+    compare_iso_ts,
+    load_session_view_state,
+    normalize_session_view_state_payload,
+    save_session_view_state,
+)
 
 
 class SessionViewStateTest(unittest.TestCase):

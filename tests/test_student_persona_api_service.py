@@ -9,11 +9,11 @@ from tempfile import TemporaryDirectory
 from services.api.student_persona_api_service import (
     StudentPersonaApiDeps,
     resolve_student_persona_runtime,
-    student_persona_avatar_upload_api,
     student_persona_activate_api,
-    student_persona_custom_update_api,
+    student_persona_avatar_upload_api,
     student_persona_custom_create_api,
     student_persona_custom_delete_api,
+    student_persona_custom_update_api,
     student_personas_get_api,
 )
 

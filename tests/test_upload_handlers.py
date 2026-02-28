@@ -1,11 +1,12 @@
-import pytest
-from fastapi import HTTPException
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 from services.api.api_models import UploadConfirmRequest
-from services.api.handlers import assignment_upload_handlers, exam_upload_handlers
-from services.api.exam_upload_api_service import ExamUploadApiError
 from services.api.assignment_upload_start_service import AssignmentUploadStartError
+from services.api.exam_upload_api_service import ExamUploadApiError
+from services.api.handlers import assignment_upload_handlers, exam_upload_handlers
 
 
 def _exam_deps(**overrides):

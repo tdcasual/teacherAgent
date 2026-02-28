@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 
 def test_compose_defaults_require_auth_and_stronger_redis_boundary() -> None:

@@ -3,11 +3,8 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -20,8 +17,8 @@ def _make_teacher_skills_dir(tmp_path: Path) -> Path:
 
 
 def _make_deps(tmp_path: Path):
-    from services.api.teacher_skill_service import TeacherSkillDeps
     from services.api.skills.loader import clear_cache
+    from services.api.teacher_skill_service import TeacherSkillDeps
     return TeacherSkillDeps(
         teacher_skills_dir=_make_teacher_skills_dir(tmp_path),
         clear_skill_cache=clear_cache,
@@ -119,8 +116,9 @@ def test_github_url_rejects_non_github():
 
 def test_build_skill_md_yaml_special_chars(tmp_path):
     """Verify YAML special characters in title/keywords don't break the frontmatter."""
-    from services.api.teacher_skill_service import create_teacher_skill
     import yaml as _yaml
+
+    from services.api.teacher_skill_service import create_teacher_skill
     deps = _make_deps(tmp_path)
     result = create_teacher_skill(
         deps, title="test: injection #1", description="desc",
@@ -178,7 +176,7 @@ def test_parse_yaml_frontmatter_no_frontmatter():
 # ---------------------------------------------------------------------------
 
 def test_system_skill_overrides_teacher(tmp_path):
-    from services.api.skills.loader import load_skills, clear_cache
+    from services.api.skills.loader import clear_cache, load_skills
     clear_cache()
     # Create a system skills dir with a skill
     system_dir = tmp_path / "system_skills" / "my-skill"
@@ -206,7 +204,7 @@ def test_system_skill_overrides_teacher(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_load_skills_teacher_dir(tmp_path):
-    from services.api.skills.loader import load_skills, clear_cache
+    from services.api.skills.loader import clear_cache, load_skills
     clear_cache()
     teacher_dir = tmp_path / "teacher_skills" / "teacher-only-skill"
     teacher_dir.mkdir(parents=True)
@@ -230,7 +228,7 @@ def test_load_skills_teacher_dir(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_lightweight_skill_routing(tmp_path):
-    from services.api.skills.loader import load_skills, clear_cache
+    from services.api.skills.loader import clear_cache, load_skills
     clear_cache()
     teacher_dir = tmp_path / "teacher_skills" / "quiz-gen"
     teacher_dir.mkdir(parents=True)
@@ -265,7 +263,7 @@ def test_parse_yaml_frontmatter_crlf():
 # ---------------------------------------------------------------------------
 
 def test_cjk_title_fallback_keywords(tmp_path):
-    from services.api.skills.loader import load_skills, clear_cache
+    from services.api.skills.loader import clear_cache, load_skills
     clear_cache()
     teacher_dir = tmp_path / "teacher_skills" / "cjk-skill"
     teacher_dir.mkdir(parents=True)

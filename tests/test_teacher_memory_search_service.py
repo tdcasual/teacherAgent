@@ -4,7 +4,10 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.teacher_memory_search_service import TeacherMemorySearchDeps, teacher_memory_search
+from services.api.teacher_memory_search_service import (
+    TeacherMemorySearchDeps,
+    teacher_memory_search,
+)
 
 
 class TeacherMemorySearchServiceTest(unittest.TestCase):

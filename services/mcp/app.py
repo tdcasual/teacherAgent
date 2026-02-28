@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -12,7 +13,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
-import logging
+
 _log = logging.getLogger(__name__)
 
 
@@ -706,9 +707,9 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                     "from_lesson",
                     "lesson_example_id",
                     "lesson_figure",
-	                ):
-	                    if args.get(key):
-	                        cmd += [f"--{key.replace('_','-')}", str(args.get(key))]
+                ):
+                    if args.get(key):
+                        cmd += [f"--{key.replace('_','-')}", str(args.get(key))]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)
 

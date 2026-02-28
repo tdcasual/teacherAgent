@@ -16,12 +16,3 @@ export const normalizeApiBase = (base: string): string => {
   const pathname = parsed.pathname.replace(/\/+$/, '');
   return `${parsed.origin}${pathname}`;
 };
-
-export const joinApiBasePath = (apiBase: string, path: string): string => {
-  const base = normalizeApiBase(apiBase);
-  const rel = String(path || '').trim();
-  if (!base) return rel;
-  if (!rel) return base;
-  if (rel.startsWith('/')) return `${base}${rel}`;
-  return `${base}/${rel}`;
-};

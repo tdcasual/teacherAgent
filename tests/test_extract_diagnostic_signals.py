@@ -2,7 +2,6 @@
 import unittest
 
 from services.api.chat_support_service import (
-    DiagnosticSignals,
     build_interaction_note,
     extract_diagnostic_signals,
 )

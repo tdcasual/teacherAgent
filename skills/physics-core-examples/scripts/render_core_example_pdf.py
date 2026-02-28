@@ -41,8 +41,8 @@ def render_pdf(example_id: str, stem_text: str, out_pdf: Path):
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
-        from reportlab.pdfgen import canvas
         from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
     except Exception as exc:
         raise SystemExit("Missing reportlab. Install: python3 -m pip install reportlab") from exc
 

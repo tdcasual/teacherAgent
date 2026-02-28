@@ -5,7 +5,10 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.teacher_memory_propose_service import TeacherMemoryProposeDeps, teacher_memory_propose
+from services.api.teacher_memory_propose_service import (
+    TeacherMemoryProposeDeps,
+    teacher_memory_propose,
+)
 
 
 class TeacherMemoryProposeServiceTest(unittest.TestCase):

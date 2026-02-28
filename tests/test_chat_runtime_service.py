@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import unittest
 from contextlib import contextmanager
 from pathlib import Path
-import unittest
 
 from services.api.chat_runtime_service import ChatRuntimeDeps, call_llm_runtime
 

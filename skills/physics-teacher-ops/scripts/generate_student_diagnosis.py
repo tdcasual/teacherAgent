@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import argparse
 import csv
-from pathlib import Path
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
 

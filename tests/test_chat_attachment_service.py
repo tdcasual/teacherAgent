@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from services.api.chat_attachment_service import (
+    MAX_FILE_SIZE_BYTES,
     ChatAttachmentDeps,
     ChatAttachmentError,
-    MAX_FILE_SIZE_BYTES,
     upload_chat_attachments,
 )
 

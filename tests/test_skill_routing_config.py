@@ -1,8 +1,7 @@
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from services.api.skills.loader import load_skills
-
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 

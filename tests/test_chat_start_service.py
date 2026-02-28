@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import threading
 import unittest
-from typing import Any, Dict, Optional
-from unittest.mock import MagicMock
 
 from services.api.chat_start_service import ChatStartDeps, start_chat_orchestration
 

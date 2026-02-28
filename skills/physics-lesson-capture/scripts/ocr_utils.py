@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import base64
 import json
-import os
 import mimetypes
+import os
 from pathlib import Path
 from typing import Optional
-
 
 _DOTENV_LOADED = False
 

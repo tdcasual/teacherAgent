@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+
 from mem0_config import get_config, load_dotenv
 
 load_dotenv()

@@ -1,5 +1,5 @@
-from collections import deque
 import threading
+from collections import deque
 
 from services.api.workers import upload_worker_service
 

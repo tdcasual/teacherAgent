@@ -3,7 +3,11 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.exam_detail_service import ExamDetailDeps, exam_question_detail, exam_student_detail
+from services.api.exam_detail_service import (
+    ExamDetailDeps,
+    exam_question_detail,
+    exam_student_detail,
+)
 
 
 def _write_rows(path: Path):

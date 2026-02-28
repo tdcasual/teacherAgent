@@ -6,13 +6,11 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import MagicMock
 
 import pytest
 
 import services.api.llm_routing as llm_routing_mod
 import services.api.llm_routing_proposals as mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers

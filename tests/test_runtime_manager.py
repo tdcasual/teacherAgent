@@ -1,4 +1,8 @@
-from services.api.runtime.runtime_manager import RuntimeManagerDeps, start_tenant_runtime, stop_tenant_runtime
+from services.api.runtime.runtime_manager import (
+    RuntimeManagerDeps,
+    start_tenant_runtime,
+    stop_tenant_runtime,
+)
 
 
 def test_start_and_stop_runtime_wire_backend_and_validate():

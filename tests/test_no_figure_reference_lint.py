@@ -1,7 +1,5 @@
-import unittest
-
-
 import sys
+import unittest
 from pathlib import Path
 
 # Import the script module by path (skills folder isn't a Python package).

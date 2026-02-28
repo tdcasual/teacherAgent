@@ -27,10 +27,22 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     return mcp_mod
 
 
+def _patch_call_llm(app_mod, fake_call_llm):
+    # Keep app module and currently wired core in sync; test order can switch the active core.
+    app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+    try:
+        from services.api.wiring import get_app_core
+
+        active_core = get_app_core()
+        setattr(active_core, "call_llm", fake_call_llm)
+    except Exception:
+        pass
+
+
 class ToolRegistrySyncTest(unittest.TestCase):
     def test_registry_covers_teacher_allowed_tools(self):
-        from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
         from services.api.app import allowed_tools
+        from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
         missing = sorted(set(allowed_tools("teacher")) - set(DEFAULT_TOOL_REGISTRY.names()))
         self.assertEqual(missing, [])
@@ -65,7 +77,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
                 captured["tool_names"] = [t.get("function", {}).get("name") for t in (tools or [])]
                 return {"choices": [{"message": {"content": "ok"}}]}
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+            _patch_call_llm(app_mod, fake_call_llm)
 
             result = app_mod.run_agent(
                 messages=[{"role": "user", "content": "hello"}],
@@ -89,7 +101,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
                 captured["tool_names"] = [t.get("function", {}).get("name") for t in (tools or [])]
                 return {"choices": [{"message": {"content": "ok"}}]}
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+            _patch_call_llm(app_mod, fake_call_llm)
 
             result = app_mod.run_agent(
                 messages=[{"role": "user", "content": "hello"}],

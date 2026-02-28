@@ -88,18 +88,3 @@ export const toUserFacingErrorMessage = (
   if (code) return sanitizePlainMessage(code, fallback);
   return fallback;
 };
-
-export const readHttpErrorMessage = async (
-  res: Response,
-  fallback = FALLBACK_NETWORK_ERROR,
-): Promise<string> => {
-  let body = '';
-  try {
-    body = await res.text();
-  } catch {
-    // ignore read failures
-  }
-  const baseFallback = res.status >= 500 ? FALLBACK_SERVER_ERROR : fallback;
-  if (!body) return baseFallback;
-  return toUserFacingErrorMessage(body, baseFallback);
-};

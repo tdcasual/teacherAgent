@@ -28,7 +28,6 @@ from typing import Any, Dict, List, Tuple
 
 import requests
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

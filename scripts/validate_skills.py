@@ -20,9 +20,9 @@ def main() -> int:
 
     # Import from project runtime (repo root on PYTHONPATH when run via `python3` in this repo).
     from services.api.app import APP_ROOT, allowed_tools  # type: ignore
-    from services.common.tool_registry import DEFAULT_TOOL_REGISTRY  # type: ignore
     from services.api.skills.loader import load_skills  # type: ignore
     from services.api.skills.runtime import compile_skill_runtime  # type: ignore
+    from services.common.tool_registry import DEFAULT_TOOL_REGISTRY  # type: ignore
 
     skills_dir = APP_ROOT / "skills"
     loaded = load_skills(skills_dir)

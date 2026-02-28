@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from services.api.teacher_provider_registry_service import (
     TeacherProviderRegistryDeps,
     resolve_shared_provider_target,

@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from typing import Dict, Optional
 
 from fastapi.testclient import TestClient
+
 from services.api.auth_service import mint_test_token
 
 

@@ -3,9 +3,6 @@ from __future__ import annotations
 
 import csv
 import math
-from pathlib import Path
-
-import pytest
 
 
 def test_parse_score_value_normal():

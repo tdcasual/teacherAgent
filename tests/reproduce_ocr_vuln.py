@@ -1,8 +1,11 @@
 import asyncio
+import os
 import shutil
-from pathlib import Path
+import sys
 from dataclasses import dataclass
-from typing import Any, List, Optional, Callable
+from pathlib import Path
+from typing import Callable, List
+
 
 # Mocking the service dependencies and models
 @dataclass
@@ -20,9 +23,6 @@ class AssignmentQuestionsOcrDeps:
     run_script: Callable[[List[str]], str]
     sanitize_filename: Callable[[str], str]
     sanitize_assignment_id: Callable[[str], str]
-
-import sys
-import os
 
 # Adjust path to include project root
 sys.path.append(os.getcwd())

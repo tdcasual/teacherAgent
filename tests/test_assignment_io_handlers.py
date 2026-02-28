@@ -1,7 +1,8 @@
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from pathlib import Path
 
 from services.api.assignment_generate_service import AssignmentGenerateError
 from services.api.handlers import assignment_io_handlers

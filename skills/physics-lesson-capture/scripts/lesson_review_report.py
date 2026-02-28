@@ -2,12 +2,10 @@
 import argparse
 import csv
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import List
-
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 

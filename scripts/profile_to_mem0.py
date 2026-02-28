@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
-import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # mem0 config

@@ -17,7 +17,6 @@ from services.api.chat_support_service import (
     normalize_math_delimiters,
 )
 
-
 # ── build_verified_student_context ──────────────────────────────────────
 
 class TestBuildVerifiedStudentContext:

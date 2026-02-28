@@ -2,7 +2,6 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-
 MODEL_REGISTRY = {
     "providers": {
         "siliconflow": {"modes": {"openai-chat": {}}},
@@ -13,7 +12,12 @@ MODEL_REGISTRY = {
 
 class LLMRoutingTest(unittest.TestCase):
     def test_resolve_with_fallback_chain(self):
-        from services.api.llm_routing import RoutingContext, apply_routing_config, get_compiled_routing, resolve_routing
+        from services.api.llm_routing import (
+            RoutingContext,
+            apply_routing_config,
+            get_compiled_routing,
+            resolve_routing,
+        )
 
         with TemporaryDirectory() as td:
             config_path = Path(td) / "llm_routing.json"
@@ -64,7 +68,12 @@ class LLMRoutingTest(unittest.TestCase):
             self.assertEqual([c.channel_id for c in decision.candidates], ["teacher-fast", "teacher-safe"])
 
     def test_kind_prefix_matching_supports_agent_specific_chat_kind(self):
-        from services.api.llm_routing import RoutingContext, apply_routing_config, get_compiled_routing, resolve_routing
+        from services.api.llm_routing import (
+            RoutingContext,
+            apply_routing_config,
+            get_compiled_routing,
+            resolve_routing,
+        )
 
         with TemporaryDirectory() as td:
             config_path = Path(td) / "llm_routing.json"
@@ -102,7 +111,12 @@ class LLMRoutingTest(unittest.TestCase):
             self.assertEqual(decision.candidates[0].channel_id, "teacher-fast")
 
     def test_capability_filter_falls_to_next_rule(self):
-        from services.api.llm_routing import RoutingContext, apply_routing_config, get_compiled_routing, resolve_routing
+        from services.api.llm_routing import (
+            RoutingContext,
+            apply_routing_config,
+            get_compiled_routing,
+            resolve_routing,
+        )
 
         with TemporaryDirectory() as td:
             config_path = Path(td) / "llm_routing.json"

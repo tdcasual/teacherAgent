@@ -9,8 +9,8 @@ from tempfile import TemporaryDirectory
 from services.api.student_persona_api_service import StudentPersonaApiDeps, student_personas_get_api
 from services.api.teacher_persona_api_service import (
     TeacherPersonaApiDeps,
-    teacher_persona_avatar_upload_api,
     teacher_persona_assign_api,
+    teacher_persona_avatar_upload_api,
     teacher_persona_create_api,
     teacher_persona_update_api,
     teacher_persona_visibility_api,

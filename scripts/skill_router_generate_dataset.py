@@ -7,7 +7,6 @@ import random
 from pathlib import Path
 from typing import Dict, List
 
-
 _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
     "golden": [
         {

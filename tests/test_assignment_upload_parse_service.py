@@ -4,7 +4,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from services.api.assignment_upload_parse_service import AssignmentUploadParseDeps, process_upload_job
+from services.api.assignment_upload_parse_service import (
+    AssignmentUploadParseDeps,
+    process_upload_job,
+)
 
 
 class AssignmentUploadParseServiceTest(unittest.TestCase):

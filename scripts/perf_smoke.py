@@ -15,12 +15,11 @@ It does NOT test real provider latency.
 import argparse
 import json
 import socket
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-
-import sys
 
 # Ensure project root is importable when executed as a script.
 ROOT = Path(__file__).resolve().parents[1]

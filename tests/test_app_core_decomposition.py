@@ -10,7 +10,6 @@ Original: 4,278 lines.  After decomposition: ~1,830 lines.
 import ast
 from pathlib import Path
 
-
 _APP_CORE_PATH = Path(__file__).resolve().parent.parent / "services" / "api" / "app_core.py"
 
 

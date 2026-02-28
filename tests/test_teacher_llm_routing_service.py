@@ -6,8 +6,6 @@ import logging
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from services.api.teacher_llm_routing_service import (
     TeacherLlmRoutingDeps,
     _registry_for_actor,

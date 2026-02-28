@@ -4,13 +4,11 @@ from __future__ import annotations
 import re
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from services.api import paths
 from services.api import config as _cfg
-
+from services.api import paths
 
 # ── safe_fs_id ──────────────────────────────────────────────────────────
 

@@ -185,10 +185,3 @@ export const formatProgressSummary = (p: AssignmentProgress | null, fallbackAssi
   if (overdue) parts.push(`逾期：${overdue}`)
   return parts.join(' · ')
 }
-
-export const describeConfirmMissing = (missing: unknown) => {
-  if (!Array.isArray(missing)) return ''
-  const keys = missing.filter((item) => typeof item === 'string') as string[]
-  if (!keys.length) return ''
-  return formatMissingRequirements(keys)
-}
