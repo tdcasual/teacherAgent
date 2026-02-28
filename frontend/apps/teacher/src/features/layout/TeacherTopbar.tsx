@@ -491,7 +491,7 @@ export default function TeacherTopbar({
   return (
     <header
       ref={topbarRef}
-      className={`flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25] ${compactMobile ? 'max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
+      className={`mobile-topbar flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25] ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
       style={{ backdropFilter: 'saturate(180%) blur(8px)' }}
     >
       <div className={`flex items-center gap-[10px] flex-wrap ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
@@ -504,7 +504,7 @@ export default function TeacherTopbar({
               draggable={false}
             />
           ) : null}
-          <div className={`font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
+          <div className={`mobile-topbar-title font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
             {compactMobile ? '物理教学助手' : '物理教学助手 · 老师端'}
           </div>
         </div>

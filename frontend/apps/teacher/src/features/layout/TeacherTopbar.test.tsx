@@ -38,9 +38,11 @@ describe('TeacherTopbar desktop AI entry logo', () => {
   it('keeps compact mode to primary actions and hides direct auth button', () => {
     const props = buildProps()
     render(<TeacherTopbar {...props} compactMobile />)
+    const header = screen.getByRole('banner')
 
     expect(screen.getByRole('button', { name: '会话' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '更多' })).toBeTruthy()
+    expect(header.className).toContain('mobile-topbar-compact')
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
 
