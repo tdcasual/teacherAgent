@@ -75,7 +75,7 @@ export default function ChatComposer({
         ) : null}
         <textarea
           ref={inputRef}
-          className="border-none bg-transparent px-[2px] py-0 shadow-none resize-none min-h-[56px] max-h-[220px] overflow-auto focus:border-none focus:shadow-none focus:outline-none focus:ring-0"
+          className="border-none bg-transparent px-[2px] py-0 shadow-none resize-none min-h-[56px] max-h-[220px] overflow-auto leading-[1.4] max-[900px]:leading-[1.32] focus:border-none focus:shadow-none focus:outline-none focus:ring-0"
           value={input}
           onChange={(e) => onInputChange(e.target.value, e.target.selectionStart || e.target.value.length)}
           onClick={(e) => onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)}

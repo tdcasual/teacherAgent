@@ -26,7 +26,7 @@ export default function ChatMessages({ renderedMessages, messagesRef, endRef, is
                 <div className="text-[11px] text-muted mb-1.5">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text markdown leading-[1.6] [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div className="text markdown leading-[1.54] max-[900px]:leading-[1.4] [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}

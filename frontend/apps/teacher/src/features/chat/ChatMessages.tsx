@@ -72,7 +72,7 @@ export default function ChatMessages({
                 <div className="text-[11px] text-muted mb-1">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text leading-[1.42] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div className="text leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>
             </div>
           ))}
@@ -80,7 +80,7 @@ export default function ChatMessages({
             <div className="flex">
               <div className="max-w-[var(--chat-assistant-bubble-max-width)] bg-[#f4f7fb] border border-dashed border-[#cfd8e3] rounded-[14px] py-2 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
-                <div className="leading-[1.42] whitespace-normal break-words">正在思考…</div>
+                <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">正在思考…</div>
               </div>
             </div>
           )}
@@ -125,7 +125,7 @@ export default function ChatMessages({
                               ? 'bg-[#ecfdf5] border-[#bbf7d0] text-[#065f46]'
                               : 'bg-[#fef2f2] border-[#fecaca] text-[#991b1b]'
                         return (
-                          <div key={item.key} className={`text-[12px] leading-[1.35] border rounded px-2 py-[6px] ${lineClass}`}>
+                          <div key={item.key} className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}>
                             <div className="font-medium">{item.name}</div>
                             <div>
                               {item.status === 'running' ? '进行中' : ''}
