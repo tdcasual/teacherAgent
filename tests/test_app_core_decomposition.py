@@ -38,7 +38,7 @@ def test_app_core_no_long_functions():
             if body_lines > 35:
                 violations.append(f"{node.name} ({body_lines} lines, line {node.lineno})")
     assert not violations, (
-        f"Functions too long for a composition root:\n"
+        "Functions too long for a composition root:\n"
         + "\n".join(f"  - {v}" for v in violations)
     )
 

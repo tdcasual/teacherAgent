@@ -1,5 +1,4 @@
 const FALLBACK_NETWORK_ERROR = '网络异常，请稍后重试。';
-const FALLBACK_SERVER_ERROR = '服务暂时不可用，请稍后重试。';
 
 const ERROR_CODE_MESSAGES: Record<string, string> = {
   avatar_too_large: '上传文件过大，请压缩后重试。',

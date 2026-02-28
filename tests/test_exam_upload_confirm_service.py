@@ -135,7 +135,6 @@ class ExamUploadConfirmServiceTest(unittest.TestCase):
     def test_confirm_allows_selected_candidate_mapping(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            writes = []
             job_dir = root / "uploads" / "exam_jobs" / "job-1"
             (job_dir / "derived").mkdir(parents=True, exist_ok=True)
             (job_dir / "parsed.json").write_text(

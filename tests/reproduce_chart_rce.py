@@ -52,7 +52,7 @@ except Exception as e:
         "input_data": {}
     }
     
-    print(f"Executing malicious code via chart_executor...")
+    print("Executing malicious code via chart_executor...")
     
     try:
         result = execute_chart_exec(args, app_root, uploads_dir)

@@ -83,3 +83,18 @@
 - Root cause: test only patched `app_mod.call_llm`, but `run_agent` resolves dependencies through the currently wired core, which can differ across test order.
 - Fix status: `fixed`
 - Notes: added `_patch_call_llm` helper to patch both `app_mod` and `services.api.wiring.get_app_core()` active core before assertions.
+
+### BUG-0005: Cleanup aftermath left stale unused symbols in TS and tests
+
+- Discovered at: `2026-02-28T13:13:00Z`
+- Area: `frontend/apps/shared/errorMessage.ts`, `frontend/apps/teacher/src/features/workbench/workbenchFormatters.ts`, and selected tests
+- Symptom: stricter no-unused checks failed after previous dead-code removals.
+- Repro steps:
+  1. Run `npm run typecheck -- --noUnusedLocals --noUnusedParameters`.
+  2. Run `python3 -m ruff check . --select F821,F841,F541,F811,F823`.
+- Evidence:
+  - TS6133 on `FALLBACK_SERVER_ERROR` and `formatMissingRequirements`.
+  - Ruff flagged `F541` and `F841` in test files.
+- Root cause: helper/function removals made adjacent constants/imports/locals unreachable but they were not pruned in the same patch.
+- Fix status: `fixed`
+- Notes: removed stale symbols, fixed extraneous `f` string prefixes, and dropped one unused local variable.

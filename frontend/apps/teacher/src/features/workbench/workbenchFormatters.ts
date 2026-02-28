@@ -5,7 +5,6 @@ import type {
   UploadDraft,
   UploadJobStatus,
 } from '../../appTypes'
-import { formatMissingRequirements } from './workbenchUtils'
 
 export const formatUploadJobStatus = (job: UploadJobStatus) => {
   const lines: string[] = []
