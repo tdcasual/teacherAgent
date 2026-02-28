@@ -68,7 +68,7 @@ export default function ChatComposer({
           placeholder={verifiedStudent ? '输入问题，例如：牛顿第三定律是什么' : '请先填写姓名完成验证'}
           rows={1}
           disabled={composerDisabled}
-          className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.45] focus:!border-none focus:!shadow-none disabled:cursor-not-allowed"
+          className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.42] max-[900px]:leading-[1.3] focus:!border-none focus:!shadow-none disabled:cursor-not-allowed"
         />
         <div className="flex items-center justify-between gap-2.5 mt-1">
           <div className="flex items-center gap-2 min-w-0">
