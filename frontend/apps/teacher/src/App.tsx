@@ -38,6 +38,7 @@ import {
   parseCommaList,
   parseLineList,
 } from './features/workbench/workbenchUtils'
+import { readFeatureFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
@@ -85,6 +86,20 @@ export default function App() {
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
   const workbenchMaxWidth = workbenchMaxWidthForViewport(viewportWidth)
+  const mobileShellV2Enabled = useMemo(() => {
+    const source: Record<string, string | undefined> = {
+      mobileShellV2: import.meta.env.VITE_MOBILE_SHELL_V2_TEACHER,
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const localOverride = window.localStorage.getItem('teacherMobileShellV2')
+        if (localOverride != null) source.mobileShellV2 = localOverride
+      } catch {
+        // ignore localStorage read failures
+      }
+    }
+    return readFeatureFlag('mobileShellV2', false, source)
+  }, [])
   const [initialWorkbenchWidth] = useState(() => {
     if (typeof window === 'undefined') return WORKBENCH_DEFAULT_WIDTH
     const initialViewportWidth = window.innerWidth
@@ -614,7 +629,12 @@ export default function App() {
   }
 
   return (
-    <div ref={appRef} className="app teacher h-dvh flex flex-col bg-bg overflow-hidden" style={appStyle}>
+    <div
+      ref={appRef}
+      className="app teacher h-dvh flex flex-col bg-bg overflow-hidden"
+      style={appStyle}
+      data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
+    >
       <TeacherTopbar
         topbarRef={topbarRef}
         sessionSidebarOpen={sessionSidebarOpen}

@@ -13,6 +13,7 @@ import { selectComposerHint } from './features/chat/studentUiSelectors'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import { useChatAttachments } from '../../shared/useChatAttachments'
+import { readFeatureFlag } from '../../shared/featureFlags'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
 import ChatPanel from './features/chat/ChatPanel'
@@ -25,6 +26,20 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
   const { saveScrollHeight, restoreScrollPosition } = useScrollPositionLock(messagesRef)
+  const mobileShellV2Enabled = useMemo(() => {
+    const source: Record<string, string | undefined> = {
+      mobileShellV2: import.meta.env.VITE_MOBILE_SHELL_V2_STUDENT,
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const localOverride = window.localStorage.getItem('studentMobileShellV2')
+        if (localOverride != null) source.mobileShellV2 = localOverride
+      } catch {
+        // ignore localStorage read failures
+      }
+    }
+    return readFeatureFlag('mobileShellV2', false, source)
+  }, [])
 
   // ── Hooks ──
   const { viewStateSyncReady } = useStudentSessionViewStateSync({ state, dispatch, setActiveSession })
@@ -376,7 +391,11 @@ export default function App() {
 
   // ── Render ──
   return (
-    <div className="app flex h-dvh flex-col bg-bg overflow-hidden" ref={appRef}>
+    <div
+      className="app flex h-dvh flex-col bg-bg overflow-hidden"
+      ref={appRef}
+      data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
+    >
       <StudentTopbar
         apiBase={state.apiBase}
         verifiedStudent={state.verifiedStudent}
