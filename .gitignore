@@ -54,6 +54,7 @@ uploads/
 
 # Runtime-generated auth secret
 config/auth_token_secret
+data/auth/auth_registry.sqlite3
 data/auth/*.sqlite3-shm
 data/auth/*.sqlite3-wal
 data/auth/*.sqlite3-journal
