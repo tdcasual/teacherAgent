@@ -1,4 +1,4 @@
-export type SessionGroupInfo = { key: 'today' | 'yesterday' | 'week' | 'older'; label: string };
+type SessionGroupInfo = { key: 'today' | 'yesterday' | 'week' | 'older'; label: string };
 
 export const sessionGroupFromIso = (updatedAt?: string): SessionGroupInfo => {
   if (!updatedAt) return { key: 'older', label: '更早' };

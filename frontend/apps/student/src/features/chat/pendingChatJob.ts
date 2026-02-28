@@ -2,7 +2,7 @@ import type { PendingChatJob } from '../../appTypes'
 
 export const PENDING_CHAT_MAX_AGE_MS = 15 * 60 * 1000
 
-export const normalizePendingChatJob = (
+const normalizePendingChatJob = (
   value: unknown,
   nowMs: number = Date.now(),
 ): PendingChatJob | null => {

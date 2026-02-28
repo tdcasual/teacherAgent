@@ -1,6 +1,6 @@
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
 
-export const STUDENT_AUTH_TOKEN_KEY = 'studentAuthAccessToken'
+const STUDENT_AUTH_TOKEN_KEY = 'studentAuthAccessToken'
 
 export const readStudentAccessToken = (): string =>
   String(safeLocalStorageGetItem(STUDENT_AUTH_TOKEN_KEY) || '').trim()

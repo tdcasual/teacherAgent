@@ -1,4 +1,4 @@
-export type VisibilityBackoffPollingOptions = {
+type VisibilityBackoffPollingOptions = {
   initialDelayMs?: number;
   maxDelayMs?: number;
   normalBackoffFactor?: number;
@@ -11,12 +11,12 @@ export type VisibilityBackoffPollingOptions = {
   kickMode?: 'direct' | 'timeout0';
 };
 
-export type VisibilityBackoffPollContext = {
+type VisibilityBackoffPollContext = {
   signal: AbortSignal;
   pollTimeoutMs: number;
 };
 
-export type VisibilityBackoffPollOutcome =
+type VisibilityBackoffPollOutcome =
   | 'continue'
   | 'stop'
   | {

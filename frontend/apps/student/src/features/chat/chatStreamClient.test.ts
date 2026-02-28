@@ -78,7 +78,7 @@ describe('runStudentChatStream', () => {
     expect(result.needsFallback).toBe(true)
   })
 
-  it('falls back after reconnect failures reach cap', async () => {
+  it('falls back after no-event reconnect failures hit the no-event cap', async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error('stream unavailable')
     })
@@ -94,9 +94,10 @@ describe('runStudentChatStream', () => {
       maxReconnects: 3,
     })
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    // When no events are ever observed (cursor does not advance),
+    // runStudentChatStream uses the no-event reconnect cap (min(2, maxReconnects)).
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
     expect(result.needsFallback).toBe(true)
     expect(result.protocolMismatch).toBe(false)
   })
 })
-

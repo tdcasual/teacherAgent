@@ -1,4 +1,4 @@
-export type MenuMoveDirection = 'next' | 'prev' | 'first' | 'last';
+type MenuMoveDirection = 'next' | 'prev' | 'first' | 'last';
 
 export const getNextMenuIndex = (
   currentIndex: number,

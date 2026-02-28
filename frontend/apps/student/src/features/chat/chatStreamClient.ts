@@ -13,7 +13,7 @@ export type StudentChatStreamEvent = {
   payload: Record<string, unknown>
 }
 
-export type StudentChatStreamResult = {
+type StudentChatStreamResult = {
   cursor: number
   protocolMismatch: boolean
   needsFallback: boolean

@@ -30,8 +30,8 @@ export const ASSIGNMENT_UPLOAD_ALLOWED_SUFFIXES = [
   '.tex',
 ];
 
-export const AVATAR_MAX_FILE_BYTES = 2 * ONE_MB;
-export const AVATAR_ALLOWED_SUFFIXES = ['.png', '.jpg', '.jpeg', '.webp'];
+const AVATAR_MAX_FILE_BYTES = 2 * ONE_MB;
+const AVATAR_ALLOWED_SUFFIXES = ['.png', '.jpg', '.jpeg', '.webp'];
 
 type ValidateFilesOptions = {
   label: string;

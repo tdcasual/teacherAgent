@@ -1,10 +1,10 @@
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../utils/storage'
 
 export const TEACHER_AUTH_ACCESS_TOKEN_KEY = 'teacherAuthAccessToken'
-export const TEACHER_AUTH_SUBJECT_KEY = 'teacherAuthSubject'
+const TEACHER_AUTH_SUBJECT_KEY = 'teacherAuthSubject'
 export const TEACHER_AUTH_EVENT = 'teacher-auth-updated'
 
-export type TeacherAuthSubject = {
+type TeacherAuthSubject = {
   teacher_id: string
   teacher_name: string
   email?: string
@@ -32,7 +32,7 @@ export const readTeacherAuthSubject = (): TeacherAuthSubject | null => {
   }
 }
 
-export const emitTeacherAuthUpdated = (): void => {
+const emitTeacherAuthUpdated = (): void => {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event(TEACHER_AUTH_EVENT))
 }

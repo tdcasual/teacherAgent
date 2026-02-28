@@ -128,3 +128,18 @@
 - Root cause: modules intentionally adjust import path/environment before importing runtime dependencies.
 - Fix status: `fixed`
 - Notes: applied explicit `# noqa: E402` only in modules where bootstrap ordering is semantically required; reordered imports in non-bootstrap modules to satisfy lint without behavior changes.
+
+### BUG-0008: Student stream reconnect-cap test expected outdated call count
+
+- Discovered at: `2026-02-28T13:41:36Z`
+- Area: `frontend/apps/student/src/features/chat/chatStreamClient.test.ts`
+- Symptom: unit test fails with expected fetch retry count mismatch during stream fallback path.
+- Repro steps:
+  1. Run `cd frontend && npm run test:unit`.
+  2. Observe failure in `runStudentChatStream > falls back after reconnect failures reach cap`.
+- Evidence:
+  - `npm run test:unit` reported `expected "spy" to be called 3 times, but got 2 times` at `chatStreamClient.test.ts:97`.
+  - Focused rerun `npx vitest run apps/student/src/features/chat/chatStreamClient.test.ts` reproduced consistently (5/5).
+- Root cause: implementation intentionally applies a stricter no-event reconnect cap `min(2, maxReconnects)` before first event arrives (`cursor <= initialCursor`), but test still asserted the generic `maxReconnects=3` call count.
+- Fix status: `fixed`
+- Notes: updated test title and assertion to align with no-event cap behavior while preserving fallback/protocol assertions.

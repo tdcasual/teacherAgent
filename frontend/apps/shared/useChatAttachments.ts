@@ -10,7 +10,7 @@ import {
   validateFilesBeforeUpload,
 } from './uploadValidation';
 
-export type AttachmentRef = {
+type AttachmentRef = {
   attachment_id: string;
 };
 
