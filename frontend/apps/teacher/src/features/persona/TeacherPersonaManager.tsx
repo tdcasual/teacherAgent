@@ -192,10 +192,11 @@ export default function TeacherPersonaManager({ open, onClose, apiBase }: Props)
 
   return (
     <div
-      className="fixed inset-0 z-100 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label="角色管理"
+      style={{ zIndex: 'var(--layer-settings-modal, 150)' }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

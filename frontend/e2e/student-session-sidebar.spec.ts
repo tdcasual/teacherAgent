@@ -50,6 +50,37 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await expect(trigger).toBeFocused()
 })
 
+test('mobile session menu closes on pointerdown outside', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  const trigger = page.locator('.session-menu-trigger').first()
+  await trigger.click()
+  const menu = page.locator('.session-menu').first()
+  await expect(menu).toBeVisible()
+
+  await page.evaluate(() => {
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }))
+  })
+
+  await expect(menu).toBeHidden()
+})
+
 test('mobile shell v2 keeps tab state stable without render loop errors', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const runtimeErrors: string[] = []
@@ -106,6 +137,42 @@ test('mobile persona picker closes when tapping outside on chat tab', async ({ p
 
   await page.locator('.messages').click({ position: { x: 24, y: 24 }, force: true })
   await expect(picker).toBeHidden()
+})
+
+test('mobile rename dialog overlays tabbar hit target', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentMobileShellV2: '1',
+      studentSidebarOpen: 'true',
+      verifiedStudent: JSON.stringify({
+        student_id: 'S001',
+        student_name: '测试学生',
+        class_name: '高二1班',
+      }),
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  await page.locator('.session-menu-trigger').first().click()
+  await page.getByRole('menuitem', { name: '重命名', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: '重命名会话' })).toBeVisible()
+
+  const bottomHitIsDialogBackdrop = await page.evaluate(() => {
+    const backdrop = document.querySelector('.app-dialog-backdrop') as HTMLElement | null
+    if (!backdrop) return false
+    const x = Math.round(window.innerWidth / 2)
+    const y = Math.round(window.innerHeight - 12)
+    const hit = document.elementFromPoint(x, y)
+    return Boolean(hit && backdrop.contains(hit))
+  })
+
+  expect(bottomHitIsDialogBackdrop).toBe(true)
 })
 
 test('rename dialog escape restores focus to session menu trigger', async ({ page }) => {

@@ -180,6 +180,32 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await expect(trigger).toBeFocused()
 })
 
+test('mobile session menu closes on pointerdown outside', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherSessionSidebarOpen: 'true',
+      teacherSkillsOpen: 'false',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  await page.locator('.session-menu-trigger').first().click()
+  const menu = page.locator('.session-menu').first()
+  await expect(menu).toBeVisible()
+
+  await page.evaluate(() => {
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }))
+  })
+
+  await expect(menu).toBeHidden()
+})
+
 test('mobile shell v2 starts in chat without auto-opening sheets', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page, {
@@ -328,6 +354,90 @@ test('mobile auth panel closes when switching tabs', async ({ page }) => {
   await page.getByRole('tab', { name: '会话' }).click()
   await expect(page.locator('.mobile-sheet-title')).toHaveText('历史会话')
   await expect(panel).toBeHidden()
+})
+
+test('mobile session dialog renders above session sheet layer', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  await page.getByRole('tab', { name: '会话' }).click()
+  await expect(page.locator('.mobile-sheet-title')).toHaveText('历史会话')
+
+  await page.locator('.session-menu-trigger').first().click()
+  await page.getByRole('menuitem', { name: '重命名', exact: true }).click()
+
+  const dialog = page.getByRole('dialog', { name: '重命名会话' })
+  await expect(dialog).toBeVisible()
+
+  const topHitIsDialog = await page.evaluate(() => {
+    const panel = document.querySelector('.app-dialog') as HTMLElement | null
+    if (!panel) return false
+    const rect = panel.getBoundingClientRect()
+    const x = Math.round(rect.left + rect.width / 2)
+    const y = Math.round(rect.top + rect.height / 2)
+    const hit = document.elementFromPoint(x, y)
+    return Boolean(hit && panel.contains(hit))
+  })
+
+  expect(topHitIsDialog).toBe(true)
+})
+
+test('mobile settings modal overlays tabbar hit target', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('button', { name: '打开设置' }).click()
+  await expect(page.getByRole('dialog', { name: '设置' })).toBeVisible()
+
+  const bottomHitIsSettingsOverlay = await page.evaluate(() => {
+    const overlay = document.querySelector('.settings-overlay') as HTMLElement | null
+    if (!overlay) return false
+    const x = Math.round(window.innerWidth / 2)
+    const y = Math.round(window.innerHeight - 12)
+    const hit = document.elementFromPoint(x, y)
+    return Boolean(hit && overlay.contains(hit))
+  })
+
+  expect(bottomHitIsSettingsOverlay).toBe(true)
+})
+
+test('mobile persona manager overlays tabbar hit target', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.getByRole('button', { name: '更多' }).click()
+  await page.getByRole('button', { name: '角色管理' }).click()
+  await expect(page.getByRole('dialog', { name: '角色管理' })).toBeVisible()
+
+  const bottomHitIsPersonaOverlay = await page.evaluate(() => {
+    const overlay = document.querySelector('[role=\"dialog\"][aria-label=\"角色管理\"]') as HTMLElement | null
+    if (!overlay) return false
+    const x = Math.round(window.innerWidth / 2)
+    const y = Math.round(window.innerHeight - 12)
+    const hit = document.elementFromPoint(x, y)
+    return Boolean(hit && overlay.contains(hit))
+  })
+
+  expect(bottomHitIsPersonaOverlay).toBe(true)
 })
 
 test('new session is created with session_* id and becomes active', async ({ page }) => {

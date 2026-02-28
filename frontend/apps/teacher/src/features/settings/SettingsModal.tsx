@@ -40,10 +40,11 @@ export default function SettingsModal({
   if (!open) return null
   return (
     <div
-      className="settings-overlay fixed inset-0 z-100 bg-black/50 backdrop-blur-sm flex items-center justify-center"
+      className="settings-overlay fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      style={{ zIndex: 'var(--layer-settings-modal, 150)' }}
       onMouseDown={(e) => { mouseDownOnOverlay.current = e.target === e.currentTarget }}
       onClick={(e) => { if (e.target === e.currentTarget && mouseDownOnOverlay.current) onClose() }}
     >

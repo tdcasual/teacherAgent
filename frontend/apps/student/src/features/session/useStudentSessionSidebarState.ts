@@ -99,7 +99,7 @@ export function useStudentSessionSidebarState({ sidebarOpen, openSessionMenuId, 
   useEffect(() => {
     if (!openSessionMenuId) return
     const sid = openSessionMenuId
-    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+    const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.closest('.session-menu-wrap')) return
       dispatch({ type: 'SET', field: 'openSessionMenuId', value: '' })
@@ -110,12 +110,10 @@ export function useStudentSessionSidebarState({ sidebarOpen, openSessionMenuId, 
         dispatch({ type: 'SET', field: 'openSessionMenuId', value: '' })
       }
     }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('pointerdown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
     return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
   }, [openSessionMenuId, dispatch])
