@@ -1,19 +1,19 @@
 export type InvocationTriggerType = 'skill'
 
-export type InvocationToken = {
+type InvocationToken = {
   type: InvocationTriggerType
   id: string
   start: number
   end: number
 }
 
-export type InvocationTrigger = {
+type InvocationTrigger = {
   type: InvocationTriggerType
   start: number
   query: string
 }
 
-export type ParseInvocationOptions = {
+type ParseInvocationOptions = {
   knownSkillIds: string[]
   activeSkillId: string
 }

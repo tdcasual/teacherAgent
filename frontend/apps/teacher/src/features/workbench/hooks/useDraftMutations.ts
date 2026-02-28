@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { ExamUploadDraft, UploadDraft } from '../../../appTypes'
 
-export type UseDraftMutationsParams = {
+type UseDraftMutationsParams = {
   uploadDraft: UploadDraft | null
   setUploadDraft: React.Dispatch<React.SetStateAction<UploadDraft | null>>
   examDraft: ExamUploadDraft | null

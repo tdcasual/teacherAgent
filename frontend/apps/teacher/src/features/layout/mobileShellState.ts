@@ -1,6 +1,6 @@
 export type TeacherMobileTab = 'chat' | 'sessions' | 'workbench'
 
-export type TeacherMobilePanels = {
+type TeacherMobilePanels = {
   sessionSidebarOpen: boolean
   skillsOpen: boolean
 }

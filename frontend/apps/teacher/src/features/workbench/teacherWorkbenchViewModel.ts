@@ -4,7 +4,7 @@ import type { MemoryTabProps } from './tabs/MemoryTab'
 import type { SkillsTabProps } from './tabs/SkillsTab'
 import type { WorkflowTabProps } from './tabs/WorkflowTab'
 
-export type TeacherWorkbenchChromeProps = {
+type TeacherWorkbenchChromeProps = {
   skillsOpen: boolean
   setSkillsOpen: Dispatch<SetStateAction<boolean>>
   workbenchTab: WorkbenchTab

@@ -18,7 +18,7 @@ export type ParsedCandidateSummary = {
   types: string[]
 }
 
-export type RecommendedCandidate = {
+type RecommendedCandidate = {
   candidate: ExamScoreSchemaSubjectCandidate
   candidateId: string
   rowsConsidered: number
@@ -29,7 +29,7 @@ export type RecommendedCandidate = {
   score: number
 } | null
 
-export type ConflictStudent = {
+type ConflictStudent = {
   studentId: string
   studentName: string
   minScore: number

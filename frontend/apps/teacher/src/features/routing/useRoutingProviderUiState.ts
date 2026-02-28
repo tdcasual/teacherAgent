@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { TeacherProviderRegistryOverview } from './routingTypes'
 
-export type RoutingProviderCreateForm = {
+type RoutingProviderCreateForm = {
   provider_id: string
   display_name: string
   base_url: string
@@ -10,7 +10,7 @@ export type RoutingProviderCreateForm = {
   enabled: boolean
 }
 
-export type RoutingProviderEditMap = Record<
+type RoutingProviderEditMap = Record<
   string,
   { display_name: string; base_url: string; enabled: boolean; api_key: string; default_model: string }
 >

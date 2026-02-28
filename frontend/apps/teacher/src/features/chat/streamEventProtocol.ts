@@ -1,6 +1,6 @@
 export const CHAT_STREAM_EVENT_VERSION = 1
 
-export type ChatStreamEnvelope = {
+type ChatStreamEnvelope = {
   eventId?: number
   eventVersion: number
   eventType?: string

@@ -1,6 +1,6 @@
 export type StudentMobileTab = 'chat' | 'sessions' | 'learning'
 
-export type StudentMobilePanels = {
+type StudentMobilePanels = {
   sidebarOpen: boolean
   verifyOpen: boolean
 }

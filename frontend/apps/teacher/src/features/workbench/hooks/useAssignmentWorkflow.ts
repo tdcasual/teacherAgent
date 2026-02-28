@@ -28,7 +28,7 @@ const toErrorMessage = (error: unknown, fallback = '请求失败') => {
 // Params type – the state / setters the hook needs from the parent component
 // ---------------------------------------------------------------------------
 
-export interface UseAssignmentWorkflowParams {
+interface UseAssignmentWorkflowParams {
   apiBase: string
 
   // Upload card state
@@ -103,7 +103,7 @@ export interface UseAssignmentWorkflowParams {
 // Return type
 // ---------------------------------------------------------------------------
 
-export interface UseAssignmentWorkflowReturn {
+interface UseAssignmentWorkflowReturn {
   handleUploadAssignment: (event: FormEvent) => Promise<void>
   saveDraft: (draft: UploadDraft) => Promise<void>
   handleConfirmUpload: () => Promise<void>

@@ -1,6 +1,6 @@
 import type { RoutingSection } from './RoutingPage'
 
-export const ROUTING_SECTIONS: RoutingSection[] = [
+const ROUTING_SECTIONS: RoutingSection[] = [
   'general',
   'providers',
   'channels',

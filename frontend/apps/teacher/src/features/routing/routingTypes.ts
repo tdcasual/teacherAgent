@@ -1,15 +1,15 @@
-export type RoutingCapability = {
+type RoutingCapability = {
   tools: boolean
   json: boolean
 }
 
-export type RoutingTarget = {
+type RoutingTarget = {
   provider: string
   mode: string
   model: string
 }
 
-export type RoutingParams = {
+type RoutingParams = {
   temperature: number | null
   max_tokens: number | null
 }
@@ -23,7 +23,7 @@ export type RoutingChannel = {
   capabilities: RoutingCapability
 }
 
-export type RoutingRuleMatch = {
+type RoutingRuleMatch = {
   roles: string[]
   skills: string[]
   kinds: string[]
@@ -105,7 +105,7 @@ export type RoutingProposalDetail = {
   }
 }
 
-export type RoutingCatalogMode = {
+type RoutingCatalogMode = {
   mode: string
   default_model: string
   model_env: string
@@ -118,7 +118,7 @@ export type RoutingCatalogProvider = {
   modes: RoutingCatalogMode[]
 }
 
-export type RoutingCatalog = {
+type RoutingCatalog = {
   providers: RoutingCatalogProvider[]
   defaults: { provider: string; mode: string }
   fallback_chain: string[]
@@ -135,7 +135,7 @@ export type RoutingOverview = {
   config_path: string
 }
 
-export type RoutingSimulateDecisionCandidate = {
+type RoutingSimulateDecisionCandidate = {
   channel_id: string
   provider: string
   mode: string
@@ -145,7 +145,7 @@ export type RoutingSimulateDecisionCandidate = {
   capabilities: RoutingCapability
 }
 
-export type RoutingSimulateDecision = {
+type RoutingSimulateDecision = {
   enabled: boolean
   matched_rule_id: string | null
   reason: string
@@ -184,7 +184,7 @@ export type RoutingRollbackResult = {
   error?: string
 }
 
-export type TeacherProviderItem = {
+type TeacherProviderItem = {
   id: string
   provider: string
   display_name: string

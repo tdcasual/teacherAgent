@@ -8,7 +8,7 @@ import type { RoutingSection } from '../routing/RoutingPage'
 // Params
 // ---------------------------------------------------------------------------
 
-export type UseLocalStorageSyncParams = {
+type UseLocalStorageSyncParams = {
   // localStorage-synced state
   apiBase: string
   favorites: string[]

@@ -4,7 +4,7 @@ import { makeId } from '../../utils/id'
 import { nowTime } from '../../utils/time'
 import { TEACHER_GREETING } from './catalog'
 
-export type UseSessionActionsDeps = {
+type UseSessionActionsDeps = {
   /** Ref whose `.current` is incremented to cancel in-flight session requests. */
   sessionRequestRef: React.MutableRefObject<number>
   /** Visible (non-archived) history sessions used by confirmArchiveDialog. */

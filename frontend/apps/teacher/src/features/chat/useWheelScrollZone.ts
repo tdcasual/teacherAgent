@@ -1,14 +1,14 @@
 import { useCallback, useRef } from 'react'
 import type { WheelScrollZone } from '../../appTypes'
 
-export interface UseWheelScrollZoneOptions {
+interface UseWheelScrollZoneOptions {
   appRef: React.RefObject<HTMLDivElement | null>
   sessionSidebarOpen: boolean
   skillsOpen: boolean
   inlineRoutingOpen: boolean
 }
 
-export interface UseWheelScrollZoneReturn {
+interface UseWheelScrollZoneReturn {
   wheelScrollZoneRef: React.RefObject<WheelScrollZone>
   setWheelScrollZone: (zone: WheelScrollZone) => void
   resolveWheelScrollTarget: (zone: WheelScrollZone) => HTMLElement | null

@@ -26,7 +26,7 @@ export type TeacherSessionState = {
   viewStateUpdatedAt: string
 }
 
-export type TeacherSessionAction =
+type TeacherSessionAction =
   | { type: 'set'; key: keyof TeacherSessionState; value: TeacherSessionState[keyof TeacherSessionState] }
   | { type: 'update'; update: (prev: TeacherSessionState) => TeacherSessionState }
 

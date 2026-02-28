@@ -6,7 +6,7 @@ import type {
   ExamUploadJobStatus,
 } from '../../../appTypes'
 
-export type UseExamWorkflowParams = {
+type UseExamWorkflowParams = {
   apiBase: string
   examId: string
   examDate: string

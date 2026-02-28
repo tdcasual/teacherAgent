@@ -81,7 +81,7 @@ export type TeacherWorkbenchState = {
   examConfirming: boolean
 }
 
-export type TeacherWorkbenchAction =
+type TeacherWorkbenchAction =
   | { type: 'set'; key: keyof TeacherWorkbenchState; value: TeacherWorkbenchState[keyof TeacherWorkbenchState] }
   | { type: 'update'; update: (prev: TeacherWorkbenchState) => TeacherWorkbenchState }
 

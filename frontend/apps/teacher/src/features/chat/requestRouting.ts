@@ -6,7 +6,7 @@ type DecideSkillRoutingInput = {
   skillPinned: boolean
 }
 
-export type SkillRoutingDecision = {
+type SkillRoutingDecision = {
   explicitSkillRequested: boolean
   explicitSkillResolved: boolean
   shouldPinEffectiveSkill: boolean
