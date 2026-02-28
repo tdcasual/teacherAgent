@@ -1,3 +1,42 @@
+:root {
+  --mobile-shell-text-lh: 1.3;
+  --mobile-shell-markdown-lh: 1.4;
+  --mobile-shell-code-lh: 1.36;
+  --mobile-shell-composer-lh: 1.32;
+  --mobile-shell-message-gap: 12px;
+  --mobile-tabbar-offset: calc(58px + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 390px) {
+  :root {
+    --mobile-shell-text-lh: 1.26;
+    --mobile-shell-markdown-lh: 1.34;
+    --mobile-shell-code-lh: 1.3;
+    --mobile-shell-composer-lh: 1.28;
+    --mobile-shell-message-gap: 10px;
+  }
+}
+
+@media (min-width: 391px) and (max-width: 420px) {
+  :root {
+    --mobile-shell-text-lh: 1.28;
+    --mobile-shell-markdown-lh: 1.36;
+    --mobile-shell-code-lh: 1.32;
+    --mobile-shell-composer-lh: 1.3;
+    --mobile-shell-message-gap: 11px;
+  }
+}
+
+@media (min-width: 421px) and (max-width: 900px) {
+  :root {
+    --mobile-shell-text-lh: 1.3;
+    --mobile-shell-markdown-lh: 1.38;
+    --mobile-shell-code-lh: 1.34;
+    --mobile-shell-composer-lh: 1.31;
+    --mobile-shell-message-gap: 12px;
+  }
+}
+
 .mobile-sheet-layer {
   position: fixed;
   inset: 0;
@@ -78,7 +117,7 @@
 .mobile-tabbar {
   position: sticky;
   bottom: 0;
-  z-index: 30;
+  z-index: 90;
   border-top: 1px solid #e5e7eb;
   background: #fff;
   padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
@@ -168,23 +207,50 @@
 }
 
 @media (max-width: 900px) {
+  .app[data-mobile-shell-v2='1'] .mobile-sheet-layer {
+    padding-bottom: var(--mobile-tabbar-offset);
+  }
+
+  .app[data-mobile-shell-v2='1'] .mobile-sheet-panel {
+    max-height: min(calc(85dvh - var(--mobile-tabbar-offset)), 720px);
+  }
+
+  .app[data-mobile-shell-v2='1'] .mobile-tabbar {
+    z-index: 110;
+  }
+
   .app[data-mobile-shell-v2='1'] .messages,
   .app[data-mobile-shell-v2='1'] .mobile-sheet-body,
   .app[data-mobile-shell-v2='1'] .session-sidebar,
   .app[data-mobile-shell-v2='1'] .status {
-    line-height: 1.3;
+    line-height: var(--mobile-shell-text-lh);
+  }
+
+  .app[data-mobile-shell-v2='1'] .messages > div {
+    gap: var(--mobile-shell-message-gap);
   }
 
   .app[data-mobile-shell-v2='1'] .markdown {
-    line-height: 1.4;
+    line-height: var(--mobile-shell-markdown-lh);
   }
 
   .app[data-mobile-shell-v2='1'] .markdown pre code {
-    line-height: 1.36;
+    line-height: var(--mobile-shell-code-lh);
   }
 
   .app[data-mobile-shell-v2='1'] .composer textarea {
-    line-height: 1.32;
+    min-height: 52px;
+    line-height: var(--mobile-shell-composer-lh);
+    font-size: 14px;
+  }
+
+  .app[data-mobile-shell-v2='1'] .session-menu-trigger {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .app[data-mobile-shell-v2='1'] .session-menu-item {
+    min-height: 36px;
   }
 }
 

@@ -221,7 +221,7 @@ export default function SessionSidebar({
                         type="button"
                         id={triggerId}
                         ref={(node) => setTriggerRef(sid, node)}
-                        className="session-menu-trigger w-[22px] h-[22px] border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-[16px] leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151]"
+                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-[16px] leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] max-[900px]:w-9 max-[900px]:h-9"
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
                         aria-controls={menuId}
@@ -238,7 +238,7 @@ export default function SessionSidebar({
                         <div
                           id={menuId}
                           ref={(node) => setMenuRef(sid, node)}
-                          className="session-menu absolute top-[26px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-[2px] z-[2]"
+                          className="session-menu absolute top-[30px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-[2px] z-[2]"
                           role="menu"
                           aria-orientation="vertical"
                           aria-labelledby={triggerId}

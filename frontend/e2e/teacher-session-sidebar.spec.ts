@@ -213,6 +213,38 @@ test('mobile shell v2 closing workbench sheet returns to chat without chaining s
   await expect(page.getByRole('dialog', { name: '历史会话' })).toHaveCount(0)
 })
 
+test('mobile shell v2 tab switching does not trigger runtime errors', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const runtimeErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return
+    const text = message.text()
+    if (!/(Maximum update depth exceeded|TypeError|ReferenceError|Cannot read)/i.test(text)) return
+    runtimeErrors.push(text)
+  })
+  page.on('pageerror', (error) => runtimeErrors.push(error.message))
+
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  const sessionsTab = page.locator('.mobile-tabbar-button', { hasText: '会话' })
+  const workbenchTab = page.locator('.mobile-tabbar-button', { hasText: '工作台' })
+  const chatTab = page.locator('.mobile-tabbar-button', { hasText: '聊天' })
+
+  await sessionsTab.click()
+  await expect(page.locator('.mobile-sheet-title')).toHaveText('历史会话')
+  await workbenchTab.click()
+  await expect(page.locator('.mobile-sheet-title')).toHaveText('工作台')
+  await chatTab.click()
+  await expect(page.locator('.mobile-sheet-layer')).toHaveCount(0)
+  await page.waitForTimeout(300)
+
+  expect(runtimeErrors).toHaveLength(0)
+})
+
 test('new session is created with session_* id and becomes active', async ({ page }) => {
   await openTeacherApp(page, {
     stateOverrides: {

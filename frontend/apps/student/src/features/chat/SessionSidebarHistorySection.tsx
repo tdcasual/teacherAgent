@@ -102,7 +102,7 @@ export default function SessionSidebarHistorySection(props: Props) {
                         type="button"
                         id={triggerId}
                         ref={(node) => setSessionMenuTriggerRef(sid, node)}
-                        className="session-menu-trigger w-[22px] h-[22px] border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151]"
+                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151] max-[900px]:w-9 max-[900px]:h-9"
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
                         aria-controls={menuId}
@@ -116,7 +116,7 @@ export default function SessionSidebarHistorySection(props: Props) {
                         <div
                           id={menuId}
                           ref={(node) => setSessionMenuRef(sid, node)}
-                          className="session-menu absolute top-[26px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-0.5 z-2 max-[900px]:min-w-[112px]"
+                          className="session-menu absolute top-[30px] right-0 min-w-[102px] border border-border rounded-[10px] bg-white shadow-sm p-1 grid gap-0.5 z-2 max-[900px]:min-w-[112px]"
                           role="menu"
                           aria-orientation="vertical"
                           aria-labelledby={triggerId}
