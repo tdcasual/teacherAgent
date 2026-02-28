@@ -121,7 +121,7 @@ export default function TeacherTopbar({
   const authPanelRef = useRef<HTMLDivElement | null>(null)
   const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
-  const [authOpen, setAuthOpen] = useState(() => !readTeacherAccessToken())
+  const [authOpen, setAuthOpen] = useState(() => !compactMobile && !readTeacherAccessToken())
   const [authed, setAuthed] = useState(() => Boolean(readTeacherAccessToken()))
   const [authSubjectLabel, setAuthSubjectLabel] = useState(() => {
     const subject = readTeacherAuthSubject()
@@ -167,7 +167,7 @@ export default function TeacherTopbar({
       setAuthed(hasToken)
       const subject = readTeacherAuthSubject()
       setAuthSubjectLabel(subject?.teacher_name || subject?.teacher_id || '')
-      if (!hasToken) {
+      if (!hasToken && !compactMobile) {
         setAuthOpen(true)
       }
     }
@@ -178,7 +178,7 @@ export default function TeacherTopbar({
       window.removeEventListener('storage', sync)
       window.removeEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
     }
-  }, [])
+  }, [compactMobile])
 
   useEffect(() => {
     if (!compactMobile && quickActionsOpen) setQuickActionsOpen(false)
@@ -486,6 +486,7 @@ export default function TeacherTopbar({
       setStudentResetError('复制失败，请手动复制列表内容。')
     }
   }
+  const authActionLabel = authed ? '认证信息' : '教师认证'
 
   return (
     <header
@@ -514,16 +515,18 @@ export default function TeacherTopbar({
       <div className={`flex gap-[10px] items-center flex-wrap relative ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className={`role-badge teacher ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>身份：老师</div>
         {authed ? <span className={`text-xs text-muted ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>已认证：{authSubjectLabel || '教师'}</span> : null}
-        <button
-          ref={authButtonRef}
-          className="ghost"
-          type="button"
-          onClick={() => setAuthOpen((prev) => !prev)}
-          aria-haspopup="dialog"
-          aria-expanded={authOpen}
-        >
-          {authed ? (compactMobile ? '认证' : '认证信息') : '教师认证'}
-        </button>
+        {!compactMobile ? (
+          <button
+            ref={authButtonRef}
+            className="ghost"
+            type="button"
+            onClick={() => setAuthOpen((prev) => !prev)}
+            aria-haspopup="dialog"
+            aria-expanded={authOpen}
+          >
+            {authActionLabel}
+          </button>
+        ) : null}
         {compactMobile ? (
           <button
             ref={quickActionsButtonRef}
@@ -575,6 +578,19 @@ export default function TeacherTopbar({
             role="menu"
             aria-label="移动端更多操作"
           >
+            <button
+              ref={authButtonRef}
+              className="ghost justify-start"
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={authOpen}
+              onClick={() => {
+                setAuthOpen((prev) => !prev)
+                setQuickActionsOpen(false)
+              }}
+            >
+              {authActionLabel}
+            </button>
             <button className="ghost justify-start" type="button" onClick={() => { onOpenRoutingSettingsPanel(); setQuickActionsOpen(false) }}>
               模型路由
             </button>
