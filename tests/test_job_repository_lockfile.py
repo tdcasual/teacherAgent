@@ -232,8 +232,8 @@ class JobRepositoryLockfileTest(unittest.TestCase):
     def test_job_repository_lock_contention_matrix(self):
         with TemporaryDirectory() as td:
             path = Path(td) / "job_claim.lock"
-
-            acquire = lambda: _try_acquire_lockfile(path, ttl_sec=60)
+            def acquire():
+                return _try_acquire_lockfile(path, ttl_sec=60)
 
             # Empty lock: exactly one contender should win.
             first_round = self._run_parallel(acquire, workers=24)
@@ -260,8 +260,8 @@ class JobRepositoryLockfileTest(unittest.TestCase):
                 get_pid=os.getpid,
                 is_pid_alive=lambda _pid: True,
             )
-
-            acquire = lambda: _shared_try_acquire_lockfile(path, ttl_sec=60, deps=deps)
+            def acquire():
+                return _shared_try_acquire_lockfile(path, ttl_sec=60, deps=deps)
 
             first_round = self._run_parallel(acquire, workers=24)
             self.assertEqual(sum(first_round), 1)
@@ -289,7 +289,8 @@ class JobRepositoryLockfileTest(unittest.TestCase):
 
         with TemporaryDirectory() as td:
             path = Path(td) / "job_claim.lock"
-            acquire = lambda: _try_acquire_lockfile(path, ttl_sec=60)
+            def acquire():
+                return _try_acquire_lockfile(path, ttl_sec=60)
 
             for idx in range(rounds):
                 _release_lockfile(path)
@@ -331,9 +332,10 @@ class JobRepositoryLockfileTest(unittest.TestCase):
                 get_pid=os.getpid,
                 is_pid_alive=lambda _pid: True,
             )
-
-            job_acquire = lambda: _try_acquire_lockfile(job_path, ttl_sec=60)
-            shared_acquire = lambda: _shared_try_acquire_lockfile(shared_path, ttl_sec=60, deps=deps)
+            def job_acquire():
+                return _try_acquire_lockfile(job_path, ttl_sec=60)
+            def shared_acquire():
+                return _shared_try_acquire_lockfile(shared_path, ttl_sec=60, deps=deps)
 
             for idx in range(rounds):
                 _release_lockfile(job_path)

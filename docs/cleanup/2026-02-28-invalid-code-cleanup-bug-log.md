@@ -98,3 +98,32 @@
 - Root cause: helper/function removals made adjacent constants/imports/locals unreachable but they were not pruned in the same patch.
 - Fix status: `fixed`
 - Notes: removed stale symbols, fixed extraneous `f` string prefixes, and dropped one unused local variable.
+
+### BUG-0006: Residual test lint defects (`E731`/`E741`) reduced readability and static-safety
+
+- Discovered at: `2026-02-28T13:16:00Z`
+- Area: `tests/test_content_catalog_service.py`, `tests/test_job_repository_lockfile.py`
+- Symptom: lint flagged ambiguous variable name and lambda-assignment anti-patterns.
+- Repro steps:
+  1. Run `python3 -m ruff check . --select E731,E741`.
+  2. Observe findings in the two test modules above.
+- Evidence:
+  - `E741` for comprehension variable `l`.
+  - multiple `E731` for `acquire = lambda: ...` patterns.
+- Root cause: earlier test scaffolding favored compact closures over explicit local helpers.
+- Fix status: `fixed`
+- Notes: renamed ambiguous variable and replaced lambda assignments with local `def` functions; related tests still pass.
+
+### BUG-0007: Remaining `E402` import-order debt tied to runtime path/bootstrap sequencing
+
+- Discovered at: `2026-02-28T13:16:00Z`
+- Area: multiple scripts/tests using `sys.path` mutation or `load_dotenv` before dependent imports
+- Symptom: `python3 -m ruff check .` still reports `E402` in bootstrapping-style modules.
+- Repro steps:
+  1. Run `python3 -m ruff check . --select E402`.
+  2. Observe current findings list.
+- Evidence:
+  - `python3 -m ruff check . --select E402` reports unresolved entries.
+- Root cause: modules intentionally adjust import path/environment before importing runtime dependencies.
+- Fix status: `open`
+- Notes: requires targeted refactor (or explicit lint exemptions) to avoid changing startup semantics.

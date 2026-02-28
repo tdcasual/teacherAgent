@@ -45,7 +45,7 @@ def test_list_lessons_sorted_with_json(tmp_path: Path):
 
     deps = _make_deps(tmp_path)
     result = list_lessons(deps=deps)
-    ids = [l["lesson_id"] for l in result["lessons"]]
+    ids = [lesson["lesson_id"] for lesson in result["lessons"]]
     assert ids == ["L001", "L002"]
     assert result["lessons"][0]["summary"] == "s-L001"
 
