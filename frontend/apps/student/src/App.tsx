@@ -12,6 +12,11 @@ import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
+import {
+  isStudentMobileTab,
+  studentMobilePanelsFromTab,
+  studentMobileTabFromPanels,
+} from './features/layout/mobileShellState'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { readFeatureFlag } from '../../shared/featureFlags'
 import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
@@ -414,30 +419,25 @@ export default function App() {
 
   useEffect(() => {
     if (!studentUseMobileShellV2) return
-    if (mobileTab === 'chat') {
-      if (state.sidebarOpen) dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
-      return
-    }
-    if (!state.sidebarOpen) dispatch({ type: 'SET', field: 'sidebarOpen', value: true })
-    const shouldOpenVerifyPanel = mobileTab === 'learning'
-    if (state.verifyOpen !== shouldOpenVerifyPanel) {
-      dispatch({ type: 'SET', field: 'verifyOpen', value: shouldOpenVerifyPanel })
-    }
-  }, [studentUseMobileShellV2, mobileTab, state.sidebarOpen, state.verifyOpen, dispatch])
-
-  useEffect(() => {
-    if (!studentUseMobileShellV2) return
-    if (!state.sidebarOpen) {
-      if (mobileTab !== 'chat') setMobileTab('chat')
-      return
-    }
-    const nextTab = state.verifyOpen ? 'learning' : 'sessions'
+    const nextTab = studentMobileTabFromPanels({
+      sidebarOpen: state.sidebarOpen,
+      verifyOpen: state.verifyOpen,
+    })
     if (mobileTab !== nextTab) setMobileTab(nextTab)
   }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, mobileTab])
 
   const handleMobileTabChange = useCallback((tabId: string) => {
-    if (tabId === 'chat' || tabId === 'sessions' || tabId === 'learning') setMobileTab(tabId)
-  }, [])
+    if (!isStudentMobileTab(tabId)) return
+    setMobileTab(tabId)
+    if (!studentUseMobileShellV2) return
+    const nextPanels = studentMobilePanelsFromTab(tabId)
+    if (state.sidebarOpen !== nextPanels.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: nextPanels.sidebarOpen })
+    }
+    if (state.verifyOpen !== nextPanels.verifyOpen) {
+      dispatch({ type: 'SET', field: 'verifyOpen', value: nextPanels.verifyOpen })
+    }
+  }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, dispatch])
 
   // ── Render ──
   return (

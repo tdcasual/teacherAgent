@@ -60,6 +60,10 @@ import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSession
 import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
 import { parsePendingChatJob } from './features/chat/pendingChatJob'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
+import {
+  isTeacherMobileTab,
+  teacherMobilePanelsFromTab,
+} from './features/layout/mobileShellState'
 import type {
   Message,
   PendingChatJob,
@@ -551,34 +555,15 @@ export default function App() {
 
   useEffect(() => {
     if (!teacherUseMobileShellV2) return
-    if (skillsOpen) {
-      if (mobileTab !== 'workbench') setMobileTab('workbench')
-      return
-    }
-    if (sessionSidebarOpen) {
-      if (mobileTab !== 'sessions') setMobileTab('sessions')
-      return
-    }
-    if (mobileTab !== 'chat') setMobileTab('chat')
-  }, [teacherUseMobileShellV2, skillsOpen, sessionSidebarOpen, mobileTab])
+    const nextPanels = teacherMobilePanelsFromTab(mobileTab)
+    if (sessionSidebarOpen !== nextPanels.sessionSidebarOpen) setSessionSidebarOpen(nextPanels.sessionSidebarOpen)
+    if (skillsOpen !== nextPanels.skillsOpen) setSkillsOpen(nextPanels.skillsOpen)
+  }, [teacherUseMobileShellV2, mobileTab, sessionSidebarOpen, skillsOpen, setSessionSidebarOpen, setSkillsOpen])
 
   const handleTeacherMobileTabChange = useCallback((tabId: string) => {
-    if (tabId !== 'chat' && tabId !== 'sessions' && tabId !== 'workbench') return
+    if (!isTeacherMobileTab(tabId)) return
     setMobileTab(tabId)
-    if (!teacherUseMobileShellV2) return
-    if (tabId === 'chat') {
-      setSessionSidebarOpen(false)
-      setSkillsOpen(false)
-      return
-    }
-    if (tabId === 'sessions') {
-      setSessionSidebarOpen(true)
-      setSkillsOpen(false)
-      return
-    }
-    setSessionSidebarOpen(false)
-    setSkillsOpen(true)
-  }, [teacherUseMobileShellV2, setSessionSidebarOpen, setSkillsOpen])
+  }, [])
 
   const handleSelectSessionFromSheet = useCallback((sessionId: string) => {
     const sid = String(sessionId || '').trim()
@@ -588,7 +573,6 @@ export default function App() {
     setSessionHasMore(false)
     setSessionError('')
     setOpenSessionMenuId('')
-    setSessionSidebarOpen(false)
     setMobileTab('chat')
   }, [
     setActiveSessionId,
@@ -596,8 +580,23 @@ export default function App() {
     setSessionHasMore,
     setSessionError,
     setOpenSessionMenuId,
-    setSessionSidebarOpen,
   ])
+
+  const handleTopbarSessionToggle = useCallback(() => {
+    if (!teacherUseMobileShellV2) {
+      toggleSessionSidebar()
+      return
+    }
+    setMobileTab((prev) => (prev === 'sessions' ? 'chat' : 'sessions'))
+  }, [teacherUseMobileShellV2, toggleSessionSidebar])
+
+  const handleTopbarWorkbenchToggle = useCallback(() => {
+    if (!teacherUseMobileShellV2) {
+      toggleSkillsWorkbench()
+      return
+    }
+    setMobileTab((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))
+  }, [teacherUseMobileShellV2, toggleSkillsWorkbench])
 
   const openPersonaManager = useCallback(() => {
     setPersonaManagerOpen(true)
@@ -700,10 +699,10 @@ export default function App() {
         sessionSidebarOpen={sessionSidebarOpen}
         skillsOpen={skillsOpen}
         compactMobile={teacherUseMobileShellV2}
-        onToggleSessionSidebar={toggleSessionSidebar}
+        onToggleSessionSidebar={handleTopbarSessionToggle}
         onOpenRoutingSettingsPanel={openRoutingSettingsPanel}
         onOpenPersonaManager={openPersonaManager}
-        onToggleSkillsWorkbench={toggleSkillsWorkbench}
+        onToggleSkillsWorkbench={handleTopbarWorkbenchToggle}
         onToggleSettingsPanel={toggleSettingsPanel}
       />
 
@@ -862,7 +861,6 @@ export default function App() {
         open={teacherUseMobileShellV2 && mobileTab === 'sessions'}
         onClose={() => {
           setMobileTab('chat')
-          setSessionSidebarOpen(false)
         }}
         title="历史会话"
       >
@@ -900,7 +898,6 @@ export default function App() {
         open={teacherUseMobileShellV2 && mobileTab === 'workbench'}
         onClose={() => {
           setMobileTab('chat')
-          setSkillsOpen(false)
         }}
         title="工作台"
       >

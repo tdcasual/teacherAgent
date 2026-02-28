@@ -50,6 +50,43 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await expect(trigger).toBeFocused()
 })
 
+test('mobile shell v2 keeps tab state stable without render loop errors', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const depthErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return
+    if (!message.text().includes('Maximum update depth exceeded')) return
+    depthErrors.push(message.text())
+  })
+
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentMobileShellV2: '1',
+      studentSidebarOpen: 'true',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+    },
+  })
+
+  const activeLabel = page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')
+  await expect(activeLabel).toBeVisible()
+  await page.waitForTimeout(500)
+
+  const samples: string[] = []
+  for (let index = 0; index < 8; index += 1) {
+    samples.push(String((await activeLabel.textContent()) || '').trim())
+    await page.waitForTimeout(80)
+  }
+
+  const unique = new Set(samples.filter((item) => item.length > 0))
+  expect(unique.size).toBe(1)
+  expect(depthErrors).toHaveLength(0)
+})
+
 test('rename dialog escape restores focus to session menu trigger', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openStudentApp(page, {
