@@ -2,6 +2,7 @@ import { useCallback, type Dispatch, type FormEvent } from 'react'
 import type {
   StudentIdentifyResponse,
   StudentLoginResponse,
+  StudentVerifyCandidate,
   VerifiedStudent,
 } from '../appTypes'
 import { writeStudentAccessToken } from '../features/auth/studentAuth'
@@ -25,11 +26,13 @@ const identifyStudent = async (apiBase: string, name: string, className: string)
   return (await res.json()) as StudentIdentifyResponse
 }
 
+const collectCandidateClasses = (candidates: StudentVerifyCandidate[]): string[] => {
+  return candidates.map((item) => String(item?.student?.class_name || '').trim()).filter(Boolean)
+}
+
 const buildCandidateHint = (data: StudentIdentifyResponse): string => {
   const classes = Array.isArray(data.candidates)
-    ? data.candidates
-      .map((item) => String(item?.student?.class_name || '').trim())
-      .filter(Boolean)
+    ? collectCandidateClasses(data.candidates)
     : []
   if (!classes.length) return ''
   const unique = Array.from(new Set(classes)).slice(0, 6)
