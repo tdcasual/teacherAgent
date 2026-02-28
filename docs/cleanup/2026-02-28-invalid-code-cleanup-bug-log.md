@@ -143,3 +143,18 @@
 - Root cause: implementation intentionally applies a stricter no-event reconnect cap `min(2, maxReconnects)` before first event arrives (`cursor <= initialCursor`), but test still asserted the generic `maxReconnects=3` call count.
 - Fix status: `fixed`
 - Notes: updated test title and assertion to align with no-event cap behavior while preserving fallback/protocol assertions.
+
+### BUG-0009: `StudentVerifyCandidate` export removal violated backend contract drift guard
+
+- Discovered at: `2026-02-28T13:55:04Z`
+- Area: `frontend/apps/student/src/appTypes.ts` + `tests/test_student_verify_contract_drift.py`
+- Symptom: CI backend-quality failed during full backend test suite after dead-code cleanup batch.
+- Repro steps:
+  1. Run `python3 -m pytest -q tests/test_student_verify_contract_drift.py`.
+  2. Observe failure on required exported type contract.
+- Evidence:
+  - CI run `22522046250` failed at `Run full backend test suite` with assertion from `tests/test_student_verify_contract_drift.py:12`.
+  - Local repro: `assert "export type StudentVerifyCandidate" in source` failed against current `appTypes.ts`.
+- Root cause: `StudentVerifyCandidate` was flagged by `ts-prune` as module-local usage, but repository policy includes a drift guard requiring this symbol to remain an explicit exported contract type.
+- Fix status: `fixed`
+- Notes: restored `export type StudentVerifyCandidate` while keeping other safe export reductions.

@@ -93,7 +93,7 @@ export type VerifiedStudent = {
   class_name?: string
 }
 
-type StudentVerifyCandidate = {
+export type StudentVerifyCandidate = {
   candidate_id: string
   student: VerifiedStudent
   password_set?: boolean
