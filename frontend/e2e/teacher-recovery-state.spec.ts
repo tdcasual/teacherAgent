@@ -602,6 +602,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.setViewportSize({ width: 390, height: 844 })
     await openTeacherApp(page, {
       stateOverrides: {
+        teacherMobileShellV2: '0',
         teacherSessionSidebarOpen: 'true',
         teacherSkillsOpen: 'true',
       },
@@ -710,6 +711,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.setViewportSize({ width: 844, height: 390 })
     const { chatStartCalls } = await openTeacherApp(page, {
       stateOverrides: {
+        teacherMobileShellV2: '0',
         teacherSkillsOpen: 'false',
         teacherSessionSidebarOpen: 'false',
       },

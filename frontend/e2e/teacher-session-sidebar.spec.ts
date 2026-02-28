@@ -1,5 +1,20 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { openTeacherApp } from './helpers/teacherHarness'
+
+const openMobileMoreMenu = async (page: Page) => {
+  await page.getByRole('button', { name: '更多' }).click()
+  const menu = page.getByRole('menu', { name: '移动端更多操作' })
+  await expect(menu).toBeVisible()
+  return menu
+}
+
+const openMobileAuthPanel = async (page: Page) => {
+  const menu = await openMobileMoreMenu(page)
+  await menu.getByRole('button', { name: /认证/ }).first().click()
+  const panel = page.getByRole('dialog', { name: '教师认证面板' })
+  await expect(panel).toBeVisible()
+  return panel
+}
 
 test('session search filters by title and preview text', async ({ page }) => {
   await openTeacherApp(page, {
@@ -282,9 +297,7 @@ test('mobile auth panel stays within viewport on narrow width', async ({ page })
     },
   })
 
-  await page.getByRole('button', { name: '认证' }).click()
-  const panel = page.getByText('教师认证').locator('..').first()
-  await expect(panel).toBeVisible()
+  const panel = await openMobileAuthPanel(page)
 
   const box = await panel.boundingBox()
   expect(box).not.toBeNull()
@@ -318,9 +331,7 @@ test('mobile auth panel closes on Escape', async ({ page }) => {
     },
   })
 
-  await page.getByRole('button', { name: '认证' }).click()
-  const panel = page.getByText('教师认证').first()
-  await expect(panel).toBeVisible()
+  const panel = await openMobileAuthPanel(page)
 
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()
@@ -334,9 +345,7 @@ test('mobile auth panel closes when tapping outside', async ({ page }) => {
     },
   })
 
-  await page.getByRole('button', { name: '认证' }).click()
-  const panel = page.getByText('教师认证').first()
-  await expect(panel).toBeVisible()
+  const panel = await openMobileAuthPanel(page)
 
   await page.mouse.click(8, 220)
   await expect(panel).toBeHidden()
@@ -350,9 +359,7 @@ test('mobile auth panel closes when switching tabs', async ({ page }) => {
     },
   })
 
-  await page.getByRole('button', { name: '认证' }).click()
-  const panel = page.getByText('教师认证').first()
-  await expect(panel).toBeVisible()
+  const panel = await openMobileAuthPanel(page)
 
   await page.getByRole('tab', { name: '会话' }).click()
   await expect(page.locator('.mobile-sheet-title')).toHaveText('历史会话')

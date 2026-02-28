@@ -368,6 +368,11 @@ export const openTeacherApp = async (
   await page.goto('/')
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
   await expect(page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)).toBeVisible()
+  const mobileShellV2Active = await page.evaluate(() => {
+    const app = document.querySelector('.app.teacher')
+    const v2Enabled = app?.getAttribute('data-mobile-shell-v2') === '1'
+    return v2Enabled && window.innerWidth <= 900
+  })
 
   const sidebarOpenRaw = options.stateOverrides?.teacherSessionSidebarOpen
   const sidebarOpen = String(sidebarOpenRaw ?? defaultLocalStorageState.teacherSessionSidebarOpen) !== 'false'
@@ -376,7 +381,7 @@ export const openTeacherApp = async (
     const expectedVisibleCount = getExpectedVisibleSessionCount(expectedHistory, options.stateOverrides)
     await expect.poll(() => mocks.getHistorySessionsCallCount()).toBeGreaterThan(0)
     await expect.poll(() => mocks.getHistorySessionCallCount()).toBeGreaterThan(0)
-    if (expectedVisibleCount > 0) {
+    if (!mobileShellV2Active && expectedVisibleCount > 0) {
       await expect
         .poll(() => page.locator('.session-item').count())
         .toBeGreaterThanOrEqual(expectedVisibleCount)

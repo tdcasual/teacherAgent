@@ -173,6 +173,7 @@ test('mobile overlay closes both session sidebar and workbench panels', async ({
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page, {
     stateOverrides: {
+      teacherMobileShellV2: '0',
       teacherSessionSidebarOpen: 'true',
       teacherSkillsOpen: 'true',
     },

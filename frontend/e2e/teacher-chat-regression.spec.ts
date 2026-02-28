@@ -585,7 +585,10 @@ test('chat pane naturally overflows and can scroll without forced sizing', async
 test('mobile keeps routing entry accessible', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openTeacherApp(page)
-  await expect(page.getByRole('button', { name: '模型路由', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '更多' }).click()
+  const quickActions = page.getByRole('menu', { name: '移动端更多操作' })
+  await expect(quickActions).toBeVisible()
+  await expect(quickActions.getByRole('button', { name: '模型路由', exact: true })).toBeVisible()
 })
 
 test('routing page can scroll when channel list is long', async ({ page }) => {
