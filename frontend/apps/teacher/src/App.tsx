@@ -15,6 +15,7 @@ import { withPendingChatOverlay } from './features/chat/pendingOverlay'
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
 import TeacherChatMainContent from './features/chat/TeacherChatMainContent'
 import TeacherSessionRail from './features/chat/TeacherSessionRail'
+import SessionSidebar from './features/chat/SessionSidebar'
 import TeacherWorkbench from './features/workbench/TeacherWorkbench'
 import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWorkbenchViewModel'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
@@ -579,6 +580,25 @@ export default function App() {
     setSkillsOpen(true)
   }, [teacherUseMobileShellV2, setSessionSidebarOpen, setSkillsOpen])
 
+  const handleSelectSessionFromSheet = useCallback((sessionId: string) => {
+    const sid = String(sessionId || '').trim()
+    if (!sid) return
+    setActiveSessionId(sid)
+    setSessionCursor(-1)
+    setSessionHasMore(false)
+    setSessionError('')
+    setOpenSessionMenuId('')
+    setSessionSidebarOpen(false)
+    setMobileTab('chat')
+  }, [
+    setActiveSessionId,
+    setSessionCursor,
+    setSessionHasMore,
+    setSessionError,
+    setOpenSessionMenuId,
+    setSessionSidebarOpen,
+  ])
+
   const openPersonaManager = useCallback(() => {
     setPersonaManagerOpen(true)
   }, [])
@@ -679,6 +699,7 @@ export default function App() {
         topbarRef={topbarRef}
         sessionSidebarOpen={sessionSidebarOpen}
         skillsOpen={skillsOpen}
+        compactMobile={teacherUseMobileShellV2}
         onToggleSessionSidebar={toggleSessionSidebar}
         onOpenRoutingSettingsPanel={openRoutingSettingsPanel}
         onOpenPersonaManager={openPersonaManager}
@@ -704,44 +725,52 @@ export default function App() {
       />
 
       <div
-        className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${sessionSidebarOpen ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]' : 'grid-cols-[0_minmax(0,1fr)]'}`}
+        className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${
+          teacherUseMobileShellV2
+            ? 'grid-cols-[minmax(0,1fr)]'
+            : sessionSidebarOpen
+              ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]'
+              : 'grid-cols-[0_minmax(0,1fr)]'
+        }`}
         style={{ overscrollBehavior: 'none' }}
       >
-        <TeacherSessionRail
-          sessionSidebarOpen={sessionSidebarOpen}
-          skillsOpen={skillsOpen}
-          setSessionSidebarOpen={setSessionSidebarOpen}
-          setSkillsOpen={setSkillsOpen}
-          setActiveSessionId={setActiveSessionId}
-          setSessionCursor={setSessionCursor}
-          setSessionHasMore={setSessionHasMore}
-          setSessionError={setSessionError}
-          setOpenSessionMenuId={setOpenSessionMenuId}
-          closeSessionSidebarOnMobile={closeSessionSidebarOnMobile}
-          historyQuery={historyQuery}
-          historyLoading={historyLoading}
-          historyError={historyError}
-          showArchivedSessions={showArchivedSessions}
-          visibleHistoryCount={visibleHistorySessions.length}
-          groupedHistorySessions={groupedHistorySessions}
-          activeSessionId={activeSessionId}
-          openSessionMenuId={openSessionMenuId}
-          deletedSessionIds={deletedSessionIds}
-          historyHasMore={historyHasMore}
-          sessionHasMore={sessionHasMore}
-          sessionLoading={sessionLoading}
-          sessionError={sessionError}
-          onStartNewSession={startNewTeacherSession}
-          onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
-          onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
-          onHistoryQueryChange={setHistoryQuery}
-          onToggleSessionMenu={toggleSessionMenu}
-          onRenameSession={renameSession}
-          onToggleSessionArchive={toggleSessionArchive}
-          onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
-          getSessionTitle={getSessionTitle}
-          formatSessionUpdatedLabel={formatSessionUpdatedLabel}
-        />
+        {teacherUseMobileShellV2 ? null : (
+          <TeacherSessionRail
+            sessionSidebarOpen={sessionSidebarOpen}
+            skillsOpen={skillsOpen}
+            setSessionSidebarOpen={setSessionSidebarOpen}
+            setSkillsOpen={setSkillsOpen}
+            setActiveSessionId={setActiveSessionId}
+            setSessionCursor={setSessionCursor}
+            setSessionHasMore={setSessionHasMore}
+            setSessionError={setSessionError}
+            setOpenSessionMenuId={setOpenSessionMenuId}
+            closeSessionSidebarOnMobile={closeSessionSidebarOnMobile}
+            historyQuery={historyQuery}
+            historyLoading={historyLoading}
+            historyError={historyError}
+            showArchivedSessions={showArchivedSessions}
+            visibleHistoryCount={visibleHistorySessions.length}
+            groupedHistorySessions={groupedHistorySessions}
+            activeSessionId={activeSessionId}
+            openSessionMenuId={openSessionMenuId}
+            deletedSessionIds={deletedSessionIds}
+            historyHasMore={historyHasMore}
+            sessionHasMore={sessionHasMore}
+            sessionLoading={sessionLoading}
+            sessionError={sessionError}
+            onStartNewSession={startNewTeacherSession}
+            onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
+            onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
+            onHistoryQueryChange={setHistoryQuery}
+            onToggleSessionMenu={toggleSessionMenu}
+            onRenameSession={renameSession}
+            onToggleSessionArchive={toggleSessionArchive}
+            onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
+            getSessionTitle={getSessionTitle}
+            formatSessionUpdatedLabel={formatSessionUpdatedLabel}
+          />
+        )}
 
         <div className="min-w-0 min-h-0 flex overflow-hidden">
           <Group
@@ -828,6 +857,44 @@ export default function App() {
           </Group>
         </div>
       </div>
+
+      <BottomSheet
+        open={teacherUseMobileShellV2 && mobileTab === 'sessions'}
+        onClose={() => {
+          setMobileTab('chat')
+          setSessionSidebarOpen(false)
+        }}
+        title="历史会话"
+      >
+        <SessionSidebar
+          mobilePresentation="sheet"
+          open
+          historyQuery={historyQuery}
+          historyLoading={historyLoading}
+          historyError={historyError}
+          showArchivedSessions={showArchivedSessions}
+          visibleHistoryCount={visibleHistorySessions.length}
+          groupedHistorySessions={groupedHistorySessions}
+          activeSessionId={activeSessionId}
+          openSessionMenuId={openSessionMenuId}
+          deletedSessionIds={deletedSessionIds}
+          historyHasMore={historyHasMore}
+          sessionHasMore={sessionHasMore}
+          sessionLoading={sessionLoading}
+          sessionError={sessionError}
+          onStartNewSession={startNewTeacherSession}
+          onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
+          onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
+          onHistoryQueryChange={setHistoryQuery}
+          onSelectSession={handleSelectSessionFromSheet}
+          onToggleSessionMenu={toggleSessionMenu}
+          onRenameSession={renameSession}
+          onToggleSessionArchive={toggleSessionArchive}
+          onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
+          getSessionTitle={getSessionTitle}
+          formatSessionUpdatedLabel={formatSessionUpdatedLabel}
+        />
+      </BottomSheet>
 
       <BottomSheet
         open={teacherUseMobileShellV2 && mobileTab === 'workbench'}
