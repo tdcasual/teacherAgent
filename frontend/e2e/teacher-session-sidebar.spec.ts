@@ -180,6 +180,39 @@ test('mobile session menu supports keyboard navigation and escape focus return',
   await expect(trigger).toBeFocused()
 })
 
+test('mobile shell v2 starts in chat without auto-opening sheets', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  const activeLabel = page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')
+  await expect(activeLabel).toBeVisible()
+  await expect(activeLabel).toHaveText('聊天')
+  await expect(page.locator('.mobile-sheet-layer')).toHaveCount(0)
+})
+
+test('mobile shell v2 closing workbench sheet returns to chat without chaining session sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherMobileShellV2: '1',
+    },
+  })
+
+  await page.locator('.mobile-tabbar-button', { hasText: '工作台' }).click()
+  await expect(page.locator('.mobile-sheet-title')).toHaveText('工作台')
+  await page.locator('.mobile-sheet-close').click()
+
+  const activeLabel = page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')
+  await expect(activeLabel).toHaveText('聊天')
+  await expect(page.locator('.mobile-sheet-layer')).toHaveCount(0)
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('dialog', { name: '历史会话' })).toHaveCount(0)
+})
+
 test('new session is created with session_* id and becomes active', async ({ page }) => {
   await openTeacherApp(page, {
     stateOverrides: {
