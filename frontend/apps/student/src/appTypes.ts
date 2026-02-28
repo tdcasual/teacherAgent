@@ -56,7 +56,7 @@ export type StudentHistorySessionsResponse = {
   total?: number
 }
 
-export type StudentHistoryMessage = {
+type StudentHistoryMessage = {
   ts?: string
   role?: string
   content?: string
@@ -71,7 +71,7 @@ export type StudentHistorySessionResponse = {
   next_cursor: number
 }
 
-export type AssignmentQuestion = {
+type AssignmentQuestion = {
   question_id?: string
   kp_id?: string
   difficulty?: string
@@ -93,7 +93,7 @@ export type VerifiedStudent = {
   class_name?: string
 }
 
-export type StudentVerifyCandidate = {
+type StudentVerifyCandidate = {
   candidate_id: string
   student: VerifiedStudent
   password_set?: boolean

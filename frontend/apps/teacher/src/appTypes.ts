@@ -75,7 +75,7 @@ export type TeacherHistorySessionsResponse = {
   total?: number
 }
 
-export type TeacherHistoryMessage = {
+type TeacherHistoryMessage = {
   ts?: string
   role?: string
   content?: string
@@ -216,7 +216,7 @@ export type UploadDraft = {
   draft_saved?: boolean
 }
 
-export type UploadDraftRequirements = {
+type UploadDraftRequirements = {
   subject?: string
   topic?: string
   grade_level?: string
@@ -287,7 +287,7 @@ export type ExamScoreSchemaSubjectCandidateSummary = {
   quality_score?: number
 }
 
-export type ExamScoreSchemaSubject = {
+type ExamScoreSchemaSubject = {
   target?: string
   question_id?: string
   selected_candidate_id?: string
@@ -306,7 +306,7 @@ export type ExamScoreSchemaSubject = {
   thresholds?: { coverage?: number; confidence?: number }
 }
 
-export type ExamScoreSchema = {
+type ExamScoreSchema = {
   mode?: string
   confidence?: number
   needs_confirm?: boolean
@@ -316,27 +316,27 @@ export type ExamScoreSchema = {
   subject?: ExamScoreSchemaSubject
 }
 
-export type ExamCounts = {
+type ExamCounts = {
   students?: number
   responses?: number
   questions?: number
   [k: string]: unknown
 }
 
-export type ExamCountsScored = {
+type ExamCountsScored = {
   students?: number
   responses?: number
   [k: string]: unknown
 }
 
-export type ExamTotalsSummary = {
+type ExamTotalsSummary = {
   avg_total?: number
   median_total?: number
   max_total_observed?: number
   [k: string]: unknown
 }
 
-export type ExamScoringSummary = {
+type ExamScoringSummary = {
   status?: string
   responses_total?: number
   responses_scored?: number
@@ -346,13 +346,13 @@ export type ExamScoringSummary = {
   [k: string]: unknown
 }
 
-export type ExamDraftMeta = {
+type ExamDraftMeta = {
   date?: string
   class_name?: string
   [k: string]: unknown
 }
 
-export type ExamAnswerKeySummary = {
+type ExamAnswerKeySummary = {
   count?: number
   source?: string
   warnings?: string[]

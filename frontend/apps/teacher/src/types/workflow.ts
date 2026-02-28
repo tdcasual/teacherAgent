@@ -17,9 +17,9 @@ import type {
 // ── Primitive helpers ──────────────────────────────────────────────────
 
 export type UploadScope = 'public' | 'class' | 'student'
-export type UploadMode = 'assignment' | 'exam'
+type UploadMode = 'assignment' | 'exam'
 
-export type DifficultyOption = Readonly<{ value: string; label: string }>
+type DifficultyOption = Readonly<{ value: string; label: string }>
 
 export type AssignmentQuestion = {
   stem?: string
@@ -41,11 +41,11 @@ export type ExamQuestion = {
 
 // ── Formatter function signatures ──────────────────────────────────────
 
-export type FormatUploadJobSummary = (
+type FormatUploadJobSummary = (
   job: UploadJobStatus | null,
   fallbackId?: string,
 ) => string
-export type FormatExamJobSummary = (
+type FormatExamJobSummary = (
   job: ExamUploadJobStatus | null,
   fallbackId?: string,
 ) => string
@@ -53,22 +53,22 @@ export type FormatProgressSummary = (
   data: AssignmentProgress | null,
   assignmentId?: string,
 ) => string
-export type FormatDraftSummary = (
+type FormatDraftSummary = (
   draft: UploadDraft | null,
   jobInfo: UploadJobStatus | null,
 ) => string
-export type FormatExamDraftSummary = (
+type FormatExamDraftSummary = (
   draft: ExamUploadDraft | null,
   jobInfo: ExamUploadJobStatus | null,
 ) => string
-export type FormatMissingRequirements = (missing?: string[]) => string
-export type DifficultyLabel = (value: string | number | undefined) => string
-export type NormalizeDifficulty = (value: string | number | undefined) => string
+type FormatMissingRequirements = (missing?: string[]) => string
+type DifficultyLabel = (value: string | number | undefined) => string
+type NormalizeDifficulty = (value: string | number | undefined) => string
 
 // ── Utility function signatures ────────────────────────────────────────
 
-export type ParseList = (text: string) => string[]
-export type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void
+type ParseList = (text: string) => string[]
+type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void
 
 // ── Shared prop groups ─────────────────────────────────────────────────
 
