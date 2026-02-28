@@ -5,6 +5,7 @@ import ErrorBoundary from './ErrorBoundary'
 import { installAuthFetchInterceptor } from '../../shared/authFetch'
 import './tailwind.css'
 import '../../shared/dialog.css'
+import '../../shared/mobile/mobile.css'
 
 installAuthFetchInterceptor('studentAuthAccessToken')
 

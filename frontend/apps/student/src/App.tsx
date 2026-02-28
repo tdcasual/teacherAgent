@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls, renderStreamingPlainText } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
 import type { Message, RenderedMessage, StudentPersonaCard, StudentPersonaListResponse } from './appTypes'
@@ -14,18 +14,24 @@ import { useStudentSessionSidebarState } from './features/session/useStudentSess
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { readFeatureFlag } from '../../shared/featureFlags'
+import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
 import ChatPanel from './features/chat/ChatPanel'
 import SessionSidebar from './features/chat/SessionSidebar'
 import 'katex/dist/katex.min.css'
 
+const DESKTOP_BREAKPOINT = 900
+
 export default function App() {
   const { state, dispatch, refs, setActiveSession } = useStudentState()
   const appRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
+  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('chat')
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
   const { saveScrollHeight, restoreScrollPosition } = useScrollPositionLock(messagesRef)
+  const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
   const mobileShellV2Enabled = useMemo(() => {
     const source: Record<string, string | undefined> = {
       mobileShellV2: import.meta.env.VITE_MOBILE_SHELL_V2_STUDENT,
@@ -39,6 +45,23 @@ export default function App() {
       }
     }
     return readFeatureFlag('mobileShellV2', false, source)
+  }, [])
+  const studentUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
+  const mobileTabItems = useMemo<MobileTabItem[]>(
+    () => [
+      { id: 'chat', label: '聊天' },
+      { id: 'sessions', label: '会话' },
+      { id: 'learning', label: '学习' },
+    ],
+    [],
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => setViewportWidth(window.innerWidth)
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
   }, [])
 
   // ── Hooks ──
@@ -389,10 +412,37 @@ export default function App() {
     event.currentTarget.form?.requestSubmit()
   }, [state.verifiedStudent, state.sending, state.pendingChatJob?.job_id, state.input, hasSendableAttachments])
 
+  useEffect(() => {
+    if (!studentUseMobileShellV2) return
+    if (mobileTab === 'chat') {
+      if (state.sidebarOpen) dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+      return
+    }
+    if (!state.sidebarOpen) dispatch({ type: 'SET', field: 'sidebarOpen', value: true })
+    const shouldOpenVerifyPanel = mobileTab === 'learning'
+    if (state.verifyOpen !== shouldOpenVerifyPanel) {
+      dispatch({ type: 'SET', field: 'verifyOpen', value: shouldOpenVerifyPanel })
+    }
+  }, [studentUseMobileShellV2, mobileTab, state.sidebarOpen, state.verifyOpen, dispatch])
+
+  useEffect(() => {
+    if (!studentUseMobileShellV2) return
+    if (!state.sidebarOpen) {
+      if (mobileTab !== 'chat') setMobileTab('chat')
+      return
+    }
+    const nextTab = state.verifyOpen ? 'learning' : 'sessions'
+    if (mobileTab !== nextTab) setMobileTab(nextTab)
+  }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, mobileTab])
+
+  const handleMobileTabChange = useCallback((tabId: string) => {
+    if (tabId === 'chat' || tabId === 'sessions' || tabId === 'learning') setMobileTab(tabId)
+  }, [])
+
   // ── Render ──
   return (
     <div
-      className="app flex h-dvh flex-col bg-bg overflow-hidden"
+      className={`app flex h-dvh flex-col bg-bg overflow-hidden ${studentUseMobileShellV2 ? 'student-mobile-shell-v2' : ''}`.trim()}
       ref={appRef}
       data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
     >
@@ -495,6 +545,14 @@ export default function App() {
           />
         }
       />
+      {studentUseMobileShellV2 ? (
+        <MobileTabBar
+          items={mobileTabItems}
+          activeId={mobileTab}
+          onChange={handleMobileTabChange}
+          ariaLabel="学生端移动导航"
+        />
+      ) : null}
     </div>
   )
 }
