@@ -266,3 +266,18 @@
 - Root cause: copy/paste logging text drifted from actual exception context.
 - Fix status: `fixed`
 - Notes: replaced misleading messages with context-accurate logs (`*thread join failed`, `profile update async worker execution failed`) without changing control flow.
+
+### BUG-0017: pending job scanners logged JSON parse failures as directory creation errors
+
+- Discovered at: `2026-03-01T01:49:04Z`
+- Area: `services/api/assignment_upload_job_service.py`, `services/api/exam_upload_job_service.py`
+- Symptom: `scan_pending_*` parse exceptions emitted `directory creation failed`, obscuring the real issue (corrupt/invalid `job.json`).
+- Repro steps:
+  1. Inspect `scan_pending_upload_jobs` / `scan_pending_exam_jobs`.
+  2. Observe exception handlers around `json.loads(...)` using unrelated log message text.
+- Evidence:
+  - `assignment_upload_job_service.scan_pending_upload_jobs`: parse exception branch logged `directory creation failed`.
+  - `exam_upload_job_service.scan_pending_exam_jobs`: parse exception branch logged `directory creation failed`.
+- Root cause: stale copy/paste log template in JSON parse exception branches.
+- Fix status: `fixed`
+- Notes: updated logs to context-accurate parse failure messages with manifest path; no runtime behavior change.

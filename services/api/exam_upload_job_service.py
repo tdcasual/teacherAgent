@@ -81,7 +81,7 @@ def scan_pending_exam_jobs(deps: ExamUploadJobDeps) -> None:
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
         except Exception:
-            _log.debug("directory creation failed", exc_info=True)
+            _log.debug("failed to parse exam job manifest at %s", job_path, exc_info=True)
             continue
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
