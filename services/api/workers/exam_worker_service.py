@@ -118,8 +118,7 @@ def stop_exam_upload_worker(*, deps: ExamWorkerDeps, timeout_sec: float = 1.5) -
         try:
             thread.join(max(0.0, float(timeout_sec or 0.0)))
         except Exception:
-            _log.debug("numeric conversion failed", exc_info=True)
-            pass
+            _log.debug("exam upload worker thread join failed", exc_info=True)
         is_alive = False
         try:
             is_alive_method = getattr(thread, "is_alive", None)

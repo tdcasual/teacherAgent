@@ -251,3 +251,18 @@
 - Root cause: migration to the `services/api/workers/` lifecycle left obsolete startup code behind in legacy job service modules; duplicate paths were no longer exercised and risked future drift/reintroduction of stale behavior.
 - Fix status: `fixed`
 - Notes: removed unused legacy `start_*_worker()` and `*_worker_loop()` functions from both modules; retained tested job IO and step-level behavior functions.
+
+### BUG-0016: worker exception logs used misleading "numeric conversion failed" messages
+
+- Discovered at: `2026-03-01T01:36:43Z`
+- Area: `services/api/workers/upload_worker_service.py`, `services/api/workers/exam_worker_service.py`, `services/api/workers/profile_update_worker_service.py`
+- Symptom: non-conversion failures (thread join failures and profile update execution errors) were logged as `numeric conversion failed`, producing misleading diagnostics during incident triage.
+- Repro steps:
+  1. Inspect worker exception handlers with `rg -n "numeric conversion failed" services/api/workers`.
+  2. Observe messages in join/async execution failure paths unrelated to numeric parsing.
+- Evidence:
+  - `stop_upload_worker` / `stop_exam_upload_worker` join exception handlers logged `numeric conversion failed`.
+  - `profile_update_worker_loop` async update exception handler logged `numeric conversion failed`.
+- Root cause: copy/paste logging text drifted from actual exception context.
+- Fix status: `fixed`
+- Notes: replaced misleading messages with context-accurate logs (`*thread join failed`, `profile update async worker execution failed`) without changing control flow.

@@ -84,7 +84,7 @@ def profile_update_worker_loop(*, deps: ProfileUpdateWorkerDeps) -> None:
                     {"student_id": student_id, "duration_ms": int((deps.monotonic() - t0) * 1000)},
                 )
             except Exception as exc:
-                _log.debug("numeric conversion failed", exc_info=True)
+                _log.debug("profile update async worker execution failed", exc_info=True)
                 deps.diag_log("profile_update.async.failed", {"student_id": student_id, "error": str(exc)[:200]})
 
 
@@ -114,8 +114,7 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
         try:
             thread.join(max(0.0, float(timeout_sec or 0.0)))
         except Exception:
-            _log.debug("numeric conversion failed", exc_info=True)
-            pass
+            _log.debug("profile update worker thread join failed", exc_info=True)
         is_alive = False
         try:
             is_alive_method = getattr(thread, "is_alive", None)
