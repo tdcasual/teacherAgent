@@ -113,24 +113,3 @@ def upload_job_worker_step(deps: AssignmentUploadJobDeps) -> bool:
             deps=deps,
         )
     return True
-
-
-def upload_job_worker_loop(deps: AssignmentUploadJobDeps) -> None:
-    while True:
-        deps.event.wait()
-        upload_job_worker_step(deps)
-
-
-def start_upload_worker(
-    deps: AssignmentUploadJobDeps,
-    *,
-    is_worker_started: Callable[[], bool],
-    set_worker_started: Callable[[bool], None],
-    thread_factory: Callable[..., Any],
-) -> None:
-    if is_worker_started():
-        return
-    scan_pending_upload_jobs(deps)
-    thread = thread_factory(target=lambda: upload_job_worker_loop(deps), daemon=True)
-    thread.start()
-    set_worker_started(True)

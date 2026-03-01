@@ -236,3 +236,18 @@
 - Root cause: each `start_*_worker()` guarded only on boolean `worker_started_get()` and never verified `worker_thread_get().is_alive()`, so stale state blocked restart indefinitely.
 - Fix status: `fixed`
 - Notes: start helpers now detect stale/non-alive tracked threads, clear stale handle/state, and then proceed to start a new worker thread.
+
+### BUG-0015: legacy upload/exam worker startup paths diverged from active lifecycle safeguards
+
+- Discovered at: `2026-03-01T01:27:25Z`
+- Area: `services/api/assignment_upload_job_service.py`, `services/api/exam_upload_job_service.py`
+- Symptom: repository still contained legacy `start_*_worker()` + `*_worker_loop()` helpers that were not referenced by runtime wiring, but kept alternate thread startup semantics without the newer lifecycle safeguards used by `services/api/workers/*`.
+- Repro steps:
+  1. Run `rg -n "def start_upload_worker\\(|def start_exam_upload_worker\\(" services/api`.
+  2. Run `rg -n "assignment_upload_job_service|exam_upload_job_service" services tests` and confirm only service-local tests referenced those legacy modules.
+- Evidence:
+  - Static scan showed no runtime imports of legacy startup helpers.
+  - Existing runtime path uses `services/api/workers/upload_worker_service.py` and `services/api/workers/exam_worker_service.py`.
+- Root cause: migration to the `services/api/workers/` lifecycle left obsolete startup code behind in legacy job service modules; duplicate paths were no longer exercised and risked future drift/reintroduction of stale behavior.
+- Fix status: `fixed`
+- Notes: removed unused legacy `start_*_worker()` and `*_worker_loop()` functions from both modules; retained tested job IO and step-level behavior functions.

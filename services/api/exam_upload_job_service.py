@@ -113,24 +113,3 @@ def exam_job_worker_step(deps: ExamUploadJobDeps) -> bool:
             deps=deps,
         )
     return True
-
-
-def exam_job_worker_loop(deps: ExamUploadJobDeps) -> None:
-    while True:
-        deps.event.wait()
-        exam_job_worker_step(deps)
-
-
-def start_exam_upload_worker(
-    deps: ExamUploadJobDeps,
-    *,
-    is_worker_started: Callable[[], bool],
-    set_worker_started: Callable[[bool], None],
-    thread_factory: Callable[..., Any],
-) -> None:
-    if is_worker_started():
-        return
-    scan_pending_exam_jobs(deps)
-    thread = thread_factory(target=lambda: exam_job_worker_loop(deps), daemon=True)
-    thread.start()
-    set_worker_started(True)
