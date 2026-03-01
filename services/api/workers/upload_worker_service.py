@@ -28,6 +28,17 @@ class UploadWorkerDeps:
     rq_enabled: Callable[[], bool]
 
 
+def _thread_is_alive(thread: Any) -> bool:
+    if thread is None:
+        return False
+    try:
+        is_alive_method = getattr(thread, "is_alive", None)
+        return bool(is_alive_method()) if callable(is_alive_method) else False
+    except Exception:
+        _log.debug("operation failed", exc_info=True)
+        return False
+
+
 def enqueue_upload_job_inline(job_id: str, *, deps: UploadWorkerDeps) -> None:
     with deps.job_lock:
         if job_id not in deps.job_queue:
@@ -84,7 +95,10 @@ def start_upload_worker(*, deps: UploadWorkerDeps) -> None:
     if deps.rq_enabled():
         return
     if deps.worker_started_get():
-        return
+        if _thread_is_alive(deps.worker_thread_get()):
+            return
+        deps.worker_thread_set(None)
+        deps.worker_started_set(False)
     deps.stop_event.clear()
     scan_pending_upload_jobs_inline(deps=deps)
     thread = deps.thread_factory(target=lambda: upload_job_worker_loop(deps=deps), daemon=True, name="upload-worker")

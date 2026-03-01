@@ -22,6 +22,22 @@ class _AliveThread:
         return self._alive
 
 
+class _StartableThread:
+    def __init__(self, *, target=None, daemon=None, name=None):
+        self.target = target
+        self.daemon = daemon
+        self.name = name
+        self.started = False
+        self._alive = False
+
+    def start(self):
+        self.started = True
+        self._alive = True
+
+    def is_alive(self):
+        return self._alive
+
+
 def test_upload_inline_enqueue_sets_event(tmp_path):
     queue = deque()
     lock = threading.Lock()
@@ -153,3 +169,126 @@ def test_stop_profile_update_worker_keeps_started_when_thread_still_alive():
     assert event.is_set() is True
     assert started["value"] is True
     assert holder["thread"] is worker_thread
+
+
+def test_start_upload_worker_recovers_from_stale_started_flag(tmp_path):
+    queue = deque()
+    lock = threading.Lock()
+    event = threading.Event()
+    stop_event = threading.Event()
+    started = {"value": True}
+    stale_thread = _AliveThread(alive=False)
+    holder = {"thread": stale_thread}
+    created_threads = []
+
+    def _factory(*_args, **kwargs):
+        thread = _StartableThread(**kwargs)
+        created_threads.append(thread)
+        return thread
+
+    deps = upload_worker_service.UploadWorkerDeps(
+        job_queue=queue,
+        job_lock=lock,
+        job_event=event,
+        job_dir=tmp_path,
+        stop_event=stop_event,
+        worker_started_get=lambda: started["value"],
+        worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+        worker_thread_get=lambda: holder["thread"],
+        worker_thread_set=lambda value: holder.__setitem__("thread", value),
+        process_job=lambda _job_id: None,
+        write_job=lambda _job_id, _updates: {},
+        diag_log=lambda *_: None,
+        sleep=lambda _: None,
+        thread_factory=_factory,
+        rq_enabled=lambda: False,
+    )
+
+    upload_worker_service.start_upload_worker(deps=deps)
+
+    assert started["value"] is True
+    assert len(created_threads) == 1
+    assert created_threads[0].started is True
+    assert holder["thread"] is created_threads[0]
+
+
+def test_start_exam_worker_recovers_from_stale_started_flag(tmp_path):
+    queue = deque()
+    lock = threading.Lock()
+    event = threading.Event()
+    stop_event = threading.Event()
+    started = {"value": True}
+    stale_thread = _AliveThread(alive=False)
+    holder = {"thread": stale_thread}
+    created_threads = []
+
+    def _factory(*_args, **kwargs):
+        thread = _StartableThread(**kwargs)
+        created_threads.append(thread)
+        return thread
+
+    deps = exam_worker_service.ExamWorkerDeps(
+        job_queue=queue,
+        job_lock=lock,
+        job_event=event,
+        job_dir=tmp_path,
+        stop_event=stop_event,
+        worker_started_get=lambda: started["value"],
+        worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+        worker_thread_get=lambda: holder["thread"],
+        worker_thread_set=lambda value: holder.__setitem__("thread", value),
+        process_job=lambda _job_id: None,
+        write_job=lambda _job_id, _updates: {},
+        diag_log=lambda *_: None,
+        sleep=lambda _: None,
+        thread_factory=_factory,
+        rq_enabled=lambda: False,
+    )
+
+    exam_worker_service.start_exam_upload_worker(deps=deps)
+
+    assert started["value"] is True
+    assert len(created_threads) == 1
+    assert created_threads[0].started is True
+    assert holder["thread"] is created_threads[0]
+
+
+def test_start_profile_update_worker_recovers_from_stale_started_flag():
+    queue = deque()
+    lock = threading.Lock()
+    event = threading.Event()
+    stop_event = threading.Event()
+    started = {"value": True}
+    stale_thread = _AliveThread(alive=False)
+    holder = {"thread": stale_thread}
+    created_threads = []
+
+    def _factory(*_args, **kwargs):
+        thread = _StartableThread(**kwargs)
+        created_threads.append(thread)
+        return thread
+
+    deps = profile_update_worker_service.ProfileUpdateWorkerDeps(
+        update_queue=queue,
+        update_lock=lock,
+        update_event=event,
+        stop_event=stop_event,
+        worker_started_get=lambda: started["value"],
+        worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+        worker_thread_get=lambda: holder["thread"],
+        worker_thread_set=lambda value: holder.__setitem__("thread", value),
+        queue_max=32,
+        student_profile_update=lambda _payload: {},
+        diag_log=lambda *_: None,
+        sleep=lambda _: None,
+        thread_factory=_factory,
+        rq_enabled=lambda: False,
+        monotonic=lambda: 0.0,
+    )
+
+    profile_update_worker_service.start_profile_update_worker(deps=deps)
+
+    assert started["value"] is True
+    assert len(created_threads) == 1
+    assert created_threads[0].started is True
+    assert holder["thread"] is created_threads[0]

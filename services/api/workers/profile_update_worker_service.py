@@ -27,6 +27,17 @@ class ProfileUpdateWorkerDeps:
     monotonic: Callable[[], float]
 
 
+def _thread_is_alive(thread: Any) -> bool:
+    if thread is None:
+        return False
+    try:
+        is_alive_method = getattr(thread, "is_alive", None)
+        return bool(is_alive_method()) if callable(is_alive_method) else False
+    except Exception:
+        _log.debug("operation failed", exc_info=True)
+        return False
+
+
 def enqueue_profile_update_inline(payload: Dict[str, Any], *, deps: ProfileUpdateWorkerDeps) -> None:
     with deps.update_lock:
         if len(deps.update_queue) >= int(deps.queue_max or 0):
@@ -81,7 +92,10 @@ def start_profile_update_worker(*, deps: ProfileUpdateWorkerDeps) -> None:
     if deps.rq_enabled():
         return
     if deps.worker_started_get():
-        return
+        if _thread_is_alive(deps.worker_thread_get()):
+            return
+        deps.worker_thread_set(None)
+        deps.worker_started_set(False)
     deps.stop_event.clear()
     thread = deps.thread_factory(target=lambda: profile_update_worker_loop(deps=deps), daemon=True, name="profile-update-worker")
     thread.start()

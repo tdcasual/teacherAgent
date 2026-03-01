@@ -218,3 +218,21 @@
 - Root cause: worker threads were started without binding `CURRENT_CORE`, so dependency lookups inside worker execution fell back to default core on every call.
 - Fix status: `fixed`
 - Notes: `_chat_worker_deps()` now wraps thread targets to set/reset `CURRENT_CORE` for worker thread execution context.
+
+### BUG-0014: inline worker start paths could not recover from stale started flags
+
+- Discovered at: `2026-03-01T00:40:09Z`
+- Area: `services/api/workers/upload_worker_service.py`, `services/api/workers/exam_worker_service.py`, `services/api/workers/profile_update_worker_service.py`
+- Symptom: when `worker_started=True` but tracked worker thread is already dead, `start_*_worker()` returned early and refused to restart worker threads.
+- Repro steps:
+  1. Run `python3 -m pytest -q tests/test_inline_worker_services.py -k stale_started_flag`.
+  2. Observe all three stale-start recovery tests fail because no replacement thread is created.
+- Evidence:
+  - Before fix: `python3 -m pytest -q tests/test_inline_worker_services.py -k stale_started_flag` -> `3 failed`.
+  - Added regression tests:
+    - `test_start_upload_worker_recovers_from_stale_started_flag`
+    - `test_start_exam_worker_recovers_from_stale_started_flag`
+    - `test_start_profile_update_worker_recovers_from_stale_started_flag`
+- Root cause: each `start_*_worker()` guarded only on boolean `worker_started_get()` and never verified `worker_thread_get().is_alive()`, so stale state blocked restart indefinitely.
+- Fix status: `fixed`
+- Notes: start helpers now detect stale/non-alive tracked threads, clear stale handle/state, and then proceed to start a new worker thread.
