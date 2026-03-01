@@ -17,6 +17,21 @@ CHAT_PENDING_RESCAN_INTERVAL_SEC = 15.0
 def _noop_append_chat_event(_job_id: str, _event_type: str, _payload: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
+
+def _thread_is_alive(thread: Any) -> bool:
+    try:
+        is_alive_method = getattr(thread, "is_alive", None)
+        return bool(is_alive_method()) if callable(is_alive_method) else False
+    except Exception:
+        _log.warning("operation failed", exc_info=True)
+        return False
+
+
+def _prune_dead_chat_worker_threads(threads: List[Any]) -> List[Any]:
+    alive_threads = [thread for thread in list(threads) if _thread_is_alive(thread)]
+    threads[:] = alive_threads
+    return alive_threads
+
 @dataclass(frozen=True)
 class ChatWorkerDeps:
     chat_job_dir: Path
@@ -143,7 +158,14 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
 
 def start_chat_worker(*, deps: ChatWorkerDeps) -> None:
     if deps.worker_started_get():
-        return
+        # Preserve explicit "started" overrides (used by tests and controlled runtimes)
+        # when no worker thread is being tracked.
+        if not deps.chat_worker_threads:
+            return
+        alive_threads = _prune_dead_chat_worker_threads(deps.chat_worker_threads)
+        if alive_threads:
+            return
+        deps.worker_started_set(False)
     deps.stop_event.clear()
     scan_pending_chat_jobs(deps=deps)
     for idx in range(max(1, int(deps.chat_worker_pool_size or 1))):
@@ -182,16 +204,5 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
         except Exception:
             _log.warning("operation failed", exc_info=True)
             pass
-    alive_threads: List[Any] = []
-    for thread in list(deps.chat_worker_threads):
-        is_alive = False
-        try:
-            is_alive_method = getattr(thread, "is_alive", None)
-            is_alive = bool(is_alive_method()) if callable(is_alive_method) else False
-        except Exception:
-            _log.warning("operation failed", exc_info=True)
-            is_alive = False
-        if is_alive:
-            alive_threads.append(thread)
-    deps.chat_worker_threads[:] = alive_threads
+    alive_threads = _prune_dead_chat_worker_threads(deps.chat_worker_threads)
     deps.worker_started_set(bool(alive_threads))

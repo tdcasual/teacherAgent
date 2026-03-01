@@ -159,6 +159,82 @@ class ChatWorkerServiceTest(unittest.TestCase):
         assert len(chat_worker_threads) == 1
         assert event.set_calls == 1
 
+    def test_start_chat_worker_recovers_from_stale_started_flag(self):
+        with TemporaryDirectory() as td:
+            started = {"value": True}
+            stale_thread = _JoinAwareThread(alive=False)
+            threads = [stale_thread]
+            event = _FakeEvent()
+
+            deps = ChatWorkerDeps(
+                chat_job_dir=Path(td) / "jobs",
+                chat_job_lock=threading.Lock(),
+                chat_job_event=event,
+                chat_worker_threads=threads,
+                chat_worker_pool_size=1,
+                worker_started_get=lambda: started["value"],
+                worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+                load_chat_job=lambda job_id: {"job_id": job_id},
+                write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+                resolve_chat_lane_id_from_job=lambda job: "lane:1",
+                chat_enqueue_locked=lambda job_id, lane_id: 1,
+                chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+                chat_pick_next_locked=lambda: ("", ""),
+                chat_mark_done_locked=lambda job_id, lane_id: None,
+                chat_has_pending_locked=lambda: False,
+                process_chat_job=lambda job_id: None,
+                diag_log=lambda *_args, **_kwargs: None,
+                sleep=lambda _seconds: None,
+                thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            )
+
+            start_chat_worker(deps=deps)
+
+            assert started["value"] is True
+            assert len(threads) == 1
+            assert isinstance(threads[0], _FakeThread)
+            assert threads[0].started is True
+
+    def test_start_chat_worker_respects_started_override_without_tracked_threads(self):
+        with TemporaryDirectory() as td:
+            started = {"value": True}
+            threads = []
+            created_threads = []
+            event = _FakeEvent()
+
+            def _factory(*args, **kwargs):
+                thread = _FakeThread(*args, **kwargs)
+                created_threads.append(thread)
+                return thread
+
+            deps = ChatWorkerDeps(
+                chat_job_dir=Path(td) / "jobs",
+                chat_job_lock=threading.Lock(),
+                chat_job_event=event,
+                chat_worker_threads=threads,
+                chat_worker_pool_size=1,
+                worker_started_get=lambda: started["value"],
+                worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+                load_chat_job=lambda job_id: {"job_id": job_id},
+                write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+                resolve_chat_lane_id_from_job=lambda job: "lane:1",
+                chat_enqueue_locked=lambda job_id, lane_id: 1,
+                chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+                chat_pick_next_locked=lambda: ("", ""),
+                chat_mark_done_locked=lambda job_id, lane_id: None,
+                chat_has_pending_locked=lambda: False,
+                process_chat_job=lambda job_id: None,
+                diag_log=lambda *_args, **_kwargs: None,
+                sleep=lambda _seconds: None,
+                thread_factory=_factory,
+            )
+
+            start_chat_worker(deps=deps)
+
+            assert started["value"] is True
+            assert created_threads == []
+            assert threads == []
+
 
 if __name__ == "__main__":
     unittest.main()

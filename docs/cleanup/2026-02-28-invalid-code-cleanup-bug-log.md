@@ -188,3 +188,33 @@
 - Root cause: stop helpers assumed `join(timeout)` means termination and forced stopped state without `is_alive()` check.
 - Fix status: `fixed`
 - Notes: stop helpers now preserve thread handle and started flag while thread remains alive; once not alive they clear handle and mark stopped.
+
+### BUG-0012: chat worker stale-start recovery conflicted with explicit started override
+
+- Discovered at: `2026-03-01T08:27:54Z`
+- Area: `services/api/workers/chat_worker_service.py`
+- Symptom: after adding stale-start recovery, `start_chat_worker()` restarted workers when `worker_started=True` but no tracked threads, breaking tests and controlled runtimes that intentionally use this flag as "do not auto-start".
+- Repro steps:
+  1. Set `CHAT_JOB_WORKER_STARTED=True` and avoid real worker startup in chat-flow tests.
+  2. Run `python3 -m pytest -q tests/test_chat_job_flow.py tests/test_student_history_flow.py`.
+- Evidence:
+  - Regression run produced multiple failures with job status stuck at `processing` because background workers restarted and raced manual `process_chat_job`.
+  - Added unit guard `test_start_chat_worker_respects_started_override_without_tracked_threads`.
+- Root cause: stale recovery path treated `started=True && threads=[]` as broken state, but in this codebase it can be an explicit runtime/test override.
+- Fix status: `fixed`
+- Notes: stale recovery now runs only when started flag is true and there are tracked threads; if no threads are tracked, `start_chat_worker()` preserves override semantics.
+
+### BUG-0013: chat worker threads lacked `CURRENT_CORE` context propagation
+
+- Discovered at: `2026-03-01T08:31:19Z`
+- Area: `services/api/wiring/chat_wiring.py`
+- Symptom: worker threads repeatedly logged `CURRENT_CORE not set, falling back to default tenant module`; this created heavy noise and teardown-time logging errors in long pytest runs.
+- Repro steps:
+  1. Run `python3 -m pytest -q` with chat worker activity.
+  2. Observe repeated fallback warnings emitted from worker thread stack paths.
+- Evidence:
+  - Full-suite output showed repeated warning call stacks originating from `chat_job_worker_loop` through `services/api/wiring/__init__.py:get_app_core`.
+  - New regression test `tests/test_chat_wiring_context.py::test_chat_worker_thread_factory_sets_current_core`.
+- Root cause: worker threads were started without binding `CURRENT_CORE`, so dependency lookups inside worker execution fell back to default core on every call.
+- Fix status: `fixed`
+- Notes: `_chat_worker_deps()` now wraps thread targets to set/reset `CURRENT_CORE` for worker thread execution context.

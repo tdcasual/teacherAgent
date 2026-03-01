@@ -115,6 +115,7 @@ from ..teacher_provider_registry_service import (
 from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
+from . import CURRENT_CORE as _CURRENT_CORE
 from . import get_app_core as _app_core
 from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registry_deps
 from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
@@ -297,6 +298,22 @@ def _chat_event_stream_deps() -> ChatEventStreamDeps:
 
 def _chat_worker_deps():
     _ac = _app_core()
+
+    def _thread_factory(*args, **kwargs):
+        import threading
+
+        target = kwargs.get("target")
+        if callable(target):
+            def _target_with_core(*inner_args, **inner_kwargs):
+                token = _CURRENT_CORE.set(_ac)
+                try:
+                    return target(*inner_args, **inner_kwargs)
+                finally:
+                    _CURRENT_CORE.reset(token)
+
+            kwargs["target"] = _target_with_core
+        return threading.Thread(*args, **kwargs)
+
     return ChatWorkerDeps(
         chat_job_dir=_ac.CHAT_JOB_DIR,
         chat_job_lock=_ac.CHAT_JOB_LOCK,
@@ -317,7 +334,7 @@ def _chat_worker_deps():
         process_chat_job=_ac.process_chat_job,
         diag_log=_ac.diag_log,
         sleep=time.sleep,
-        thread_factory=lambda *args, **kwargs: __import__("threading").Thread(*args, **kwargs),
+        thread_factory=_thread_factory,
     )
 
 
