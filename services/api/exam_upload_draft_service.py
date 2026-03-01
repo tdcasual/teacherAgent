@@ -78,7 +78,6 @@ def build_exam_upload_draft(
     questions = parsed.get("questions") or []
     score_schema = parsed.get("score_schema") or {}
     warnings = parsed.get("warnings") or []
-    score_schema = parsed.get("score_schema") or {}
     needs_confirm = bool(parsed.get("needs_confirm"))
     answer_key = parsed.get("answer_key") or {}
     scoring = parsed.get("scoring") or {}

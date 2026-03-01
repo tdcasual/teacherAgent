@@ -75,10 +75,11 @@ def exam_upload_draft(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, Any]
 
     parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
     override = deps.load_exam_draft_override(job_dir)
+    answer_text_path = job_dir / "answer_text.txt"
     try:
-        answer_text_excerpt = deps.read_text_safe(job_dir / "answer_text.txt", 6000)
+        answer_text_excerpt = deps.read_text_safe(answer_text_path, 6000)
     except Exception:
-        _log.debug("JSON parse failed", exc_info=True)
+        _log.debug("failed to read answer_text excerpt at %s", answer_text_path, exc_info=True)
         answer_text_excerpt = ""
     draft = deps.build_exam_upload_draft(
         job_id,
@@ -179,7 +180,7 @@ def exam_upload_confirm(job_id: str, *, deps: ExamUploadApiDeps) -> Dict[str, An
     try:
         return deps.confirm_exam_upload(job_id, job, job_dir)
     except Exception as exc:
-        _log.debug("operation failed", exc_info=True)
+        _log.debug("exam upload confirm failed for job_id=%s", job_id, exc_info=True)
         status_code = getattr(exc, "status_code", None)
         if status_code is not None:
             raise ExamUploadApiError(status_code=status_code, detail=getattr(exc, "detail", str(exc))) from exc

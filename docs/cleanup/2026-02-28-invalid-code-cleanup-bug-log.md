@@ -281,3 +281,18 @@
 - Root cause: stale copy/paste log template in JSON parse exception branches.
 - Fix status: `fixed`
 - Notes: updated logs to context-accurate parse failure messages with manifest path; no runtime behavior change.
+
+### BUG-0018: exam draft excerpt read failures were mislabeled as JSON parse errors
+
+- Discovered at: `2026-03-01T01:54:40Z`
+- Area: `services/api/exam_upload_api_service.py`
+- Symptom: when reading `answer_text.txt` failed, debug log emitted `JSON parse failed`, which misdirected debugging and hid file-read context.
+- Repro steps:
+  1. Run `python3 -m pytest -q tests/test_exam_upload_api_service.py -k read_text_failure_logs_context_and_falls_back`.
+  2. Observe the assertion failure that log output does not contain an answer-text read context message.
+- Evidence:
+  - Failing regression before fix: `tests/test_exam_upload_api_service.py::ExamUploadApiServiceTest::test_draft_read_text_failure_logs_context_and_falls_back` (`AssertionError` on missing context log text).
+  - Code inspection showed exception branch around `read_text_safe(job_dir / "answer_text.txt", 6000)` logging `JSON parse failed`.
+- Root cause: stale copy/paste log text from JSON decode paths reused in an unrelated file-read exception handler, plus missing `job_id` context in confirm failure logs.
+- Fix status: `fixed`
+- Notes: updated draft-read failure log to include `answer_text.txt` path and updated confirm exception log to include `job_id`; also removed one duplicate `score_schema` assignment in `services/api/exam_upload_draft_service.py` as no-op dead code cleanup.

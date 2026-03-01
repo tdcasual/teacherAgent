@@ -328,6 +328,48 @@ class ExamUploadApiServiceTest(unittest.TestCase):
             self.assertEqual(calls.get("job_id"), "job-4")
             self.assertEqual(calls.get("excerpt"), "1 A")
 
+    def test_draft_read_text_failure_logs_context_and_falls_back(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            job_dir = root / "job-5"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(json.dumps({"exam_id": "EX5"}), encoding="utf-8")
+            calls = {}
+
+            def _build(job_id, job, parsed, override, *, parse_exam_answer_key_text, answer_text_excerpt):  # type: ignore[no-untyped-def]
+                calls["job_id"] = job_id
+                calls["parsed"] = parsed
+                calls["override"] = override
+                calls["excerpt"] = answer_text_excerpt
+                self.assertTrue(callable(parse_exam_answer_key_text))
+                return {"exam_id": parsed.get("exam_id"), "job_id": job_id}
+
+            def _read_text_safe(_path, limit=6000):  # type: ignore[no-untyped-def]
+                raise OSError("simulated read failure")
+
+            deps = ExamUploadApiDeps(
+                load_exam_job=lambda _job_id: {"status": "done"},
+                exam_job_path=lambda _job_id: job_dir,
+                load_exam_draft_override=lambda _job_dir: {"meta": {"class_name": "高二2403班"}},
+                save_exam_draft_override=lambda *_args, **_kwargs: {},
+                build_exam_upload_draft=_build,
+                exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+                parse_exam_answer_key_text=lambda _text: ([], []),
+                read_text_safe=_read_text_safe,
+                write_exam_job=lambda _job_id, _updates: None,
+                enqueue_exam_job=lambda _job_id: None,
+                confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+            )
+            with self.assertLogs("services.api.exam_upload_api_service", level="DEBUG") as logs:
+                result = exam_upload_draft("job-5", deps=deps)
+            self.assertTrue(result.get("ok"))
+            self.assertEqual((result.get("draft") or {}).get("exam_id"), "EX5")
+            self.assertEqual(calls.get("job_id"), "job-5")
+            self.assertEqual(calls.get("excerpt"), "")
+            self.assertTrue(
+                any("failed to read answer_text excerpt at" in msg and "answer_text.txt" in msg for msg in logs.output)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
