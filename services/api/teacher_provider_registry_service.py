@@ -173,8 +173,11 @@ def _is_private_host(hostname: str) -> bool:
     try:
         addr = ipaddress.ip_address(host)
         return bool(addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved or addr.is_multicast)
+    except ValueError:
+        # Non-IP hostnames (e.g. api.openai.com) are expected here.
+        return False
     except Exception:
-        _log.debug("operation failed", exc_info=True)
+        _log.debug("private-host check failed for host=%s", host, exc_info=True)
         return False
 
 

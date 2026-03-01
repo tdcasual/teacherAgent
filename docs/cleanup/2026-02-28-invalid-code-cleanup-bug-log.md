@@ -296,3 +296,18 @@
 - Root cause: stale copy/paste log text from JSON decode paths reused in an unrelated file-read exception handler, plus missing `job_id` context in confirm failure logs.
 - Fix status: `fixed`
 - Notes: updated draft-read failure log to include `answer_text.txt` path and updated confirm exception log to include `job_id`; also removed one duplicate `score_schema` assignment in `services/api/exam_upload_draft_service.py` as no-op dead code cleanup.
+
+### BUG-0019: public host checks emitted spurious exception stacks for normal domain names
+
+- Discovered at: `2026-03-01T01:58:47Z`
+- Area: `services/api/teacher_provider_registry_service.py`
+- Symptom: `_is_private_host("api.openai.com")` logged `operation failed` with traceback during normal domain checks, producing noisy/misleading diagnostics on every probe path.
+- Repro steps:
+  1. Run `python3 -m pytest -q tests/test_teacher_provider_registry_service.py -k is_private_host_domain_does_not_emit_parse_error_log`.
+  2. Observe failure showing captured `operation failed` debug record for a normal public hostname.
+- Evidence:
+  - Failing regression before fix: assertion in `test_is_private_host_domain_does_not_emit_parse_error_log` with captured message `operation failed`.
+  - Stack trace shows expected `ValueError` from `ipaddress.ip_address("api.openai.com")` being treated as unexpected error.
+- Root cause: `_is_private_host` used broad `except Exception` and logged all failures; `ValueError` is expected for non-IP hostnames and should not be logged as an operational error.
+- Fix status: `fixed`
+- Notes: split exception handling into `except ValueError: return False` (expected path) and context-rich logging for truly unexpected exceptions.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -7,6 +8,7 @@ from tempfile import TemporaryDirectory
 from services.api.teacher_provider_registry_service import (
     TeacherProviderRegistryDeps,
     _catalog,
+    _is_private_host,
     merged_model_registry,
     resolve_provider_target,
     teacher_provider_registry_create,
@@ -187,6 +189,27 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
         self.assertEqual((providers[0] or {}).get("provider"), "qwen")
         self.assertEqual((out.get("defaults") or {}).get("provider"), "")
         self.assertEqual(out.get("fallback_chain"), [])
+
+    def test_is_private_host_domain_does_not_emit_parse_error_log(self):
+        logger = logging.getLogger("services.api.teacher_provider_registry_service")
+        records: list[logging.LogRecord] = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = _Capture(level=logging.DEBUG)
+        original_level = logger.level
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+        try:
+            self.assertFalse(_is_private_host("api.openai.com"))
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(original_level)
+
+        messages = [record.getMessage() for record in records]
+        self.assertFalse(any("operation failed" in message for message in messages), messages)
 
 
 if __name__ == "__main__":
