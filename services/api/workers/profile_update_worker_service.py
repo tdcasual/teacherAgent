@@ -95,11 +95,21 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
     deps.stop_event.set()
     deps.update_event.set()
     thread = deps.worker_thread_get()
+    next_thread = thread
     if thread is not None:
         try:
             thread.join(max(0.0, float(timeout_sec or 0.0)))
         except Exception:
             _log.debug("numeric conversion failed", exc_info=True)
             pass
-    deps.worker_thread_set(None)
-    deps.worker_started_set(False)
+        is_alive = False
+        try:
+            is_alive_method = getattr(thread, "is_alive", None)
+            is_alive = bool(is_alive_method()) if callable(is_alive_method) else False
+        except Exception:
+            _log.debug("operation failed", exc_info=True)
+            is_alive = False
+        if not is_alive:
+            next_thread = None
+    deps.worker_thread_set(next_thread)
+    deps.worker_started_set(next_thread is not None)

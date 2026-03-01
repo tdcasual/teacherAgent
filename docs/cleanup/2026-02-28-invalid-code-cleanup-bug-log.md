@@ -173,3 +173,18 @@
 - Root cause: `stop_chat_worker()` joined threads with timeout but always cleared started flag without checking `thread.is_alive()`.
 - Fix status: `fixed`
 - Notes: stop path now inspects liveness, retains alive thread references, and sets `worker_started` from actual alive-thread state.
+
+### BUG-0011: inline worker stop paths had same stale-state race as chat worker
+
+- Discovered at: `2026-03-01T08:13:00Z`
+- Area: `services/api/workers/upload_worker_service.py`, `services/api/workers/exam_worker_service.py`, `services/api/workers/profile_update_worker_service.py`
+- Symptom: stop paths unconditionally cleared `worker_started` and thread handle even when `join(timeout)` returned while thread was still alive, reopening duplicate-start race for inline workers.
+- Repro steps:
+  1. Run `python3 -m pytest -q tests/test_inline_worker_services.py -k still_alive`.
+  2. Observe `started` flipped to `False` despite alive fake thread in all three stop helpers.
+- Evidence:
+  - Before fix: `3 failed` with assertion `assert started["value"] is True`.
+  - After fix: same selection passes (`3 passed`).
+- Root cause: stop helpers assumed `join(timeout)` means termination and forced stopped state without `is_alive()` check.
+- Fix status: `fixed`
+- Notes: stop helpers now preserve thread handle and started flag while thread remains alive; once not alive they clear handle and mark stopped.
