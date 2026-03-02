@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_app_registers_routes():
     import importlib
 
@@ -19,16 +22,14 @@ def test_rq_mode_disables_inprocess_workers(monkeypatch):
     assert app_mod._rq_enabled() is True
 
 
-def test_rq_fallback_to_inline_when_not_configured(monkeypatch):
-    """When RQ is not configured, the system should fall back to inline backend instead of crashing."""
+def test_runtime_start_requires_explicit_queue_mode_when_not_pytest(monkeypatch):
     monkeypatch.delenv("RQ_BACKEND_ENABLED", raising=False)
     monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     from services.api.runtime import bootstrap
 
-    # Should NOT raise — falls back to inline backend
-    bootstrap.start_runtime()
-    bootstrap.stop_runtime()
+    with pytest.raises(RuntimeError, match="RQ backend required"):
+        bootstrap.start_runtime()
 
 
 def test_lifespan_does_not_start_workers(monkeypatch):
@@ -59,3 +60,34 @@ def test_lifespan_does_not_start_workers(monkeypatch):
 
     asyncio.run(run())
     assert called["start"] == 0
+
+
+def test_bootstrap_runtime_prefers_sys_modules_app_when_package_attr_is_stale(monkeypatch):
+    import sys
+    import types
+
+    import services.api as api_pkg
+    from services.api.runtime import bootstrap
+
+    stale_app = types.ModuleType("services.api.app")
+    stale_app.TENANT_ID = "stale"  # type: ignore[attr-defined]
+    fresh_app = types.ModuleType("services.api._app_fresh")
+    fresh_app.TENANT_ID = "fresh"  # type: ignore[attr-defined]
+
+    calls = []
+
+    def _fake_start(*, deps):
+        calls.append(("start", deps.tenant_id))
+
+    def _fake_stop(*, deps):
+        calls.append(("stop", deps.tenant_id))
+
+    monkeypatch.setattr(bootstrap, "start_tenant_runtime", _fake_start)
+    monkeypatch.setattr(bootstrap, "stop_tenant_runtime", _fake_stop)
+    monkeypatch.setitem(sys.modules, "services.api.app", fresh_app)
+    monkeypatch.setattr(api_pkg, "app", stale_app, raising=False)
+
+    bootstrap.start_runtime()
+    bootstrap.stop_runtime()
+
+    assert calls == [("start", "fresh"), ("stop", "fresh")]

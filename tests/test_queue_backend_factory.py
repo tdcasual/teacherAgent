@@ -96,7 +96,7 @@ def test_get_app_queue_backend_caches_and_resets():
 def test_prod_mode_does_not_fallback_to_inline_backend(monkeypatch):
     reset_queue_backend()
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.delenv("ALLOW_INLINE_FALLBACK_IN_PROD", raising=False)
+    monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
 
     created = []
 
@@ -108,7 +108,7 @@ def test_prod_mode_does_not_fallback_to_inline_backend(monkeypatch):
     def failing_backend(**_kwargs):
         raise RuntimeError("rq unavailable")
 
-    with pytest.raises(RuntimeError, match="inline fallback disabled"):
+    with pytest.raises(RuntimeError, match="rq unavailable"):
         get_app_queue_backend(
             tenant_id="prod-tenant",
             is_pytest=False,
@@ -118,12 +118,14 @@ def test_prod_mode_does_not_fallback_to_inline_backend(monkeypatch):
     assert created == []
 
 
-def test_prod_mode_can_enable_inline_fallback_explicitly(monkeypatch):
+def test_non_pytest_inline_mode_bypasses_rq_backend(monkeypatch):
     reset_queue_backend()
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("ALLOW_INLINE_FALLBACK_IN_PROD", "1")
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("JOB_QUEUE_BACKEND", "inline")
 
+    calls = {"rq": 0}
     def failing_backend(**_kwargs):
+        calls["rq"] += 1
         raise RuntimeError("rq unavailable")
 
     backend = get_app_queue_backend(
@@ -134,3 +136,93 @@ def test_prod_mode_can_enable_inline_fallback_explicitly(monkeypatch):
     )
 
     assert backend.label == "inline"
+    assert calls["rq"] == 0
+
+
+def test_pytest_backend_cache_isolated_by_data_dir(monkeypatch):
+    reset_queue_backend()
+    created = []
+
+    def inline_factory():
+        backend = DummyBackend(f"inline-{len(created)}")
+        created.append(backend)
+        return backend
+
+    monkeypatch.setenv("DATA_DIR", "/tmp/case-a")
+    backend_a = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    monkeypatch.setenv("DATA_DIR", "/tmp/case-b")
+    backend_b = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    assert backend_a is not backend_b
+
+
+def test_pytest_backend_cache_keeps_same_instance_across_phase_suffix(monkeypatch):
+    reset_queue_backend()
+    created = []
+
+    def inline_factory():
+        backend = DummyBackend(f"inline-{len(created)}")
+        created.append(backend)
+        return backend
+
+    monkeypatch.setenv("DATA_DIR", "/tmp/case-phase")
+    monkeypatch.setenv("UPLOADS_DIR", "/tmp/case-phase/uploads")
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_case.py::test_sample (setup)")
+    backend_setup = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_case.py::test_sample (teardown)")
+    backend_teardown = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    assert backend_setup is backend_teardown
+
+
+def test_pytest_backend_cache_key_avoids_pipe_delimiter_collisions(monkeypatch):
+    reset_queue_backend()
+    created = []
+
+    def inline_factory():
+        backend = DummyBackend(f"inline-{len(created)}")
+        created.append(backend)
+        return backend
+
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "")
+    monkeypatch.setenv("DATA_DIR", "/tmp/scope-a|scope-b")
+    monkeypatch.delenv("UPLOADS_DIR", raising=False)
+    backend_pipe_in_data = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    monkeypatch.setenv("DATA_DIR", "/tmp/scope-a")
+    monkeypatch.setenv("UPLOADS_DIR", "scope-b")
+    backend_split_scopes = get_app_queue_backend(
+        tenant_id="t-same",
+        is_pytest=True,
+        inline_backend_factory=inline_factory,
+        get_backend=lambda **_kwargs: DummyBackend("rq"),
+    )
+
+    assert backend_pipe_in_data is not backend_split_scopes
