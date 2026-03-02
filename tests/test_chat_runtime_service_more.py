@@ -5,6 +5,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, List
 
+import pytest
+
 from services.api.chat_runtime_service import ChatRuntimeDeps, call_llm_runtime
 
 
@@ -363,3 +365,195 @@ def test_runtime_stream_forwards_token_sink_to_gateway(monkeypatch) -> None:
     assert out["choices"][0]["message"]["content"] == "AB"
     assert chunks == ["A", "B"]
     assert gateway.stream_calls and gateway.stream_calls[0]["stream"] is True
+
+
+def test_runtime_gateway_compat_fallback_preserves_type_error(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _LegacyGateway:
+        def __init__(self):
+            self.registry = {"default": {}}
+
+        def generate(self, req):  # type: ignore[no-untyped-def]
+            raise TypeError("legacy_generate_signature")
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _LegacyGateway()
+    deps, _, _, _ = _deps(
+        gateway,  # type: ignore[arg-type]
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    with pytest.raises(TypeError) as excinfo:
+        call_llm_runtime(
+            [{"role": "user", "content": "hello"}],
+            deps=deps,
+        )
+    assert "No active exception to reraise" not in str(excinfo.value)
+
+
+def test_runtime_gateway_internal_type_error_does_not_retry_compat_fallback(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _InternalTypeErrorGateway:
+        def __init__(self):
+            self.registry = {"default": {}}
+            self.calls = 0
+
+        def generate(  # type: ignore[no-untyped-def]
+            self,
+            req,
+            provider=None,
+            mode=None,
+            model=None,
+            allow_fallback=True,
+            target_override=None,
+            token_sink=None,
+        ):
+            self.calls += 1
+            raise TypeError("internal_type_error_sentinel")
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _InternalTypeErrorGateway()
+    deps, _, _, _ = _deps(
+        gateway,  # type: ignore[arg-type]
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    with pytest.raises(TypeError, match="internal_type_error_sentinel"):
+        call_llm_runtime(
+            [{"role": "user", "content": "hello"}],
+            deps=deps,
+        )
+    assert gateway.calls == 1
+
+
+def test_runtime_gateway_internal_type_error_signature_like_message_does_not_retry(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _SignatureLikeInternalTypeErrorGateway:
+        def __init__(self):
+            self.registry = {"default": {}}
+            self.calls = 0
+
+        def generate(  # type: ignore[no-untyped-def]
+            self,
+            req,
+            provider=None,
+            mode=None,
+            model=None,
+            allow_fallback=True,
+            target_override=None,
+            token_sink=None,
+        ):
+            self.calls += 1
+            raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _SignatureLikeInternalTypeErrorGateway()
+    deps, _, _, _ = _deps(
+        gateway,  # type: ignore[arg-type]
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        call_llm_runtime(
+            [{"role": "user", "content": "hello"}],
+            deps=deps,
+        )
+    assert gateway.calls == 1
+
+
+def test_runtime_gateway_uninspectable_signature_like_internal_type_error_does_not_retry(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _UninspectableGenerate:
+        def __init__(self):
+            self.calls = 0
+
+        @property
+        def __signature__(self):
+            raise ValueError("signature unavailable")
+
+        def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+    class _Gateway:
+        def __init__(self):
+            self.registry = {"default": {}}
+            self.generate = _UninspectableGenerate()
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _Gateway()
+    deps, _, _, _ = _deps(
+        gateway,  # type: ignore[arg-type]
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    with pytest.raises(TypeError, match="missing 1 required positional argument"):
+        call_llm_runtime(
+            [{"role": "user", "content": "hello"}],
+            deps=deps,
+        )
+    assert gateway.generate.calls == 1
+
+
+def test_runtime_gateway_strict_signature_rejects_missing_target_override_without_retry(monkeypatch) -> None:
+    decision = SimpleNamespace(reason="no_route", matched_rule_id=None, selected=False, candidates=[])
+    _install_routing_module(monkeypatch, errors=[], warnings=[], decision=decision)
+
+    class _CompatMismatchGateway:
+        def __init__(self):
+            self.registry = {"default": {}}
+            self.calls = 0
+
+        def generate(  # type: ignore[no-untyped-def]
+            self,
+            req,
+            provider=None,
+            mode=None,
+            model=None,
+            allow_fallback=True,
+        ):
+            self.calls += 1
+            raise TypeError("unexpected keyword argument")
+
+    logs: List[Any] = []
+    limiter_seen: List[Any] = []
+    gateway = _CompatMismatchGateway()
+    deps, _, _, _ = _deps(
+        gateway,  # type: ignore[arg-type]
+        logs,
+        limiter_seen,
+        resolve_teacher_model_registry=lambda _actor: {},
+        resolve_teacher_provider_target=lambda *_args: None,
+    )
+
+    with pytest.raises(TypeError, match="target_override|unexpected keyword argument"):
+        call_llm_runtime(
+            [{"role": "user", "content": "hello"}],
+            deps=deps,
+        )
+    # Call binding fails before entering gateway.generate; no compatibility retry occurs.
+    assert gateway.calls == 0

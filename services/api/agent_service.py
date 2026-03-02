@@ -124,7 +124,7 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
         return None
     text = content.strip()
     if text.startswith("```"):
-        text = re.sub(r"^```\w*\n|```$", "", text, flags=re.S).strip()
+        text = re.sub(r"^```\w*\r?\n|```$", "", text, flags=re.S).strip()
     data = parse_tool_json_safe(text)
     if data is None:
         match = re.search(r"\{.*\}", text, re.S)
@@ -373,16 +373,13 @@ def _dispatch_tool_safely(
     teacher_id: Optional[str],
 ) -> Dict[str, Any]:
     try:
-        try:
-            return deps.tool_dispatch(
-                name,
-                args_dict,
-                role_hint,
-                skill_id=skill_id,
-                teacher_id=teacher_id,
-            )
-        except TypeError:
-            return deps.tool_dispatch(name, args_dict, role_hint)
+        return deps.tool_dispatch(
+            name,
+            args_dict,
+            role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+        )
     except Exception as exc:
         _log.debug("operation failed", exc_info=True)
         return {"error": f"tool_dispatch failed: {exc}"}
@@ -615,10 +612,10 @@ def _run_tool_loop(
     for round_index in range(max_tool_rounds):
         round_stream_chunks: List[str] = []
 
-        def _round_token_sink(delta: str) -> None:
+        def _round_token_sink(delta: str, _round_stream_chunks: List[str] = round_stream_chunks) -> None:
             piece = str(delta or "")
             if piece:
-                round_stream_chunks.append(piece)
+                _round_stream_chunks.append(piece)
                 if callable(event_sink):
                     event_sink("assistant.delta", {"delta": piece})
 
@@ -791,13 +788,7 @@ def run_agent_runtime(
 
     tools: List[Dict[str, Any]] = []
     if role_hint == "teacher":
-        try:
-            tools = deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
-        except TypeError:
-            try:
-                tools = deps.teacher_tools_to_openai(allowed, skill_runtime)
-            except TypeError:
-                tools = deps.teacher_tools_to_openai(allowed)
+        tools = deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
     reply, tool_budget_exhausted = _run_tool_loop(
         deps=deps,
         convo=convo,

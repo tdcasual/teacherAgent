@@ -19,6 +19,13 @@ class AgentServiceTest(unittest.TestCase):
         self.assertEqual(parsed.get("tool"), "exam.get")
         self.assertEqual((parsed.get("arguments") or {}).get("exam_id"), "EX001")
 
+    def test_parse_tool_json_accepts_crlf_fenced_json(self):
+        content = '```json\r\n{"tool":"exam.get","arguments":{"exam_id":"EX001"}}\r\n```'
+        parsed = parse_tool_json(content)
+        self.assertIsInstance(parsed, dict)
+        self.assertEqual(parsed.get("tool"), "exam.get")
+        self.assertEqual((parsed.get("arguments") or {}).get("exam_id"), "EX001")
+
     def test_run_agent_runtime_returns_reply_without_tool_calls(self):
         llm_calls = []
 
@@ -40,8 +47,8 @@ class AgentServiceTest(unittest.TestCase):
             build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
-            tool_dispatch=lambda name, args, role: {"ok": True},
-            teacher_tools_to_openai=lambda allowed: [],
+            tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [],
         )
 
         result = run_agent_runtime(
@@ -90,8 +97,8 @@ class AgentServiceTest(unittest.TestCase):
             },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
-            tool_dispatch=lambda name, args, role: {"ok": True},
-            teacher_tools_to_openai=lambda allowed: [],
+            tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [],
         )
 
         result = run_agent_runtime(
@@ -135,8 +142,8 @@ class AgentServiceTest(unittest.TestCase):
             },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
-            tool_dispatch=lambda name, args, role: {"ok": True},
-            teacher_tools_to_openai=lambda allowed: [],
+            tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [],
         )
 
         result = run_agent_runtime(
@@ -178,8 +185,8 @@ class AgentServiceTest(unittest.TestCase):
             },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
-            tool_dispatch=lambda name, args, role: {"ok": True},
-            teacher_tools_to_openai=lambda allowed: [],
+            tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [],
         )
 
         result = run_agent_runtime(
@@ -227,8 +234,8 @@ class AgentServiceTest(unittest.TestCase):
             },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
-            tool_dispatch=lambda name, args, role: {"ok": True},
-            teacher_tools_to_openai=lambda allowed: [],
+            tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [],
         )
 
         result = run_agent_runtime(
@@ -265,8 +272,8 @@ class AgentServiceTest(unittest.TestCase):
             build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=call_llm,
-            tool_dispatch=tool_dispatch or (lambda name, args, role: {"ok": True}),
-            teacher_tools_to_openai=lambda allowed: [
+            tool_dispatch=tool_dispatch or (lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True}),
+            teacher_tools_to_openai=lambda allowed, skill_runtime=None: [
                 {"type": "function", "function": {"name": n, "parameters": {}}}
                 for n in sorted(allowed)
             ],
@@ -288,7 +295,7 @@ class AgentServiceTest(unittest.TestCase):
                 }}]}
             return {"choices": [{"message": {"content": "final reply"}}]}
 
-        def bad_dispatch(name, args, role):
+        def bad_dispatch(name, args, role, skill_id=None, teacher_id=None):
             raise RuntimeError("db connection lost")
 
         deps = self._make_deps(call_llm=fake_call_llm, tool_dispatch=bad_dispatch)
@@ -310,7 +317,7 @@ class AgentServiceTest(unittest.TestCase):
                 }}]}
             return {"choices": [{"message": {"content": "recovered reply"}}]}
 
-        def bad_dispatch(name, args, role):
+        def bad_dispatch(name, args, role, skill_id=None, teacher_id=None):
             raise ValueError("invalid exam_id")
 
         deps = self._make_deps(call_llm=fake_call_llm, tool_dispatch=bad_dispatch)
@@ -318,6 +325,158 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "查看考试"}], "teacher", deps=deps,
         )
         self.assertEqual(result.get("reply"), "recovered reply")
+
+    def test_tool_dispatch_internal_type_error_does_not_retry_compat_fallback(self):
+        """Internal TypeError should not trigger legacy-signature retry calls."""
+        call_count = [0]
+        dispatch_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {"choices": [{"message": {
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "function": {"name": "exam.get", "arguments": '{"exam_id":"EX001"}'},
+                    }],
+                }}]}
+            return {"choices": [{"message": {"content": "recovered reply"}}]}
+
+        def bad_dispatch(name, args, role, **kwargs):
+            dispatch_calls[0] += 1
+            raise TypeError("internal_tool_dispatch_type_error")
+
+        deps = self._make_deps(call_llm=fake_call_llm, tool_dispatch=bad_dispatch)
+        result = run_agent_runtime(
+            [{"role": "user", "content": "查看考试"}], "teacher", deps=deps,
+        )
+        self.assertEqual(result.get("reply"), "recovered reply")
+        self.assertEqual(dispatch_calls[0], 1)
+
+    def test_tool_dispatch_signature_like_internal_type_error_does_not_retry_compat_fallback(self):
+        """Signature-like internal TypeError should not trigger legacy-signature retry calls."""
+        call_count = [0]
+        dispatch_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {"choices": [{"message": {
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "function": {"name": "exam.get", "arguments": '{"exam_id":"EX001"}'},
+                    }],
+                }}]}
+            return {"choices": [{"message": {"content": "recovered reply"}}]}
+
+        def bad_dispatch(name, args, role, **kwargs):
+            dispatch_calls[0] += 1
+            raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = self._make_deps(call_llm=fake_call_llm, tool_dispatch=bad_dispatch)
+        result = run_agent_runtime(
+            [{"role": "user", "content": "查看考试"}], "teacher", deps=deps,
+        )
+        self.assertEqual(result.get("reply"), "recovered reply")
+        self.assertEqual(dispatch_calls[0], 1)
+
+    def test_teacher_tools_internal_type_error_does_not_retry_compat_fallback(self):
+        """Internal TypeError in teacher_tools_to_openai should not be retried."""
+        tool_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            return {"choices": [{"message": {"content": "ignored"}}]}
+
+        def bad_teacher_tools(*args, **kwargs):
+            tool_calls[0] += 1
+            raise TypeError("internal_teacher_tools_type_error")
+
+        deps = self._make_deps(call_llm=fake_call_llm)
+        deps = AgentRuntimeDeps(**{**deps.__dict__, "teacher_tools_to_openai": bad_teacher_tools})
+
+        with self.assertRaises(TypeError):
+            run_agent_runtime(
+                [{"role": "user", "content": "你好"}], "teacher", deps=deps,
+            )
+        self.assertEqual(tool_calls[0], 1)
+
+    def test_teacher_tools_signature_like_internal_type_error_does_not_retry_compat_fallback(self):
+        """Signature-like internal TypeError in teacher_tools_to_openai should not be retried."""
+        tool_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            return {"choices": [{"message": {"content": "ignored"}}]}
+
+        def bad_teacher_tools(*args, **kwargs):
+            tool_calls[0] += 1
+            raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = self._make_deps(call_llm=fake_call_llm)
+        deps = AgentRuntimeDeps(**{**deps.__dict__, "teacher_tools_to_openai": bad_teacher_tools})
+
+        with self.assertRaises(TypeError):
+            run_agent_runtime(
+                [{"role": "user", "content": "你好"}], "teacher", deps=deps,
+            )
+        self.assertEqual(tool_calls[0], 1)
+
+    def test_tool_dispatch_uninspectable_signature_like_internal_type_error_does_not_retry(self):
+        call_count = [0]
+        dispatch_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {"choices": [{"message": {
+                    "content": "",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "function": {"name": "exam.get", "arguments": '{"exam_id":"EX001"}'},
+                    }],
+                }}]}
+            return {"choices": [{"message": {"content": "recovered reply"}}]}
+
+        class _BadDispatch:
+            @property
+            def __signature__(self):
+                raise ValueError("signature unavailable")
+
+            def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                dispatch_calls[0] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = self._make_deps(call_llm=fake_call_llm, tool_dispatch=_BadDispatch())
+        result = run_agent_runtime(
+            [{"role": "user", "content": "查看考试"}], "teacher", deps=deps,
+        )
+        self.assertEqual(result.get("reply"), "recovered reply")
+        self.assertEqual(dispatch_calls[0], 1)
+
+    def test_teacher_tools_uninspectable_signature_like_internal_type_error_does_not_retry(self):
+        tool_calls = [0]
+
+        def fake_call_llm(messages, **kwargs):
+            return {"choices": [{"message": {"content": "ignored"}}]}
+
+        class _BadTeacherTools:
+            @property
+            def __signature__(self):
+                raise ValueError("signature unavailable")
+
+            def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                tool_calls[0] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = self._make_deps(call_llm=fake_call_llm)
+        deps = AgentRuntimeDeps(**{**deps.__dict__, "teacher_tools_to_openai": _BadTeacherTools()})
+
+        with self.assertRaises(TypeError):
+            run_agent_runtime(
+                [{"role": "user", "content": "你好"}], "teacher", deps=deps,
+            )
+        self.assertEqual(tool_calls[0], 1)
 
     def test_tool_permission_denied(self):
         """Tool not in allowed set should return permission denied, not crash."""
@@ -431,6 +590,59 @@ class AgentServiceTest(unittest.TestCase):
         done_payloads = [payload.get("text") for et, payload in event_records if et == "assistant.done"]
         self.assertEqual(delta_payloads, ["第一段", "第二段"])
         self.assertEqual(done_payloads, ["第一段第二段"])
+
+    def test_run_agent_runtime_late_sink_from_previous_round_does_not_pollute_current_round_chunks(self):
+        event_records = []
+
+        def event_sink(event_type, payload):
+            event_records.append((str(event_type), dict(payload or {})))
+
+        state = {"calls": 0, "previous_sink": None}
+
+        def fake_call_llm(messages, **kwargs):  # type: ignore[no-untyped-def]
+            state["calls"] += 1
+            sink = kwargs.get("token_sink")
+            if state["calls"] == 1:
+                state["previous_sink"] = sink
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "",
+                                "tool_calls": [
+                                    {
+                                        "id": "call_1",
+                                        "function": {"name": "exam.get", "arguments": '{"exam_id":"EX001"}'},
+                                    }
+                                ],
+                            }
+                        }
+                    ]
+                }
+
+            if callable(state.get("previous_sink")):
+                state["previous_sink"]("跨轮延迟片段")
+            if callable(sink):
+                sink("当前轮片段")
+            return {"choices": [{"message": {"content": ""}}]}
+
+        deps = self._make_deps(
+            call_llm=fake_call_llm,
+            allowed={"exam.get"},
+            tool_dispatch=lambda _name, _args, _role, skill_id=None, teacher_id=None: {"ok": True, "exam_id": "EX001"},
+        )
+        result = run_agent_runtime(
+            [{"role": "user", "content": "查看考试"}],
+            "teacher",
+            deps=deps,
+            event_sink=event_sink,
+        )
+
+        self.assertEqual(result.get("reply"), "当前轮片段")
+        self.assertEqual(state["calls"], 2)
+
+        done_payloads = [payload.get("text") for et, payload in event_records if et == "assistant.done"]
+        self.assertEqual(done_payloads, ["当前轮片段"])
 
 
 if __name__ == "__main__":

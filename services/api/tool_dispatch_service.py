@@ -69,19 +69,13 @@ def _maybe_dispatch_dynamic_tool(
     if not callable(fn):
         return None
     try:
-        try:
-            return fn(
-                name=name,
-                args=args,
-                role=role,
-                skill_id=skill_id,
-                teacher_id=teacher_id,
-            )
-        except TypeError:
-            try:
-                return fn(name, args, role, skill_id, teacher_id)
-            except TypeError:
-                return fn(name, args, role)
+        return fn(
+            name=name,
+            args=args,
+            role=role,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+        )
     except Exception as exc:
         return {
             "error": "dynamic_tool_dispatch_failed",

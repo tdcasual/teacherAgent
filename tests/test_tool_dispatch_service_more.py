@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from services.api.tool_dispatch_service import ToolDispatchDeps, tool_dispatch
@@ -319,3 +320,138 @@ def test_tool_dispatch_falls_back_to_unknown_when_registry_accepts_unhandled_nam
     deps, _ = _deps({"custom.unhandled"})
     out = tool_dispatch("custom.unhandled", {"x": 1}, role="teacher", deps=deps)
     assert out == {"error": "unknown tool: custom.unhandled"}
+
+
+def test_tool_dispatch_dynamic_internal_type_error_does_not_retry_signature_fallback():
+    deps, _ = _deps(set())
+    attempts = []
+
+    def _dynamic(*args, **kwargs):  # type: ignore[no-untyped-def]
+        attempts.append((args, kwargs))
+        raise TypeError("internal_dynamic_type_error")
+
+    deps = replace(deps, dynamic_tool_dispatch=_dynamic)
+    out = tool_dispatch(
+        "dynamic.custom",
+        {"x": 1},
+        role="teacher",
+        deps=deps,
+        skill_id="skill-dyn",
+        teacher_id="t1",
+    )
+
+    assert out.get("error") == "dynamic_tool_dispatch_failed"
+    assert "internal_dynamic_type_error" in str(out.get("detail") or "")
+    assert out.get("_dynamic_tool") is True
+    assert out.get("_dynamic_tool_degraded") is True
+    assert len(attempts) == 1
+
+
+def test_tool_dispatch_dynamic_signature_like_internal_type_error_does_not_retry_signature_fallback():
+    deps, _ = _deps(set())
+    attempts = []
+
+    def _dynamic(*args, **kwargs):  # type: ignore[no-untyped-def]
+        attempts.append((args, kwargs))
+        raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+    deps = replace(deps, dynamic_tool_dispatch=_dynamic)
+    out = tool_dispatch(
+        "dynamic.custom",
+        {"x": 1},
+        role="teacher",
+        deps=deps,
+        skill_id="skill-dyn",
+        teacher_id="t1",
+    )
+
+    assert out.get("error") == "dynamic_tool_dispatch_failed"
+    assert "required positional argument" in str(out.get("detail") or "")
+    assert out.get("_dynamic_tool") is True
+    assert out.get("_dynamic_tool_degraded") is True
+    assert len(attempts) == 1
+
+
+def test_tool_dispatch_dynamic_legacy_three_arg_signature_is_rejected():
+    deps, _ = _deps(set())
+    attempts = []
+
+    def _dynamic(name, args, role):  # type: ignore[no-untyped-def]
+        attempts.append((name, args, role))
+        return {"ok": True}
+
+    deps = replace(deps, dynamic_tool_dispatch=_dynamic)
+    out = tool_dispatch(
+        "dynamic.custom",
+        {"x": 1},
+        role="teacher",
+        deps=deps,
+        skill_id="skill-dyn",
+        teacher_id="t1",
+    )
+
+    assert out.get("error") == "dynamic_tool_dispatch_failed"
+    assert "unexpected keyword argument" in str(out.get("detail") or "")
+    assert len(attempts) == 0
+
+
+def test_tool_dispatch_dynamic_uninspectable_internal_type_error_does_not_retry():
+    deps, _ = _deps(set())
+
+    class _Dynamic:
+        def __init__(self):
+            self.calls = []
+
+        @property
+        def __signature__(self):
+            raise ValueError("signature unavailable")
+
+        def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls.append((args, kwargs))
+            raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+    dynamic = _Dynamic()
+    deps = replace(deps, dynamic_tool_dispatch=dynamic)
+    out = tool_dispatch(
+        "dynamic.custom",
+        {"x": 1},
+        role="teacher",
+        deps=deps,
+        skill_id="skill-dyn",
+        teacher_id="t1",
+    )
+
+    assert out.get("error") == "dynamic_tool_dispatch_failed"
+    assert "required positional argument" in str(out.get("detail") or "")
+    assert len(dynamic.calls) == 1
+
+
+def test_tool_dispatch_dynamic_uninspectable_positional_only_signature_is_rejected():
+    deps, _ = _deps(set())
+
+    class _Dynamic:
+        def __init__(self):
+            self.calls = 0
+
+        @property
+        def __signature__(self):
+            raise ValueError("signature unavailable")
+
+        def __call__(self, name, args, role, /):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            return {"ok": True}
+
+    dynamic = _Dynamic()
+    deps = replace(deps, dynamic_tool_dispatch=dynamic)
+    out = tool_dispatch(
+        "dynamic.custom",
+        {"x": 1},
+        role="teacher",
+        deps=deps,
+        skill_id="skill-dyn",
+        teacher_id="t1",
+    )
+
+    assert out.get("error") == "dynamic_tool_dispatch_failed"
+    assert "positional-only" in str(out.get("detail") or "")
+    assert dynamic.calls == 0
