@@ -26,3 +26,4 @@ def test_ci_runs_maintainability_guardrails() -> None:
     assert "Run maintainability guardrails" in ci_text
     assert "tests/test_tech_debt_targets.py" in ci_text
     assert "tests/test_app_core_import_fanout.py" in ci_text
+    assert "tests/test_chat_workers_signature_fallback_guard.py" in ci_text

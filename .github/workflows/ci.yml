@@ -103,6 +103,7 @@ jobs:
             tests/test_app_core_import_fanout.py \
             tests/test_assignment_wiring_structure.py \
             tests/test_chat_wiring_structure.py \
+            tests/test_chat_workers_signature_fallback_guard.py \
             tests/test_exam_wiring_structure.py \
             tests/test_misc_wiring_structure.py \
             tests/test_no_duplicate_route_files.py \
