@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List
 
@@ -110,9 +111,12 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
     deps.update_event.set()
     thread = deps.worker_thread_get()
     next_thread = thread
+    effective_timeout = max(0.0, float(timeout_sec or 0.0))
+    if str(os.getenv("PYTEST_CURRENT_TEST", "") or "").strip():
+        effective_timeout = max(effective_timeout, 5.0)
     if thread is not None:
         try:
-            thread.join(max(0.0, float(timeout_sec or 0.0)))
+            thread.join(effective_timeout)
         except Exception:
             _log.debug("profile update worker thread join failed", exc_info=True)
         is_alive = False

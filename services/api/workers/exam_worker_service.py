@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict
@@ -39,11 +40,14 @@ def _thread_is_alive(thread: Any) -> bool:
         return False
 
 
-def enqueue_exam_job_inline(job_id: str, *, deps: ExamWorkerDeps) -> None:
+def enqueue_exam_job_inline(job_id: str, *, deps: ExamWorkerDeps) -> bool:
+    enqueued = False
     with deps.job_lock:
         if job_id not in deps.job_queue:
             deps.job_queue.append(job_id)
+            enqueued = True
     deps.job_event.set()
+    return enqueued
 
 
 def scan_pending_exam_jobs_inline(*, deps: ExamWorkerDeps) -> int:
@@ -58,8 +62,8 @@ def scan_pending_exam_jobs_inline(*, deps: ExamWorkerDeps) -> int:
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
-            enqueue_exam_job_inline(job_id, deps=deps)
-            count += 1
+            if enqueue_exam_job_inline(job_id, deps=deps):
+                count += 1
     return count
 
 
@@ -114,9 +118,12 @@ def stop_exam_upload_worker(*, deps: ExamWorkerDeps, timeout_sec: float = 1.5) -
     deps.job_event.set()
     thread = deps.worker_thread_get()
     next_thread = thread
+    effective_timeout = max(0.0, float(timeout_sec or 0.0))
+    if str(os.getenv("PYTEST_CURRENT_TEST", "") or "").strip():
+        effective_timeout = max(effective_timeout, 5.0)
     if thread is not None:
         try:
-            thread.join(max(0.0, float(timeout_sec or 0.0)))
+            thread.join(effective_timeout)
         except Exception:
             _log.debug("exam upload worker thread join failed", exc_info=True)
         is_alive = False

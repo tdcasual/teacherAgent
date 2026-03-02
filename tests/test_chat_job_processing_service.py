@@ -179,6 +179,175 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(last_user, "讲一下牛顿第二定律")
             self.assertIn("persona-style-prompt", captured_extra_system["value"])
 
+    def test_compute_chat_reply_internal_type_error_does_not_retry_event_sink_fallback(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            run_calls = {"count": 0}
+
+            def _run_agent(*_args, **_kwargs):
+                run_calls["count"] += 1
+                raise TypeError("internal_run_agent_type_error")
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=_run_agent,
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+                resolve_student_persona_runtime=lambda _sid, _pid: {},
+            )
+            req = _Req(assignment_id="")
+            with self.assertRaises(TypeError):
+                compute_chat_reply_sync(
+                    req,
+                    deps=deps,
+                    event_sink=lambda *_args, **_kwargs: None,
+                )
+            self.assertEqual(run_calls["count"], 1)
+
+    def test_compute_chat_reply_signature_like_internal_type_error_does_not_retry_event_sink_fallback(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            run_calls = {"count": 0}
+
+            def _run_agent(*_args, **_kwargs):
+                run_calls["count"] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=_run_agent,
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+                resolve_student_persona_runtime=lambda _sid, _pid: {},
+            )
+            req = _Req(assignment_id="")
+            with self.assertRaises(TypeError):
+                compute_chat_reply_sync(
+                    req,
+                    deps=deps,
+                    event_sink=lambda *_args, **_kwargs: None,
+                )
+            self.assertEqual(run_calls["count"], 1)
+
+    def test_compute_chat_reply_uninspectable_signature_like_internal_type_error_does_not_retry(
+        self,
+    ):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            run_calls = {"count": 0}
+
+            class _RunAgent:
+                @property
+                def __signature__(self):
+                    raise ValueError("signature unavailable")
+
+                def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                    run_calls["count"] += 1
+                    raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=_RunAgent(),
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+                resolve_student_persona_runtime=lambda _sid, _pid: {},
+            )
+            req = _Req(assignment_id="")
+            with self.assertRaises(TypeError):
+                compute_chat_reply_sync(
+                    req,
+                    deps=deps,
+                    event_sink=lambda *_args, **_kwargs: None,
+                )
+            self.assertEqual(run_calls["count"], 1)
+
+    def test_compute_chat_reply_rejects_legacy_run_agent_without_event_sink(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            run_calls = {"count": 0}
+
+            def _run_agent(_messages, _role_hint, *, extra_system=None, skill_id=None, teacher_id=None):
+                del _messages, _role_hint, extra_system, skill_id, teacher_id
+                run_calls["count"] += 1
+                return {"reply": "OK"}
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=_run_agent,
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+                resolve_student_persona_runtime=lambda _sid, _pid: {},
+            )
+            req = _Req(assignment_id="")
+            with self.assertRaises(TypeError):
+                compute_chat_reply_sync(
+                    req,
+                    deps=deps,
+                    event_sink=lambda *_args, **_kwargs: None,
+                )
+            # Strict keyword call binding fails before entering the legacy callable.
+            self.assertEqual(run_calls["count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

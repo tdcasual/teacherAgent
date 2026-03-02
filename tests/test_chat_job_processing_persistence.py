@@ -77,7 +77,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             chat_request_model=lambda **payload: _Req(**payload),
             compute_chat_reply_sync=(
                 compute_chat_reply_sync
-                or (lambda _req, session_id=None, teacher_id_override=None: ("回复内容", "teacher", "列出考试"))
+                or (lambda _req, session_id=None, teacher_id_override=None, event_sink=None: ("回复内容", "teacher", "列出考试"))
             ),
             monotonic=monotonic or (lambda: 0.0),
             build_interaction_note=lambda _u, _a, assignment_id=None: "",
@@ -180,7 +180,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: ("回复内容", "student", "讲一下牛顿第二定律"),
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: ("回复内容", "student", "讲一下牛顿第二定律"),
             monotonic=lambda: 0.0,
             build_interaction_note=lambda _u, _a, assignment_id=None: "",
             profile_update_async=False,
@@ -249,7 +249,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
                 "收到，后续我先给结论。",
                 "student",
                 "以后请先给结论",
@@ -325,7 +325,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
                 "收到，后续我先给结论。",
                 "student",
                 "以后请先给结论",
@@ -394,7 +394,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
                 "收到。",
                 "student",
                 "以后请先给结论",
@@ -426,6 +426,33 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
         self.assertIsNone(auto_calls[0].get("teacher_id"))
         self.assertEqual(auto_calls[0].get("student_id"), "S001")
         self.assertEqual(auto_calls[0].get("session_id"), "resolved_session_005")
+
+    def test_process_chat_job_rejects_uninspectable_legacy_compute_callable_without_event_sink(self):
+        events: list[str] = []
+
+        class _Compute:
+            def __init__(self):
+                self.calls = 0
+
+            @property
+            def __signature__(self):
+                raise ValueError("signature unavailable")
+
+            def __call__(self, _req, session_id=None, teacher_id_override=None):  # type: ignore[no-untyped-def]
+                self.calls += 1
+                assert session_id == "session_test_001"
+                assert teacher_id_override == "teacher"
+                return ("回复内容", "teacher", "列出考试")
+
+        compute = _Compute()
+        deps = self._deps(events=events, compute_chat_reply_sync=compute)
+
+        with self.assertRaises(TypeError):
+            process_chat_job("cjob_test_001", deps=deps)
+
+        self.assertIn("write:processing", events)
+        self.assertNotIn("write:done", events)
+        self.assertEqual(compute.calls, 0)
 
 
 if __name__ == "__main__":

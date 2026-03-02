@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -257,24 +256,16 @@ def compute_chat_reply_sync(
     messages = deps.trim_messages(
         [{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint
     )
+
     def _run_agent_with_optional_events() -> Dict[str, Any]:
-        try:
-            return deps.run_agent(
-                messages,
-                role_hint,
-                extra_system=extra_system,
-                skill_id=req.skill_id,
-                teacher_id=effective_teacher_id or req.teacher_id,
-                event_sink=event_sink,
-            )
-        except TypeError:
-            return deps.run_agent(
-                messages,
-                role_hint,
-                extra_system=extra_system,
-                skill_id=req.skill_id,
-                teacher_id=effective_teacher_id or req.teacher_id,
-            )
+        return deps.run_agent(
+            messages,
+            role_hint,
+            extra_system=extra_system,
+            skill_id=req.skill_id,
+            teacher_id=effective_teacher_id or req.teacher_id,
+            event_sink=event_sink,
+        )
 
     if role_hint == "student":
         with deps.student_inflight(req.student_id) as allowed:
@@ -470,22 +461,12 @@ def _call_compute_chat_reply_sync(
     teacher_id_override: Optional[str],
     event_sink: Callable[[str, Dict[str, Any]], None],
 ) -> Tuple[str, Optional[str], str]:
-    supports_event_sink = True
-    try:
-        params = inspect.signature(deps.compute_chat_reply_sync).parameters
-        supports_event_sink = "event_sink" in params or any(
-            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-        )
-    except Exception:
-        supports_event_sink = True
-
-    kwargs: Dict[str, Any] = {
-        "session_id": session_id,
-        "teacher_id_override": teacher_id_override,
-    }
-    if supports_event_sink:
-        kwargs["event_sink"] = event_sink
-    return deps.compute_chat_reply_sync(req, **kwargs)
+    return deps.compute_chat_reply_sync(
+        req,
+        session_id=session_id,
+        teacher_id_override=teacher_id_override,
+        event_sink=event_sink,
+    )
 
 
 def _build_chat_request_for_job(

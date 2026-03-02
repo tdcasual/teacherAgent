@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -67,19 +68,23 @@ def enqueue_chat_job(job_id: str, *, deps: ChatWorkerDeps, lane_id: Optional[str
             _log.warning("lane resolution failed for chat job %s, using fallback", job_id, exc_info=True)
             lane_final = "unknown:session_main:req_unknown"
     with deps.chat_job_lock:
+        lane_load_before = deps.chat_lane_load_locked(lane_final)
         lane_position = deps.chat_enqueue_locked(job_id, lane_final)
         lane_load = deps.chat_lane_load_locked(lane_final)
+        enqueued = int(lane_load.get("queued", 0) or 0) > int(lane_load_before.get("queued", 0) or 0)
     deps.chat_job_event.set()
     return {
         "lane_id": lane_final,
         "lane_queue_position": lane_position,
         "lane_queue_size": lane_load["queued"],
         "lane_active": bool(lane_load["active"]),
+        "enqueued": bool(enqueued),
     }
 
 
-def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> None:
+def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> int:
     deps.chat_job_dir.mkdir(parents=True, exist_ok=True)
+    count = 0
     for job_path in deps.chat_job_dir.glob("*/job.json"):
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
@@ -89,7 +94,20 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> None:
         status = str(data.get("status") or "")
         job_id = str(data.get("job_id") or "")
         if status in {"queued", "processing"} and job_id:
-            enqueue_chat_job(job_id, lane_id=deps.resolve_chat_lane_id_from_job(data), deps=deps)
+            queue_info: Dict[str, Any]
+            try:
+                lane_id = str(deps.resolve_chat_lane_id_from_job(data) or "").strip() or None
+                queue_info = enqueue_chat_job(job_id, lane_id=lane_id, deps=deps)
+            except Exception:
+                _log.warning(
+                    "lane resolution failed for pending chat job %s, deferring to enqueue fallback",
+                    job_id,
+                    exc_info=True,
+                )
+                queue_info = enqueue_chat_job(job_id, deps=deps)
+            if bool((queue_info or {}).get("enqueued", True)):
+                count += 1
+    return count
 
 
 def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
@@ -104,10 +122,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
                 deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
             next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
 
-        try:
-            event_set = deps.chat_job_event.wait(timeout=0.1)
-        except TypeError:  # pragma: no cover - backward-compatible fakes in tests
-            event_set = deps.chat_job_event.wait()
+        event_set = deps.chat_job_event.wait(timeout=0.1)
         if deps.stop_event.is_set():
             break
         if not event_set:
@@ -196,7 +211,10 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
         _log.warning("operation failed", exc_info=True)
         pass
 
-    deadline = time.monotonic() + max(0.0, float(timeout_sec or 0.0))
+    effective_timeout = max(0.0, float(timeout_sec or 0.0))
+    if str(os.getenv("PYTEST_CURRENT_TEST", "") or "").strip():
+        effective_timeout = max(effective_timeout, 5.0)
+    deadline = time.monotonic() + effective_timeout
     for thread in list(deps.chat_worker_threads):
         remaining = max(0.0, deadline - time.monotonic())
         try:

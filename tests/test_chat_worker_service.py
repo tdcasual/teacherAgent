@@ -9,6 +9,7 @@ from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
     chat_job_worker_loop,
     enqueue_chat_job,
+    scan_pending_chat_jobs,
     start_chat_worker,
     stop_chat_worker,
 )
@@ -91,6 +92,232 @@ class ChatWorkerServiceTest(unittest.TestCase):
         self.assertEqual(result["lane_queue_position"], 1)
         self.assertEqual(result["lane_queue_size"], 1)
         self.assertEqual(event.set_calls, 1)
+
+    def test_worker_loop_internal_type_error_from_wait_does_not_retry_compat_fallback(self):
+        stop_event = threading.Event()
+        wait_calls = {"count": 0}
+
+        class _BrokenEvent:
+            def set(self):
+                return None
+
+            def clear(self):
+                return None
+
+            def wait(self, timeout=0.1):  # type: ignore[no-untyped-def]
+                wait_calls["count"] += 1
+                raise TypeError("internal_event_wait_type_error")
+
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=_BrokenEvent(),
+            chat_worker_threads=[],
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: True,
+            worker_started_set=lambda value: None,
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            stop_event=stop_event,
+        )
+
+        with self.assertRaises(TypeError):
+            chat_job_worker_loop(deps=deps)
+        self.assertEqual(wait_calls["count"], 1)
+
+    def test_worker_loop_signature_like_internal_type_error_from_wait_does_not_retry_compat_fallback(self):
+        stop_event = threading.Event()
+        wait_calls = {"count": 0}
+
+        class _BrokenEvent:
+            def set(self):
+                return None
+
+            def clear(self):
+                return None
+
+            def wait(self, timeout=0.1):  # type: ignore[no-untyped-def]
+                wait_calls["count"] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=_BrokenEvent(),
+            chat_worker_threads=[],
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: True,
+            worker_started_set=lambda value: None,
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            stop_event=stop_event,
+        )
+
+        with self.assertRaises(TypeError):
+            chat_job_worker_loop(deps=deps)
+        self.assertEqual(wait_calls["count"], 1)
+
+    def test_worker_loop_uninspectable_signature_like_internal_type_error_from_wait_does_not_retry(
+        self,
+    ):
+        stop_event = threading.Event()
+        wait_calls = {"count": 0}
+
+        class _BrokenEvent:
+            @property
+            def __signature__(self):
+                raise ValueError("signature unavailable")
+
+            def set(self):
+                return None
+
+            def clear(self):
+                return None
+
+            def wait(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                wait_calls["count"] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=_BrokenEvent(),
+            chat_worker_threads=[],
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: True,
+            worker_started_set=lambda value: None,
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            stop_event=stop_event,
+        )
+
+        with self.assertRaises(TypeError):
+            chat_job_worker_loop(deps=deps)
+        self.assertEqual(wait_calls["count"], 1)
+
+    def test_worker_loop_uninspectable_wait_callable_signature_like_internal_type_error_does_not_retry(
+        self,
+    ):
+        stop_event = threading.Event()
+        wait_calls = {"count": 0}
+
+        class _WaitCallable:
+            @property
+            def __signature__(self):
+                raise ValueError("signature unavailable")
+
+            def __call__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+                wait_calls["count"] += 1
+                raise TypeError("helper() missing 1 required positional argument: 'ctx'")
+
+        class _BrokenEvent:
+            def __init__(self):
+                self.wait = _WaitCallable()
+
+            def set(self):
+                return None
+
+            def clear(self):
+                return None
+
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=_BrokenEvent(),
+            chat_worker_threads=[],
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: True,
+            worker_started_set=lambda value: None,
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            stop_event=stop_event,
+        )
+
+        with self.assertRaises(TypeError):
+            chat_job_worker_loop(deps=deps)
+        self.assertEqual(wait_calls["count"], 1)
+
+    def test_worker_loop_does_not_treat_generic_takes_message_as_signature_mismatch(self):
+        stop_event = threading.Event()
+        wait_calls = {"count": 0}
+
+        class _BrokenEvent:
+            def set(self):
+                return None
+
+            def clear(self):
+                return None
+
+            def wait(self, timeout=0.1):  # type: ignore[no-untyped-def]
+                wait_calls["count"] += 1
+                raise TypeError("internal buffer takes too long")
+
+        deps = ChatWorkerDeps(
+            chat_job_dir=Path("."),
+            chat_job_lock=threading.Lock(),
+            chat_job_event=_BrokenEvent(),
+            chat_worker_threads=[],
+            chat_worker_pool_size=1,
+            worker_started_get=lambda: True,
+            worker_started_set=lambda value: None,
+            load_chat_job=lambda job_id: {"job_id": job_id},
+            write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+            resolve_chat_lane_id_from_job=lambda job: "lane:test",
+            chat_enqueue_locked=lambda job_id, lane_id: 1,
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+            chat_pick_next_locked=lambda: ("", ""),
+            chat_mark_done_locked=lambda job_id, lane_id: None,
+            chat_has_pending_locked=lambda: False,
+            process_chat_job=lambda job_id: None,
+            diag_log=lambda *_args, **_kwargs: None,
+            sleep=lambda _seconds: None,
+            thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            stop_event=stop_event,
+        )
+
+        with self.assertRaises(TypeError):
+            chat_job_worker_loop(deps=deps)
+        self.assertEqual(wait_calls["count"], 1)
 
     def test_start_chat_worker_is_idempotent(self):
         with TemporaryDirectory() as td:
@@ -235,6 +462,133 @@ class ChatWorkerServiceTest(unittest.TestCase):
             assert created_threads == []
             assert threads == []
 
+    def test_scan_pending_chat_jobs_falls_back_when_lane_resolution_fails(self):
+        with TemporaryDirectory() as td:
+            job_dir = Path(td) / "jobs"
+            job_file = job_dir / "bad" / "job.json"
+            job_file.parent.mkdir(parents=True, exist_ok=True)
+            job_file.write_text('{"status":"queued","job_id":"bad-1"}\n', encoding="utf-8")
+
+            enqueue_calls = []
+            deps = ChatWorkerDeps(
+                chat_job_dir=job_dir,
+                chat_job_lock=threading.Lock(),
+                chat_job_event=_FakeEvent(),
+                chat_worker_threads=[],
+                chat_worker_pool_size=1,
+                worker_started_get=lambda: False,
+                worker_started_set=lambda value: None,
+                load_chat_job=lambda job_id: {"job_id": job_id},
+                write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+                resolve_chat_lane_id_from_job=lambda job: (_ for _ in ()).throw(RuntimeError("lane parse failed")),
+                chat_enqueue_locked=lambda job_id, lane_id: enqueue_calls.append((job_id, lane_id)) or 1,
+                chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+                chat_pick_next_locked=lambda: ("", ""),
+                chat_mark_done_locked=lambda job_id, lane_id: None,
+                chat_has_pending_locked=lambda: False,
+                process_chat_job=lambda job_id: None,
+                diag_log=lambda *_args, **_kwargs: None,
+                sleep=lambda _seconds: None,
+                thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            )
+
+            scan_pending_chat_jobs(deps=deps)
+            self.assertEqual(enqueue_calls, [("bad-1", "unknown:session_main:req_unknown")])
+
+    def test_scan_pending_chat_jobs_returns_enqueued_count(self):
+        with TemporaryDirectory() as td:
+            job_dir = Path(td) / "jobs"
+            (job_dir / "a").mkdir(parents=True, exist_ok=True)
+            (job_dir / "b").mkdir(parents=True, exist_ok=True)
+            (job_dir / "a" / "job.json").write_text(
+                '{"status":"queued","job_id":"c-1","lane_id":"lane:c-1"}\n',
+                encoding="utf-8",
+            )
+            (job_dir / "b" / "job.json").write_text(
+                '{"status":"done","job_id":"c-2","lane_id":"lane:c-2"}\n',
+                encoding="utf-8",
+            )
+
+            enqueue_calls = []
+            lane_queue = []
+
+            def _chat_enqueue_locked(job_id, lane_id):
+                if job_id not in lane_queue:
+                    lane_queue.append(job_id)
+                enqueue_calls.append((job_id, lane_id))
+                return len(lane_queue)
+
+            deps = ChatWorkerDeps(
+                chat_job_dir=job_dir,
+                chat_job_lock=threading.Lock(),
+                chat_job_event=_FakeEvent(),
+                chat_worker_threads=[],
+                chat_worker_pool_size=1,
+                worker_started_get=lambda: False,
+                worker_started_set=lambda value: None,
+                load_chat_job=lambda job_id: {"job_id": job_id},
+                write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+                resolve_chat_lane_id_from_job=lambda job: str(job.get("lane_id") or "lane:fallback"),
+                chat_enqueue_locked=_chat_enqueue_locked,
+                chat_lane_load_locked=lambda lane_id: {"queued": len(lane_queue), "active": 0, "total": len(lane_queue)},
+                chat_pick_next_locked=lambda: ("", ""),
+                chat_mark_done_locked=lambda job_id, lane_id: None,
+                chat_has_pending_locked=lambda: False,
+                process_chat_job=lambda job_id: None,
+                diag_log=lambda *_args, **_kwargs: None,
+                sleep=lambda _seconds: None,
+                thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            )
+
+            count = scan_pending_chat_jobs(deps=deps)
+            self.assertEqual(count, 1)
+            self.assertEqual(enqueue_calls, [("c-1", "lane:c-1")])
+
+    def test_scan_pending_chat_jobs_counts_only_new_enqueues(self):
+        with TemporaryDirectory() as td:
+            job_dir = Path(td) / "jobs"
+            (job_dir / "dup").mkdir(parents=True, exist_ok=True)
+            (job_dir / "dup" / "job.json").write_text(
+                '{"status":"queued","job_id":"c-dup","lane_id":"lane:dup"}\n',
+                encoding="utf-8",
+            )
+
+            lane_queue = ["c-dup"]
+            queued_ids = {"c-dup"}
+
+            def _chat_enqueue_locked(job_id, lane_id):
+                if job_id in queued_ids:
+                    return 1
+                queued_ids.add(job_id)
+                lane_queue.append(job_id)
+                return len(lane_queue)
+
+            deps = ChatWorkerDeps(
+                chat_job_dir=job_dir,
+                chat_job_lock=threading.Lock(),
+                chat_job_event=_FakeEvent(),
+                chat_worker_threads=[],
+                chat_worker_pool_size=1,
+                worker_started_get=lambda: False,
+                worker_started_set=lambda value: None,
+                load_chat_job=lambda job_id: {"job_id": job_id},
+                write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+                resolve_chat_lane_id_from_job=lambda job: str(job.get("lane_id") or "lane:fallback"),
+                chat_enqueue_locked=_chat_enqueue_locked,
+                chat_lane_load_locked=lambda lane_id: {"queued": len(lane_queue), "active": 0, "total": len(lane_queue)},
+                chat_pick_next_locked=lambda: ("", ""),
+                chat_mark_done_locked=lambda job_id, lane_id: None,
+                chat_has_pending_locked=lambda: False,
+                process_chat_job=lambda job_id: None,
+                diag_log=lambda *_args, **_kwargs: None,
+                sleep=lambda _seconds: None,
+                thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+            )
+
+            count = scan_pending_chat_jobs(deps=deps)
+            self.assertEqual(count, 0)
+            self.assertEqual(lane_queue, ["c-dup"])
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -310,6 +664,42 @@ def test_worker_loop_skips_pick_when_event_not_set(tmp_path):
 
     chat_job_worker_loop(deps=deps)
     assert pick_calls["count"] == 0
+
+
+def test_stop_chat_worker_extends_join_timeout_under_pytest(monkeypatch):
+    started = {"value": True}
+    thread = _JoinAwareThread(alive=False)
+    event = _FakeEvent()
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_chat_worker_service.py::test_stop (call)")
+
+    deps = ChatWorkerDeps(
+        chat_job_dir=Path("."),
+        chat_job_lock=threading.Lock(),
+        chat_job_event=event,
+        chat_worker_threads=[thread],
+        chat_worker_pool_size=1,
+        worker_started_get=lambda: started["value"],
+        worker_started_set=lambda value: started.__setitem__("value", bool(value)),
+        load_chat_job=lambda job_id: {"job_id": job_id},
+        write_chat_job=lambda job_id, updates: {"job_id": job_id, **updates},
+        resolve_chat_lane_id_from_job=lambda job: "lane:test",
+        chat_enqueue_locked=lambda job_id, lane_id: 1,
+        chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 0, "total": 0},
+        chat_pick_next_locked=lambda: ("", ""),
+        chat_mark_done_locked=lambda job_id, lane_id: None,
+        chat_has_pending_locked=lambda: False,
+        process_chat_job=lambda job_id: None,
+        diag_log=lambda *_args, **_kwargs: None,
+        sleep=lambda _seconds: None,
+        thread_factory=lambda *args, **kwargs: _FakeThread(*args, **kwargs),
+    )
+
+    stop_chat_worker(deps=deps, timeout_sec=0.1)
+
+    assert thread.join_calls == 1
+    assert thread.join_timeouts
+    assert float(thread.join_timeouts[0] or 0.0) >= 4.9
+    assert started["value"] is False
 
 
 def test_worker_loop_marks_failed_and_emits_terminal_event_on_processing_error(tmp_path):
