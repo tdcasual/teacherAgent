@@ -33,6 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r services/api/requirements.txt pytest pytest-cov ruff black mypy
 
+      - name: Check backend dependency audit
+        run: |
+          bash scripts/quality/check_backend_dep_audit.sh
+
       - name: Ruff (backend quality gate)
         run: |
           python -m ruff check \
@@ -170,6 +174,10 @@ jobs:
             echo "| --- | --- | --- |"
             echo "| ${GITHUB_JOB} | ${cache_hit} | ${install_seconds} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check frontend production dependency audit
+        run: |
+          bash ../scripts/quality/check_frontend_prod_audit.sh
 
       - name: Verify frontend @types install integrity
         run: npm run check:types-install
