@@ -109,21 +109,21 @@ def test_get_app_core_raises_in_multi_tenant():
     token = CURRENT_CORE.set(None)
     try:
         with patch.dict(os.environ, {"MULTI_TENANT_ENABLED": "1"}):
-            with pytest.raises(RuntimeError, match="tenant context is required"):
+            with pytest.raises(RuntimeError, match="core context is required"):
                 get_app_core()
     finally:
         CURRENT_CORE.reset(token)
 
 
-def test_get_app_core_fallback_single_tenant():
+def test_get_app_core_raises_without_context_even_single_tenant():
     from services.api.wiring import CURRENT_CORE, get_app_core
     token = CURRENT_CORE.set(None)
     try:
         env = os.environ.copy()
         env.pop("MULTI_TENANT_ENABLED", None)
         with patch.dict(os.environ, env, clear=True):
-            mod = get_app_core()
-            assert mod is not None
+            with pytest.raises(RuntimeError, match="core context is required"):
+                get_app_core()
     finally:
         CURRENT_CORE.reset(token)
 

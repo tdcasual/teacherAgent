@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import logging
 import os
 from pathlib import Path
@@ -17,17 +16,16 @@ from .observability import OBSERVABILITY
 from .rate_limit import rate_limit_middleware
 from .request_context import RequestIdFilter
 from .runtime.lifecycle import app_lifespan
+from .wiring import CURRENT_CORE
 
 _log = logging.getLogger(__name__)
-
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _core = importlib.reload(_core)
 
 _APP_CORE = _core
 _APP_ROOT = Path(getattr(_core, "APP_ROOT", Path(__file__).resolve().parents[2]))
 
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
 app.state.core = _core
+CURRENT_CORE.set(_core)
 
 
 def get_core() -> Any:

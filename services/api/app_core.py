@@ -23,13 +23,6 @@ from collections import deque
 _log = logging.getLogger(__name__)
 
 
-def _reexport_public(module: Any) -> None:
-    export_names = getattr(module, "__all__", None)
-    if export_names is None:
-        export_names = [name for name in dir(module) if not name.startswith("_")]
-    for name in export_names:
-        globals()[name] = getattr(module, name)
-
 from llm_gateway import LLMGateway
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,19 +39,16 @@ except Exception:
     _log.warning("failed to import or run mem0_config.load_dotenv", exc_info=True)
     pass
 
-import importlib as _importlib
 from . import core_services as _core_services_module
 from . import core_service_imports as _core_service_imports_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_core_services_module)
-    _importlib.reload(_core_service_imports_module)
-_reexport_public(_core_services_module)
 
 from . import config as _config_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_config_module)
-_reexport_public(_config_module)
 from .config import (
+    CHAT_JOB_DIR,
+    LLM_MAX_CONCURRENCY,
+    LLM_MAX_CONCURRENCY_STUDENT,
+    LLM_MAX_CONCURRENCY_TEACHER,
+    OCR_MAX_CONCURRENCY,
     _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
     _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
     _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
@@ -69,25 +59,13 @@ from .config import (
 )
 
 from . import paths as _paths_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_paths_module)
-_reexport_public(_paths_module)
 
 from . import job_repository as _job_repository_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_job_repository_module)
-_reexport_public(_job_repository_module)
 from .job_repository import _atomic_write_json, _try_acquire_lockfile, _release_lockfile
 
 from . import session_store as _session_store_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_session_store_module)
-_reexport_public(_session_store_module)
 
 from . import chat_lane_repository as _chat_lane_repository_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_chat_lane_repository_module)
-_reexport_public(_chat_lane_repository_module)
 from .chat_lane_repository import (
     _chat_last_user_text,
     _chat_text_fingerprint,
@@ -106,29 +84,14 @@ from .chat_lane_repository import (
 )
 
 from . import exam_utils as _exam_utils_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_exam_utils_module)
-_reexport_public(_exam_utils_module)
 
 from . import core_utils as _core_utils_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_core_utils_module)
-_reexport_public(_core_utils_module)
 
 from . import profile_service as _profile_service_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_profile_service_module)
-_reexport_public(_profile_service_module)
 
 from . import assignment_data_service as _assignment_data_service_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_assignment_data_service_module)
-_reexport_public(_assignment_data_service_module)
 
 from . import teacher_memory_core as _teacher_memory_core_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_teacher_memory_core_module)
-_reexport_public(_teacher_memory_core_module)
 
 def _rq_enabled() -> bool:
     return _core_service_imports_module._rq_enabled_impl()
@@ -147,17 +110,54 @@ from .wiring import worker_wiring as _worker_wiring_module
 from .wiring import misc_wiring as _misc_wiring_module
 from .wiring import skill_wiring as _skill_wiring_module
 from . import app_core_wiring_exports as _app_core_wiring_exports_module
-if os.getenv("PYTEST_CURRENT_TEST"):
-    _importlib.reload(_chat_wiring_module)
-    _importlib.reload(_assignment_wiring_module)
-    _importlib.reload(_exam_wiring_module)
-    _importlib.reload(_student_wiring_module)
-    _importlib.reload(_teacher_wiring_module)
-    _importlib.reload(_worker_wiring_module)
-    _importlib.reload(_misc_wiring_module)
-    _importlib.reload(_skill_wiring_module)
-    _importlib.reload(_app_core_wiring_exports_module)
-_reexport_public(_app_core_wiring_exports_module)
+from .wiring import CURRENT_CORE
+
+_DELEGATE_MODULES: Tuple[Any, ...] = (
+    _core_services_module,
+    _config_module,
+    _paths_module,
+    _job_repository_module,
+    _session_store_module,
+    _chat_lane_repository_module,
+    _exam_utils_module,
+    _core_utils_module,
+    _profile_service_module,
+    _assignment_data_service_module,
+    _teacher_memory_core_module,
+    _app_core_wiring_exports_module,
+)
+
+
+def _iter_delegate_export_names(module: Any) -> Iterable[str]:
+    declared = getattr(module, "__all__", None)
+    if isinstance(declared, (list, tuple, set)):
+        for item in declared:
+            name = str(item or "").strip()
+            if name and not name.startswith("_"):
+                yield name
+        return
+    for item in vars(module).keys():
+        name = str(item or "").strip()
+        if name and not name.startswith("_"):
+            yield name
+
+
+def _bind_delegate_exports() -> None:
+    for module in _DELEGATE_MODULES:
+        for name in _iter_delegate_export_names(module):
+            if name in globals():
+                continue
+            try:
+                globals()[name] = getattr(module, name)
+            except AttributeError:
+                continue
+
+
+_bind_delegate_exports()
+
+
+if CURRENT_CORE.get(None) is None:
+    CURRENT_CORE.set(sys.modules[__name__])
 
 from services.api.chat_limits import (
     acquire_limiters as _acquire_limiters_impl,

@@ -18,7 +18,7 @@ def _load_budget() -> Dict[str, Any]:
     return payload
 
 
-def _run_ruff_c901() -> List[Dict[str, Any]]:
+def _run_ruff_c901(max_complexity: int) -> List[Dict[str, Any]]:
     cmd = [
         sys.executable,
         "-m",
@@ -27,6 +27,8 @@ def _run_ruff_c901() -> List[Dict[str, Any]]:
         "services/api",
         "--select",
         "C901",
+        "--config",
+        f"lint.mccabe.max-complexity={int(max_complexity)}",
         "--output-format",
         "json",
     ]
@@ -62,12 +64,13 @@ def _summarize(issues: List[Dict[str, Any]]) -> Tuple[int, Dict[str, int]]:
 
 def main() -> int:
     budget = _load_budget()
+    max_complexity = max(1, int(budget.get("mccabe_max_complexity") or 10))
     total_max = int(budget.get("total_c901_max") or 0)
     critical_budget = budget.get("critical_files") or {}
     if not isinstance(critical_budget, dict):
         raise ValueError("critical_files must be a JSON object")
 
-    issues = _run_ruff_c901()
+    issues = _run_ruff_c901(max_complexity)
     total, per_file = _summarize(issues)
     violations: List[str] = []
 
@@ -87,11 +90,11 @@ def main() -> int:
         print("[INFO] Current C901 by critical files:")
         for path in sorted(critical_budget.keys()):
             print(f"- {path}: {int(per_file.get(str(path), 0))}")
-        print(f"[INFO] Current total C901: {total}")
+        print(f"[INFO] Current total C901: {total} (max complexity>{max_complexity})")
         return 1
 
     print("[OK] Complexity budget check passed.")
-    print(f"[INFO] Current total C901: {total} / budget {total_max}")
+    print(f"[INFO] Current total C901: {total} / budget {total_max} (max complexity>{max_complexity})")
     for path in sorted(critical_budget.keys()):
         print(
             f"[INFO] {path}: {int(per_file.get(str(path), 0))} / budget {int(critical_budget[path])}"

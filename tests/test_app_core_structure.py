@@ -47,7 +47,9 @@ def test_app_core_has_no_star_imports() -> None:
 def test_app_core_reexports_core_services_module() -> None:
     app_source = _APP_CORE_PATH.read_text(encoding="utf-8")
     assert "from . import core_services as _core_services_module" in app_source
-    assert "_reexport_public(_core_services_module)" in app_source
+    assert "_reexport_public(" not in app_source
+    assert "def __getattr__(name: str) -> Any:" not in app_source
+    assert "_bind_delegate_exports()" in app_source
     assert "context_application_facade" not in app_source
     assert "context_runtime_facade" not in app_source
     assert "context_io_facade" not in app_source

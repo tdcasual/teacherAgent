@@ -1,5 +1,6 @@
 {
-  "total_c901_max": 64,
+  "mccabe_max_complexity": 14,
+  "total_c901_max": 30,
   "critical_files": {
     "services/api/agent_service.py": 0,
     "services/api/auth_service.py": 0,

@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 100
-target-version = ["py39"]
+target-version = ["py313"]
 exclude = '''
 /(
     \.git
@@ -15,7 +15,7 @@ exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py313"
 exclude = [
   ".git",
   ".worktrees",
@@ -35,7 +35,7 @@ ignore = ["E501"]
 "services/api/teacher_memory_core.py" = ["E402", "F401"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.13"
 warn_unused_configs = true
 ignore_missing_imports = true
 follow_imports = "normal"

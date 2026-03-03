@@ -37,6 +37,80 @@ def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path
     return target
 
 
+def _assignment_not_found(assignment_id: str) -> Dict[str, Any]:
+    return {"ok": False, "error": "assignment_not_found", "assignment_id": assignment_id}
+
+
+def _load_expected_students(meta: Dict[str, Any]) -> List[str]:
+    expected_raw = meta.get("expected_students")
+    if not isinstance(expected_raw, list):
+        return []
+    return [str(student).strip() for student in expected_raw if str(student).strip()]
+
+
+def _parse_due_timestamp(due_at: str) -> Optional[float]:
+    if not due_at:
+        return None
+    try:
+        return datetime.fromisoformat(due_at.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        _log.debug("operation failed", exc_info=True)
+        return None
+
+
+def _profile_map(profiles: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    return {
+        str(profile.get("student_id")): profile
+        for profile in profiles
+        if profile.get("student_id")
+    }
+
+
+def _student_progress(
+    assignment_id: str,
+    student_id: str,
+    profile: Dict[str, Any],
+    *,
+    deps: AssignmentProgressDeps,
+    due_ts: Optional[float],
+    now_ts: float,
+    include_student_payload: bool,
+) -> Dict[str, Any]:
+    discussion = deps.session_discussion_pass(student_id, assignment_id)
+    discussion_pass = bool(discussion.get("pass"))
+    attempts = deps.list_submission_attempts(assignment_id, student_id)
+    best = deps.best_submission_attempt(attempts)
+    submitted = bool(best)
+    completed = discussion_pass and submitted
+    overdue = bool(due_ts and now_ts > due_ts and not completed)
+    payload: Optional[Dict[str, Any]] = None
+    if include_student_payload:
+        payload = {
+            "student_id": student_id,
+            "student_name": profile.get("student_name") or "",
+            "class_name": profile.get("class_name") or "",
+            "discussion": discussion,
+            "submission": {"attempts": len(attempts), "best": best},
+            "complete": completed,
+            "overdue": overdue,
+        }
+    return {
+        "discussion_pass": discussion_pass,
+        "submitted": submitted,
+        "completed": completed,
+        "overdue": overdue,
+        "payload": payload,
+    }
+
+
+def _student_sort_key(item: Dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(item.get("class_name") or ""),
+        str(item.get("student_name") or ""),
+        str(item.get("student_id") or ""),
+    )
+
+
 def compute_assignment_progress(
     assignment_id: str,
     *,
@@ -45,9 +119,9 @@ def compute_assignment_progress(
 ) -> Dict[str, Any]:
     folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
     if folder is None:
-        return {"ok": False, "error": "assignment_not_found", "assignment_id": assignment_id}
+        return _assignment_not_found(assignment_id)
     if not folder.exists():
-        return {"ok": False, "error": "assignment_not_found", "assignment_id": assignment_id}
+        return _assignment_not_found(assignment_id)
     meta = deps.load_assignment_meta(folder)
     if not meta:
         meta = {"assignment_id": assignment_id}
@@ -55,22 +129,11 @@ def compute_assignment_progress(
     deps.postprocess_assignment_meta(assignment_id)
     meta = deps.load_assignment_meta(folder) or meta
 
-    expected_raw = meta.get("expected_students")
-    expected_students: List[str] = []
-    if isinstance(expected_raw, list):
-        expected_students = [str(s).strip() for s in expected_raw if str(s).strip()]
-
+    expected_students = _load_expected_students(meta)
     due_at = deps.normalize_due_at(meta.get("due_at"))
-    due_ts = None
-    if due_at:
-        try:
-            due_ts = datetime.fromisoformat(due_at.replace("Z", "+00:00")).timestamp()
-        except Exception:
-            _log.debug("operation failed", exc_info=True)
-            due_ts = None
-
+    due_ts = _parse_due_timestamp(due_at)
     now_ts = deps.time_time()
-    profiles = {p.get("student_id"): p for p in deps.list_all_student_profiles() if p.get("student_id")}
+    profiles = _profile_map(deps.list_all_student_profiles())
 
     students_out: List[Dict[str, Any]] = []
     discussion_pass_count = 0
@@ -79,50 +142,25 @@ def compute_assignment_progress(
     overdue_count = 0
 
     for sid in expected_students:
-        p = profiles.get(sid) or {}
-        discussion = deps.session_discussion_pass(sid, assignment_id)
-        discussion_pass = bool(discussion.get("pass"))
-        if discussion_pass:
-            discussion_pass_count += 1
-
-        attempts = deps.list_submission_attempts(assignment_id, sid)
-        best = deps.best_submission_attempt(attempts)
-        submitted = bool(best)
-        if submitted:
-            submission_count += 1
-
-        complete = discussion_pass and submitted
-        if complete:
-            completed_count += 1
-
-        overdue = bool(due_ts and now_ts > due_ts and not complete)
-        if overdue:
-            overdue_count += 1
-
-        if include_students:
-            students_out.append(
-                {
-                    "student_id": sid,
-                    "student_name": p.get("student_name") or "",
-                    "class_name": p.get("class_name") or "",
-                    "discussion": discussion,
-                    "submission": {
-                        "attempts": len(attempts),
-                        "best": best,
-                    },
-                    "complete": complete,
-                    "overdue": overdue,
-                }
-            )
+        student = _student_progress(
+            assignment_id,
+            sid,
+            profiles.get(sid) or {},
+            deps=deps,
+            due_ts=due_ts,
+            now_ts=now_ts,
+            include_student_payload=include_students,
+        )
+        discussion_pass_count += int(bool(student["discussion_pass"]))
+        submission_count += int(bool(student["submitted"]))
+        completed_count += int(bool(student["completed"]))
+        overdue_count += int(bool(student["overdue"]))
+        payload = student.get("payload")
+        if include_students and isinstance(payload, dict):
+            students_out.append(payload)
 
     if include_students:
-        students_out.sort(
-            key=lambda x: (
-                str(x.get("class_name") or ""),
-                str(x.get("student_name") or ""),
-                str(x.get("student_id") or ""),
-            )
-        )
+        students_out.sort(key=_student_sort_key)
 
     result = {
         "ok": True,

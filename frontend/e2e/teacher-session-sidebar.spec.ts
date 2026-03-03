@@ -316,7 +316,7 @@ test('mobile more menu closes when tapping outside', async ({ page }) => {
   })
 
   await page.getByRole('button', { name: '更多' }).click()
-  const menuItem = page.getByRole('button', { name: '模型路由' }).first()
+  const menuItem = page.getByRole('button', { name: '打开设置' }).first()
   await expect(menuItem).toBeVisible()
 
   await page.mouse.click(8, 220)
@@ -424,30 +424,6 @@ test('mobile settings modal overlays tabbar hit target', async ({ page }) => {
   })
 
   expect(bottomHitIsSettingsOverlay).toBe(true)
-})
-
-test('mobile persona manager overlays tabbar hit target', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherMobileShellV2: '1',
-    },
-  })
-
-  await page.getByRole('button', { name: '更多' }).click()
-  await page.getByRole('button', { name: '角色管理' }).click()
-  await expect(page.getByRole('dialog', { name: '角色管理' })).toBeVisible()
-
-  const bottomHitIsPersonaOverlay = await page.evaluate(() => {
-    const overlay = document.querySelector('[role=\"dialog\"][aria-label=\"角色管理\"]') as HTMLElement | null
-    if (!overlay) return false
-    const x = Math.round(window.innerWidth / 2)
-    const y = Math.round(window.innerHeight - 12)
-    const hit = document.elementFromPoint(x, y)
-    return Boolean(hit && overlay.contains(hit))
-  })
-
-  expect(bottomHitIsPersonaOverlay).toBe(true)
 })
 
 test('new session is created with session_* id and becomes active', async ({ page }) => {

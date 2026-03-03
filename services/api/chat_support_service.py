@@ -112,76 +112,74 @@ def _extract_kp_near(text: str, anchor_pos: int, window: int = 40) -> List[str]:
     return found
 
 
+def _collect_kp_by_prefixes(text: str, prefixes: tuple[str, ...]) -> List[str]:
+    out: List[str] = []
+    for prefix in prefixes:
+        idx = 0
+        while True:
+            pos = text.find(prefix, idx)
+            if pos < 0:
+                break
+            for kp in _extract_kp_near(text, pos + len(prefix)):
+                if kp not in out:
+                    out.append(kp)
+            idx = pos + len(prefix)
+    return out
+
+
+def _collect_misconceptions(text: str) -> List[str]:
+    out: List[str] = []
+    for prefix in _MISCONCEPTION_PREFIXES:
+        pos = text.find(prefix)
+        if pos < 0:
+            continue
+        snippet = text[pos : pos + 60].strip()
+        for sep in ("。", "；", "\n", "，"):
+            cut = snippet.find(sep)
+            if cut > 0:
+                snippet = snippet[:cut]
+                break
+        if snippet and snippet not in out:
+            out.append(snippet)
+    return out
+
+
+def _extract_next_focus(text: str) -> str:
+    for prefix in _NEXT_FOCUS_PREFIXES:
+        pos = text.find(prefix)
+        if pos < 0:
+            continue
+        snippet = text[pos : pos + 60].strip()
+        for sep in ("。", "；", "\n"):
+            cut = snippet.find(sep)
+            if cut > 0:
+                return snippet[:cut]
+        return snippet
+    return ""
+
+
+def _extract_topic(text: str) -> str:
+    m = re.search(r"【(.+?)】", text)
+    if m:
+        return m.group(1)[:30]
+    m = re.search(r"\*\*(.+?)\*\*", text)
+    if m:
+        return m.group(1)[:30]
+    return ""
+
+
 def extract_diagnostic_signals(reply_text: str) -> DiagnosticSignals:
     """Rule-based extraction of diagnostic signals from an LLM reply."""
     if not reply_text:
         return DiagnosticSignals()
-
     text = reply_text
-    signals = DiagnosticSignals()
-
-    # --- weak KP ---
-    for prefix in _WEAK_PREFIXES:
-        idx = 0
-        while True:
-            pos = text.find(prefix, idx)
-            if pos < 0:
-                break
-            kps = _extract_kp_near(text, pos + len(prefix))
-            for kp in kps:
-                if kp not in signals.weak_kp:
-                    signals.weak_kp.append(kp)
-            idx = pos + len(prefix)
-
-    # --- strong KP ---
-    for prefix in _STRONG_PREFIXES:
-        idx = 0
-        while True:
-            pos = text.find(prefix, idx)
-            if pos < 0:
-                break
-            kps = _extract_kp_near(text, pos + len(prefix))
-            for kp in kps:
-                if kp not in signals.strong_kp:
-                    signals.strong_kp.append(kp)
-            idx = pos + len(prefix)
-
-    # --- misconceptions ---
-    for prefix in _MISCONCEPTION_PREFIXES:
-        pos = text.find(prefix)
-        if pos >= 0:
-            snippet = text[pos: pos + 60].strip()
-            # Take up to the first sentence boundary.
-            for sep in ("。", "；", "\n", "，"):
-                cut = snippet.find(sep)
-                if cut > 0:
-                    snippet = snippet[:cut]
-                    break
-            if snippet and snippet not in signals.misconceptions:
-                signals.misconceptions.append(snippet)
-
-    # --- next focus ---
-    for prefix in _NEXT_FOCUS_PREFIXES:
-        pos = text.find(prefix)
-        if pos >= 0 and not signals.next_focus:
-            snippet = text[pos: pos + 60].strip()
-            for sep in ("。", "；", "\n"):
-                cut = snippet.find(sep)
-                if cut > 0:
-                    snippet = snippet[:cut]
-                    break
-            signals.next_focus = snippet
-
-    # --- topic (first 【...】 or **...** heading) ---
-    m = re.search(r"【(.+?)】", text)
-    if m:
-        signals.topic = m.group(1)[:30]
-    elif not signals.topic:
-        m = re.search(r"\*\*(.+?)\*\*", text)
-        if m:
-            signals.topic = m.group(1)[:30]
-
-    return signals
+    return DiagnosticSignals(
+        weak_kp=_collect_kp_by_prefixes(text, _WEAK_PREFIXES),
+        strong_kp=_collect_kp_by_prefixes(text, _STRONG_PREFIXES),
+        misconceptions=_collect_misconceptions(text),
+        next_focus=_extract_next_focus(text),
+        topic=_extract_topic(text),
+    )
 
 
 def build_interaction_note(last_user: str, reply: str, assignment_id: Optional[str] = None) -> str:

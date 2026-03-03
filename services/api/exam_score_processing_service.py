@@ -64,44 +64,107 @@ def build_exam_question_id(q_no: int, sub_no: Optional[str]) -> str:
     return f"Q{q_no}"
 
 
-def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+def _normalize_exam_parse_mode(parsed: Dict[str, Any]) -> str:
     mode = str(parsed.get("mode") or "").strip().lower()
-    if mode not in {"question", "total"}:
-        mode = "question" if parsed.get("questions") else "total"
+    if mode in {"question", "total"}:
+        return mode
+    return "question" if parsed.get("questions") else "total"
+
+
+def _collect_parse_warnings(parsed: Dict[str, Any]) -> List[str]:
     warnings: List[str] = []
     parsed_warnings = parsed.get("warnings")
     if isinstance(parsed_warnings, list):
         warnings.extend([str(x) for x in parsed_warnings if x])
+    return warnings
+
+
+def _build_question_templates(parsed: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    questions_out: Dict[str, Dict[str, Any]] = {}
+    questions_in = parsed.get("questions") or []
+    if not isinstance(questions_in, list):
+        return questions_out
+    for item in questions_in:
+        if not isinstance(item, dict):
+            continue
+        raw_label = str(item.get("raw_label") or "").strip()
+        q_no = item.get("question_no")
+        sub_no = str(item.get("sub_no") or "").strip() or None
+        qid = str(item.get("question_id") or "").strip()
+        if not qid and q_no:
+            try:
+                qid = build_exam_question_id(int(q_no), sub_no)
+            except Exception:
+                _log.warning("numeric conversion failed", exc_info=True)
+                qid = ""
+        if not raw_label and qid:
+            raw_label = qid
+        if not qid:
+            continue
+        questions_out[qid] = {
+            "question_id": qid,
+            "question_no": str(q_no or "").strip(),
+            "sub_no": str(sub_no or "").strip(),
+        }
+    return questions_out
+
+
+def _normalize_scores_map(scores_map: Any) -> Dict[str, Any]:
+    if isinstance(scores_map, dict):
+        return scores_map
+    if not isinstance(scores_map, list):
+        return {}
+    converted: Dict[str, Any] = {}
+    for item in scores_map:
+        if not isinstance(item, dict):
+            continue
+        lbl = str(item.get("raw_label") or item.get("label") or "").strip()
+        converted[lbl] = item.get("score")
+    return converted
+
+
+def _build_total_row(
+    exam_id: str,
+    student_id: str,
+    student_name: str,
+    class_name: str,
+    total_score: float,
+) -> Dict[str, Any]:
+    return {
+        "exam_id": exam_id,
+        "student_id": student_id,
+        "student_name": student_name,
+        "class_name": class_name,
+        "question_id": "TOTAL",
+        "question_no": "",
+        "sub_no": "",
+        "raw_label": "TOTAL",
+        "raw_value": str(total_score),
+        "raw_answer": "",
+        "score": total_score,
+        "is_correct": "",
+    }
+
+
+def _sort_key_question_no(item: Dict[str, Any]) -> Tuple[int, str]:
+    no = item.get("question_no") or ""
+    try:
+        no_int = int(str(no))
+    except Exception:
+        _log.warning("numeric conversion failed", exc_info=True)
+        no_int = 9999
+    return no_int, str(item.get("sub_no") or "")
+
+
+def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+    mode = _normalize_exam_parse_mode(parsed)
+    warnings = _collect_parse_warnings(parsed)
 
     students = parsed.get("students") or []
     if not isinstance(students, list):
         return [], [], ["students_missing_or_invalid"]
 
-    questions_out: Dict[str, Dict[str, Any]] = {}
-    questions_in = parsed.get("questions") or []
-    if isinstance(questions_in, list):
-        for item in questions_in:
-            if not isinstance(item, dict):
-                continue
-            raw_label = str(item.get("raw_label") or "").strip()
-            q_no = item.get("question_no")
-            sub_no = str(item.get("sub_no") or "").strip() or None
-            qid = str(item.get("question_id") or "").strip()
-            if not qid and q_no:
-                try:
-                    qid = build_exam_question_id(int(q_no), sub_no)
-                except Exception:
-                    _log.warning("numeric conversion failed", exc_info=True)
-                    qid = ""
-            if not raw_label and qid:
-                raw_label = qid
-            if not qid:
-                continue
-            questions_out[qid] = {
-                "question_id": qid,
-                "question_no": str(q_no or "").strip(),
-                "sub_no": str(sub_no or "").strip(),
-            }
+    questions_out = _build_question_templates(parsed)
 
     rows: List[Dict[str, Any]] = []
     for s in students:
@@ -117,34 +180,11 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
             total_score = parse_score_value(s.get("total_score"))
             if total_score is None:
                 continue
-            rows.append(
-                {
-                    "exam_id": exam_id,
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                    "question_id": "TOTAL",
-                    "question_no": "",
-                    "sub_no": "",
-                    "raw_label": "TOTAL",
-                    "raw_value": str(total_score),
-                    "raw_answer": "",
-                    "score": total_score,
-                    "is_correct": "",
-                }
-            )
+            rows.append(_build_total_row(exam_id, student_id, student_name, class_name, total_score))
             continue
 
-        scores_map = s.get("scores") or {}
-        if isinstance(scores_map, list):
-            converted: Dict[str, Any] = {}
-            for item in scores_map:
-                if not isinstance(item, dict):
-                    continue
-                lbl = str(item.get("raw_label") or item.get("label") or "").strip()
-                converted[lbl] = item.get("score")
-            scores_map = converted
-        if not isinstance(scores_map, dict):
+        scores_map = _normalize_scores_map(s.get("scores") or {})
+        if not scores_map:
             continue
         for raw_label, raw_score in scores_map.items():
             raw_label_str = str(raw_label or "").strip()
@@ -185,17 +225,7 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
             )
 
     questions_list = list(questions_out.values())
-
-    def _q_key(q: Dict[str, Any]) -> Tuple[int, str]:
-        no = q.get("question_no") or ""
-        try:
-            no_int = int(str(no))
-        except Exception:
-            _log.warning("numeric conversion failed", exc_info=True)
-            no_int = 9999
-        return no_int, str(q.get("sub_no") or "")
-
-    questions_list.sort(key=_q_key)
+    questions_list.sort(key=_sort_key_question_no)
     return rows, questions_list, warnings
 
 
@@ -280,6 +310,28 @@ def normalize_objective_answer(value: str) -> str:
     return "".join(sorted(set(letters)))
 
 
+def _build_answer_key_item(label: str, ans: str) -> Dict[str, Any]:
+    parsed = parse_exam_question_label(label)
+    if parsed:
+        q_no, sub_no, raw_norm = parsed
+        qid = build_exam_question_id(q_no, sub_no)
+        return {
+            "question_id": qid,
+            "question_no": str(q_no),
+            "sub_no": str(sub_no or ""),
+            "raw_label": raw_norm,
+            "correct_answer": ans,
+        }
+    qid = label if label.upper().startswith("Q") else f"Q{label}"
+    return {
+        "question_id": qid,
+        "question_no": "",
+        "sub_no": "",
+        "raw_label": label,
+        "correct_answer": ans,
+    }
+
+
 def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     warnings: List[str] = []
     if not text or not text.strip():
@@ -300,25 +352,8 @@ def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[st
         ans = normalize_objective_answer(m.group("ans"))
         if not ans:
             continue
-        parsed = parse_exam_question_label(label)
-        if parsed:
-            q_no, sub_no, raw_norm = parsed
-            qid = build_exam_question_id(q_no, sub_no)
-            q_no_str = str(q_no)
-            sub_no_str = str(sub_no or "")
-            raw_label = raw_norm
-        else:
-            qid = label if label.upper().startswith("Q") else f"Q{label}"
-            q_no_str = ""
-            sub_no_str = ""
-            raw_label = label
-        items[qid] = {
-            "question_id": qid,
-            "question_no": q_no_str,
-            "sub_no": sub_no_str,
-            "raw_label": raw_label,
-            "correct_answer": ans,
-        }
+        item = _build_answer_key_item(label, ans)
+        items[str(item.get("question_id") or "")] = item
 
     if not items:
         inline_re = re.compile(
@@ -329,25 +364,8 @@ def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[st
             ans = normalize_objective_answer(m.group("ans"))
             if not label or not ans:
                 continue
-            parsed = parse_exam_question_label(label)
-            if parsed:
-                q_no, sub_no, raw_norm = parsed
-                qid = build_exam_question_id(q_no, sub_no)
-                q_no_str = str(q_no)
-                sub_no_str = str(sub_no or "")
-                raw_label = raw_norm
-            else:
-                qid = label if label.upper().startswith("Q") else f"Q{label}"
-                q_no_str = ""
-                sub_no_str = ""
-                raw_label = label
-            items[qid] = {
-                "question_id": qid,
-                "question_no": q_no_str,
-                "sub_no": sub_no_str,
-                "raw_label": raw_label,
-                "correct_answer": ans,
-            }
+            item = _build_answer_key_item(label, ans)
+            items[str(item.get("question_id") or "")] = item
 
     if not items:
         warnings.append("未能从答案文本中识别出“题号-答案”结构（建议上传更清晰的答案PDF/图片，或使用可复制文本的答案文件）。")

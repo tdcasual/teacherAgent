@@ -61,107 +61,98 @@ def normalize_exam_chart_types(value: Any) -> List[str]:
     return normalized or list(_EXAM_CHART_DEFAULT_TYPES)
 
 
-def build_exam_chart_bundle_input(exam_id: str, top_n: int, deps: ExamAnalysisChartsDeps) -> Dict[str, Any]:
-    manifest = deps.load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-    responses_path = deps.exam_responses_path(manifest)
-    if not responses_path or not responses_path.exists():
-        return {"error": "responses_missing", "exam_id": exam_id}
-
-    totals_result = deps.compute_exam_totals(responses_path)
-    totals: Dict[str, float] = totals_result.get("totals") or {}
-    students_meta: Dict[str, Dict[str, str]] = totals_result.get("students") or {}
-    if not totals:
-        return {"error": "no_scored_responses", "exam_id": exam_id}
-
-    score_values = [float(v) for v in totals.values()]
-    student_count = len(score_values)
-    warnings: List[str] = []
-
+def _build_class_compare(
+    totals: Dict[str, float],
+    students_meta: Dict[str, Dict[str, str]],
+) -> tuple[str, List[Dict[str, Any]]]:
     class_scores: Dict[str, List[float]] = {}
     for sid, total in totals.items():
         cls = str((students_meta.get(sid) or {}).get("class_name") or "").strip() or "未分班"
         class_scores.setdefault(cls, []).append(float(total))
 
-    class_compare_mode = "class"
-    class_compare: List[Dict[str, Any]] = []
     if len(class_scores) >= 2:
-        for cls, vals in class_scores.items():
-            class_compare.append(
-                {
-                    "label": cls,
-                    "avg_total": round(sum(vals) / len(vals), 3),
-                    "student_count": len(vals),
-                }
-            )
+        class_compare = [
+            {
+                "label": cls,
+                "avg_total": round(sum(vals) / len(vals), 3),
+                "student_count": len(vals),
+            }
+            for cls, vals in class_scores.items()
+        ]
         class_compare.sort(key=lambda x: x.get("avg_total") or 0, reverse=True)
-    else:
-        class_compare_mode = "tier"
-        ranked_scores = [float(v) for _, v in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
-        if ranked_scores:
-            n = len(ranked_scores)
-            idx1 = max(1, n // 3)
-            idx2 = n if n < 3 else min(n, max(idx1 + 1, (2 * n) // 3))
-            segments = [
-                ("Top 33%", ranked_scores[:idx1]),
-                ("Middle 34%", ranked_scores[idx1:idx2]),
-                ("Bottom 33%", ranked_scores[idx2:]),
-            ]
-            for label, vals in segments:
-                if not vals:
-                    continue
-                class_compare.append(
-                    {
-                        "label": label,
-                        "avg_total": round(sum(vals) / len(vals), 3),
-                        "student_count": len(vals),
-                    }
-                )
+        return "class", class_compare
 
+    ranked_scores = [float(v) for _, v in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
+    if not ranked_scores:
+        return "tier", []
+    n = len(ranked_scores)
+    idx1 = max(1, n // 3)
+    idx2 = n if n < 3 else min(n, max(idx1 + 1, (2 * n) // 3))
+    segments = [
+        ("Top 33%", ranked_scores[:idx1]),
+        ("Middle 34%", ranked_scores[idx1:idx2]),
+        ("Bottom 33%", ranked_scores[idx2:]),
+    ]
+    class_compare: List[Dict[str, Any]] = []
+    for label, vals in segments:
+        if not vals:
+            continue
+        class_compare.append(
+            {
+                "label": label,
+                "avg_total": round(sum(vals) / len(vals), 3),
+                "student_count": len(vals),
+            }
+        )
+    return "tier", class_compare
+
+
+def _build_knowledge_points(exam_id: str, top_n: int, deps: ExamAnalysisChartsDeps) -> List[Dict[str, Any]]:
     analysis_res = deps.exam_analysis_get(exam_id)
     kp_items: List[Dict[str, Any]] = []
-    if analysis_res.get("ok"):
-        analysis = analysis_res.get("analysis") if isinstance(analysis_res.get("analysis"), dict) else {}
-        raw_kps = analysis.get("knowledge_points") if isinstance(analysis, dict) else None
-        if isinstance(raw_kps, list):
-            for row in raw_kps:
-                if not isinstance(row, dict):
-                    continue
-                label = str(row.get("kp_id") or row.get("name") or row.get("kp") or "").strip()
-                if not label:
-                    continue
-                mastery: Optional[float] = None
-                loss_rate = deps.parse_score_value(row.get("loss_rate"))
-                if loss_rate is not None:
-                    mastery = 1.0 - float(loss_rate)
-                if mastery is None:
-                    avg_score = deps.parse_score_value(row.get("avg_score"))
-                    coverage_score = deps.parse_score_value(row.get("coverage_score"))
-                    if (avg_score is not None) and (coverage_score is not None) and coverage_score > 0:
-                        mastery = float(avg_score) / float(coverage_score)
-                if mastery is None:
-                    mastery = deps.parse_score_value(row.get("mastery"))
-                if mastery is None:
-                    continue
-                mastery = max(0.0, min(1.0, float(mastery)))
-                kp_items.append(
-                    {
-                        "label": label,
-                        "mastery": round(mastery, 4),
-                        "loss_rate": round(1.0 - mastery, 4),
-                        "coverage_count": int(row.get("coverage_count") or 0),
-                    }
-                )
-    if kp_items:
-        kp_items.sort(key=lambda x: x.get("mastery") or 0)
-        kp_limit = deps.safe_int_arg(top_n, 8, 3, 12)
-        kp_items = kp_items[:kp_limit]
-    else:
-        warnings.append("知识点雷达图数据不足（analysis.knowledge_points 缺失或为空）。")
+    if not analysis_res.get("ok"):
+        return kp_items
+    analysis = analysis_res.get("analysis") if isinstance(analysis_res.get("analysis"), dict) else {}
+    raw_kps = analysis.get("knowledge_points") if isinstance(analysis, dict) else None
+    if not isinstance(raw_kps, list):
+        return kp_items
+    for row in raw_kps:
+        if not isinstance(row, dict):
+            continue
+        label = str(row.get("kp_id") or row.get("name") or row.get("kp") or "").strip()
+        if not label:
+            continue
+        mastery: Optional[float] = None
+        loss_rate = deps.parse_score_value(row.get("loss_rate"))
+        if loss_rate is not None:
+            mastery = 1.0 - float(loss_rate)
+        if mastery is None:
+            avg_score = deps.parse_score_value(row.get("avg_score"))
+            coverage_score = deps.parse_score_value(row.get("coverage_score"))
+            if (avg_score is not None) and (coverage_score is not None) and coverage_score > 0:
+                mastery = float(avg_score) / float(coverage_score)
+        if mastery is None:
+            mastery = deps.parse_score_value(row.get("mastery"))
+        if mastery is None:
+            continue
+        mastery = max(0.0, min(1.0, float(mastery)))
+        kp_items.append(
+            {
+                "label": label,
+                "mastery": round(mastery, 4),
+                "loss_rate": round(1.0 - mastery, 4),
+                "coverage_count": int(row.get("coverage_count") or 0),
+            }
+        )
+    kp_items.sort(key=lambda x: x.get("mastery") or 0)
+    return kp_items[: deps.safe_int_arg(top_n, 8, 3, 12)]
 
-    questions_path = deps.exam_questions_path(manifest)
-    questions = deps.read_questions_csv(questions_path) if questions_path else {}
+
+def _collect_question_score_maps(
+    responses_path: Path,
+    deps: ExamAnalysisChartsDeps,
+    questions: Dict[str, Dict[str, Any]],
+) -> tuple[Dict[str, Dict[str, float]], Dict[str, Dict[str, Any]], Dict[str, float]]:
     question_scores: Dict[str, Dict[str, float]] = {}
     question_meta: Dict[str, Dict[str, Any]] = {}
     observed_max: Dict[str, float] = {}
@@ -184,42 +175,94 @@ def build_exam_chart_bundle_input(exam_id: str, top_n: int, deps: ExamAnalysisCh
                     "question_no": str(row.get("question_no") or "").strip(),
                     "question_id": qid,
                 }
+    return question_scores, question_meta, observed_max
 
-    question_discrimination: List[Dict[str, Any]] = []
+
+def _build_question_discrimination(
+    totals: Dict[str, float],
+    responses_path: Path,
+    top_n: int,
+    deps: ExamAnalysisChartsDeps,
+    questions: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     ranked_students = [sid for sid, _ in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
-    if len(ranked_students) >= 4:
-        group_size = max(1, int(len(ranked_students) * 0.27))
-        group_size = min(group_size, len(ranked_students) // 2)
-        top_ids = ranked_students[:group_size]
-        bottom_ids = ranked_students[-group_size:]
-        for qid, per_student in question_scores.items():
-            q_meta = questions.get(qid) or question_meta.get(qid) or {}
-            max_score = deps.parse_score_value(q_meta.get("max_score"))
-            if (max_score is None) or (max_score <= 0):
-                max_score = observed_max.get(qid)
-            if (max_score is None) or (max_score <= 0):
-                continue
-            top_vals = [float(per_student[sid]) / float(max_score) for sid in top_ids if sid in per_student]
-            bottom_vals = [float(per_student[sid]) / float(max_score) for sid in bottom_ids if sid in per_student]
-            if (not top_vals) or (not bottom_vals):
-                continue
-            disc = (sum(top_vals) / len(top_vals)) - (sum(bottom_vals) / len(bottom_vals))
-            avg_score = sum(per_student.values()) / len(per_student) if per_student else 0.0
-            q_no = str(q_meta.get("question_no") or "").strip()
-            label = q_no if q_no.upper().startswith("Q") else (f"Q{q_no}" if q_no else qid)
-            question_discrimination.append(
-                {
-                    "question_id": qid,
-                    "label": label,
-                    "discrimination": round(float(disc), 4),
-                    "avg_score": round(float(avg_score), 4),
-                    "max_score": float(max_score),
-                    "response_count": len(per_student),
-                }
-            )
-        question_discrimination.sort(key=lambda x: x.get("discrimination") or 0)
-        question_discrimination = question_discrimination[: deps.safe_int_arg(top_n, 12, 3, 30)]
-    else:
+    if len(ranked_students) < 4:
+        return []
+    group_size = max(1, int(len(ranked_students) * 0.27))
+    group_size = min(group_size, len(ranked_students) // 2)
+    top_ids = ranked_students[:group_size]
+    bottom_ids = ranked_students[-group_size:]
+
+    question_scores, question_meta, observed_max = _collect_question_score_maps(
+        responses_path=responses_path,
+        deps=deps,
+        questions=questions,
+    )
+
+    out: List[Dict[str, Any]] = []
+    for qid, per_student in question_scores.items():
+        q_meta = questions.get(qid) or question_meta.get(qid) or {}
+        max_score = deps.parse_score_value(q_meta.get("max_score"))
+        if (max_score is None) or (max_score <= 0):
+            max_score = observed_max.get(qid)
+        if (max_score is None) or (max_score <= 0):
+            continue
+        top_vals = [float(per_student[sid]) / float(max_score) for sid in top_ids if sid in per_student]
+        bottom_vals = [float(per_student[sid]) / float(max_score) for sid in bottom_ids if sid in per_student]
+        if (not top_vals) or (not bottom_vals):
+            continue
+        disc = (sum(top_vals) / len(top_vals)) - (sum(bottom_vals) / len(bottom_vals))
+        avg_score = sum(per_student.values()) / len(per_student) if per_student else 0.0
+        q_no = str(q_meta.get("question_no") or "").strip()
+        label = q_no if q_no.upper().startswith("Q") else (f"Q{q_no}" if q_no else qid)
+        out.append(
+            {
+                "question_id": qid,
+                "label": label,
+                "discrimination": round(float(disc), 4),
+                "avg_score": round(float(avg_score), 4),
+                "max_score": float(max_score),
+                "response_count": len(per_student),
+            }
+        )
+    out.sort(key=lambda x: x.get("discrimination") or 0)
+    return out[: deps.safe_int_arg(top_n, 12, 3, 30)]
+
+
+def build_exam_chart_bundle_input(exam_id: str, top_n: int, deps: ExamAnalysisChartsDeps) -> Dict[str, Any]:
+    manifest = deps.load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+    responses_path = deps.exam_responses_path(manifest)
+    if not responses_path or not responses_path.exists():
+        return {"error": "responses_missing", "exam_id": exam_id}
+
+    totals_result = deps.compute_exam_totals(responses_path)
+    totals: Dict[str, float] = totals_result.get("totals") or {}
+    students_meta: Dict[str, Dict[str, str]] = totals_result.get("students") or {}
+    if not totals:
+        return {"error": "no_scored_responses", "exam_id": exam_id}
+
+    score_values = [float(v) for v in totals.values()]
+    student_count = len(score_values)
+    warnings: List[str] = []
+
+    class_compare_mode, class_compare = _build_class_compare(totals=totals, students_meta=students_meta)
+
+    kp_items = _build_knowledge_points(exam_id=exam_id, top_n=top_n, deps=deps)
+    if not kp_items:
+        warnings.append("知识点雷达图数据不足（analysis.knowledge_points 缺失或为空）。")
+
+    questions_path = deps.exam_questions_path(manifest)
+    questions = deps.read_questions_csv(questions_path) if questions_path else {}
+    question_discrimination = _build_question_discrimination(
+        totals=totals,
+        responses_path=responses_path,
+        top_n=top_n,
+        deps=deps,
+        questions=questions,
+    )
+    if not question_discrimination:
         warnings.append("题目区分度图数据不足（学生数至少需要 4 人）。")
 
     return {
@@ -436,68 +479,68 @@ def exam_analysis_charts_generate(args: Dict[str, Any], deps: ExamAnalysisCharts
             warnings.append(f"{title} 生成失败。")
         charts.append(entry)
 
+    chart_specs = {
+        "score_distribution": (
+            "成绩分布图",
+            chart_code_score_distribution,
+            lambda payload: {
+                "title": f"Score Distribution · {exam_id}",
+                "scores": payload.get("scores") or [],
+            },
+            "score_distribution.png",
+            "成绩分布图数据不足。",
+        ),
+        "knowledge_radar": (
+            "知识点掌握雷达图",
+            chart_code_knowledge_radar,
+            lambda payload: {
+                "title": f"Knowledge Mastery · {exam_id}",
+                "items": payload.get("knowledge_points") or [],
+            },
+            "knowledge_radar.png",
+            "知识点雷达图数据不足。",
+        ),
+        "class_compare": (
+            "班级（或分层）均分对比图",
+            chart_code_class_compare,
+            lambda payload: {
+                "title": f"Average Score Compare · {exam_id}",
+                "x_label": "Class" if str(payload.get("class_compare_mode") or "class") == "class" else "Tier",
+                "items": payload.get("class_compare") or [],
+            },
+            "class_compare.png",
+            "班级/分层对比图数据不足。",
+        ),
+        "question_discrimination": (
+            "题目区分度图（低到高）",
+            chart_code_question_discrimination,
+            lambda payload: {
+                "title": f"Question Discrimination · {exam_id}",
+                "items": payload.get("question_discrimination") or [],
+            },
+            "question_discrimination.png",
+            "题目区分度图数据不足。",
+        ),
+    }
+
     for chart_type in chart_types:
-        if chart_type == "score_distribution":
-            scores = bundle.get("scores") or []
-            if not scores:
-                warnings.append("成绩分布图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="成绩分布图",
-                python_code=chart_code_score_distribution(),
-                input_data={"title": f"Score Distribution · {exam_id}", "scores": scores},
-                save_as="score_distribution.png",
-            )
+        spec = chart_specs.get(chart_type)
+        if not spec:
             continue
-
-        if chart_type == "knowledge_radar":
-            kp_items = bundle.get("knowledge_points") or []
-            if not kp_items:
-                warnings.append("知识点雷达图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="知识点掌握雷达图",
-                python_code=chart_code_knowledge_radar(),
-                input_data={"title": f"Knowledge Mastery · {exam_id}", "items": kp_items},
-                save_as="knowledge_radar.png",
-            )
+        title, code_builder, input_builder, save_as, warn_msg = spec
+        input_data = input_builder(bundle)
+        items = input_data.get("items")
+        scores = input_data.get("scores")
+        if (isinstance(items, list) and not items) or (isinstance(scores, list) and not scores):
+            warnings.append(warn_msg)
             continue
-
-        if chart_type == "class_compare":
-            compare_items = bundle.get("class_compare") or []
-            if not compare_items:
-                warnings.append("班级/分层对比图数据不足。")
-                continue
-            compare_mode = str(bundle.get("class_compare_mode") or "class")
-            x_label = "Class" if compare_mode == "class" else "Tier"
-            run_chart(
-                chart_type=chart_type,
-                title="班级（或分层）均分对比图",
-                python_code=chart_code_class_compare(),
-                input_data={
-                    "title": f"Average Score Compare · {exam_id}",
-                    "x_label": x_label,
-                    "items": compare_items,
-                },
-                save_as="class_compare.png",
-            )
-            continue
-
-        if chart_type == "question_discrimination":
-            items = bundle.get("question_discrimination") or []
-            if not items:
-                warnings.append("题目区分度图数据不足。")
-                continue
-            run_chart(
-                chart_type=chart_type,
-                title="题目区分度图（低到高）",
-                python_code=chart_code_question_discrimination(),
-                input_data={"title": f"Question Discrimination · {exam_id}", "items": items},
-                save_as="question_discrimination.png",
-            )
-            continue
+        run_chart(
+            chart_type=chart_type,
+            title=title,
+            python_code=code_builder(),
+            input_data=input_data,
+            save_as=save_as,
+        )
 
     successful = [c for c in charts if c.get("ok") and c.get("image_url")]
     markdown_lines = [f"### 考试分析图表 · {exam_id}"]
