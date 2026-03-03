@@ -14,11 +14,6 @@ _QUEUE_BACKENDS: Dict[_BackendKey, QueueBackend] = {}
 _BACKEND_LOCK = threading.Lock()
 
 
-def _is_inline_mode(mode: str) -> bool:
-    normalized = str(mode or "").strip().lower()
-    return normalized in {"inline", "inproc", "in-process", "in_process"}
-
-
 def _normalize_pytest_case(value: str) -> str:
     text = str(value or "").strip()
     if not text:
@@ -64,7 +59,7 @@ def get_app_queue_backend(
     with _BACKEND_LOCK:
         backend = _QUEUE_BACKENDS.get(key)
         if backend is None:
-            if is_pytest or _is_inline_mode(queue_mode):
+            if is_pytest:
                 backend = inline_backend_factory()
             else:
                 backend = get_backend(tenant_id=tenant_id)

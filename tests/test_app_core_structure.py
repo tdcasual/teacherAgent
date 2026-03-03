@@ -39,7 +39,8 @@ def test_app_core_io_wrappers_extracted() -> None:
         "IO/upload wrappers should be extracted to services/api/context_io_facade.py."
     )
     app_source = _APP_CORE_PATH.read_text(encoding="utf-8")
-    assert "from .context_io_facade import *" in app_source
+    assert "from .context_io_facade import *" not in app_source
+    assert "_reexport_public(_context_io_facade_module)" in app_source
     assert "def process_upload_job(" not in app_source
     assert "def process_exam_upload_job(" not in app_source
     assert "def extract_text_from_pdf(" not in app_source
@@ -47,8 +48,12 @@ def test_app_core_io_wrappers_extracted() -> None:
 
 def test_app_core_avoids_duplicate_explicit_reexport_blocks() -> None:
     app_source = _APP_CORE_PATH.read_text(encoding="utf-8")
-    # Keep star-based compatibility exports, but avoid duplicate explicit import lists
-    # that bloat app_core without adding behavior.
+    # Keep compatibility exports centralized via module-level re-export helper,
+    # and avoid duplicate explicit import lists that bloat app_core.
     assert "from .teacher_memory_core import (\n" not in app_source
     assert "from .context_application_facade import (\n" not in app_source
     assert "from .context_runtime_facade import (\n" not in app_source
+    assert "from .context_application_facade import *" not in app_source
+    assert "from .context_runtime_facade import *" not in app_source
+    assert "_reexport_public(_context_application_facade_module)" in app_source
+    assert "_reexport_public(_context_runtime_facade_module)" in app_source

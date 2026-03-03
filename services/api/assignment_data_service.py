@@ -10,8 +10,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+from .assignment_catalog_service import build_assignment_detail as _build_assignment_detail_impl
 from .config import ASSIGNMENT_DETAIL_CACHE_TTL_SEC
 from .profile_service import load_profile_file
+from .wiring.assignment_wiring import _assignment_catalog_deps
 
 _log = logging.getLogger(__name__)
 
@@ -61,9 +63,12 @@ def _assignment_detail_fingerprint(folder: Path) -> Tuple[float, float, float]:
 
 
 def build_assignment_detail_cached(folder: Path, include_text: bool = True) -> Dict[str, Any]:
-    from services.api import app_core as _ac
     if ASSIGNMENT_DETAIL_CACHE_TTL_SEC <= 0:
-        return _ac.build_assignment_detail(folder, include_text=include_text)
+        return _build_assignment_detail_impl(
+            folder=folder,
+            include_text=include_text,
+            deps=_assignment_catalog_deps(),
+        )
     key = (str(folder), bool(include_text))
     now = time.monotonic()
     fp = _assignment_detail_fingerprint(folder)
@@ -73,7 +78,11 @@ def build_assignment_detail_cached(folder: Path, include_text: bool = True) -> D
             ts, cached_fp, data = cached
             if (now - ts) <= ASSIGNMENT_DETAIL_CACHE_TTL_SEC and cached_fp == fp:
                 return data
-    data = _ac.build_assignment_detail(folder, include_text=include_text)
+    data = _build_assignment_detail_impl(
+        folder=folder,
+        include_text=include_text,
+        deps=_assignment_catalog_deps(),
+    )
     with _ASSIGNMENT_DETAIL_CACHE_LOCK:
         _ASSIGNMENT_DETAIL_CACHE[key] = (now, fp, data)
     return data

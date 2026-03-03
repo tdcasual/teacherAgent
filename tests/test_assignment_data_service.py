@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import time
-import types
 from pathlib import Path
 
 import pytest
@@ -102,14 +100,12 @@ def test_build_assignment_detail_cached_with_ttl_disabled_bypasses_cache(
     monkeypatch.setattr(mod, "ASSIGNMENT_DETAIL_CACHE_TTL_SEC", 0)
 
     calls = {"count": 0}
-    fake_app_core = types.ModuleType("services.api.app_core")
-
-    def _fake_build_assignment_detail(folder: Path, *, include_text: bool = True):
+    def _fake_build_assignment_detail(*, folder: Path, include_text: bool = True, deps=None):
         calls["count"] += 1
         return {"call_count": calls["count"], "folder": str(folder), "include_text": include_text}
 
-    fake_app_core.build_assignment_detail = _fake_build_assignment_detail  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "services.api.app_core", fake_app_core)
+    monkeypatch.setattr(mod, "_build_assignment_detail_impl", _fake_build_assignment_detail)
+    monkeypatch.setattr(mod, "_assignment_catalog_deps", lambda: object())
 
     first = mod.build_assignment_detail_cached(tmp_path, include_text=False)
     second = mod.build_assignment_detail_cached(tmp_path, include_text=False)
@@ -132,14 +128,12 @@ def test_build_assignment_detail_cached_reuses_cache_then_invalidates_on_fingerp
     (tmp_path / "questions.csv").write_text("q,a\n1,2\n", encoding="utf-8")
 
     calls = {"count": 0}
-    fake_app_core = types.ModuleType("services.api.app_core")
-
-    def _fake_build_assignment_detail(folder: Path, *, include_text: bool = True):
+    def _fake_build_assignment_detail(*, folder: Path, include_text: bool = True, deps=None):
         calls["count"] += 1
         return {"call_count": calls["count"], "folder": str(folder), "include_text": include_text}
 
-    fake_app_core.build_assignment_detail = _fake_build_assignment_detail  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "services.api.app_core", fake_app_core)
+    monkeypatch.setattr(mod, "_build_assignment_detail_impl", _fake_build_assignment_detail)
+    monkeypatch.setattr(mod, "_assignment_catalog_deps", lambda: object())
 
     first = mod.build_assignment_detail_cached(tmp_path, include_text=True)
     second = mod.build_assignment_detail_cached(tmp_path, include_text=True)

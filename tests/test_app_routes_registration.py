@@ -1,4 +1,5 @@
 from fastapi import APIRouter, FastAPI
+import pytest
 
 from services.api import app_routes
 
@@ -30,3 +31,9 @@ def test_register_routes_includes_assignment_router():
 
     assert called.get("core").__class__ is DummyCore
     assert any(route.path == "/__assignment_probe" for route in app.router.routes)
+
+
+def test_register_routes_rejects_missing_core() -> None:
+    app = FastAPI()
+    with pytest.raises(ValueError, match="core must not be None"):
+        app_routes.register_routes(app, None)

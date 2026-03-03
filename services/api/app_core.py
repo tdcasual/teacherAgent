@@ -22,6 +22,15 @@ from collections import deque
 
 _log = logging.getLogger(__name__)
 
+
+def _reexport_public(module: Any) -> None:
+    export_names = getattr(module, "__all__", None)
+    if export_names is None:
+        export_names = [name for name in dir(module) if not name.startswith("_")]
+    for name in export_names:
+        globals()[name] = getattr(module, name)
+
+
 from llm_gateway import LLMGateway
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -129,6 +138,7 @@ from .wiring import teacher_wiring as _teacher_wiring_module
 from .wiring import worker_wiring as _worker_wiring_module
 from .wiring import misc_wiring as _misc_wiring_module
 from .wiring import skill_wiring as _skill_wiring_module
+from . import app_core_wiring_exports as _app_core_wiring_exports_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_chat_wiring_module)
     _importlib.reload(_assignment_wiring_module)
@@ -138,7 +148,8 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_worker_wiring_module)
     _importlib.reload(_misc_wiring_module)
     _importlib.reload(_skill_wiring_module)
-from .app_core_wiring_exports import *  # noqa: F401,F403
+    _importlib.reload(_app_core_wiring_exports_module)
+_reexport_public(_app_core_wiring_exports_module)
 
 from . import context_application_facade as _context_application_facade_module
 from . import context_runtime_facade as _context_runtime_facade_module
@@ -147,9 +158,9 @@ if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATA_DIR") or os.getenv("UPLOA
     _importlib.reload(_context_application_facade_module)
     _importlib.reload(_context_runtime_facade_module)
     _importlib.reload(_context_io_facade_module)
-from .context_application_facade import *  # noqa: F401,F403
-from .context_runtime_facade import *  # noqa: F401,F403
-from .context_io_facade import *  # noqa: F401,F403
+_reexport_public(_context_application_facade_module)
+_reexport_public(_context_runtime_facade_module)
+_reexport_public(_context_io_facade_module)
 from services.api.chat_limits import (
     acquire_limiters as _acquire_limiters_impl,
     student_inflight_guard as _student_inflight_guard_impl,

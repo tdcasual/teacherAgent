@@ -110,6 +110,7 @@ jobs:
             tests/test_worker_skill_wiring_structure.py \
             tests/test_teacher_frontend_structure.py \
             tests/test_student_frontend_structure.py \
+            tests/test_no_go_artifacts.py \
             tests/test_tech_debt_targets.py \
             tests/test_observability_store.py \
             tests/test_operability_evidence.py

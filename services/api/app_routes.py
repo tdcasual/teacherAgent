@@ -15,11 +15,7 @@ from .routes.teacher_routes import build_router as build_teacher_router
 
 def register_routes(app: FastAPI, core: Any) -> None:
     if core is None:
-        @app.get("/health")
-        async def health():
-            return {"status": "ok"}
-
-        return
+        raise ValueError("core must not be None")
 
     app.include_router(build_misc_router(core))
     app.include_router(build_chat_router(core))

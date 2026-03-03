@@ -118,7 +118,7 @@ def test_prod_mode_does_not_fallback_to_inline_backend(monkeypatch):
     assert created == []
 
 
-def test_non_pytest_inline_mode_bypasses_rq_backend(monkeypatch):
+def test_non_pytest_inline_mode_still_requires_rq_backend(monkeypatch):
     reset_queue_backend()
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("JOB_QUEUE_BACKEND", "inline")
@@ -128,15 +128,15 @@ def test_non_pytest_inline_mode_bypasses_rq_backend(monkeypatch):
         calls["rq"] += 1
         raise RuntimeError("rq unavailable")
 
-    backend = get_app_queue_backend(
-        tenant_id="prod-tenant",
-        is_pytest=False,
-        inline_backend_factory=lambda: DummyBackend("inline"),
-        get_backend=failing_backend,
-    )
+    with pytest.raises(RuntimeError, match="rq unavailable"):
+        get_app_queue_backend(
+            tenant_id="prod-tenant",
+            is_pytest=False,
+            inline_backend_factory=lambda: DummyBackend("inline"),
+            get_backend=failing_backend,
+        )
 
-    assert backend.label == "inline"
-    assert calls["rq"] == 0
+    assert calls["rq"] == 1
 
 
 def test_pytest_backend_cache_isolated_by_data_dir(monkeypatch):

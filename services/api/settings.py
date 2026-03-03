@@ -285,10 +285,5 @@ def app_env() -> str:
 def is_production() -> bool:
     return app_env() in {"prod", "production"}
 
-
-def allow_inline_fallback_in_prod() -> bool:
-    return env_bool("ALLOW_INLINE_FALLBACK_IN_PROD", "0")
-
-
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))

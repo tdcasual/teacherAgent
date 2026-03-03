@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from services.api.chat_lane_store import MemoryLaneStore
+import pytest
+
 from services.api.chat_lane_store_factory import get_chat_lane_store, reset_chat_lane_stores
 
 
@@ -42,7 +43,7 @@ def test_factory_uses_redis_store_when_available(monkeypatch) -> None:
     assert client.ping_calls == 1
 
 
-def test_factory_falls_back_to_memory_when_redis_unavailable(monkeypatch) -> None:
+def test_factory_raises_when_redis_unavailable(monkeypatch) -> None:
     reset_chat_lane_stores()
 
     class _BadClient:
@@ -52,22 +53,11 @@ def test_factory_falls_back_to_memory_when_redis_unavailable(monkeypatch) -> Non
 
     monkeypatch.setattr("services.api.redis_clients.get_redis_client", lambda url, decode_responses=True: _BadClient())
 
-    store = get_chat_lane_store(
-        tenant_id="   ",
-        is_pytest=False,
-        redis_url="redis://x",
-        debounce_ms=11,
-        claim_ttl_sec=22,
-    )
-
-    assert isinstance(store, MemoryLaneStore)
-
-    # tenant_id blank should normalize to default key and be cached.
-    same = get_chat_lane_store(
-        tenant_id="default",
-        is_pytest=False,
-        redis_url="redis://x",
-        debounce_ms=11,
-        claim_ttl_sec=22,
-    )
-    assert same is store
+    with pytest.raises(RuntimeError, match="Redis is required for chat lane store"):
+        get_chat_lane_store(
+            tenant_id="   ",
+            is_pytest=False,
+            redis_url="redis://x",
+            debounce_ms=11,
+            claim_ttl_sec=22,
+        )

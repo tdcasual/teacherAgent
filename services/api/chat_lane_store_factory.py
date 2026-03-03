@@ -30,26 +30,23 @@ def get_chat_lane_store(
                     claim_ttl_sec=claim_ttl_sec,
                 )
             else:
-                try:
-                    from .chat_redis_lane_store import RedisLaneStore
-                    from .redis_clients import get_redis_client
+                from .chat_redis_lane_store import RedisLaneStore
+                from .redis_clients import get_redis_client
 
+                try:
                     client = get_redis_client(redis_url, decode_responses=True)
                     client.ping()
-                    store = RedisLaneStore(
-                        redis_client=client,
-                        tenant_id=tenant_key,
-                        claim_ttl_sec=claim_ttl_sec,
-                        debounce_ms=debounce_ms,
-                    )
-                except Exception:
-                    _log.warning(
-                        "Redis unavailable for chat lane store; using in-memory fallback"
-                    )
-                    store = MemoryLaneStore(
-                        debounce_ms=debounce_ms,
-                        claim_ttl_sec=claim_ttl_sec,
-                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"Redis is required for chat lane store (tenant={tenant_key})"
+                    ) from exc
+
+                store = RedisLaneStore(
+                    redis_client=client,
+                    tenant_id=tenant_key,
+                    claim_ttl_sec=claim_ttl_sec,
+                    debounce_ms=debounce_ms,
+                )
             _CHAT_LANE_STORES[tenant_key] = store
     return store
 
