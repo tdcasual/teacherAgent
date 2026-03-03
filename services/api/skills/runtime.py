@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from ..dynamic_skill_tools import load_dynamic_tools_for_skill_source
 from ..prompt_builder import DEFAULT_PROMPT_VERSION, PROMPTS_DIR
 from .spec import SkillModelPolicy, SkillSpec
 
@@ -71,7 +70,6 @@ class SkillRuntime:
     max_tool_calls: Optional[int]
     context_providers: List[str]
     model_policy: SkillModelPolicy
-    dynamic_tools: Dict[str, Dict[str, Any]]
 
     def apply_tool_policy(self, role_allowed: Set[str]) -> Set[str]:
         allowed = set(role_allowed)
@@ -195,5 +193,4 @@ def compile_skill_runtime(
         max_tool_calls=skill.agent.budgets.max_tool_calls,
         context_providers=skill.agent.context_providers,
         model_policy=skill.agent.model_policy,
-        dynamic_tools=load_dynamic_tools_for_skill_source(skill.source_path),
     )

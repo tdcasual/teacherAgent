@@ -14,11 +14,10 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
         teacher_id: Optional[str] = None, status: Optional[str] = None, limit: int = 20
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        result = core._list_teacher_memory_proposals_api_impl(
-            teacher_id_scoped,
+        result = core.teacher_memory_list_proposals(
+            core.resolve_teacher_id(teacher_id_scoped),
             status=status,
             limit=limit,
-            deps=core._teacher_memory_api_deps(),
         )
         ensure_ok_error_detail(result)
         return result
@@ -34,11 +33,10 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
         proposal_id: str, req: TeacherMemoryProposalReviewRequest
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(req.teacher_id)
-        result = core._review_teacher_memory_proposal_api_impl(
-            proposal_id,
-            teacher_id=teacher_id_scoped,
+        result = core.teacher_memory_apply(
+            core.resolve_teacher_id(teacher_id_scoped),
+            proposal_id=str(proposal_id or "").strip(),
             approve=bool(req.approve),
-            deps=core._teacher_memory_api_deps(),
         )
         if result.get("error"):
             ensure_ok_error_detail(result, not_found_errors={"proposal not found"})
@@ -49,10 +47,9 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
         proposal_id: str, teacher_id: Optional[str] = None
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        result = core._delete_teacher_memory_proposal_api_impl(
-            proposal_id,
-            teacher_id=teacher_id_scoped,
-            deps=core._teacher_memory_api_deps(),
+        result = core.teacher_memory_delete_proposal(
+            core.resolve_teacher_id(teacher_id_scoped),
+            proposal_id=str(proposal_id or "").strip(),
         )
         if result.get("error"):
             ensure_ok_error_detail(result, not_found_errors={"proposal not found"})

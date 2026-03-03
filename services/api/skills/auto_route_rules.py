@@ -5,7 +5,6 @@ from typing import List, Optional, Tuple
 
 _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
-_ROUTING_RE = re.compile(r"(llm\s*routing|模型路由|路由(配置|仿真|回滚|策略|规则))", flags=re.I)
 
 
 def _score_teacher_skill(
@@ -41,22 +40,6 @@ def _score_teacher_skill(
         if "作业" in text:
             score += 1
             hits.append("作业")
-        return score, hits
-
-    if skill_id == "physics-llm-routing":
-        if _ROUTING_RE.search(text):
-            score += 7
-            hits.append("routing_regex")
-        for key, weight in (
-            ("teacher.llm_routing", 6),
-            ("channel", 2),
-            ("fallback", 2),
-            ("provider", 2),
-            ("model", 2),
-        ):
-            if key in text:
-                score += weight
-                hits.append(key)
         return score, hits
 
     if skill_id == "physics-lesson-capture":
@@ -178,4 +161,3 @@ def score_role_skill(
             return score, hits
         return 0, []
     return 0, []
-

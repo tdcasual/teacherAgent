@@ -4,7 +4,8 @@ from pathlib import Path
 
 class SkillsFirstClassTest(unittest.TestCase):
     def test_skill_loader_and_tool_policy(self):
-        from services.api.app import APP_ROOT, allowed_tools
+        from services.api.config import APP_ROOT
+        from services.api.context_runtime_facade import allowed_tools
         from services.api.skills.loader import load_skills
         from services.api.skills.runtime import compile_skill_runtime
 
@@ -37,14 +38,7 @@ class SkillsFirstClassTest(unittest.TestCase):
         teacher_ops = loaded.skills["physics-teacher-ops"]
         ops_rt = compile_skill_runtime(teacher_ops)
         filtered_ops = ops_rt.apply_tool_policy(role_allowed)
-        denied = {
-            "teacher.llm_routing.get",
-            "teacher.llm_routing.simulate",
-            "teacher.llm_routing.propose",
-            "teacher.llm_routing.apply",
-            "teacher.llm_routing.rollback",
-        }
-        self.assertEqual(filtered_ops, role_allowed - denied)
+        self.assertEqual(filtered_ops, role_allowed)
         ops_longform_targets = ops_rt.resolve_model_targets(
             role_hint="teacher",
             kind="chat.exam_longform",
@@ -55,7 +49,7 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertEqual((ops_longform_targets[0] or {}).get("route_id"), "exam_longform")
 
     def test_router_fallback_and_role_gate(self):
-        from services.api.app import APP_ROOT
+        from services.api.config import APP_ROOT
         from services.api.skills.loader import load_skills
         from services.api.skills.router import resolve_skill
 
@@ -71,7 +65,8 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertEqual(sel2.skill.skill_id, "physics-student-coach")
 
     def test_chart_exec_policy_teacher_yes_student_no(self):
-        from services.api.app import APP_ROOT, allowed_tools
+        from services.api.config import APP_ROOT
+        from services.api.context_runtime_facade import allowed_tools
         from services.api.skills.loader import load_skills
         from services.api.skills.runtime import compile_skill_runtime
 
@@ -96,7 +91,7 @@ class SkillsFirstClassTest(unittest.TestCase):
                 self.assertNotIn("chart.agent.run", filtered_student, f"{skill_id}: student must not use chart.agent.run")
 
     def test_model_policy_can_distinguish_roles(self):
-        from services.api.app import APP_ROOT
+        from services.api.config import APP_ROOT
         from services.api.skills.loader import load_skills
         from services.api.skills.runtime import compile_skill_runtime
 

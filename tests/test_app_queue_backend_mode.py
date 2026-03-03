@@ -1,4 +1,5 @@
 import pytest
+from services.api.queue.queue_backend import rq_enabled
 
 
 def test_app_registers_routes():
@@ -14,12 +15,7 @@ def test_app_registers_routes():
 
 def test_rq_mode_disables_inprocess_workers(monkeypatch):
     monkeypatch.setenv("JOB_QUEUE_BACKEND", "rq")
-    import importlib
-
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    assert app_mod._rq_enabled() is True
+    assert rq_enabled() is True
 
 
 def test_runtime_start_requires_explicit_queue_mode_when_not_pytest(monkeypatch):

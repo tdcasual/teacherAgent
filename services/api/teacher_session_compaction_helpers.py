@@ -34,7 +34,7 @@ __all__ = [
     "_teacher_compact_reset_ts",
     "_teacher_compact_transcript",
     "_teacher_compact_summary",
-    "_write_teacher_session_records",
+    "write_teacher_session_records",
     "_mark_teacher_session_compacted",
 ]
 
@@ -124,7 +124,7 @@ def _teacher_compact_summary(records: List[Dict[str, Any]], previous_summary: st
     return "\n".join(parts).strip()
 
 
-def _write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) -> None:
+def write_teacher_session_records(path: Path, records: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".{uuid.uuid4().hex}.tmp")
     try:

@@ -23,7 +23,7 @@ def register_student_profile_routes(router: APIRouter, core: Any) -> None:
     @router.get("/student/profile/{student_id}")
     def get_profile(student_id: str) -> Any:
         sid = _scoped_student_id(student_id)
-        result = core._get_profile_api_impl(sid, deps=core._student_profile_api_deps())
+        result = core.student_profile_get(sid)
         if result.get("error") in {"profile not found", "profile_not_found"}:
             raise HTTPException(status_code=404, detail="profile not found")
         if result.get("error"):
@@ -40,13 +40,12 @@ def register_student_profile_routes(router: APIRouter, core: Any) -> None:
         interaction_note: Optional[str] = Form(""),
     ) -> JSONResponse:
         sid = _scoped_student_id(student_id)
-        payload = core._update_profile_api_impl(
+        payload = core.update_profile(
             student_id=sid,
             weak_kp=weak_kp,
             strong_kp=strong_kp,
             medium_kp=medium_kp,
             next_focus=next_focus,
             interaction_note=interaction_note,
-            deps=core._student_ops_api_deps(),
         )
         return JSONResponse(payload)

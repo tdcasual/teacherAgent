@@ -2,7 +2,6 @@ import { useEffect, type RefObject } from 'react'
 import { safeLocalStorageSetItem, safeLocalStorageRemoveItem } from '../../utils/storage'
 import { TEACHER_LOCAL_DRAFT_SESSIONS_KEY } from '../chat/viewState'
 import type { PendingChatJob, WorkbenchTab } from '../../appTypes'
-import type { RoutingSection } from '../routing/RoutingPage'
 
 // ---------------------------------------------------------------------------
 // Params
@@ -15,7 +14,6 @@ type UseLocalStorageSyncParams = {
   skillsOpen: boolean
   workbenchTab: WorkbenchTab
   sessionSidebarOpen: boolean
-  settingsSection: RoutingSection
   activeSkillId: string
   skillPinned: boolean
   localDraftSessionIds: string[]
@@ -79,7 +77,6 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
     skillsOpen,
     workbenchTab,
     sessionSidebarOpen,
-    settingsSection,
     activeSkillId,
     skillPinned,
     localDraftSessionIds,
@@ -140,10 +137,6 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
   useEffect(() => {
     safeLocalStorageSetItem('teacherSessionSidebarOpen', String(sessionSidebarOpen))
   }, [sessionSidebarOpen])
-
-  useEffect(() => {
-    safeLocalStorageSetItem('teacherSettingsSection', settingsSection)
-  }, [settingsSection])
 
   useEffect(() => {
     if (activeSkillId) safeLocalStorageSetItem('teacherActiveSkillId', activeSkillId)

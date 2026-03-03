@@ -27,7 +27,7 @@ class ChatLaneQueueTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             payload1 = {
                 "request_id": "req_lane_001",
@@ -58,7 +58,7 @@ class ChatLaneQueueTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 first = client.post(

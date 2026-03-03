@@ -61,16 +61,6 @@ export const fallbackSkills: Skill[] = [
     keywords: [],
     source_type: 'system',
   },
-  {
-    id: 'physics-llm-routing',
-    title: '模型路由管理',
-    desc: '按任务类型配置模型路由，支持仿真与回滚。',
-    instructions: '',
-    prompts: ['先读取当前路由配置，再给我一个三类任务分流方案。'],
-    examples: ['查看当前模型路由', '仿真 physics-homework-generator 的 chat.agent', '回滚到路由版本 3'],
-    keywords: [],
-    source_type: 'system',
-  },
 ]
 
 export const TEACHER_GREETING =

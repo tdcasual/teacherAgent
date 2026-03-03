@@ -228,16 +228,16 @@ class SecurityAuthHardeningTest(unittest.TestCase):
     def test_student_profile_update_forbids_cross_student_access(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
-            client = TestClient(app_mod.app)
-            student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
+            with TestClient(app_mod.app) as client:
+                student_headers = _auth_headers("student_a", "student", secret=self.SECRET)
 
-            denied = client.post(
-                "/student/profile/update",
-                headers=student_headers,
-                data={"student_id": "student_b", "next_focus": "kinematics"},
-            )
-            self.assertEqual(denied.status_code, 403)
-            self.assertEqual(denied.json().get("detail"), "forbidden_student_scope")
+                denied = client.post(
+                    "/student/profile/update",
+                    headers=student_headers,
+                    data={"student_id": "student_b", "next_focus": "kinematics"},
+                )
+                self.assertEqual(denied.status_code, 403)
+                self.assertEqual(denied.json().get("detail"), "forbidden_student_scope")
 
     def test_student_submit_forbids_cross_student_access(self):
         with TemporaryDirectory() as td:
@@ -355,7 +355,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             self.assertEqual(blocked.status_code, 400)
             self.assertEqual(blocked.json().get("detail"), "responses file not found")
 
-    def test_teacher_skills_routes_forbid_student_role(self):
+    def test_removed_teacher_skills_routes_return_not_found(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
@@ -366,8 +366,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 headers=student_headers,
                 json={"github_url": "https://github.com/example/repo"},
             )
-            self.assertEqual(denied_preview.status_code, 403)
-            self.assertEqual(denied_preview.json().get("detail"), "forbidden")
+            self.assertEqual(denied_preview.status_code, 404)
 
             denied_create = client.post(
                 "/teacher/skills",
@@ -380,8 +379,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                     "allowed_roles": ["teacher"],
                 },
             )
-            self.assertEqual(denied_create.status_code, 403)
-            self.assertEqual(denied_create.json().get("detail"), "forbidden")
+            self.assertEqual(denied_create.status_code, 404)
 
     def test_assignment_exam_teacher_routes_forbid_student_role(self):
         with TemporaryDirectory() as td:

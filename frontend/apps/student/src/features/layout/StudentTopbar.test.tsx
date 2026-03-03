@@ -8,23 +8,10 @@ afterEach(() => {
 });
 
 const buildProps = () => ({
-  apiBase: 'http://localhost:8000',
   verifiedStudent: null,
   sidebarOpen: false,
   dispatch: vi.fn(),
   startNewStudentSession: vi.fn(),
-  personaEnabled: false,
-  personaPickerOpen: false,
-  personaCards: [],
-  activePersonaId: '',
-  personaLoading: false,
-  personaError: '',
-  onTogglePersonaEnabled: vi.fn(),
-  onTogglePersonaPicker: vi.fn(),
-  onSelectPersona: vi.fn(),
-  onCreateCustomPersona: vi.fn(async () => {}),
-  onUpdateCustomPersona: vi.fn(async () => {}),
-  onUploadCustomPersonaAvatar: vi.fn(async () => {}),
 });
 
 describe('StudentTopbar compact mobile mode', () => {
@@ -55,18 +42,15 @@ describe('StudentTopbar compact mobile mode', () => {
     expect(screen.getByRole('button', { name: '更多' })).toBeTruthy();
     expect(header.className).toContain('mobile-topbar-compact');
     expect(screen.queryByText('身份：学生')).toBeNull();
-    expect(screen.queryByRole('button', { name: '角色卡：关' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '选择角色卡' })).toBeNull();
   });
 
-  it('moves persona actions into compact more menu', () => {
+  it('shows compact quick actions menu', () => {
     const props = buildProps();
     render(<StudentTopbar {...props} compactMobile />);
 
     fireEvent.click(screen.getByRole('button', { name: '更多' }));
 
     expect(screen.getByRole('menu', { name: '移动端更多操作' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '角色卡：关' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '选择角色卡' })).toBeTruthy();
+    expect(screen.getByText('未验证学生身份')).toBeTruthy();
   });
 });

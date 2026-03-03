@@ -44,7 +44,7 @@ def _build_app_with_core(deps: ChatEventStreamDeps, *, job_status: str = "done")
                 "teacher_id": "teacher-1",
             }
 
-        def _chat_event_stream_deps(self):
+        def chat_event_stream_deps(self):
             return deps
 
     app = FastAPI()

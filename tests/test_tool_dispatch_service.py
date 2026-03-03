@@ -6,7 +6,7 @@ from services.api.tool_dispatch_service import ToolDispatchDeps, tool_dispatch
 
 class _FakeRegistry:
     def __init__(self):
-        self._tools = {"exam.get", "teacher.llm_routing.get", "teacher.memory.get", "teacher.memory.propose"}
+        self._tools = {"exam.get", "chart.agent.run", "teacher.memory.get", "teacher.memory.propose"}
 
     def get(self, name):
         return name if name in self._tools else None
@@ -59,11 +59,6 @@ class ToolDispatchServiceTest(unittest.TestCase):
             teacher_memory_search=lambda teacher_id, query, limit=5: {"mode": "keyword", "matches": []},
             teacher_memory_propose=lambda teacher_id, target, title, content: {"ok": True, "proposal_id": "p1", "target": target},
             teacher_memory_apply=lambda teacher_id, proposal_id, approve=True: {"ok": True, "proposal_id": proposal_id, "status": "applied"},
-            teacher_llm_routing_get=lambda args: {"ok": True, "routing": {}},
-            teacher_llm_routing_simulate=lambda args: {"ok": True, "result": {}},
-            teacher_llm_routing_propose=lambda args: {"ok": True, "proposal_id": "r1"},
-            teacher_llm_routing_apply=lambda args: {"ok": True},
-            teacher_llm_routing_rollback=lambda args: {"ok": True},
         )
 
     def test_unknown_tool_returns_error(self):
@@ -76,7 +71,7 @@ class ToolDispatchServiceTest(unittest.TestCase):
         self.assertEqual(out.get("tool"), "exam.get")
 
     def test_teacher_only_tool_requires_teacher_role(self):
-        out = tool_dispatch("teacher.llm_routing.get", {}, role="student", deps=self._deps())
+        out = tool_dispatch("chart.agent.run", {}, role="student", deps=self._deps())
         self.assertEqual(out.get("error"), "permission denied")
 
     def test_teacher_memory_get_uses_safe_default_file(self):

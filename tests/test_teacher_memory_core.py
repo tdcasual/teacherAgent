@@ -39,7 +39,7 @@ from services.api.teacher_session_compaction_helpers import (  # noqa: E402
     _teacher_compact_allowed,
     _teacher_compact_key,
     _teacher_compact_transcript,
-    _write_teacher_session_records,
+    write_teacher_session_records,
     reset_compact_state,
 )
 from services.api.teacher_session_compaction_service import (  # noqa: E402
@@ -138,7 +138,7 @@ class TestWriteTeacherSessionRecords(unittest.TestCase):
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": "world"},
             ]
-            _write_teacher_session_records(p, records)
+            write_teacher_session_records(p, records)
             lines = p.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(lines), 2)
             self.assertEqual(json.loads(lines[0])["content"], "hello")

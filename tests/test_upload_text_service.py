@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 from services.api.upload_text_service import (
     UploadTextDeps,
     clean_ocr_text,
-    ensure_ocr_api_key_aliases,
     extract_text_from_file,
     extract_text_from_image,
     parse_timeout_env,
@@ -31,12 +30,6 @@ class UploadTextServiceTest(unittest.TestCase):
     def test_clean_ocr_text(self):
         text = clean_ocr_text("  A \n\n B  \n")
         self.assertEqual(text, "A\nB")
-
-    def test_ensure_ocr_api_key_aliases(self):
-        os.environ.pop("OPENAI_API_KEY", None)
-        os.environ["openai-api-key"] = "x-key"
-        ensure_ocr_api_key_aliases()
-        self.assertEqual(os.environ.get("OPENAI_API_KEY"), "x-key")
 
     def test_extract_text_from_file_for_text_and_tex(self):
         with TemporaryDirectory() as td:

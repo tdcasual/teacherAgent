@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class ChatMessage(BaseModel):
@@ -15,11 +15,11 @@ class ChatAttachmentRef(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     messages: List[ChatMessage]
     role: Optional[str] = None
-    agent_id: Optional[str] = None
     skill_id: Optional[str] = None
-    persona_id: Optional[str] = None
     teacher_id: Optional[str] = None
     student_id: Optional[str] = None
     assignment_id: Optional[str] = None
@@ -165,33 +165,6 @@ class ExamUploadDraftSaveRequest(BaseModel):
     reparse: Optional[bool] = False
 
 
-class RoutingSimulateRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    role: Optional[str] = "teacher"
-    skill_id: Optional[str] = None
-    kind: Optional[str] = None
-    needs_tools: Optional[bool] = False
-    needs_json: Optional[bool] = False
-    config: Optional[Dict[str, Any]] = None
-
-
-class RoutingProposalCreateRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    note: Optional[str] = None
-    config: Dict[str, Any]
-
-
-class RoutingProposalReviewRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    approve: Optional[bool] = True
-
-
-class RoutingRollbackRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    target_version: int
-    note: Optional[str] = None
-
-
 class TeacherProviderRegistryCreateRequest(BaseModel):
     teacher_id: Optional[str] = None
     provider_id: Optional[str] = None
@@ -219,27 +192,11 @@ class TeacherProviderRegistryProbeRequest(BaseModel):
     teacher_id: Optional[str] = None
 
 
+class TeacherModelConfigUpdateRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    models: Dict[str, Any]
+
+
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
-
-
-class TeacherSkillCreateRequest(BaseModel):
-    title: str = Field(..., max_length=200)
-    description: str = Field(..., max_length=50000)
-    keywords: List[str] = Field(default=[], max_length=30)
-    examples: List[str] = Field(default=[], max_length=20)
-    allowed_roles: List[str] = Field(default=["teacher"], max_length=10)
-
-
-class TeacherSkillUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=50000)
-    keywords: Optional[List[str]] = Field(default=None, max_length=30)
-    examples: Optional[List[str]] = Field(default=None, max_length=20)
-    allowed_roles: Optional[List[str]] = Field(default=None, max_length=10)
-
-
-class TeacherSkillImportRequest(BaseModel):
-    github_url: str = Field(..., max_length=2000)
-    overwrite: bool = False

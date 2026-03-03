@@ -10,7 +10,6 @@ from . import settings as _settings
 APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(_settings.data_dir() or (APP_ROOT / "data"))
 UPLOADS_DIR = Path(_settings.uploads_dir() or (APP_ROOT / "uploads"))
-LLM_ROUTING_PATH = Path(_settings.llm_routing_path() or (DATA_DIR / "llm_routing.json"))
 TENANT_ID = _settings.tenant_id()
 JOB_QUEUE_BACKEND = _settings.job_queue_backend()
 RQ_BACKEND_ENABLED = _settings.rq_backend_enabled()
@@ -31,7 +30,6 @@ CHAT_LANE_MAX_QUEUE = _settings.chat_lane_max_queue()
 CHAT_LANE_DEBOUNCE_MS = _settings.chat_lane_debounce_ms()
 CHAT_JOB_CLAIM_TTL_SEC = _settings.chat_job_claim_ttl_sec()
 STUDENT_SESSIONS_DIR = DATA_DIR / "student_chat_sessions"
-TEACHER_SKILLS_DIR = DATA_DIR / "teacher_skills"
 TEACHER_WORKSPACES_DIR = DATA_DIR / "teacher_workspaces"
 TEACHER_SESSIONS_DIR = DATA_DIR / "teacher_chat_sessions"
 STUDENT_SUBMISSIONS_DIR = DATA_DIR / "student_submissions"

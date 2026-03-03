@@ -65,21 +65,6 @@ async def save_upload_file(
     return await run_in_threadpool(_copy)
 
 
-def ensure_ocr_api_key_aliases() -> None:
-    if not os.getenv("OPENAI_API_KEY"):
-        for alias in ("openai-api-key", "OPENAI-API-KEY", "openai_api_key", "openaiApiKey"):
-            value = os.environ.get(alias)
-            if value:
-                os.environ["OPENAI_API_KEY"] = value.strip()
-                break
-    if not os.getenv("SILICONFLOW_API_KEY"):
-        for alias in ("siliconflow-api-key", "SILICONFLOW-API-KEY", "siliconflow_api_key"):
-            value = os.environ.get(alias)
-            if value:
-                os.environ["SILICONFLOW_API_KEY"] = value.strip()
-                break
-
-
 def load_ocr_utils() -> Tuple[Any, Any]:
     global _OCR_UTILS
     if _OCR_UTILS is not None:
@@ -89,7 +74,6 @@ def load_ocr_utils() -> Tuple[Any, Any]:
 
         # Load once on first use; repeated file reads can become a hot-path under load.
         load_env_from_dotenv(Path(".env"))
-        ensure_ocr_api_key_aliases()
         _OCR_UTILS = (load_env_from_dotenv, ocr_with_sdk)
         return _OCR_UTILS
     except Exception:

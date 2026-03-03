@@ -7,7 +7,7 @@ from typing import Any, Callable
 from fastapi import HTTPException
 
 from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
-from ..exam_upload_api_service import ExamUploadApiError
+from ..exam_upload_service import ExamUploadError
 
 
 @dataclass
@@ -28,7 +28,7 @@ async def _maybe_await(value: Any) -> Any:
 async def _call_exam_api(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     try:
         return await _maybe_await(fn(*args, **kwargs))
-    except ExamUploadApiError as exc:
+    except ExamUploadError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 

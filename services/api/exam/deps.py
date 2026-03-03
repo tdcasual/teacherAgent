@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict
 
 from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
+from ..wiring.exam_wiring import _exam_upload_handlers_deps
 
 
 @dataclass(frozen=True)
@@ -27,9 +28,7 @@ def build_exam_application_deps(core: Any) -> ExamApplicationDeps:
 
     return ExamApplicationDeps(
         list_exams=lambda limit, cursor: core.list_exams(limit=limit, cursor=cursor),
-        get_exam_detail_api=lambda exam_id: core._get_exam_detail_api_impl(
-            exam_id, deps=core._exam_api_deps()
-        ),
+        get_exam_detail_api=lambda exam_id: core.exam_get(exam_id),
         exam_analysis_get=lambda exam_id: core.exam_analysis_get(exam_id),
         exam_students_list=_exam_students_list,
         exam_student_detail=lambda exam_id, student_id: core.exam_student_detail(
@@ -39,23 +38,23 @@ def build_exam_application_deps(core: Any) -> ExamApplicationDeps:
             exam_id, question_id=question_id
         ),
         exam_upload_start=lambda **kwargs: core.exam_upload_handlers.exam_upload_start(
-            deps=core._exam_upload_handlers_deps(),
+            deps=_exam_upload_handlers_deps(),
             **kwargs,
         ),
         exam_upload_status=lambda job_id: core.exam_upload_handlers.exam_upload_status(
             job_id,
-            deps=core._exam_upload_handlers_deps(),
+            deps=_exam_upload_handlers_deps(),
         ),
         exam_upload_draft=lambda job_id: core.exam_upload_handlers.exam_upload_draft(
             job_id,
-            deps=core._exam_upload_handlers_deps(),
+            deps=_exam_upload_handlers_deps(),
         ),
         exam_upload_draft_save=lambda req: core.exam_upload_handlers.exam_upload_draft_save(
             req,
-            deps=core._exam_upload_handlers_deps(),
+            deps=_exam_upload_handlers_deps(),
         ),
         exam_upload_confirm=lambda req: core.exam_upload_handlers.exam_upload_confirm(
             req,
-            deps=core._exam_upload_handlers_deps(),
+            deps=_exam_upload_handlers_deps(),
         ),
     )

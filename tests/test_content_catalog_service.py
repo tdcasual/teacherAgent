@@ -23,7 +23,6 @@ def _make_deps(tmp_path: Path, **overrides: Any) -> ContentCatalogDeps:
         app_root=tmp_path,
         load_profile_file=lambda p: json.loads(p.read_text()),
         load_skills=lambda *a, **kw: SimpleNamespace(skills={}, errors=[]),
-        teacher_skills_dir=tmp_path / "teacher_skills",
     )
     defaults.update(overrides)
     return ContentCatalogDeps(**defaults)
@@ -121,11 +120,11 @@ def test_list_skills_delegates(tmp_path: Path):
     fake_loaded = SimpleNamespace(skills={"sk1": fake_spec}, errors=[])
     called_with: list = []
 
-    def mock_load(skills_dir, *, teacher_skills_dir):
-        called_with.append((skills_dir, teacher_skills_dir))
+    def mock_load(skills_dir):
+        called_with.append(skills_dir)
         return fake_loaded
 
     deps = _make_deps(tmp_path, load_skills=mock_load)
     result = list_skills(deps=deps)
     assert result == {"skills": [{"id": "sk1", "name": "Skill 1"}]}
-    assert called_with[0][0] == tmp_path / "skills"
+    assert called_with[0] == tmp_path / "skills"

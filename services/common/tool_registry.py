@@ -525,68 +525,6 @@ def build_default_registry() -> ToolRegistry:
             required=["proposal_id"],
         ),
     )
-    tools["teacher.llm_routing.get"] = ToolDef(
-        name="teacher.llm_routing.get",
-        description="Get current LLM routing config, validation result, proposals, and history",
-        parameters=_schema_object(
-            {
-                "teacher_id": {"type": "string"},
-                "history_limit": {"type": "integer", "default": 20},
-                "proposal_limit": {"type": "integer", "default": 20},
-                "proposal_status": {"type": "string", "description": "optional filter: pending/applied/rejected/failed"},
-            }
-        ),
-    )
-    tools["teacher.llm_routing.simulate"] = ToolDef(
-        name="teacher.llm_routing.simulate",
-        description="Simulate which channel/model would be selected for a task context",
-        parameters=_schema_object(
-            {
-                "role": {"type": "string", "default": "teacher"},
-                "skill_id": {"type": "string"},
-                "kind": {"type": "string", "description": "task kind, e.g. chat.agent"},
-                "needs_tools": {"type": "boolean", "default": False},
-                "needs_json": {"type": "boolean", "default": False},
-            }
-        ),
-    )
-    tools["teacher.llm_routing.propose"] = ToolDef(
-        name="teacher.llm_routing.propose",
-        description="Create a pending proposal for routing config change",
-        parameters=_schema_object(
-            {
-                "teacher_id": {"type": "string"},
-                "note": {"type": "string"},
-                "config": {"type": "object"},
-            },
-            required=["config"],
-        ),
-    )
-    tools["teacher.llm_routing.apply"] = ToolDef(
-        name="teacher.llm_routing.apply",
-        description="Apply or reject a routing proposal by proposal_id",
-        parameters=_schema_object(
-            {
-                "teacher_id": {"type": "string"},
-                "proposal_id": {"type": "string"},
-                "approve": {"type": "boolean", "default": True},
-            },
-            required=["proposal_id"],
-        ),
-    )
-    tools["teacher.llm_routing.rollback"] = ToolDef(
-        name="teacher.llm_routing.rollback",
-        description="Rollback routing config to an old version snapshot",
-        parameters=_schema_object(
-            {
-                "teacher_id": {"type": "string"},
-                "target_version": {"type": "integer"},
-                "note": {"type": "string"},
-            },
-            required=["target_version"],
-        ),
-    )
-
     return ToolRegistry(tools)
 
 

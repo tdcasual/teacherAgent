@@ -12,7 +12,6 @@ __all__ = [
     "_assignment_catalog_deps",
     "_assignment_meta_postprocess_deps",
     "_assignment_upload_parse_deps",
-    "_assignment_upload_legacy_deps",
     "_assignment_today_deps",
     "_assignment_generate_deps",
     "_assignment_generate_tool_deps",
@@ -22,7 +21,6 @@ __all__ = [
     "_assignment_upload_query_deps",
     "_assignment_upload_draft_save_deps",
     "_assignment_upload_confirm_deps",
-    "_assignment_api_deps",
 ]
 
 import os
@@ -33,12 +31,6 @@ from datetime import datetime
 
 from services.api.runtime import queue_runtime
 
-from ..assignment_api_service import (
-    AssignmentApiDeps,
-)
-from ..assignment_api_service import (
-    get_assignment_detail_api as _get_assignment_detail_api_impl,
-)
 from ..assignment_catalog_service import (
     AssignmentCatalogDeps,
     AssignmentMetaPostprocessDeps,
@@ -96,12 +88,6 @@ from ..assignment_upload_draft_service import (
 from ..assignment_upload_draft_service import (
     save_assignment_draft_override as _save_assignment_draft_override_impl,
 )
-from ..assignment_upload_legacy_service import (
-    AssignmentUploadLegacyDeps,
-)
-from ..assignment_upload_legacy_service import (
-    assignment_upload as _assignment_upload_legacy_impl,
-)
 from ..assignment_upload_parse_service import AssignmentUploadParseDeps
 from ..assignment_upload_query_service import (
     AssignmentUploadQueryDeps,
@@ -125,6 +111,16 @@ from . import get_app_core as _app_core
 
 def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
     _ac = _app_core()
+
+    def _get_assignment_detail_api(assignment_id: str):
+        try:
+            folder = _ac.resolve_assignment_dir(str(assignment_id or ""))
+        except ValueError:
+            return {"error": "assignment_not_found"}
+        if not folder.exists():
+            return {"error": "assignment_not_found"}
+        return _ac.build_assignment_detail(folder, include_text=True)
+
     return assignment_handlers.AssignmentHandlerDeps(
         list_assignments=lambda limit, cursor: _ac.list_assignments(limit=limit, cursor=cursor),
         compute_assignment_progress=_ac.compute_assignment_progress,
@@ -140,20 +136,13 @@ def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
             per_kp=per_kp,
             deps=_assignment_today_deps(),
         ),
-        get_assignment_detail_api=lambda assignment_id: _get_assignment_detail_api_impl(
-            assignment_id,
-            deps=_assignment_api_deps(),
-        ),
+        get_assignment_detail_api=_get_assignment_detail_api,
     )
 
 
 def _assignment_upload_handlers_deps() -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
     _ac = _app_core()
     return assignment_upload_handlers.AssignmentUploadHandlerDeps(
-        assignment_upload_legacy=lambda **kwargs: _assignment_upload_legacy_impl(
-            deps=_assignment_upload_legacy_deps(),
-            **kwargs,
-        ),
         start_assignment_upload=lambda **kwargs: _start_assignment_upload_impl(
             deps=_assignment_upload_start_deps(),
             **kwargs,
@@ -214,9 +203,9 @@ def _assignment_progress_deps():
         postprocess_assignment_meta=_ac.postprocess_assignment_meta,
         normalize_due_at=_ac.normalize_due_at,
         list_all_student_profiles=_ac.list_all_student_profiles,
-        session_discussion_pass=_ac._session_discussion_pass,
-        list_submission_attempts=_ac._list_submission_attempts,
-        best_submission_attempt=_ac._best_submission_attempt,
+        session_discussion_pass=_ac.session_discussion_pass,
+        list_submission_attempts=_ac.list_submission_attempts,
+        best_submission_attempt=_ac.best_submission_attempt,
         resolve_assignment_date=_ac.resolve_assignment_date,
         atomic_write_json=_ac._atomic_write_json,
         time_time=time.time,
@@ -280,27 +269,6 @@ def _assignment_upload_parse_deps():
         compute_requirements_missing=_ac.compute_requirements_missing,
         llm_autofill_requirements=_ac.llm_autofill_requirements,
         diag_log=_ac.diag_log,
-    )
-
-
-def _assignment_upload_legacy_deps():
-    _ac = _app_core()
-    return AssignmentUploadLegacyDeps(
-        data_dir=_ac.DATA_DIR,
-        parse_date_str=_ac.parse_date_str,
-        sanitize_filename=_ac.sanitize_filename,
-        save_upload_file=_ac.save_upload_file,
-        extract_text_from_pdf=_ac.extract_text_from_pdf,
-        extract_text_from_image=_ac.extract_text_from_image,
-        llm_parse_assignment_payload=_ac.llm_parse_assignment_payload,
-        write_uploaded_questions=_ac.write_uploaded_questions,
-        compute_requirements_missing=_ac.compute_requirements_missing,
-        llm_autofill_requirements=_ac.llm_autofill_requirements,
-        save_assignment_requirements=_ac.save_assignment_requirements,
-        parse_ids_value=_ac.parse_ids_value,
-        resolve_scope=_ac.resolve_scope,
-        load_assignment_meta=_ac.load_assignment_meta,
-        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
@@ -438,20 +406,3 @@ def _assignment_upload_confirm_deps():
         copy2=shutil.copy2,
     )
 
-
-def _assignment_api_deps():
-    _ac = _app_core()
-
-    def _assignment_exists(assignment_id: str) -> bool:
-        try:
-            return _ac.resolve_assignment_dir(str(assignment_id or "")).exists()
-        except ValueError:
-            return False
-
-    return AssignmentApiDeps(
-        build_assignment_detail=lambda assignment_id, include_text=True: _ac.build_assignment_detail(
-            _ac.resolve_assignment_dir(str(assignment_id or "")),
-            include_text=include_text,
-        ),
-        assignment_exists=_assignment_exists,
-    )

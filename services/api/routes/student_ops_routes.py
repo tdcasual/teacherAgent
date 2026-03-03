@@ -37,9 +37,7 @@ def register_student_ops_routes(router: APIRouter, core: Any) -> None:
 
     @router.post("/student/verify")
     def verify_student(req: StudentVerifyRequest) -> Any:
-        return core._verify_student_api_impl(
-            req.name, req.class_name, deps=core._student_ops_api_deps()
-        )
+        return core.verify_student(req.name, req.class_name)
 
     @router.post("/student/submit")
     async def submit(
@@ -49,10 +47,9 @@ def register_student_ops_routes(router: APIRouter, core: Any) -> None:
         auto_assignment: bool = Form(False),
     ) -> Any:
         sid = _scoped_student_id(student_id)
-        return await core._student_submit_impl(
+        return await core.student_submit(
             student_id=sid,
             files=files,
             assignment_id=assignment_id,
             auto_assignment=auto_assignment,
-            deps=core._student_submit_deps(),
         )

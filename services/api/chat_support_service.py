@@ -307,11 +307,6 @@ def allowed_tools(role_hint: Optional[str]) -> Set[str]:
             "teacher.memory.search",
             "teacher.memory.propose",
             "teacher.memory.apply",
-            "teacher.llm_routing.get",
-            "teacher.llm_routing.simulate",
-            "teacher.llm_routing.propose",
-            "teacher.llm_routing.apply",
-            "teacher.llm_routing.rollback",
         }
     return set()
 

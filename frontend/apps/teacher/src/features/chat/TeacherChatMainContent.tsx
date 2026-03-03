@@ -1,5 +1,4 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent, type MutableRefObject } from 'react'
-import RoutingPage from '../routing/RoutingPage'
 import ChatComposer from './ChatComposer'
 import ChatMessages from './ChatMessages'
 import MentionPanel from './MentionPanel'
@@ -22,10 +21,6 @@ type RenderedMessage = {
 }
 
 type TeacherChatMainContentProps = {
-  inlineRoutingOpen: boolean
-  apiBase: string
-  onApiBaseChange: (value: string) => void
-  onDirtyChange: (dirty: boolean) => void
   renderedMessages: RenderedMessage[]
   sending: boolean
   hasPendingChatJob: boolean
@@ -58,10 +53,6 @@ type TeacherChatMainContentProps = {
 }
 
 export default function TeacherChatMainContent({
-  inlineRoutingOpen,
-  apiBase,
-  onApiBaseChange,
-  onDirtyChange,
   renderedMessages,
   sending,
   hasPendingChatJob,
@@ -95,65 +86,53 @@ export default function TeacherChatMainContent({
   const shellRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    if (inlineRoutingOpen) return
     const shell = shellRef.current
     if (!shell) return
     if (shell.scrollTop !== 0) shell.scrollTop = 0
-  }, [inlineRoutingOpen, renderedMessages.length])
+  }, [renderedMessages.length])
 
   return (
     <main
       ref={shellRef}
-      className={`chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 bg-surface ${inlineRoutingOpen ? 'overflow-y-auto overflow-x-hidden' : 'overflow-hidden'}`}
-      style={inlineRoutingOpen ? { overscrollBehavior: 'contain' } : undefined}
+      className="chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 bg-surface overflow-hidden"
     >
-      {inlineRoutingOpen ? (
-        <RoutingPage
-          apiBase={apiBase}
-          onApiBaseChange={onApiBaseChange}
-          onDirtyChange={onDirtyChange}
-          section="general"
-          legacyFlat
+      <>
+        <ChatMessages
+          renderedMessages={renderedMessages}
+          sending={sending}
+          hasPendingChatJob={hasPendingChatJob}
+          typingTimeLabel={typingTimeLabel}
+          messagesRef={messagesRef}
+          onMessagesScroll={onMessagesScroll}
+          showScrollToBottom={showScrollToBottom}
+          onScrollToBottom={onScrollToBottom}
+          pendingStreamStage={pendingStreamStage}
+          pendingToolRuns={pendingToolRuns}
         />
-      ) : (
-        <>
-          <ChatMessages
-            renderedMessages={renderedMessages}
-            sending={sending}
-            hasPendingChatJob={hasPendingChatJob}
-            typingTimeLabel={typingTimeLabel}
-            messagesRef={messagesRef}
-            onMessagesScroll={onMessagesScroll}
-            showScrollToBottom={showScrollToBottom}
-            onScrollToBottom={onScrollToBottom}
-            pendingStreamStage={pendingStreamStage}
-            pendingToolRuns={pendingToolRuns}
-          />
 
-          <ChatComposer
-            activeSkillId={activeSkillId || 'physics-teacher-ops'}
-            skillPinned={skillPinned}
-            input={input}
-            pendingChatJob={hasPendingChatJob}
-            sending={sending}
-            chatQueueHint={chatQueueHint}
-            composerWarning={composerWarning}
-            attachments={attachments}
-            uploadingAttachments={uploadingAttachments}
-            hasSendableAttachments={hasSendableAttachments}
-            inputRef={inputRef}
-            onSubmit={onSubmit}
-            onInputChange={onInputChange}
-            onInputClick={onInputClick}
-            onInputKeyUp={onInputKeyUp}
-            onInputKeyDown={onInputKeyDown}
-            onPickFiles={onPickFiles}
-            onRemoveAttachment={onRemoveAttachment}
-          />
+        <ChatComposer
+          activeSkillId={activeSkillId || 'physics-teacher-ops'}
+          skillPinned={skillPinned}
+          input={input}
+          pendingChatJob={hasPendingChatJob}
+          sending={sending}
+          chatQueueHint={chatQueueHint}
+          composerWarning={composerWarning}
+          attachments={attachments}
+          uploadingAttachments={uploadingAttachments}
+          hasSendableAttachments={hasSendableAttachments}
+          inputRef={inputRef}
+          onSubmit={onSubmit}
+          onInputChange={onInputChange}
+          onInputClick={onInputClick}
+          onInputKeyUp={onInputKeyUp}
+          onInputKeyDown={onInputKeyDown}
+          onPickFiles={onPickFiles}
+          onRemoveAttachment={onRemoveAttachment}
+        />
 
-          <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={onInsertMention} />
-        </>
-      )}
+        <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={onInsertMention} />
+      </>
     </main>
   )
 }

@@ -5,7 +5,6 @@ interface UseWheelScrollZoneOptions {
   appRef: React.RefObject<HTMLDivElement | null>
   sessionSidebarOpen: boolean
   skillsOpen: boolean
-  inlineRoutingOpen: boolean
 }
 
 interface UseWheelScrollZoneReturn {
@@ -18,7 +17,6 @@ export function useWheelScrollZone({
   appRef,
   sessionSidebarOpen,
   skillsOpen,
-  inlineRoutingOpen,
 }: UseWheelScrollZoneOptions): UseWheelScrollZoneReturn {
   const wheelScrollZoneRef = useRef<WheelScrollZone>('chat')
 
@@ -37,12 +35,9 @@ export function useWheelScrollZone({
           (root.querySelector('.skills-panel.open .workbench-memory') as HTMLElement | null)
         )
       }
-      if (inlineRoutingOpen) {
-        return root.querySelector('.chat-shell') as HTMLElement | null
-      }
       return root.querySelector('.messages') as HTMLElement | null
     },
-    [appRef, inlineRoutingOpen, sessionSidebarOpen, skillsOpen],
+    [appRef, sessionSidebarOpen, skillsOpen],
   )
 
   const setWheelScrollZone = useCallback((zone: WheelScrollZone) => {

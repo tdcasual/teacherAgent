@@ -12,9 +12,8 @@ __all__ = [
     "chat_worker_deps",
     "_chat_job_process_deps",
     "_compute_chat_reply_deps",
-    "_chat_api_deps",
     "_chat_support_deps",
-    "_session_history_api_deps",
+    "_session_history_deps",
 ]
 
 import os
@@ -32,7 +31,6 @@ from services.api.workers.chat_worker_service import (
 )
 
 from ..api_models import ChatRequest
-from ..chat_api_service import ChatApiDeps
 from ..chat_attachment_service import (
     ChatAttachmentDeps,
 )
@@ -86,7 +84,7 @@ from ..chat_support_service import ChatSupportDeps
 from ..handlers import chat_handlers
 from ..job_repository import _atomic_write_json, _release_lockfile, _try_acquire_lockfile
 from ..prompt_builder import compile_system_prompt
-from ..session_history_api_service import SessionHistoryApiDeps
+from ..session_history_service import SessionHistoryDeps
 from ..session_view_state import (
     compare_iso_ts as _compare_iso_ts_impl,
 )
@@ -94,30 +92,21 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
-from ..student_memory_api_service import (
-    StudentMemoryApiDeps,
+from ..student_memory_service import (
+    StudentMemoryDeps,
 )
-from ..student_memory_api_service import (
+from ..student_memory_service import (
     student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
 )
-from ..student_persona_api_service import (
-    StudentPersonaApiDeps,
-)
-from ..student_persona_api_service import (
-    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
-)
-from ..teacher_llm_routing_service import (
-    ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
-)
-from ..teacher_provider_registry_service import (
-    merged_model_registry as _merged_model_registry_impl,
+from ..teacher_model_config_service import (
+    resolve_teacher_model_config as _resolve_teacher_model_config_impl,
 )
 from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
 from . import CURRENT_CORE as _CURRENT_CORE
 from . import get_app_core as _app_core
-from .teacher_wiring import _teacher_llm_routing_deps, _teacher_provider_registry_deps
+from .teacher_wiring import _teacher_model_config_deps, _teacher_provider_registry_deps
 from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
 
 
@@ -133,7 +122,7 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
     _ac = _app_core()
     backend = _queue_backend_for_app_core(_ac)
     return chat_handlers.ChatHandlerDeps(
-        compute_chat_reply_sync=lambda req: _ac._compute_chat_reply_sync(req),
+        compute_chat_reply_sync=lambda req: _ac.compute_chat_reply_sync(req),
         detect_math_delimiters=_ac.detect_math_delimiters,
         detect_latex_tokens=_ac.detect_latex_tokens,
         diag_log=_ac.diag_log,
@@ -146,7 +135,7 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         profile_update_async=_ac.PROFILE_UPDATE_ASYNC,
         run_in_threadpool=run_in_threadpool,
         get_chat_status=lambda job_id: _get_chat_status_impl(job_id, deps=_chat_status_deps()),
-        start_chat_api=lambda req: _ac._start_chat_api_impl(req, deps=_ac._chat_api_deps()),
+        start_chat_api=lambda req: _start_chat_orchestration_impl(req, deps=_chat_start_deps()),
     )
 
 
@@ -259,8 +248,9 @@ def _chat_runtime_deps():
             GLOBAL_LLM_SEMAPHORE_TEACHER,
         ),
         resolve_teacher_id=_ac.resolve_teacher_id,
-        resolve_teacher_model_registry=lambda teacher_id: _merged_model_registry_impl(
-            teacher_id, deps=_teacher_provider_registry_deps()
+        resolve_teacher_model_config=lambda teacher_id: _resolve_teacher_model_config_impl(
+            teacher_id,
+            deps=_teacher_model_config_deps(),
         ),
         resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _resolve_provider_target_impl(
             teacher_id,
@@ -269,8 +259,6 @@ def _chat_runtime_deps():
             model,
             deps=_teacher_provider_registry_deps(),
         ),
-        ensure_teacher_routing_file=lambda actor: _ensure_teacher_routing_file_impl(actor, deps=_teacher_llm_routing_deps()),
-        routing_config_path_for_role=_ac.routing_config_path_for_role,
         diag_log=_ac.diag_log,
         monotonic=time.monotonic,
     )
@@ -345,7 +333,7 @@ def chat_worker_deps():
 def _chat_job_process_deps():
     _ac = _app_core()
     backend = _queue_backend_for_app_core(_ac)
-    student_memory_deps = StudentMemoryApiDeps(
+    student_memory_deps = StudentMemoryDeps(
         resolve_teacher_id=_ac.resolve_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
@@ -357,7 +345,7 @@ def _chat_job_process_deps():
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
         chat_request_model=ChatRequest,
-        compute_chat_reply_sync=lambda req, session_id, teacher_id_override, event_sink=None: _ac._compute_chat_reply_sync(
+        compute_chat_reply_sync=lambda req, session_id, teacher_id_override, event_sink=None: _ac.compute_chat_reply_sync(
             req,
             session_id=session_id,
             teacher_id_override=teacher_id_override,
@@ -434,23 +422,8 @@ def _compute_chat_reply_deps():
             requested_skill_id=requested_skill_id,
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
-            teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
-        ),
-        resolve_student_persona_runtime=lambda student_id, persona_id: _resolve_student_persona_runtime_impl(
-            student_id,
-            persona_id,
-            deps=StudentPersonaApiDeps(
-                data_dir=_ac.DATA_DIR,
-                uploads_dir=_ac.UPLOADS_DIR,
-                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
-            ),
         ),
     )
-
-
-def _chat_api_deps():
-    return ChatApiDeps(start_chat=lambda req: _start_chat_orchestration_impl(req, deps=_chat_start_deps()))
-
 
 def _chat_support_deps():
     _ac = _app_core()
@@ -461,9 +434,9 @@ def _chat_support_deps():
     )
 
 
-def _session_history_api_deps():
+def _session_history_deps():
     _ac = _app_core()
-    return SessionHistoryApiDeps(
+    return SessionHistoryDeps(
         load_student_sessions_index=_ac.load_student_sessions_index,
         load_teacher_sessions_index=_ac.load_teacher_sessions_index,
         paginate_session_items=lambda items, cursor, limit: _paginate_session_items_impl(items, cursor=cursor, limit=limit),

@@ -13,8 +13,7 @@ const buildProps = () => ({
   sessionSidebarOpen: false,
   skillsOpen: false,
   onToggleSessionSidebar: vi.fn(),
-  onOpenRoutingSettingsPanel: vi.fn(),
-  onOpenPersonaManager: vi.fn(),
+  onOpenModelSettingsPanel: vi.fn(),
   onToggleSkillsWorkbench: vi.fn(),
   onToggleSettingsPanel: vi.fn(),
 })

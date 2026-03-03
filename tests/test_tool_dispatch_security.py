@@ -19,7 +19,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
     def test_lesson_capture_rejects_outside_paths(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "lesson.capture",
                 {"lesson_id": "L1", "topic": "T", "sources": ["/etc/passwd"]},
                 role="teacher",
@@ -30,7 +30,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
     def test_core_example_render_rejects_outside_out_path(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "core_example.render",
                 {"example_id": "CE001", "out": "/etc/out.pdf"},
                 role="teacher",
@@ -41,7 +41,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
     def test_core_example_register_rejects_outside_files(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "core_example.register",
                 {"example_id": "CE001", "kp_id": "KP-M01", "core_model": "M", "stem_file": "/etc/passwd"},
                 role="teacher",
@@ -49,35 +49,31 @@ class ToolDispatchSecurityTest(unittest.TestCase):
             self.assertIn("error", res)
             self.assertEqual(res["error"], "stem_file_not_found_or_outside_app_root")
 
-    def test_teacher_llm_routing_tool_requires_teacher(self):
+    def test_removed_teacher_llm_routing_tool_is_unknown(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.tool_dispatch("teacher.llm_routing.get", {}, role="student")
-            self.assertIn("error", denied)
-            self.assertEqual(denied["error"], "permission denied")
-
-            allowed = app_mod.tool_dispatch("teacher.llm_routing.get", {}, role="teacher")
-            self.assertTrue(allowed.get("ok"))
-            self.assertIn("routing", allowed)
+            result = app_mod.get_core().tool_dispatch("teacher.llm_routing.get", {}, role="teacher")
+            self.assertIn("error", result)
+            self.assertEqual(result["error"], "unknown tool: teacher.llm_routing.get")
 
     def test_chart_exec_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="student")
+            denied = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="student")
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
 
     def test_chart_agent_run_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.tool_dispatch("chart.agent.run", {"task": "plot"}, role="student")
+            denied = app_mod.get_core().tool_dispatch("chart.agent.run", {"task": "plot"}, role="student")
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
 
     def test_chart_agent_run_rejects_opencode_engine_for_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            result = app_mod.tool_dispatch("chart.agent.run", {"task": "plot", "engine": "opencode"}, role="teacher")
+            result = app_mod.get_core().tool_dispatch("chart.agent.run", {"task": "plot", "engine": "opencode"}, role="teacher")
             self.assertIn("error", result)
             self.assertEqual(result["error"], "opencode_forbidden")
             self.assertEqual(result.get("status_code"), 400)
@@ -85,7 +81,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
     def test_exam_analysis_charts_generate_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX001"}, role="student")
+            denied = app_mod.get_core().tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX001"}, role="student")
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
 

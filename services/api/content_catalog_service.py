@@ -13,7 +13,6 @@ class ContentCatalogDeps:
     app_root: Path
     load_profile_file: Callable[[Path], Dict[str, Any]]
     load_skills: Callable[..., Any]
-    teacher_skills_dir: Path = Path(".")
 
 
 _log = logging.getLogger(__name__)
@@ -43,7 +42,7 @@ def list_lessons(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
 
 def list_skills(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
     skills_dir = deps.app_root / "skills"
-    loaded = deps.load_skills(skills_dir, teacher_skills_dir=deps.teacher_skills_dir)
+    loaded = deps.load_skills(skills_dir)
     items = [spec.as_public_dict() for spec in loaded.skills.values()]
     items.sort(key=lambda x: x.get("id") or "")
     payload: Dict[str, Any] = {"skills": items}

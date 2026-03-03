@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-# Compatibility import registry used by app_core facade.
+# Import registry used by app_core facade.
 # ruff: noqa: F401,I001
 
-from .assignment_api_service import AssignmentApiDeps, get_assignment_detail_api as _get_assignment_detail_api_impl
 from .api_models import (
     AssignmentRequirementsRequest,
     ChatResponse,
@@ -11,10 +10,6 @@ from .api_models import (
     ChatStartRequest,
     ExamUploadConfirmRequest,
     ExamUploadDraftSaveRequest,
-    RoutingProposalCreateRequest,
-    RoutingProposalReviewRequest,
-    RoutingRollbackRequest,
-    RoutingSimulateRequest,
     StudentImportRequest,
     StudentVerifyRequest,
     TeacherProviderRegistryCreateRequest,
@@ -96,11 +91,6 @@ from .assignment_upload_draft_save_service import (
     AssignmentUploadDraftSaveError,
     save_assignment_upload_draft as _save_assignment_upload_draft_impl,
 )
-from .assignment_upload_legacy_service import (
-    AssignmentUploadLegacyDeps,
-    AssignmentUploadLegacyError,
-    assignment_upload as _assignment_upload_legacy_impl,
-)
 from .assignment_upload_draft_service import (
     assignment_upload_not_ready_detail as _assignment_upload_not_ready_detail_impl,
     build_assignment_upload_draft as _build_assignment_upload_draft_impl,
@@ -136,7 +126,6 @@ from .agent_service import (
     parse_tool_json as _parse_tool_json_impl,
     run_agent_runtime as _run_agent_runtime_impl,
 )
-from .chat_api_service import ChatApiDeps, start_chat_api as _start_chat_api_impl
 from .chat_job_repository import ChatJobRepositoryDeps
 from .chat_job_service import (
     chat_job_path as _chat_job_path_impl,
@@ -194,7 +183,6 @@ from .chart_agent_run_service import (
     chart_agent_packages as _chart_agent_packages_impl,
     chart_agent_run as _chart_agent_run_impl,
 )
-from .chart_api_service import ChartApiDeps, chart_exec_api as _chart_exec_api_impl
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
 from .handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers, chat_handlers, exam_upload_handlers
 from .content_catalog_service import (
@@ -208,7 +196,6 @@ from .core_example_tool_service import (
     core_example_render as _core_example_render_impl,
     core_example_search as _core_example_search_impl,
 )
-from .exam_api_service import ExamApiDeps, get_exam_detail_api as _get_exam_detail_api_impl
 from .exam_detail_service import (
     ExamDetailDeps,
     exam_question_detail as _exam_question_detail_impl,
@@ -241,14 +228,6 @@ from .exam_upload_confirm_service import (
     ExamUploadConfirmDeps,
     confirm_exam_upload as _confirm_exam_upload_impl,
 )
-from .exam_upload_api_service import (
-    ExamUploadApiDeps,
-    ExamUploadApiError,
-    exam_upload_confirm as _exam_upload_confirm_api_impl,
-    exam_upload_draft as _exam_upload_draft_api_impl,
-    exam_upload_draft_save as _exam_upload_draft_save_api_impl,
-    exam_upload_status as _exam_upload_status_api_impl,
-)
 from .exam_upload_draft_service import (
     build_exam_upload_draft as _build_exam_upload_draft_impl,
     exam_upload_not_ready_detail as _exam_upload_not_ready_detail_impl,
@@ -265,45 +244,15 @@ from .session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
     save_session_view_state as _save_session_view_state_impl,
 )
-from .session_history_api_service import (
-    SessionHistoryApiDeps,
-    SessionHistoryApiError,
-    student_history_session as _student_history_session_api_impl,
-    student_history_sessions as _student_history_sessions_api_impl,
-    student_session_view_state as _student_session_view_state_api_impl,
-    teacher_history_session as _teacher_history_session_api_impl,
-    teacher_history_sessions as _teacher_history_sessions_api_impl,
-    teacher_session_view_state as _teacher_session_view_state_api_impl,
-    update_student_session_view_state as _update_student_session_view_state_api_impl,
-    update_teacher_session_view_state as _update_teacher_session_view_state_api_impl,
-)
 from .session_discussion_service import (
     SessionDiscussionDeps,
     session_discussion_pass as _session_discussion_pass_impl,
-)
-from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
-from .student_persona_api_service import (
-    StudentPersonaApiDeps,
-    resolve_student_persona_runtime as _resolve_student_persona_runtime_impl,
-    resolve_student_persona_avatar_path as _resolve_student_persona_avatar_path_impl,
-    student_persona_activate_api as _student_persona_activate_api_impl,
-    student_persona_avatar_upload_api as _student_persona_avatar_upload_api_impl,
-    student_persona_custom_create_api as _student_persona_custom_create_api_impl,
-    student_persona_custom_update_api as _student_persona_custom_update_api_impl,
-    student_persona_custom_delete_api as _student_persona_custom_delete_api_impl,
-    student_personas_get_api as _student_personas_get_api_impl,
 )
 from .student_import_service import (
     StudentImportDeps,
     import_students_from_responses as _import_students_from_responses_impl,
     resolve_responses_file as _resolve_responses_file_impl,
     student_import as _student_import_impl,
-)
-from .student_ops_api_service import (
-    StudentOpsApiDeps,
-    update_profile as _update_profile_api_impl,
-    upload_files as _upload_files_api_impl,
-    verify_student as _verify_student_api_impl,
 )
 from .student_directory_service import (
     StudentDirectoryDeps,
@@ -318,16 +267,11 @@ from .teacher_assignment_preflight_service import (
     TeacherAssignmentPreflightDeps,
     teacher_assignment_preflight as _teacher_assignment_preflight_impl,
 )
-from .teacher_routing_api_service import TeacherRoutingApiDeps, get_routing_api as _get_routing_api_impl
-from .teacher_llm_routing_service import (
-    TeacherLlmRoutingDeps,
-    ensure_teacher_routing_file as _ensure_teacher_routing_file_impl,
-    teacher_llm_routing_apply as _teacher_llm_routing_apply_impl,
-    teacher_llm_routing_get as _teacher_llm_routing_get_impl,
-    teacher_llm_routing_proposal_get as _teacher_llm_routing_proposal_get_impl,
-    teacher_llm_routing_propose as _teacher_llm_routing_propose_impl,
-    teacher_llm_routing_rollback as _teacher_llm_routing_rollback_impl,
-    teacher_llm_routing_simulate as _teacher_llm_routing_simulate_impl,
+from .teacher_model_config_service import (
+    TeacherModelConfigDeps,
+    resolve_teacher_model_config as _resolve_teacher_model_config_impl,
+    teacher_model_config_get as _teacher_model_config_get_impl,
+    teacher_model_config_update as _teacher_model_config_update_impl,
 )
 from .teacher_provider_registry_service import (
     TeacherProviderRegistryDeps,
@@ -338,16 +282,6 @@ from .teacher_provider_registry_service import (
     teacher_provider_registry_get as _teacher_provider_registry_get_impl,
     teacher_provider_registry_probe_models as _teacher_provider_registry_probe_models_impl,
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
-)
-from .teacher_persona_api_service import (
-    TeacherPersonaApiDeps,
-    resolve_teacher_persona_avatar_path as _resolve_teacher_persona_avatar_path_impl,
-    teacher_persona_assign_api as _teacher_persona_assign_api_impl,
-    teacher_persona_avatar_upload_api as _teacher_persona_avatar_upload_api_impl,
-    teacher_persona_create_api as _teacher_persona_create_api_impl,
-    teacher_persona_update_api as _teacher_persona_update_api_impl,
-    teacher_persona_visibility_api as _teacher_persona_visibility_api_impl,
-    teacher_personas_get_api as _teacher_personas_get_api_impl,
 )
 from .tool_dispatch_service import ToolDispatchDeps, tool_dispatch as _tool_dispatch_impl
 from .upload_io_service import sanitize_filename_io

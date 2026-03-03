@@ -13,10 +13,8 @@ from .config import (
     APP_ROOT,
     DATA_DIR,
     EXAM_UPLOAD_JOB_DIR,
-    LLM_ROUTING_PATH,
     STUDENT_SESSIONS_DIR,
     TEACHER_SESSIONS_DIR,
-    TEACHER_SKILLS_DIR,
     TEACHER_WORKSPACES_DIR,
     UPLOAD_JOB_DIR,
 )
@@ -53,11 +51,6 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
         digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:10] if raw else uuid.uuid4().hex[:10]
         slug = f"{prefix}_{digest}"
     return slug
-
-
-def teacher_skill_dir(skill_id: str) -> Path:
-    safe_id = safe_fs_id(skill_id, prefix="skill")
-    return TEACHER_SKILLS_DIR / safe_id
 
 
 # ---------------------------------------------------------------------------
@@ -121,11 +114,6 @@ def teacher_workspace_file(teacher_id: str, name: str) -> Path:
     return teacher_workspace_dir(teacher_id) / name
 
 
-def teacher_llm_routing_path(teacher_id: Optional[str] = None) -> Path:
-    teacher_id_final = resolve_teacher_id(teacher_id)
-    return teacher_workspace_dir(teacher_id_final) / "llm_routing.json"
-
-
 def teacher_provider_registry_path(teacher_id: Optional[str] = None) -> Path:
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_workspace_dir(teacher_id_final) / "provider_registry.json"
@@ -134,12 +122,6 @@ def teacher_provider_registry_path(teacher_id: Optional[str] = None) -> Path:
 def teacher_provider_registry_audit_path(teacher_id: Optional[str] = None) -> Path:
     teacher_id_final = resolve_teacher_id(teacher_id)
     return teacher_workspace_dir(teacher_id_final) / "provider_registry_audit.jsonl"
-
-
-def routing_config_path_for_role(role_hint: Optional[str], teacher_id: Optional[str] = None) -> Path:
-    if role_hint == "teacher":
-        return teacher_llm_routing_path(teacher_id)
-    return LLM_ROUTING_PATH
 
 
 # ---------------------------------------------------------------------------

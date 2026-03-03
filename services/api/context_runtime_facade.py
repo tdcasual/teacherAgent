@@ -9,7 +9,7 @@ from .agent_service import (
 from .agent_service import (
     run_agent_runtime as _run_agent_runtime_impl,
 )
-from .api_models import ChatRequest
+from .api_models import ChatRequest, ChatStartRequest
 from .chart_agent_run_service import chart_agent_run as _chart_agent_run_impl
 from .chat_job_processing_service import (
     compute_chat_reply_sync as _compute_chat_reply_sync_impl,
@@ -84,6 +84,7 @@ from .student_import_service import (
 from .student_import_service import (
     student_import as _student_import_impl,
 )
+from .handlers import chat_handlers as _chat_handlers_module
 from .teacher_provider_registry_service import (
     teacher_provider_registry_create as _teacher_provider_registry_create_impl,
 )
@@ -99,9 +100,17 @@ from .teacher_provider_registry_service import (
 from .teacher_provider_registry_service import (
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
 )
+from .teacher_model_config_service import (
+    teacher_model_config_get as _teacher_model_config_get_impl,
+)
+from .teacher_model_config_service import (
+    teacher_model_config_update as _teacher_model_config_update_impl,
+)
 from .tool_dispatch_service import tool_dispatch as _tool_dispatch_impl
 from .wiring.assignment_wiring import _assignment_generate_tool_deps
 from .wiring.chat_wiring import (
+    _chat_event_stream_deps,
+    _chat_handlers_deps,
     _chat_job_process_deps,
     _chat_runtime_deps,
     _chat_support_deps,
@@ -117,7 +126,7 @@ from .wiring.misc_wiring import (
     _tool_dispatch_deps,
 )
 from .wiring.student_wiring import _student_import_deps
-from .wiring.teacher_wiring import _teacher_provider_registry_deps
+from .wiring.teacher_wiring import _teacher_model_config_deps, _teacher_provider_registry_deps
 
 
 def build_verified_student_context(student_id: str, profile: Optional[Dict[str, Any]] = None) -> str:
@@ -152,53 +161,28 @@ def list_skills() -> Dict[str, Any]:
     return _list_skills_impl(deps=_content_catalog_deps())
 
 
-def _ensure_teacher_routing_file(actor: str) -> Path:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._ensure_teacher_routing_file_impl(actor, deps=_ac._teacher_llm_routing_deps())
+async def chat(req: ChatRequest) -> Any:
+    return await _chat_handlers_module.chat(req, deps=_chat_handlers_deps())
 
 
-def teacher_llm_routing_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_get_impl(args, deps=_ac._teacher_llm_routing_deps())
+async def chat_start(req: ChatStartRequest) -> Any:
+    return await _chat_handlers_module.chat_start(req, deps=_chat_handlers_deps())
 
 
-def teacher_llm_routing_simulate(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_simulate_impl(args, deps=_ac._teacher_llm_routing_deps())
+async def chat_status(job_id: str) -> Any:
+    return await _chat_handlers_module.chat_status(job_id, deps=_chat_handlers_deps())
 
 
-def teacher_llm_routing_propose(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_propose_impl(args, deps=_ac._teacher_llm_routing_deps())
+def chat_event_stream_deps() -> Any:
+    return _chat_event_stream_deps()
 
 
-def teacher_llm_routing_apply(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_apply_impl(args, deps=_ac._teacher_llm_routing_deps())
+def teacher_model_config_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_model_config_get_impl(args, deps=_teacher_model_config_deps())
 
 
-def teacher_llm_routing_rollback(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_rollback_impl(args, deps=_ac._teacher_llm_routing_deps())
-
-
-def teacher_llm_routing_proposal_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    from .wiring import get_app_core as _app_core
-
-    _ac = _app_core()
-    return _ac._teacher_llm_routing_proposal_get_impl(args, deps=_ac._teacher_llm_routing_deps())
+def teacher_model_config_update(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_model_config_update_impl(args, deps=_teacher_model_config_deps())
 
 
 def teacher_provider_registry_get(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -251,7 +235,11 @@ def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
     from .wiring import get_app_core as _app_core
 
     _ac = _app_core()
-    return _ac._chart_exec_api_impl(args, deps=_ac._chart_api_deps())
+    return _ac.execute_chart_exec(
+        args,
+        app_root=_ac.APP_ROOT,
+        uploads_dir=_ac.UPLOADS_DIR,
+    )
 
 
 def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -367,7 +355,6 @@ def run_agent(
     messages: List[Dict[str, Any]],
     role_hint: Optional[str],
     extra_system: Optional[str] = None,
-    agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
@@ -377,14 +364,13 @@ def run_agent(
         role_hint,
         deps=_agent_runtime_deps(),
         extra_system=extra_system,
-        agent_id=agent_id,
         skill_id=skill_id,
         teacher_id=teacher_id,
         event_sink=event_sink,
     )
 
 
-def _compute_chat_reply_sync(
+def compute_chat_reply_sync(
     req: ChatRequest,
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,

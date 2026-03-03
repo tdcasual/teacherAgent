@@ -4,7 +4,8 @@ from pathlib import Path
 
 class SkillsPolicyConsistencyTest(unittest.TestCase):
     def test_skill_tool_policy_matches_roles(self):
-        from services.api.app import APP_ROOT, allowed_tools
+        from services.api.config import APP_ROOT
+        from services.api.context_runtime_facade import allowed_tools
         from services.api.skills.loader import load_skills
 
         loaded = load_skills(Path(APP_ROOT) / "skills")
@@ -28,7 +29,7 @@ class SkillsPolicyConsistencyTest(unittest.TestCase):
             self.assertTrue(ok, f"{skill_id}: tool policy not compatible with allowed_roles")
 
     def test_skill_budgets_are_positive(self):
-        from services.api.app import APP_ROOT
+        from services.api.config import APP_ROOT
         from services.api.skills.loader import load_skills
 
         loaded = load_skills(Path(APP_ROOT) / "skills")
@@ -42,4 +43,3 @@ class SkillsPolicyConsistencyTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

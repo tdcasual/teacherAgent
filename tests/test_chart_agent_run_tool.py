@@ -46,11 +46,11 @@ class ChartAgentRunToolTest(unittest.TestCase):
                     "python_executable": "python3",
                 }
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
+            app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            app_mod.get_core().resolve_opencode_status = fake_status  # type: ignore[attr-defined]
 
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
                 {"task": "画一个简单折线图", "input_data": {"a": 1}, "packages": ["numpy"], "auto_install": True},
                 role="teacher",
@@ -101,11 +101,11 @@ class ChartAgentRunToolTest(unittest.TestCase):
                     "python_executable": "python3",
                 }
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
+            app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            app_mod.get_core().resolve_opencode_status = fake_status  # type: ignore[attr-defined]
 
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
                 {"task": "画图", "max_retries": 3},
                 role="teacher",
@@ -117,7 +117,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
     def test_chart_agent_run_with_opencode_engine(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
                 {
                     "task": "画一个趋势图",
@@ -138,8 +138,8 @@ class ChartAgentRunToolTest(unittest.TestCase):
             def fake_status(app_root, overrides=None):  # type: ignore[no-untyped-def]
                 return {"enabled": True, "available": False, "reason": "binary_not_found", "config": {}}
 
-            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
-            res = app_mod.tool_dispatch(
+            app_mod.get_core().resolve_opencode_status = fake_status  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
                 {"task": "画图", "engine": "opencode"},
                 role="teacher",
@@ -180,11 +180,11 @@ class ChartAgentRunToolTest(unittest.TestCase):
                     "python_executable": "python3",
                 }
 
-            app_mod.resolve_opencode_status = fake_status  # type: ignore[attr-defined]
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            app_mod.get_core().resolve_opencode_status = fake_status  # type: ignore[attr-defined]
+            app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
 
-            res = app_mod.tool_dispatch(
+            res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
                 {"task": "画图", "engine": "auto"},
                 role="teacher",

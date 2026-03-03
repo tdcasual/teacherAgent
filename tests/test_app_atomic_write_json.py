@@ -1,27 +1,17 @@
-import importlib
 import json
-import os
 import threading
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-
-def load_app(tmp_dir: Path):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+from services.api.job_repository import _atomic_write_json
+from services.api.teacher_session_compaction_helpers import write_teacher_session_records
 
 
 class AppAtomicWriteJsonTest(unittest.TestCase):
     def test_atomic_write_json_handles_concurrent_writers(self):
         with TemporaryDirectory() as td:
-            app_mod = load_app(Path(td))
             target = Path(td) / "uploads" / "chat_jobs" / "cjob_concurrent" / "job.json"
             barrier = threading.Barrier(2)
             errors = []
@@ -35,7 +25,7 @@ class AppAtomicWriteJsonTest(unittest.TestCase):
 
             def writer(seq: int):
                 try:
-                    app_mod._atomic_write_json(target, {"seq": seq})
+                    _atomic_write_json(target, {"seq": seq})
                 except Exception as exc:  # pragma: no cover - asserted below
                     errors.append(exc)
 
@@ -53,7 +43,6 @@ class AppAtomicWriteJsonTest(unittest.TestCase):
 
     def test_write_teacher_session_records_handles_concurrent_writers(self):
         with TemporaryDirectory() as td:
-            app_mod = load_app(Path(td))
             target = Path(td) / "data" / "teacher_chat_sessions" / "teacher_demo" / "session_main.jsonl"
             barrier = threading.Barrier(2)
             errors = []
@@ -70,7 +59,7 @@ class AppAtomicWriteJsonTest(unittest.TestCase):
 
             def writer(records):
                 try:
-                    app_mod._write_teacher_session_records(target, records)
+                    write_teacher_session_records(target, records)
                 except Exception as exc:  # pragma: no cover - asserted below
                     errors.append(exc)
 

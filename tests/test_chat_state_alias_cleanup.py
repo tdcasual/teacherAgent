@@ -19,10 +19,12 @@ class ChatStateAliasCleanupTest(unittest.TestCase):
     def test_request_index_aliases_removed_from_module_scope(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            self.assertTrue(hasattr(app_mod, "CHAT_IDEMPOTENCY_STATE"))
-            self.assertFalse(hasattr(app_mod, "CHAT_REQUEST_MAP_DIR"))
-            self.assertFalse(hasattr(app_mod, "CHAT_REQUEST_INDEX_PATH"))
-            self.assertFalse(hasattr(app_mod, "CHAT_REQUEST_INDEX_LOCK"))
+            core = app_mod.get_core()
+            self.assertFalse(hasattr(app_mod, "CHAT_IDEMPOTENCY_STATE"))
+            self.assertTrue(hasattr(core, "CHAT_IDEMPOTENCY_STATE"))
+            self.assertFalse(hasattr(core, "CHAT_REQUEST_MAP_DIR"))
+            self.assertFalse(hasattr(core, "CHAT_REQUEST_INDEX_PATH"))
+            self.assertFalse(hasattr(core, "CHAT_REQUEST_INDEX_LOCK"))
 
 
 if __name__ == "__main__":

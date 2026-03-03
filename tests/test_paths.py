@@ -128,16 +128,3 @@ class TestTeacherWorkspaceFile:
     def test_disallowed_name_raises(self):
         with pytest.raises(ValueError, match="invalid"):
             paths.teacher_workspace_file("teacher1", "evil.txt")
-
-
-# ── routing_config_path_for_role ────────────────────────────────────────
-
-class TestRoutingConfigPathForRole:
-    def test_teacher_role(self):
-        result = paths.routing_config_path_for_role("teacher", "t1")
-        assert "llm_routing.json" in str(result)
-        assert "teacher" in str(result).lower()
-
-    def test_student_role_returns_global(self):
-        result = paths.routing_config_path_for_role("student")
-        assert result == _cfg.LLM_ROUTING_PATH

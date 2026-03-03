@@ -8,7 +8,6 @@ import type {
   AssignmentDetail,
   Message,
   PendingChatJob,
-  StudentPersonaCard,
   StudentHistorySession,
   VerifiedStudent,
 } from '../appTypes'
@@ -133,12 +132,6 @@ export type StudentState = {
   renameDialogSessionId: string | null
   archiveDialogSessionId: string | null
   forceSessionLoadToken: number
-  personaEnabled: boolean
-  personaPickerOpen: boolean
-  activePersonaId: string
-  personaCards: StudentPersonaCard[]
-  personaLoading: boolean
-  personaError: string
 }
 
 export type StudentAction =
@@ -236,12 +229,6 @@ function buildInitialState(): StudentState {
     renameDialogSessionId: null,
     archiveDialogSessionId: null,
     forceSessionLoadToken: 0,
-    personaEnabled: false,
-    personaPickerOpen: false,
-    activePersonaId: '',
-    personaCards: [],
-    personaLoading: false,
-    personaError: '',
   }
 }
 

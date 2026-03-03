@@ -106,7 +106,8 @@ def test_tenant_unload_stops_chat_workers():
         handle = getattr(app_mod, "_TENANT_REGISTRY").get_loaded("t1")
         assert handle is not None
         module = handle.instance.module
-        threads = list(getattr(module, "CHAT_WORKER_THREADS", []) or [])
+        core = module.get_core() if hasattr(module, "get_core") else getattr(module, "_APP_CORE")
+        threads = list(getattr(core, "CHAT_WORKER_THREADS", []) or [])
         assert threads, "expected chat worker threads to be started for tenant"
         assert any(t.is_alive() for t in threads)
 

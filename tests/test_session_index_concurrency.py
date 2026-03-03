@@ -33,7 +33,7 @@ class SessionIndexConcurrencyTest(unittest.TestCase):
                 def writer(session_id: str, delay: float):
                     try:
                         time.sleep(delay)
-                        app_mod.update_teacher_session_index(
+                        app_mod.get_core().update_teacher_session_index(
                             teacher_id,
                             session_id,
                             preview=session_id,
@@ -50,7 +50,7 @@ class SessionIndexConcurrencyTest(unittest.TestCase):
                 t2.join()
 
                 self.assertEqual(errors, [])
-                items = app_mod.load_teacher_sessions_index(teacher_id)
+                items = app_mod.get_core().load_teacher_sessions_index(teacher_id)
                 ids = {str(item.get("session_id") or "") for item in items}
                 self.assertIn(sid_a, ids)
                 self.assertIn(sid_b, ids)

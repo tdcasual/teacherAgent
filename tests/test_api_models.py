@@ -11,8 +11,7 @@ from services.api.api_models import (
     ChatRequest,
     ChatResponse,
     ChatStartRequest,
-    TeacherSkillCreateRequest,
-    TeacherSkillImportRequest,
+    TeacherModelConfigUpdateRequest,
 )
 
 # ── ChatMessage ──────────────────────────────────────────────────────
@@ -39,7 +38,6 @@ class TestChatRequest:
         req = ChatRequest(messages=[ChatMessage(role="user", content="hi")])
         assert len(req.messages) == 1
         assert req.role is None
-        assert req.agent_id is None
         assert req.skill_id is None
         assert req.auto_generate_assignment is None
 
@@ -47,7 +45,6 @@ class TestChatRequest:
         req = ChatRequest(
             messages=[ChatMessage(role="user", content="hi")],
             role="teacher",
-            agent_id="a1",
             skill_id="s1",
             teacher_id="t1",
             student_id="st1",
@@ -56,12 +53,19 @@ class TestChatRequest:
             auto_generate_assignment=True,
         )
         assert req.role == "teacher"
-        assert req.agent_id == "a1"
+        assert req.skill_id == "s1"
         assert req.auto_generate_assignment is True
 
     def test_missing_messages(self):
         with pytest.raises(ValidationError):
             ChatRequest()
+
+    def test_forbids_unknown_fields(self):
+        with pytest.raises(ValidationError):
+            ChatRequest(
+                messages=[ChatMessage(role="user", content="hi")],
+                agent_id="legacy",
+            )
 
 
 # ── ChatStartRequest ─────────────────────────────────────────────────
@@ -108,24 +112,6 @@ class TestAssignmentRequirementsRequest:
             AssignmentRequirementsRequest(assignment_id="a1")
 
 
-# ── TeacherSkillCreateRequest ────────────────────────────────────────
-
-class TestTeacherSkillCreateRequest:
-    def test_defaults(self):
-        req = TeacherSkillCreateRequest(title="My Skill", description="desc")
-        assert req.keywords == []
-        assert req.examples == []
-        assert req.allowed_roles == ["teacher"]
-
-    def test_title_too_long(self):
-        with pytest.raises(ValidationError):
-            TeacherSkillCreateRequest(title="x" * 201, description="ok")
-
-    def test_missing_title(self):
-        with pytest.raises(ValidationError):
-            TeacherSkillCreateRequest(description="desc")
-
-
 # ── ChatResponse ─────────────────────────────────────────────────────
 
 class TestChatResponse:
@@ -139,13 +125,17 @@ class TestChatResponse:
         assert resp.role == "assistant"
 
 
-# ── TeacherSkillImportRequest ────────────────────────────────────────
+# ── TeacherModelConfigUpdateRequest ──────────────────────────────────
 
-class TestTeacherSkillImportRequest:
+class TestTeacherModelConfigUpdateRequest:
     def test_valid(self):
-        req = TeacherSkillImportRequest(github_url="https://github.com/a/b")
-        assert req.github_url == "https://github.com/a/b"
+        req = TeacherModelConfigUpdateRequest(
+            teacher_id="t1",
+            models={"conversation": {"provider": "p1", "mode": "m1", "model": "x"}},
+        )
+        assert req.teacher_id == "t1"
+        assert "conversation" in req.models
 
-    def test_missing_url(self):
+    def test_missing_models(self):
         with pytest.raises(ValidationError):
-            TeacherSkillImportRequest()
+            TeacherModelConfigUpdateRequest()

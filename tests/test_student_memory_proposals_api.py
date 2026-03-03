@@ -23,7 +23,7 @@ class StudentMemoryProposalsApiTest(unittest.TestCase):
     def test_create_list_review_delete(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            teacher_id = app_mod.resolve_teacher_id("teacher_a")
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher_a")
 
             with TestClient(app_mod.app) as client:
                 created = client.post(
@@ -74,7 +74,7 @@ class StudentMemoryProposalsApiTest(unittest.TestCase):
     def test_blocked_content_returns_400(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            teacher_id = app_mod.resolve_teacher_id("teacher_a")
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher_a")
 
             with TestClient(app_mod.app) as client:
                 blocked = client.post(
@@ -91,7 +91,7 @@ class StudentMemoryProposalsApiTest(unittest.TestCase):
     def test_invalid_memory_type_returns_400(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            teacher_id = app_mod.resolve_teacher_id("teacher_a")
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher_a")
 
             with TestClient(app_mod.app) as client:
                 invalid = client.post(
