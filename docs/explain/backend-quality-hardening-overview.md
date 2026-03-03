@@ -24,6 +24,7 @@
 1. 继续收敛 `app_core` 的兼容导出与耦合面。
 2. 保持 touched-file typing 与 lint 门禁。
 3. 把阶段性改造成果沉淀为稳定 reference/explain 文档，而不仅是实施报告。
+4. 架构文档与前端结构守卫测试保持同步，避免引用已移除路径造成认知漂移。
 
 ## 相关文档
 - `docs/operations/slo-and-observability.md`

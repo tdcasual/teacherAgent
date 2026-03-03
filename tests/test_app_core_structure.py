@@ -1,26 +1,35 @@
 """Maintainability guardrails for app_core compatibility facade."""
 
+import json
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
 _APP_CORE_PATH = (
-    Path(__file__).resolve().parent.parent
+    _ROOT
     / "services"
     / "api"
     / "app_core.py"
 )
 _APP_CORE_IO_FACADE_PATH = (
-    Path(__file__).resolve().parent.parent
+    _ROOT
     / "services"
     / "api"
     / "context_io_facade.py"
 )
+_BUDGET_PATH = _ROOT / "config" / "backend_quality_budget.json"
+
+
+def _app_core_line_budget() -> int:
+    payload = json.loads(_BUDGET_PATH.read_text(encoding="utf-8"))
+    return int(payload["app_core_max_lines"])
 
 
 def test_app_core_line_budget() -> None:
     lines = _APP_CORE_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 900, (
-        f"app_core.py is {line_count} lines (limit 900). "
+    budget = _app_core_line_budget()
+    assert line_count <= budget, (
+        f"app_core.py is {line_count} lines (limit {budget}). "
         "Move domain wrapper functions to context application modules."
     )
 

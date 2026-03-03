@@ -73,6 +73,7 @@ from .exam_longform_service import (
 from .exam_longform_service import (
     summarize_exam_students as _summarize_exam_students_impl,
 )
+from .handlers import chat_handlers as _chat_handlers_module
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
 from .paths import DATA_DIR, parse_date_str
 from .student_import_service import (
@@ -84,7 +85,12 @@ from .student_import_service import (
 from .student_import_service import (
     student_import as _student_import_impl,
 )
-from .handlers import chat_handlers as _chat_handlers_module
+from .teacher_model_config_service import (
+    teacher_model_config_get as _teacher_model_config_get_impl,
+)
+from .teacher_model_config_service import (
+    teacher_model_config_update as _teacher_model_config_update_impl,
+)
 from .teacher_provider_registry_service import (
     teacher_provider_registry_create as _teacher_provider_registry_create_impl,
 )
@@ -99,12 +105,6 @@ from .teacher_provider_registry_service import (
 )
 from .teacher_provider_registry_service import (
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
-)
-from .teacher_model_config_service import (
-    teacher_model_config_get as _teacher_model_config_get_impl,
-)
-from .teacher_model_config_service import (
-    teacher_model_config_update as _teacher_model_config_update_impl,
 )
 from .tool_dispatch_service import tool_dispatch as _tool_dispatch_impl
 from .wiring.assignment_wiring import _assignment_generate_tool_deps

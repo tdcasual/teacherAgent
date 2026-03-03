@@ -44,12 +44,14 @@
 
 ## Frontend Boundaries (Student App)
 
-- 会话壳层：`frontend/apps/student/src/features/session/StudentSessionShell.tsx`
-- 聊天面板：`frontend/apps/student/src/features/chat/StudentChatPanel.tsx`
-- 工作台容器：`frontend/apps/student/src/features/workbench/StudentWorkbench.tsx`
+- 应用编排入口：`frontend/apps/student/src/App.tsx`
+- 聊天主面板：`frontend/apps/student/src/features/chat/ChatPanel.tsx`
+- 会话编排与分组：`frontend/apps/student/src/hooks/useSessionManager.ts`
+- 侧边栏容器：`frontend/apps/student/src/features/chat/SessionSidebar.tsx`
 - 约束：
-  - `App.tsx` 负责状态管理与编排，不直接扩展大型 UI 结构
-  - 新 UI 区块优先进入 `features/*`，避免继续膨胀单文件
+  - `App.tsx` 只做跨模块状态编排；聊天、会话、认证逻辑必须继续下沉到 `features/*` 或 `hooks/*`
+  - 新 UI 区块优先进入 `features/*`，避免将复杂视图回流到 `App.tsx`
+  - 会话分组/筛选规则优先放在 selector 或 hook 层，不在页面层重复实现
   - E2E 稳定定位器必须使用 `data-testid`
 
 ## Forbidden Dependency Patterns

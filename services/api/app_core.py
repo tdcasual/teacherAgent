@@ -138,14 +138,7 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_worker_wiring_module)
     _importlib.reload(_misc_wiring_module)
     _importlib.reload(_skill_wiring_module)
-from .wiring.chat_wiring import *  # noqa: F401,F403
-from .wiring.assignment_wiring import *  # noqa: F401,F403
-from .wiring.exam_wiring import *  # noqa: F401,F403
-from .wiring.student_wiring import *  # noqa: F401,F403
-from .wiring.teacher_wiring import *  # noqa: F401,F403
-from .wiring.worker_wiring import *  # noqa: F401,F403
-from .wiring.misc_wiring import *  # noqa: F401,F403
-from .wiring.skill_wiring import *  # noqa: F401,F403
+from .app_core_wiring_exports import *  # noqa: F401,F403
 
 from . import context_application_facade as _context_application_facade_module
 from . import context_runtime_facade as _context_runtime_facade_module
