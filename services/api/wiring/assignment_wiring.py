@@ -28,6 +28,7 @@ import shutil
 import time
 import uuid
 from datetime import datetime
+from typing import Any
 
 from services.api.runtime import queue_runtime
 
@@ -112,7 +113,7 @@ from . import get_app_core as _app_core
 def _assignment_handlers_deps() -> assignment_handlers.AssignmentHandlerDeps:
     _ac = _app_core()
 
-    def _get_assignment_detail_api(assignment_id: str):
+    def _get_assignment_detail_api(assignment_id: str) -> dict[str, Any]:
         try:
             folder = _ac.resolve_assignment_dir(str(assignment_id or ""))
         except ValueError:
@@ -405,4 +406,3 @@ def _assignment_upload_confirm_deps():
         atomic_write_json=_ac._atomic_write_json,
         copy2=shutil.copy2,
     )
-

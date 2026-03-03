@@ -9,5 +9,6 @@ from typing import Any
 
 from fastapi import APIRouter
 
+
 def build_router(core: Any) -> APIRouter:
     return APIRouter()
