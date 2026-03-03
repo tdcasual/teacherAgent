@@ -13,6 +13,8 @@
   3. 审计日志仍记录执行上下文（来源/角色/调用信息）用于持续追踪。
 - Owner：后端平台负责人
 - 关闭日期：2026-03-03
+- 下次复审日期：2026-06-03
+- 退出条件：默认保持 `sandboxed` 且 trusted 白名单策略与回归测试连续通过。
 - 验证证据：
   1. `services/api/chart_executor.py` 默认 profile 逻辑改为 `sandboxed`。
   2. `services/common/tool_registry.py` 中 `chart.exec.execution_profile.default` 改为 `sandboxed`。

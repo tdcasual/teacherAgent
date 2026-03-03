@@ -93,7 +93,7 @@ def test_execute_chart_exec_releases_semaphore_on_inner_error(
     assert sem.release_calls == 1
 
 
-def test_execute_chart_exec_invalid_profile_falls_back_to_trusted(
+def test_execute_chart_exec_invalid_profile_falls_back_to_sandboxed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -117,7 +117,7 @@ def test_execute_chart_exec_invalid_profile_falls_back_to_trusted(
     )
 
     assert out["ok"] is True
-    assert captured["execution_profile"] == "trusted"
+    assert captured["execution_profile"] == "sandboxed"
     assert sem.release_calls == 1
 
 
