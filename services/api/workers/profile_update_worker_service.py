@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, Dict, List
 
+from .lifecycle_state import compute_stop_result
+
 _log = logging.getLogger(__name__)
 
 
@@ -110,7 +112,6 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
     deps.stop_event.set()
     deps.update_event.set()
     thread = deps.worker_thread_get()
-    next_thread = thread
     effective_timeout = max(0.0, float(timeout_sec or 0.0))
     if str(os.getenv("PYTEST_CURRENT_TEST", "") or "").strip():
         effective_timeout = max(effective_timeout, 5.0)
@@ -119,14 +120,7 @@ def stop_profile_update_worker(*, deps: ProfileUpdateWorkerDeps, timeout_sec: fl
             thread.join(effective_timeout)
         except Exception:
             _log.debug("profile update worker thread join failed", exc_info=True)
-        is_alive = False
-        try:
-            is_alive_method = getattr(thread, "is_alive", None)
-            is_alive = bool(is_alive_method()) if callable(is_alive_method) else False
-        except Exception:
-            _log.debug("operation failed", exc_info=True)
-            is_alive = False
-        if not is_alive:
-            next_thread = None
+    stop_state = compute_stop_result(thread_alive=_thread_is_alive(thread))
+    next_thread = None if stop_state.clear_thread_ref else thread
     deps.worker_thread_set(next_thread)
-    deps.worker_started_set(next_thread is not None)
+    deps.worker_started_set(stop_state.worker_started)

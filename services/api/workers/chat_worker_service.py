@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .lifecycle_state import compute_stop_result
+
 _log = logging.getLogger(__name__)
 
 
@@ -223,4 +225,5 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
             _log.warning("operation failed", exc_info=True)
             pass
     alive_threads = _prune_dead_chat_worker_threads(deps.chat_worker_threads)
-    deps.worker_started_set(bool(alive_threads))
+    stop_state = compute_stop_result(thread_alive=bool(alive_threads))
+    deps.worker_started_set(stop_state.worker_started)
