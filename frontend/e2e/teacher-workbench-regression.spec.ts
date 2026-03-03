@@ -32,10 +32,14 @@ test('skills favorites filter keeps insertion target and sends cleaned payload',
 })
 
 
-test('chat start payload includes routing teacher id from settings state', async ({ page }) => {
+test('chat start payload includes authenticated teacher id from subject state', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page, {
     stateOverrides: {
-      teacherRoutingTeacherId: 'teacherB',
+      teacherAuthSubject: JSON.stringify({
+        teacher_id: 'teacherB',
+        teacher_name: 'Teacher B',
+        email: 'teacher-b@example.com',
+      }),
     },
   })
 

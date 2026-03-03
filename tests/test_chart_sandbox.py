@@ -4,7 +4,9 @@ from __future__ import annotations
 import builtins
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from services.api.chart_sandbox import (
@@ -213,6 +215,35 @@ class BuildFilesystemGuardSourceTest(unittest.TestCase):
         source = build_filesystem_guard_source("/out", ["/out", "/data", "/uploads"])
         self.assertIn("/data", source)
         self.assertIn("/uploads", source)
+
+    def test_guard_blocks_prefix_bypass_for_reads(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            output_dir = root / "uploads" / "charts" / "chr_test"
+            uploads_dir = root / "uploads"
+            data_dir = root / "data"
+            outside_prefix_dir = root / "uploads_evil"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            outside_prefix_dir.mkdir(parents=True, exist_ok=True)
+            outside_file = outside_prefix_dir / "secret.txt"
+            outside_file.write_text("secret", encoding="utf-8")
+
+            source = build_filesystem_guard_source(
+                str(output_dir),
+                [str(output_dir), str(uploads_dir), str(data_dir)],
+            )
+            namespace: dict[str, object] = {}
+            original_open = builtins.open
+            try:
+                exec(source, namespace, namespace)
+                guarded_open = namespace.get("_guarded_open")
+                self.assertTrue(callable(guarded_open))
+                with self.assertRaises(PermissionError):
+                    guarded_open(str(outside_file), "r", encoding="utf-8")  # type: ignore[misc]
+            finally:
+                builtins.open = original_open
 
 
 class ConcurrencySemaphoreTest(unittest.TestCase):

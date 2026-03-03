@@ -152,7 +152,15 @@ class ChartExecToolTest(unittest.TestCase):
 
             meta_path = tmp / "uploads" / "chart_runs" / "chr_test123" / "meta.json"
             meta_path.parent.mkdir(parents=True, exist_ok=True)
-            meta_path.write_text(json.dumps({"run_id": "chr_test123"}), encoding="utf-8")
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "chr_test123",
+                        "audit": {"role": "teacher", "actor": "teacher_a"},
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             student_headers = _auth_headers(actor_id="student_a", role="student", secret=secret)
             teacher_headers = _auth_headers(actor_id="teacher_a", role="teacher", secret=secret)
@@ -168,7 +176,7 @@ class ChartExecToolTest(unittest.TestCase):
             self.assertEqual(client.get("/charts/chr_test123/main.png", headers=service_headers).status_code, 200)
             self.assertEqual(client.get("/chart-runs/chr_test123/meta", headers=service_headers).status_code, 200)
 
-    def test_chart_endpoints_accept_chart_query_access_token_for_teacher(self):
+    def test_chart_endpoints_forbid_cross_teacher_owner_access(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             secret = "chart-auth-secret"
@@ -181,7 +189,46 @@ class ChartExecToolTest(unittest.TestCase):
 
             meta_path = tmp / "uploads" / "chart_runs" / "chr_test123" / "meta.json"
             meta_path.parent.mkdir(parents=True, exist_ok=True)
-            meta_path.write_text(json.dumps({"run_id": "chr_test123"}), encoding="utf-8")
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "chr_test123",
+                        "audit": {"role": "teacher", "actor": "teacher_owner"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            owner_headers = _auth_headers(actor_id="teacher_owner", role="teacher", secret=secret)
+            other_headers = _auth_headers(actor_id="teacher_other", role="teacher", secret=secret)
+
+            self.assertEqual(client.get("/charts/chr_test123/main.png", headers=owner_headers).status_code, 200)
+            self.assertEqual(client.get("/chart-runs/chr_test123/meta", headers=owner_headers).status_code, 200)
+            self.assertEqual(client.get("/charts/chr_test123/main.png", headers=other_headers).status_code, 403)
+            self.assertEqual(client.get("/chart-runs/chr_test123/meta", headers=other_headers).status_code, 403)
+
+    def test_chart_endpoints_reject_chart_query_access_token(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            secret = "chart-auth-secret"
+            app_mod = load_app(tmp, auth_required="1", auth_secret=secret)
+            client = TestClient(app_mod.app)
+
+            chart_path = tmp / "uploads" / "charts" / "chr_test123" / "main.png"
+            chart_path.parent.mkdir(parents=True, exist_ok=True)
+            chart_path.write_bytes(b"png-bytes")
+
+            meta_path = tmp / "uploads" / "chart_runs" / "chr_test123" / "meta.json"
+            meta_path.parent.mkdir(parents=True, exist_ok=True)
+            meta_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "chr_test123",
+                        "audit": {"role": "teacher", "actor": "teacher_a"},
+                    }
+                ),
+                encoding="utf-8",
+            )
 
             teacher_token = _auth_headers(actor_id="teacher_a", role="teacher", secret=secret)["Authorization"][7:]
             student_token = _auth_headers(actor_id="student_a", role="student", secret=secret)["Authorization"][7:]
@@ -203,10 +250,10 @@ class ChartExecToolTest(unittest.TestCase):
                 params={"access_token": student_token},
             )
 
-            self.assertEqual(chart_ok.status_code, 200)
-            self.assertEqual(meta_ok.status_code, 200)
-            self.assertEqual(chart_denied.status_code, 403)
-            self.assertEqual(meta_denied.status_code, 403)
+            self.assertEqual(chart_ok.status_code, 401)
+            self.assertEqual(meta_ok.status_code, 401)
+            self.assertEqual(chart_denied.status_code, 401)
+            self.assertEqual(meta_denied.status_code, 401)
 
 
 if __name__ == "__main__":

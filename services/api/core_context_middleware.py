@@ -19,27 +19,6 @@ from .request_context import REQUEST_ID, new_request_id
 from .wiring import CURRENT_CORE
 
 
-def _is_chart_asset_path(path: str) -> bool:
-    value = str(path or "").strip()
-    return value.startswith("/charts/") or value.startswith("/chart-runs/")
-
-
-def _resolve_chart_query_principal(request: Request) -> Any:
-    path = str(request.url.path)
-    if not _is_chart_asset_path(path):
-        return None
-    token = str(request.query_params.get("access_token") or "").strip()
-    if not token:
-        return None
-    synthetic_headers = {"authorization": f"Bearer {token}"}
-    return resolve_principal_from_headers(
-        synthetic_headers,
-        path=path,
-        method=request.method,
-        allow_exempt=True,
-    )
-
-
 def _resolve_active_core(request: Request, *, default_core: Any) -> Any:
     state = getattr(request.app, "state", None)
     core_from_state = getattr(state, "core", None) if state is not None else None
@@ -51,19 +30,12 @@ def _resolve_active_core(request: Request, *, default_core: Any) -> Any:
 def _resolve_principal_token(request: Request) -> Any:
     principal = get_current_principal()
     if principal is None:
-        try:
-            principal = resolve_principal_from_headers(
-                request.headers,
-                path=str(request.url.path),
-                method=request.method,
-                allow_exempt=True,
-            )
-        except AuthError as exc:
-            if exc.detail != "missing_authorization":
-                raise
-            principal = _resolve_chart_query_principal(request)
-            if principal is None:
-                raise
+        principal = resolve_principal_from_headers(
+            request.headers,
+            path=str(request.url.path),
+            method=request.method,
+            allow_exempt=True,
+        )
     if principal is None:
         return None
     return set_current_principal(principal)
@@ -104,7 +76,7 @@ def build_set_core_context_middleware(
         except AuthError as exc:
             status_code = int(exc.status_code)
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             status_code = 500
             logging.getLogger(__name__).exception("Unhandled error in request middleware")
             return JSONResponse(status_code=500, content={"detail": "internal_error"})

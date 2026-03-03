@@ -1696,9 +1696,11 @@ test('pending completion reply survives hard reload and laggy history during ses
   await expect(page.locator('.message.assistant .text').filter({ hasText: resolvedReply }).first()).toBeVisible()
 
   const openSidebarIfNeeded = async () => {
-    const expandSidebarButton = page.getByRole('button', { name: '展开会话' })
-    if (await expandSidebarButton.isVisible()) {
-      await expandSidebarButton.click()
+    const collapsedSidebarToggle = page.locator(
+      'button[aria-controls="student-session-sidebar"][aria-expanded="false"]',
+    )
+    if (await collapsedSidebarToggle.first().isVisible()) {
+      await collapsedSidebarToggle.first().click()
     }
   }
 
@@ -2156,9 +2158,11 @@ test('recent completion should not duplicate when history reply has no ts', asyn
   await expect(page.locator('.message.assistant .text').filter({ hasText: resolvedReply }).first()).toBeVisible()
 
   const openSidebarIfNeeded = async () => {
-    const expandSidebarButton = page.getByRole('button', { name: '展开会话' })
-    if (await expandSidebarButton.isVisible()) {
-      await expandSidebarButton.click()
+    const collapsedSidebarToggle = page.locator(
+      'button[aria-controls="student-session-sidebar"][aria-expanded="false"]',
+    )
+    if (await collapsedSidebarToggle.first().isVisible()) {
+      await collapsedSidebarToggle.first().click()
     }
   }
 

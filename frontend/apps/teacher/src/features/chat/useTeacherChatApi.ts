@@ -192,7 +192,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       if (cached && cached.content === msg.content && cached.apiBase === apiBase && cached.authToken === authToken) {
         return { ...msg, html: cached.html }
       }
-      const html = absolutizeChartImageUrls(renderMarkdown(msg.content), apiBase, authToken)
+      const html = absolutizeChartImageUrls(renderMarkdown(msg.content), apiBase)
       cache.set(msg.id, { content: msg.content, html, apiBase, authToken })
       return { ...msg, html }
     })

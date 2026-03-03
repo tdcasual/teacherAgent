@@ -155,6 +155,7 @@ test('assistant markdown sanitization blocks common XSS payloads', async ({ page
   await setupUnifiedApiMocks(page, { assistantReply: payload })
   await page.addInitScript(() => {
     try {
+      window.localStorage.setItem('studentAuthAccessToken', 'e2e-student-token')
       window.localStorage.setItem(
         'verifiedStudent',
         JSON.stringify({ student_id: 'S001', student_name: '测试学生', class_name: '测试班级' }),

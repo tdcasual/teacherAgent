@@ -206,28 +206,16 @@ export const renderStreamingPlainText = (content: string) => {
   return escapeHtml(normalized).replace(/\n/g, '<br/>');
 };
 
-const appendChartAccessToken = (path: string, accessToken: string) => {
-  const token = String(accessToken || '').trim();
-  if (!token) return path;
-  const rawPath = String(path || '');
-  const hashIndex = rawPath.indexOf('#');
-  const baseAndQuery = hashIndex >= 0 ? rawPath.slice(0, hashIndex) : rawPath;
-  const hashSuffix = hashIndex >= 0 ? rawPath.slice(hashIndex) : '';
-  if (/(?:\?|&)access_token=/.test(baseAndQuery)) return rawPath;
-  const separator = baseAndQuery.includes('?') ? '&' : '?';
-  return `${baseAndQuery}${separator}access_token=${encodeURIComponent(token)}${hashSuffix}`;
-};
-
-export const absolutizeChartImageUrls = (html: string, apiBase: string, accessToken = '') => {
+export const absolutizeChartImageUrls = (html: string, apiBase: string) => {
   const base = normalizeApiBase(apiBase);
   if (!base) return html;
   return html
     .replace(
       /(<img\b[^>]*\bsrc=["'])(\/charts\/[^"']+)(["'])/gi,
-      (_, p1, p2, p3) => `${p1}${base}${appendChartAccessToken(String(p2), accessToken)}${p3}`,
+      (_, p1, p2, p3) => `${p1}${base}${String(p2)}${p3}`,
     )
     .replace(
       /(<a\b[^>]*\bhref=["'])(\/charts\/[^"']+)(["'])/gi,
-      (_, p1, p2, p3) => `${p1}${base}${appendChartAccessToken(String(p2), accessToken)}${p3}`,
+      (_, p1, p2, p3) => `${p1}${base}${String(p2)}${p3}`,
     );
 };
