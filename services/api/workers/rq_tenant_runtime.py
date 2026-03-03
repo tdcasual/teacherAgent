@@ -37,4 +37,5 @@ def load_tenant_module(tenant_id: Optional[str]) -> Any:
         return importlib.import_module("services.api.app")
     registry = _get_registry()
     handle = registry.get_or_create(tid)
+    handle.instance.activate()
     return handle.instance.module

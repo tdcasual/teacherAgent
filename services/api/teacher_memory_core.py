@@ -291,7 +291,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
         return ""
     try:
         path = teacher_session_file(teacher_id, session_id)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("Failed to resolve session file path for teacher=%s session=%s", teacher_id, session_id)
         return ""
     try:
@@ -302,7 +302,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
                     continue
                 try:
                     obj = json.loads(line)
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("Skipping non-JSON line in session file %s", path)
                     continue
                 if isinstance(obj, dict) and obj.get("kind") == "session_summary":
@@ -310,7 +310,7 @@ def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: i
                     return (text[:max_chars] + "\u2026") if max_chars and len(text) > max_chars else text
                 # If the first meaningful record isn't summary, don't scan the whole file.
                 break
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to read session file %s for summary", path, exc_info=True)
         return ""
     return ""
@@ -402,7 +402,7 @@ def teacher_memory_list_proposals(
     for path in files:
         try:
             rec = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("Failed to read proposal file %s", path, exc_info=True)
             continue
         if not isinstance(rec, dict):
@@ -621,7 +621,7 @@ def teacher_memory_delete_proposal(teacher_id: str, proposal_id: str) -> Dict[st
 
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to read proposal file for delete teacher=%s proposal=%s", teacher_id, pid, exc_info=True)
         record = {}
     if not isinstance(record, dict):
@@ -682,7 +682,7 @@ def _teacher_memory_remove_entry_from_file(path: Path, proposal_id: str) -> bool
         return False
     try:
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to read memory file for delete path=%s", path, exc_info=True)
         return False
 
@@ -714,7 +714,7 @@ def _teacher_memory_remove_entry_from_file(path: Path, proposal_id: str) -> bool
         next_text += "\n"
     try:
         path.write_text(next_text, encoding="utf-8")
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to write memory file for delete path=%s", path, exc_info=True)
         return False
     return True
@@ -782,7 +782,7 @@ def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> 
 def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, Any]:
     try:
         from .mem0_adapter import teacher_mem0_search
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to import mem0_adapter for search", exc_info=True)
         return {"ok": False, "matches": []}
     return teacher_mem0_search(teacher_id, query, limit=limit)
@@ -791,12 +791,12 @@ def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, A
 def _teacher_mem0_should_index_target(target: str) -> bool:
     try:
         from .mem0_adapter import teacher_mem0_should_index_target
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to import mem0_adapter for index target check", exc_info=True)
         return False
     try:
         return bool(teacher_mem0_should_index_target(target))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("mem0 should_index_target call failed for target=%s", target, exc_info=True)
         return False
 
@@ -804,7 +804,7 @@ def _teacher_mem0_should_index_target(target: str) -> bool:
 def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from .mem0_adapter import teacher_mem0_index_entry
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to import mem0_adapter for index entry", exc_info=True)
         return {"ok": False, "error": "mem0_unavailable"}
     return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)

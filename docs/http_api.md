@@ -7,16 +7,14 @@
 - Content-Type：`application/json`（除文件上传/表单接口）
 
 ## 实现说明（app.py 模块化）
-`services/api/app.py` 作为组合根（composition root），路由通过 deps 工厂委托到 domain API service：
-- `services/api/exam_api_service.py`
-- `services/api/assignment_api_service.py`
-- `services/api/student_profile_api_service.py`
-- `services/api/teacher_routing_api_service.py`
-- `services/api/chart_api_service.py`
-- `services/api/chat_api_service.py`
-- `services/api/teacher_memory_api_service.py`
-- `services/api/upload_io_service.py`
-- `services/api/llm_agent_tooling_service.py`
+`services/api/app.py` 作为组合根（composition root），统一通过
+`services/api/app_routes.py` 注册各领域路由模块：
+- `services/api/routes/chat_routes.py`
+- `services/api/routes/student_routes.py`
+- `services/api/routes/teacher_routes.py`
+- `services/api/routes/skill_routes.py`
+- `services/api/routes/exam_routes.py`
+- `services/api/routes/assignment_routes.py`
 
 ## 架构边界约束（2026-02 更新）
 - 模块边界规范：`docs/architecture/module-boundaries.md`
@@ -60,25 +58,13 @@
 
 ---
 
-## 老师端模型路由与 Provider 管理
+## 老师端模型配置与 Provider 管理
 
-### GET `/teacher/llm-routing`
-读取当前老师的路由配置、校验结果、历史版本与提案列表。
+### GET `/teacher/model-config`
+读取老师模型用途配置（`conversation`、`embedding`、`ocr`、`image_generation`）与可用目录。
 
-### POST `/teacher/llm-routing/simulate`
-基于当前配置（或传入草稿）进行路由仿真。
-
-### POST `/teacher/llm-routing/proposals`
-创建路由配置提案。
-
-### GET `/teacher/llm-routing/proposals/{proposal_id}`
-读取提案详情。
-
-### POST `/teacher/llm-routing/proposals/{proposal_id}/review`
-审核提案（生效或拒绝）。
-
-### POST `/teacher/llm-routing/rollback`
-回滚到历史版本。
+### PUT `/teacher/model-config`
+更新老师模型用途配置。
 
 ### GET `/teacher/provider-registry`
 读取老师私有 Provider 列表（脱敏）及共享+私有合并目录。

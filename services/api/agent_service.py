@@ -403,6 +403,128 @@ def _coerce_llm_message_content(content: Any) -> str:
     return str(content)
 
 
+def _append_tool_result_message(convo: List[Dict[str, Any]], *, call_id: str, result: Dict[str, Any]) -> None:
+    convo.append(
+        {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": json.dumps(result, ensure_ascii=False),
+        }
+    )
+
+
+def _emit_tool_start_event(
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+    *,
+    name: str,
+    call_id: str,
+) -> None:
+    if callable(event_sink):
+        event_sink(
+            "tool.start",
+            {
+                "tool_name": str(name),
+                "tool_call_id": call_id,
+            },
+        )
+
+
+def _emit_tool_finish_event(
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+    *,
+    name: str,
+    call_id: str,
+    started_at: float,
+    result: Dict[str, Any],
+    force_error: str = "",
+) -> None:
+    if not callable(event_sink):
+        return
+    result_error = str(result.get("error") or "") if isinstance(result, dict) else ""
+    error_text = str(force_error or result_error)
+    event_sink(
+        "tool.finish",
+        {
+            "tool_name": str(name),
+            "tool_call_id": call_id,
+            "ok": not bool(error_text.strip()),
+            "duration_ms": int((time.monotonic() - started_at) * 1000),
+            "error": error_text,
+        },
+    )
+
+
+def _parse_structured_tool_args(call: Dict[str, Any]) -> Dict[str, Any]:
+    raw_args = call["function"].get("arguments") or "{}"
+    try:
+        parsed = json.loads(raw_args)
+    except Exception:
+        _log.debug("JSON parse failed", exc_info=True)
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _process_structured_tool_call(
+    *,
+    deps: AgentRuntimeDeps,
+    convo: List[Dict[str, Any]],
+    call: Dict[str, Any],
+    allowed: Set[str],
+    role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> bool:
+    name = call["function"]["name"]
+    call_id = str(call.get("id") or "")
+    t0 = time.monotonic()
+    _emit_tool_start_event(event_sink, name=str(name), call_id=call_id)
+
+    if name not in allowed:
+        denied_result = {"error": "permission denied", "tool": name}
+        _append_tool_result_message(convo, call_id=call["id"], result=denied_result)
+        _emit_tool_finish_event(
+            event_sink,
+            name=str(name),
+            call_id=call_id,
+            started_at=t0,
+            result=denied_result,
+            force_error="permission denied",
+        )
+        return False
+
+    args_dict = _parse_structured_tool_args(call)
+    result = _dispatch_tool_safely(
+        deps,
+        name,
+        args_dict,
+        role_hint,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+    )
+    if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
+        allowed.discard(name)
+    _append_tool_result_message(convo, call_id=call["id"], result=result)
+    _emit_tool_finish_event(
+        event_sink,
+        name=str(name),
+        call_id=call_id,
+        started_at=t0,
+        result=result if isinstance(result, dict) else {},
+    )
+    return True
+
+
+def _append_tool_budget_exhausted(
+    convo: List[Dict[str, Any]],
+    *,
+    over_budget_calls: List[Dict[str, Any]],
+) -> None:
+    for call in over_budget_calls:
+        result = {"error": "tool_budget_exhausted", "tool": call["function"]["name"]}
+        _append_tool_result_message(convo, call_id=call["id"], result=result)
+
+
 def _handle_structured_tool_calls(
     *,
     deps: AgentRuntimeDeps,
@@ -422,84 +544,20 @@ def _handle_structured_tool_calls(
         return tool_calls_total, True
     convo.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
     for call in tool_calls[:remaining]:
-        name = call["function"]["name"]
-        call_id = str(call.get("id") or "")
-        t0 = time.monotonic()
-        if callable(event_sink):
-            event_sink(
-                "tool.start",
-                {
-                    "tool_name": str(name),
-                    "tool_call_id": call_id,
-                },
-            )
-        if name not in allowed:
-            result = {"error": "permission denied", "tool": name}
-            convo.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": json.dumps(result, ensure_ascii=False),
-                }
-            )
-            if callable(event_sink):
-                event_sink(
-                    "tool.finish",
-                    {
-                        "tool_name": str(name),
-                        "tool_call_id": call_id,
-                        "ok": False,
-                        "duration_ms": int((time.monotonic() - t0) * 1000),
-                        "error": "permission denied",
-                    },
-                )
-            continue
-        args = call["function"].get("arguments") or "{}"
-        try:
-            args_dict = json.loads(args)
-        except Exception:
-            _log.debug("JSON parse failed", exc_info=True)
-            args_dict = {}
-        result = _dispatch_tool_safely(
-            deps,
-            name,
-            args_dict,
-            role_hint,
+        counted = _process_structured_tool_call(
+            deps=deps,
+            convo=convo,
+            call=call,
+            allowed=allowed,
+            role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            event_sink=event_sink,
         )
-        if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
-            allowed.discard(name)
-        convo.append(
-            {
-                "role": "tool",
-                "tool_call_id": call["id"],
-                "content": json.dumps(result, ensure_ascii=False),
-            }
-        )
-        if callable(event_sink):
-            ok = not (isinstance(result, dict) and str(result.get("error") or "").strip())
-            event_sink(
-                "tool.finish",
-                {
-                    "tool_name": str(name),
-                    "tool_call_id": call_id,
-                    "ok": bool(ok),
-                    "duration_ms": int((time.monotonic() - t0) * 1000),
-                    "error": str(result.get("error") or "") if isinstance(result, dict) else "",
-                },
-            )
-        tool_calls_total += 1
+        if counted:
+            tool_calls_total += 1
     if len(tool_calls) > remaining:
-        for call in tool_calls[remaining:]:
-            result = {"error": "tool_budget_exhausted", "tool": call["function"]["name"]}
-            convo.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call["id"],
-                    "content": json.dumps(result, ensure_ascii=False),
-                }
-            )
+        _append_tool_budget_exhausted(convo, over_budget_calls=tool_calls[remaining:])
         return tool_calls_total, True
     return tool_calls_total, False
 
@@ -573,8 +631,113 @@ def _handle_json_tool_request(
                 "duration_ms": int((time.monotonic() - t0) * 1000),
                 "error": str(result.get("error") or "") if isinstance(result, dict) else "",
             },
-        )
+    )
     return tool_calls_total + 1, False
+
+
+def _make_round_token_sink(
+    *,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+    round_stream_chunks: List[str],
+) -> Callable[[str], None]:
+    def _round_token_sink(delta: str) -> None:
+        piece = str(delta or "")
+        if not piece:
+            return
+        round_stream_chunks.append(piece)
+        if callable(event_sink):
+            event_sink("assistant.delta", {"delta": piece})
+
+    return _round_token_sink
+
+
+def _emit_round_done_and_get_reply(
+    *,
+    content: str,
+    round_stream_chunks: List[str],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> str:
+    final_text = content or ""
+    if not callable(event_sink):
+        return final_text
+    if round_stream_chunks:
+        final_text = content or "".join(round_stream_chunks)
+        event_sink("assistant.done", {"text": final_text})
+        return final_text
+    for chunk in _iter_reply_chunks(content or ""):
+        event_sink("assistant.delta", {"delta": chunk})
+    event_sink("assistant.done", {"text": final_text})
+    return final_text
+
+
+def _handle_tool_round_outcome(
+    *,
+    deps: AgentRuntimeDeps,
+    convo: List[Dict[str, Any]],
+    resp: Dict[str, Any],
+    allowed: Set[str],
+    role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
+    max_tool_calls: int,
+    tool_calls_total: int,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+    round_stream_chunks: List[str],
+) -> Dict[str, Any]:
+    message = resp["choices"][0]["message"]
+    content = _coerce_llm_message_content(message.get("content"))
+    tool_calls = message.get("tool_calls")
+    if tool_calls:
+        tool_calls_total, tool_budget_exhausted = _handle_structured_tool_calls(
+            deps=deps,
+            convo=convo,
+            tool_calls=tool_calls,
+            content=content,
+            allowed=allowed,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            max_tool_calls=max_tool_calls,
+            tool_calls_total=tool_calls_total,
+            event_sink=event_sink,
+        )
+        return {
+            "reply": None,
+            "tool_calls_total": tool_calls_total,
+            "tool_budget_exhausted": tool_budget_exhausted,
+        }
+
+    tool_request = parse_tool_json(content or "")
+    if tool_request:
+        tool_calls_total, tool_budget_exhausted = _handle_json_tool_request(
+            deps=deps,
+            convo=convo,
+            tool_request=tool_request,
+            content=content,
+            allowed=allowed,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            max_tool_calls=max_tool_calls,
+            tool_calls_total=tool_calls_total,
+            event_sink=event_sink,
+        )
+        return {
+            "reply": None,
+            "tool_calls_total": tool_calls_total,
+            "tool_budget_exhausted": tool_budget_exhausted,
+        }
+
+    reply_text = _emit_round_done_and_get_reply(
+        content=content,
+        round_stream_chunks=round_stream_chunks,
+        event_sink=event_sink,
+    )
+    return {
+        "reply": reply_text,
+        "tool_calls_total": tool_calls_total,
+        "tool_budget_exhausted": False,
+    }
 
 
 def _run_tool_loop(
@@ -595,13 +758,10 @@ def _run_tool_loop(
     tool_budget_exhausted = False
     for round_index in range(max_tool_rounds):
         round_stream_chunks: List[str] = []
-
-        def _round_token_sink(delta: str, _round_stream_chunks: List[str] = round_stream_chunks) -> None:
-            piece = str(delta or "")
-            if piece:
-                _round_stream_chunks.append(piece)
-                if callable(event_sink):
-                    event_sink("assistant.delta", {"delta": piece})
+        round_token_sink = _make_round_token_sink(
+            event_sink=event_sink,
+            round_stream_chunks=round_stream_chunks,
+        )
 
         if callable(event_sink):
             event_sink(
@@ -617,55 +777,28 @@ def _run_tool_loop(
             teacher_id=teacher_id,
             skill_runtime=skill_runtime,
             stream=bool(event_sink),
-            token_sink=_round_token_sink if callable(event_sink) else None,
+            token_sink=round_token_sink if callable(event_sink) else None,
         )
-        message = resp["choices"][0]["message"]
-        content = _coerce_llm_message_content(message.get("content"))
-        tool_calls = message.get("tool_calls")
-        if tool_calls:
-            tool_calls_total, tool_budget_exhausted = _handle_structured_tool_calls(
-                deps=deps,
-                convo=convo,
-                tool_calls=tool_calls,
-                content=content,
-                allowed=allowed,
-                role_hint=role_hint,
-                skill_id=skill_id,
-                teacher_id=teacher_id,
-                max_tool_calls=max_tool_calls,
-                tool_calls_total=tool_calls_total,
-                event_sink=event_sink,
-            )
-            if tool_budget_exhausted:
-                break
-            continue
-        tool_request = parse_tool_json(content or "")
-        if tool_request:
-            tool_calls_total, tool_budget_exhausted = _handle_json_tool_request(
-                deps=deps,
-                convo=convo,
-                tool_request=tool_request,
-                content=content,
-                allowed=allowed,
-                role_hint=role_hint,
-                skill_id=skill_id,
-                teacher_id=teacher_id,
-                max_tool_calls=max_tool_calls,
-                tool_calls_total=tool_calls_total,
-                event_sink=event_sink,
-            )
-            if tool_budget_exhausted:
-                break
-            continue
-        if callable(event_sink):
-            if round_stream_chunks:
-                final_text = content or "".join(round_stream_chunks)
-                event_sink("assistant.done", {"text": final_text})
-                return final_text, tool_budget_exhausted
-            for chunk in _iter_reply_chunks(content or ""):
-                event_sink("assistant.delta", {"delta": chunk})
-            event_sink("assistant.done", {"text": content or ""})
-        return content or "", tool_budget_exhausted
+        outcome = _handle_tool_round_outcome(
+            deps=deps,
+            convo=convo,
+            resp=resp,
+            allowed=allowed,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            max_tool_calls=max_tool_calls,
+            tool_calls_total=tool_calls_total,
+            event_sink=event_sink,
+            round_stream_chunks=round_stream_chunks,
+        )
+        tool_calls_total = int(outcome.get("tool_calls_total") or tool_calls_total)
+        tool_budget_exhausted = bool(outcome.get("tool_budget_exhausted"))
+        reply = outcome.get("reply")
+        if isinstance(reply, str):
+            return reply, tool_budget_exhausted
+        if tool_budget_exhausted:
+            break
     return None, tool_budget_exhausted
 
 

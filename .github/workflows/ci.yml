@@ -85,6 +85,14 @@ jobs:
         run: |
           python scripts/quality/check_backend_quality_budget.py
 
+      - name: Check strict exception policy
+        run: |
+          python scripts/quality/check_exception_policy.py
+
+      - name: Check complexity budget
+        run: |
+          python scripts/quality/check_complexity_budget.py
+
       - name: Run full backend test suite
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -106,6 +114,7 @@ jobs:
             tests/test_misc_wiring_structure.py \
             tests/test_no_duplicate_route_files.py \
             tests/test_no_star_imports_guardrail.py \
+            tests/test_coverage_config_integrity.py \
             tests/test_teacher_student_wiring_structure.py \
             tests/test_worker_skill_wiring_structure.py \
             tests/test_teacher_frontend_structure.py \

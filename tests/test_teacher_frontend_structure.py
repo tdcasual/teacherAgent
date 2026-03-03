@@ -31,3 +31,15 @@ def test_model_settings_page_exists_and_is_used() -> None:
 def test_removed_feature_directories_are_gone() -> None:
     assert not _ROUTING_DIR.exists()
     assert not _PERSONA_DIR.exists()
+
+
+def test_teacher_css_has_no_routing_tokens() -> None:
+    css = (
+        _ROOT
+        / "frontend"
+        / "apps"
+        / "teacher"
+        / "src"
+        / "tailwind.css"
+    ).read_text(encoding="utf-8")
+    assert ".routing-" not in css

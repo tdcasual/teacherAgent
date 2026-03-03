@@ -40,6 +40,43 @@ def _resolve_chart_query_principal(request: Request) -> Any:
     )
 
 
+def _resolve_active_core(request: Request, *, default_core: Any) -> Any:
+    state = getattr(request.app, "state", None)
+    core_from_state = getattr(state, "core", None) if state is not None else None
+    container = getattr(state, "container", None) if state is not None else None
+    core_from_container = getattr(container, "core", None) if container is not None else None
+    return core_from_container or core_from_state or default_core
+
+
+def _resolve_principal_token(request: Request) -> Any:
+    principal = get_current_principal()
+    if principal is None:
+        try:
+            principal = resolve_principal_from_headers(
+                request.headers,
+                path=str(request.url.path),
+                method=request.method,
+                allow_exempt=True,
+            )
+        except AuthError as exc:
+            if exc.detail != "missing_authorization":
+                raise
+            principal = _resolve_chart_query_principal(request)
+            if principal is None:
+                raise
+    if principal is None:
+        return None
+    return set_current_principal(principal)
+
+
+def _resolve_route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    if isinstance(route_path, str) and route_path:
+        return route_path
+    return str(request.url.path)
+
+
 def build_set_core_context_middleware(
     *,
     default_core: Any,
@@ -51,40 +88,17 @@ def build_set_core_context_middleware(
         rid = request.headers.get("x-request-id") or new_request_id()
         start = time.perf_counter()
         rid_token = REQUEST_ID.set(rid)
-        state = getattr(request.app, "state", None)
-        core_from_state = getattr(state, "core", None) if state is not None else None
-        container = getattr(state, "container", None) if state is not None else None
-        core_from_container = getattr(container, "core", None) if container is not None else None
-        active_core = core_from_container or core_from_state or default_core
+        active_core = _resolve_active_core(request, default_core=default_core)
         core_token = CURRENT_CORE.set(active_core)
         principal_token = None
         status_code = 500
-        route_template = str(request.url.path)
+        route_template = _resolve_route_template(request)
         OBSERVABILITY.inc_inflight()
         try:
-            principal = get_current_principal()
-            if principal is None:
-                try:
-                    principal = resolve_principal_from_headers(
-                        request.headers,
-                        path=str(request.url.path),
-                        method=request.method,
-                        allow_exempt=True,
-                    )
-                except AuthError as exc:
-                    if exc.detail != "missing_authorization":
-                        raise
-                    principal = _resolve_chart_query_principal(request)
-                    if principal is None:
-                        raise
-                if principal is not None:
-                    principal_token = set_current_principal(principal)
+            principal_token = _resolve_principal_token(request)
             response = await call_next(request)
             status_code = int(getattr(response, "status_code", 200) or 200)
-            route = request.scope.get("route")
-            route_path = getattr(route, "path", None)
-            if isinstance(route_path, str) and route_path:
-                route_template = route_path
+            route_template = _resolve_route_template(request)
             response.headers["x-request-id"] = rid
             return response
         except AuthError as exc:

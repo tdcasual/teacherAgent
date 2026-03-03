@@ -118,32 +118,37 @@ def _extract_python_code(text: str) -> str:
     return ""
 
 
+_OPENCODE_TEXT_KEYS = ("text", "content", "message", "response", "result", "output", "final")
+
+
+def _append_payload_text(chunks: List[str], payload: Dict[str, Any]) -> None:
+    for key in _OPENCODE_TEXT_KEYS:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            chunks.append(value.strip())
+
+
 def _collect_text_from_json_lines(stdout: str) -> str:
     chunks: List[str] = []
     for line in (stdout or "").splitlines():
         raw = line.strip()
         if not raw:
             continue
-        if raw.startswith("{") and raw.endswith("}"):
-            try:
-                payload = json.loads(raw)
-            except Exception:
-                _log.warning("JSON line parse failed in _collect_text_from_json_lines, line=%s", raw[:200], exc_info=True)
-                chunks.append(raw)
-                continue
-            if isinstance(payload, dict):
-                part = payload.get("part")
-                if isinstance(part, dict):
-                    for key in ("text", "content", "message", "response", "result", "output", "final"):
-                        value = part.get(key)
-                        if isinstance(value, str) and value.strip():
-                            chunks.append(value.strip())
-                for key in ("content", "text", "message", "response", "result", "output", "final"):
-                    value = payload.get(key)
-                    if isinstance(value, str) and value.strip():
-                        chunks.append(value.strip())
-        else:
+        if not (raw.startswith("{") and raw.endswith("}")):
             chunks.append(raw)
+            continue
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            _log.warning("JSON line parse failed in _collect_text_from_json_lines, line=%s", raw[:200], exc_info=True)
+            chunks.append(raw)
+            continue
+        if not isinstance(payload, dict):
+            continue
+        part = payload.get("part")
+        if isinstance(part, dict):
+            _append_payload_text(chunks, part)
+        _append_payload_text(chunks, payload)
     return "\n".join(chunks).strip()
 
 
@@ -190,11 +195,8 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
     return dict(parsed)
 
 
-def load_opencode_bridge_config(app_root: Path, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    config_file_raw = str(os.getenv("OPENCODE_BRIDGE_FILE") or "").strip()
-    config_file = Path(config_file_raw).resolve() if config_file_raw else (app_root / "config" / "opencode_bridge.yaml")
-    loaded = _load_config_file(config_file)
-    merged: Dict[str, Any] = {
+def _opencode_config_defaults() -> Dict[str, Any]:
+    return {
         "enabled": False,
         "bin": "opencode",
         "mode": "run",
@@ -206,11 +208,9 @@ def load_opencode_bridge_config(app_root: Path, overrides: Optional[Dict[str, An
         "max_retries": 3,
         "extra_env": {},
     }
-    if loaded:
-        merged.update(loaded)
-    if overrides:
-        merged.update({k: v for k, v in overrides.items() if v is not None})
 
+
+def _apply_opencode_env_map(merged: Dict[str, Any]) -> None:
     env_map = {
         "OPENCODE_BRIDGE_ENABLED": "enabled",
         "OPENCODE_BRIDGE_BIN": "bin",
@@ -227,28 +227,55 @@ def load_opencode_bridge_config(app_root: Path, overrides: Optional[Dict[str, An
         if value is not None and str(value).strip() != "":
             merged[key] = value
 
+
+def _apply_opencode_extra_env(merged: Dict[str, Any]) -> None:
     extra_env_raw = os.getenv("OPENCODE_BRIDGE_EXTRA_ENV")
-    if extra_env_raw:
-        try:
-            parsed = json.loads(extra_env_raw)
-            if isinstance(parsed, dict):
-                merged["extra_env"] = parsed
-        except Exception:
-            _log.warning("Failed to parse OPENCODE_BRIDGE_EXTRA_ENV=%s", extra_env_raw[:200], exc_info=True)
-            pass
+    if not extra_env_raw:
+        return
+    try:
+        parsed = json.loads(extra_env_raw)
+    except Exception:
+        _log.warning("Failed to parse OPENCODE_BRIDGE_EXTRA_ENV=%s", extra_env_raw[:200], exc_info=True)
+        return
+    if isinstance(parsed, dict):
+        merged["extra_env"] = parsed
 
-    mode = str(merged.get("mode") or "run").strip().lower()
-    if mode not in {"run", "attach"}:
-        mode = "run"
 
-    extra_env_value = merged.get("extra_env")
-    extra_env: Dict[str, str] = {}
-    if isinstance(extra_env_value, dict):
-        for key, value in extra_env_value.items():
-            key_text = str(key or "").strip()
-            if not key_text:
-                continue
-            extra_env[key_text] = str(value if value is not None else "")
+def _normalize_opencode_mode(value: Any) -> str:
+    mode = str(value or "run").strip().lower()
+    return mode if mode in {"run", "attach"} else "run"
+
+
+def _normalize_opencode_extra_env(value: Any) -> Dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    out: Dict[str, str] = {}
+    for key, item in value.items():
+        key_text = str(key or "").strip()
+        if not key_text:
+            continue
+        out[key_text] = str(item if item is not None else "")
+    return out
+
+
+def load_opencode_bridge_config(app_root: Path, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    config_file_raw = str(os.getenv("OPENCODE_BRIDGE_FILE") or "").strip()
+    config_file = (
+        Path(config_file_raw).resolve()
+        if config_file_raw
+        else (app_root / "config" / "opencode_bridge.yaml")
+    )
+    loaded = _load_config_file(config_file)
+    merged: Dict[str, Any] = _opencode_config_defaults()
+    if loaded:
+        merged.update(loaded)
+    if overrides:
+        merged.update({k: v for k, v in overrides.items() if v is not None})
+    _apply_opencode_env_map(merged)
+    _apply_opencode_extra_env(merged)
+
+    mode = _normalize_opencode_mode(merged.get("mode"))
+    extra_env = _normalize_opencode_extra_env(merged.get("extra_env"))
 
     normalized = {
         "enabled": _as_bool(merged.get("enabled"), False),
@@ -372,6 +399,104 @@ def build_opencode_chart_prompt(
     )
 
 
+def _build_opencode_run_command(
+    *,
+    binary: str,
+    flags: Dict[str, bool],
+    config: Dict[str, Any],
+    prompt: str,
+) -> List[str]:
+    cmd: List[str] = [binary, "run"]
+    if flags.get("format"):
+        cmd.extend(["--format", "json"])
+
+    model = str(config.get("model") or "").strip()
+    if model and flags.get("model"):
+        cmd.extend(["--model", model])
+
+    agent = str(config.get("agent") or "").strip()
+    if agent and flags.get("agent"):
+        cmd.extend(["--agent", agent])
+
+    config_path = str(config.get("config_path") or "").strip()
+    if config_path and flags.get("config"):
+        cmd.extend(["--config", config_path])
+
+    if str(config.get("mode") or "run") == "attach":
+        attach_url = str(config.get("attach_url") or "").strip()
+        if attach_url and flags.get("attach"):
+            cmd.extend(["--attach", attach_url])
+
+    if flags.get("prompt"):
+        cmd.extend(["--prompt", prompt])
+    else:
+        cmd.append(prompt)
+    return cmd
+
+
+def _build_opencode_run_env(config: Dict[str, Any]) -> Dict[str, str]:
+    env = os.environ.copy()
+    extra_env = config.get("extra_env") if isinstance(config, dict) else {}
+    if not isinstance(extra_env, dict):
+        return env
+    for key, value in extra_env.items():
+        key_text = str(key or "").strip()
+        if not key_text:
+            continue
+        env[key_text] = str(value if value is not None else "")
+    return env
+
+
+def _run_opencode_command(
+    *,
+    cmd: List[str],
+    app_root: Path,
+    env: Dict[str, str],
+    timeout_sec: int,
+    status: Dict[str, Any],
+    started_at: float,
+) -> Dict[str, Any]:
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(app_root),
+            env=env,
+            timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
+        return {
+            "ok": False,
+            "result": {
+                "ok": False,
+                "error": "opencode_timeout",
+                "timeout_sec": timeout_sec,
+                "duration_sec": round(time.monotonic() - started_at, 3),
+                "stdout": _clip_text(stdout),
+                "stderr": _clip_text((stderr + "\nopencode timed out").strip()),
+                "command": cmd,
+                "status": status,
+            },
+        }
+    except Exception as exc:
+        _log.warning("opencode subprocess execution failed: %s", exc, exc_info=True)
+        return {
+            "ok": False,
+            "result": {
+                "ok": False,
+                "error": "opencode_exec_error",
+                "detail": str(exc),
+                "duration_sec": round(time.monotonic() - started_at, 3),
+                "command": cmd,
+                "status": status,
+            },
+        }
+    return {"ok": True, "proc": proc}
+
+
 def run_opencode_codegen(
     *,
     app_root: Path,
@@ -401,75 +526,25 @@ def run_opencode_codegen(
         attempt=attempt,
         max_retries=max_retries,
     )
-
-    cmd: List[str] = [binary, "run"]
-    if flags.get("format"):
-        cmd.extend(["--format", "json"])
-
-    model = str(config.get("model") or "").strip()
-    if model and flags.get("model"):
-        cmd.extend(["--model", model])
-
-    agent = str(config.get("agent") or "").strip()
-    if agent and flags.get("agent"):
-        cmd.extend(["--agent", agent])
-
-    config_path = str(config.get("config_path") or "").strip()
-    if config_path and flags.get("config"):
-        cmd.extend(["--config", config_path])
-
-    if str(config.get("mode") or "run") == "attach":
-        attach_url = str(config.get("attach_url") or "").strip()
-        if attach_url and flags.get("attach"):
-            cmd.extend(["--attach", attach_url])
-
-    if flags.get("prompt"):
-        cmd.extend(["--prompt", prompt])
-    else:
-        cmd.append(prompt)
-
-    env = os.environ.copy()
-    extra_env = config.get("extra_env") if isinstance(config, dict) else {}
-    if isinstance(extra_env, dict):
-        for key, value in extra_env.items():
-            key_text = str(key or "").strip()
-            if not key_text:
-                continue
-            env[key_text] = str(value if value is not None else "")
-
+    cmd = _build_opencode_run_command(
+        binary=binary,
+        flags=flags,
+        config=config if isinstance(config, dict) else {},
+        prompt=prompt,
+    )
+    env = _build_opencode_run_env(config if isinstance(config, dict) else {})
     t0 = time.monotonic()
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(app_root),
-            env=env,
-            timeout=timeout_sec,
-        )
-    except subprocess.TimeoutExpired as exc:
-        stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
-        return {
-            "ok": False,
-            "error": "opencode_timeout",
-            "timeout_sec": timeout_sec,
-            "duration_sec": round(time.monotonic() - t0, 3),
-            "stdout": _clip_text(stdout),
-            "stderr": _clip_text((stderr + "\nopencode timed out").strip()),
-            "command": cmd,
-            "status": status,
-        }
-    except Exception as exc:
-        _log.warning("opencode subprocess execution failed: %s", exc, exc_info=True)
-        return {
-            "ok": False,
-            "error": "opencode_exec_error",
-            "detail": str(exc),
-            "duration_sec": round(time.monotonic() - t0, 3),
-            "command": cmd,
-            "status": status,
-        }
+    run_result = _run_opencode_command(
+        cmd=cmd,
+        app_root=app_root,
+        env=env,
+        timeout_sec=timeout_sec,
+        status=status,
+        started_at=t0,
+    )
+    if not run_result.get("ok"):
+        return dict(run_result.get("result") or {})
+    proc = run_result["proc"]
 
     stdout = _clip_text(proc.stdout or "")
     stderr = _clip_text(proc.stderr or "")

@@ -50,7 +50,7 @@ class AuthRegistryStore:
         with self._connect() as conn:
             try:
                 conn.execute("PRAGMA journal_mode=WAL;")
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.warning("WAL journal mode not available for %s", self.db_path, exc_info=True)
             conn.execute(
                 """
@@ -622,7 +622,7 @@ class AuthRegistryStore:
         path.write_text(content, encoding="utf-8")
         try:
             os.chmod(path, 0o600)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("failed to chmod admin bootstrap file: %s", path, exc_info=True)
         return str(path)
 
@@ -1157,7 +1157,7 @@ class AuthRegistryStore:
         for path in sorted(root.glob("*.json")):
             try:
                 profile = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.warning("failed to load student profile %s", path, exc_info=True)
                 continue
             sid = str(profile.get("student_id") or path.stem).strip()
@@ -1406,7 +1406,7 @@ def _parse_ts(text: str) -> Optional[datetime]:
         return None
     try:
         dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -1416,21 +1416,21 @@ def _parse_ts(text: str) -> Optional[datetime]:
 def _min_password_len() -> int:
     try:
         return max(8, int(str(os.getenv("AUTH_PASSWORD_MIN_LEN", "8") or "8")))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return 8
 
 
 def _lock_threshold() -> int:
     try:
         return max(3, int(str(os.getenv("AUTH_LOGIN_LOCK_THRESHOLD", "5") or "5")))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return 5
 
 
 def _lock_minutes() -> int:
     try:
         return max(1, int(str(os.getenv("AUTH_LOGIN_LOCK_MINUTES", "15") or "15")))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return 15
 
 
@@ -1464,7 +1464,7 @@ def _bounded_env_int(
         base = min(base, int(max_value))
     try:
         parsed = int(str(os.getenv(name, str(default)) or str(default)))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return base
     bounded = max(int(min_value), parsed)
     if max_value is not None:
@@ -1581,7 +1581,7 @@ def _verify_password(password: str, stored: str) -> bool:
         iterations = int(iter_text)
         salt = base64.b64decode(salt_text.encode("ascii"), validate=True)
         expected = base64.b64decode(digest_text.encode("ascii"), validate=True)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return False
     computed = hashlib.pbkdf2_hmac(
         "sha256",
@@ -1597,7 +1597,7 @@ def _parse_teacher_profile_markdown(path: Path) -> Dict[str, str]:
         return {"name": "", "email": ""}
     try:
         text = path.read_text(encoding="utf-8")
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return {"name": "", "email": ""}
 
     name = ""

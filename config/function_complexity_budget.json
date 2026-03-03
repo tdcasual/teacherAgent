@@ -1,0 +1,13 @@
+{
+  "total_c901_max": 64,
+  "critical_files": {
+    "services/api/agent_service.py": 0,
+    "services/api/auth_service.py": 0,
+    "services/api/chart_executor.py": 0,
+    "services/api/core_context_middleware.py": 0,
+    "services/api/opencode_executor.py": 0,
+    "services/api/tenant_dispatcher.py": 0,
+    "services/api/tool_dispatch_service.py": 0,
+    "services/api/chat_job_processing_service.py": 0
+  }
+}

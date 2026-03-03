@@ -5,7 +5,7 @@ from pathlib import Path
 class SkillsFirstClassTest(unittest.TestCase):
     def test_skill_loader_and_tool_policy(self):
         from services.api.config import APP_ROOT
-        from services.api.context_runtime_facade import allowed_tools
+        from services.api.core_services import allowed_tools
         from services.api.skills.loader import load_skills
         from services.api.skills.runtime import compile_skill_runtime
 
@@ -66,7 +66,7 @@ class SkillsFirstClassTest(unittest.TestCase):
 
     def test_chart_exec_policy_teacher_yes_student_no(self):
         from services.api.config import APP_ROOT
-        from services.api.context_runtime_facade import allowed_tools
+        from services.api.core_services import allowed_tools
         from services.api.skills.loader import load_skills
         from services.api.skills.runtime import compile_skill_runtime
 

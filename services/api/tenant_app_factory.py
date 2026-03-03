@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import logging
-import sys
 import types
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from services.api.runtime import bootstrap
 from services.api.runtime.runtime_state import reset_runtime_state
@@ -36,8 +34,15 @@ class TenantAppInstance:
     module_name: str
     module: types.ModuleType
     app: Any
+    settings: Optional[TenantSettings] = None
+
+    def activate(self) -> None:
+        if self.settings is None:
+            return
+        _configure_module_for_tenant(self.module, self.settings, reset_runtime=False)
 
     def startup(self) -> None:
+        self.activate()
         core = getattr(self.module, '_APP_CORE', None)
         token = CURRENT_CORE.set(core) if core is not None else None
         try:
@@ -47,6 +52,7 @@ class TenantAppInstance:
                 CURRENT_CORE.reset(token)
 
     def shutdown(self) -> None:
+        self.activate()
         core = getattr(self.module, '_APP_CORE', None)
         token = CURRENT_CORE.set(core) if core is not None else None
         try:
@@ -57,12 +63,11 @@ class TenantAppInstance:
         finally:
             if token is not None:
                 CURRENT_CORE.reset(token)
-            sys.modules.pop(self.module_name, None)
-
-_APP_PY_PATH = Path(__file__).resolve().with_name("app.py")
 
 
-def _configure_module_for_tenant(mod: types.ModuleType, settings: TenantSettings) -> None:
+def _configure_module_for_tenant(
+    mod: types.ModuleType, settings: TenantSettings, *, reset_runtime: bool
+) -> None:
     data_dir = settings.data_dir.expanduser().resolve()
     uploads_dir = settings.uploads_dir.expanduser().resolve()
 
@@ -96,30 +101,25 @@ def _configure_module_for_tenant(mod: types.ModuleType, settings: TenantSettings
 
     _set("DIAG_LOG_PATH", uploads_dir / "diagnostics.log")
 
-    for target in targets:
-        idempotency_factory = getattr(target, "create_chat_idempotency_store", None)
-        if callable(idempotency_factory):
-            reset_runtime_state(target, create_chat_idempotency_store=idempotency_factory)
-        _set("_DIAG_LOGGER", None)
+    if reset_runtime:
+        for target in targets:
+            idempotency_factory = getattr(target, "create_chat_idempotency_store", None)
+            if callable(idempotency_factory):
+                reset_runtime_state(target, create_chat_idempotency_store=idempotency_factory)
+    _set("_DIAG_LOGGER", None)
 
 def create_tenant_app(settings: TenantSettings) -> TenantAppInstance:
-    module_suffix = uuid.uuid4().hex[:10]
-    module_name = f"services.api._tenant_{settings.tenant_id}_{module_suffix}"
-    spec = importlib.util.spec_from_file_location(module_name, _APP_PY_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("failed to load tenant module spec")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)  # type: ignore[arg-type]
-
-    _configure_module_for_tenant(module, settings)
-    tenant_app = getattr(module, "app", None)
+    app_mod = importlib.import_module("services.api.app")
+    module_name = f"tenant:{settings.tenant_id}"
+    module = app_mod
+    _configure_module_for_tenant(module, settings, reset_runtime=True)
+    tenant_app = getattr(module, "_DEFAULT_APP", None) or getattr(module, "app", None)
     if tenant_app is None:
-        raise RuntimeError("tenant module missing app")
+        raise RuntimeError("tenant app missing app instance")
     return TenantAppInstance(
         tenant_id=settings.tenant_id,
         module_name=module_name,
         module=module,
         app=tenant_app,
+        settings=settings,
     )

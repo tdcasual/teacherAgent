@@ -5,7 +5,7 @@ from pathlib import Path
 class SkillsPolicyConsistencyTest(unittest.TestCase):
     def test_skill_tool_policy_matches_roles(self):
         from services.api.config import APP_ROOT
-        from services.api.context_runtime_facade import allowed_tools
+        from services.api.core_services import allowed_tools
         from services.api.skills.loader import load_skills
 
         loaded = load_skills(Path(APP_ROOT) / "skills")

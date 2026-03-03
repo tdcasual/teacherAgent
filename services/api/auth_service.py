@@ -125,16 +125,17 @@ def mint_test_token(claims: Dict[str, Any], *, secret: str) -> str:
     return f"{payload_segment}.{sig_segment}"
 
 
-def _decode_bearer_token(token: str, *, secret: str) -> AuthPrincipal:
+def _split_signed_token(token: str) -> tuple[str, str]:
     text = str(token or "").strip()
     if not text:
         raise AuthError(401, "missing_bearer_token")
-
     parts = text.split(".")
     if len(parts) != 2:
         raise AuthError(401, "invalid_token_format")
+    return parts[0], parts[1]
 
-    payload_segment, sig_segment = parts
+
+def _verify_token_signature(payload_segment: str, sig_segment: str, *, secret: str) -> None:
     expected = hmac.new(secret.encode("utf-8"), payload_segment.encode("ascii"), hashlib.sha256).digest()
     try:
         got = _b64url_decode(sig_segment)
@@ -143,6 +144,8 @@ def _decode_bearer_token(token: str, *, secret: str) -> AuthPrincipal:
     if not hmac.compare_digest(got, expected):
         raise AuthError(401, "invalid_token_signature")
 
+
+def _decode_token_payload(payload_segment: str) -> Dict[str, Any]:
     try:
         payload_raw = _b64url_decode(payload_segment)
         payload = json.loads(payload_raw.decode("utf-8"))
@@ -150,24 +153,86 @@ def _decode_bearer_token(token: str, *, secret: str) -> AuthPrincipal:
         raise AuthError(401, "invalid_token_payload")
     if not isinstance(payload, dict):
         raise AuthError(401, "invalid_token_payload")
+    return payload
 
+
+def _decode_token_exp(payload: Dict[str, Any]) -> Optional[int]:
+    exp_raw = payload.get("exp")
+    if exp_raw is None:
+        return None
+    try:
+        exp = int(exp_raw)
+    except Exception:
+        raise AuthError(401, "invalid_token_exp")
+    if exp <= int(time.time()):
+        raise AuthError(401, "token_expired")
+    return exp
+
+
+def _principal_from_payload(payload: Dict[str, Any]) -> AuthPrincipal:
     actor_id = str(payload.get("sub") or payload.get("actor_id") or "").strip()
     role = _normalize_role(payload.get("role"))
     if not actor_id or role not in {"teacher", "student", "admin", "service"}:
         raise AuthError(401, "invalid_token_claims")
-
-    exp_raw = payload.get("exp")
-    exp: Optional[int] = None
-    if exp_raw is not None:
-        try:
-            exp = int(exp_raw)
-        except Exception:
-            raise AuthError(401, "invalid_token_exp")
-        if exp <= int(time.time()):
-            raise AuthError(401, "token_expired")
-
     tenant_id = str(payload.get("tenant_id") or payload.get("tid") or "").strip()
-    return AuthPrincipal(actor_id=actor_id, role=role, tenant_id=tenant_id, exp=exp, claims=dict(payload))
+    exp = _decode_token_exp(payload)
+    return AuthPrincipal(
+        actor_id=actor_id,
+        role=role,
+        tenant_id=tenant_id,
+        exp=exp,
+        claims=dict(payload),
+    )
+
+
+def _is_exempt_auth_request(*, path: str, method: str, allow_exempt: bool) -> bool:
+    if not allow_exempt:
+        return False
+    if str(method or "").strip().upper() == "OPTIONS":
+        return True
+    return _auth_exempt_path(path)
+
+
+def _extract_bearer_authorization(headers: Mapping[str, Any]) -> str:
+    authz = str(headers.get("authorization") or headers.get("Authorization") or "").strip()
+    if not authz:
+        raise AuthError(401, "missing_authorization")
+    if not authz.lower().startswith("bearer "):
+        raise AuthError(401, "invalid_authorization_scheme")
+    return authz[7:].strip()
+
+
+def _validate_principal_token_version(principal: AuthPrincipal) -> None:
+    claims = principal.claims if isinstance(principal.claims, dict) else {}
+    if principal.role not in {"teacher", "student"} or claims.get("tv") is None:
+        return
+    raw_token_version = claims.get("tv")
+    try:
+        token_version = int(str(raw_token_version))
+    except Exception:
+        raise AuthError(401, "invalid_token_claims")
+    try:
+        from .auth_registry_service import validate_subject_token_version
+
+        ok = validate_subject_token_version(
+            role=principal.role,
+            subject_id=principal.actor_id,
+            token_version=token_version,
+        )
+    except AuthError:
+        raise
+    except Exception:
+        _log.warning("auth token version validation failed", exc_info=True)
+        raise AuthError(401, "invalid_token_claims")
+    if not ok:
+        raise AuthError(401, "token_revoked")
+
+
+def _decode_bearer_token(token: str, *, secret: str) -> AuthPrincipal:
+    payload_segment, sig_segment = _split_signed_token(token)
+    _verify_token_signature(payload_segment, sig_segment, secret=secret)
+    payload = _decode_token_payload(payload_segment)
+    return _principal_from_payload(payload)
 
 
 def mint_access_token(
@@ -209,45 +274,16 @@ def resolve_principal_from_headers(
     if not auth_required():
         return None
 
-    if allow_exempt:
-        if str(method or "").strip().upper() == "OPTIONS":
-            return None
-        if _auth_exempt_path(path):
-            return None
+    if _is_exempt_auth_request(path=path, method=method, allow_exempt=allow_exempt):
+        return None
 
     secret = _secret()
     if not secret:
         raise AuthError(500, "auth_token_secret_missing")
 
-    authz = str(headers.get("authorization") or headers.get("Authorization") or "").strip()
-    if not authz:
-        raise AuthError(401, "missing_authorization")
-    if not authz.lower().startswith("bearer "):
-        raise AuthError(401, "invalid_authorization_scheme")
-    token = authz[7:].strip()
+    token = _extract_bearer_authorization(headers)
     principal = _decode_bearer_token(token, secret=secret)
-
-    claims = principal.claims if isinstance(principal.claims, dict) else {}
-    if principal.role in {"teacher", "student"} and claims.get("tv") is not None:
-        raw_token_version = claims.get("tv")
-        try:
-            token_version = int(str(raw_token_version))
-        except Exception:
-            raise AuthError(401, "invalid_token_claims")
-        try:
-            from .auth_registry_service import validate_subject_token_version
-
-            if not validate_subject_token_version(
-                role=principal.role,
-                subject_id=principal.actor_id,
-                token_version=token_version,
-            ):
-                raise AuthError(401, "token_revoked")
-        except AuthError:
-            raise
-        except Exception:
-            _log.warning("auth token version validation failed", exc_info=True)
-            raise AuthError(401, "invalid_token_claims")
+    _validate_principal_token_version(principal)
     return principal
 
 

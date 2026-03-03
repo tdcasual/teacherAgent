@@ -20,7 +20,7 @@ def main() -> int:
 
     # Import from domain modules directly instead of app facade.
     from services.api.config import APP_ROOT  # type: ignore
-    from services.api.context_runtime_facade import allowed_tools  # type: ignore
+    from services.api.core_services import allowed_tools  # type: ignore
     from services.api.skills.loader import load_skills  # type: ignore
     from services.api.skills.runtime import compile_skill_runtime  # type: ignore
     from services.common.tool_registry import DEFAULT_TOOL_REGISTRY  # type: ignore

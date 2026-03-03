@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import app_core as _core
 from .app_routes import register_routes
 from .auth_service import require_principal
 from .core_context_middleware import build_set_core_context_middleware
@@ -20,51 +20,11 @@ from .runtime.lifecycle import app_lifespan
 
 _log = logging.getLogger(__name__)
 
-_CORE_PATH = Path(__file__).resolve().with_name("app_core.py")
+if os.getenv("PYTEST_CURRENT_TEST"):
+    _core = importlib.reload(_core)
 
-
-def _core_env_fingerprint() -> tuple[str, ...]:
-    keys = (
-        "DATA_DIR",
-        "UPLOADS_DIR",
-        "TENANT_ID",
-        "TENANT_DATA_DIR",
-        "TENANT_UPLOADS_DIR",
-    )
-    return tuple(str(os.getenv(key, "")) for key in keys)
-
-
-def _load_core():
-    module_suffix = str(__name__).split(".")[-1]
-    module_name = f"services.api._core_{module_suffix}"
-    is_main_app = module_suffix == "app"
-    canonical_name = "services.api.app_core"
-    fp = _core_env_fingerprint()
-    existing = sys.modules.get(module_name)
-    should_reload = bool(os.getenv("PYTEST_CURRENT_TEST"))
-    if existing is not None and getattr(existing, "_CORE_ENV_FINGERPRINT", None) != fp:
-        should_reload = True
-    if should_reload:
-        sys.modules.pop(module_name, None)
-        if is_main_app:
-            sys.modules.pop(canonical_name, None)
-        existing = None
-    if existing is not None:
-        return existing
-    spec = importlib.util.spec_from_file_location(module_name, _CORE_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("failed to load app_core")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    if is_main_app:
-        sys.modules[canonical_name] = module
-    spec.loader.exec_module(module)  # type: ignore[arg-type]
-    setattr(module, "_CORE_ENV_FINGERPRINT", fp)
-    return module
-
-
-_core = _load_core()
 _APP_CORE = _core
+_APP_ROOT = Path(getattr(_core, "APP_ROOT", Path(__file__).resolve().parents[2]))
 
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
 app.state.core = _core
@@ -131,7 +91,7 @@ if __name__ == "services.api.app":
     TENANT_DB_PATH = Path(
         os.getenv(
             "TENANT_DB_PATH",
-            str(_core.APP_ROOT / "data" / "_system" / "tenants.sqlite3"),
+            str(_APP_ROOT / "data" / "_system" / "tenants.sqlite3"),
         )
     )
 

@@ -49,7 +49,6 @@ pretty = true
 source = ["services/api"]
 omit = [
   "services/api/workers/rq_worker.py",
-  "services/api/__main__.py",
 ]
 
 [tool.coverage.report]

@@ -41,7 +41,7 @@ def _patch_call_llm(app_mod, fake_call_llm):
 
 class ToolRegistrySyncTest(unittest.TestCase):
     def test_registry_covers_teacher_allowed_tools(self):
-        from services.api.context_runtime_facade import allowed_tools
+        from services.api.core_services import allowed_tools
         from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
         missing = sorted(set(allowed_tools("teacher")) - set(DEFAULT_TOOL_REGISTRY.names()))
@@ -91,7 +91,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
             )
 
     def test_run_agent_default_skill_keeps_teacher_tools(self):
-        from services.api.context_runtime_facade import allowed_tools
+        from services.api.core_services import allowed_tools
 
         with TemporaryDirectory() as td:
             tmp = Path(td)

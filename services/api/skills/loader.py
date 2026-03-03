@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import threading
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -147,17 +146,7 @@ def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
 
 
 def _resolve_source_dirs(skills_dir: Path) -> List[Path]:
-    sources: List[Path] = []
-
-    primary = _normalize_path(skills_dir)
-    sources.append(primary)
-
-    home = Path(os.path.expanduser("~"))
-    claude_skills = _normalize_path(home / ".claude" / "skills")
-    if claude_skills != primary:
-        sources.append(claude_skills)
-
-    return sources
+    return [_normalize_path(skills_dir)]
 
 
 def _dir_signature(skills_dir: Path) -> Tuple[Tuple[str, int], ...]:
@@ -356,10 +345,6 @@ def load_skills(skills_dir: Path) -> LoadedSkills:
             return cached[1]
         gen_at_start = _CACHE_GEN
 
-    # Build source markers for source_type tagging.
-    primary_dir_resolved = _normalize_path(skills_dir)
-    claude_dir_resolved = _normalize_path(Path(os.path.expanduser("~")) / ".claude" / "skills")
-
     skills: Dict[str, SkillSpec] = {}
     errors: List[SkillLoadError] = []
     found_any_dir = False
@@ -368,7 +353,6 @@ def load_skills(skills_dir: Path) -> LoadedSkills:
         if not source_dir.exists() or not source_dir.is_dir():
             continue
         found_any_dir = True
-        resolved_source = _normalize_path(source_dir)
         for folder in sorted(source_dir.iterdir(), key=lambda p: p.name):
             if not folder.is_dir():
                 continue
@@ -378,11 +362,7 @@ def load_skills(skills_dir: Path) -> LoadedSkills:
                 errors.append(err)
                 continue
             if spec is not None:
-                # Tag source_type based on which directory the skill came from.
-                source_type = "system"
-                if resolved_source == claude_dir_resolved and resolved_source != primary_dir_resolved:
-                    source_type = "claude"
-                spec = replace(spec, source_type=source_type)
+                spec = replace(spec, source_type="system")
                 skills[skill_id] = spec
 
     if not found_any_dir:

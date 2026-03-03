@@ -30,7 +30,6 @@ def _reexport_public(module: Any) -> None:
     for name in export_names:
         globals()[name] = getattr(module, name)
 
-
 from llm_gateway import LLMGateway
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +38,6 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-from .app_core_service_imports import *  # noqa: F401,F403
 try:
     from mem0_config import load_dotenv
 
@@ -49,10 +47,17 @@ except Exception:
     pass
 
 import importlib as _importlib
+from . import core_services as _core_services_module
+from . import core_service_imports as _core_service_imports_module
+if os.getenv("PYTEST_CURRENT_TEST"):
+    _importlib.reload(_core_services_module)
+    _importlib.reload(_core_service_imports_module)
+_reexport_public(_core_services_module)
+
 from . import config as _config_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_config_module)
-from .config import *  # noqa: F401,F403 — re-export all configuration constants
+_reexport_public(_config_module)
 from .config import (
     _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
     _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
@@ -66,23 +71,23 @@ from .config import (
 from . import paths as _paths_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_paths_module)
-from .paths import *  # noqa: F401,F403 — re-export all path resolution functions
+_reexport_public(_paths_module)
 
 from . import job_repository as _job_repository_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_job_repository_module)
-from .job_repository import *  # noqa: F401,F403 — re-export all job repository functions
+_reexport_public(_job_repository_module)
 from .job_repository import _atomic_write_json, _try_acquire_lockfile, _release_lockfile
 
 from . import session_store as _session_store_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_session_store_module)
-from .session_store import *  # noqa: F401,F403 — re-export all session store functions
+_reexport_public(_session_store_module)
 
 from . import chat_lane_repository as _chat_lane_repository_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_chat_lane_repository_module)
-from .chat_lane_repository import *  # noqa: F401,F403 — re-export all chat lane repository functions
+_reexport_public(_chat_lane_repository_module)
 from .chat_lane_repository import (
     _chat_last_user_text,
     _chat_text_fingerprint,
@@ -103,32 +108,35 @@ from .chat_lane_repository import (
 from . import exam_utils as _exam_utils_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_exam_utils_module)
-from .exam_utils import *  # noqa: F401,F403
+_reexport_public(_exam_utils_module)
 
 from . import core_utils as _core_utils_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_core_utils_module)
-from .core_utils import *  # noqa: F401,F403
+_reexport_public(_core_utils_module)
 
 from . import profile_service as _profile_service_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_profile_service_module)
-from .profile_service import *  # noqa: F401,F403
+_reexport_public(_profile_service_module)
 
 from . import assignment_data_service as _assignment_data_service_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_assignment_data_service_module)
-from .assignment_data_service import *  # noqa: F401,F403
+_reexport_public(_assignment_data_service_module)
 
 from . import teacher_memory_core as _teacher_memory_core_module
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_core_module)
-from .teacher_memory_core import *  # noqa: F401,F403 — re-export all teacher memory functions
+_reexport_public(_teacher_memory_core_module)
 
 def _rq_enabled() -> bool:
-    return _rq_enabled_impl()
+    return _core_service_imports_module._rq_enabled_impl()
 
-_reset_runtime_state(sys.modules[__name__], create_chat_idempotency_store=create_chat_idempotency_store)
+_core_service_imports_module._reset_runtime_state(
+    sys.modules[__name__],
+    create_chat_idempotency_store=_core_service_imports_module.create_chat_idempotency_store,
+)
 
 from .wiring import chat_wiring as _chat_wiring_module
 from .wiring import assignment_wiring as _assignment_wiring_module
@@ -151,16 +159,6 @@ if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_app_core_wiring_exports_module)
 _reexport_public(_app_core_wiring_exports_module)
 
-from . import context_application_facade as _context_application_facade_module
-from . import context_runtime_facade as _context_runtime_facade_module
-from . import context_io_facade as _context_io_facade_module
-if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("DATA_DIR") or os.getenv("UPLOADS_DIR"):
-    _importlib.reload(_context_application_facade_module)
-    _importlib.reload(_context_runtime_facade_module)
-    _importlib.reload(_context_io_facade_module)
-_reexport_public(_context_application_facade_module)
-_reexport_public(_context_runtime_facade_module)
-_reexport_public(_context_io_facade_module)
 from services.api.chat_limits import (
     acquire_limiters as _acquire_limiters_impl,
     student_inflight_guard as _student_inflight_guard_impl,
@@ -175,30 +173,33 @@ def _trim_messages(messages: List[Dict[str, Any]], role_hint: Optional[str] = No
     return _trim_messages_impl(
         messages,
         role_hint=role_hint,
-        max_messages=CHAT_MAX_MESSAGES,
-        max_messages_student=CHAT_MAX_MESSAGES_STUDENT,
-        max_messages_teacher=CHAT_MAX_MESSAGES_TEACHER,
-        max_chars=CHAT_MAX_MESSAGE_CHARS,
+        max_messages=_config_module.CHAT_MAX_MESSAGES,
+        max_messages_student=_config_module.CHAT_MAX_MESSAGES_STUDENT,
+        max_messages_teacher=_config_module.CHAT_MAX_MESSAGES_TEACHER,
+        max_chars=_config_module.CHAT_MAX_MESSAGE_CHARS,
     )
 
 
 def _student_inflight(student_id: Optional[str]) -> Any:
+    mod = sys.modules[__name__]
     return _student_inflight_guard_impl(
         student_id=student_id,
-        inflight=_STUDENT_INFLIGHT,
-        lock=_STUDENT_INFLIGHT_LOCK,
-        limit=CHAT_STUDENT_INFLIGHT_LIMIT,
+        inflight=getattr(mod, "_STUDENT_INFLIGHT", {}),
+        lock=getattr(mod, "_STUDENT_INFLIGHT_LOCK", threading.Lock()),
+        limit=_config_module.CHAT_STUDENT_INFLIGHT_LIMIT,
     )
 
 def _setup_diag_logger() -> Optional[logging.Logger]:
-    if not DIAG_LOG_ENABLED:
+    if not _config_module.DIAG_LOG_ENABLED:
         return None
-    DIAG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _config_module.DIAG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("diag")
     if logger.handlers:
         return logger
     logger.setLevel(logging.INFO)
-    handler = RotatingFileHandler(str(DIAG_LOG_PATH), maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    handler = RotatingFileHandler(
+        str(_config_module.DIAG_LOG_PATH), maxBytes=2_000_000, backupCount=3, encoding="utf-8"
+    )
     formatter = logging.Formatter("%(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -209,7 +210,7 @@ _DIAG_LOGGER = _setup_diag_logger()
 LLM_GATEWAY = LLMGateway()
 
 def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
-    if not DIAG_LOG_ENABLED or _DIAG_LOGGER is None:
+    if not _config_module.DIAG_LOG_ENABLED or _DIAG_LOGGER is None:
         return
     record = {
         "ts": datetime.now().isoformat(timespec="seconds"),
@@ -224,43 +225,52 @@ def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
         pass
 
 def chat_job_path(job_id: str) -> Path:
-    return _chat_job_path_impl(job_id, deps=_chat_job_repo_deps())
+    return _core_service_imports_module._chat_job_path_impl(
+        job_id, deps=_app_core_wiring_exports_module._chat_job_repo_deps()
+    )
 
 def load_chat_job(job_id: str) -> Dict[str, Any]:
-    return _load_chat_job_impl(job_id, deps=_chat_job_repo_deps())
+    return _core_service_imports_module._load_chat_job_impl(
+        job_id, deps=_app_core_wiring_exports_module._chat_job_repo_deps()
+    )
 
 def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
-    return _write_chat_job_impl(job_id, updates, deps=_chat_job_repo_deps(), overwrite=overwrite)
+    return _core_service_imports_module._write_chat_job_impl(
+        job_id,
+        updates,
+        deps=_app_core_wiring_exports_module._chat_job_repo_deps(),
+        overwrite=overwrite,
+    )
 
 def _inline_backend_factory():
-    upload_deps = upload_worker_deps()
-    exam_deps = exam_worker_deps()
-    profile_deps = profile_update_worker_deps()
-    chat_deps = chat_worker_deps()
-    return build_inline_backend(
-        enqueue_upload_job_fn=lambda job_id: upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_deps),
-        enqueue_exam_job_fn=lambda job_id: exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
-        enqueue_profile_update_fn=lambda payload: profile_update_worker_service.enqueue_profile_update_inline(
+    upload_deps = _app_core_wiring_exports_module.upload_worker_deps()
+    exam_deps = _app_core_wiring_exports_module.exam_worker_deps()
+    profile_deps = _app_core_wiring_exports_module.profile_update_worker_deps()
+    chat_deps = _app_core_wiring_exports_module.chat_worker_deps()
+    return _core_service_imports_module.build_inline_backend(
+        enqueue_upload_job_fn=lambda job_id: _core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_deps),
+        enqueue_exam_job_fn=lambda job_id: _core_service_imports_module.exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
+        enqueue_profile_update_fn=lambda payload: _core_service_imports_module.profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
         ),
-        enqueue_chat_job_fn=lambda job_id, lane_id=None: _enqueue_chat_job_impl(
+        enqueue_chat_job_fn=lambda job_id, lane_id=None: _core_service_imports_module._enqueue_chat_job_impl(
             job_id, deps=chat_deps, lane_id=lane_id
         ),
-        scan_pending_upload_jobs_fn=lambda: upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_deps),
-        scan_pending_exam_jobs_fn=lambda: exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_deps),
-        scan_pending_chat_jobs_fn=lambda: _scan_pending_chat_jobs_impl(deps=chat_deps),
-        start_fn=lambda: start_inline_workers(
+        scan_pending_upload_jobs_fn=lambda: _core_service_imports_module.upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_deps),
+        scan_pending_exam_jobs_fn=lambda: _core_service_imports_module.exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_deps),
+        scan_pending_chat_jobs_fn=lambda: _core_service_imports_module._scan_pending_chat_jobs_impl(deps=chat_deps),
+        start_fn=lambda: _core_service_imports_module.start_inline_workers(
             upload_deps=upload_deps,
             exam_deps=exam_deps,
             profile_deps=profile_deps,
             chat_deps=chat_deps,
-            profile_update_async=PROFILE_UPDATE_ASYNC,
+            profile_update_async=_config_module.PROFILE_UPDATE_ASYNC,
         ),
-        stop_fn=lambda: stop_inline_workers(
+        stop_fn=lambda: _core_service_imports_module.stop_inline_workers(
             upload_deps=upload_deps,
             exam_deps=exam_deps,
             profile_deps=profile_deps,
             chat_deps=chat_deps,
-            profile_update_async=PROFILE_UPDATE_ASYNC,
+            profile_update_async=_config_module.PROFILE_UPDATE_ASYNC,
         ),
     )
