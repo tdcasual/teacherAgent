@@ -27,7 +27,7 @@ _HELD_LOCKS_GUARD = threading.Lock()
 def _path_key(path: Path) -> str:
     try:
         return str(Path(str(path)).resolve())
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return str(path)
 
 
@@ -61,7 +61,7 @@ def _best_effort_flock(fd: int, op: int) -> bool:
             return False
         _log.debug("flock failed for fd=%s op=%s", fd, op, exc_info=True)
         return False
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("flock failed for fd=%s op=%s", fd, op, exc_info=True)
         return False
 
@@ -72,7 +72,7 @@ def _read_lock_payload(path: Path) -> Dict[str, object]:
         payload = json.loads(raw)
         if isinstance(payload, dict):
             return payload
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("failed to read lock payload %s", path, exc_info=True)
     return {}
 
@@ -86,7 +86,7 @@ def _pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("unexpected error checking pid %s, assuming alive", pid)
         return True
     return True
@@ -102,7 +102,7 @@ def _read_lock_pid(path: Path) -> int:
         if isinstance(raw_pid, (int, float, str, bytes, bytearray)):
             return int(raw_pid)
         return 0
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("non-integer pid in lock file %s", path)
         return 0
 
@@ -137,33 +137,33 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
                     return False
             except FileNotFoundError:
                 continue
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to probe existing lock file %s", path, exc_info=True)
             finally:
                 if probe_fd is not None:
                     _best_effort_flock(probe_fd, fcntl.LOCK_UN)
                     try:
                         os.close(probe_fd)
-                    except Exception:
+                    except Exception:  # policy: allowed-broad-except
                         _log.debug("failed to close probe fd for %s", path)
 
             pid = 0
             try:
                 pid = _read_lock_pid(path)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to check/remove stale lock %s", path)
                 pass
             if pid > 0:
                 try:
                     if deps.is_pid_alive(pid):
                         return False
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("failed to check pid liveness for %s", path)
                     return False
                 try:
                     path.unlink(missing_ok=True)
                     continue
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("failed to remove dead-pid lock %s", path)
                     return False
             try:
@@ -171,11 +171,11 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
                 if ttl_sec > 0 and age > float(ttl_sec):
                     path.unlink(missing_ok=True)
                     continue
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to check lock TTL for %s", path)
                 pass
             return False
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("unexpected error acquiring lock %s", path, exc_info=True)
             return False
         owner = uuid.uuid4().hex
@@ -188,17 +188,17 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
             if not _register_held_lock(path, fd, owner):
                 raise RuntimeError("lock_already_held_locally")
             return True
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.debug("failed to persist lock payload for %s", path, exc_info=True)
             _best_effort_flock(fd, fcntl.LOCK_UN)
             try:
                 deps.os_close(fd)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to close lock fd for %s", path)
                 pass
             try:
                 path.unlink(missing_ok=True)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to cleanup partial lock %s", path)
             return False
     return False
@@ -214,18 +214,18 @@ def release_lockfile(path: Path) -> None:
             # recreated by another process after stale recovery.
             if not owner or owner == held.owner:
                 path.unlink(missing_ok=True)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.debug("failed to release owned lock file %s", path, exc_info=True)
         finally:
             _best_effort_flock(held.fd, fcntl.LOCK_UN)
             try:
                 os.close(held.fd)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.debug("failed to close owned lock fd for %s", path)
         return
     try:
         path.unlink(missing_ok=True)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("failed to release lock file %s", path)
         pass
 
