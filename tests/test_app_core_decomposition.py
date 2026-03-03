@@ -8,17 +8,25 @@ After decomposition, app_core.py should remain a thin composition root:
 Original: 4,278 lines.  After decomposition: ~1,830 lines.
 """
 import ast
+import json
 from pathlib import Path
 
 _APP_CORE_PATH = Path(__file__).resolve().parent.parent / "services" / "api" / "app_core.py"
+_BUDGET_PATH = Path(__file__).resolve().parent.parent / "config" / "backend_quality_budget.json"
+
+
+def _app_core_line_budget() -> int:
+    payload = json.loads(_BUDGET_PATH.read_text(encoding="utf-8"))
+    return int(payload["app_core_max_lines"])
 
 
 def test_app_core_line_count():
     """app_core.py should stay under 2000 lines after decomposition."""
     source = _APP_CORE_PATH.read_text(encoding="utf-8")
     line_count = len(source.splitlines())
-    assert line_count < 1400, (
-        f"app_core.py is {line_count} lines (limit 1400). "
+    budget = _app_core_line_budget()
+    assert line_count <= budget, (
+        f"app_core.py is {line_count} lines (limit {budget}). "
         "Extract new logic to domain modules instead of adding to app_core."
     )
 
