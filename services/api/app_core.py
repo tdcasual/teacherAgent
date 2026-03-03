@@ -110,6 +110,7 @@ from .wiring import worker_wiring as _worker_wiring_module
 from .wiring import misc_wiring as _misc_wiring_module
 from .wiring import skill_wiring as _skill_wiring_module
 from . import app_core_wiring_exports as _app_core_wiring_exports_module
+from . import app_core_init as _app_core_init_module
 from .wiring import CURRENT_CORE
 
 _DELEGATE_MODULES: Tuple[Any, ...] = (
@@ -243,34 +244,9 @@ def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False
     )
 
 def _inline_backend_factory():
-    upload_deps = _app_core_wiring_exports_module.upload_worker_deps(CURRENT_CORE.get(None))
-    exam_deps = _app_core_wiring_exports_module.exam_worker_deps(CURRENT_CORE.get(None))
-    profile_deps = _app_core_wiring_exports_module.profile_update_worker_deps(CURRENT_CORE.get(None))
-    chat_deps = _app_core_wiring_exports_module.chat_worker_deps(CURRENT_CORE.get(None))
-    return _core_service_imports_module.build_inline_backend(
-        enqueue_upload_job_fn=lambda job_id: _core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_deps),
-        enqueue_exam_job_fn=lambda job_id: _core_service_imports_module.exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
-        enqueue_profile_update_fn=lambda payload: _core_service_imports_module.profile_update_worker_service.enqueue_profile_update_inline(
-            payload, deps=profile_deps
-        ),
-        enqueue_chat_job_fn=lambda job_id, lane_id=None: _core_service_imports_module._enqueue_chat_job_impl(
-            job_id, deps=chat_deps, lane_id=lane_id
-        ),
-        scan_pending_upload_jobs_fn=lambda: _core_service_imports_module.upload_worker_service.scan_pending_upload_jobs_inline(deps=upload_deps),
-        scan_pending_exam_jobs_fn=lambda: _core_service_imports_module.exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_deps),
-        scan_pending_chat_jobs_fn=lambda: _core_service_imports_module._scan_pending_chat_jobs_impl(deps=chat_deps),
-        start_fn=lambda: _core_service_imports_module.start_inline_workers(
-            upload_deps=upload_deps,
-            exam_deps=exam_deps,
-            profile_deps=profile_deps,
-            chat_deps=chat_deps,
-            profile_update_async=_config_module.PROFILE_UPDATE_ASYNC,
-        ),
-        stop_fn=lambda: _core_service_imports_module.stop_inline_workers(
-            upload_deps=upload_deps,
-            exam_deps=exam_deps,
-            profile_deps=profile_deps,
-            chat_deps=chat_deps,
-            profile_update_async=_config_module.PROFILE_UPDATE_ASYNC,
-        ),
+    return _app_core_init_module.build_inline_backend_factory(
+        current_core=CURRENT_CORE.get(None),
+        app_core_wiring_exports_module=_app_core_wiring_exports_module,
+        core_service_imports_module=_core_service_imports_module,
+        profile_update_async=_config_module.PROFILE_UPDATE_ASYNC,
     )
