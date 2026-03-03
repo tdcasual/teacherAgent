@@ -122,7 +122,7 @@ class ChartExecToolTest(unittest.TestCase):
         params = tool["function"]["parameters"]["properties"]
         self.assertIn("execution_profile", params)
         execution_profile = params["execution_profile"]
-        self.assertEqual(execution_profile.get("default"), "trusted")
+        self.assertEqual(execution_profile.get("default"), "sandboxed")
         self.assertIn("sandboxed", execution_profile.get("enum", []))
 
     def test_chart_endpoints_require_auth_when_enabled(self):

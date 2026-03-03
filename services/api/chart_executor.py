@@ -776,9 +776,9 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
     if not python_code.strip():
         return {"error": "missing_python_code"}
 
-    execution_profile = str(exec_args.get("execution_profile") or "trusted").strip()
+    execution_profile = str(exec_args.get("execution_profile") or "sandboxed").strip()
     if execution_profile not in ("template", "trusted", "sandboxed"):
-        execution_profile = "trusted"
+        execution_profile = "sandboxed"
 
     audit_context = _chart_exec_audit_context(exec_args)
     auto_install = _normalize_bool(exec_args.get("auto_install"), default=False)

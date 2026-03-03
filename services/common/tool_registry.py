@@ -436,9 +436,9 @@ def build_default_registry() -> ToolRegistry:
                 "chart_hint": {"type": "string", "description": "optional intent/notes"},
                 "execution_profile": {
                     "type": "string",
-                    "description": "optional execution profile; default keeps trusted behavior",
+                    "description": "optional execution profile; defaults to sandboxed execution",
                     "enum": ["trusted", "sandboxed", "template"],
-                    "default": "trusted",
+                    "default": "sandboxed",
                 },
                 "timeout_sec": {"type": "integer", "default": 120},
                 "save_as": {"type": "string", "description": "optional PNG filename, e.g. main.png"},
