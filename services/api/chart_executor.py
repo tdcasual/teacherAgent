@@ -13,6 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .chart.policy_service import prepare_chart_exec_policy
+from .chart.runner_service import execute_with_global_semaphore
+
 _log = logging.getLogger(__name__)
 
 
@@ -776,94 +779,41 @@ def execute_chart_exec(args: Dict[str, Any], app_root: Path, uploads_dir: Path) 
     if not python_code.strip():
         return {"error": "missing_python_code"}
 
-    execution_profile = str(exec_args.get("execution_profile") or "sandboxed").strip()
-    if execution_profile not in ("template", "trusted", "sandboxed"):
-        execution_profile = "sandboxed"
-
-    audit_context = _chart_exec_audit_context(exec_args)
-    auto_install = _normalize_bool(exec_args.get("auto_install"), default=False)
-    requested_packages = _normalize_packages(exec_args.get("packages"))
-    trusted_alerts: List[str] = []
-
-    if execution_profile == "trusted":
-        trusted_alerts = _trusted_risk_alerts(
-            python_code,
-            auto_install=auto_install,
-            requested_packages=requested_packages,
-        )
-        if trusted_alerts:
-            _log.warning("chart.exec trusted profile risk alerts: %s", ",".join(trusted_alerts))
-        denied_reason = _trusted_policy_denial(
-            role=audit_context.get("role") or "",
-            source=audit_context.get("source") or "",
-        )
-        if denied_reason:
-            _audit_log(
-                "chart.exec.policy.denied",
-                {
-                    "execution_profile": execution_profile,
-                    "source": audit_context.get("source"),
-                    "role": audit_context.get("role"),
-                    "actor": audit_context.get("actor"),
-                    "detail": denied_reason,
-                },
-            )
-            return {
-                "error": "chart_exec_trusted_forbidden",
-                "detail": denied_reason,
-                "execution_profile": execution_profile,
-            }
-
-    exec_args["_audit_context"] = audit_context
-    exec_args["_trusted_risk_alerts"] = list(trusted_alerts)
-    _audit_log(
-        "chart.exec.start",
-        {
-            "execution_profile": execution_profile,
-            "source": audit_context.get("source"),
-            "role": audit_context.get("role"),
-            "actor": audit_context.get("actor"),
-            "auto_install": auto_install,
-            "requested_packages": requested_packages,
-            "trusted_risk_alerts": trusted_alerts,
-        },
+    policy = prepare_chart_exec_policy(
+        exec_args,
+        python_code,
+        chart_exec_audit_context=_chart_exec_audit_context,
+        normalize_bool=_normalize_bool,
+        normalize_packages=_normalize_packages,
+        trusted_risk_alerts_fn=_trusted_risk_alerts,
+        trusted_policy_denial_fn=_trusted_policy_denial,
+        audit_log=_audit_log,
+        scan_code_patterns=scan_code_patterns,
+        logger=_log,
     )
+    error_result = policy.get("error_result")
+    if isinstance(error_result, dict):
+        return error_result
 
-    # Sandboxed profile: scan code before execution
-    if execution_profile == "sandboxed":
-        scan_result = scan_code_patterns(python_code, execution_profile)
-        if scan_result is not None:
-            return scan_result
+    scan_result = policy.get("scan_result")
+    if isinstance(scan_result, dict):
+        return scan_result
 
-    # Concurrency control
-    acquired = GLOBAL_CHART_EXEC_SEMAPHORE.acquire(timeout=30)
-    if not acquired:
-        return {"error": "chart_exec_busy", "message": "Too many concurrent chart executions"}
-
-    try:
-        result = _execute_chart_exec_inner(
-            exec_args, app_root, uploads_dir, python_code, execution_profile,
-        )
-        _audit_log(
-            "chart.exec.finish",
-            {
-                "execution_profile": execution_profile,
-                "source": audit_context.get("source"),
-                "role": audit_context.get("role"),
-                "actor": audit_context.get("actor"),
-                "ok": bool(result.get("ok")),
-                "run_id": result.get("run_id"),
-                "exit_code": result.get("exit_code"),
-                "timed_out": bool(result.get("timed_out")),
-                "auto_install": bool(result.get("auto_install")),
-                "requested_packages": result.get("requested_packages") or [],
-                "installed_packages": result.get("installed_packages") or [],
-                "trusted_risk_alerts": trusted_alerts,
-            },
-        )
-        return result
-    finally:
-        GLOBAL_CHART_EXEC_SEMAPHORE.release()
+    execution_profile = str(policy.get("execution_profile") or "sandboxed")
+    audit_context = policy.get("audit_context")
+    trusted_alerts = policy.get("trusted_alerts")
+    return execute_with_global_semaphore(
+        exec_args=exec_args,
+        app_root=app_root,
+        uploads_dir=uploads_dir,
+        python_code=python_code,
+        execution_profile=execution_profile,
+        audit_context=audit_context if isinstance(audit_context, dict) else {},
+        trusted_alerts=trusted_alerts if isinstance(trusted_alerts, list) else [],
+        execute_inner=_execute_chart_exec_inner,
+        audit_log=_audit_log,
+        semaphore=GLOBAL_CHART_EXEC_SEMAPHORE,
+    )
 
 
 def _execute_chart_exec_inner(

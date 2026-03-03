@@ -17,6 +17,11 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from .auth.login_service import handle_login
+from .auth.password_reset_service import (
+    handle_reset_student_passwords,
+    handle_reset_teacher_password,
+)
 from .config import DATA_DIR as CONFIG_DATA_DIR
 from .core_utils import normalize
 from .paths import resolve_teacher_id
@@ -265,176 +270,25 @@ class AuthRegistryStore:
         credential_type: str,
         credential: str,
     ) -> Dict[str, Any]:
-        role_norm = _normalize_role(role)
-        if role_norm not in {"student", "teacher"}:
-            return {"ok": False, "error": "invalid_role"}
-
-        table, id_field = _table_for_role(role_norm)
-        sid = str(candidate_id or "").strip()
-        cred_type = str(credential_type or "").strip().lower()
-        cred = str(credential or "")
-        if not sid:
-            return {"ok": False, "error": "missing_candidate_id"}
-        if cred_type not in {"token", "password"}:
-            return {"ok": False, "error": "invalid_credential_type"}
-        if not cred:
-            return {"ok": False, "error": "missing_credential"}
-        max_subject_id_len = _max_subject_id_len()
-        if len(sid) > max_subject_id_len:
-            with self._connect() as conn:
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="candidate_id_too_long",
-                    detail={
-                        "max_len": max_subject_id_len,
-                        "input_len": len(sid),
-                    },
-                )
-            return {"ok": False, "error": "invalid_credential"}
-        max_credential_len = _max_credential_len()
-        if len(cred) > max_credential_len:
-            with self._connect() as conn:
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="credential_too_long",
-                    detail={
-                        "max_len": max_credential_len,
-                        "input_len": len(cred),
-                    },
-                )
-            return {"ok": False, "error": "invalid_credential"}
-
-        now = _utc_now()
-        with self._connect() as conn:
-            row = conn.execute(
-                f"SELECT * FROM {table} WHERE {id_field} = ?",
-                (sid,),
-            ).fetchone()
-            if row is None:
-                if cred_type == "password":
-                    _consume_dummy_password_verify(cred)
-                elif cred_type == "token":
-                    _consume_dummy_token_verify(cred)
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="not_found",
-                )
-                return {"ok": False, "error": "not_found"}
-            if int(row["is_disabled"] or 0) == 1:
-                if cred_type == "password":
-                    _consume_dummy_password_verify(cred)
-                elif cred_type == "token":
-                    _consume_dummy_token_verify(cred)
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="disabled",
-                )
-                return {"ok": False, "error": "disabled"}
-
-            lock_until = _parse_ts(str(row["locked_until"] or ""))
-            if lock_until is not None and lock_until > now:
-                retry_after = int((lock_until - now).total_seconds())
-                if cred_type == "password":
-                    _consume_dummy_password_verify(cred)
-                elif cred_type == "token":
-                    _consume_dummy_token_verify(cred)
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="locked",
-                    detail={"retry_after_sec": max(1, retry_after)},
-                )
-                return {
-                    "ok": False,
-                    "error": "locked",
-                    "retry_after_sec": max(1, retry_after),
-                }
-
-            valid = False
-            if cred_type == "token":
-                valid = _constant_time_eq(str(row["token_hash"] or ""), _hash_token(cred))
-            else:
-                pwd_hash = str(row["password_hash"] or "")
-                if not pwd_hash:
-                    _consume_dummy_password_verify(cred)
-                    self._append_login_attempt(
-                        conn,
-                        role=role_norm,
-                        candidate_id=sid,
-                        credential_type=cred_type,
-                        result="password_not_set",
-                    )
-                    return {"ok": False, "error": "password_not_set"}
-                valid = _verify_password(cred, pwd_hash)
-
-            if not valid:
-                failed_state = self._record_failed_login(
-                    conn,
-                    table=table,
-                    id_field=id_field,
-                    subject_id=sid,
-                    current_failed=int(row["failed_count"] or 0),
-                    now=now,
-                )
-                self._append_login_attempt(
-                    conn,
-                    role=role_norm,
-                    candidate_id=sid,
-                    credential_type=cred_type,
-                    result="invalid_credential",
-                    detail=failed_state,
-                )
-                return {"ok": False, "error": "invalid_credential"}
-
-            conn.execute(
-                (
-                    f"UPDATE {table} SET failed_count = 0, locked_until = NULL, updated_at = ? "
-                    f"WHERE {id_field} = ?"
-                ),
-                (_iso(now), sid),
-            )
-            self._append_login_attempt(
-                conn,
-                role=role_norm,
-                candidate_id=sid,
-                credential_type=cred_type,
-                result="success",
-            )
-
-            result: Dict[str, Any] = {
-                "ok": True,
-                "role": role_norm,
-                "subject_id": sid,
-                "token_version": int(row["token_version"] or 1),
-                "password_set": bool(str(row["password_hash"] or "").strip()),
-            }
-            if role_norm == "student":
-                result["student"] = {
-                    "student_id": sid,
-                    "student_name": str(row["student_name"] or ""),
-                    "class_name": str(row["class_name"] or ""),
-                }
-            else:
-                result["teacher"] = {
-                    "teacher_id": sid,
-                    "teacher_name": str(row["teacher_name"] or ""),
-                    "email": str(row["email"] or ""),
-                }
-            return result
+        return handle_login(
+            self,
+            role=role,
+            candidate_id=candidate_id,
+            credential_type=credential_type,
+            credential=credential,
+            normalize_role=_normalize_role,
+            table_for_role=_table_for_role,
+            max_subject_id_len=_max_subject_id_len,
+            max_credential_len=_max_credential_len,
+            utc_now=_utc_now,
+            parse_ts=_parse_ts,
+            consume_dummy_password_verify=_consume_dummy_password_verify,
+            consume_dummy_token_verify=_consume_dummy_token_verify,
+            constant_time_eq=_constant_time_eq,
+            hash_token=_hash_token,
+            verify_password=_verify_password,
+            iso=_iso,
+        )
 
     def bootstrap_admin(self) -> Dict[str, Any]:
         username = _admin_username()
@@ -717,84 +571,18 @@ class AuthRegistryStore:
         actor_id: str,
         actor_role: str,
     ) -> Dict[str, Any]:
-        identity = self._get_teacher_identity(target_id)
-        if identity is None:
-            return {"ok": False, "error": "not_found"}
-
-        tid = str(identity.get("teacher_id") or "").strip()
-        ensured = self._ensure_teacher_auth(
-            teacher_id=tid,
-            teacher_name=str(identity.get("teacher_name") or "").strip() or tid,
-            email=str(identity.get("email") or "").strip() or None,
-            regenerate_token=False,
+        return handle_reset_teacher_password(
+            self,
+            target_id=target_id,
+            new_password=new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            generate_bootstrap_password=_generate_bootstrap_password,
+            validate_password_strength=validate_password_strength,
+            hash_password=_hash_password,
+            utc_now=_utc_now,
+            iso=_iso,
         )
-        if not ensured:
-            return {"ok": False, "error": "not_found"}
-
-        generated_password = False
-        password_value = str(new_password or "").strip()
-        if not password_value:
-            password_value = _generate_bootstrap_password()
-            generated_password = True
-
-        password_error = validate_password_strength(password_value)
-        if password_error:
-            return {
-                "ok": False,
-                "error": password_error,
-                "message": "密码至少 8 位，且需同时包含字母与数字。",
-            }
-
-        now = _utc_now()
-        with self._connect() as conn:
-            conn.execute(
-                (
-                    "UPDATE teacher_auth SET password_hash = ?, password_algo = ?, password_set_at = ?, "
-                    "token_version = token_version + 1, failed_count = 0, locked_until = NULL, "
-                    "updated_at = ? WHERE teacher_id = ?"
-                ),
-                (
-                    _hash_password(password_value),
-                    "pbkdf2_sha256",
-                    _iso(now),
-                    _iso(now),
-                    tid,
-                ),
-            )
-            self._append_audit(
-                conn,
-                actor_id=actor_id,
-                actor_role=actor_role,
-                action="reset_password",
-                target_id=tid,
-                target_role="teacher",
-                detail={"generated": generated_password},
-            )
-            row = conn.execute(
-                (
-                    "SELECT teacher_id, teacher_name, email, token_version "
-                    "FROM teacher_auth WHERE teacher_id = ?"
-                ),
-                (tid,),
-            ).fetchone()
-        if row is None:
-            return {"ok": False, "error": "not_found"}
-
-        payload: Dict[str, Any] = {
-            "ok": True,
-            "role": "teacher",
-            "target_id": tid,
-            "generated_password": generated_password,
-            "token_version": int(row["token_version"] or 1),
-            "teacher": {
-                "teacher_id": str(row["teacher_id"] or ""),
-                "teacher_name": str(row["teacher_name"] or ""),
-                "email": str(row["email"] or ""),
-            },
-        }
-        if generated_password:
-            payload["temp_password"] = password_value
-        return payload
 
     def reset_student_passwords(
         self,
@@ -806,111 +594,20 @@ class AuthRegistryStore:
         actor_id: str,
         actor_role: str,
     ) -> Dict[str, Any]:
-        scope_norm = str(scope or "").strip().lower() or "student"
-        targets_result = self._resolve_student_password_targets(
-            scope=scope_norm,
+        return handle_reset_student_passwords(
+            self,
+            scope=scope,
             student_id=student_id,
             class_name=class_name,
+            new_password=new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            generate_bootstrap_password=_generate_bootstrap_password,
+            validate_password_strength=validate_password_strength,
+            hash_password=_hash_password,
+            utc_now=_utc_now,
+            iso=_iso,
         )
-        if not targets_result.get("ok"):
-            return targets_result
-        targets = targets_result.get("items") or []
-        if not targets:
-            return {"ok": False, "error": "not_found"}
-
-        requested_password = str(new_password or "").strip()
-        if requested_password:
-            password_error = validate_password_strength(requested_password)
-            if password_error:
-                return {
-                    "ok": False,
-                    "error": password_error,
-                    "message": "密码至少 8 位，且需同时包含字母与数字。",
-                }
-
-        ensured_targets: List[Dict[str, str]] = []
-        for target in targets:
-            sid = str(target.get("student_id") or "").strip()
-            if not sid:
-                continue
-            row = self._ensure_student_auth(
-                student_id=sid,
-                student_name=str(target.get("student_name") or "").strip(),
-                class_name=str(target.get("class_name") or "").strip(),
-                regenerate_token=False,
-            )
-            if not row:
-                continue
-            ensured_targets.append(
-                {
-                    "student_id": sid,
-                    "student_name": str(row.get("student_name") or "").strip(),
-                    "class_name": str(row.get("class_name") or "").strip(),
-                }
-            )
-
-        if not ensured_targets:
-            return {"ok": False, "error": "not_found"}
-
-        now = _utc_now()
-        generated_password = not bool(requested_password)
-        items: List[Dict[str, Any]] = []
-        with self._connect() as conn:
-            for target in ensured_targets:
-                sid = str(target.get("student_id") or "").strip()
-                if not sid:
-                    continue
-                password_value = requested_password or _generate_bootstrap_password()
-                conn.execute(
-                    (
-                        "UPDATE student_auth SET password_hash = ?, password_algo = ?, "
-                        "password_set_at = ?, token_version = token_version + 1, failed_count = 0, "
-                        "locked_until = NULL, updated_at = ? WHERE student_id = ?"
-                    ),
-                    (
-                        _hash_password(password_value),
-                        "pbkdf2_sha256",
-                        _iso(now),
-                        _iso(now),
-                        sid,
-                    ),
-                )
-                row = conn.execute(
-                    (
-                        "SELECT student_id, student_name, class_name, token_version "
-                        "FROM student_auth WHERE student_id = ?"
-                    ),
-                    (sid,),
-                ).fetchone()
-                if row is None:
-                    continue
-                self._append_audit(
-                    conn,
-                    actor_id=actor_id,
-                    actor_role=actor_role,
-                    action="reset_password",
-                    target_id=sid,
-                    target_role="student",
-                    detail={"scope": scope_norm, "generated": generated_password},
-                )
-                items.append(
-                    {
-                        "student_id": str(row["student_id"] or ""),
-                        "student_name": str(row["student_name"] or ""),
-                        "class_name": str(row["class_name"] or ""),
-                        "token_version": int(row["token_version"] or 1),
-                        "generated_password": generated_password,
-                        "temp_password": password_value,
-                    }
-                )
-
-        return {
-            "ok": True,
-            "scope": scope_norm,
-            "count": len(items),
-            "generated_password": generated_password,
-            "items": items,
-        }
 
     def _write_admin_bootstrap_file(self, *, username: str, password: str) -> str:
         auth_dir = self.data_dir / "auth"
