@@ -19,21 +19,18 @@ def load_app(tmp_dir: Path, *, auto_apply_enabled: bool = True):
 
 
 class TeacherMemoryProposalsApiTest(unittest.TestCase):
-    def test_proposals_endpoint_uses_teacher_memory_api_deps(self):
+    def test_proposals_endpoint_uses_teacher_memory_list_proposals(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=False)
-            sentinel = object()
             captured = {}
 
-            def fake_list(teacher_id, *, status, limit, deps):  # type: ignore[no-untyped-def]
+            def fake_list(teacher_id, *, status, limit):  # type: ignore[no-untyped-def]
                 captured["teacher_id"] = teacher_id
                 captured["status"] = status
                 captured["limit"] = limit
-                captured["deps"] = deps
                 return {"ok": True, "proposals": []}
 
-            app_mod._list_teacher_memory_proposals_api_impl = fake_list  # type: ignore[attr-defined]
-            app_mod._teacher_memory_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+            app_mod.get_core().teacher_memory_list_proposals = fake_list  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 listed = client.get(
@@ -44,23 +41,19 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 self.assertEqual(captured.get("teacher_id"), "teacher_x")
                 self.assertEqual(captured.get("status"), "proposed")
                 self.assertEqual(captured.get("limit"), 7)
-                self.assertIs(captured.get("deps"), sentinel)
 
-    def test_review_endpoint_uses_teacher_memory_api_deps(self):
+    def test_review_endpoint_uses_teacher_memory_apply(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=False)
-            sentinel = object()
             captured = {}
 
-            def fake_review(proposal_id, *, teacher_id, approve, deps):  # type: ignore[no-untyped-def]
+            def fake_review(teacher_id, proposal_id, approve=True):  # type: ignore[no-untyped-def]
                 captured["proposal_id"] = proposal_id
                 captured["teacher_id"] = teacher_id
                 captured["approve"] = approve
-                captured["deps"] = deps
                 return {"ok": True, "status": "applied"}
 
-            app_mod._review_teacher_memory_proposal_api_impl = fake_review  # type: ignore[attr-defined]
-            app_mod._teacher_memory_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+            app_mod.get_core().teacher_memory_apply = fake_review  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 review = client.post(
@@ -71,22 +64,18 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 self.assertEqual(captured.get("proposal_id"), "p123")
                 self.assertEqual(captured.get("teacher_id"), "teacher_y")
                 self.assertTrue(captured.get("approve"))
-                self.assertIs(captured.get("deps"), sentinel)
 
-    def test_delete_endpoint_uses_teacher_memory_api_deps(self):
+    def test_delete_endpoint_uses_teacher_memory_delete_proposal(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=False)
-            sentinel = object()
             captured = {}
 
-            def fake_delete(proposal_id, *, teacher_id, deps):  # type: ignore[no-untyped-def]
+            def fake_delete(teacher_id, proposal_id):  # type: ignore[no-untyped-def]
                 captured["proposal_id"] = proposal_id
                 captured["teacher_id"] = teacher_id
-                captured["deps"] = deps
                 return {"ok": True, "status": "deleted"}
 
-            app_mod._delete_teacher_memory_proposal_api_impl = fake_delete  # type: ignore[attr-defined]
-            app_mod._teacher_memory_api_deps = lambda: sentinel  # type: ignore[attr-defined]
+            app_mod.get_core().teacher_memory_delete_proposal = fake_delete  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 deleted = client.delete(
@@ -96,13 +85,12 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 self.assertEqual(deleted.status_code, 200)
                 self.assertEqual(captured.get("proposal_id"), "p123")
                 self.assertEqual(captured.get("teacher_id"), "teacher_y")
-                self.assertIs(captured.get("deps"), sentinel)
 
     def test_list_and_review_proposals_when_manual_mode(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=False)
-            teacher_id = app_mod.resolve_teacher_id("teacher")
-            prop = app_mod.teacher_memory_propose(
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher")
+            prop = app_mod.get_core().teacher_memory_propose(
                 teacher_id,
                 target="MEMORY",
                 title="偏好A",
@@ -134,8 +122,8 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
     def test_default_auto_apply_lists_applied(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=True)
-            teacher_id = app_mod.resolve_teacher_id("teacher")
-            prop = app_mod.teacher_memory_propose(
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher")
+            prop = app_mod.get_core().teacher_memory_propose(
                 teacher_id,
                 target="MEMORY",
                 title="偏好B",
@@ -161,8 +149,8 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
     def test_delete_applied_proposal_hides_it_from_list(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), auto_apply_enabled=True)
-            teacher_id = app_mod.resolve_teacher_id("teacher")
-            prop = app_mod.teacher_memory_propose(
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher")
+            prop = app_mod.get_core().teacher_memory_propose(
                 teacher_id,
                 target="MEMORY",
                 title="偏好C",
@@ -182,7 +170,7 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 )
                 self.assertEqual(deleted.status_code, 200)
                 self.assertEqual(deleted.json().get("status"), "deleted")
-                memory_path = app_mod.teacher_workspace_file(teacher_id, "MEMORY.md")
+                memory_path = app_mod.get_core().teacher_workspace_file(teacher_id, "MEMORY.md")
                 memory_text = memory_path.read_text(encoding="utf-8")
                 self.assertNotIn(f"- entry_id: {proposal_id}", memory_text)
                 self.assertNotIn("请先给结论再给步骤。", memory_text)

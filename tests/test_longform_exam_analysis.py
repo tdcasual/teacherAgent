@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from services.api.core_utils import _non_ws_len
+
 
 def load_app(tmp_dir: Path):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
@@ -93,14 +95,14 @@ class LongformExamAnalysisTest(unittest.TestCase):
                 calls["count"] += 1
                 return {"choices": [{"message": {"content": ("长文" * 1600)}}]}
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+            app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
 
-            result = app_mod.run_agent(
+            result = app_mod.get_core().run_agent(
                 [{"role": "user", "content": f"查看{exam_id}的考试分析，要求字数不少于3000字"}],
                 role_hint="teacher",
             )
             text = result.get("reply") or ""
-            self.assertGreaterEqual(app_mod._non_ws_len(text), 3000)
+            self.assertGreaterEqual(_non_ws_len(text), 3000)
             self.assertEqual(calls["count"], 1)
 
     def test_run_agent_tool_budget_exhausted_falls_back_to_no_tool_answer(self):
@@ -111,7 +113,7 @@ class LongformExamAnalysisTest(unittest.TestCase):
             def fake_tool_dispatch(name, args, role=None):  # type: ignore[no-untyped-def]
                 return {"ok": True, "tool": name}
 
-            app_mod.tool_dispatch = fake_tool_dispatch  # type: ignore[attr-defined]
+            app_mod.get_core().tool_dispatch = fake_tool_dispatch  # type: ignore[attr-defined]
 
             def fake_call_llm(messages, tools=None, role_hint=None, max_tokens=None, **kwargs):  # type: ignore[no-untyped-def]
                 # When tools are present, keep asking for too many tools; when tools are absent, provide final answer.
@@ -128,9 +130,9 @@ class LongformExamAnalysisTest(unittest.TestCase):
                     return {"choices": [{"message": {"content": "", "tool_calls": tool_calls}}]}
                 return {"choices": [{"message": {"content": "final_no_tool_answer"}}]}
 
-            app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+            app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
 
-            result = app_mod.run_agent(
+            result = app_mod.get_core().run_agent(
                 [{"role": "user", "content": "列出考试"}],
                 role_hint="teacher",
             )

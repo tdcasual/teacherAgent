@@ -28,11 +28,11 @@ class TeacherMem0IntegrationTest(unittest.TestCase):
             teacher_id = "teacher"
 
             # Seed a keyword into curated memory.
-            mem_path = app_mod.teacher_workspace_file(teacher_id, "MEMORY.md")
+            mem_path = app_mod.get_core().teacher_workspace_file(teacher_id, "MEMORY.md")
             mem_path.parent.mkdir(parents=True, exist_ok=True)
             mem_path.write_text("# Long-Term Memory\n\n偏好：输出要简洁\n", encoding="utf-8")
 
-            res = app_mod.teacher_memory_search(teacher_id, "简洁", limit=5)
+            res = app_mod.get_core().teacher_memory_search(teacher_id, "简洁", limit=5)
             self.assertEqual(res.get("mode"), "keyword")
             self.assertTrue(res.get("matches"))
             self.assertEqual(res["matches"][0].get("source"), "keyword")
@@ -46,7 +46,7 @@ class TeacherMem0IntegrationTest(unittest.TestCase):
                 "services.api.mem0_adapter.teacher_mem0_search",
                 return_value={"ok": True, "matches": [{"source": "mem0", "snippet": "hello", "score": 0.9}]},
             ):
-                res = app_mod.teacher_memory_search(teacher_id, "anything", limit=5)
+                res = app_mod.get_core().teacher_memory_search(teacher_id, "anything", limit=5)
             self.assertEqual(res.get("mode"), "mem0")
             self.assertEqual(res.get("matches")[0].get("source"), "mem0")
 
@@ -55,7 +55,7 @@ class TeacherMem0IntegrationTest(unittest.TestCase):
             app_mod = load_app(Path(td))
             teacher_id = "teacher"
 
-            prop = app_mod.teacher_memory_propose(
+            prop = app_mod.get_core().teacher_memory_propose(
                 teacher_id,
                 target="MEMORY",
                 title="T",
@@ -67,7 +67,7 @@ class TeacherMem0IntegrationTest(unittest.TestCase):
                 "services.api.mem0_adapter.teacher_mem0_index_entry",
                 return_value={"ok": True, "chunks": 1},
             ) as mock_index:
-                res = app_mod.teacher_memory_apply(teacher_id, proposal_id, approve=True)
+                res = app_mod.get_core().teacher_memory_apply(teacher_id, proposal_id, approve=True)
 
             self.assertEqual(res.get("status"), "applied")
             self.assertIn("mem0", res)

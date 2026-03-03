@@ -23,7 +23,7 @@ def register_provider_registry_routes(router: APIRouter, core: Any) -> None:
 
     @router.post("/teacher/provider-registry/providers")
     def teacher_provider_registry_create_api(req: TeacherProviderRegistryCreateRequest) -> Any:
-        payload = scoped_payload_teacher_id(core.model_dump_compat(req, exclude_none=True))
+        payload = scoped_payload_teacher_id(req.model_dump(exclude_none=True))
         result = core.teacher_provider_registry_create(payload)
         ensure_ok_result(result)
         return result
@@ -32,7 +32,7 @@ def register_provider_registry_routes(router: APIRouter, core: Any) -> None:
     def teacher_provider_registry_update_api(
         provider_id: str, req: TeacherProviderRegistryUpdateRequest
     ) -> Any:
-        payload = scoped_payload_teacher_id(core.model_dump_compat(req, exclude_none=True))
+        payload = scoped_payload_teacher_id(req.model_dump(exclude_none=True))
         payload["provider_id"] = provider_id
         result = core.teacher_provider_registry_update(payload)
         ensure_ok_result(result, not_found_errors={"provider_not_found"})
@@ -42,7 +42,7 @@ def register_provider_registry_routes(router: APIRouter, core: Any) -> None:
     def teacher_provider_registry_delete_api(
         provider_id: str, req: TeacherProviderRegistryDeleteRequest
     ) -> Any:
-        payload = scoped_payload_teacher_id(core.model_dump_compat(req, exclude_none=True))
+        payload = scoped_payload_teacher_id(req.model_dump(exclude_none=True))
         payload["provider_id"] = provider_id
         result = core.teacher_provider_registry_delete(payload)
         ensure_ok_result(result, not_found_errors={"provider_not_found"})
@@ -52,7 +52,7 @@ def register_provider_registry_routes(router: APIRouter, core: Any) -> None:
     def teacher_provider_registry_probe_models_api(
         provider_id: str, req: TeacherProviderRegistryProbeRequest
     ) -> Any:
-        payload = scoped_payload_teacher_id(core.model_dump_compat(req, exclude_none=True))
+        payload = scoped_payload_teacher_id(req.model_dump(exclude_none=True))
         payload["provider_id"] = provider_id
         result = core.teacher_provider_registry_probe_models(payload)
         ensure_ok_result(result, not_found_errors={"provider_not_found"})

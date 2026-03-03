@@ -26,13 +26,13 @@ class TeacherSessionCompactionTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
-            app_mod.run_agent = lambda *args, **kwargs: {"reply": "stub-reply"}  # type: ignore[assignment]
+            app_mod.get_core().run_agent = lambda *args, **kwargs: {"reply": "stub-reply"}  # type: ignore[assignment]
 
-            teacher_id = app_mod.resolve_teacher_id("teacher")
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher")
             session_id = "main"
             for i in range(12):
-                app_mod.append_teacher_session_message(teacher_id, session_id, "user", f"旧用户消息{i}")
-                app_mod.append_teacher_session_message(teacher_id, session_id, "assistant", f"旧助手消息{i}")
+                app_mod.get_core().append_teacher_session_message(teacher_id, session_id, "user", f"旧用户消息{i}")
+                app_mod.get_core().append_teacher_session_message(teacher_id, session_id, "assistant", f"旧助手消息{i}")
 
             job_id = "cjob_compact_001"
             record = {
@@ -48,10 +48,10 @@ class TeacherSessionCompactionTest(unittest.TestCase):
                     "teacher_id": teacher_id,
                 },
             }
-            app_mod.write_chat_job(job_id, record, overwrite=True)
-            app_mod.process_chat_job(job_id)
+            app_mod.get_core().write_chat_job(job_id, record, overwrite=True)
+            app_mod.get_core().process_chat_job(job_id)
 
-            path = app_mod.teacher_session_file(teacher_id, session_id)
+            path = app_mod.get_core().teacher_session_file(teacher_id, session_id)
             lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
             self.assertTrue(lines)
             records = [json.loads(ln) for ln in lines]

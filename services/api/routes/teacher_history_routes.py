@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from ..session_history_service import SessionHistoryError
 from .teacher_route_helpers import scoped_teacher_id
 
 
@@ -13,27 +14,18 @@ def register_history_routes(router: APIRouter, core: Any) -> None:
         teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        return core._teacher_history_sessions_api_impl(
-            teacher_id_scoped,
-            limit=limit,
-            cursor=cursor,
-            deps=core._session_history_api_deps(),
-        )
+        return core.teacher_history_sessions(teacher_id_scoped, limit=limit, cursor=cursor)
 
     @router.get("/teacher/session/view-state")
     def teacher_session_view_state(teacher_id: Optional[str] = None) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        return core._teacher_session_view_state_api_impl(
-            teacher_id_scoped, deps=core._session_history_api_deps()
-        )
+        return core.teacher_session_view_state(teacher_id_scoped)
 
     @router.put("/teacher/session/view-state")
     def update_teacher_session_view_state(req: dict[str, Any]) -> Any:
         payload = dict(req or {})
         payload["teacher_id"] = scoped_teacher_id(payload.get("teacher_id"))
-        return core._update_teacher_session_view_state_api_impl(
-            payload, deps=core._session_history_api_deps()
-        )
+        return core.update_teacher_session_view_state(payload)
 
     @router.get("/teacher/history/session")
     def teacher_history_session(
@@ -45,13 +37,12 @@ def register_history_routes(router: APIRouter, core: Any) -> None:
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
         try:
-            return core._teacher_history_session_api_impl(
+            return core.teacher_history_session(
                 session_id,
                 teacher_id_scoped,
                 cursor=cursor,
                 limit=limit,
                 direction=direction,
-                deps=core._session_history_api_deps(),
             )
-        except core.SessionHistoryApiError as exc:
+        except SessionHistoryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)

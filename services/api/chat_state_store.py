@@ -23,8 +23,6 @@ class ChatStateStore:
 @dataclass
 class ChatIdempotencyStore:
     request_map_dir: Path
-    request_index_path: Path
-    request_index_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 def create_chat_state_store() -> ChatStateStore:
@@ -39,5 +37,4 @@ def create_chat_state_store() -> ChatStateStore:
 def create_chat_idempotency_store(chat_job_dir: Path) -> ChatIdempotencyStore:
     return ChatIdempotencyStore(
         request_map_dir=chat_job_dir / "request_index",
-        request_index_path=chat_job_dir / "request_index.json",
     )

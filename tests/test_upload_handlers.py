@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from services.api.api_models import UploadConfirmRequest
 from services.api.assignment_upload_start_service import AssignmentUploadStartError
-from services.api.exam_upload_api_service import ExamUploadApiError
+from services.api.exam_upload_service import ExamUploadError
 from services.api.handlers import assignment_upload_handlers, exam_upload_handlers
 
 
@@ -38,9 +38,6 @@ def _exam_deps(**overrides):
 
 
 def _assignment_deps(tmp_path, **overrides):
-    def assignment_upload_legacy(**_kwargs):
-        return {"ok": True}
-
     async def start_assignment_upload(**_kwargs):
         return {"ok": True}
 
@@ -66,7 +63,6 @@ def _assignment_deps(tmp_path, **overrides):
         return Path(tmp_path)
 
     deps = assignment_upload_handlers.AssignmentUploadHandlerDeps(
-        assignment_upload_legacy=assignment_upload_legacy,
         start_assignment_upload=start_assignment_upload,
         assignment_upload_status=assignment_upload_status,
         assignment_upload_draft=assignment_upload_draft,
@@ -84,7 +80,7 @@ def _assignment_deps(tmp_path, **overrides):
 @pytest.mark.anyio
 async def test_exam_upload_status_maps_error():
     def exam_upload_status(_job_id):
-        raise ExamUploadApiError(400, "bad")
+        raise ExamUploadError(400, "bad")
 
     deps = _exam_deps(exam_upload_status=exam_upload_status)
 

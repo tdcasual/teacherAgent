@@ -57,8 +57,6 @@ def test_extracted_modules_exist():
         "core_utils.py",
         "profile_service.py",
         "assignment_data_service.py",
-        "llm_routing_resolver.py",
-        "llm_routing_proposals.py",
         "teacher_session_compaction_helpers.py",
         "teacher_memory_deps.py",
         "wiring/__init__.py",

@@ -132,8 +132,8 @@ class ExamAnalysisChartsGenerateToolTest(unittest.TestCase):
                     "artifacts": [{"name": save_as, "url": f"/charts/{run_id}/{save_as}", "size": 1234}],
                 }
 
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            res = app_mod.tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX_TEST"}, role="teacher")
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX_TEST"}, role="teacher")
 
             self.assertTrue(res.get("ok"))
             self.assertEqual(res.get("generated_count"), 4)
@@ -156,8 +156,8 @@ class ExamAnalysisChartsGenerateToolTest(unittest.TestCase):
                 save_as = str(args.get("save_as") or "main.png")
                 return {"ok": True, "run_id": run_id, "image_url": f"/charts/{run_id}/{save_as}", "meta_url": f"/chart-runs/{run_id}/meta"}
 
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            res = app_mod.tool_dispatch(
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch(
                 "exam.analysis.charts.generate",
                 {"exam_id": "EX_TEST", "chart_types": ["分布", "区分度"], "top_n": 6},
                 role="teacher",

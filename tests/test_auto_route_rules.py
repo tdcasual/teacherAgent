@@ -39,12 +39,10 @@ def test_homework_generator_intent_flags():
     assert "assignment_intent" in h2
 
 
-def test_llm_routing_matches():
+def test_removed_routing_skill_returns_zero():
     score, hits = score_role_skill("teacher", "physics-llm-routing", "模型路由配置 channel provider", **_KW)
-    assert score > 0
-    assert "routing_regex" in hits
-    assert "channel" in hits
-    assert "provider" in hits
+    assert score == 0
+    assert hits == []
 
 
 def test_lesson_capture_matches():

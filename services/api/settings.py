@@ -62,10 +62,6 @@ def uploads_dir() -> str:
     return env_str("UPLOADS_DIR", "")
 
 
-def llm_routing_path() -> str:
-    return env_str("LLM_ROUTING_PATH", "")
-
-
 def diag_log_enabled() -> bool:
     return env_bool("DIAG_LOG", "")
 

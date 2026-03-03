@@ -25,13 +25,6 @@ routing:
 agent:
   prompt_modules:
     - teacher/skills/teacher_ops.md
-  tools:
-    deny:
-      - teacher.llm_routing.get
-      - teacher.llm_routing.simulate
-      - teacher.llm_routing.propose
-      - teacher.llm_routing.apply
-      - teacher.llm_routing.rollback
   budgets:
     max_tool_rounds: 5
     max_tool_calls: 12

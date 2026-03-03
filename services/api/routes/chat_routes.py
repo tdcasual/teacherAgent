@@ -72,16 +72,16 @@ def _register_chat_routes(router: APIRouter, core: Any) -> None:
     @router.post("/chat")
     async def chat(req: ChatRequest) -> Any:
         bound = _bind_or_raise(req)
-        return await core.chat_handlers.chat(bound, deps=core._chat_handlers_deps())
+        return await core.chat(bound)
 
     @router.post("/chat/start")
     async def chat_start(req: ChatStartRequest) -> Any:
         bound = _bind_or_raise(req)
-        return await core.chat_handlers.chat_start(bound, deps=core._chat_handlers_deps())
+        return await core.chat_start(bound)
 
     @router.get("/chat/status")
     async def chat_status(job_id: str) -> Any:
-        return await core.chat_handlers.chat_status(job_id, deps=core._chat_handlers_deps())
+        return await core.chat_status(job_id)
 
     @router.get("/chat/stream")
     async def chat_stream(
@@ -96,7 +96,7 @@ def _register_chat_routes(router: APIRouter, core: Any) -> None:
             raise HTTPException(status_code=404, detail="job not found")
         except AuthError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-        deps = core._chat_event_stream_deps()
+        deps = core.chat_event_stream_deps()
         header_last_event_id = str(request.headers.get("last-event-id") or "").strip()
         if header_last_event_id:
             try:

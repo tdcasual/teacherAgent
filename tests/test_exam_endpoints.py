@@ -20,26 +20,22 @@ def load_app(tmp_dir: Path):
 
 
 class ExamEndpointsTest(unittest.TestCase):
-    def test_exam_routes_use_exam_api_service_deps(self):
+    def test_exam_routes_use_exam_get_directly(self):
         with TemporaryDirectory() as td:
             tmp_dir = Path(td)
             app_mod = load_app(tmp_dir)
             client = TestClient(app_mod.app)
-            sentinel = object()
             captured = {}
 
-            def _fake_impl(exam_id: str, *, deps):
+            def _fake_impl(exam_id: str):
                 captured["exam_id"] = exam_id
-                captured["deps"] = deps
                 return {"ok": True, "exam_id": exam_id}
 
-            app_mod._get_exam_detail_api_impl = _fake_impl
-            app_mod._exam_api_deps = lambda: sentinel
+            app_mod.get_core().exam_get = _fake_impl
 
             res = client.get("/exam/E1")
             self.assertEqual(res.status_code, 200)
             self.assertEqual(captured.get("exam_id"), "E1")
-            self.assertIs(captured.get("deps"), sentinel)
 
     def test_exam_endpoints_from_manifest(self):
         with TemporaryDirectory() as td:
@@ -139,7 +135,7 @@ class ExamEndpointsTest(unittest.TestCase):
             self.assertTrue(q["ok"])
             self.assertEqual(q["question"]["question_id"], "Q1")
 
-            range_rank = app_mod.tool_dispatch(
+            range_rank = app_mod.get_core().tool_dispatch(
                 "exam.range.top_students",
                 {"exam_id": exam_id, "start_question_no": 1, "end_question_no": 2, "top_n": 2},
                 role="teacher",
@@ -150,7 +146,7 @@ class ExamEndpointsTest(unittest.TestCase):
             self.assertEqual(range_rank["top_students"][0]["student_id"], "C1_A")
             self.assertEqual(range_rank["bottom_students"][0]["student_id"], "C1_B")
 
-            range_batch = app_mod.tool_dispatch(
+            range_batch = app_mod.get_core().tool_dispatch(
                 "exam.range.summary.batch",
                 {
                     "exam_id": exam_id,
@@ -168,7 +164,7 @@ class ExamEndpointsTest(unittest.TestCase):
             self.assertEqual(range_batch["ranges"][0]["summary"]["max_score"], 4.0)
             self.assertEqual(range_batch["ranges"][1]["summary"]["max_score"], 7.0)
 
-            question_batch = app_mod.tool_dispatch(
+            question_batch = app_mod.get_core().tool_dispatch(
                 "exam.question.batch.get",
                 {"exam_id": exam_id, "question_nos": [1, 2], "top_n": 1},
                 role="teacher",

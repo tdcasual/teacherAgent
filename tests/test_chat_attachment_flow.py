@@ -70,7 +70,7 @@ class ChatAttachmentFlowTest(unittest.TestCase):
                 job_id = (chat_res.json() or {}).get("job_id")
                 self.assertTrue(job_id)
 
-                job = app_mod.load_chat_job(job_id)
+                job = app_mod.get_core().load_chat_job(job_id)
                 req_payload = (job or {}).get("request") or {}
                 self.assertEqual((req_payload.get("messages") or [{}])[-1].get("content"), "请用附件做总结")
                 attachment_context = str(req_payload.get("attachment_context") or "")

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from services.api import app as app_mod
+from services.api.core_context_middleware import build_set_core_context_middleware
 from services.api.wiring import CURRENT_CORE
 
 
@@ -11,7 +11,7 @@ def test_request_core_context_uses_app_state_core(monkeypatch) -> None:
     sentinel = object()
     app = FastAPI()
     app.state.core = sentinel
-    app.middleware('http')(app_mod._set_core_context)
+    app.middleware('http')(build_set_core_context_middleware(default_core=None))
 
     @app.get('/probe')
     async def probe():

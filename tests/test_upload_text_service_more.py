@@ -11,7 +11,6 @@ import pytest
 from services.api import upload_text_service as mod
 from services.api.upload_text_service import (
     UploadTextDeps,
-    ensure_ocr_api_key_aliases,
     extract_text_from_file,
     extract_text_from_image,
     extract_text_from_pdf,
@@ -81,16 +80,21 @@ def test_save_upload_file_handles_seek_failure(tmp_path: Path) -> None:
     assert dest.read_bytes() == b"abcdef"
 
 
-def test_ensure_ocr_aliases_preserve_existing_and_set_silicon(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "keep-me")
-    monkeypatch.setenv("openai-api-key", "alias-openai")
+def test_load_ocr_utils_does_not_map_legacy_alias_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+    monkeypatch.setenv("openai-api-key", "alias-openai")
     monkeypatch.setenv("siliconflow_api_key", " alias-silicon ")
 
-    ensure_ocr_api_key_aliases()
+    fake = types.ModuleType("ocr_utils")
+    fake.load_env_from_dotenv = lambda _path: None  # type: ignore[attr-defined]
+    fake.ocr_with_sdk = lambda *args, **kwargs: "ok"  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ocr_utils", fake)
 
-    assert mod.os.getenv("OPENAI_API_KEY") == "keep-me"
-    assert mod.os.getenv("SILICONFLOW_API_KEY") == "alias-silicon"
+    load_ocr_utils()
+
+    assert mod.os.getenv("OPENAI_API_KEY") is None
+    assert mod.os.getenv("SILICONFLOW_API_KEY") is None
 
 
 def test_load_ocr_utils_success_and_cache(monkeypatch: pytest.MonkeyPatch) -> None:

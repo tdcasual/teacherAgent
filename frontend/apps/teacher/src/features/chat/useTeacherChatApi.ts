@@ -7,8 +7,7 @@ import { decideSkillRouting } from './requestRouting'
 import { CHAT_STREAM_EVENT_VERSION, parseChatStreamEnvelope } from './streamEventProtocol'
 import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
 import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
-import { safeLocalStorageGetItem } from '../../utils/storage'
-import { TEACHER_AUTH_EVENT, readTeacherAccessToken } from '../auth/teacherAuth'
+import { TEACHER_AUTH_EVENT, readTeacherAccessToken, readTeacherAuthSubject } from '../auth/teacherAuth'
 import { makeId } from '../../utils/id'
 import { nowTime, timeFromIso } from '../../utils/time'
 import type {
@@ -594,7 +593,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       if (!activeSessionId) setActiveSessionId(sessionId)
       const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
       const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const routingTeacherId = (safeLocalStorageGetItem('teacherRoutingTeacherId') || '').trim()
+      const teacherId = String(readTeacherAuthSubject()?.teacher_id || '').trim()
 
       setWheelScrollZone('chat')
       enableAutoScroll()
@@ -622,7 +621,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             session_id: sessionId,
             messages: contextMessages,
             role: 'teacher',
-            teacher_id: routingTeacherId || undefined,
+            teacher_id: teacherId || undefined,
             skill_id: routingDecision.skillIdForRequest,
             attachments: attachmentRefs.length ? attachmentRefs : undefined,
           }),

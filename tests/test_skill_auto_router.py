@@ -30,7 +30,7 @@ class SkillAutoRouterTest(unittest.TestCase):
         self.assertEqual(result.get("effective_skill_id"), "physics-homework-generator")
         self.assertIn("auto_rule", str(result.get("reason") or ""))
 
-    def test_teacher_auto_routes_llm_routing_requests(self):
+    def test_teacher_model_config_requests_fall_back_to_teacher_ops(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,
             role_hint="teacher",
@@ -38,8 +38,8 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="先读取当前模型路由配置，再回滚到版本 3",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-llm-routing")
-        self.assertIn("auto_rule", str(result.get("reason") or ""))
+        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+        self.assertIn("default", str(result.get("reason") or ""))
 
     def test_teacher_auto_routes_provider_registry_requests(self):
         result = resolve_effective_skill(
@@ -49,8 +49,8 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="帮我配置一个私有 provider，填 base url 和 api key 走中转",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-llm-routing")
-        self.assertIn("auto_rule", str(result.get("reason") or ""))
+        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+        self.assertIn("default", str(result.get("reason") or ""))
 
     def test_ambiguous_low_margin_falls_back_to_default(self):
         result = resolve_effective_skill(

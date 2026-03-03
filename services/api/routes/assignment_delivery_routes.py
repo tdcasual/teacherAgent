@@ -84,8 +84,7 @@ def register_assignment_delivery_routes(
     @router.get("/assignment/{assignment_id}")
     async def assignment_detail(assignment_id: str) -> Any:
         _require_assignment_access(assignment_id, core=core)
-        # Keep compatibility with tests and legacy monkeypatch surface on app_core.
-        return core._get_assignment_detail_api_impl(
+        return await assignment_app.get_assignment_detail(
             assignment_id,
-            deps=core._assignment_api_deps(),
+            deps=app_deps,
         )

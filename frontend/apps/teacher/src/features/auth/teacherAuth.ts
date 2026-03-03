@@ -49,7 +49,6 @@ export const writeTeacherAuthSession = (params: {
   const teacherName = String(params.teacherName || '').trim() || teacherId
   const email = String(params.email || '').trim()
   safeLocalStorageSetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, accessToken)
-  safeLocalStorageSetItem('teacherRoutingTeacherId', teacherId)
   safeLocalStorageSetItem(
     TEACHER_AUTH_SUBJECT_KEY,
     JSON.stringify({ teacher_id: teacherId, teacher_name: teacherName, ...(email ? { email } : {}) }),
@@ -60,6 +59,5 @@ export const writeTeacherAuthSession = (params: {
 export const clearTeacherAuthSession = (): void => {
   safeLocalStorageRemoveItem(TEACHER_AUTH_ACCESS_TOKEN_KEY)
   safeLocalStorageRemoveItem(TEACHER_AUTH_SUBJECT_KEY)
-  safeLocalStorageRemoveItem('teacherRoutingTeacherId')
   emitTeacherAuthUpdated()
 }

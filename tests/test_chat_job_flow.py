@@ -178,8 +178,8 @@ class ChatJobFlowTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
-            app_mod.teacher_assignment_preflight = lambda _req: None  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().teacher_assignment_preflight = lambda _req: None  # type: ignore[attr-defined]
             captured = {"skill_id": None}
 
             def fake_run_agent(
@@ -188,7 +188,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 last_user = ""
                 for m in reversed(messages or []):
@@ -198,7 +198,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 captured["skill_id"] = skill_id
                 return {"reply": f"echo:{role_hint}:{last_user}"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 payload = {
@@ -222,7 +222,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(job_id_1, job_id_2)
 
                 # Deterministic: process job synchronously.
-                app_mod.process_chat_job(job_id_1)
+                app_mod.get_core().process_chat_job(job_id_1)
 
                 res_status = client.get("/chat/status", params={"job_id": job_id_1})
                 self.assertEqual(res_status.status_code, 200)
@@ -240,7 +240,7 @@ class ChatJobFlowTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
             with TestClient(app_mod.app) as client:
                 res = client.get("/chat/status", params={"job_id": "cjob_missing_001"})
                 self.assertEqual(res.status_code, 404)
@@ -252,7 +252,7 @@ class ChatJobFlowTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             class _FakeGatewayResp:
                 def __init__(self, text: str):
@@ -263,61 +263,47 @@ class ChatJobFlowTest(unittest.TestCase):
 
             calls = []
 
-            def fake_generate(req, provider=None, mode=None, model=None, allow_fallback=True):
+            def fake_generate(
+                req,
+                provider=None,
+                mode=None,
+                model=None,
+                allow_fallback=True,
+                target_override=None,
+                token_sink=None,
+            ):
                 calls.append(
                     {
                         "provider": provider,
                         "mode": mode,
                         "model": model,
                         "allow_fallback": allow_fallback,
+                        "target_override": isinstance(target_override, dict),
                     }
                 )
                 return _FakeGatewayResp(f"model:{model or ''}")
 
-            app_mod.LLM_GATEWAY.generate = fake_generate  # type: ignore[attr-defined]
+            app_mod.get_core().LLM_GATEWAY.generate = fake_generate  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 for teacher_id, model_name in (
                     ("teacher_alpha", "model-alpha"),
                     ("teacher_beta", "model-beta"),
                 ):
-                    config = {
-                        "enabled": True,
-                        "channels": [
-                            {
-                                "id": "chat_main",
-                                "target": {
+                    update = client.put(
+                        "/teacher/model-config",
+                        json={
+                            "teacher_id": teacher_id,
+                            "models": {
+                                "conversation": {
                                     "provider": "openai",
                                     "mode": "openai-chat",
                                     "model": model_name,
-                                },
-                            }
-                        ],
-                        "rules": [
-                            {
-                                "id": "chat_rule",
-                                "priority": 100,
-                                "match": {"roles": ["teacher"], "kinds": ["chat.skill"]},
-                                "route": {"channel_id": "chat_main"},
-                            }
-                        ],
-                    }
-                    create = client.post(
-                        "/teacher/llm-routing/proposals",
-                        json={
-                            "teacher_id": teacher_id,
-                            "note": f"seed-{teacher_id}",
-                            "config": config,
+                                }
+                            },
                         },
                     )
-                    self.assertEqual(create.status_code, 200)
-                    proposal_id = create.json().get("proposal_id")
-                    self.assertTrue(proposal_id)
-                    review = client.post(
-                        f"/teacher/llm-routing/proposals/{proposal_id}/review",
-                        json={"teacher_id": teacher_id, "approve": True},
-                    )
-                    self.assertEqual(review.status_code, 200)
+                    self.assertEqual(update.status_code, 200)
 
                 for teacher_id, request_id, expected_model in (
                     ("teacher_alpha", "req_teacher_alpha_001", "model-alpha"),
@@ -334,7 +320,7 @@ class ChatJobFlowTest(unittest.TestCase):
                     )
                     self.assertEqual(start.status_code, 200)
                     job_id = start.json()["job_id"]
-                    app_mod.process_chat_job(job_id)
+                    app_mod.get_core().process_chat_job(job_id)
                     status = client.get("/chat/status", params={"job_id": job_id})
                     self.assertEqual(status.status_code, 200)
                     payload = status.json()
@@ -349,14 +335,14 @@ class ChatJobFlowTest(unittest.TestCase):
             self.assertIn("model-alpha", routed_models)
             self.assertIn("model-beta", routed_models)
 
-    def test_chat_start_rejects_agent_id_payload(self):
+    def test_chat_start_rejects_unknown_agent_id_payload(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 payload = {
@@ -366,7 +352,7 @@ class ChatJobFlowTest(unittest.TestCase):
                     "messages": [{"role": "user", "content": "hello"}],
                 }
                 res = client.post("/chat/start", json=payload)
-                self.assertEqual(res.status_code, 400)
+                self.assertEqual(res.status_code, 422)
 
 
 class ChatJobStateMachineTest(unittest.TestCase):
@@ -411,7 +397,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -421,12 +407,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -444,7 +430,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -469,7 +455,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -479,12 +465,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_total_mode_analysis"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -502,7 +488,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -527,7 +513,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -537,12 +523,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -560,7 +546,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -590,10 +576,10 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             diag_events = []
-            original_diag_log = app_mod.diag_log
+            original_diag_log = app_mod.get_core().diag_log
 
             def _capture_diag(event, payload=None):
                 diag_events.append((str(event), payload or {}))
@@ -602,7 +588,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 except Exception:
                     pass
 
-            app_mod.diag_log = _capture_diag  # type: ignore[attr-defined]
+            app_mod.get_core().diag_log = _capture_diag  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -612,12 +598,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_subject_score_reply"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -635,7 +621,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -658,7 +644,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -668,12 +654,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -691,7 +677,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -711,7 +697,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -721,12 +707,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -744,7 +730,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)
@@ -764,7 +750,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
             calls = {"run_agent": 0}
 
@@ -774,12 +760,12 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                agent_id=None,
+                event_sink=None,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "normal_subject_mode_reply"}
 
-            app_mod.run_agent = fake_run_agent  # type: ignore[attr-defined]
+            app_mod.get_core().run_agent = fake_run_agent  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -797,7 +783,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 job_id = str(start.json().get("job_id") or "")
                 self.assertTrue(job_id)
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 status = client.get("/chat/status", params={"job_id": job_id})
                 self.assertEqual(status.status_code, 200)

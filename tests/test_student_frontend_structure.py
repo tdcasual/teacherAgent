@@ -64,16 +64,13 @@ def test_student_app_composer_hint_uses_selector_layer() -> None:
     assert "selectComposerHint" in source
 
 
-def test_student_app_passes_active_persona_into_send_flow() -> None:
+def test_student_app_does_not_pass_persona_into_send_flow() -> None:
     source = _STUDENT_APP_PATH.read_text(encoding="utf-8")
-    assert "activePersonaId: state.personaEnabled ? state.activePersonaId : ''" in source
+    assert "activePersonaId" not in source
 
 
-def test_student_topbar_contains_persona_controls() -> None:
+def test_student_topbar_has_no_persona_controls() -> None:
     source = _STUDENT_TOPBAR_PATH.read_text(encoding="utf-8")
-    assert "角色卡" in source
-    assert "onTogglePersonaEnabled" in source
-    assert "onSelectPersona" in source
-    assert "onCreateCustomPersona" in source
-    assert "onUpdateCustomPersona" in source
-    assert "onUploadCustomPersonaAvatar" in source
+    assert "角色卡" not in source
+    assert "onTogglePersonaEnabled" not in source
+    assert "onSelectPersona" not in source

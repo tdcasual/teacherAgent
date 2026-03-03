@@ -35,30 +35,8 @@ async def get_assignment_requirements(assignment_id: str, *, deps: AssignmentApp
     return await deps.assignment_requirements_get(assignment_id)
 
 
-async def upload_assignment_legacy(
-    *,
-    assignment_id: str,
-    date: Optional[str],
-    scope: Optional[str],
-    class_name: Optional[str],
-    student_ids: Optional[str],
-    files: list[UploadFile],
-    answer_files: Optional[list[UploadFile]],
-    ocr_mode: Optional[str],
-    language: Optional[str],
-    deps: AssignmentApplicationDeps,
-) -> Any:
-    return await deps.assignment_upload_legacy(
-        assignment_id=assignment_id,
-        date=date,
-        scope=scope,
-        class_name=class_name,
-        student_ids=student_ids,
-        files=files,
-        answer_files=answer_files,
-        ocr_mode=ocr_mode,
-        language=language,
-    )
+async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
+    return await deps.assignment_detail(assignment_id)
 
 
 async def upload_assignment_start(

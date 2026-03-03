@@ -24,8 +24,8 @@ class SkillRouterStressEvalScriptTest(unittest.TestCase):
                 "id": "g002",
                 "role": "teacher",
                 "requested_skill_id": "",
-                "text": "先读取当前模型路由配置，再回滚到版本 3",
-                "expected_skill_id": "physics-llm-routing",
+                "text": "先读取最新考试概览，再生成讲评提纲",
+                "expected_skill_id": "physics-teacher-ops",
                 "bucket": "golden",
             },
             {

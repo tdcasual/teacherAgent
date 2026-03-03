@@ -91,7 +91,7 @@ from .teacher_session_compaction_helpers import (
     _teacher_compact_key,
     _teacher_compact_summary,
     _teacher_compact_transcript,
-    _write_teacher_session_records,
+    write_teacher_session_records,
 )
 
 if os.getenv("PYTEST_CURRENT_TEST"):
@@ -101,18 +101,6 @@ from .teacher_context_service import (
 )
 from .teacher_context_service import (
     build_teacher_context as _build_teacher_context_impl,
-)
-from .teacher_memory_api_service import (
-    TeacherMemoryApiDeps,
-)
-from .teacher_memory_api_service import (
-    delete_proposal_api as _delete_teacher_memory_proposal_api_impl,
-)
-from .teacher_memory_api_service import (
-    list_proposals_api as _list_teacher_memory_proposals_api_impl,
-)
-from .teacher_memory_api_service import (
-    review_proposal_api as _review_teacher_memory_proposal_api_impl,
 )
 from .teacher_memory_apply_service import (
     TeacherMemoryApplyDeps,
@@ -132,7 +120,6 @@ from .teacher_memory_auto_service import (
 from .teacher_memory_deps import *  # noqa: F401,F403
 from .teacher_memory_deps import (
     _teacher_context_deps,
-    _teacher_memory_api_deps,
     _teacher_memory_apply_deps,
     _teacher_memory_auto_deps,
     _teacher_memory_insights_deps,

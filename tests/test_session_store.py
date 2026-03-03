@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import threading
 
 import pytest
 
@@ -185,11 +184,6 @@ def _clr_state_none(monkeypatch):
     return clr
 
 
-def test_load_chat_request_index_returns_empty_when_state_none(monkeypatch):
-    clr = _clr_state_none(monkeypatch)
-    assert clr.load_chat_request_index() == {}
-
-
 def test_chat_request_map_path_returns_none_when_state_none(monkeypatch):
     clr = _clr_state_none(monkeypatch)
     assert clr._chat_request_map_path("req1") is None
@@ -209,34 +203,6 @@ def test_upsert_chat_request_index_noop_when_state_none(monkeypatch):
 def test_get_chat_job_id_by_request_returns_none_when_state_none(monkeypatch):
     clr = _clr_state_none(monkeypatch)
     assert clr.get_chat_job_id_by_request("req1") is None
-
-
-def test_get_chat_job_id_by_request_returns_legacy_when_primary_map_misses(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-
-    from services.api import chat_lane_repository as clr
-
-    request_index_path = tmp_path / "request_index.json"
-    request_index_path.write_text(json.dumps({"req_legacy": "job_legacy"}), encoding="utf-8")
-    request_map_dir = tmp_path / "request_map"
-    request_map_dir.mkdir(parents=True, exist_ok=True)
-
-    state = SimpleNamespace(
-        CHAT_IDEMPOTENCY_STATE=SimpleNamespace(
-            request_index_path=request_index_path,
-            request_map_dir=request_map_dir,
-            request_index_lock=threading.Lock(),
-        )
-    )
-    monkeypatch.setattr(clr, "_get_state", lambda: state)
-    monkeypatch.setattr(clr, "_chat_request_map_get", lambda request_id: None)
-    monkeypatch.setattr(clr, "_chat_job_path", lambda job_id: tmp_path / "jobs" / str(job_id))
-
-    legacy_job_dir = tmp_path / "jobs" / "job_legacy"
-    legacy_job_dir.mkdir(parents=True, exist_ok=True)
-    (legacy_job_dir / "job.json").write_text("{}", encoding="utf-8")
-
-    assert clr.get_chat_job_id_by_request("req_legacy") == "job_legacy"
 
 
 # ---------------------------------------------------------------------------

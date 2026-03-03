@@ -281,16 +281,16 @@ def test_session_lock_gc():
 
 def test_cursor_is_mutable_list():
     from services.api import app as app_mod
-    assert isinstance(app_mod.CHAT_LANE_CURSOR, list) and len(app_mod.CHAT_LANE_CURSOR) == 1
+    assert isinstance(app_mod.get_core().CHAT_LANE_CURSOR, list) and len(app_mod.get_core().CHAT_LANE_CURSOR) == 1
 
 
 def test_cursor_shared_reference():
     from services.api import app as app_mod
-    ref = app_mod.CHAT_LANE_CURSOR
-    orig = app_mod.CHAT_LANE_CURSOR[0]
-    app_mod.CHAT_LANE_CURSOR[0] = 99
+    ref = app_mod.get_core().CHAT_LANE_CURSOR
+    orig = app_mod.get_core().CHAT_LANE_CURSOR[0]
+    app_mod.get_core().CHAT_LANE_CURSOR[0] = 99
     assert ref[0] == 99
-    app_mod.CHAT_LANE_CURSOR[0] = orig
+    app_mod.get_core().CHAT_LANE_CURSOR[0] = orig
 
 
 # ---------------------------------------------------------------------------

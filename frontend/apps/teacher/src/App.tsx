@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
-import type { RoutingSection } from './features/routing/RoutingPage'
-import { isRoutingSection } from './features/routing/routingSections'
 import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
 import TeacherTopbar from './features/layout/TeacherTopbar'
-import TeacherPersonaManager from './features/persona/TeacherPersonaManager'
 import { useChatScroll } from './features/chat/useChatScroll'
 import {
   readTeacherLocalViewState,
@@ -65,6 +62,7 @@ import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSession
 import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
 import { parsePendingChatJob } from './features/chat/pendingChatJob'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
+import { readTeacherAuthSubject } from './features/auth/teacherAuth'
 import {
   isTeacherMobileTab,
   teacherMobilePanelsFromTab,
@@ -175,14 +173,6 @@ export default function App() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [personaManagerOpen, setPersonaManagerOpen] = useState(false)
-  const [settingsLegacyFlat, setSettingsLegacyFlat] = useState(false)
-  const [inlineRoutingOpen, setInlineRoutingOpen] = useState(false)
-  const [settingsHasUnsavedDraft, setSettingsHasUnsavedDraft] = useState(false)
-  const [settingsSection, setSettingsSection] = useState<RoutingSection>(() => {
-    const raw = safeLocalStorageGetItem('teacherSettingsSection')
-    return isRoutingSection(raw) ? raw : 'general'
-  })
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => safeLocalStorageGetItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => safeLocalStorageGetItem('teacherSkillsOpen') !== 'false')
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'workbench'>('chat')
@@ -239,7 +229,7 @@ export default function App() {
   } = useDraftMutations({ uploadDraft, setUploadDraft: workbench.setUploadDraft, examDraft, setExamDraft: workbench.setExamDraft })
 
   const { setWheelScrollZone } = useWheelScrollZone({
-    appRef, sessionSidebarOpen, skillsOpen, inlineRoutingOpen,
+    appRef, sessionSidebarOpen, skillsOpen,
   })
 
   const chooseSkill = (skillId: string, pinned = true) => {
@@ -270,7 +260,7 @@ export default function App() {
   })
 
   useLocalStorageSync({
-    apiBase, favorites, skillsOpen, workbenchTab, sessionSidebarOpen, settingsSection,
+    apiBase, favorites, skillsOpen, workbenchTab, sessionSidebarOpen,
     activeSkillId, skillPinned, localDraftSessionIds, activeSessionId, uploadMode,
     pendingChatJob, pendingChatKey: PENDING_CHAT_KEY,
     activeSessionRef, historyCursorRef, historyHasMoreRef, localDraftSessionIdsRef, pendingChatJobRef,
@@ -452,7 +442,7 @@ export default function App() {
     setExamStatusPollNonce,
   })
 
-  const attachmentTeacherId = (safeLocalStorageGetItem('teacherRoutingTeacherId') || '').trim()
+  const attachmentTeacherId = String(readTeacherAuthSubject()?.teacher_id || '').trim()
   const {
     attachments,
     addFiles,
@@ -543,19 +533,14 @@ export default function App() {
     toggleSkillsWorkbench,
     requestCloseSettings,
     toggleSettingsPanel,
-    openRoutingSettingsPanel,
+    openModelSettingsPanel,
   } = useTeacherUiPanels({
     skillsOpen,
     setSkillsOpen,
     setSessionSidebarOpen,
     isMobileViewport,
-    settingsHasUnsavedDraft,
     settingsOpen,
     setSettingsOpen,
-    setSettingsLegacyFlat,
-    setSettingsHasUnsavedDraft,
-    setInlineRoutingOpen,
-    setSettingsSection,
   })
 
   useEffect(() => {
@@ -602,14 +587,6 @@ export default function App() {
     }
     setMobileTab((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))
   }, [teacherUseMobileShellV2, toggleSkillsWorkbench])
-
-  const openPersonaManager = useCallback(() => {
-    setPersonaManagerOpen(true)
-  }, [])
-
-  const closePersonaManager = useCallback(() => {
-    setPersonaManagerOpen(false)
-  }, [])
 
   const {
     isWorkbenchResizing,
@@ -705,27 +682,16 @@ export default function App() {
         skillsOpen={skillsOpen}
         compactMobile={teacherUseMobileShellV2}
         onToggleSessionSidebar={handleTopbarSessionToggle}
-        onOpenRoutingSettingsPanel={openRoutingSettingsPanel}
-        onOpenPersonaManager={openPersonaManager}
+        onOpenModelSettingsPanel={openModelSettingsPanel}
         onToggleSkillsWorkbench={handleTopbarWorkbenchToggle}
         onToggleSettingsPanel={toggleSettingsPanel}
-      />
-
-      <TeacherPersonaManager
-        open={personaManagerOpen}
-        onClose={closePersonaManager}
-        apiBase={apiBase}
       />
 
       <TeacherSettingsPanel
         open={settingsOpen}
         onClose={requestCloseSettings}
-        settingsSection={settingsSection}
-        onSettingsSectionChange={setSettingsSection}
         apiBase={apiBase}
         onApiBaseChange={setApiBase}
-        onDirtyChange={setSettingsHasUnsavedDraft}
-        settingsLegacyFlat={settingsLegacyFlat}
       />
 
       <div
@@ -787,10 +753,6 @@ export default function App() {
               minSize={isMobileLayout ? 0 : 360}
             >
               <TeacherChatMainContent
-                inlineRoutingOpen={inlineRoutingOpen}
-                apiBase={apiBase}
-                onApiBaseChange={setApiBase}
-                onDirtyChange={setSettingsHasUnsavedDraft}
                 renderedMessages={renderedMessages}
                 sending={sending}
                 hasPendingChatJob={Boolean(pendingChatJob?.job_id)}

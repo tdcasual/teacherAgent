@@ -4,6 +4,7 @@ import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -24,7 +25,7 @@ def write_json(path: Path, payload):
 
 
 class AssignmentProgressTest(unittest.TestCase):
-    def test_assignment_routes_use_assignment_api_deps(self):
+    def test_assignment_routes_use_assignment_handler_deps(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
@@ -32,15 +33,18 @@ class AssignmentProgressTest(unittest.TestCase):
                 sentinel = object()
                 captured = {}
 
-                def _fake_impl(assignment_id: str, *, deps):
+                async def _fake_impl(assignment_id: str, *, deps):
                     captured["assignment_id"] = assignment_id
                     captured["deps"] = deps
                     return {"assignment_id": assignment_id}
 
-                app_mod._get_assignment_detail_api_impl = _fake_impl
-                app_mod._assignment_api_deps = lambda: sentinel
+                app_mod.get_core().assignment_handlers.assignment_detail = _fake_impl
+                with patch(
+                    "services.api.assignment.deps._assignment_handlers_deps",
+                    lambda: sentinel,
+                ):
+                    res = client.get("/assignment/A1")
 
-                res = client.get("/assignment/A1")
                 self.assertEqual(res.status_code, 200)
                 self.assertEqual(captured.get("assignment_id"), "A1")
                 self.assertIs(captured.get("deps"), sentinel)
@@ -122,14 +126,14 @@ class AssignmentProgressTest(unittest.TestCase):
             )
 
             # S001: discussion pass marker + graded submission
-            sess_path = app_mod.student_session_file("S001", assignment_id)
+            sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             sess_path.write_text(
                 json.dumps(
                     {
                         "ts": "2026-02-05T10:10:00",
                         "role": "assistant",
-                        "content": f"{app_mod.DISCUSSION_COMPLETE_MARKER}\n1) ...",
+                        "content": f"{app_mod.get_core().DISCUSSION_COMPLETE_MARKER}\n1) ...",
                     },
                     ensure_ascii=False,
                 )
@@ -179,11 +183,11 @@ class AssignmentProgressTest(unittest.TestCase):
             write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
 
             # Discussion marker so completion depends only on submission best attempt.
-            sess_path = app_mod.student_session_file("S001", assignment_id)
+            sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             sess_path.write_text(
                 json.dumps(
-                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.DISCUSSION_COMPLETE_MARKER},
+                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.get_core().DISCUSSION_COMPLETE_MARKER},
                     ensure_ascii=False,
                 )
                 + "\n",
@@ -257,11 +261,11 @@ class AssignmentProgressTest(unittest.TestCase):
             write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
 
             # Discussion pass marker
-            sess_path = app_mod.student_session_file("S001", assignment_id)
+            sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             sess_path.write_text(
                 json.dumps(
-                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.DISCUSSION_COMPLETE_MARKER},
+                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.get_core().DISCUSSION_COMPLETE_MARKER},
                     ensure_ascii=False,
                 )
                 + "\n",
@@ -310,7 +314,7 @@ class AssignmentProgressTest(unittest.TestCase):
             )
 
             # Session index points to a non-assignment session id
-            index_path = app_mod.student_sessions_index_path("S001")
+            index_path = app_mod.get_core().student_sessions_index_path("S001")
             write_json(
                 index_path,
                 [
@@ -324,11 +328,11 @@ class AssignmentProgressTest(unittest.TestCase):
             )
 
             # Session file contains the marker (assistant role)
-            sess_path = app_mod.student_session_file("S001", "general_2026-02-05")
+            sess_path = app_mod.get_core().student_session_file("S001", "general_2026-02-05")
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             sess_path.write_text(
                 json.dumps(
-                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.DISCUSSION_COMPLETE_MARKER},
+                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.get_core().DISCUSSION_COMPLETE_MARKER},
                     ensure_ascii=False,
                 )
                 + "\n",
@@ -372,11 +376,11 @@ class AssignmentProgressTest(unittest.TestCase):
             write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
 
             # Marker appears in user role only -> should NOT count as discussion pass
-            sess_path = app_mod.student_session_file("S001", assignment_id)
+            sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             sess_path.write_text(
                 json.dumps(
-                    {"ts": "2026-02-05T10:10:00", "role": "user", "content": app_mod.DISCUSSION_COMPLETE_MARKER},
+                    {"ts": "2026-02-05T10:10:00", "role": "user", "content": app_mod.get_core().DISCUSSION_COMPLETE_MARKER},
                     ensure_ascii=False,
                 )
                 + "\n",

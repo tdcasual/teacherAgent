@@ -42,48 +42,12 @@ class ToolDispatchDeps:
     teacher_memory_search: Callable[[str, str, int], Dict[str, Any]]
     teacher_memory_propose: Callable[..., Dict[str, Any]]
     teacher_memory_apply: Callable[..., Dict[str, Any]]
-    teacher_llm_routing_get: Callable[[Dict[str, Any]], Dict[str, Any]]
-    teacher_llm_routing_simulate: Callable[[Dict[str, Any]], Dict[str, Any]]
-    teacher_llm_routing_propose: Callable[[Dict[str, Any]], Dict[str, Any]]
-    teacher_llm_routing_apply: Callable[[Dict[str, Any]], Dict[str, Any]]
-    teacher_llm_routing_rollback: Callable[[Dict[str, Any]], Dict[str, Any]]
-    dynamic_tool_dispatch: Optional[Callable[..., Optional[Dict[str, Any]]]] = None
 
 
 def _require_teacher(role: Optional[str], detail: str) -> Optional[Dict[str, Any]]:
     if role == "teacher":
         return None
     return {"error": "permission denied", "detail": detail}
-
-
-def _maybe_dispatch_dynamic_tool(
-    name: str,
-    args: Dict[str, Any],
-    role: Optional[str],
-    deps: ToolDispatchDeps,
-    *,
-    skill_id: Optional[str],
-    teacher_id: Optional[str],
-) -> Optional[Dict[str, Any]]:
-    fn = deps.dynamic_tool_dispatch
-    if not callable(fn):
-        return None
-    try:
-        return fn(
-            name=name,
-            args=args,
-            role=role,
-            skill_id=skill_id,
-            teacher_id=teacher_id,
-        )
-    except Exception as exc:
-        return {
-            "error": "dynamic_tool_dispatch_failed",
-            "tool": name,
-            "detail": str(exc),
-            "_dynamic_tool": True,
-            "_dynamic_tool_degraded": True,
-        }
 
 
 def tool_dispatch(
@@ -97,16 +61,6 @@ def tool_dispatch(
 ) -> Dict[str, Any]:
     static_tool = deps.tool_registry.get(name)
     if static_tool is None:
-        dynamic = _maybe_dispatch_dynamic_tool(
-            name,
-            args,
-            role,
-            deps,
-            skill_id=skill_id,
-            teacher_id=teacher_id,
-        )
-        if dynamic is not None:
-            return dynamic
         return {"error": f"unknown tool: {name}"}
 
     issues = deps.tool_registry.validate_arguments(name, args)
@@ -241,39 +195,4 @@ def tool_dispatch(
         proposal_id = str(args.get("proposal_id") or "")
         approve = bool(args.get("approve", True))
         return deps.teacher_memory_apply(teacher_id, proposal_id=proposal_id, approve=approve)
-    if name == "teacher.llm_routing.get":
-        denied = _require_teacher(role, "teacher.llm_routing.get requires teacher role")
-        if denied:
-            return denied
-        return deps.teacher_llm_routing_get(args)
-    if name == "teacher.llm_routing.simulate":
-        denied = _require_teacher(role, "teacher.llm_routing.simulate requires teacher role")
-        if denied:
-            return denied
-        return deps.teacher_llm_routing_simulate(args)
-    if name == "teacher.llm_routing.propose":
-        denied = _require_teacher(role, "teacher.llm_routing.propose requires teacher role")
-        if denied:
-            return denied
-        return deps.teacher_llm_routing_propose(args)
-    if name == "teacher.llm_routing.apply":
-        denied = _require_teacher(role, "teacher.llm_routing.apply requires teacher role")
-        if denied:
-            return denied
-        return deps.teacher_llm_routing_apply(args)
-    if name == "teacher.llm_routing.rollback":
-        denied = _require_teacher(role, "teacher.llm_routing.rollback requires teacher role")
-        if denied:
-            return denied
-        return deps.teacher_llm_routing_rollback(args)
-    dynamic = _maybe_dispatch_dynamic_tool(
-        name,
-        args,
-        role,
-        deps,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-    )
-    if dynamic is not None:
-        return dynamic
     return {"error": f"unknown tool: {name}"}

@@ -10,7 +10,6 @@ from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
 from ..assignment_upload_confirm_gate_service import AssignmentUploadConfirmGateError
 from ..assignment_upload_confirm_service import AssignmentUploadConfirmError
 from ..assignment_upload_draft_save_service import AssignmentUploadDraftSaveError
-from ..assignment_upload_legacy_service import AssignmentUploadLegacyError
 from ..assignment_upload_query_service import AssignmentUploadQueryError
 from ..assignment_upload_start_service import AssignmentUploadStartError
 from ..auth_service import AuthError, enforce_upload_job_access
@@ -18,7 +17,6 @@ from ..auth_service import AuthError, enforce_upload_job_access
 
 @dataclass
 class AssignmentUploadHandlerDeps:
-    assignment_upload_legacy: Callable[..., Any]
     start_assignment_upload: Callable[..., Any]
     assignment_upload_status: Callable[[str], Any]
     assignment_upload_draft: Callable[[str], Any]
@@ -33,14 +31,6 @@ async def _maybe_await(value: Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
-
-
-async def assignment_upload(**kwargs: Any) -> Any:
-    deps: AssignmentUploadHandlerDeps = kwargs.pop("deps")
-    try:
-        return await _maybe_await(deps.assignment_upload_legacy(**kwargs))
-    except AssignmentUploadLegacyError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 async def assignment_upload_start(

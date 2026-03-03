@@ -146,12 +146,8 @@ def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
     return "\n\n".join(chunks)
 
 
-def _resolve_source_dirs(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> List[Path]:
+def _resolve_source_dirs(skills_dir: Path) -> List[Path]:
     sources: List[Path] = []
-
-    # Teacher skills dir has lowest priority (scanned first, overridden by later)
-    if teacher_skills_dir is not None:
-        sources.append(_normalize_path(teacher_skills_dir))
 
     primary = _normalize_path(skills_dir)
     sources.append(primary)
@@ -282,9 +278,6 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
                 instructions = f"{instructions}\n\n{include_text}"
             else:
                 instructions = include_text
-        # For backward compat: if no explicit desc in frontmatter, use body as desc
-        if not desc and body:
-            desc = body
 
         keywords = _as_str_list(fm.get("keywords"))
 
@@ -352,8 +345,8 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
     return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml not found")
 
 
-def load_skills(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> LoadedSkills:
-    source_dirs = _resolve_source_dirs(skills_dir, teacher_skills_dir=teacher_skills_dir)
+def load_skills(skills_dir: Path) -> LoadedSkills:
+    source_dirs = _resolve_source_dirs(skills_dir)
     key = "||".join(str(_normalize_path(src)) for src in source_dirs)
     sig = _signature(source_dirs)
 
@@ -364,7 +357,6 @@ def load_skills(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> 
         gen_at_start = _CACHE_GEN
 
     # Build source markers for source_type tagging.
-    teacher_dir_resolved = _normalize_path(teacher_skills_dir) if teacher_skills_dir else None
     primary_dir_resolved = _normalize_path(skills_dir)
     claude_dir_resolved = _normalize_path(Path(os.path.expanduser("~")) / ".claude" / "skills")
 
@@ -388,9 +380,7 @@ def load_skills(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> 
             if spec is not None:
                 # Tag source_type based on which directory the skill came from.
                 source_type = "system"
-                if teacher_dir_resolved and resolved_source == teacher_dir_resolved:
-                    source_type = "teacher"
-                elif resolved_source == claude_dir_resolved and resolved_source != primary_dir_resolved:
+                if resolved_source == claude_dir_resolved and resolved_source != primary_dir_resolved:
                     source_type = "claude"
                 spec = replace(spec, source_type=source_type)
                 skills[skill_id] = spec
@@ -407,7 +397,7 @@ def load_skills(skills_dir: Path, teacher_skills_dir: Optional[Path] = None) -> 
 
 
 def clear_cache() -> None:
-    """Clear the skill loader cache. Call after CRUD operations on teacher skills."""
+    """Clear the skill loader cache."""
     global _CACHE_GEN
     with _CACHE_LOCK:
         _CACHE.clear()

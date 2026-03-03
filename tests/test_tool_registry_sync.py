@@ -29,7 +29,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
 
 def _patch_call_llm(app_mod, fake_call_llm):
     # Keep app module and currently wired core in sync; test order can switch the active core.
-    app_mod.call_llm = fake_call_llm  # type: ignore[attr-defined]
+    app_mod.get_core().call_llm = fake_call_llm  # type: ignore[attr-defined]
     try:
         from services.api.wiring import get_app_core
 
@@ -41,7 +41,7 @@ def _patch_call_llm(app_mod, fake_call_llm):
 
 class ToolRegistrySyncTest(unittest.TestCase):
     def test_registry_covers_teacher_allowed_tools(self):
-        from services.api.app import allowed_tools
+        from services.api.context_runtime_facade import allowed_tools
         from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
         missing = sorted(set(allowed_tools("teacher")) - set(DEFAULT_TOOL_REGISTRY.names()))
@@ -79,7 +79,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
 
             _patch_call_llm(app_mod, fake_call_llm)
 
-            result = app_mod.run_agent(
+            result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
                 skill_id="physics-core-examples",
@@ -91,6 +91,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
             )
 
     def test_run_agent_default_skill_keeps_teacher_tools(self):
+        from services.api.context_runtime_facade import allowed_tools
+
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_api(tmp)
@@ -103,20 +105,13 @@ class ToolRegistrySyncTest(unittest.TestCase):
 
             _patch_call_llm(app_mod, fake_call_llm)
 
-            result = app_mod.run_agent(
+            result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
                 skill_id="physics-teacher-ops",
             )
             self.assertEqual(result.get("reply"), "ok")
-            denied = {
-                "teacher.llm_routing.get",
-                "teacher.llm_routing.simulate",
-                "teacher.llm_routing.propose",
-                "teacher.llm_routing.apply",
-                "teacher.llm_routing.rollback",
-            }
-            self.assertEqual(set(captured.get("tool_names") or []), set(app_mod.allowed_tools("teacher")) - denied)
+            self.assertEqual(set(captured.get("tool_names") or []), set(allowed_tools("teacher")))
 
     def test_mcp_tools_list_matches_registry(self):
         with TemporaryDirectory() as td:

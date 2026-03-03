@@ -1,5 +1,7 @@
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _read(path: str) -> str:
     return Path(path).read_text(encoding="utf-8")
@@ -11,13 +13,9 @@ def test_markdown_absolutize_uses_validated_api_base() -> None:
     assert "const base = normalizeApiBase(apiBase)" in source
 
 
-def test_teacher_routing_and_persona_apis_use_safe_error_mapping() -> None:
-    routing = _read("frontend/apps/teacher/src/features/routing/routingApi.ts")
-    persona = _read("frontend/apps/teacher/src/features/persona/personaApi.ts")
-    assert "toUserFacingErrorMessage" in routing
-    assert "toUserFacingErrorMessage" in persona
-    assert "JSON.stringify(detail || data || {})" not in routing
-    assert "JSON.stringify(detail || data || {})" not in persona
+def test_teacher_legacy_routing_and_persona_frontend_files_removed() -> None:
+    assert not (_ROOT / "frontend/apps/teacher/src/features/routing").exists()
+    assert not (_ROOT / "frontend/apps/teacher/src/features/persona").exists()
 
 
 def test_student_and_teacher_error_helpers_use_shared_user_facing_mapper() -> None:

@@ -18,8 +18,9 @@ def main() -> int:
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-    # Import from project runtime (repo root on PYTHONPATH when run via `python3` in this repo).
-    from services.api.app import APP_ROOT, allowed_tools  # type: ignore
+    # Import from domain modules directly instead of app facade.
+    from services.api.config import APP_ROOT  # type: ignore
+    from services.api.context_runtime_facade import allowed_tools  # type: ignore
     from services.api.skills.loader import load_skills  # type: ignore
     from services.api.skills.runtime import compile_skill_runtime  # type: ignore
     from services.common.tool_registry import DEFAULT_TOOL_REGISTRY  # type: ignore

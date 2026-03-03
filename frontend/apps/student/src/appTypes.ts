@@ -99,26 +99,6 @@ export type StudentVerifyCandidate = {
   password_set?: boolean
 }
 
-export type StudentPersonaCard = {
-  persona_id: string
-  name?: string
-  summary?: string
-  source?: string
-  teacher_id?: string
-  avatar_url?: string
-  review_status?: string
-  style_rules?: string[]
-  few_shot_examples?: string[]
-}
-
-export type StudentPersonaListResponse = {
-  ok: boolean
-  student_id: string
-  assigned: StudentPersonaCard[]
-  custom: StudentPersonaCard[]
-  active_persona_id: string
-}
-
 export type StudentIdentifyResponse = {
   ok: boolean
   error?: string

@@ -45,24 +45,22 @@ def _auth_headers(*, actor_id: str, role: str, secret: str) -> Dict[str, str]:
 
 
 class ChartExecToolTest(unittest.TestCase):
-    def test_chart_exec_dispatch_uses_chart_api_service_deps(self):
+    def test_chart_exec_dispatch_delegates_to_execute_chart_exec(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            sentinel = object()
             captured = {}
 
-            def fake_impl(args, *, deps):  # type: ignore[no-untyped-def]
+            def fake_execute(args, app_root, uploads_dir):  # type: ignore[no-untyped-def]
                 captured["args"] = dict(args)
-                captured["deps"] = deps
+                captured["app_root"] = app_root
+                captured["uploads_dir"] = uploads_dir
                 return {"ok": True}
 
-            app_mod._chart_exec_api_impl = fake_impl  # type: ignore[attr-defined]
-            app_mod._chart_api_deps = lambda: sentinel  # type: ignore[attr-defined]
-
-            res = app_mod.tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
             self.assertTrue(res.get("ok"))
             self.assertEqual((captured.get("args") or {}).get("python_code"), "print('hi')")
-            self.assertIs(captured.get("deps"), sentinel)
+            self.assertTrue(str(captured.get("uploads_dir", "")).endswith("uploads"))
 
     def test_chart_exec_dispatch_calls_executor_for_teacher(self):
         with TemporaryDirectory() as td:
@@ -75,8 +73,8 @@ class ChartExecToolTest(unittest.TestCase):
                 called["uploads_dir"] = uploads_dir
                 return {"ok": True, "run_id": "chr_test", "image_url": "/charts/chr_test/main.png"}
 
-            app_mod.execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            res = app_mod.tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
             self.assertTrue(res.get("ok"))
             self.assertEqual(called.get("args", {}).get("python_code"), "print('hi')")
             self.assertTrue(str(called.get("uploads_dir", "")).endswith("uploads"))

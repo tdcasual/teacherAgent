@@ -5,6 +5,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException
 
 from ..auth_service import AuthError, resolve_student_scope
+from ..session_history_service import SessionHistoryError
 
 
 def _scoped_student_id(student_id: str | None) -> str:
@@ -23,23 +24,16 @@ def register_student_history_routes(router: APIRouter, core: Any) -> None:
     def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0) -> Any:
         sid = _scoped_student_id(student_id)
         try:
-            return core._student_history_sessions_api_impl(
-                sid,
-                limit=limit,
-                cursor=cursor,
-                deps=core._session_history_api_deps(),
-            )
-        except core.SessionHistoryApiError as exc:
+            return core.student_history_sessions(sid, limit=limit, cursor=cursor)
+        except SessionHistoryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
     @router.get("/student/session/view-state")
     def student_session_view_state(student_id: str) -> Any:
         sid = _scoped_student_id(student_id)
         try:
-            return core._student_session_view_state_api_impl(
-                sid, deps=core._session_history_api_deps()
-            )
-        except core.SessionHistoryApiError as exc:
+            return core.student_session_view_state(sid)
+        except SessionHistoryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
     @router.put("/student/session/view-state")
@@ -47,10 +41,8 @@ def register_student_history_routes(router: APIRouter, core: Any) -> None:
         payload = dict(req or {})
         payload["student_id"] = _scoped_student_id(str(payload.get("student_id") or ""))
         try:
-            return core._update_student_session_view_state_api_impl(
-                payload, deps=core._session_history_api_deps()
-            )
-        except core.SessionHistoryApiError as exc:
+            return core.update_student_session_view_state(payload)
+        except SessionHistoryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
     @router.get("/student/history/session")
@@ -63,13 +55,12 @@ def register_student_history_routes(router: APIRouter, core: Any) -> None:
     ) -> Any:
         sid = _scoped_student_id(student_id)
         try:
-            return core._student_history_session_api_impl(
+            return core.student_history_session(
                 sid,
                 session_id,
                 cursor=cursor,
                 limit=limit,
                 direction=direction,
-                deps=core._session_history_api_deps(),
             )
-        except core.SessionHistoryApiError as exc:
+        except SessionHistoryError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)

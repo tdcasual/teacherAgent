@@ -18,26 +18,22 @@ def load_app(tmp_dir: Path):
 
 
 class StudentHistoryFlowTest(unittest.TestCase):
-    def test_student_profile_route_uses_profile_api_deps(self):
+    def test_student_profile_route_uses_student_profile_get_directly(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
-                sentinel = object()
                 captured = {}
 
-                def _fake_impl(student_id: str, *, deps):
+                def _fake_impl(student_id: str):
                     captured["student_id"] = student_id
-                    captured["deps"] = deps
                     return {"student_id": student_id}
 
-                app_mod._get_profile_api_impl = _fake_impl
-                app_mod._student_profile_api_deps = lambda: sentinel
+                app_mod.get_core().student_profile_get = _fake_impl
 
                 res = client.get("/student/profile/S1")
                 self.assertEqual(res.status_code, 200)
                 self.assertEqual(captured.get("student_id"), "S1")
-                self.assertIs(captured.get("deps"), sentinel)
 
     def test_student_chat_writes_history_and_lists_sessions(self):
         with TemporaryDirectory() as td:
@@ -46,9 +42,9 @@ class StudentHistoryFlowTest(unittest.TestCase):
             from services.api.workers import chat_worker_service
 
             chat_worker_service.start_chat_worker = lambda **_: None
-            app_mod.CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
+            app_mod.get_core().CHAT_JOB_WORKER_STARTED = True  # type: ignore[attr-defined]
 
-            app_mod.run_agent = lambda *args, **kwargs: {"reply": "stub-reply"}  # type: ignore[assignment]
+            app_mod.get_core().run_agent = lambda *args, **kwargs: {"reply": "stub-reply"}  # type: ignore[assignment]
 
             with TestClient(app_mod.app) as client:
                 start = client.post(
@@ -81,7 +77,7 @@ class StudentHistoryFlowTest(unittest.TestCase):
                 self.assertEqual(len(msgs_before_done), 1)
                 self.assertEqual(msgs_before_done[0]["role"], "user")
 
-                app_mod.process_chat_job(job_id)
+                app_mod.get_core().process_chat_job(job_id)
 
                 sessions = client.get("/student/history/sessions", params={"student_id": "S001"})
                 self.assertEqual(sessions.status_code, 200)

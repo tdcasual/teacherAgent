@@ -11,7 +11,7 @@ import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from fastapi import HTTPException
 
@@ -20,7 +20,6 @@ from .config import APP_ROOT
 _log = logging.getLogger(__name__)
 
 __all__ = [
-    "model_dump_compat",
     "run_script",
     "normalize",
     "parse_ids_value",
@@ -35,12 +34,6 @@ __all__ = [
     "_is_safe_tool_id",
     "_resolve_app_path",
 ]
-
-
-def model_dump_compat(model: Any, *, exclude_none: bool = False) -> Dict[str, Any]:
-    if hasattr(model, "model_dump"):
-        return model.model_dump(exclude_none=exclude_none)
-    return model.dict(exclude_none=exclude_none)
 
 
 def run_script(args: List[str]) -> str:

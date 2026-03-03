@@ -100,9 +100,6 @@ def _validate_start_request(req: Any, deps: ChatStartDeps) -> str:
     request_id = str(req.request_id or "").strip()
     if not request_id:
         raise deps.http_error(400, "request_id is required")
-    legacy_agent_id = str(getattr(req, "agent_id", "") or "").strip()
-    if legacy_agent_id:
-        raise deps.http_error(400, "agent_id is no longer supported; use skill_id")
     return request_id
 
 
@@ -127,7 +124,6 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "messages": [{"role": m.role, "content": m.content} for m in req.messages],
         "role": req.role,
         "skill_id": req.skill_id,
-        "persona_id": req.persona_id,
         "teacher_id": teacher_id if role_hint == "teacher" else req.teacher_id,
         "student_id": req.student_id,
         "assignment_id": req.assignment_id,
@@ -154,7 +150,6 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
-            str(req_payload.get("persona_id") or "").strip(),
             str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
             ",".join(attachment_ids),
@@ -237,7 +232,6 @@ def _build_job_record(
         "progress": 0,
         "role": context.role_hint or req.role or "unknown",
         "skill_id": req.skill_id or "",
-        "persona_id": req.persona_id or "",
         "teacher_id": context.teacher_id,
         "student_id": req.student_id or "",
         "assignment_id": req.assignment_id or "",

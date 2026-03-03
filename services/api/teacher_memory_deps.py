@@ -50,7 +50,6 @@ from .session_store import (
     save_teacher_sessions_index,
 )
 from .teacher_context_service import TeacherContextDeps
-from .teacher_memory_api_service import TeacherMemoryApiDeps
 from .teacher_memory_apply_service import TeacherMemoryApplyDeps
 from .teacher_memory_auto_service import TeacherMemoryAutoDeps
 from .teacher_memory_insights_service import TeacherMemoryInsightsDeps
@@ -72,7 +71,6 @@ __all__ = [
     "_teacher_memory_auto_deps",
     "_teacher_context_deps",
     "_teacher_session_compaction_deps",
-    "_teacher_memory_api_deps",
 ]
 
 
@@ -266,17 +264,8 @@ def _teacher_session_compaction_deps():
         teacher_compact_allowed=tmc._teacher_compact_allowed,
         teacher_session_file=teacher_session_file,
         teacher_compact_summary=tmc._teacher_compact_summary,
-        write_teacher_session_records=tmc._write_teacher_session_records,
+        write_teacher_session_records=tmc.write_teacher_session_records,
         mark_teacher_session_compacted=tmc._mark_teacher_session_compacted,
         diag_log=_app_core().diag_log,
     )
 
-
-def _teacher_memory_api_deps():
-    tmc = _tmc()
-    return TeacherMemoryApiDeps(
-        resolve_teacher_id=_app_core().resolve_teacher_id,
-        teacher_memory_list_proposals=tmc.teacher_memory_list_proposals,
-        teacher_memory_apply=tmc.teacher_memory_apply,
-        teacher_memory_delete=tmc.teacher_memory_delete_proposal,
-    )

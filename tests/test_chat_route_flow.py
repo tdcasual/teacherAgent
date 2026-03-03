@@ -28,7 +28,7 @@ class ChatRouteFlowTest(unittest.TestCase):
                 captured["msg_count"] = len(getattr(req, "messages", []) or [])
                 return "delegated reply", "teacher", "hello"
 
-            app_mod._compute_chat_reply_sync = fake_compute  # type: ignore[attr-defined]
+            app_mod.get_core().compute_chat_reply_sync = fake_compute  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 res = client.post(
@@ -60,10 +60,10 @@ class ChatRouteFlowTest(unittest.TestCase):
             def fake_enqueue(_payload):  # type: ignore[no-untyped-def]
                 calls["enqueue"] += 1
 
-            app_mod._compute_chat_reply_sync = fake_compute  # type: ignore[attr-defined]
-            app_mod.student_profile_update = fake_profile_update  # type: ignore[attr-defined]
-            app_mod.enqueue_profile_update = fake_enqueue  # type: ignore[attr-defined]
-            app_mod.PROFILE_UPDATE_ASYNC = False  # type: ignore[attr-defined]
+            app_mod.get_core().compute_chat_reply_sync = fake_compute  # type: ignore[attr-defined]
+            app_mod.get_core().student_profile_update = fake_profile_update  # type: ignore[attr-defined]
+            app_mod.get_core().enqueue_profile_update = fake_enqueue  # type: ignore[attr-defined]
+            app_mod.get_core().PROFILE_UPDATE_ASYNC = False  # type: ignore[attr-defined]
 
             with TestClient(app_mod.app) as client:
                 res = client.post(

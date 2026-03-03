@@ -17,10 +17,10 @@ def test_markdown_skill_supports_advanced_frontmatter_and_includes(tmp_path: Pat
     system_skills = tmp_path / "system_skills"
     system_skills.mkdir(parents=True, exist_ok=True)
 
-    teacher_skill_dir = tmp_path / "teacher_skills" / "advanced"
-    _write_text(teacher_skill_dir / "references" / "guardrails.md", "必须输出三段式。")
+    skill_dir = system_skills / "advanced"
+    _write_text(skill_dir / "references" / "guardrails.md", "必须输出三段式。")
     _write_text(
-        teacher_skill_dir / "SKILL.md",
+        skill_dir / "SKILL.md",
         textwrap.dedent(
             """\
             ---
@@ -74,10 +74,10 @@ def test_markdown_skill_supports_advanced_frontmatter_and_includes(tmp_path: Pat
         ),
     )
 
-    loaded = load_skills(system_skills, teacher_skills_dir=tmp_path / "teacher_skills")
+    loaded = load_skills(system_skills)
     spec = loaded.skills["advanced"]
 
-    assert spec.source_type == "teacher"
+    assert spec.source_type == "system"
     assert spec.allowed_roles == ["teacher"]
     assert spec.ui.prompts == ["生成小测"]
     assert spec.ui.examples == ["给我十道题"]
@@ -110,24 +110,24 @@ def test_markdown_skill_can_load_local_prompt_module(tmp_path: Path) -> None:
     system_skills = tmp_path / "system_skills"
     system_skills.mkdir(parents=True, exist_ok=True)
 
-    teacher_skill_dir = tmp_path / "teacher_skills" / "local-module-skill"
-    _write_text(teacher_skill_dir / "references" / "module.md", "LOCAL MODULE CONTENT")
+    skill_dir = system_skills / "local-module-skill"
+    _write_text(skill_dir / "references" / "module.md", "LOCAL MODULE CONTENT")
     _write_text(
-        teacher_skill_dir / "SKILL.md",
+        skill_dir / "SKILL.md",
         textwrap.dedent(
             """\
             ---
             title: Local Module Skill
             agent:
               prompt_modules:
-                - references/module.md
+                - local:references/module.md
             ---
             主体说明
             """
         ),
     )
 
-    loaded = load_skills(system_skills, teacher_skills_dir=tmp_path / "teacher_skills")
+    loaded = load_skills(system_skills)
     spec = loaded.skills["local-module-skill"]
     runtime = compile_skill_runtime(spec)
 

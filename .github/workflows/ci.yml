@@ -74,9 +74,7 @@ jobs:
             services/api/request_context.py \
             services/api/fs_atomic.py \
             services/api/runtime/runtime_manager.py \
-            services/api/llm_routing.py \
-            services/api/llm_routing_resolver.py \
-            services/api/llm_routing_proposals.py \
+            services/api/teacher_model_config_service.py \
             services/api/teacher_provider_registry_service.py \
             services/api/chart_executor.py \
             services/api/chart_sandbox.py \

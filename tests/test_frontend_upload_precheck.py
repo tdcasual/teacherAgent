@@ -32,7 +32,7 @@ def test_assignment_workflow_uses_client_side_upload_precheck() -> None:
 
 
 def test_persona_avatar_upload_uses_client_side_precheck() -> None:
-    teacher_source = _read("frontend/apps/teacher/src/features/persona/TeacherPersonaManager.tsx")
-    student_source = _read("frontend/apps/student/src/features/layout/StudentTopbar.tsx")
-    assert "validateAvatarFileBeforeUpload" in teacher_source
-    assert "validateAvatarFileBeforeUpload" in student_source
+    teacher_persona_path = _ROOT / "frontend/apps/teacher/src/features/persona/TeacherPersonaManager.tsx"
+    student_topbar_source = _read("frontend/apps/student/src/features/layout/StudentTopbar.tsx")
+    assert not teacher_persona_path.exists()
+    assert "validateAvatarFileBeforeUpload" not in student_topbar_source

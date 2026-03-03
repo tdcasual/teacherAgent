@@ -113,17 +113,17 @@ def test_assignment_and_exam_status_polling_hooks_avoid_any_hotspots() -> None:
     assert "catch (err: any)" not in exam_polling_source
 
 
-def test_workbench_utils_and_routing_api_avoid_any_hotspots() -> None:
+def test_workbench_utils_and_model_settings_page_avoid_any_hotspots() -> None:
     workbench_utils_source = _read(
         "frontend/apps/teacher/src/features/workbench/workbenchUtils.ts",
     )
-    routing_api_source = _read(
-        "frontend/apps/teacher/src/features/routing/routingApi.ts",
+    model_settings_source = _read(
+        "frontend/apps/teacher/src/features/settings/ModelSettingsPage.tsx",
     )
 
     assert "normalizeDifficulty = (value: any)" not in workbench_utils_source
     assert "difficultyLabel = (value: any)" not in workbench_utils_source
-    assert "(data as any)?.detail" not in routing_api_source
+    assert " as any" not in model_settings_source
 
 
 def test_exam_candidate_analysis_avoids_any_hotspots() -> None:

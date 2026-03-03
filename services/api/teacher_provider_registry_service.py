@@ -238,14 +238,12 @@ def _catalog(registry: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
     defaults = _as_dict(registry.get("defaults"))
-    routing_cfg = _as_dict(registry.get("routing"))
     return {
         "providers": providers,
         "defaults": {
             "provider": _as_str(defaults.get("provider")),
             "mode": _as_str(defaults.get("mode")),
         },
-        "fallback_chain": [str(x) for x in (routing_cfg.get("fallback_chain") or []) if _as_str(x)],
     }
 
 

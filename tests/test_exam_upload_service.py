@@ -1,0 +1,375 @@
+import json
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from services.api.exam_upload_service import (
+    ExamUploadDeps,
+    ExamUploadError,
+    exam_upload_confirm,
+    exam_upload_draft,
+    exam_upload_draft_save,
+    exam_upload_status,
+)
+
+
+class _ConfirmError(Exception):
+    def __init__(self, status_code: int, detail):
+        super().__init__(str(detail))
+        self.status_code = status_code
+        self.detail = detail
+
+
+class ExamUploadServiceTest(unittest.TestCase):
+    def test_status_missing_job_raises_http_mappable_error(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: (_ for _ in ()).throw(FileNotFoundError()),
+            exam_job_path=lambda _job_id: Path("/tmp/none"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        with self.assertRaises(ExamUploadError) as ctx:
+            exam_upload_status("job-missing", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(ctx.exception.detail, "job not found")
+
+    def test_draft_requires_done_or_confirmed(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "processing", "step": "ocr", "progress": 25},
+            exam_job_path=lambda _job_id: Path("/tmp/none"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        with self.assertRaises(ExamUploadError) as ctx:
+            exam_upload_draft("job-1", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual((ctx.exception.detail or {}).get("error"), "job_not_ready")
+
+    def test_draft_save_bumps_version(self):
+        writes = []
+        saves = []
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "draft_version": 2},
+            exam_job_path=lambda _job_id: Path("/tmp/job-2"),
+            load_exam_draft_override=lambda _job_dir: {"meta": {}},
+            save_exam_draft_override=lambda *args, **kwargs: saves.append((args, kwargs)) or {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda job_id, updates: writes.append((job_id, dict(updates))),
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        result = exam_upload_draft_save(
+            job_id="job-2",
+            meta={"class_name": "高二2403班"},
+            questions=[{"question_id": "Q1"}],
+            score_schema={"mode": "question"},
+            answer_key_text="1 A",
+            reparse=False,
+            deps=deps,
+        )
+        self.assertTrue(result.get("ok"))
+        self.assertEqual(result.get("draft_version"), 3)
+        self.assertEqual(writes, [("job-2", {"draft_version": 3})])
+        self.assertEqual(len(saves), 1)
+
+    def test_draft_save_with_selected_candidate_enqueues_reparse(self):
+        writes = []
+        enqueued = []
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "draft_version": 5, "score_schema": {}},
+            exam_job_path=lambda _job_id: Path("/tmp/job-2b"),
+            load_exam_draft_override=lambda _job_dir: {"meta": {}},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda job_id, updates: writes.append((job_id, dict(updates))),
+            enqueue_exam_job=lambda job_id: enqueued.append(job_id),
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        score_schema = {"subject": {"selected_candidate_id": "pair:4:5"}}
+        result = exam_upload_draft_save(
+            job_id="job-2b",
+            meta={"class_name": "高二2403班"},
+            questions=[{"question_id": "Q1"}],
+            score_schema=score_schema,
+            answer_key_text="1 A",
+            reparse=True,
+            deps=deps,
+        )
+        self.assertTrue(result.get("ok"))
+        self.assertEqual(result.get("draft_version"), 6)
+        self.assertEqual(enqueued, ["job-2b"])
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][0], "job-2b")
+        self.assertEqual(writes[0][1].get("status"), "queued")
+        self.assertEqual((writes[0][1].get("score_schema") or {}).get("subject", {}).get("selected_candidate_id"), "pair:4:5")
+
+    def test_draft_save_same_selected_candidate_does_not_requeue(self):
+        writes = []
+        enqueued = []
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {
+                "status": "done",
+                "draft_version": 8,
+                "score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}},
+            },
+            exam_job_path=lambda _job_id: Path("/tmp/job-2c"),
+            load_exam_draft_override=lambda _job_dir: {"meta": {}},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda job_id, updates: writes.append((job_id, dict(updates))),
+            enqueue_exam_job=lambda job_id: enqueued.append(job_id),
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        out = exam_upload_draft_save(
+            job_id="job-2c",
+            meta={"class_name": "高二2403班"},
+            questions=[{"question_id": "Q1"}],
+            score_schema={"subject": {"selected_candidate_id": "pair:4:5"}},
+            answer_key_text="",
+            reparse=True,
+            deps=deps,
+        )
+        self.assertTrue(out.get("ok"))
+        self.assertEqual(enqueued, [])
+        self.assertEqual(writes, [("job-2c", {"draft_version": 9})])
+
+    def test_draft_save_selected_candidate_without_reparse_flag_does_not_requeue(self):
+        writes = []
+        enqueued = []
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "draft_version": 3, "score_schema": {}},
+            exam_job_path=lambda _job_id: Path("/tmp/job-2d"),
+            load_exam_draft_override=lambda _job_dir: {"meta": {}},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda job_id, updates: writes.append((job_id, dict(updates))),
+            enqueue_exam_job=lambda job_id: enqueued.append(job_id),
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        out = exam_upload_draft_save(
+            job_id="job-2d",
+            meta={},
+            questions=[],
+            score_schema={"subject": {"selected_candidate_id": "pair:4:5"}},
+            answer_key_text="",
+            reparse=False,
+            deps=deps,
+        )
+        self.assertTrue(out.get("ok"))
+        self.assertEqual(enqueued, [])
+        self.assertEqual(writes, [("job-2d", {"draft_version": 4})])
+
+    def test_confirm_maps_confirm_error(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done"},
+            exam_job_path=lambda _job_id: Path("/tmp/job-3"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: (_ for _ in ()).throw(
+                _ConfirmError(400, {"error": "exam_id_conflict"})
+            ),
+        )
+        with self.assertRaises(ExamUploadError) as ctx:
+            exam_upload_confirm("job-3", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual((ctx.exception.detail or {}).get("error"), "exam_id_conflict")
+
+    def test_confirm_requires_score_schema_confirmation_when_needed(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "needs_confirm": True},
+            exam_job_path=lambda _job_id: Path("/tmp/job-needs-confirm"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+        )
+        with self.assertRaises(ExamUploadError) as ctx:
+            exam_upload_confirm("job-needs-confirm", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
+
+    def test_confirm_allows_selected_candidate_mapping(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {"status": "done", "needs_confirm": True},
+            exam_job_path=lambda _job_id: Path("/tmp/job-needs-confirm-selected"),
+            load_exam_draft_override=lambda _job_dir: {"score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}}},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True, "exam_id": "EX1"},
+        )
+        out = exam_upload_confirm("job-needs-confirm-selected", deps=deps)
+        self.assertTrue(out.get("ok"))
+
+    def test_confirm_rejects_invalid_selected_candidate_mapping(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {
+                "status": "done",
+                "needs_confirm": True,
+                "score_schema": {
+                    "subject": {
+                        "selected_candidate_id": "pair:4:5",
+                        "selected_candidate_available": False,
+                        "selection_error": "selected_candidate_not_found",
+                    }
+                },
+            },
+            exam_job_path=lambda _job_id: Path("/tmp/job-needs-confirm-selected-invalid"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True, "exam_id": "EX_FAIL"},
+        )
+        with self.assertRaises(ExamUploadError) as ctx:
+            exam_upload_confirm("job-needs-confirm-selected-invalid", deps=deps)
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual((ctx.exception.detail or {}).get("error"), "score_schema_confirm_required")
+
+    def test_confirm_allows_selected_candidate_from_job_score_schema(self):
+        deps = ExamUploadDeps(
+            load_exam_job=lambda _job_id: {
+                "status": "done",
+                "needs_confirm": True,
+                "score_schema": {"subject": {"selected_candidate_id": "pair:4:5"}},
+            },
+            exam_job_path=lambda _job_id: Path("/tmp/job-needs-confirm-selected-job"),
+            load_exam_draft_override=lambda _job_dir: {},
+            save_exam_draft_override=lambda *_args, **_kwargs: {},
+            build_exam_upload_draft=lambda *_args, **_kwargs: {},
+            exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+            parse_exam_answer_key_text=lambda _text: ([], []),
+            read_text_safe=lambda _path, limit=6000: "",
+            write_exam_job=lambda _job_id, _updates: None,
+            enqueue_exam_job=lambda _job_id: None,
+            confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True, "exam_id": "EX2"},
+        )
+        out = exam_upload_confirm("job-needs-confirm-selected-job", deps=deps)
+        self.assertTrue(out.get("ok"))
+
+    def test_draft_reads_parsed_and_builds_response(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            job_dir = root / "job-4"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(json.dumps({"exam_id": "EX4"}), encoding="utf-8")
+            (job_dir / "answer_text.txt").write_text("1 A", encoding="utf-8")
+            calls = {}
+
+            def _build(job_id, job, parsed, override, *, parse_exam_answer_key_text, answer_text_excerpt):  # type: ignore[no-untyped-def]
+                calls["job_id"] = job_id
+                calls["parsed"] = parsed
+                calls["override"] = override
+                calls["excerpt"] = answer_text_excerpt
+                self.assertTrue(callable(parse_exam_answer_key_text))
+                return {"exam_id": parsed.get("exam_id"), "job_id": job_id}
+
+            deps = ExamUploadDeps(
+                load_exam_job=lambda _job_id: {"status": "done"},
+                exam_job_path=lambda _job_id: job_dir,
+                load_exam_draft_override=lambda _job_dir: {"meta": {"class_name": "高二2403班"}},
+                save_exam_draft_override=lambda *_args, **_kwargs: {},
+                build_exam_upload_draft=_build,
+                exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+                parse_exam_answer_key_text=lambda _text: ([], []),
+                read_text_safe=lambda path, limit=6000: path.read_text(encoding="utf-8")[:limit],
+                write_exam_job=lambda _job_id, _updates: None,
+                enqueue_exam_job=lambda _job_id: None,
+                confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+            )
+            result = exam_upload_draft("job-4", deps=deps)
+            self.assertTrue(result.get("ok"))
+            self.assertEqual((result.get("draft") or {}).get("exam_id"), "EX4")
+            self.assertEqual(calls.get("job_id"), "job-4")
+            self.assertEqual(calls.get("excerpt"), "1 A")
+
+    def test_draft_read_text_failure_logs_context_and_falls_back(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            job_dir = root / "job-5"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(json.dumps({"exam_id": "EX5"}), encoding="utf-8")
+            calls = {}
+
+            def _build(job_id, job, parsed, override, *, parse_exam_answer_key_text, answer_text_excerpt):  # type: ignore[no-untyped-def]
+                calls["job_id"] = job_id
+                calls["parsed"] = parsed
+                calls["override"] = override
+                calls["excerpt"] = answer_text_excerpt
+                self.assertTrue(callable(parse_exam_answer_key_text))
+                return {"exam_id": parsed.get("exam_id"), "job_id": job_id}
+
+            def _read_text_safe(_path, limit=6000):  # type: ignore[no-untyped-def]
+                raise OSError("simulated read failure")
+
+            deps = ExamUploadDeps(
+                load_exam_job=lambda _job_id: {"status": "done"},
+                exam_job_path=lambda _job_id: job_dir,
+                load_exam_draft_override=lambda _job_dir: {"meta": {"class_name": "高二2403班"}},
+                save_exam_draft_override=lambda *_args, **_kwargs: {},
+                build_exam_upload_draft=_build,
+                exam_upload_not_ready_detail=lambda job, message: {"error": "job_not_ready", "status": job.get("status"), "message": message},
+                parse_exam_answer_key_text=lambda _text: ([], []),
+                read_text_safe=_read_text_safe,
+                write_exam_job=lambda _job_id, _updates: None,
+                enqueue_exam_job=lambda _job_id: None,
+                confirm_exam_upload=lambda _job_id, _job, _job_dir: {"ok": True},
+            )
+            with self.assertLogs("services.api.exam_upload_service", level="DEBUG") as logs:
+                result = exam_upload_draft("job-5", deps=deps)
+            self.assertTrue(result.get("ok"))
+            self.assertEqual((result.get("draft") or {}).get("exam_id"), "EX5")
+            self.assertEqual(calls.get("job_id"), "job-5")
+            self.assertEqual(calls.get("excerpt"), "")
+            self.assertTrue(
+                any("failed to read answer_text excerpt at" in msg and "answer_text.txt" in msg for msg in logs.output)
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

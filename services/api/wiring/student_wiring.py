@@ -3,20 +3,16 @@ from __future__ import annotations
 
 __all__ = [
     "_student_submit_deps",
-    "_student_profile_api_deps",
-    "_student_persona_api_deps",
     "_student_import_deps",
     "_student_directory_deps",
-    "_student_ops_api_deps",
+    "_student_ops_deps",
 ]
 
 from datetime import datetime
 
 from ..student_directory_service import StudentDirectoryDeps
 from ..student_import_service import StudentImportDeps
-from ..student_ops_api_service import StudentOpsApiDeps
-from ..student_persona_api_service import StudentPersonaApiDeps
-from ..student_profile_api_service import StudentProfileApiDeps
+from ..student_ops_service import StudentOpsDeps
 from ..student_submit_service import StudentSubmitDeps
 from . import get_app_core as _app_core
 
@@ -29,20 +25,6 @@ def _student_submit_deps():
         student_submissions_dir=_ac.STUDENT_SUBMISSIONS_DIR,
         run_script=_ac.run_script,
         sanitize_filename=_ac.sanitize_filename,
-    )
-
-
-def _student_profile_api_deps():
-    _ac = _app_core()
-    return StudentProfileApiDeps(student_profile_get=_ac.student_profile_get)
-
-
-def _student_persona_api_deps():
-    _ac = _app_core()
-    return StudentPersonaApiDeps(
-        data_dir=_ac.DATA_DIR,
-        uploads_dir=_ac.UPLOADS_DIR,
-        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
 
@@ -65,9 +47,9 @@ def _student_directory_deps():
     )
 
 
-def _student_ops_api_deps():
+def _student_ops_deps():
     _ac = _app_core()
-    return StudentOpsApiDeps(
+    return StudentOpsDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
         sanitize_filename=_ac.sanitize_filename,

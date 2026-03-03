@@ -188,7 +188,7 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
         self.assertEqual(len(providers), 1)
         self.assertEqual((providers[0] or {}).get("provider"), "qwen")
         self.assertEqual((out.get("defaults") or {}).get("provider"), "")
-        self.assertEqual(out.get("fallback_chain"), [])
+        self.assertNotIn("fallback_chain", out)
 
     def test_is_private_host_domain_does_not_emit_parse_error_log(self):
         logger = logging.getLogger("services.api.teacher_provider_registry_service")

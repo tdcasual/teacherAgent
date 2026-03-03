@@ -6,7 +6,6 @@ __all__ = [
     "_upload_llm_deps",
     "_upload_text_deps",
     "_content_catalog_deps",
-    "_chart_api_deps",
     "_chart_agent_run_deps",
     "_lesson_core_tool_deps",
     "_core_example_tool_deps",
@@ -55,11 +54,9 @@ from ..chart_agent_run_service import (
 from ..chart_agent_run_service import (
     chart_agent_packages as _chart_agent_packages_impl,
 )
-from ..chart_api_service import ChartApiDeps
 from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
 from ..core_utils import _is_safe_tool_id, _resolve_app_path
-from ..dynamic_skill_tools import dispatch_dynamic_tool as _dispatch_dynamic_tool_impl
 from ..exam_longform_service import generate_longform_reply as _generate_longform_reply_impl
 from ..exam_score_processing_service import normalize_excel_cell as _normalize_excel_cell_impl
 from ..exam_utils import _safe_int_arg
@@ -110,20 +107,6 @@ def _tool_dispatch_deps():
         teacher_memory_search=_ac.teacher_memory_search,
         teacher_memory_propose=_ac.teacher_memory_propose,
         teacher_memory_apply=_ac.teacher_memory_apply,
-        teacher_llm_routing_get=_ac.teacher_llm_routing_get,
-        teacher_llm_routing_simulate=_ac.teacher_llm_routing_simulate,
-        teacher_llm_routing_propose=_ac.teacher_llm_routing_propose,
-        teacher_llm_routing_apply=_ac.teacher_llm_routing_apply,
-        teacher_llm_routing_rollback=_ac.teacher_llm_routing_rollback,
-        dynamic_tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: _dispatch_dynamic_tool_impl(
-            name=name,
-            args=args,
-            role=role,
-            skill_id=skill_id,
-            teacher_id=teacher_id,
-            teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
-            diag_log=_ac.diag_log,
-        ),
     )
 
 
@@ -160,18 +143,6 @@ def _content_catalog_deps():
         app_root=_ac.APP_ROOT,
         load_profile_file=_ac.load_profile_file,
         load_skills=load_skills,
-        teacher_skills_dir=_ac.TEACHER_SKILLS_DIR,
-    )
-
-
-def _chart_api_deps():
-    _ac = _app_core()
-    return ChartApiDeps(
-        chart_exec=lambda args: _ac.execute_chart_exec(
-            args,
-            app_root=_ac.APP_ROOT,
-            uploads_dir=_ac.UPLOADS_DIR,
-        )
     )
 
 
@@ -239,7 +210,7 @@ def _agent_runtime_deps():
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
         diag_log=_ac.diag_log,
-        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id, teacher_skills_dir=_ac.TEACHER_SKILLS_DIR),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
         allowed_tools=_ac.allowed_tools,
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,

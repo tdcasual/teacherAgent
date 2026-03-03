@@ -80,7 +80,7 @@ class SkillLoaderDualSourceTest(unittest.TestCase):
 
             self.assertIn("claude-notes", loaded.skills)
             self.assertEqual(loaded.skills["claude-notes"].title, "Claude Notes")
-            self.assertIn("specialized helper", loaded.skills["claude-notes"].desc)
+            self.assertEqual(loaded.skills["claude-notes"].desc, "")
             self.assertEqual(loaded.skills["claude-notes"].source_type, "claude")
 
     def test_invalid_claude_override_keeps_project_skill(self):

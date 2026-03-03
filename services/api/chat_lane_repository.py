@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
 import re
@@ -18,7 +17,6 @@ from .config import (
     REDIS_URL,
     TENANT_ID,
 )
-from .job_repository import _atomic_write_json
 from .paths import resolve_teacher_id, safe_fs_id
 
 # ---------------------------------------------------------------------------
@@ -254,26 +252,6 @@ def _chat_recent_job_locked(lane_id: str, fingerprint: str) -> Optional[str]:
 # Request index / idempotency
 # ---------------------------------------------------------------------------
 
-def load_chat_request_index() -> Dict[str, str]:
-    _ac = _get_state()
-    if _ac.CHAT_IDEMPOTENCY_STATE is None:
-        return {}
-    request_index_path = _ac.CHAT_IDEMPOTENCY_STATE.request_index_path
-    try:
-        data = json.loads(request_index_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
-    except Exception as exc:
-        _log.warning("load_chat_request_index: corrupt JSON at %s: %s", request_index_path, exc)
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    out: Dict[str, str] = {}
-    for k, v in data.items():
-        if isinstance(k, str) and isinstance(v, str):
-            out[k] = v
-    return out
-
 
 def _chat_request_map_path(request_id: str) -> Optional[Path]:
     _ac = _get_state()
@@ -336,44 +314,8 @@ def _chat_request_map_set_if_absent(request_id: str, job_id: str) -> bool:
 
 
 def upsert_chat_request_index(request_id: str, job_id: str) -> None:
-    """
-    Best-effort idempotency mapping. Primary mapping is per-request lockfile under CHAT_REQUEST_MAP_DIR.
-    request_index.json is kept as legacy/debug only.
-    """
     _chat_request_map_set_if_absent(request_id, job_id)
-    _ac = _get_state()
-    if _ac.CHAT_IDEMPOTENCY_STATE is None:
-        return
-    try:
-        with _ac.CHAT_IDEMPOTENCY_STATE.request_index_lock:
-            idx = load_chat_request_index()
-            idx[str(request_id)] = str(job_id)
-            _atomic_write_json(_ac.CHAT_IDEMPOTENCY_STATE.request_index_path, idx)
-    except Exception:
-        _log.debug("upsert_chat_request_index: legacy index write failed for request_id=%s", request_id, exc_info=True)
 
 
 def get_chat_job_id_by_request(request_id: str) -> Optional[str]:
-    job_id = _chat_request_map_get(request_id)
-    if job_id:
-        return job_id
-    # Fallback to legacy json index (e.g., old jobs created before request map existed).
-    _ac = _get_state()
-    if _ac.CHAT_IDEMPOTENCY_STATE is None:
-        return None
-    try:
-        with _ac.CHAT_IDEMPOTENCY_STATE.request_index_lock:
-            idx = load_chat_request_index()
-            legacy = idx.get(str(request_id))
-    except Exception:
-        _log.warning("get_chat_job_id_by_request: legacy index read failed for request_id=%s", request_id, exc_info=True)
-        legacy = None
-    if not legacy:
-        return None
-    try:
-        if not (_chat_job_path(legacy) / "job.json").exists():
-            return None
-    except Exception:
-        _log.debug("get_chat_job_id_by_request: stale job path check failed for job_id=%s", legacy)
-        return None
-    return str(legacy)
+    return _chat_request_map_get(request_id)

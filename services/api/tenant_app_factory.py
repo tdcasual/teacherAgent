@@ -78,7 +78,6 @@ def _configure_module_for_tenant(mod: types.ModuleType, settings: TenantSettings
     _set("TENANT_ID", settings.tenant_id)
     _set("DATA_DIR", data_dir)
     _set("UPLOADS_DIR", uploads_dir)
-    _set("LLM_ROUTING_PATH", data_dir / "llm_routing.json")
 
     _set("STUDENT_SESSIONS_DIR", data_dir / "student_chat_sessions")
     _set("TEACHER_WORKSPACES_DIR", data_dir / "teacher_workspaces")

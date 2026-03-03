@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
-from services.common.tool_registry import DEFAULT_TOOL_REGISTRY, ToolDef
+from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .subject_score_guard_service import (
@@ -142,24 +142,11 @@ def _default_teacher_tools_to_openai(
     allowed: Set[str],
     skill_runtime: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
-    dynamic_tools: Dict[str, Any] = {}
-    if skill_runtime is not None:
-        dynamic_tools = getattr(skill_runtime, "dynamic_tools", {}) or {}
-
     out: List[Dict[str, Any]] = []
     for name in sorted(allowed):
         static_tool = DEFAULT_TOOL_REGISTRY.get(name)
         if static_tool is not None:
             out.append(static_tool.to_openai())
-            continue
-        spec = dynamic_tools.get(name) if isinstance(dynamic_tools, dict) else None
-        if not isinstance(spec, dict):
-            continue
-        schema = spec.get("input_schema")
-        if not isinstance(schema, dict):
-            schema = {"type": "object", "properties": {}, "additionalProperties": True}
-        description = str(spec.get("description") or name)
-        out.append(ToolDef(name=name, description=description, parameters=schema).to_openai())
     return out
 
 
@@ -211,9 +198,6 @@ def _resolve_runtime_tool_limits(
     max_tool_calls = deps.max_tool_calls
     if skill_runtime is not None:
         allowed = skill_runtime.apply_tool_policy(allowed)
-        dynamic_tools = getattr(skill_runtime, "dynamic_tools", {})
-        if role_hint == "teacher" and isinstance(dynamic_tools, dict):
-            allowed |= {str(name) for name in dynamic_tools.keys() if str(name).strip()}
         if skill_runtime.max_tool_rounds is not None:
             max_tool_rounds = _clamp_budget(max_tool_rounds, skill_runtime.max_tool_rounds)
         if skill_runtime.max_tool_calls is not None:
@@ -752,7 +736,6 @@ def run_agent_runtime(
     *,
     deps: AgentRuntimeDeps,
     extra_system: Optional[str] = None,
-    agent_id: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
@@ -828,13 +811,12 @@ def default_load_skill_runtime(
     app_root: Path,
     role_hint: Optional[str],
     skill_id: Optional[str],
-    teacher_skills_dir: Optional[Path] = None,
 ) -> Tuple[Optional[Any], Optional[str]]:
     from .skills.loader import load_skills
     from .skills.router import resolve_skill
     from .skills.runtime import compile_skill_runtime
 
-    loaded = load_skills(app_root / "skills", teacher_skills_dir=teacher_skills_dir)
+    loaded = load_skills(app_root / "skills")
     selection = resolve_skill(loaded, skill_id, role_hint)
     warning = selection.warning
     runtime = None

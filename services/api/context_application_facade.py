@@ -140,6 +140,30 @@ from .session_discussion_service import (
 from .session_discussion_service import (
     session_discussion_pass as _session_discussion_pass_impl,
 )
+from .session_history_service import (
+    student_history_session as _student_history_session_impl,
+)
+from .session_history_service import (
+    student_history_sessions as _student_history_sessions_impl,
+)
+from .session_history_service import (
+    student_session_view_state as _student_session_view_state_impl,
+)
+from .session_history_service import (
+    teacher_history_session as _teacher_history_session_impl,
+)
+from .session_history_service import (
+    teacher_history_sessions as _teacher_history_sessions_impl,
+)
+from .session_history_service import (
+    teacher_session_view_state as _teacher_session_view_state_impl,
+)
+from .session_history_service import (
+    update_student_session_view_state as _update_student_session_view_state_impl,
+)
+from .session_history_service import (
+    update_teacher_session_view_state as _update_teacher_session_view_state_impl,
+)
 from .session_store import load_student_sessions_index, student_session_file
 from .student_directory_service import (
     list_all_student_ids as _list_all_student_ids_impl,
@@ -156,6 +180,18 @@ from .student_directory_service import (
 from .student_directory_service import (
     student_search as _student_search_impl,
 )
+from .student_ops_service import (
+    update_profile as _update_profile_impl,
+)
+from .student_ops_service import (
+    upload_files as _upload_files_impl,
+)
+from .student_ops_service import (
+    verify_student as _verify_student_impl,
+)
+from .student_submit_service import (
+    submit as _student_submit_impl,
+)
 from .teacher_assignment_preflight_service import (
     teacher_assignment_preflight as _teacher_assignment_preflight_impl,
 )
@@ -167,6 +203,7 @@ from .wiring.assignment_wiring import (
     _assignment_requirements_deps,
     _assignment_submission_attempt_deps,
 )
+from .wiring.chat_wiring import _session_history_deps
 from .wiring.exam_wiring import (
     _exam_analysis_charts_deps,
     _exam_catalog_deps,
@@ -174,7 +211,7 @@ from .wiring.exam_wiring import (
     _exam_overview_deps,
     _exam_range_deps,
 )
-from .wiring.student_wiring import _student_directory_deps
+from .wiring.student_wiring import _student_directory_deps, _student_ops_deps, _student_submit_deps
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
 
@@ -205,6 +242,118 @@ def compute_expected_students(scope: str, class_name: str, student_ids: List[str
     if scope_val == "class":
         return list_student_ids_by_class(class_name)
     return list_all_student_ids()
+
+
+async def upload_files(files: List[Any]) -> Dict[str, Any]:
+    return await _upload_files_impl(files, deps=_student_ops_deps())
+
+
+def update_profile(
+    *,
+    student_id: str,
+    weak_kp: Optional[str] = "",
+    strong_kp: Optional[str] = "",
+    medium_kp: Optional[str] = "",
+    next_focus: Optional[str] = "",
+    interaction_note: Optional[str] = "",
+) -> Dict[str, Any]:
+    return _update_profile_impl(
+        student_id=student_id,
+        weak_kp=weak_kp,
+        strong_kp=strong_kp,
+        medium_kp=medium_kp,
+        next_focus=next_focus,
+        interaction_note=interaction_note,
+        deps=_student_ops_deps(),
+    )
+
+
+def verify_student(name: str, class_name: Optional[str]) -> Dict[str, Any]:
+    return _verify_student_impl(name, class_name, deps=_student_ops_deps())
+
+
+async def student_submit(
+    *,
+    student_id: str,
+    files: List[Any],
+    assignment_id: Optional[str],
+    auto_assignment: bool,
+) -> Dict[str, Any]:
+    return await _student_submit_impl(
+        student_id=student_id,
+        files=files,
+        assignment_id=assignment_id,
+        auto_assignment=auto_assignment,
+        deps=_student_submit_deps(),
+    )
+
+
+def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0) -> Dict[str, Any]:
+    return _student_history_sessions_impl(
+        student_id,
+        limit=limit,
+        cursor=cursor,
+        deps=_session_history_deps(),
+    )
+
+
+def student_session_view_state(student_id: str) -> Dict[str, Any]:
+    return _student_session_view_state_impl(student_id, deps=_session_history_deps())
+
+
+def update_student_session_view_state(req: Dict[str, Any]) -> Dict[str, Any]:
+    return _update_student_session_view_state_impl(req, deps=_session_history_deps())
+
+
+def student_history_session(
+    student_id: str,
+    session_id: str,
+    cursor: int = -1,
+    limit: int = 50,
+    direction: str = "backward",
+) -> Dict[str, Any]:
+    return _student_history_session_impl(
+        student_id,
+        session_id,
+        cursor=cursor,
+        limit=limit,
+        direction=direction,
+        deps=_session_history_deps(),
+    )
+
+
+def teacher_history_sessions(teacher_id: Optional[str], limit: int = 20, cursor: int = 0) -> Dict[str, Any]:
+    return _teacher_history_sessions_impl(
+        teacher_id,
+        limit=limit,
+        cursor=cursor,
+        deps=_session_history_deps(),
+    )
+
+
+def teacher_session_view_state(teacher_id: Optional[str]) -> Dict[str, Any]:
+    return _teacher_session_view_state_impl(teacher_id, deps=_session_history_deps())
+
+
+def update_teacher_session_view_state(req: Dict[str, Any]) -> Dict[str, Any]:
+    return _update_teacher_session_view_state_impl(req, deps=_session_history_deps())
+
+
+def teacher_history_session(
+    session_id: str,
+    teacher_id: Optional[str],
+    cursor: int = -1,
+    limit: int = 50,
+    direction: str = "backward",
+) -> Dict[str, Any]:
+    return _teacher_history_session_impl(
+        session_id,
+        teacher_id,
+        cursor=cursor,
+        limit=limit,
+        direction=direction,
+        deps=_session_history_deps(),
+    )
 
 
 def list_exams(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
@@ -463,7 +612,7 @@ def postprocess_assignment_meta(
     )
 
 
-def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
+def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
     return _session_discussion_pass_impl(
         student_id,
         assignment_id,
@@ -475,11 +624,11 @@ def _session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, A
     )
 
 
-def _list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
+def list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
     return _list_submission_attempts_impl(assignment_id, student_id, deps=_assignment_submission_attempt_deps())
 
 
-def _best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return _best_submission_attempt_impl(attempts)
 
 

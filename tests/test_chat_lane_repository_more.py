@@ -1,7 +1,4 @@
 from __future__ import annotations
-
-import json
-import threading
 from collections import deque
 from types import SimpleNamespace
 
@@ -24,15 +21,11 @@ def _install_state(monkeypatch, state: SimpleNamespace) -> None:
     monkeypatch.setattr(clr, "_get_state", lambda: state)
 
 
-def _make_idempotency_state(tmp_path, request_index_text: str = "{}") -> SimpleNamespace:
-    request_index_path = tmp_path / "request_index.json"
-    request_index_path.write_text(request_index_text, encoding="utf-8")
+def _make_idempotency_state(tmp_path) -> SimpleNamespace:
     request_map_dir = tmp_path / "request_map"
     request_map_dir.mkdir(parents=True, exist_ok=True)
     return SimpleNamespace(
-        request_index_path=request_index_path,
         request_map_dir=request_map_dir,
-        request_index_lock=threading.Lock(),
     )
 
 
@@ -240,22 +233,6 @@ def test_chat_recent_job_locked_uses_store_outside_pytest(monkeypatch):
     assert clr._chat_recent_job_locked("lane-a", "fp-a") == "job-from-store"
 
 
-def test_load_chat_request_index_handles_corrupt_json(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(tmp_path, request_index_text="{bad")
-    _install_state(monkeypatch, state)
-
-    assert clr.load_chat_request_index() == {}
-
-
-def test_load_chat_request_index_handles_non_dict_payload(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(tmp_path, request_index_text=json.dumps([1, 2, 3]))
-    _install_state(monkeypatch, state)
-
-    assert clr.load_chat_request_index() == {}
-
-
 def test_chat_request_map_get_rejects_blank_request_id(tmp_path, monkeypatch):
     state = _base_state()
     state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(tmp_path)
@@ -347,68 +324,6 @@ def test_chat_request_map_set_if_absent_ignores_close_failure(tmp_path, monkeypa
     monkeypatch.setattr(clr.os, "close", _raise_close)
 
     assert clr._chat_request_map_set_if_absent("req-1", "job-1") is True
-
-
-def test_upsert_chat_request_index_handles_legacy_write_failure(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(tmp_path)
-    _install_state(monkeypatch, state)
-
-    monkeypatch.setattr(clr, "_chat_request_map_set_if_absent", lambda request_id, job_id: True)
-
-    def _raise_atomic_write(*_args, **_kwargs):
-        raise RuntimeError("atomic write failed")
-
-    monkeypatch.setattr(clr, "_atomic_write_json", _raise_atomic_write)
-
-    clr.upsert_chat_request_index("req-1", "job-1")
-
-
-def test_get_chat_job_id_by_request_handles_legacy_read_failure(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(tmp_path)
-    _install_state(monkeypatch, state)
-
-    monkeypatch.setattr(clr, "_chat_request_map_get", lambda request_id: None)
-
-    def _raise_load() -> dict:
-        raise RuntimeError("load failed")
-
-    monkeypatch.setattr(clr, "load_chat_request_index", _raise_load)
-
-    assert clr.get_chat_job_id_by_request("req-1") is None
-
-
-def test_get_chat_job_id_by_request_returns_none_for_missing_legacy_job(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(
-        tmp_path,
-        request_index_text=json.dumps({"req-1": "job-missing"}),
-    )
-    _install_state(monkeypatch, state)
-
-    monkeypatch.setattr(clr, "_chat_request_map_get", lambda request_id: None)
-    monkeypatch.setattr(clr, "_chat_job_path", lambda job_id: tmp_path / "jobs" / str(job_id))
-
-    assert clr.get_chat_job_id_by_request("req-1") is None
-
-
-def test_get_chat_job_id_by_request_handles_job_path_exception(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = _make_idempotency_state(
-        tmp_path,
-        request_index_text=json.dumps({"req-1": "job-any"}),
-    )
-    _install_state(monkeypatch, state)
-
-    monkeypatch.setattr(clr, "_chat_request_map_get", lambda request_id: None)
-
-    def _raise_chat_job_path(_job_id: str):
-        raise RuntimeError("bad job path")
-
-    monkeypatch.setattr(clr, "_chat_job_path", _raise_chat_job_path)
-
-    assert clr.get_chat_job_id_by_request("req-1") is None
 
 
 def test_chat_job_path_uses_app_core_chat_job_path(tmp_path, monkeypatch):
@@ -515,19 +430,6 @@ def test_chat_recent_job_locked_handles_debounce_disabled_missing_and_match(monk
     state.CHAT_LANE_RECENT["lane-1"] = (1000.0, "fp-1", "job-1")
     monkeypatch.setattr(clr.time, "time", lambda: 1000.5)
     assert clr._chat_recent_job_locked("lane-1", "fp-1") == "job-1"
-
-
-def test_load_chat_request_index_handles_missing_file(tmp_path, monkeypatch):
-    state = _base_state()
-    state.CHAT_IDEMPOTENCY_STATE = SimpleNamespace(
-        request_index_path=tmp_path / "missing.json",
-        request_map_dir=tmp_path / "request_map",
-        request_index_lock=threading.Lock(),
-    )
-    state.CHAT_IDEMPOTENCY_STATE.request_map_dir.mkdir(parents=True, exist_ok=True)
-    _install_state(monkeypatch, state)
-
-    assert clr.load_chat_request_index() == {}
 
 
 def test_chat_request_map_get_handles_missing_map_file(tmp_path, monkeypatch):

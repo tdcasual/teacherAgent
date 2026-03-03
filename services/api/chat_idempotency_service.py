@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -13,28 +12,8 @@ _log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class ChatIdempotencyDeps:
     request_map_dir: Path
-    request_index_path: Path
-    request_index_lock: Any
     safe_fs_id: Callable[[str, str], str]
     chat_job_exists: Callable[[str], bool]
-    atomic_write_json: Callable[[Path, Any], None]
-
-
-def load_chat_request_index(path: Path) -> Dict[str, str]:
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        _log.warning("corrupt chat request index at %s", path, exc_info=True)
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    out: Dict[str, str] = {}
-    for key, value in data.items():
-        if isinstance(key, str) and isinstance(value, str):
-            out[key] = value
-    return out
 
 
 def request_map_path(request_id: str, deps: ChatIdempotencyDeps) -> Path:
@@ -78,6 +57,9 @@ def request_map_set_if_absent(request_id: str, job_id: str, deps: ChatIdempotenc
     except Exception:
         _log.warning("idempotent lock creation failed for request %s", request_id, exc_info=True)
         return False
+    try:
+        os.write(fd, job_id.encode("utf-8", errors="ignore"))
+        os.fsync(fd)
     finally:
         try:
             os.close(fd)
@@ -89,32 +71,7 @@ def request_map_set_if_absent(request_id: str, job_id: str, deps: ChatIdempotenc
 
 def upsert_chat_request_index(request_id: str, job_id: str, deps: ChatIdempotencyDeps) -> None:
     request_map_set_if_absent(request_id, job_id, deps)
-    try:
-        with deps.request_index_lock:
-            idx = load_chat_request_index(deps.request_index_path)
-            idx[str(request_id)] = str(job_id)
-            deps.atomic_write_json(deps.request_index_path, idx)
-    except Exception:
-        _log.warning("chat request index persist failed for request=%s job=%s", request_id, job_id, exc_info=True)
 
 
 def get_chat_job_id_by_request(request_id: str, deps: ChatIdempotencyDeps) -> Optional[str]:
-    job_id = request_map_get(request_id, deps)
-    if job_id:
-        return job_id
-    try:
-        with deps.request_index_lock:
-            idx = load_chat_request_index(deps.request_index_path)
-            legacy = idx.get(str(request_id))
-    except Exception:
-        _log.debug("operation failed", exc_info=True)
-        legacy = None
-    if not legacy:
-        return None
-    try:
-        if not deps.chat_job_exists(legacy):
-            return None
-    except Exception:
-        _log.debug("operation failed", exc_info=True)
-        return None
-    return legacy
+    return request_map_get(request_id, deps)

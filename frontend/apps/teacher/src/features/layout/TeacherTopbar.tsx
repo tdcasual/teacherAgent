@@ -24,8 +24,7 @@ type TeacherTopbarProps = {
   skillsOpen: boolean
   compactMobile?: boolean
   onToggleSessionSidebar: () => void
-  onOpenRoutingSettingsPanel: () => void
-  onOpenPersonaManager: () => void
+  onOpenModelSettingsPanel: () => void
   onToggleSkillsWorkbench: () => void
   onToggleSettingsPanel: () => void
 }
@@ -112,8 +111,7 @@ export default function TeacherTopbar({
   skillsOpen,
   compactMobile = false,
   onToggleSessionSidebar,
-  onOpenRoutingSettingsPanel,
-  onOpenPersonaManager,
+  onOpenModelSettingsPanel,
   onToggleSkillsWorkbench,
   onToggleSettingsPanel,
 }: TeacherTopbarProps) {
@@ -540,11 +538,8 @@ export default function TeacherTopbar({
           </button>
         ) : (
           <>
-            <button className="ghost" type="button" onClick={onOpenRoutingSettingsPanel}>
-              模型路由
-            </button>
-            <button className="ghost" type="button" onClick={onOpenPersonaManager}>
-              角色管理
+            <button className="ghost" type="button" onClick={onOpenModelSettingsPanel}>
+              模型设置
             </button>
             <button className="ghost" type="button" onClick={onToggleSkillsWorkbench}>
               {skillsOpen ? '收起工作台' : '打开工作台'}
@@ -591,11 +586,8 @@ export default function TeacherTopbar({
             >
               {authActionLabel}
             </button>
-            <button className="ghost justify-start" type="button" onClick={() => { onOpenRoutingSettingsPanel(); setQuickActionsOpen(false) }}>
-              模型路由
-            </button>
-            <button className="ghost justify-start" type="button" onClick={() => { onOpenPersonaManager(); setQuickActionsOpen(false) }}>
-              角色管理
+            <button className="ghost justify-start" type="button" onClick={() => { onOpenModelSettingsPanel(); setQuickActionsOpen(false) }}>
+              模型设置
             </button>
             <button className="ghost justify-start" type="button" onClick={() => { onToggleSkillsWorkbench(); setQuickActionsOpen(false) }}>
               {skillsOpen ? '收起工作台' : '打开工作台'}

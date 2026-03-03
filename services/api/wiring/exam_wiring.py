@@ -9,10 +9,9 @@ __all__ = [
     "_exam_upload_parse_deps",
     "_exam_upload_confirm_deps",
     "_exam_upload_start_deps",
-    "_exam_upload_api_deps",
+    "_exam_upload_ops_deps",
     "_exam_overview_deps",
     "_exam_catalog_deps",
-    "_exam_api_deps",
     "_exam_detail_deps",
 ]
 
@@ -24,26 +23,25 @@ from services.api.runtime import queue_runtime
 
 from ..core_utils import _non_ws_len
 from ..exam_analysis_charts_service import ExamAnalysisChartsDeps
-from ..exam_api_service import ExamApiDeps
 from ..exam_catalog_service import ExamCatalogDeps
 from ..exam_detail_service import ExamDetailDeps
 from ..exam_longform_service import ExamLongformDeps
 from ..exam_overview_service import ExamOverviewDeps
 from ..exam_range_service import ExamRangeDeps
-from ..exam_upload_api_service import (
-    ExamUploadApiDeps,
+from ..exam_upload_service import (
+    ExamUploadDeps,
 )
-from ..exam_upload_api_service import (
-    exam_upload_confirm as _exam_upload_confirm_api_impl,
+from ..exam_upload_service import (
+    exam_upload_confirm as _exam_upload_confirm_impl,
 )
-from ..exam_upload_api_service import (
-    exam_upload_draft as _exam_upload_draft_api_impl,
+from ..exam_upload_service import (
+    exam_upload_draft as _exam_upload_draft_impl,
 )
-from ..exam_upload_api_service import (
-    exam_upload_draft_save as _exam_upload_draft_save_api_impl,
+from ..exam_upload_service import (
+    exam_upload_draft_save as _exam_upload_draft_save_impl,
 )
-from ..exam_upload_api_service import (
-    exam_upload_status as _exam_upload_status_api_impl,
+from ..exam_upload_service import (
+    exam_upload_status as _exam_upload_status_impl,
 )
 from ..exam_upload_confirm_service import (
     ExamUploadConfirmDeps,
@@ -88,10 +86,10 @@ def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
             language=language,
             deps=_exam_upload_start_deps(),
         ),
-        exam_upload_status=lambda job_id: _exam_upload_status_api_impl(job_id, deps=_exam_upload_api_deps()),
-        exam_upload_draft=lambda job_id: _exam_upload_draft_api_impl(job_id, deps=_exam_upload_api_deps()),
-        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_api_impl(**kwargs, deps=_exam_upload_api_deps()),
-        exam_upload_confirm=lambda job_id: _exam_upload_confirm_api_impl(job_id, deps=_exam_upload_api_deps()),
+        exam_upload_status=lambda job_id: _exam_upload_status_impl(job_id, deps=_exam_upload_ops_deps()),
+        exam_upload_draft=lambda job_id: _exam_upload_draft_impl(job_id, deps=_exam_upload_ops_deps()),
+        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_impl(**kwargs, deps=_exam_upload_ops_deps()),
+        exam_upload_confirm=lambda job_id: _exam_upload_confirm_impl(job_id, deps=_exam_upload_ops_deps()),
     )
 
 
@@ -211,14 +209,14 @@ def _exam_upload_start_deps():
     )
 
 
-def _exam_upload_api_deps():
+def _exam_upload_ops_deps():
     _ac = _app_core()
     backend = queue_runtime.app_queue_backend(
         tenant_id=_ac.TENANT_ID or None,
         is_pytest=_ac._settings.is_pytest(),
         inline_backend_factory=_ac._inline_backend_factory,
     )
-    return ExamUploadApiDeps(
+    return ExamUploadDeps(
         load_exam_job=_ac.load_exam_job,
         exam_job_path=_ac.exam_job_path,
         load_exam_draft_override=_load_exam_draft_override_impl,
@@ -259,11 +257,6 @@ def _exam_catalog_deps():
         data_dir=_ac.DATA_DIR,
         load_profile_file=_ac.load_profile_file,
     )
-
-
-def _exam_api_deps():
-    _ac = _app_core()
-    return ExamApiDeps(exam_get=_ac.exam_get)
 
 
 def _exam_detail_deps():

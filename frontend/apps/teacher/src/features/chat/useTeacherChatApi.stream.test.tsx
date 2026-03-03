@@ -226,7 +226,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('reflects queue + tool progress and completes assistant reply from SSE events', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const streamBody = [
       toSseEvent(1, 'job.queued', { lane_queue_position: 2, lane_queue_size: 4 }),
@@ -326,7 +326,7 @@ describe('useTeacherChatApi stream mapping', () => {
     vi.useFakeTimers()
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     let streamAttempts = 0
     let statusCalls = 0
@@ -394,7 +394,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('reconnects stream with last_event_id to continue unfinished output', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const firstStreamBody = [
       toSseEvent(1, 'job.processing', {}),
@@ -467,7 +467,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('does not spam tool-state updates for assistant delta-only chunks', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const streamBody = [
       toSseEvent(1, 'job.processing', {}),
@@ -534,7 +534,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('resolves terminal status after clean stream EOF to avoid reconnect spin', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const firstStreamBody = [
       toSseEvent(1, 'job.processing', {}),
@@ -601,7 +601,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('falls back to polling on unsupported stream event version', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const streamBody = toRawSseEvent(
       1,
@@ -674,7 +674,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('consumes SSE metadata when envelope omits type and event_id', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const streamBody = [
       toRawSseEvent(1, 'assistant.delta', JSON.stringify({ payload: { delta: 'A' }, event_version: 1 })),
@@ -733,7 +733,7 @@ describe('useTeacherChatApi stream mapping', () => {
   it('ignores id-less events when cursor already advanced', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
-    localStorageMock.setItem('teacherRoutingTeacherId', 'teacher-1')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' })) 
 
     const firstStreamBody = [
       toSseEvent(1, 'assistant.delta', { delta: 'A' }),

@@ -16,7 +16,6 @@ type UseStudentSendFlowParams = {
   verifiedStudent: VerifiedStudent | null
   pendingChatJob: PendingChatJob | null
   attachments: Array<{ attachment_id: string }>
-  activePersonaId?: string
   pendingChatKeyPrefix: string
   todayDate: () => string
   onSendSuccess: () => void
@@ -53,7 +52,6 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
     verifiedStudent,
     pendingChatJob,
     attachments,
-    activePersonaId,
     pendingChatKeyPrefix,
     todayDate,
     onSendSuccess,
@@ -179,7 +177,6 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
               messages: contextMessages,
               role: 'student',
               student_id: studentId,
-              persona_id: activePersonaId || undefined,
               assignment_id: inferredAssignmentId,
               assignment_date: todayDate(),
               attachments: attachmentRefs.length ? attachmentRefs : undefined,
@@ -224,7 +221,6 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
     [
       verifiedStudent,
       pendingChatJob?.job_id,
-      activePersonaId,
       input,
       attachments,
       pendingChatKeyPrefix,

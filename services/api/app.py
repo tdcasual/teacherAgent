@@ -4,29 +4,19 @@ import importlib.util
 import logging
 import os
 import sys
-import time
-import types
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from .app_routes import register_routes
-from .auth_service import (
-    AuthError,
-    get_current_principal,
-    require_principal,
-    reset_current_principal,
-    resolve_principal_from_headers,
-    set_current_principal,
-)
+from .auth_service import require_principal
+from .core_context_middleware import build_set_core_context_middleware
 from .observability import OBSERVABILITY
 from .rate_limit import rate_limit_middleware
-from .request_context import REQUEST_ID, RequestIdFilter, new_request_id
+from .request_context import RequestIdFilter
 from .runtime.lifecycle import app_lifespan
-from .wiring import CURRENT_CORE
 
 _log = logging.getLogger(__name__)
 
@@ -79,6 +69,17 @@ _APP_CORE = _core
 app = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
 app.state.core = _core
 
+
+def get_core() -> Any:
+    default_app = globals().get("_DEFAULT_APP")
+    app_obj = globals().get("app")
+    for candidate in (default_app, app_obj):
+        state = getattr(candidate, "state", None)
+        core = getattr(state, "core", None) if state is not None else None
+        if core is not None:
+            return core
+    return _APP_CORE
+
 origins = os.getenv("CORS_ORIGINS", "*")
 origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]
 _allow_credentials = "*" not in origins_list
@@ -95,97 +96,12 @@ app.add_middleware(
 )
 
 app.middleware("http")(rate_limit_middleware)
+app.middleware("http")(build_set_core_context_middleware(default_core=_core))
 
 register_routes(app, _core)
 
 # Attach request-id filter so all loggers include it
 logging.getLogger().addFilter(RequestIdFilter())
-
-
-def _is_chart_asset_path(path: str) -> bool:
-    value = str(path or "").strip()
-    return value.startswith("/charts/") or value.startswith("/chart-runs/")
-
-
-def _resolve_chart_query_principal(request: Request) -> Any:
-    path = str(request.url.path)
-    if not _is_chart_asset_path(path):
-        return None
-    token = str(request.query_params.get("access_token") or "").strip()
-    if not token:
-        return None
-    synthetic_headers = {"authorization": f"Bearer {token}"}
-    return resolve_principal_from_headers(
-        synthetic_headers,
-        path=path,
-        method=request.method,
-        allow_exempt=True,
-    )
-
-
-@app.middleware("http")
-async def _set_core_context(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    rid = request.headers.get("x-request-id") or new_request_id()
-    start = time.perf_counter()
-    rid_token = REQUEST_ID.set(rid)
-    state = getattr(request.app, "state", None)
-    core_from_state = getattr(state, "core", None) if state is not None else None
-    container = getattr(state, "container", None) if state is not None else None
-    core_from_container = getattr(container, "core", None) if container is not None else None
-    active_core = core_from_container or core_from_state or _core
-    core_token = CURRENT_CORE.set(active_core)
-    principal_token = None
-    status_code = 500
-    route_template = str(request.url.path)
-    OBSERVABILITY.inc_inflight()
-    try:
-        principal = get_current_principal()
-        if principal is None:
-            try:
-                principal = resolve_principal_from_headers(
-                    request.headers,
-                    path=str(request.url.path),
-                    method=request.method,
-                    allow_exempt=True,
-                )
-            except AuthError as exc:
-                if exc.detail != "missing_authorization":
-                    raise
-                principal = _resolve_chart_query_principal(request)
-                if principal is None:
-                    raise
-            if principal is not None:
-                principal_token = set_current_principal(principal)
-        response = await call_next(request)
-        status_code = int(getattr(response, "status_code", 200) or 200)
-        route = request.scope.get("route")
-        route_path = getattr(route, "path", None)
-        if isinstance(route_path, str) and route_path:
-            route_template = route_path
-        response.headers["x-request-id"] = rid
-        return response
-    except AuthError as exc:
-        status_code = int(exc.status_code)
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-    except Exception:
-        status_code = 500
-        logging.getLogger(__name__).exception("Unhandled error in request middleware")
-        return JSONResponse(status_code=500, content={"detail": "internal_error"})
-    finally:
-        elapsed = time.perf_counter() - start
-        OBSERVABILITY.record(
-            method=request.method,
-            route=route_template,
-            status_code=status_code,
-            latency_sec=elapsed,
-        )
-        OBSERVABILITY.dec_inflight()
-        if principal_token is not None:
-            reset_current_principal(principal_token)
-        CURRENT_CORE.reset(core_token)
-        REQUEST_ID.reset(rid_token)
 
 
 @app.get("/ops/metrics")
@@ -242,26 +158,3 @@ if __name__ == "services.api.app":
             exc_info=True,
         )
         app = _DEFAULT_APP
-
-
-class _AppModule(types.ModuleType):
-    def __getattr__(self, name: str) -> Any:
-        return getattr(_core, name)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name.startswith("__") or name in {"app", "_DEFAULT_APP", "_APP_CORE"}:
-            return super().__setattr__(name, value)
-        try:
-            setattr(_core, name, value)
-        except Exception:
-            logging.getLogger(__name__).debug("setattr(%s) on _core failed", name, exc_info=True)
-        if name in self.__dict__:
-            try:
-                del self.__dict__[name]
-            except Exception:
-                _log.debug("operation failed", exc_info=True)
-                pass
-        return None
-
-
-sys.modules[__name__].__class__ = _AppModule

@@ -30,8 +30,6 @@ class ChatStateStoreTest(unittest.TestCase):
         store = create_chat_idempotency_store(chat_job_dir)
         self.assertIsInstance(store, ChatIdempotencyStore)
         self.assertEqual(store.request_map_dir, chat_job_dir / "request_index")
-        self.assertEqual(store.request_index_path, chat_job_dir / "request_index.json")
-        self.assertIsInstance(store.request_index_lock, type(threading.Lock()))
 
     def test_state_instances_are_isolated(self):
         left = create_chat_state_store()

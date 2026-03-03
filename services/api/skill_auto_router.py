@@ -17,10 +17,7 @@ _log = logging.getLogger(__name__)
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
 _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
-_ROUTING_RE = re.compile(r"(llm\s*routing|模型路由|路由(配置|仿真|回滚|策略|规则))", flags=re.I)
-
 _TIE_BREAK_ORDER = [
-    "physics-llm-routing",
     "physics-homework-generator",
     "physics-lesson-capture",
     "physics-core-examples",
@@ -119,9 +116,6 @@ def _score_from_skill_config(
         score += 4
         hits.append("cfg-intent:assignment")
 
-    if "routing" in intents and _ROUTING_RE.search(text):
-        score += 6
-        hits.append("cfg-intent:routing")
     if "student_focus" in intents and (("学生" in text) or ("画像" in text) or ("诊断" in text)):
         score += 4
         hits.append("cfg-intent:student_focus")
@@ -168,9 +162,8 @@ def resolve_effective_skill(
     requested_skill_id: Optional[str],
     last_user_text: str,
     detect_assignment_intent: Optional[Callable[[str], bool]] = None,
-    teacher_skills_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    loaded = load_skills(app_root / "skills", teacher_skills_dir=teacher_skills_dir)
+    loaded = load_skills(app_root / "skills")
     skills = dict(loaded.skills or {})
     role = str(role_hint or "").strip()
     text = str(last_user_text or "").strip().lower()

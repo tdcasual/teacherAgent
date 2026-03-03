@@ -8,14 +8,13 @@ import pytest
 
 _ROUTE_MODULES = [
     "services/api/routes/student_ops_routes.py",
-    "services/api/routes/skill_import_routes.py",
-    "services/api/routes/skill_crud_routes.py",
+    "services/api/routes/skill_routes.py",
     "services/api/routes/exam_upload_routes.py",
     "services/api/routes/exam_query_routes.py",
     "services/api/routes/assignment_upload_routes.py",
     "services/api/routes/assignment_listing_routes.py",
     "services/api/routes/chat_routes.py",
-    "services/api/routes/teacher_llm_routing_routes.py",
+    "services/api/routes/teacher_model_config_routes.py",
     "services/api/routes/teacher_provider_registry_routes.py",
     "services/api/routes/teacher_history_routes.py",
     "services/api/routes/teacher_memory_routes.py",
