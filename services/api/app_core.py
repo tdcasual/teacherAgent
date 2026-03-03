@@ -221,9 +221,9 @@ def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
         record.update(payload)
     try:
         _DIAG_LOGGER.info(json.dumps(record, ensure_ascii=False, default=str))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("diag_log serialization failed for event=%s", event)
-        pass
+        pass  # policy: allowed-broad-except
 
 def chat_job_path(job_id: str) -> Path:
     return _core_service_imports_module._chat_job_path_impl(
