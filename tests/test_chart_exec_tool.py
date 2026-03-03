@@ -1,4 +1,3 @@
-import importlib
 import json
 import os
 import time
@@ -10,6 +9,7 @@ from typing import Dict, Optional
 from fastapi.testclient import TestClient
 
 from services.api.auth_service import mint_test_token
+from tests.helpers.app_factory import create_test_app
 
 
 def load_app(
@@ -18,21 +18,17 @@ def load_app(
     auth_required: Optional[str] = None,
     auth_secret: Optional[str] = None,
 ):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
+    env_overrides: Dict[str, str] = {}
+    env_unset: list[str] = []
     if auth_required is None:
-        os.environ.pop("AUTH_REQUIRED", None)
+        env_unset.append("AUTH_REQUIRED")
     else:
-        os.environ["AUTH_REQUIRED"] = auth_required
+        env_overrides["AUTH_REQUIRED"] = auth_required
     if auth_secret is None:
-        os.environ.pop("AUTH_TOKEN_SECRET", None)
+        env_unset.append("AUTH_TOKEN_SECRET")
     else:
-        os.environ["AUTH_TOKEN_SECRET"] = auth_secret
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+        env_overrides["AUTH_TOKEN_SECRET"] = auth_secret
+    return create_test_app(tmp_dir, env_overrides=env_overrides, env_unset=env_unset)
 
 
 def _auth_headers(*, actor_id: str, role: str, secret: str) -> Dict[str, str]:

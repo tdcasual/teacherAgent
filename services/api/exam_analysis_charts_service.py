@@ -71,7 +71,7 @@ def _build_class_compare(
         class_scores.setdefault(cls, []).append(float(total))
 
     if len(class_scores) >= 2:
-        class_compare = [
+        class_compare: List[Dict[str, Any]] = [
             {
                 "label": cls,
                 "avg_total": round(sum(vals) / len(vals), 3),
@@ -79,7 +79,7 @@ def _build_class_compare(
             }
             for cls, vals in class_scores.items()
         ]
-        class_compare.sort(key=lambda x: x.get("avg_total") or 0, reverse=True)
+        class_compare.sort(key=lambda item: float(item["avg_total"]), reverse=True)
         return "class", class_compare
 
     ranked_scores = [float(v) for _, v in sorted(totals.items(), key=lambda kv: kv[1], reverse=True)]
@@ -93,18 +93,18 @@ def _build_class_compare(
         ("Middle 34%", ranked_scores[idx1:idx2]),
         ("Bottom 33%", ranked_scores[idx2:]),
     ]
-    class_compare: List[Dict[str, Any]] = []
+    tier_compare: List[Dict[str, Any]] = []
     for label, vals in segments:
         if not vals:
             continue
-        class_compare.append(
+        tier_compare.append(
             {
                 "label": label,
                 "avg_total": round(sum(vals) / len(vals), 3),
                 "student_count": len(vals),
             }
         )
-    return "tier", class_compare
+    return "tier", tier_compare
 
 
 def _build_knowledge_points(exam_id: str, top_n: int, deps: ExamAnalysisChartsDeps) -> List[Dict[str, Any]]:

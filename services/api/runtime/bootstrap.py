@@ -21,6 +21,11 @@ from services.api.workers.inline_runtime import start_inline_workers, stop_inlin
 
 
 def _resolve_app_core(app_mod: Any) -> Any:
+    state = getattr(app_mod, "state", None)
+    core = getattr(state, "core", None) if state is not None else None
+    if core is not None:
+        return core
+
     getter = getattr(app_mod, "get_core", None)
     if callable(getter):
         try:
@@ -32,9 +37,6 @@ def _resolve_app_core(app_mod: Any) -> Any:
     app_obj = getattr(app_mod, "app", None)
     state = getattr(app_obj, "state", None) if app_obj is not None else None
     core = getattr(state, "core", None) if state is not None else None
-    if core is not None:
-        return core
-    core = getattr(app_mod, "_APP_CORE", None)
     if core is not None:
         return core
     return app_mod
@@ -85,7 +87,7 @@ def build_runtime_deps(app_mod: Any) -> RuntimeManagerDeps:
     core = _resolve_app_core(app_mod)
     return RuntimeManagerDeps(
         tenant_id=getattr(core, "TENANT_ID", None) or None,
-        is_pytest=settings.is_pytest(),
+        is_pytest=bool(getattr(getattr(core, "_settings", None), "is_pytest", settings.is_pytest)()),
         validate_master_key_policy=validate_master_key_policy,
         inline_backend_factory=lambda: build_inline_backend_for_app(core),
     )

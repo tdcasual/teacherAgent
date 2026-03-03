@@ -1,5 +1,4 @@
 import csv
-import importlib
 import json
 import os
 import time
@@ -11,16 +10,11 @@ from tempfile import TemporaryDirectory
 from xml.sax.saxutils import escape
 
 from fastapi.testclient import TestClient
+from tests.helpers.app_factory import create_test_app
 
 
 def load_app(tmp_dir: Path):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(tmp_dir)
 
 
 def make_pdf_bytes(text: str) -> bytes:

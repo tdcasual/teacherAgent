@@ -16,14 +16,15 @@ _log = logging.getLogger(__name__)
 @asynccontextmanager
 async def app_lifespan(_app):
     state = getattr(_app, "state", None)
+    core = getattr(state, "core", None) if state is not None else None
+    if core is None:
+        raise RuntimeError("app.state.core is required for lifecycle startup")
     if state is not None and not hasattr(state, "container"):
-        core = getattr(state, "core", None)
         state.container = build_app_container(core=core)
     ensure_auth_token_secret()
     validate_auth_secret_policy()
     configure_logging()
     try:
-        core = getattr(state, "core", None) if state is not None else None
         data_dir = getattr(core, "DATA_DIR", None)
         if data_dir is not None:
             result = build_auth_registry_store(data_dir=data_dir).bootstrap_admin()
@@ -35,13 +36,13 @@ async def app_lifespan(_app):
     except Exception:
         _log.error("Admin bootstrap failed", exc_info=True)
     try:
-        bootstrap.start_runtime()
+        bootstrap.start_runtime(app_mod=_app)
     except Exception:
         _log.error("Runtime startup failed; running in degraded mode", exc_info=True)
     try:
         yield
     finally:
         try:
-            bootstrap.stop_runtime()
+            bootstrap.stop_runtime(app_mod=_app)
         except Exception:
             _log.error("Runtime shutdown error", exc_info=True)

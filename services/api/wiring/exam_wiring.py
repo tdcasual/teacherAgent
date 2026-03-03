@@ -1,7 +1,19 @@
+# mypy: disable-error-code=no-untyped-def
 """Exam domain deps builders — extracted from app_core."""
 from __future__ import annotations
 
 __all__ = [
+    "exam_upload_handlers_deps",
+    "exam_range_deps",
+    "exam_analysis_charts_deps",
+    "exam_longform_deps",
+    "exam_upload_parse_deps",
+    "exam_upload_confirm_deps",
+    "exam_upload_start_deps",
+    "exam_upload_ops_deps",
+    "exam_overview_deps",
+    "exam_catalog_deps",
+    "exam_detail_deps",
     "_exam_upload_handlers_deps",
     "_exam_range_deps",
     "_exam_analysis_charts_deps",
@@ -18,6 +30,7 @@ __all__ = [
 import shutil
 import uuid
 from datetime import datetime
+from typing import Any
 
 from services.api.runtime import queue_runtime
 
@@ -73,7 +86,9 @@ from ..handlers import exam_upload_handlers
 from . import get_app_core as _app_core
 
 
-def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
+def _exam_upload_handlers_deps(
+    core: Any | None = None,
+) -> exam_upload_handlers.ExamUploadHandlerDeps:
     return exam_upload_handlers.ExamUploadHandlerDeps(
         start_exam_upload=lambda exam_id, date, class_name, paper_files, score_files, answer_files, ocr_mode, language, deps=None: _start_exam_upload_impl(
             exam_id=exam_id,
@@ -84,17 +99,19 @@ def _exam_upload_handlers_deps() -> exam_upload_handlers.ExamUploadHandlerDeps:
             answer_files=answer_files,
             ocr_mode=ocr_mode,
             language=language,
-            deps=_exam_upload_start_deps(),
+            deps=_exam_upload_start_deps(core),
         ),
-        exam_upload_status=lambda job_id: _exam_upload_status_impl(job_id, deps=_exam_upload_ops_deps()),
-        exam_upload_draft=lambda job_id: _exam_upload_draft_impl(job_id, deps=_exam_upload_ops_deps()),
-        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_impl(**kwargs, deps=_exam_upload_ops_deps()),
-        exam_upload_confirm=lambda job_id: _exam_upload_confirm_impl(job_id, deps=_exam_upload_ops_deps()),
+        exam_upload_status=lambda job_id: _exam_upload_status_impl(job_id, deps=_exam_upload_ops_deps(core)),
+        exam_upload_draft=lambda job_id: _exam_upload_draft_impl(job_id, deps=_exam_upload_ops_deps(core)),
+        exam_upload_draft_save=lambda **kwargs: _exam_upload_draft_save_impl(
+            **kwargs, deps=_exam_upload_ops_deps(core)
+        ),
+        exam_upload_confirm=lambda job_id: _exam_upload_confirm_impl(job_id, deps=_exam_upload_ops_deps(core)),
     )
 
 
-def _exam_range_deps():
-    _ac = _app_core()
+def _exam_range_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamRangeDeps(
         load_exam_manifest=_ac.load_exam_manifest,
         exam_responses_path=_ac.exam_responses_path,
@@ -106,8 +123,8 @@ def _exam_range_deps():
     )
 
 
-def _exam_analysis_charts_deps():
-    _ac = _app_core()
+def _exam_analysis_charts_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamAnalysisChartsDeps(
         app_root=_ac.APP_ROOT,
         uploads_dir=_ac.UPLOADS_DIR,
@@ -123,8 +140,8 @@ def _exam_analysis_charts_deps():
     )
 
 
-def _exam_longform_deps():
-    _ac = _app_core()
+def _exam_longform_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamLongformDeps(
         data_dir=_ac.DATA_DIR,
         exam_students_list=_ac.exam_students_list,
@@ -135,8 +152,8 @@ def _exam_longform_deps():
     )
 
 
-def _exam_upload_parse_deps():
-    _ac = _app_core()
+def _exam_upload_parse_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamUploadParseDeps(
         app_root=_ac.APP_ROOT,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
@@ -166,8 +183,8 @@ def _exam_upload_parse_deps():
     )
 
 
-def _exam_upload_confirm_deps():
-    _ac = _app_core()
+def _exam_upload_confirm_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamUploadConfirmDeps(
         app_root=_ac.APP_ROOT,
         data_dir=_ac.DATA_DIR,
@@ -186,8 +203,8 @@ def _exam_upload_confirm_deps():
     )
 
 
-def _exam_upload_start_deps():
-    _ac = _app_core()
+def _exam_upload_start_deps(core: Any | None = None):
+    _ac = _app_core(core)
     backend = queue_runtime.app_queue_backend(
         tenant_id=_ac.TENANT_ID or None,
         is_pytest=_ac._settings.is_pytest(),
@@ -209,8 +226,8 @@ def _exam_upload_start_deps():
     )
 
 
-def _exam_upload_ops_deps():
-    _ac = _app_core()
+def _exam_upload_ops_deps(core: Any | None = None):
+    _ac = _app_core(core)
     backend = queue_runtime.app_queue_backend(
         tenant_id=_ac.TENANT_ID or None,
         is_pytest=_ac._settings.is_pytest(),
@@ -231,13 +248,13 @@ def _exam_upload_ops_deps():
             job_id,
             job,
             job_dir,
-            deps=_exam_upload_confirm_deps(),
+            deps=_exam_upload_confirm_deps(core),
         ),
     )
 
 
-def _exam_overview_deps():
-    _ac = _app_core()
+def _exam_overview_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamOverviewDeps(
         data_dir=_ac.DATA_DIR,
         load_exam_manifest=_ac.load_exam_manifest,
@@ -251,16 +268,16 @@ def _exam_overview_deps():
     )
 
 
-def _exam_catalog_deps():
-    _ac = _app_core()
+def _exam_catalog_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamCatalogDeps(
         data_dir=_ac.DATA_DIR,
         load_profile_file=_ac.load_profile_file,
     )
 
 
-def _exam_detail_deps():
-    _ac = _app_core()
+def _exam_detail_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ExamDetailDeps(
         load_exam_manifest=_ac.load_exam_manifest,
         exam_responses_path=_ac.exam_responses_path,
@@ -269,3 +286,47 @@ def _exam_detail_deps():
         parse_score_value=_ac.parse_score_value,
         safe_int_arg=_safe_int_arg,
     )
+
+
+def exam_upload_handlers_deps(core: Any) -> exam_upload_handlers.ExamUploadHandlerDeps:
+    return _exam_upload_handlers_deps(core)
+
+
+def exam_range_deps(core: Any):
+    return _exam_range_deps(core)
+
+
+def exam_analysis_charts_deps(core: Any):
+    return _exam_analysis_charts_deps(core)
+
+
+def exam_longform_deps(core: Any):
+    return _exam_longform_deps(core)
+
+
+def exam_upload_parse_deps(core: Any):
+    return _exam_upload_parse_deps(core)
+
+
+def exam_upload_confirm_deps(core: Any):
+    return _exam_upload_confirm_deps(core)
+
+
+def exam_upload_start_deps(core: Any):
+    return _exam_upload_start_deps(core)
+
+
+def exam_upload_ops_deps(core: Any):
+    return _exam_upload_ops_deps(core)
+
+
+def exam_overview_deps(core: Any):
+    return _exam_overview_deps(core)
+
+
+def exam_catalog_deps(core: Any):
+    return _exam_catalog_deps(core)
+
+
+def exam_detail_deps(core: Any):
+    return _exam_detail_deps(core)

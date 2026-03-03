@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import json
 import time
 from pathlib import Path
@@ -8,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from services.api.auth_service import mint_test_token
+from tests.helpers.app_factory import create_test_app
 
 
 def _auth_headers(actor_id: str, role: str, *, secret: str) -> dict[str, str]:
@@ -30,24 +30,18 @@ def _load_app(
     admin_username: str = "admin",
     admin_password: str | None = None,
 ):
-    import os
-
-    os.environ["DATA_DIR"] = str(tmp_path / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_path / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    os.environ["MASTER_KEY_DEV_DEFAULT"] = "dev-key"
-    os.environ["AUTH_REQUIRED"] = "1"
-    os.environ["AUTH_TOKEN_SECRET"] = secret
-    os.environ["ADMIN_USERNAME"] = admin_username
+    env_overrides = {
+        "MASTER_KEY_DEV_DEFAULT": "dev-key",
+        "AUTH_REQUIRED": "1",
+        "AUTH_TOKEN_SECRET": secret,
+        "ADMIN_USERNAME": admin_username,
+    }
+    env_unset: list[str] = []
     if admin_password is None:
-        os.environ.pop("ADMIN_PASSWORD", None)
+        env_unset.append("ADMIN_PASSWORD")
     else:
-        os.environ["ADMIN_PASSWORD"] = admin_password
-
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+        env_overrides["ADMIN_PASSWORD"] = admin_password
+    return create_test_app(tmp_path, env_overrides=env_overrides, env_unset=env_unset)
 
 
 def _write_student_profile(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import socket
@@ -17,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.api.auth_service import mint_test_token, validate_auth_secret_policy
+from tests.helpers.app_factory import create_test_app
 
 
 def _auth_headers(actor_id: str, role: str, *, secret: str, tenant_id: str = ""):
@@ -33,16 +33,16 @@ def _auth_headers(actor_id: str, role: str, *, secret: str, tenant_id: str = "")
 
 
 def load_app(tmp_dir: Path, *, secret: str = "test-secret"):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    os.environ["MASTER_KEY_DEV_DEFAULT"] = "dev-key"
-    os.environ["AUTH_REQUIRED"] = "1"
-    os.environ["AUTH_TOKEN_SECRET"] = secret
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(
+        tmp_dir,
+        env_overrides={
+            "MASTER_KEY_DEV_DEFAULT": "dev-key",
+            "AUTH_REQUIRED": "1",
+            "AUTH_TOKEN_SECRET": secret,
+        },
+        use_runtime_entrypoint=True,
+        reload_module=True,
+    )
 
 
 def test_auth_required_true_without_secret_raises_startup_error(monkeypatch) -> None:

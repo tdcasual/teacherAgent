@@ -1,16 +1,15 @@
 import pytest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from services.api.queue.queue_backend import rq_enabled
+from tests.helpers.app_factory import create_test_app
 
 
 def test_app_registers_routes():
-    import importlib
-
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    app_obj = getattr(app_mod, "_DEFAULT_APP", app_mod.app)
-    paths = {route.path for route in app_obj.router.routes}
-    assert "/health" in paths
+    with TemporaryDirectory() as td:
+        app_mod = create_test_app(Path(td))
+        paths = {route.path for route in app_mod.app.router.routes}
+        assert "/health" in paths
 
 
 def test_rq_mode_disables_inprocess_workers(monkeypatch):
@@ -18,21 +17,31 @@ def test_rq_mode_disables_inprocess_workers(monkeypatch):
     assert rq_enabled() is True
 
 
-def test_runtime_start_requires_explicit_queue_mode_when_not_pytest(monkeypatch):
+def test_runtime_start_uses_runtime_manager_when_not_pytest(monkeypatch):
     monkeypatch.delenv("RQ_BACKEND_ENABLED", raising=False)
     monkeypatch.delenv("JOB_QUEUE_BACKEND", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    from services.api.runtime import bootstrap
 
-    with pytest.raises(RuntimeError, match="RQ backend required"):
-        bootstrap.start_runtime()
+    calls = []
+
+    def _fake_start(*, deps):
+        calls.append(deps)
+    with TemporaryDirectory() as td:
+        app_mod = create_test_app(
+            Path(td),
+            env_unset=("PYTEST_CURRENT_TEST", "JOB_QUEUE_BACKEND", "RQ_BACKEND_ENABLED"),
+        )
+        from services.api.runtime import bootstrap
+
+        monkeypatch.setattr(bootstrap, "start_tenant_runtime", _fake_start)
+        bootstrap.start_runtime(app_mod=app_mod.app)
+    assert calls
+    assert calls[0].is_pytest is False
 
 
 def test_lifespan_does_not_start_workers(monkeypatch):
-    from services.api import app as app_mod
-    from services.api.runtime import bootstrap, lifecycle
-
     monkeypatch.setenv("JOB_QUEUE_BACKEND", "rq")
+    monkeypatch.setenv("RQ_BACKEND_ENABLED", "1")
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
     import sys
     import types
@@ -46,13 +55,20 @@ def test_lifespan_does_not_start_workers(monkeypatch):
     def fake_start():
         called["start"] += 1
 
-    monkeypatch.setattr(bootstrap, "start_inline_workers", fake_start, raising=False)
-
     import asyncio
 
     async def run():
-        async with lifecycle.app_lifespan(app_mod.app):
-            pass
+        with TemporaryDirectory() as td:
+            app_mod = create_test_app(
+                Path(td),
+                env_overrides={"JOB_QUEUE_BACKEND": "rq", "RQ_BACKEND_ENABLED": "1"},
+                env_unset=("PYTEST_CURRENT_TEST",),
+            )
+            from services.api.runtime import bootstrap, lifecycle
+
+            monkeypatch.setattr(bootstrap, "start_inline_workers", fake_start, raising=False)
+            async with lifecycle.app_lifespan(app_mod.app):
+                pass
 
     asyncio.run(run())
     assert called["start"] == 0

@@ -20,8 +20,9 @@ def test_chat_worker_thread_factory_sets_current_core(monkeypatch, tmp_path):
         process_chat_job=lambda _job_id: None,
         diag_log=lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(chat_wiring, "_app_core", lambda: fake_core)
+    monkeypatch.setattr(chat_wiring, "_app_core", lambda _core=None: fake_core)
 
+    previous_core = CURRENT_CORE.get(None)
     deps = chat_wiring._chat_worker_deps()
 
     captured = {"core": None}
@@ -37,4 +38,4 @@ def test_chat_worker_thread_factory_sets_current_core(monkeypatch, tmp_path):
 
     assert done.is_set() is True
     assert captured["core"] is fake_core
-    assert CURRENT_CORE.get(None) is None
+    assert CURRENT_CORE.get(None) is previous_core

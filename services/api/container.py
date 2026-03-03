@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from .core_runtime import CoreRuntime
 
 
 @dataclass(frozen=True)
 class AppContainer:
-    core: Any
+    core: CoreRuntime
 
 
-def build_app_container(*, core: Any) -> AppContainer:
+def build_app_container(*, core: CoreRuntime) -> AppContainer:
     return AppContainer(core=core)

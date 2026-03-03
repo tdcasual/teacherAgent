@@ -1,8 +1,7 @@
-import importlib
-import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from tests.helpers.app_factory import create_test_app
 
 
 def load_app(
@@ -12,32 +11,28 @@ def load_app(
     flush_margin: int = 24,
     infer_min_priority: int = 58,
 ):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-
-    os.environ["TEACHER_MEMORY_AUTO_ENABLED"] = "1"
-    os.environ["TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS"] = "8"
-    os.environ["TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY"] = "20"
-    os.environ["TEACHER_MEMORY_FLUSH_ENABLED"] = "1"
-    os.environ["TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES"] = str(flush_margin)
-    os.environ["TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS"] = "1200"
-    os.environ["TEACHER_MEMORY_AUTO_APPLY_ENABLED"] = "1"
-    os.environ["TEACHER_MEMORY_AUTO_INFER_ENABLED"] = "1"
-    os.environ["TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS"] = "2"
-    os.environ["TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS"] = "20"
-    os.environ["TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY"] = str(infer_min_priority)
-
-    os.environ["TEACHER_SESSION_COMPACT_ENABLED"] = "1"
-    os.environ["TEACHER_SESSION_COMPACT_MAIN_ONLY"] = "1"
-    os.environ["TEACHER_SESSION_COMPACT_MAX_MESSAGES"] = str(compact_max)
-    os.environ["TEACHER_SESSION_COMPACT_KEEP_TAIL"] = str(max(2, compact_max // 2))
-    os.environ["TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC"] = "0"
-
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(
+        tmp_dir,
+        env_overrides={
+            "TEACHER_MEMORY_AUTO_ENABLED": "1",
+            "TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS": "8",
+            "TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY": "20",
+            "TEACHER_MEMORY_FLUSH_ENABLED": "1",
+            "TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES": str(flush_margin),
+            "TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS": "1200",
+            "TEACHER_MEMORY_AUTO_APPLY_ENABLED": "1",
+            "TEACHER_MEMORY_AUTO_INFER_ENABLED": "1",
+            "TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS": "2",
+            "TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS": "20",
+            "TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY": str(infer_min_priority),
+            "TEACHER_SESSION_COMPACT_ENABLED": "1",
+            "TEACHER_SESSION_COMPACT_MAIN_ONLY": "1",
+            "TEACHER_SESSION_COMPACT_MAX_MESSAGES": str(compact_max),
+            "TEACHER_SESSION_COMPACT_KEEP_TAIL": str(max(2, compact_max // 2)),
+            "TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC": "0",
+        },
+        reset_modules=True,
+    )
 
 
 def build_teacher_job(job_id: str, request_id: str, teacher_id: str, text: str) -> dict:

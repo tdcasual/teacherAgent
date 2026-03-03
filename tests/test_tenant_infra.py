@@ -104,26 +104,27 @@ def test_dispatcher_regex_accepts_valid():
 # 3. wiring: CURRENT_CORE strict mode
 # ---------------------------------------------------------------------------
 
-def test_get_app_core_raises_in_multi_tenant():
-    from services.api.wiring import CURRENT_CORE, get_app_core
+def test_get_app_core_returns_default_when_context_missing():
+    from services.api.wiring import CURRENT_CORE, get_app_core, set_default_core
+
+    default_core = object()
+    set_default_core(default_core)
     token = CURRENT_CORE.set(None)
     try:
-        with patch.dict(os.environ, {"MULTI_TENANT_ENABLED": "1"}):
-            with pytest.raises(RuntimeError, match="core context is required"):
-                get_app_core()
+        assert get_app_core() is default_core
     finally:
         CURRENT_CORE.reset(token)
 
 
-def test_get_app_core_raises_without_context_even_single_tenant():
-    from services.api.wiring import CURRENT_CORE, get_app_core
-    token = CURRENT_CORE.set(None)
+def test_get_app_core_prefers_context_over_default():
+    from services.api.wiring import CURRENT_CORE, get_app_core, set_default_core
+
+    default_core = object()
+    ctx_core = object()
+    set_default_core(default_core)
+    token = CURRENT_CORE.set(ctx_core)
     try:
-        env = os.environ.copy()
-        env.pop("MULTI_TENANT_ENABLED", None)
-        with patch.dict(os.environ, env, clear=True):
-            with pytest.raises(RuntimeError, match="core context is required"):
-                get_app_core()
+        assert get_app_core() is ctx_core
     finally:
         CURRENT_CORE.reset(token)
 

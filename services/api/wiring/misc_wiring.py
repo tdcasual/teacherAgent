@@ -1,7 +1,16 @@
+# mypy: disable-error-code=no-untyped-def
 """Miscellaneous deps builders — extracted from app_core."""
 from __future__ import annotations
 
 __all__ = [
+    "tool_dispatch_deps",
+    "upload_llm_deps",
+    "upload_text_deps",
+    "content_catalog_deps",
+    "chart_agent_run_deps",
+    "lesson_core_tool_deps",
+    "core_example_tool_deps",
+    "agent_runtime_deps",
     "_tool_dispatch_deps",
     "_upload_llm_deps",
     "_upload_text_deps",
@@ -12,6 +21,7 @@ __all__ = [
     "_agent_runtime_deps",
 ]
 
+from typing import Any
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
@@ -68,8 +78,8 @@ from . import get_app_core as _app_core
 from .exam_wiring import _exam_longform_deps
 
 
-def _tool_dispatch_deps():
-    _ac = _app_core()
+def _tool_dispatch_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
         list_exams=_ac.list_exams,
@@ -110,8 +120,8 @@ def _tool_dispatch_deps():
     )
 
 
-def _upload_llm_deps():
-    _ac = _app_core()
+def _upload_llm_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return UploadLlmDeps(
         app_root=_ac.APP_ROOT,
         call_llm=_ac.call_llm,
@@ -123,8 +133,8 @@ def _upload_llm_deps():
     )
 
 
-def _upload_text_deps():
-    _ac = _app_core()
+def _upload_text_deps(core: Any | None = None):
+    _ac = _app_core(core)
     from ..global_limits import GLOBAL_OCR_SEMAPHORE
 
     return UploadTextDeps(
@@ -134,8 +144,8 @@ def _upload_text_deps():
     )
 
 
-def _content_catalog_deps():
-    _ac = _app_core()
+def _content_catalog_deps(core: Any | None = None):
+    _ac = _app_core(core)
     from ..skills.loader import load_skills
 
     return ContentCatalogDeps(
@@ -146,8 +156,8 @@ def _content_catalog_deps():
     )
 
 
-def _chart_agent_run_deps():
-    _ac = _app_core()
+def _chart_agent_run_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ChartAgentRunDeps(
         safe_int_arg=_safe_int_arg,
         chart_bool=_chart_agent_bool_impl,
@@ -183,8 +193,8 @@ def _chart_agent_run_deps():
     )
 
 
-def _lesson_core_tool_deps():
-    _ac = _app_core()
+def _lesson_core_tool_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return LessonCaptureDeps(
         is_safe_tool_id=_is_safe_tool_id,
         resolve_app_path=_resolve_app_path,
@@ -193,8 +203,8 @@ def _lesson_core_tool_deps():
     )
 
 
-def _core_example_tool_deps():
-    _ac = _app_core()
+def _core_example_tool_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return CoreExampleToolDeps(
         data_dir=_ac.DATA_DIR,
         app_root=_ac.APP_ROOT,
@@ -204,8 +214,8 @@ def _core_example_tool_deps():
     )
 
 
-def _agent_runtime_deps():
-    _ac = _app_core()
+def _agent_runtime_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return AgentRuntimeDeps(
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
@@ -225,9 +235,41 @@ def _agent_runtime_deps():
             skill_id,
             teacher_id,
             skill_runtime,
-            deps=_exam_longform_deps(),
+            deps=_exam_longform_deps(core),
         ),
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
     )
+
+
+def tool_dispatch_deps(core: Any):
+    return _tool_dispatch_deps(core)
+
+
+def upload_llm_deps(core: Any):
+    return _upload_llm_deps(core)
+
+
+def upload_text_deps(core: Any):
+    return _upload_text_deps(core)
+
+
+def content_catalog_deps(core: Any):
+    return _content_catalog_deps(core)
+
+
+def chart_agent_run_deps(core: Any):
+    return _chart_agent_run_deps(core)
+
+
+def lesson_core_tool_deps(core: Any):
+    return _lesson_core_tool_deps(core)
+
+
+def core_example_tool_deps(core: Any):
+    return _core_example_tool_deps(core)
+
+
+def agent_runtime_deps(core: Any):
+    return _agent_runtime_deps(core)

@@ -1,20 +1,22 @@
-import importlib
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
+from tests.helpers.app_factory import create_test_app
 
 
 def _load_app(tmp_dir: Path, *, admin_key: str):
-    os.environ["TENANT_ADMIN_KEY"] = admin_key
-    os.environ["TENANT_DB_PATH"] = str(tmp_dir / "tenants.sqlite3")
-    os.environ["DIAG_LOG"] = "0"
-
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(
+        tmp_dir,
+        env_overrides={
+            "TENANT_ADMIN_KEY": admin_key,
+            "TENANT_DB_PATH": str(tmp_dir / "tenants.sqlite3"),
+            "DIAG_LOG": "0",
+        },
+        use_runtime_entrypoint=True,
+        reset_modules=True,
+    )
 
 
 def test_admin_requires_key():
@@ -103,10 +105,12 @@ def test_tenant_unload_stops_chat_workers():
         )
         assert res.status_code == 200
 
-        handle = getattr(app_mod, "_TENANT_REGISTRY").get_loaded("t1")
+        dispatcher = app_mod.app
+        handle = dispatcher.registry.get_loaded("t1")
         assert handle is not None
-        module = handle.instance.module
-        core = module.get_core() if hasattr(module, "get_core") else getattr(module, "_APP_CORE")
+        app_state = getattr(handle.app, "state", None)
+        core = getattr(app_state, "core", None)
+        assert core is not None
         threads = list(getattr(core, "CHAT_WORKER_THREADS", []) or [])
         assert threads, "expected chat worker threads to be started for tenant"
         assert any(t.is_alive() for t in threads)

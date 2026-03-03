@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 __all__ = [
+    "teacher_provider_registry_deps",
+    "teacher_model_config_deps",
+    "teacher_assignment_preflight_deps",
     "_teacher_provider_registry_deps",
     "_teacher_model_config_deps",
     "_teacher_assignment_preflight_deps",
@@ -22,8 +25,8 @@ from ..teacher_provider_registry_service import (
 from . import get_app_core as _app_core
 
 
-def _teacher_provider_registry_deps():
-    _ac = _app_core()
+def _teacher_provider_registry_deps(core=None):
+    _ac = _app_core(core)
     return TeacherProviderRegistryDeps(
         model_registry=_ac.LLM_GATEWAY.registry,
         resolve_teacher_id=_ac.resolve_teacher_id,
@@ -34,10 +37,12 @@ def _teacher_provider_registry_deps():
     )
 
 
-def _teacher_model_config_deps():
-    _ac = _app_core()
+def _teacher_model_config_deps(core=None):
+    _ac = _app_core(core)
     return TeacherModelConfigDeps(
-        resolve_model_registry=lambda teacher_id: _merged_model_registry_impl(teacher_id, deps=_teacher_provider_registry_deps()),
+        resolve_model_registry=lambda teacher_id: _merged_model_registry_impl(
+            teacher_id, deps=_teacher_provider_registry_deps(core)
+        ),
         resolve_teacher_id=_ac.resolve_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         atomic_write_json=_atomic_write_json,
@@ -45,8 +50,8 @@ def _teacher_model_config_deps():
     )
 
 
-def _teacher_assignment_preflight_deps():
-    _ac = _app_core()
+def _teacher_assignment_preflight_deps(core=None):
+    _ac = _app_core(core)
     return TeacherAssignmentPreflightDeps(
         app_root=_ac.APP_ROOT,
         detect_assignment_intent=_ac.detect_assignment_intent,
@@ -61,3 +66,15 @@ def _teacher_assignment_preflight_deps():
         extract_exam_id=_ac.extract_exam_id,
         exam_get=_ac.exam_get,
     )
+
+
+def teacher_provider_registry_deps(core):
+    return _teacher_provider_registry_deps(core)
+
+
+def teacher_model_config_deps(core):
+    return _teacher_model_config_deps(core)
+
+
+def teacher_assignment_preflight_deps(core):
+    return _teacher_assignment_preflight_deps(core)

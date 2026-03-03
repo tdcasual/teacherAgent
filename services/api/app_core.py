@@ -226,27 +226,27 @@ def diag_log(event: str, payload: Optional[Dict[str, Any]] = None) -> None:
 
 def chat_job_path(job_id: str) -> Path:
     return _core_service_imports_module._chat_job_path_impl(
-        job_id, deps=_app_core_wiring_exports_module._chat_job_repo_deps()
+        job_id, deps=_app_core_wiring_exports_module.chat_job_repo_deps(CURRENT_CORE.get(None))
     )
 
 def load_chat_job(job_id: str) -> Dict[str, Any]:
     return _core_service_imports_module._load_chat_job_impl(
-        job_id, deps=_app_core_wiring_exports_module._chat_job_repo_deps()
+        job_id, deps=_app_core_wiring_exports_module.chat_job_repo_deps(CURRENT_CORE.get(None))
     )
 
 def write_chat_job(job_id: str, updates: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     return _core_service_imports_module._write_chat_job_impl(
         job_id,
         updates,
-        deps=_app_core_wiring_exports_module._chat_job_repo_deps(),
+        deps=_app_core_wiring_exports_module.chat_job_repo_deps(CURRENT_CORE.get(None)),
         overwrite=overwrite,
     )
 
 def _inline_backend_factory():
-    upload_deps = _app_core_wiring_exports_module.upload_worker_deps()
-    exam_deps = _app_core_wiring_exports_module.exam_worker_deps()
-    profile_deps = _app_core_wiring_exports_module.profile_update_worker_deps()
-    chat_deps = _app_core_wiring_exports_module.chat_worker_deps()
+    upload_deps = _app_core_wiring_exports_module.upload_worker_deps(CURRENT_CORE.get(None))
+    exam_deps = _app_core_wiring_exports_module.exam_worker_deps(CURRENT_CORE.get(None))
+    profile_deps = _app_core_wiring_exports_module.profile_update_worker_deps(CURRENT_CORE.get(None))
+    chat_deps = _app_core_wiring_exports_module.chat_worker_deps(CURRENT_CORE.get(None))
     return _core_service_imports_module.build_inline_backend(
         enqueue_upload_job_fn=lambda job_id: _core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(job_id, deps=upload_deps),
         enqueue_exam_job_fn=lambda job_id: _core_service_imports_module.exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),

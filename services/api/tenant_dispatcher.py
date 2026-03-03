@@ -99,8 +99,11 @@ class MultiTenantDispatcher:
         receive: Callable[[], Awaitable[Dict[str, Any]]],
         send: Callable[[Dict[str, Any]], Awaitable[None]],
     ) -> None:
-        # Explicitly set CURRENT_CORE so tenant-aware code sees the right module.
-        core = getattr(handle.instance.module, "_APP_CORE", None)
+        # Explicitly set CURRENT_CORE so tenant-aware code sees the right runtime core.
+        state = getattr(getattr(handle, "app", None), "state", None)
+        core = getattr(state, "core", None) if state is not None else None
+        if core is None:
+            core = getattr(handle.instance.module, "_APP_CORE", None)
         token = CURRENT_CORE.set(core) if core is not None else None
         try:
             await handle.app(scope, receive, send)

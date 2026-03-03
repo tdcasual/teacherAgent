@@ -1,24 +1,22 @@
-import importlib
 import json
-import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from tests.helpers.app_factory import create_test_app
 
 
 def load_app(tmp_dir: Path):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    os.environ["TEACHER_SESSION_COMPACT_ENABLED"] = "1"
-    os.environ["TEACHER_SESSION_COMPACT_MAIN_ONLY"] = "1"
-    os.environ["TEACHER_SESSION_COMPACT_MAX_MESSAGES"] = "20"
-    os.environ["TEACHER_SESSION_COMPACT_KEEP_TAIL"] = "10"
-    os.environ["TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC"] = "0"
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(
+        tmp_dir,
+        env_overrides={
+            "TEACHER_SESSION_COMPACT_ENABLED": "1",
+            "TEACHER_SESSION_COMPACT_MAIN_ONLY": "1",
+            "TEACHER_SESSION_COMPACT_MAX_MESSAGES": "20",
+            "TEACHER_SESSION_COMPACT_KEEP_TAIL": "10",
+            "TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC": "0",
+        },
+        reset_modules=True,
+    )
 
 
 class TeacherSessionCompactionTest(unittest.TestCase):

@@ -106,50 +106,50 @@ def _load_json_file(path: Path) -> Dict[str, Any]:
         _log.warning("failed to load JSON at %s", path, exc_info=True)
         return {}
 
-def load_exam_manifest(exam_id: str) -> Dict[str, Any]:
+def load_exam_manifest(exam_id: str, core: Any | None = None) -> Dict[str, Any]:
     exam_id = str(exam_id or "").strip()
     if not exam_id:
         return {}
     try:
-        manifest_path = resolve_exam_dir(exam_id) / "manifest.json"
+        manifest_path = resolve_exam_dir(exam_id, core=core) / "manifest.json"
     except ValueError:
         return {}
     return _load_json_file(manifest_path)
 
 
-def exam_responses_path(manifest: Dict[str, Any]) -> Optional[Path]:
+def exam_responses_path(manifest: Dict[str, Any], core: Any | None = None) -> Optional[Path]:
     files = manifest.get("files") or {}
     if not isinstance(files, dict):
         return None
     for key in ("responses_scored", "responses", "responses_csv"):
-        path = resolve_manifest_path(files.get(key))
+        path = resolve_manifest_path(files.get(key), core=core)
         if path and path.exists():
             return path
     return None
 
 
-def exam_questions_path(manifest: Dict[str, Any]) -> Optional[Path]:
+def exam_questions_path(manifest: Dict[str, Any], core: Any | None = None) -> Optional[Path]:
     files = manifest.get("files") or {}
     if not isinstance(files, dict):
         return None
     for key in ("questions", "questions_csv"):
-        path = resolve_manifest_path(files.get(key))
+        path = resolve_manifest_path(files.get(key), core=core)
         if path and path.exists():
             return path
     return None
 
 
-def exam_analysis_draft_path(manifest: Dict[str, Any]) -> Optional[Path]:
+def exam_analysis_draft_path(manifest: Dict[str, Any], core: Any | None = None) -> Optional[Path]:
     files = manifest.get("files") or {}
     if isinstance(files, dict):
-        path = resolve_manifest_path(files.get("analysis_draft_json"))
+        path = resolve_manifest_path(files.get("analysis_draft_json"), core=core)
         if path and path.exists():
             return path
     exam_id = str(manifest.get("exam_id") or "").strip()
     if not exam_id:
         return None
     try:
-        fallback = resolve_analysis_dir(exam_id) / "draft.json"
+        fallback = resolve_analysis_dir(exam_id, core=core) / "draft.json"
     except ValueError:
         return None
     return fallback if fallback.exists() else None

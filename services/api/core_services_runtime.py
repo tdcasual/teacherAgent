@@ -153,88 +153,94 @@ def normalize_math_delimiters(text: str) -> str:
     return _normalize_math_delimiters_impl(text)
 
 
-def list_lessons() -> Dict[str, Any]:
-    return _list_lessons_impl(deps=_content_catalog_deps())
+def list_lessons(core: Any | None = None) -> Dict[str, Any]:
+    return _list_lessons_impl(deps=_content_catalog_deps(core))
 
 
-def list_skills() -> Dict[str, Any]:
-    return _list_skills_impl(deps=_content_catalog_deps())
+def list_skills(core: Any | None = None) -> Dict[str, Any]:
+    return _list_skills_impl(deps=_content_catalog_deps(core))
 
 
-async def chat(req: ChatRequest) -> Any:
-    return await _chat_handlers_module.chat(req, deps=_chat_handlers_deps())
+async def chat(req: ChatRequest, core: Any | None = None) -> Any:
+    return await _chat_handlers_module.chat(req, deps=_chat_handlers_deps(core))
 
 
-async def chat_start(req: ChatStartRequest) -> Any:
-    return await _chat_handlers_module.chat_start(req, deps=_chat_handlers_deps())
+async def chat_start(req: ChatStartRequest, core: Any | None = None) -> Any:
+    return await _chat_handlers_module.chat_start(req, deps=_chat_handlers_deps(core))
 
 
-async def chat_status(job_id: str) -> Any:
-    return await _chat_handlers_module.chat_status(job_id, deps=_chat_handlers_deps())
+async def chat_status(job_id: str, core: Any | None = None) -> Any:
+    return await _chat_handlers_module.chat_status(job_id, deps=_chat_handlers_deps(core))
 
 
-def chat_event_stream_deps() -> Any:
-    return _chat_event_stream_deps()
+def chat_event_stream_deps(core: Any | None = None) -> Any:
+    return _chat_event_stream_deps(core)
 
 
-def teacher_model_config_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_model_config_get_impl(args, deps=_teacher_model_config_deps())
+def teacher_model_config_get(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_model_config_get_impl(args, deps=_teacher_model_config_deps(core))
 
 
-def teacher_model_config_update(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_model_config_update_impl(args, deps=_teacher_model_config_deps())
+def teacher_model_config_update(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_model_config_update_impl(args, deps=_teacher_model_config_deps(core))
 
 
-def teacher_provider_registry_get(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_get_impl(args, deps=_teacher_provider_registry_deps())
+def teacher_provider_registry_get(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_provider_registry_get_impl(args, deps=_teacher_provider_registry_deps(core))
 
 
-def teacher_provider_registry_create(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_create_impl(args, deps=_teacher_provider_registry_deps())
+def teacher_provider_registry_create(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_provider_registry_create_impl(args, deps=_teacher_provider_registry_deps(core))
 
 
-def teacher_provider_registry_update(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_update_impl(args, deps=_teacher_provider_registry_deps())
+def teacher_provider_registry_update(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_provider_registry_update_impl(args, deps=_teacher_provider_registry_deps(core))
 
 
-def teacher_provider_registry_delete(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_delete_impl(args, deps=_teacher_provider_registry_deps())
+def teacher_provider_registry_delete(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _teacher_provider_registry_delete_impl(args, deps=_teacher_provider_registry_deps(core))
 
 
-def teacher_provider_registry_probe_models(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _teacher_provider_registry_probe_models_impl(args, deps=_teacher_provider_registry_deps())
+def teacher_provider_registry_probe_models(
+    args: Dict[str, Any], core: Any | None = None
+) -> Dict[str, Any]:
+    return _teacher_provider_registry_probe_models_impl(args, deps=_teacher_provider_registry_deps(core))
 
 
-def resolve_responses_file(exam_id: Optional[str], file_path: Optional[str]) -> Optional[Path]:
-    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps())
+def resolve_responses_file(
+    exam_id: Optional[str], file_path: Optional[str], core: Any | None = None
+) -> Optional[Path]:
+    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps(core))
 
 
-def import_students_from_responses(path: Path, mode: str = "merge") -> Dict[str, Any]:
-    return _import_students_from_responses_impl(path, deps=_student_import_deps(), mode=mode)
+def import_students_from_responses(
+    path: Path, mode: str = "merge", core: Any | None = None
+) -> Dict[str, Any]:
+    return _import_students_from_responses_impl(path, deps=_student_import_deps(core), mode=mode)
 
 
-def student_import(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _student_import_impl(args, deps=_student_import_deps())
+def student_import(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _student_import_impl(args, deps=_student_import_deps(core))
 
 
-def assignment_generate(args: Dict[str, Any]) -> Dict[str, Any]:
+def assignment_generate(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
     from .assignment_generate_tool_service import (
         assignment_generate as _assignment_generate_tool_impl,
     )
 
-    return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps())
+    return _assignment_generate_tool_impl(args, deps=_assignment_generate_tool_deps(core))
 
 
-def assignment_render(args: Dict[str, Any]) -> Dict[str, Any]:
+def assignment_render(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
     from .assignment_generate_tool_service import assignment_render as _assignment_render_impl
 
-    return _assignment_render_impl(args, deps=_assignment_generate_tool_deps())
+    return _assignment_render_impl(args, deps=_assignment_generate_tool_deps(core))
 
 
-def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
+def chart_exec(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
     from .wiring import get_app_core as _app_core
 
-    _ac = _app_core()
+    _ac = _app_core(core)
     return _ac.execute_chart_exec(
         args,
         app_root=_ac.APP_ROOT,
@@ -242,24 +248,24 @@ def chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def chart_agent_run(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _chart_agent_run_impl(args, deps=_chart_agent_run_deps())
+def chart_agent_run(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _chart_agent_run_impl(args, deps=_chart_agent_run_deps(core))
 
 
-def lesson_capture(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _lesson_capture_impl(args, deps=_lesson_core_tool_deps())
+def lesson_capture(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _lesson_capture_impl(args, deps=_lesson_core_tool_deps(core))
 
 
-def core_example_search(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_search_impl(args, deps=_core_example_tool_deps())
+def core_example_search(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _core_example_search_impl(args, deps=_core_example_tool_deps(core))
 
 
-def core_example_register(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_register_impl(args, deps=_core_example_tool_deps())
+def core_example_register(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _core_example_register_impl(args, deps=_core_example_tool_deps(core))
 
 
-def core_example_render(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _core_example_render_impl(args, deps=_core_example_tool_deps())
+def core_example_render(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
+    return _core_example_render_impl(args, deps=_core_example_tool_deps(core))
 
 
 def tool_dispatch(
@@ -269,12 +275,13 @@ def tool_dispatch(
     *,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    core: Any | None = None,
 ) -> Dict[str, Any]:
     return _tool_dispatch_impl(
         name,
         args,
         role,
-        deps=_tool_dispatch_deps(),
+        deps=_tool_dispatch_deps(core),
         skill_id=skill_id,
         teacher_id=teacher_id,
     )
@@ -291,10 +298,11 @@ def call_llm(
     skill_runtime: Optional[Any] = None,
     stream: bool = False,
     token_sink: Optional[Callable[[str], None]] = None,
+    core: Any | None = None,
 ) -> Dict[str, Any]:
     return _call_llm_runtime_impl(
         messages,
-        deps=_chat_runtime_deps(),
+        deps=_chat_runtime_deps(core),
         tools=tools,
         role_hint=role_hint,
         max_tokens=max_tokens,
@@ -311,8 +319,8 @@ def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
     return _parse_tool_json_impl(content)
 
 
-def build_system_prompt(role_hint: Optional[str]) -> str:
-    return _build_system_prompt_impl(role_hint, deps=_chat_support_deps())
+def build_system_prompt(role_hint: Optional[str], core: Any | None = None) -> str:
+    return _build_system_prompt_impl(role_hint, deps=_chat_support_deps(core))
 
 
 def allowed_tools(role_hint: Optional[str]) -> set:
@@ -331,8 +339,10 @@ def is_exam_analysis_request(text: str) -> bool:
     return _is_exam_analysis_request_impl(text)
 
 
-def summarize_exam_students(exam_id: str, max_total: Optional[float]) -> Dict[str, Any]:
-    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps())
+def summarize_exam_students(
+    exam_id: str, max_total: Optional[float], core: Any | None = None
+) -> Dict[str, Any]:
+    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps(core))
 
 
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
@@ -347,8 +357,8 @@ def load_question_kp_map() -> Dict[str, str]:
     return _load_question_kp_map_impl(DATA_DIR)
 
 
-def build_exam_longform_context(exam_id: str) -> Dict[str, Any]:
-    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps())
+def build_exam_longform_context(exam_id: str, core: Any | None = None) -> Dict[str, Any]:
+    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps(core))
 
 
 def run_agent(
@@ -358,11 +368,12 @@ def run_agent(
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    core: Any | None = None,
 ) -> Dict[str, Any]:
     return _run_agent_runtime_impl(
         messages,
         role_hint,
-        deps=_agent_runtime_deps(),
+        deps=_agent_runtime_deps(core),
         extra_system=extra_system,
         skill_id=skill_id,
         teacher_id=teacher_id,
@@ -375,10 +386,11 @@ def compute_chat_reply_sync(
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    core: Any | None = None,
 ) -> Tuple[str, Optional[str], str]:
     return _compute_chat_reply_sync_impl(
         req,
-        deps=_compute_chat_reply_deps(),
+        deps=_compute_chat_reply_deps(core),
         session_id=session_id,
         teacher_id_override=teacher_id_override,
         event_sink=event_sink,
@@ -398,5 +410,5 @@ def resolve_student_session_id(
     )
 
 
-def process_chat_job(job_id: str) -> None:
-    _process_chat_job_impl(job_id, deps=_chat_job_process_deps())
+def process_chat_job(job_id: str, core: Any | None = None) -> None:
+    _process_chat_job_impl(job_id, deps=_chat_job_process_deps(core))

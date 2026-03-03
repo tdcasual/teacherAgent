@@ -1,24 +1,17 @@
-import importlib
-import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from tests.helpers.app_factory import create_test_app
 
 
 def load_app(tmp_dir: Path):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    os.environ["TEACHER_MEMORY_AUTO_APPLY_ENABLED"] = "0"
-    # Default: keep mem0 disabled unless a test enables it explicitly.
-    os.environ.pop("TEACHER_MEM0_ENABLED", None)
-    os.environ.pop("TEACHER_MEM0_WRITE_ENABLED", None)
-    os.environ.pop("TEACHER_MEM0_INDEX_DAILY", None)
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(
+        tmp_dir,
+        env_overrides={"TEACHER_MEMORY_AUTO_APPLY_ENABLED": "0"},
+        env_unset=["TEACHER_MEM0_ENABLED", "TEACHER_MEM0_WRITE_ENABLED", "TEACHER_MEM0_INDEX_DAILY"],
+        reset_modules=True,
+    )
 
 
 class TeacherMem0IntegrationTest(unittest.TestCase):

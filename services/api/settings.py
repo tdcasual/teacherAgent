@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any, Mapping
 
 _log = logging.getLogger(__name__)
 
@@ -287,3 +288,9 @@ def is_production() -> bool:
 
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def load_app_settings(env: Mapping[str, str] | None = None) -> Any:
+    from .runtime_settings import load_settings
+
+    return load_settings(env)

@@ -1,7 +1,19 @@
+# mypy: disable-error-code=no-untyped-def
 """Chat domain deps builders — extracted from app_core."""
 from __future__ import annotations
 
 __all__ = [
+    "chat_handlers_deps",
+    "chat_start_deps",
+    "chat_status_deps",
+    "chat_runtime_deps",
+    "chat_event_stream_deps",
+    "chat_job_repo_deps",
+    "chat_worker_deps",
+    "chat_job_process_deps",
+    "compute_chat_reply_deps",
+    "chat_support_deps",
+    "session_history_deps",
     "_chat_handlers_deps",
     "_chat_start_deps",
     "_chat_status_deps",
@@ -104,10 +116,13 @@ from ..teacher_model_config_service import (
 from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
-from . import CURRENT_CORE as _CURRENT_CORE
 from . import get_app_core as _app_core
 from .teacher_wiring import _teacher_model_config_deps, _teacher_provider_registry_deps
-from .worker_wiring import _chat_worker_started_get, _chat_worker_started_set
+from .worker_wiring import (
+    _chat_worker_started_get,
+    _chat_worker_started_set,
+    _thread_factory_for_core,
+)
 
 
 def _queue_backend_for_app_core(_ac: Any) -> Any:
@@ -118,8 +133,8 @@ def _queue_backend_for_app_core(_ac: Any) -> Any:
     )
 
 
-def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
-    _ac = _app_core()
+def _chat_handlers_deps(core: Any | None = None) -> chat_handlers.ChatHandlerDeps:
+    _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
     return chat_handlers.ChatHandlerDeps(
         compute_chat_reply_sync=lambda req: _ac.compute_chat_reply_sync(req),
@@ -134,13 +149,13 @@ def _chat_handlers_deps() -> chat_handlers.ChatHandlerDeps:
         student_profile_update=_ac.student_profile_update,
         profile_update_async=_ac.PROFILE_UPDATE_ASYNC,
         run_in_threadpool=run_in_threadpool,
-        get_chat_status=lambda job_id: _get_chat_status_impl(job_id, deps=_chat_status_deps()),
-        start_chat_api=lambda req: _start_chat_orchestration_impl(req, deps=_chat_start_deps()),
+        get_chat_status=lambda job_id: _get_chat_status_impl(job_id, deps=_chat_status_deps(core)),
+        start_chat_api=lambda req: _start_chat_orchestration_impl(req, deps=_chat_start_deps(core)),
     )
 
 
-def _chat_start_deps():
-    _ac = _app_core()
+def _chat_start_deps(core: Any | None = None):
+    _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
 
     def _detect_role_hint_nonnull(req: Any) -> str:
@@ -198,13 +213,13 @@ def _chat_start_deps():
             job_id,
             event_type,
             payload,
-            deps=_chat_event_stream_deps(),
+            deps=_chat_event_stream_deps(core),
         ),
     )
 
 
-def _chat_status_deps():
-    _ac = _app_core()
+def _chat_status_deps(core: Any | None = None):
+    _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
     return ChatStatusDeps(
         load_chat_job=_ac.load_chat_job,
@@ -220,8 +235,8 @@ def _chat_status_deps():
     )
 
 
-def _chat_runtime_deps():
-    _ac = _app_core()
+def _chat_runtime_deps(core: Any | None = None):
+    _ac = _app_core(core)
     from ..global_limits import (
         GLOBAL_LLM_SEMAPHORE,
         GLOBAL_LLM_SEMAPHORE_STUDENT,
@@ -250,22 +265,22 @@ def _chat_runtime_deps():
         resolve_teacher_id=_ac.resolve_teacher_id,
         resolve_teacher_model_config=lambda teacher_id: _resolve_teacher_model_config_impl(
             teacher_id,
-            deps=_teacher_model_config_deps(),
+            deps=_teacher_model_config_deps(core),
         ),
         resolve_teacher_provider_target=lambda teacher_id, provider, mode, model: _resolve_provider_target_impl(
             teacher_id,
             provider,
             mode,
             model,
-            deps=_teacher_provider_registry_deps(),
+            deps=_teacher_provider_registry_deps(core),
         ),
         diag_log=_ac.diag_log,
         monotonic=time.monotonic,
     )
 
 
-def _chat_job_repo_deps():
-    _ac = _app_core()
+def _chat_job_repo_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ChatJobRepositoryDeps(
         chat_job_dir=_ac.CHAT_JOB_DIR,
         atomic_write_json=_atomic_write_json,
@@ -273,10 +288,10 @@ def _chat_job_repo_deps():
     )
 
 
-def _chat_event_stream_deps() -> ChatEventStreamDeps:
-    _ac = _app_core()
+def _chat_event_stream_deps(core: Any | None = None) -> ChatEventStreamDeps:
+    _ac = _app_core(core)
     return ChatEventStreamDeps(
-        chat_job_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()),
+        chat_job_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps(core)),
         chat_job_lock=_ac.CHAT_JOB_LOCK,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         notify_job_event=_notify_chat_stream_event_impl,
@@ -284,23 +299,8 @@ def _chat_event_stream_deps() -> ChatEventStreamDeps:
     )
 
 
-def _chat_worker_deps():
-    _ac = _app_core()
-
-    def _thread_factory(*args, **kwargs):
-        import threading
-
-        target = kwargs.get("target")
-        if callable(target):
-            def _target_with_core(*inner_args, **inner_kwargs):
-                token = _CURRENT_CORE.set(_ac)
-                try:
-                    return target(*inner_args, **inner_kwargs)
-                finally:
-                    _CURRENT_CORE.reset(token)
-
-            kwargs["target"] = _target_with_core
-        return threading.Thread(*args, **kwargs)
+def _chat_worker_deps(core: Any | None = None):
+    _ac = _app_core(core)
 
     return ChatWorkerDeps(
         chat_job_dir=_ac.CHAT_JOB_DIR,
@@ -309,8 +309,8 @@ def _chat_worker_deps():
         stop_event=_ac.CHAT_WORKER_STOP_EVENT,
         chat_worker_threads=_ac.CHAT_WORKER_THREADS,
         chat_worker_pool_size=_ac.CHAT_WORKER_POOL_SIZE,
-        worker_started_get=_chat_worker_started_get,
-        worker_started_set=_chat_worker_started_set,
+        worker_started_get=lambda: _chat_worker_started_get(_ac),
+        worker_started_set=lambda value: _chat_worker_started_set(_ac, value),
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
         resolve_chat_lane_id_from_job=resolve_chat_lane_id_from_job,
@@ -322,16 +322,16 @@ def _chat_worker_deps():
         process_chat_job=_ac.process_chat_job,
         diag_log=_ac.diag_log,
         sleep=time.sleep,
-        thread_factory=_thread_factory,
+        thread_factory=_thread_factory_for_core(_ac),
     )
 
 
-def chat_worker_deps():
-    return _chat_worker_deps()
+def chat_worker_deps(core: Any):
+    return _chat_worker_deps(core)
 
 
-def _chat_job_process_deps():
-    _ac = _app_core()
+def _chat_job_process_deps(core: Any | None = None):
+    _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
     student_memory_deps = StudentMemoryDeps(
         resolve_teacher_id=_ac.resolve_teacher_id,
@@ -339,7 +339,8 @@ def _chat_job_process_deps():
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
     return ChatJobProcessDeps(
-        chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps()) / "claim.lock",
+        chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps(core))
+        / "claim.lock",
         try_acquire_lockfile=_try_acquire_lockfile,
         chat_job_claim_ttl_sec=_ac.CHAT_JOB_CLAIM_TTL_SEC,
         load_chat_job=_ac.load_chat_job,
@@ -385,13 +386,13 @@ def _chat_job_process_deps():
             job_id,
             event_type,
             payload,
-            deps=_chat_event_stream_deps(),
+            deps=_chat_event_stream_deps(core),
         ),
     )
 
 
-def _compute_chat_reply_deps():
-    _ac = _app_core()
+def _compute_chat_reply_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ComputeChatReplyDeps(
         detect_role=_ac.detect_role,
         diag_log=_ac.diag_log,
@@ -425,8 +426,8 @@ def _compute_chat_reply_deps():
         ),
     )
 
-def _chat_support_deps():
-    _ac = _app_core()
+def _chat_support_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return ChatSupportDeps(
         compile_system_prompt=compile_system_prompt,
         diag_log=_ac.diag_log,
@@ -434,8 +435,8 @@ def _chat_support_deps():
     )
 
 
-def _session_history_deps():
-    _ac = _app_core()
+def _session_history_deps(core: Any | None = None):
+    _ac = _app_core(core)
     return SessionHistoryDeps(
         load_student_sessions_index=_ac.load_student_sessions_index,
         load_teacher_sessions_index=_ac.load_teacher_sessions_index,
@@ -452,3 +453,43 @@ def _session_history_deps():
         load_session_messages=_load_session_messages_impl,
         resolve_teacher_id=_ac.resolve_teacher_id,
     )
+
+
+def chat_handlers_deps(core: Any) -> chat_handlers.ChatHandlerDeps:
+    return _chat_handlers_deps(core)
+
+
+def chat_start_deps(core: Any):
+    return _chat_start_deps(core)
+
+
+def chat_status_deps(core: Any):
+    return _chat_status_deps(core)
+
+
+def chat_runtime_deps(core: Any):
+    return _chat_runtime_deps(core)
+
+
+def chat_event_stream_deps(core: Any) -> ChatEventStreamDeps:
+    return _chat_event_stream_deps(core)
+
+
+def chat_job_repo_deps(core: Any):
+    return _chat_job_repo_deps(core)
+
+
+def chat_job_process_deps(core: Any):
+    return _chat_job_process_deps(core)
+
+
+def compute_chat_reply_deps(core: Any):
+    return _compute_chat_reply_deps(core)
+
+
+def chat_support_deps(core: Any):
+    return _chat_support_deps(core)
+
+
+def session_history_deps(core: Any):
+    return _session_history_deps(core)

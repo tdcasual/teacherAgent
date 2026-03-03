@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 __all__ = [
+    "student_submit_deps",
+    "student_import_deps",
+    "student_directory_deps",
+    "student_ops_deps",
     "_student_submit_deps",
     "_student_import_deps",
     "_student_directory_deps",
@@ -17,8 +21,8 @@ from ..student_submit_service import StudentSubmitDeps
 from . import get_app_core as _app_core
 
 
-def _student_submit_deps():
-    _ac = _app_core()
+def _student_submit_deps(core=None):
+    _ac = _app_core(core)
     return StudentSubmitDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
@@ -28,8 +32,8 @@ def _student_submit_deps():
     )
 
 
-def _student_import_deps():
-    _ac = _app_core()
+def _student_import_deps(core=None):
+    _ac = _app_core(core)
     return StudentImportDeps(
         app_root=_ac.APP_ROOT,
         data_dir=_ac.DATA_DIR,
@@ -38,8 +42,8 @@ def _student_import_deps():
     )
 
 
-def _student_directory_deps():
-    _ac = _app_core()
+def _student_directory_deps(core=None):
+    _ac = _app_core(core)
     return StudentDirectoryDeps(
         data_dir=_ac.DATA_DIR,
         load_profile_file=_ac.load_profile_file,
@@ -47,8 +51,8 @@ def _student_directory_deps():
     )
 
 
-def _student_ops_deps():
-    _ac = _app_core()
+def _student_ops_deps(core=None):
+    _ac = _app_core(core)
     return StudentOpsDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
@@ -59,3 +63,19 @@ def _student_ops_deps():
         normalize=_ac.normalize,
         diag_log=_ac.diag_log,
     )
+
+
+def student_submit_deps(core):
+    return _student_submit_deps(core)
+
+
+def student_import_deps(core):
+    return _student_import_deps(core)
+
+
+def student_directory_deps(core):
+    return _student_directory_deps(core)
+
+
+def student_ops_deps(core):
+    return _student_ops_deps(core)

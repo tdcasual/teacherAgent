@@ -9,5 +9,5 @@ from . import get_app_core as _app_core
 __all__: list[str] = []
 
 
-def _app_core_accessor():
-    return _app_core()
+def app_core_accessor(core=None):
+    return _app_core(core)
