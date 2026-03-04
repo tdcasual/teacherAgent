@@ -202,6 +202,20 @@ def teacher_memory_search_filter_expired() -> bool:
     return env_bool("TEACHER_MEMORY_SEARCH_FILTER_EXPIRED", "1")
 
 
+def student_memory_assignment_evidence_high_mastery_ratio() -> float:
+    return min(
+        1.0,
+        max(0.0, env_float("STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO", 0.85)),
+    )
+
+
+def student_memory_assignment_evidence_low_mastery_ratio() -> float:
+    return min(
+        1.0,
+        max(0.0, env_float("STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO", 0.45)),
+    )
+
+
 def discussion_complete_marker() -> str:
     return env_str("DISCUSSION_COMPLETE_MARKER", "\u3010\u4e2a\u6027\u5316\u4f5c\u4e1a\u3011")
 

@@ -36,6 +36,8 @@ _BLOCK_PATTERNS: Tuple[Tuple[str, Any], ...] = (
 
 _AUTO_MIN_CONTENT_CHARS = 12
 _AUTO_MAX_PROPOSALS_PER_DAY = 6
+_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO = 0.85
+_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO = 0.45
 
 _AUTO_GOAL_PATTERNS: Tuple[Any, ...] = (
     re.compile(r"(?:长期目标|阶段目标|我的目标|目标是|我希望(?:在|能)|计划在|我要在)", re.IGNORECASE),
@@ -62,6 +64,8 @@ class StudentMemoryDeps:
     resolve_teacher_id: Callable[[Optional[str]], str]
     teacher_workspace_dir: Callable[[str], Path]
     now_iso: Callable[[], str]
+    assignment_evidence_high_mastery_ratio: float
+    assignment_evidence_low_mastery_ratio: float
 
 
 def _norm_text_for_dedupe(value: str) -> str:
@@ -244,6 +248,67 @@ def _infer_auto_candidate(
     return None
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _normalize_assignment_evidence_thresholds(
+    *,
+    high_mastery_ratio: Any,
+    low_mastery_ratio: Any,
+) -> Tuple[float, float]:
+    high = min(1.0, max(0.0, _safe_float(high_mastery_ratio, _ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO)))
+    low = min(1.0, max(0.0, _safe_float(low_mastery_ratio, _ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO)))
+    if low > high:
+        low, high = high, low
+    return high, low
+
+
+def _infer_assignment_evidence_candidate(
+    *,
+    assignment_id: str,
+    evidence: Dict[str, Any],
+    high_mastery_ratio: float,
+    low_mastery_ratio: float,
+) -> Optional[Dict[str, str]]:
+    if str(evidence.get("schema") or "").strip() != "assignment_progress_evidence/v1":
+        return None
+    signals = evidence.get("signals")
+    if not isinstance(signals, dict):
+        return None
+    if not bool(signals.get("submitted")):
+        return None
+    graded_total = max(0, _safe_int(signals.get("best_graded_total"), 0))
+    score_earned = max(0.0, _safe_float(signals.get("best_score_earned"), 0.0))
+    if graded_total <= 0:
+        return None
+    ratio = score_earned / max(1.0, float(graded_total))
+    completed = bool(signals.get("completed"))
+    discussion_pass = bool(signals.get("discussion_pass"))
+    aid = str(assignment_id or "").strip() or "当前作业"
+    if completed and discussion_pass and ratio >= high_mastery_ratio:
+        return {
+            "memory_type": "effective_intervention",
+            "content": f"在作业{aid}中，先讨论思路再提交答案的流程对该生稳定有效，后续继续采用“先说思路再作答”。",
+        }
+    if ratio <= low_mastery_ratio:
+        return {
+            "memory_type": "stable_misconception",
+            "content": f"在作业{aid}中，提交结果反映基础概念仍不稳定，后续需先口述概念与适用条件，再进入计算。",
+        }
+    return None
+
+
 def _auto_daily_quota_reached(
     existing: List[Dict[str, Any]],
     *,
@@ -377,6 +442,110 @@ def student_memory_auto_propose_from_turn_api(
         "memory_type": str(candidate.get("memory_type") or ""),
         "teacher_id": teacher_id_final,
         "student_id": sid,
+    }
+
+
+def student_memory_auto_propose_from_assignment_evidence_api(
+    *,
+    teacher_id: Optional[str],
+    student_id: str,
+    assignment_id: str,
+    evidence: Optional[Dict[str, Any]],
+    request_id: Optional[str],
+    deps: StudentMemoryDeps,
+) -> Dict[str, Any]:
+    teacher_input = str(teacher_id or "").strip()
+    if not teacher_input:
+        return {"ok": False, "created": False, "reason": "missing_teacher_id"}
+    sid = str(student_id or "").strip()
+    if not sid:
+        return {"ok": False, "created": False, "reason": "student_id_required"}
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        return {"ok": False, "created": False, "reason": "assignment_id_required"}
+    evidence_payload = evidence if isinstance(evidence, dict) else {}
+    high_ratio, low_ratio = _normalize_assignment_evidence_thresholds(
+        high_mastery_ratio=deps.assignment_evidence_high_mastery_ratio,
+        low_mastery_ratio=deps.assignment_evidence_low_mastery_ratio,
+    )
+    candidate = _infer_assignment_evidence_candidate(
+        assignment_id=aid,
+        evidence=evidence_payload,
+        high_mastery_ratio=high_ratio,
+        low_mastery_ratio=low_ratio,
+    )
+    if not candidate:
+        return {"ok": False, "created": False, "reason": "no_candidate"}
+
+    teacher_id_final = deps.resolve_teacher_id(teacher_input)
+    existing_resp = list_proposals_api(
+        teacher_id_final,
+        student_id=sid,
+        status=None,
+        limit=300,
+        deps=deps,
+    )
+    existing: List[Dict[str, Any]] = []
+    existing_raw = existing_resp.get("proposals")
+    if bool(existing_resp.get("ok")) and isinstance(existing_raw, list):
+        for item in existing_raw:
+            if isinstance(item, dict):
+                existing.append(item)
+    today = str(deps.now_iso() or "").strip().split("T", 1)[0]
+    if _auto_daily_quota_reached(existing, today=today):
+        return {"ok": False, "created": False, "reason": "daily_quota_reached"}
+
+    duplicate = _auto_find_duplicate(
+        existing,
+        student_id=sid,
+        memory_type=str(candidate.get("memory_type") or ""),
+        content=str(candidate.get("content") or ""),
+    )
+    if duplicate:
+        return {
+            "ok": True,
+            "created": False,
+            "reason": "duplicate",
+            "proposal_id": str(duplicate.get("proposal_id") or ""),
+            "memory_type": str(candidate.get("memory_type") or ""),
+        }
+
+    refs: List[str] = [f"assignment:{aid}"]
+    schema = str(evidence_payload.get("schema") or "").strip()
+    if schema:
+        refs.append(f"evidence:{schema}")
+    best_attempt_id = str((evidence_payload.get("signals") or {}).get("best_attempt_id") or "").strip()
+    if best_attempt_id:
+        refs.append(f"attempt:{best_attempt_id}")
+    rid_ref = str(request_id or "").strip()
+    if rid_ref:
+        refs.append(f"request:{rid_ref}")
+
+    created = create_proposal_api(
+        teacher_id=teacher_id_final,
+        student_id=sid,
+        memory_type=str(candidate.get("memory_type") or ""),
+        content=str(candidate.get("content") or ""),
+        evidence_refs=refs,
+        source="auto_assignment_evidence",
+        deps=deps,
+    )
+    if not created.get("ok"):
+        return {
+            "ok": False,
+            "created": False,
+            "reason": str(created.get("error") or "create_failed"),
+            "error": str(created.get("error") or "create_failed"),
+        }
+    return {
+        "ok": True,
+        "created": True,
+        "proposal_id": str(created.get("proposal_id") or ""),
+        "status": str(created.get("status") or "proposed"),
+        "memory_type": str(candidate.get("memory_type") or ""),
+        "teacher_id": teacher_id_final,
+        "student_id": sid,
+        "assignment_id": aid,
     }
 
 

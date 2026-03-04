@@ -11,6 +11,7 @@ from services.api.student_memory_service import (
     delete_proposal_api,
     list_proposals_api,
     review_proposal_api,
+    student_memory_auto_propose_from_assignment_evidence_api,
     student_memory_auto_propose_from_turn_api,
 )
 
@@ -24,6 +25,8 @@ class StudentMemoryServiceTest(unittest.TestCase):
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
             )
 
             created = create_proposal_api(
@@ -85,6 +88,8 @@ class StudentMemoryServiceTest(unittest.TestCase):
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
             )
 
             created = create_proposal_api(
@@ -116,6 +121,8 @@ class StudentMemoryServiceTest(unittest.TestCase):
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
             )
 
             blocked = create_proposal_api(
@@ -139,6 +146,8 @@ class StudentMemoryServiceTest(unittest.TestCase):
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
             )
 
             blocked = create_proposal_api(
@@ -161,6 +170,8 @@ class StudentMemoryServiceTest(unittest.TestCase):
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
                 now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
             )
 
             created = student_memory_auto_propose_from_turn_api(
@@ -188,6 +199,122 @@ class StudentMemoryServiceTest(unittest.TestCase):
             self.assertTrue(duplicated.get("ok"))
             self.assertFalse(duplicated.get("created"))
             self.assertEqual(duplicated.get("reason"), "duplicate")
+
+    def test_auto_propose_from_assignment_evidence_creates_and_deduplicates(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            deps = StudentMemoryDeps(
+                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
+            )
+            evidence = {
+                "schema": "assignment_progress_evidence/v1",
+                "signals": {
+                    "submitted": True,
+                    "discussion_pass": False,
+                    "completed": False,
+                    "best_graded_total": 4,
+                    "best_score_earned": 1.0,
+                    "best_attempt_id": "submission_20260205_101000",
+                },
+            }
+
+            created = student_memory_auto_propose_from_assignment_evidence_api(
+                teacher_id="teacher_a",
+                student_id="S001",
+                assignment_id="HW_1",
+                evidence=evidence,
+                request_id="req_001",
+                deps=deps,
+            )
+            self.assertTrue(created.get("ok"))
+            self.assertTrue(created.get("created"))
+            self.assertEqual(created.get("memory_type"), "stable_misconception")
+
+            duplicated = student_memory_auto_propose_from_assignment_evidence_api(
+                teacher_id="teacher_a",
+                student_id="S001",
+                assignment_id="HW_1",
+                evidence=evidence,
+                request_id="req_002",
+                deps=deps,
+            )
+            self.assertTrue(duplicated.get("ok"))
+            self.assertFalse(duplicated.get("created"))
+            self.assertEqual(duplicated.get("reason"), "duplicate")
+
+    def test_auto_propose_from_assignment_evidence_uses_effective_intervention_for_high_mastery(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            deps = StudentMemoryDeps(
+                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
+            )
+            evidence = {
+                "schema": "assignment_progress_evidence/v1",
+                "signals": {
+                    "submitted": True,
+                    "discussion_pass": True,
+                    "completed": True,
+                    "best_graded_total": 5,
+                    "best_score_earned": 5.0,
+                    "best_attempt_id": "submission_20260205_102000",
+                },
+            }
+
+            created = student_memory_auto_propose_from_assignment_evidence_api(
+                teacher_id="teacher_a",
+                student_id="S001",
+                assignment_id="HW_2",
+                evidence=evidence,
+                request_id="req_003",
+                deps=deps,
+            )
+            self.assertTrue(created.get("ok"))
+            self.assertTrue(created.get("created"))
+            self.assertEqual(created.get("memory_type"), "effective_intervention")
+
+    def test_auto_propose_from_assignment_evidence_thresholds_are_configurable(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            deps = StudentMemoryDeps(
+                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.75,
+                assignment_evidence_low_mastery_ratio=0.35,
+            )
+            evidence = {
+                "schema": "assignment_progress_evidence/v1",
+                "signals": {
+                    "submitted": True,
+                    "discussion_pass": True,
+                    "completed": True,
+                    "best_graded_total": 10,
+                    "best_score_earned": 8.0,
+                },
+            }
+
+            created = student_memory_auto_propose_from_assignment_evidence_api(
+                teacher_id="teacher_a",
+                student_id="S001",
+                assignment_id="HW_3",
+                evidence=evidence,
+                request_id="req_004",
+                deps=deps,
+            )
+            self.assertTrue(created.get("ok"))
+            self.assertTrue(created.get("created"))
+            self.assertEqual(created.get("memory_type"), "effective_intervention")
 
 
 if __name__ == "__main__":

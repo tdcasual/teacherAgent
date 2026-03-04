@@ -108,6 +108,9 @@ from ..student_memory_service import (
     StudentMemoryDeps,
 )
 from ..student_memory_service import (
+    student_memory_auto_propose_from_assignment_evidence_api as _student_memory_auto_propose_from_assignment_evidence_api,
+)
+from ..student_memory_service import (
     student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
 )
 from ..teacher_model_config_service import (
@@ -337,6 +340,8 @@ def _chat_job_process_deps(core: Any | None = None):
         resolve_teacher_id=_ac.resolve_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
+        assignment_evidence_low_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
     return ChatJobProcessDeps(
         chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps(core))
@@ -378,6 +383,15 @@ def _chat_job_process_deps(core: Any | None = None):
             session_id=str(kwargs.get("session_id") or ""),
             user_text=str(kwargs.get("user_text") or ""),
             assistant_text=str(kwargs.get("assistant_text") or ""),
+            request_id=(str(kwargs.get("request_id") or "") or None),
+        ),
+        compute_assignment_progress=_ac.compute_assignment_progress,
+        student_memory_auto_propose_from_assignment_evidence=lambda **kwargs: _student_memory_auto_propose_from_assignment_evidence_api(
+            deps=student_memory_deps,
+            teacher_id=kwargs.get("teacher_id"),
+            student_id=str(kwargs.get("student_id") or ""),
+            assignment_id=str(kwargs.get("assignment_id") or ""),
+            evidence=kwargs.get("evidence") if isinstance(kwargs.get("evidence"), dict) else None,
             request_id=(str(kwargs.get("request_id") or "") or None),
         ),
         diag_log=_ac.diag_log,

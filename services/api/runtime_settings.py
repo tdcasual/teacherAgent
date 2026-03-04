@@ -75,6 +75,8 @@ class AppSettings:
     teacher_memory_ttl_days_daily: int
     teacher_memory_context_max_entries: int
     teacher_memory_search_filter_expired: bool
+    student_memory_assignment_evidence_high_mastery_ratio: float
+    student_memory_assignment_evidence_low_mastery_ratio: float
     discussion_complete_marker: str
     grade_count_conf_threshold: float
     ocr_max_concurrency: int
@@ -206,6 +208,20 @@ def load_settings(env: Mapping[str, str] | None = None) -> AppSettings:
         ),
         teacher_memory_search_filter_expired=_env_bool(
             source, "TEACHER_MEMORY_SEARCH_FILTER_EXPIRED", "1"
+        ),
+        student_memory_assignment_evidence_high_mastery_ratio=min(
+            1.0,
+            max(
+                0.0,
+                _env_float(source, "STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO", 0.85),
+            ),
+        ),
+        student_memory_assignment_evidence_low_mastery_ratio=min(
+            1.0,
+            max(
+                0.0,
+                _env_float(source, "STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO", 0.45),
+            ),
         ),
         discussion_complete_marker=_env_str(source, "DISCUSSION_COMPLETE_MARKER", "【个性化作业】"),
         grade_count_conf_threshold=_env_float(source, "GRADE_COUNT_CONF_THRESHOLD", 0.6),

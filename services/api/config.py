@@ -77,6 +77,8 @@ class ConfigValues:
     TEACHER_MEMORY_TTL_DAYS_DAILY: int
     TEACHER_MEMORY_CONTEXT_MAX_ENTRIES: int
     TEACHER_MEMORY_SEARCH_FILTER_EXPIRED: bool
+    STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO: float
+    STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO: float
     DISCUSSION_COMPLETE_MARKER: str
     GRADE_COUNT_CONF_THRESHOLD: float
     OCR_MAX_CONCURRENCY: int
@@ -196,6 +198,8 @@ def build_config(
         TEACHER_MEMORY_TTL_DAYS_DAILY=settings.teacher_memory_ttl_days_daily,
         TEACHER_MEMORY_CONTEXT_MAX_ENTRIES=settings.teacher_memory_context_max_entries,
         TEACHER_MEMORY_SEARCH_FILTER_EXPIRED=settings.teacher_memory_search_filter_expired,
+        STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO=settings.student_memory_assignment_evidence_high_mastery_ratio,
+        STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO=settings.student_memory_assignment_evidence_low_mastery_ratio,
         DISCUSSION_COMPLETE_MARKER=settings.discussion_complete_marker,
         GRADE_COUNT_CONF_THRESHOLD=settings.grade_count_conf_threshold,
         OCR_MAX_CONCURRENCY=settings.ocr_max_concurrency,

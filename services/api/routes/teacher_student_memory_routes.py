@@ -25,6 +25,8 @@ def _student_memory_deps(core: Any) -> StudentMemoryDeps:
         resolve_teacher_id=core.resolve_teacher_id,
         teacher_workspace_dir=core.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        assignment_evidence_high_mastery_ratio=core.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
+        assignment_evidence_low_mastery_ratio=core.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
 
 
