@@ -106,6 +106,12 @@ from .teacher_provider_registry_service import (
 from .teacher_provider_registry_service import (
     teacher_provider_registry_update as _teacher_provider_registry_update_impl,
 )
+from .teacher_model_config_service import (
+    teacher_model_config_get as _teacher_model_config_get_impl,
+)
+from .teacher_model_config_service import (
+    teacher_model_config_update as _teacher_model_config_update_impl,
+)
 from .tool_dispatch_service import tool_dispatch as _tool_dispatch_impl
 from .wiring.assignment_wiring import _assignment_generate_tool_deps
 from .wiring.chat_wiring import (
@@ -161,6 +167,7 @@ def list_skills(core: Any | None = None) -> Dict[str, Any]:
     return _list_skills_impl(deps=_content_catalog_deps(core))
 
 
+<<<<<<<< HEAD:services/api/core_services_runtime.py
 async def chat(req: ChatRequest, core: Any | None = None) -> Any:
     return await _chat_handlers_module.chat(req, deps=_chat_handlers_deps(core))
 
@@ -187,6 +194,14 @@ def teacher_model_config_update(args: Dict[str, Any], core: Any | None = None) -
 
 def teacher_provider_registry_get(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:
     return _teacher_provider_registry_get_impl(args, deps=_teacher_provider_registry_deps(core))
+========
+def teacher_model_config_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_model_config_get_impl(args, deps=_teacher_model_config_deps())
+
+
+def teacher_model_config_update(args: Dict[str, Any]) -> Dict[str, Any]:
+    return _teacher_model_config_update_impl(args, deps=_teacher_model_config_deps())
+>>>>>>>> 0c7a9ea (chore: commit all local changes (cleaned)):services/api/context_runtime_facade.py
 
 
 def teacher_provider_registry_create(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:

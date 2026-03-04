@@ -248,6 +248,10 @@ from .session_discussion_service import (
     SessionDiscussionDeps,
     session_discussion_pass as _session_discussion_pass_impl,
 )
+<<<<<<<< HEAD:services/api/core_service_imports.py
+========
+from .student_profile_api_service import StudentProfileApiDeps, get_profile_api as _get_profile_api_impl
+>>>>>>>> 0c7a9ea (chore: commit all local changes (cleaned)):services/api/app_core_service_imports.py
 from .student_import_service import (
     StudentImportDeps,
     import_students_from_responses as _import_students_from_responses_impl,

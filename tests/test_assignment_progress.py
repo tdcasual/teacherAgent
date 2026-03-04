@@ -478,6 +478,175 @@ class AssignmentProgressTest(unittest.TestCase):
                 ids = sorted([a.get("assignment_id") for a in data.get("assignments") or []])
                 self.assertEqual(ids, ["A1", "A2"])
 
+    def test_completion_policy_submission_only_allows_completion_without_discussion(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+
+            write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
+            assignment_id = "HW_POLICY_SUB_ONLY_2026-02-05"
+            write_json(
+                tmp / "data" / "assignments" / assignment_id / "meta.json",
+                {
+                    "assignment_id": assignment_id,
+                    "date": "2026-02-05",
+                    "scope": "student",
+                    "student_ids": ["S001"],
+                    "completion_policy": {
+                        "requires_discussion": False,
+                        "requires_submission": True,
+                        "min_graded_total": 1,
+                        "best_attempt": "score_earned_then_correct_then_graded_total",
+                        "version": 2,
+                    },
+                },
+            )
+            write_json(
+                tmp
+                / "data"
+                / "student_submissions"
+                / assignment_id
+                / "S001"
+                / "submission_20260205_101000"
+                / "grading_report.json",
+                {
+                    "student_id": "S001",
+                    "assignment_id": assignment_id,
+                    "graded_total": 2,
+                    "ungraded": 0,
+                    "correct": 2,
+                    "items": [{"status": "matched", "confidence": 1.0, "score": 1.0}] * 2,
+                },
+            )
+
+            with TestClient(app_mod.app) as client:
+                res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                student = next(s for s in data["students"] if s.get("student_id") == "S001")
+                self.assertFalse(student["discussion"]["pass"])
+                self.assertTrue(student["complete"])
+                self.assertEqual(student["completion"]["policy"]["version"], 2)
+                self.assertTrue(student["completion"]["checks"]["submitted"])
+                self.assertTrue(student["completion"]["checks"]["completed"])
+
+    def test_completion_policy_discussion_only_allows_completion_without_submission(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+
+            write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
+            assignment_id = "HW_POLICY_DISCUSS_ONLY_2026-02-05"
+            write_json(
+                tmp / "data" / "assignments" / assignment_id / "meta.json",
+                {
+                    "assignment_id": assignment_id,
+                    "date": "2026-02-05",
+                    "scope": "student",
+                    "student_ids": ["S001"],
+                    "completion_policy": {
+                        "requires_discussion": True,
+                        "requires_submission": False,
+                        "min_graded_total": 1,
+                        "best_attempt": "score_earned_then_correct_then_graded_total",
+                        "version": 2,
+                    },
+                },
+            )
+            sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
+            sess_path.parent.mkdir(parents=True, exist_ok=True)
+            sess_path.write_text(
+                json.dumps(
+                    {"ts": "2026-02-05T10:10:00", "role": "assistant", "content": app_mod.get_core().DISCUSSION_COMPLETE_MARKER},
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with TestClient(app_mod.app) as client:
+                res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                student = next(s for s in data["students"] if s.get("student_id") == "S001")
+                self.assertTrue(student["discussion"]["pass"])
+                self.assertFalse(student["completion"]["checks"]["submitted"])
+                self.assertTrue(student["complete"])
+
+    def test_completion_policy_uses_latest_attempt_and_emits_evidence_snapshot(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+
+            write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
+            assignment_id = "HW_POLICY_LATEST_2026-02-05"
+            write_json(
+                tmp / "data" / "assignments" / assignment_id / "meta.json",
+                {
+                    "assignment_id": assignment_id,
+                    "date": "2026-02-05",
+                    "scope": "student",
+                    "student_ids": ["S001"],
+                    "completion_policy": {
+                        "requires_discussion": False,
+                        "requires_submission": True,
+                        "min_graded_total": 2,
+                        "best_attempt": "latest_submission",
+                        "version": 3,
+                    },
+                },
+            )
+            write_json(
+                tmp
+                / "data"
+                / "student_submissions"
+                / assignment_id
+                / "S001"
+                / "submission_20260205_101000"
+                / "grading_report.json",
+                {
+                    "student_id": "S001",
+                    "assignment_id": assignment_id,
+                    "graded_total": 3,
+                    "ungraded": 0,
+                    "correct": 3,
+                    "items": [{"status": "matched", "confidence": 1.0, "score": 1.0}] * 3,
+                },
+            )
+            write_json(
+                tmp
+                / "data"
+                / "student_submissions"
+                / assignment_id
+                / "S001"
+                / "submission_20260205_102000"
+                / "grading_report.json",
+                {
+                    "student_id": "S001",
+                    "assignment_id": assignment_id,
+                    "graded_total": 2,
+                    "ungraded": 0,
+                    "correct": 1,
+                    "items": [
+                        {"status": "matched", "confidence": 1.0, "score": 1.0},
+                        {"status": "missed", "confidence": 1.0, "score": 0.0},
+                    ],
+                },
+            )
+
+            with TestClient(app_mod.app) as client:
+                res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                student = next(s for s in data["students"] if s.get("student_id") == "S001")
+                best = student["submission"]["best"]
+                self.assertEqual(best["attempt_id"], "submission_20260205_102000")
+                self.assertTrue(student["complete"])
+                evidence = student.get("evidence") or {}
+                self.assertEqual(evidence.get("schema"), "assignment_progress_evidence/v1")
+                self.assertEqual(evidence.get("signals", {}).get("best_attempt_id"), "submission_20260205_102000")
+                self.assertTrue(evidence.get("signals", {}).get("completed"))
+
     def test_assignment_requirements_get_rejects_invalid_assignment_id_path(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)

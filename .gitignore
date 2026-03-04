@@ -70,6 +70,7 @@ main.png
 
 # Local git worktrees
 .worktrees/
+.worktrees.deleting.*/
 
 # Local Playwright CLI cache
 .playwright-cli/

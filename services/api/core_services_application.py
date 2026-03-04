@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -211,6 +212,7 @@ from .wiring.exam_wiring import (
     _exam_overview_deps,
     _exam_range_deps,
 )
+from .wiring import get_app_core as _app_core
 from .wiring.student_wiring import _student_directory_deps, _student_ops_deps, _student_submit_deps
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
@@ -613,13 +615,35 @@ def postprocess_assignment_meta(
 
 
 def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
+    core = _app_core(None)
+    marker = DISCUSSION_COMPLETE_MARKER
+    load_index_fn = load_student_sessions_index
+    session_file_fn = student_session_file
+    if core is not None:
+        marker = str(getattr(core, "DISCUSSION_COMPLETE_MARKER", marker) or marker)
+        session_file_fn = getattr(core, "student_session_file", session_file_fn)
+        index_path_fn = getattr(core, "student_sessions_index_path", None)
+        if callable(index_path_fn):
+            def _load_index_with_core(student_id_value: str) -> List[Dict[str, Any]]:
+                try:
+                    path = index_path_fn(student_id_value)
+                    raw = json.loads(path.read_text(encoding="utf-8"))
+                except FileNotFoundError:
+                    return []
+                except Exception:
+                    return []
+                return raw if isinstance(raw, list) else []
+
+            load_index_fn = _load_index_with_core
+        else:
+            load_index_fn = getattr(core, "load_student_sessions_index", load_index_fn)
     return _session_discussion_pass_impl(
         student_id,
         assignment_id,
         deps=SessionDiscussionDeps(
-            marker=DISCUSSION_COMPLETE_MARKER,
-            load_student_sessions_index=load_student_sessions_index,
-            student_session_file=student_session_file,
+            marker=marker,
+            load_student_sessions_index=load_index_fn,
+            student_session_file=session_file_fn,
         ),
     )
 
