@@ -95,6 +95,9 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
             teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            student_memory_auto_propose_from_turn=lambda **_kwargs: {"ok": False, "created": False},
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
             diag_log=lambda *_args, **_kwargs: None,
             release_lockfile=lambda _path: None,
             append_chat_event=append_chat_event or (lambda _job_id, _event_type, _payload: {}),
@@ -197,6 +200,9 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
             teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            student_memory_auto_propose_from_turn=lambda **_kwargs: {"ok": False, "created": False},
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
             diag_log=lambda *_args, **_kwargs: None,
             release_lockfile=lambda _path: None,
         )
@@ -270,6 +276,8 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
             teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
             diag_log=lambda *_args, **_kwargs: None,
             release_lockfile=lambda _path: None,
             student_memory_auto_propose_from_turn=_auto_hook,
@@ -346,6 +354,8 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
             teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
             diag_log=lambda name, payload: diag_events.append(f"{name}:{payload.get('student_id', '')}"),
             release_lockfile=lambda _path: None,
             student_memory_auto_propose_from_turn=_auto_hook,
@@ -415,6 +425,8 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
             teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
             maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
             diag_log=lambda *_args, **_kwargs: None,
             release_lockfile=lambda _path: None,
             student_memory_auto_propose_from_turn=_auto_hook,
@@ -426,6 +438,106 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
         self.assertIsNone(auto_calls[0].get("teacher_id"))
         self.assertEqual(auto_calls[0].get("student_id"), "S001")
         self.assertEqual(auto_calls[0].get("session_id"), "resolved_session_005")
+
+    def test_student_assignment_evidence_hook_runs_after_done_when_assignment_present(self):
+        events: list[str] = []
+        evidence_calls: list[dict] = []
+        state = {
+            "job_id": "cjob_test_006",
+            "status": "queued",
+            "session_id": "",
+            "teacher_id": "teacher_auto",
+            "request_id": "req_test_006",
+            "skill_id": "",
+            "request": {
+                "messages": [{"role": "user", "content": "继续今天作业"}],
+                "role": "student",
+                "skill_id": "",
+                "teacher_id": "teacher_auto",
+                "student_id": "S001",
+                "assignment_id": "HW_6",
+                "assignment_date": "2026-02-15",
+                "auto_generate_assignment": None,
+            },
+        }
+
+        def _write_chat_job(_job_id, updates):
+            if "status" in updates:
+                events.append(f"write:{updates.get('status')}")
+            state.update(dict(updates or {}))
+
+        def _evidence_hook(**kwargs):
+            evidence_calls.append(dict(kwargs))
+            events.append("evidence_hook")
+            return {
+                "ok": True,
+                "created": True,
+                "proposal_id": "smem_evd_001",
+                "memory_type": "stable_misconception",
+                "teacher_id": "teacher_auto",
+            }
+
+        deps = ChatJobProcessDeps(
+            chat_job_claim_path=lambda _job_id: "/tmp/claim.lock",
+            try_acquire_lockfile=lambda _path, _ttl: True,
+            chat_job_claim_ttl_sec=600,
+            load_chat_job=lambda _job_id: dict(state),
+            write_chat_job=_write_chat_job,
+            chat_request_model=lambda **payload: _Req(**payload),
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
+                "继续完成作业吧。",
+                "student",
+                "继续今天作业",
+            ),
+            monotonic=lambda: 0.0,
+            build_interaction_note=lambda _u, _a, assignment_id=None: "",
+            profile_update_async=False,
+            enqueue_profile_update=lambda _payload: None,
+            student_profile_update=lambda _payload: None,
+            resolve_student_session_id=lambda _student_id, _assignment_id, _assignment_date: "resolved_session_006",
+            append_student_session_message=lambda *args, **kwargs: None,
+            update_student_session_index=lambda *args, **kwargs: None,
+            parse_date_str=lambda raw: str(raw or ""),
+            resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+            ensure_teacher_workspace=lambda _teacher_id: None,
+            append_teacher_session_message=lambda *args, **kwargs: None,
+            update_teacher_session_index=lambda *args, **kwargs: None,
+            teacher_memory_auto_propose_from_turn=lambda *args, **kwargs: {},
+            teacher_memory_auto_flush_from_session=lambda *args, **kwargs: {},
+            maybe_compact_teacher_session=lambda *args, **kwargs: None,
+            compute_assignment_progress=lambda _assignment_id, _include_students: {
+                "ok": True,
+                "students": [
+                    {
+                        "student_id": "S001",
+                        "evidence": {
+                            "schema": "assignment_progress_evidence/v1",
+                            "signals": {
+                                "submitted": True,
+                                "best_graded_total": 4,
+                                "best_score_earned": 1.0,
+                                "completed": False,
+                                "discussion_pass": False,
+                                "best_attempt_id": "submission_20260215_101000",
+                            },
+                        },
+                    }
+                ],
+            },
+            student_memory_auto_propose_from_turn=lambda **_kwargs: {"ok": False, "created": False},
+            student_memory_auto_propose_from_assignment_evidence=_evidence_hook,
+            diag_log=lambda *_args, **_kwargs: None,
+            release_lockfile=lambda _path: None,
+        )
+        process_chat_job("cjob_test_006", deps=deps)
+
+        self.assertIn("write:done", events)
+        self.assertIn("evidence_hook", events)
+        self.assertGreater(events.index("evidence_hook"), events.index("write:done"))
+        self.assertEqual(len(evidence_calls), 1)
+        self.assertEqual(evidence_calls[0].get("teacher_id"), "teacher_auto")
+        self.assertEqual(evidence_calls[0].get("student_id"), "S001")
+        self.assertEqual(evidence_calls[0].get("assignment_id"), "HW_6")
 
     def test_process_chat_job_rejects_uninspectable_legacy_compute_callable_without_event_sink(self):
         events: list[str] = []

@@ -359,13 +359,13 @@ class ChatJobProcessDeps:
     teacher_memory_auto_propose_from_turn: Callable[..., Dict[str, Any]]
     teacher_memory_auto_flush_from_session: Callable[..., Dict[str, Any]]
     maybe_compact_teacher_session: Callable[[str, str], None]
+    student_memory_auto_propose_from_turn: Callable[..., Dict[str, Any]]
+    compute_assignment_progress: Callable[[str, bool], Dict[str, Any]]
+    student_memory_auto_propose_from_assignment_evidence: Callable[..., Dict[str, Any]]
     diag_log: Callable[[str, Dict[str, Any]], None]
     release_lockfile: Callable[[Any], None]
     append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
         lambda _job_id, _event_type, _payload: {}
-    )
-    student_memory_auto_propose_from_turn: Callable[..., Dict[str, Any]] = (
-        lambda **_kwargs: {"ok": False, "created": False, "reason": "disabled"}
     )
 
 
@@ -755,6 +755,8 @@ def _run_student_post_done_side_effects(
     if not student_id:
         return
     teacher_id = str(getattr(req, "teacher_id", "") or "").strip()
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    request_id = str(job.get("request_id") or "")
     try:
         auto = deps.student_memory_auto_propose_from_turn(
             teacher_id=teacher_id or None,
@@ -762,7 +764,7 @@ def _run_student_post_done_side_effects(
             session_id=str(session_id or ""),
             user_text=last_user_text,
             assistant_text=reply_text,
-            request_id=str(job.get("request_id") or ""),
+            request_id=request_id,
         )
         if auto.get("created"):
             deps.diag_log(
@@ -785,6 +787,178 @@ def _run_student_post_done_side_effects(
                 "session_id": str(session_id or ""),
                 "error": str(exc)[:200],
             },
+        )
+    if not assignment_id:
+        return
+    try:
+        progress = deps.compute_assignment_progress(assignment_id, True)
+        if not isinstance(progress, dict) or not bool(progress.get("ok")):
+            return
+        student_items = progress.get("students")
+        if not isinstance(student_items, list):
+            return
+        student_payload = next(
+            (
+                item
+                for item in student_items
+                if isinstance(item, dict) and str(item.get("student_id") or "").strip() == student_id
+            ),
+            None,
+        )
+        if not isinstance(student_payload, dict):
+            return
+        evidence = student_payload.get("evidence")
+        if not isinstance(evidence, dict):
+            return
+        auto_evidence = deps.student_memory_auto_propose_from_assignment_evidence(
+            teacher_id=teacher_id or None,
+            student_id=student_id,
+            assignment_id=assignment_id,
+            evidence=evidence,
+            request_id=request_id or None,
+        )
+        if auto_evidence.get("created"):
+            deps.diag_log(
+                "student.memory.assignment_evidence.proposed",
+                {
+                    "teacher_id": str(auto_evidence.get("teacher_id") or teacher_id),
+                    "student_id": student_id,
+                    "assignment_id": assignment_id,
+                    "proposal_id": auto_evidence.get("proposal_id"),
+                    "memory_type": auto_evidence.get("memory_type"),
+                },
+            )
+    except Exception as exc:  # policy: allowed-broad-except
+        _log.warning("operation failed", exc_info=True)
+        deps.diag_log(
+            "student.memory.assignment_evidence.failed",
+            {
+                "teacher_id": teacher_id,
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "error": str(exc)[:200],
+            },
+        )
+
+
+def _compute_reply_with_runtime_events(
+    *,
+    job_id: str,
+    job: Dict[str, Any],
+    req: Any,
+    deps: ChatJobProcessDeps,
+) -> Tuple[str, Optional[str], str, int]:
+    t0 = deps.monotonic()
+    event_state = {"assistant_done": False}
+    runtime_event_writer = _BufferedRuntimeEventWriter(
+        job_id=job_id,
+        deps=deps,
+        event_state=event_state,
+    )
+
+    def _event_sink(event_type: str, payload: Dict[str, Any]) -> None:
+        runtime_event_writer.emit(event_type, payload)
+
+    try:
+        reply_text, role_hint, last_user_text = _call_compute_chat_reply_sync(
+            deps=deps,
+            req=req,
+            session_id=str(job.get("session_id") or "main"),
+            teacher_id_override=str(job.get("teacher_id") or "").strip() or None,
+            event_sink=_event_sink,
+        )
+    finally:
+        runtime_event_writer.flush()
+
+    if not event_state["assistant_done"]:
+        _emit_assistant_reply_events(job_id=job_id, reply_text=reply_text, deps=deps)
+
+    duration_ms = int((deps.monotonic() - t0) * 1000)
+    return reply_text, role_hint, last_user_text, duration_ms
+
+
+def _persist_history_by_role(
+    *,
+    job_id: str,
+    job: Dict[str, Any],
+    req: Any,
+    role_hint: Optional[str],
+    reply_text: str,
+    last_user_text: str,
+    user_turn_persisted: bool,
+    deps: ChatJobProcessDeps,
+    status_writer: _ChatJobStatusWriter,
+) -> Tuple[bool, str, str, str]:
+    teacher_id = ""
+    teacher_session_id = ""
+    student_session_id = str(job.get("session_id") or "")
+
+    if role_hint == "teacher":
+        persisted_ok, teacher_id, teacher_session_id = _persist_teacher_history(
+            job_id,
+            job,
+            req,
+            reply_text=reply_text,
+            last_user_text=last_user_text,
+            user_turn_persisted=user_turn_persisted,
+            deps=deps,
+            status_writer=status_writer,
+        )
+        return persisted_ok, teacher_id, teacher_session_id, student_session_id
+
+    if role_hint == "student" and req.student_id:
+        _update_student_profile_safe(
+            req, last_user_text=last_user_text, reply_text=reply_text, deps=deps
+        )
+        student_session_id = student_session_id or deps.resolve_student_session_id(
+            req.student_id,
+            req.assignment_id,
+            req.assignment_date,
+        )
+        persisted_ok = _persist_student_history(
+            job_id,
+            job,
+            req,
+            reply_text=reply_text,
+            last_user_text=last_user_text,
+            user_turn_persisted=user_turn_persisted,
+            deps=deps,
+            status_writer=status_writer,
+        )
+        if not persisted_ok:
+            return False, teacher_id, teacher_session_id, student_session_id
+
+    return True, teacher_id, teacher_session_id, student_session_id
+
+
+def _run_post_done_side_effects_by_role(
+    *,
+    req: Any,
+    job: Dict[str, Any],
+    role_hint: Optional[str],
+    teacher_id: str,
+    teacher_session_id: str,
+    student_session_id: str,
+    last_user_text: str,
+    reply_text: str,
+    deps: ChatJobProcessDeps,
+) -> None:
+    if role_hint == "teacher":
+        _run_teacher_post_done_side_effects(
+            teacher_id,
+            teacher_session_id,
+            last_user_text=last_user_text,
+            reply_text=reply_text,
+            deps=deps,
+        )
+    if role_hint == "student" and req.student_id:
+        _run_student_post_done_side_effects(
+            req=req,
+            job=job,
+            session_id=student_session_id,
+            last_user_text=last_user_text,
+            reply_text=reply_text,
+            deps=deps,
         )
 
 
