@@ -9,8 +9,8 @@ from ..api_models import (
     StudentMemoryProposalCreateRequest,
     StudentMemoryProposalReviewRequest,
 )
-from ..student_memory_api_service import (
-    StudentMemoryApiDeps,
+from ..student_memory_service import (
+    StudentMemoryDeps,
     create_proposal_api,
     delete_proposal_api,
     insights_api,
@@ -20,11 +20,13 @@ from ..student_memory_api_service import (
 from .teacher_route_helpers import ensure_ok_error_detail, scoped_teacher_id
 
 
-def _student_memory_api_deps(core: Any) -> StudentMemoryApiDeps:
-    return StudentMemoryApiDeps(
+def _student_memory_deps(core: Any) -> StudentMemoryDeps:
+    return StudentMemoryDeps(
         resolve_teacher_id=core.resolve_teacher_id,
         teacher_workspace_dir=core.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        assignment_evidence_high_mastery_ratio=core.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
+        assignment_evidence_low_mastery_ratio=core.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
 
 
@@ -42,7 +44,7 @@ def register_student_memory_routes(router: APIRouter, core: Any) -> None:
             student_id=student_id,
             status=status,
             limit=limit,
-            deps=_student_memory_api_deps(core),
+            deps=_student_memory_deps(core),
         )
         ensure_ok_error_detail(result)
         return result
@@ -57,7 +59,7 @@ def register_student_memory_routes(router: APIRouter, core: Any) -> None:
             content=req.content,
             evidence_refs=req.evidence_refs,
             source=req.source,
-            deps=_student_memory_api_deps(core),
+            deps=_student_memory_deps(core),
         )
         ensure_ok_error_detail(result)
         return result
@@ -72,7 +74,7 @@ def register_student_memory_routes(router: APIRouter, core: Any) -> None:
             proposal_id,
             teacher_id=teacher_id_scoped,
             approve=bool(req.approve),
-            deps=_student_memory_api_deps(core),
+            deps=_student_memory_deps(core),
         )
         if result.get("error"):
             ensure_ok_error_detail(result, not_found_errors={"proposal not found"})
@@ -87,7 +89,7 @@ def register_student_memory_routes(router: APIRouter, core: Any) -> None:
         result = delete_proposal_api(
             proposal_id,
             teacher_id=teacher_id_scoped,
-            deps=_student_memory_api_deps(core),
+            deps=_student_memory_deps(core),
         )
         if result.get("error"):
             ensure_ok_error_detail(result, not_found_errors={"proposal not found"})
@@ -104,7 +106,7 @@ def register_student_memory_routes(router: APIRouter, core: Any) -> None:
             teacher_id_scoped,
             student_id=student_id,
             days=days,
-            deps=_student_memory_api_deps(core),
+            deps=_student_memory_deps(core),
         )
         ensure_ok_error_detail(result)
         return result

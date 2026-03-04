@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any, Mapping
 
 _log = logging.getLogger(__name__)
 
@@ -60,10 +61,6 @@ def data_dir() -> str:
 
 def uploads_dir() -> str:
     return env_str("UPLOADS_DIR", "")
-
-
-def llm_routing_path() -> str:
-    return env_str("LLM_ROUTING_PATH", "")
 
 
 def diag_log_enabled() -> bool:
@@ -205,6 +202,20 @@ def teacher_memory_search_filter_expired() -> bool:
     return env_bool("TEACHER_MEMORY_SEARCH_FILTER_EXPIRED", "1")
 
 
+def student_memory_assignment_evidence_high_mastery_ratio() -> float:
+    return min(
+        1.0,
+        max(0.0, env_float("STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO", 0.85)),
+    )
+
+
+def student_memory_assignment_evidence_low_mastery_ratio() -> float:
+    return min(
+        1.0,
+        max(0.0, env_float("STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO", 0.45)),
+    )
+
+
 def discussion_complete_marker() -> str:
     return env_str("DISCUSSION_COMPLETE_MARKER", "\u3010\u4e2a\u6027\u5316\u4f5c\u4e1a\u3011")
 
@@ -289,10 +300,11 @@ def app_env() -> str:
 def is_production() -> bool:
     return app_env() in {"prod", "production"}
 
-
-def allow_inline_fallback_in_prod() -> bool:
-    return env_bool("ALLOW_INLINE_FALLBACK_IN_PROD", "0")
-
-
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def load_app_settings(env: Mapping[str, str] | None = None) -> Any:
+    from .runtime_settings import load_settings
+
+    return load_settings(env)
