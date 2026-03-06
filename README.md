@@ -69,7 +69,7 @@ docker compose up -d api
 ## 本地开发（可选）
 ```bash
 # API
-python3 -m venv .venv
+python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -r services/api/requirements.txt
 uvicorn services.api.app:app --reload --port 8000
@@ -79,3 +79,5 @@ cd frontend
 npm install
 npm run dev:teacher
 ```
+
+说明：非 Docker 方式本地启动后端时，请使用 Python `3.13`，以与 `/Users/lvxiaoer/Documents/codeWork/teacherAgent/pyproject.toml` 和 CI 保持一致。

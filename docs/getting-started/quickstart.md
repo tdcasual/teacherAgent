@@ -33,3 +33,4 @@ docker compose exec api admin_manager
 docker compose build api
 docker compose up -d api
 ```
+- 本地非 Docker 调试 API：请使用 Python `3.13` 创建虚拟环境，保持与 CI / `pyproject.toml` 一致。

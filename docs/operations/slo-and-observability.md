@@ -70,3 +70,21 @@ Review cadence:
 
 - Weekly: inspect SLO burn and route-level hot spots.
 - Monthly: revise SLO targets if product requirements change.
+
+## 发布前门禁
+
+所有 M/H 发布在进入生产前，都应补充以下可审计证据：
+
+1. 运行 `scripts/quality/check_backend_quality_budget.py`，确认后端质量预算未超线；
+2. 运行 `scripts/quality/check_complexity_budget.py`，确认复杂度预算未回退；
+3. 检查 `/ops/metrics`，确认 `http_error_rate` 与 `http_latency_sec.p95` 无异常；
+4. 检查 `/ops/slo`，确认当前 SLO 状态与发布预期一致。
+
+## 回滚后核验
+
+当发布后执行回滚时，必须再次读取 `/ops/metrics` 与 `/ops/slo`，并记录：
+
+- 回滚后 5xx 错误率是否回落；
+- 回滚后 P95 延迟是否恢复；
+- 是否仍存在 inflight 请求堆积；
+- 是否需要继续执行事件响应 runbook。

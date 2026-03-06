@@ -27,6 +27,12 @@ def test_ci_has_backend_quality_budget_check_step() -> None:
     assert "python scripts/quality/check_backend_quality_budget.py" in text
 
 
+def test_ci_scans_for_merge_conflict_markers() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Check merge conflict markers" in text
+    assert 'rg -n "^(<<<<<<< .+|=======|>>>>>>> .+)$" services frontend tests docs .github' in text
+
+
 def test_frontend_ci_has_types_install_integrity_step() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Verify frontend @types install integrity" in text

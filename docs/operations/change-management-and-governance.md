@@ -57,6 +57,25 @@ Last updated: 2026-02-15
 2. 提供回滚路径；
 3. 关键路径增加回归测试。
 
+## 发布前门禁
+
+发布前必须保留以下证据，且证据能关联到当前 PR / 变更单：
+
+1. 后端质量预算通过：`python3 scripts/quality/check_backend_quality_budget.py`
+2. 复杂度预算通过：`python3 scripts/quality/check_complexity_budget.py`
+3. 关键回归通过：受影响测试、结构守卫、前端类型检查 / 构建
+4. 运行时观测核验：查看 `/ops/metrics` 与 `/ops/slo`，确认无明显错误率或延迟异常
+
+建议将 `scripts/quality/collect_backend_quality.sh` 的输出附到发布记录中，作为发布前门禁摘要。
+
+## 回滚后核验
+
+若发生回滚，值守人员必须在回滚完成后补充以下检查：
+
+1. 再次查看 `/ops/metrics`，确认请求量、错误率、延迟恢复到可接受区间；
+2. 查看 `/ops/slo`，确认当前 SLO 投影已恢复绿色或明确记录仍在观察；
+3. 记录回滚原因、影响时间窗、后续补救任务与 owner。
+
 ## 文档治理约束
 
 1. 设计过程文档放 `docs/plans/`，稳定结论迁移到 `docs/reference/` 或 `docs/explain/`。

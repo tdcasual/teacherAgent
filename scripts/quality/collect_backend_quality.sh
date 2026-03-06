@@ -16,6 +16,10 @@ SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
 
 python3 "${SCRIPT_DIR}/check_backend_quality_budget.py" --print-only --show-tool-output
 
+echo
+echo "# complexity budget"
+python3 "${SCRIPT_DIR}/check_complexity_budget.py"
+
 ENABLE_CHAT_STREAM_STABILITY_SMOKE="${ENABLE_CHAT_STREAM_STABILITY_SMOKE:-1}"
 if [[ "${ENABLE_CHAT_STREAM_STABILITY_SMOKE}" != "0" ]]; then
   SMOKE_SCRIPT="${SCRIPT_DIR}/../chat_stream_stability_smoke.py"

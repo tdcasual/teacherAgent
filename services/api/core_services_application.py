@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .api_models import ChatRequest
 from .assignment_catalog_service import (
@@ -196,6 +196,7 @@ from .student_submit_service import (
 from .teacher_assignment_preflight_service import (
     teacher_assignment_preflight as _teacher_assignment_preflight_impl,
 )
+from .wiring import get_app_core as _app_core
 from .wiring.assignment_wiring import (
     _assignment_catalog_deps,
     _assignment_llm_gate_deps,
@@ -212,7 +213,6 @@ from .wiring.exam_wiring import (
     _exam_overview_deps,
     _exam_range_deps,
 )
-from .wiring import get_app_core as _app_core
 from .wiring.student_wiring import _student_directory_deps, _student_ops_deps, _student_submit_deps
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
@@ -617,7 +617,7 @@ def postprocess_assignment_meta(
 def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, Any]:
     core = _app_core(None)
     marker = DISCUSSION_COMPLETE_MARKER
-    load_index_fn = load_student_sessions_index
+    load_index_fn: Callable[[str], List[Dict[str, Any]]] = load_student_sessions_index
     session_file_fn = student_session_file
     if core is not None:
         marker = str(getattr(core, "DISCUSSION_COMPLETE_MARKER", marker) or marker)

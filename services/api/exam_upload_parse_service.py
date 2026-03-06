@@ -51,6 +51,176 @@ def _candidate_source_rank(candidate_id: str) -> int:
     return 9
 
 
+def _aggregate_score_schema_inputs(
+    score_schema_sources: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    aggregated_data_rows = 0
+    aggregated_parsed_rows = 0
+    aggregated_unresolved: List[str] = []
+    aggregated_candidates: List[Dict[str, Any]] = []
+    confidence_values: List[float] = []
+
+    for source in score_schema_sources:
+        summary = _as_dict(source.get("summary"))
+        aggregated_data_rows += int(summary.get("data_rows") or 0)
+        aggregated_parsed_rows += int(summary.get("parsed_rows") or 0)
+
+        confidence_value = _float_or_none(source.get("confidence"))
+        if confidence_value is not None:
+            confidence_values.append(confidence_value)
+
+        subject_info = _as_dict(source.get("subject"))
+        unresolved = _as_list(subject_info.get("unresolved_students"))
+        aggregated_unresolved.extend([str(x) for x in unresolved if str(x or "").strip()])
+
+        for item in _as_list(subject_info.get("candidate_columns")):
+            if not isinstance(item, dict):
+                continue
+            candidate_id = str(item.get("candidate_id") or "").strip()
+            if not candidate_id:
+                continue
+            aggregated_candidates.append(
+                {"candidate_id": candidate_id, **item, "file": source.get("file")}
+            )
+
+    return {
+        "data_rows": aggregated_data_rows,
+        "parsed_rows": aggregated_parsed_rows,
+        "unresolved": aggregated_unresolved,
+        "candidates": aggregated_candidates,
+        "confidence_values": confidence_values,
+    }
+
+
+def _dedupe_candidate_columns(aggregated_candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    seen_candidate_ids: set[str] = set()
+    dedup_candidates: List[Dict[str, Any]] = []
+    for item in aggregated_candidates:
+        candidate_id = str(item.get("candidate_id") or "").strip()
+        if not candidate_id or candidate_id in seen_candidate_ids:
+            continue
+        seen_candidate_ids.add(candidate_id)
+        dedup_candidates.append(item)
+    return dedup_candidates
+
+
+def _candidate_summary_entry(candidate_id: str, bucket: Dict[str, Any]) -> Dict[str, Any]:
+    rows_considered = int(bucket.get("rows_considered") or 0)
+    rows_parsed = int(bucket.get("rows_parsed") or 0)
+    rows_invalid = int(bucket.get("rows_invalid") or 0)
+    parsed_rate = (rows_parsed / rows_considered) if rows_considered > 0 else 0.0
+    quality_score = (
+        (rows_parsed * 1.0)
+        + (parsed_rate * 100.0)
+        - (rows_invalid * 0.2)
+        - (_candidate_source_rank(candidate_id) * 2.0)
+    )
+    files = _as_set(bucket.get("files"))
+    types = _as_set(bucket.get("types"))
+    return {
+        "candidate_id": candidate_id,
+        "rows_considered": rows_considered,
+        "rows_parsed": rows_parsed,
+        "rows_invalid": rows_invalid,
+        "parsed_rate": round(float(parsed_rate), 4),
+        "source_rank": _candidate_source_rank(candidate_id),
+        "files": sorted([str(x) for x in files]),
+        "types": sorted([str(x) for x in types]),
+        "quality_score": round(float(quality_score), 4),
+    }
+
+
+def _build_candidate_summaries(aggregated_candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    candidate_stats: Dict[str, Dict[str, Any]] = {}
+    for item in aggregated_candidates:
+        candidate_id = str(item.get("candidate_id") or "").strip()
+        if not candidate_id:
+            continue
+        bucket = candidate_stats.setdefault(
+            candidate_id,
+            {
+                "candidate_id": candidate_id,
+                "rows_considered": 0,
+                "rows_parsed": 0,
+                "rows_invalid": 0,
+                "files": set(),
+                "types": set(),
+            },
+        )
+        bucket["rows_considered"] = int(bucket.get("rows_considered") or 0) + int(
+            item.get("rows_considered") or 0
+        )
+        bucket["rows_parsed"] = int(bucket.get("rows_parsed") or 0) + int(
+            item.get("rows_parsed") or 0
+        )
+        bucket["rows_invalid"] = int(bucket.get("rows_invalid") or 0) + int(
+            item.get("rows_invalid") or 0
+        )
+        file_name = str(item.get("file") or "").strip()
+        if file_name and isinstance(bucket.get("files"), set):
+            bucket["files"].add(file_name)
+        candidate_type = str(item.get("type") or "").strip()
+        if candidate_type and isinstance(bucket.get("types"), set):
+            bucket["types"].add(candidate_type)
+
+    candidate_summaries = [
+        _candidate_summary_entry(candidate_id, bucket)
+        for candidate_id, bucket in candidate_stats.items()
+    ]
+    candidate_summaries.sort(
+        key=lambda item: (
+            -float(item.get("quality_score") or 0.0),
+            int(item.get("source_rank") or 99),
+            str(item.get("candidate_id") or ""),
+        )
+    )
+    return candidate_summaries
+
+
+def _recommended_candidate_details(candidate_summaries: List[Dict[str, Any]]) -> Tuple[str, str]:
+    recommended_candidate_id = str(
+        (candidate_summaries[0].get("candidate_id") if candidate_summaries else "") or ""
+    )
+    if not candidate_summaries:
+        return recommended_candidate_id, ""
+
+    top = candidate_summaries[0]
+    recommended_candidate_reason = (
+        f"rows_parsed={int(top.get('rows_parsed') or 0)}, "
+        f"parsed_rate={float(top.get('parsed_rate') or 0.0):.2f}, "
+        f"source_rank={int(top.get('source_rank') or 99)}"
+    )
+    return recommended_candidate_id, recommended_candidate_reason
+
+
+def _resolve_selected_candidate_status(
+    *,
+    overall_mode: str,
+    selected_candidate_id: Optional[str],
+    score_schema_sources: List[Dict[str, Any]],
+    dedup_candidates: List[Dict[str, Any]],
+) -> Tuple[bool, bool]:
+    if overall_mode != "subject" or not selected_candidate_id:
+        return True, False
+
+    subject_sources = [
+        source for source in score_schema_sources if str(source.get("mode") or "") == "subject"
+    ]
+    candidate_present = any(
+        str(item.get("candidate_id") or "").strip() == selected_candidate_id
+        for item in dedup_candidates
+    )
+    availability_flags: List[bool] = []
+    for source in subject_sources:
+        subject_info = _as_dict(source.get("subject"))
+        if "selected_candidate_available" in subject_info:
+            availability_flags.append(bool(subject_info.get("selected_candidate_available")))
+    selected_candidate_available = bool(
+        candidate_present and (not availability_flags or all(availability_flags))
+    )
+    return selected_candidate_available, not selected_candidate_available
+
+
 @dataclass(frozen=True)
 class ExamUploadParseDeps:
     app_root: Path
@@ -497,36 +667,15 @@ def _build_score_schema(
     score_schema_sources: List[Dict[str, Any]],
     selected_candidate_id: Optional[str],
 ) -> Dict[str, Any]:
-    score_schema: Dict[str, Any] = {}
-    aggregated_data_rows = 0
-    aggregated_parsed_rows = 0
-    aggregated_unresolved: List[str] = []
-    aggregated_candidates: List[Dict[str, Any]] = []
-    confidence_values: List[float] = []
-    selected_candidate_invalid = False
-    for source in score_schema_sources:
-        summary = _as_dict(source.get("summary"))
-        aggregated_data_rows += int(summary.get("data_rows") or 0)
-        aggregated_parsed_rows += int(summary.get("parsed_rows") or 0)
-        confidence_value = _float_or_none(source.get("confidence"))
-        if confidence_value is not None:
-            confidence_values.append(confidence_value)
-        subject_info = _as_dict(source.get("subject"))
-        unresolved = _as_list(subject_info.get("unresolved_students"))
-        aggregated_unresolved.extend([str(x) for x in unresolved if str(x or "").strip()])
-        candidates = _as_list(subject_info.get("candidate_columns"))
-        for item in candidates:
-            if not isinstance(item, dict):
-                continue
-            candidate_id = str(item.get("candidate_id") or "").strip()
-            if not candidate_id:
-                continue
-            aggregated_candidates.append(
-                {"candidate_id": candidate_id, **item, "file": source.get("file")}
-            )
-
     if not score_schema_sources:
-        return score_schema
+        return {}
+
+    aggregated = _aggregate_score_schema_inputs(score_schema_sources)
+    aggregated_data_rows = int(aggregated["data_rows"] or 0)
+    aggregated_parsed_rows = int(aggregated["parsed_rows"] or 0)
+    aggregated_unresolved = [str(x) for x in _as_list(aggregated["unresolved"])]
+    aggregated_candidates = [x for x in _as_list(aggregated["candidates"]) if isinstance(x, dict)]
+    confidence_values = [float(x) for x in _as_list(aggregated["confidence_values"])]
 
     modes = [
         str(source.get("mode") or "")
@@ -536,118 +685,20 @@ def _build_score_schema(
     overall_mode = "question" if "question" in modes else (modes[0] if modes else "")
     coverage = (aggregated_parsed_rows / aggregated_data_rows) if aggregated_data_rows > 0 else 0.0
     confidence = (sum(confidence_values) / len(confidence_values)) if confidence_values else 0.0
-    seen_candidate_ids: set[str] = set()
-    dedup_candidates: List[Dict[str, Any]] = []
-    for item in aggregated_candidates:
-        candidate_id = str(item.get("candidate_id") or "").strip()
-        if not candidate_id or candidate_id in seen_candidate_ids:
-            continue
-        seen_candidate_ids.add(candidate_id)
-        dedup_candidates.append(item)
-
-    candidate_stats: Dict[str, Dict[str, Any]] = {}
-    for item in aggregated_candidates:
-        candidate_id = str(item.get("candidate_id") or "").strip()
-        if not candidate_id:
-            continue
-        bucket = candidate_stats.setdefault(
-            candidate_id,
-            {
-                "candidate_id": candidate_id,
-                "rows_considered": 0,
-                "rows_parsed": 0,
-                "rows_invalid": 0,
-                "files": set(),
-                "types": set(),
-            },
-        )
-        bucket["rows_considered"] = int(bucket.get("rows_considered") or 0) + int(
-            item.get("rows_considered") or 0
-        )
-        bucket["rows_parsed"] = int(bucket.get("rows_parsed") or 0) + int(
-            item.get("rows_parsed") or 0
-        )
-        bucket["rows_invalid"] = int(bucket.get("rows_invalid") or 0) + int(
-            item.get("rows_invalid") or 0
-        )
-        file_name = str(item.get("file") or "").strip()
-        if file_name:
-            bucket_files = bucket.get("files")
-            if isinstance(bucket_files, set):
-                bucket_files.add(file_name)
-        candidate_type = str(item.get("type") or "").strip()
-        if candidate_type:
-            bucket_types = bucket.get("types")
-            if isinstance(bucket_types, set):
-                bucket_types.add(candidate_type)
-
-    candidate_summaries: List[Dict[str, Any]] = []
-    for candidate_id, bucket in candidate_stats.items():
-        rows_considered = int(bucket.get("rows_considered") or 0)
-        rows_parsed = int(bucket.get("rows_parsed") or 0)
-        rows_invalid = int(bucket.get("rows_invalid") or 0)
-        parsed_rate = (rows_parsed / rows_considered) if rows_considered > 0 else 0.0
-        quality_score = (
-            (rows_parsed * 1.0)
-            + (parsed_rate * 100.0)
-            - (rows_invalid * 0.2)
-            - (_candidate_source_rank(candidate_id) * 2.0)
-        )
-        files = _as_set(bucket.get("files"))
-        types = _as_set(bucket.get("types"))
-        candidate_summaries.append(
-            {
-                "candidate_id": candidate_id,
-                "rows_considered": rows_considered,
-                "rows_parsed": rows_parsed,
-                "rows_invalid": rows_invalid,
-                "parsed_rate": round(float(parsed_rate), 4),
-                "source_rank": _candidate_source_rank(candidate_id),
-                "files": sorted([str(x) for x in files]),
-                "types": sorted([str(x) for x in types]),
-                "quality_score": round(float(quality_score), 4),
-            }
-        )
-    candidate_summaries.sort(
-        key=lambda item: (
-            -float(item.get("quality_score") or 0.0),
-            int(item.get("source_rank") or 99),
-            str(item.get("candidate_id") or ""),
-        )
+    dedup_candidates = _dedupe_candidate_columns(aggregated_candidates)
+    candidate_summaries = _build_candidate_summaries(aggregated_candidates)
+    recommended_candidate_id, recommended_candidate_reason = _recommended_candidate_details(
+        candidate_summaries
     )
-    recommended_candidate_id = str(
-        (candidate_summaries[0].get("candidate_id") if candidate_summaries else "") or ""
+    selected_candidate_available, selected_candidate_invalid = _resolve_selected_candidate_status(
+        overall_mode=overall_mode,
+        selected_candidate_id=selected_candidate_id,
+        score_schema_sources=score_schema_sources,
+        dedup_candidates=dedup_candidates,
     )
-    recommended_candidate_reason = ""
-    if candidate_summaries:
-        top = candidate_summaries[0]
-        recommended_candidate_reason = (
-            f"rows_parsed={int(top.get('rows_parsed') or 0)}, "
-            f"parsed_rate={float(top.get('parsed_rate') or 0.0):.2f}, "
-            f"source_rank={int(top.get('source_rank') or 99)}"
-        )
-
-    selected_candidate_available = True
-    if overall_mode == "subject" and selected_candidate_id:
-        subject_sources = [
-            source for source in score_schema_sources if str(source.get("mode") or "") == "subject"
-        ]
-        candidate_present = any(
-            str(item.get("candidate_id") or "").strip() == selected_candidate_id
-            for item in dedup_candidates
-        )
-        availability_flags: List[bool] = []
-        for source in subject_sources:
-            subject_info = _as_dict(source.get("subject"))
-            if "selected_candidate_available" in subject_info:
-                availability_flags.append(bool(subject_info.get("selected_candidate_available")))
-        selected_candidate_available = bool(
-            candidate_present and (not availability_flags or all(availability_flags))
-        )
-        selected_candidate_invalid = not selected_candidate_available
 
     needs_confirm = bool((coverage < 0.85) or (confidence < 0.82) or selected_candidate_invalid)
-    score_schema = {
+    score_schema: Dict[str, Any] = {
         "mode": overall_mode,
         "confidence": round(float(confidence), 4),
         "needs_confirm": needs_confirm,
@@ -671,7 +722,8 @@ def _build_score_schema(
         score_schema["confirm"] = True
         score_schema["needs_confirm"] = False
     elif selected_candidate_id and selected_candidate_invalid:
-        score_schema["subject"]["selection_error"] = "selected_candidate_not_found"
+        subject_info = _as_dict(score_schema.get("subject"))
+        subject_info["selection_error"] = "selected_candidate_not_found"
     return score_schema
 
 

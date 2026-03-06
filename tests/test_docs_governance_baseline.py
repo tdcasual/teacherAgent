@@ -30,6 +30,16 @@ def test_docs_index_links_to_governance_artifacts() -> None:
     assert "docs/operations/security-incident-response-runbook.md" in text
 
 
+def test_change_management_doc_includes_release_gate_and_rollback_verification() -> None:
+    text = Path("docs/operations/change-management-and-governance.md").read_text(encoding="utf-8")
+    assert "发布前门禁" in text
+    assert "回滚后核验" in text
+    assert "check_backend_quality_budget.py" in text
+    assert "check_complexity_budget.py" in text
+    assert "/ops/metrics" in text
+    assert "/ops/slo" in text
+
+
 def test_codeowners_covers_core_scopes() -> None:
     text = Path(".github/CODEOWNERS").read_text(encoding="utf-8")
     assert "/services/api/" in text

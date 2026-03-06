@@ -18,6 +18,8 @@ from ..student_directory_service import StudentDirectoryDeps
 from ..student_import_service import StudentImportDeps
 from ..student_memory_service import (
     StudentMemoryDeps,
+)
+from ..student_memory_service import (
     student_memory_auto_propose_from_assignment_evidence_api as _student_memory_auto_propose_from_assignment_evidence_api,
 )
 from ..student_ops_service import StudentOpsDeps

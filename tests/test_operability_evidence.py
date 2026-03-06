@@ -11,6 +11,8 @@ def test_slo_document_exists_with_required_sections() -> None:
     assert "/ops/metrics" in text
     assert "/ops/slo" in text
     assert "backend-slo-overview.json" in text
+    assert "发布前门禁" in text
+    assert "回滚后核验" in text
 
 
 def test_dashboard_artifact_is_valid_and_complete() -> None:
@@ -25,3 +27,9 @@ def test_dashboard_artifact_is_valid_and_complete() -> None:
     assert "HTTP Error Rate" in titles
     assert "HTTP Latency P95 (sec)" in titles
     assert "SLO Status" in titles
+
+
+def test_collect_backend_quality_script_runs_budget_and_complexity_checks() -> None:
+    text = Path("scripts/quality/collect_backend_quality.sh").read_text(encoding="utf-8")
+    assert "check_backend_quality_budget.py" in text
+    assert "check_complexity_budget.py" in text
