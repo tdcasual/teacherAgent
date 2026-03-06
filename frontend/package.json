@@ -55,9 +55,10 @@
     "typescript-eslint": "^8.46.2",
     "vite": "^7.3.1",
     "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^2.1.8"
+    "vitest": "^4.0.18"
   },
   "overrides": {
-    "rollup": "^4.59.0"
+    "rollup": "^4.59.0",
+    "serialize-javascript": "^7.0.4"
   }
 }

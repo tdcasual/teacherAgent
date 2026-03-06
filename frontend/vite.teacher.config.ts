@@ -12,6 +12,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        inlineWorkboxRuntime: true,
+      },
       includeAssets: ['icon.svg'],
       manifest: {
         name: '物理教学助手（老师端）',
