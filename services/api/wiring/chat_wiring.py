@@ -104,6 +104,7 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..teacher_workflows import resolve_teacher_workflow as _resolve_teacher_workflow_impl
 from ..student_memory_service import (
     StudentMemoryDeps,
 )
@@ -113,6 +114,7 @@ from ..student_memory_service import (
 from ..student_memory_service import (
     student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
 )
+from ..teacher_assignment_preflight_service import teacher_workflow_preflight_reply
 from ..teacher_model_config_service import (
     resolve_teacher_model_config as _resolve_teacher_model_config_impl,
 )
@@ -431,6 +433,19 @@ def _compute_chat_reply_deps(core: Any | None = None):
         student_inflight=_ac._student_inflight,
         run_agent=_ac.run_agent,
         normalize_math_delimiters=_ac.normalize_math_delimiters,
+        teacher_workflow_preflight=lambda req, effective_skill_id, last_user_text, attachment_context: teacher_workflow_preflight_reply(
+            req,
+            effective_skill_id=effective_skill_id,
+            last_user_text=last_user_text,
+            attachment_context=attachment_context,
+            deps=_teacher_assignment_preflight_deps(core),
+        ),
+        resolve_teacher_workflow=lambda req, effective_skill_id, last_user_text, attachment_context: _resolve_teacher_workflow_impl(
+            req,
+            effective_skill_id=effective_skill_id,
+            last_user_text=last_user_text,
+            attachment_context=attachment_context,
+        ),
         resolve_effective_skill=lambda role_hint, requested_skill_id, last_user_text: _resolve_effective_skill_impl(
             app_root=_ac.APP_ROOT,
             role_hint=role_hint,

@@ -1,5 +1,10 @@
 # 文档总览
 
+## 产品定位
+- 本仓库是教学 workflow 产品，不是通用 agent 平台
+- 先看运行时契约：`docs/reference/agent-runtime-contract.md`
+- 老师端以“教学能力 / workflow 入口”为主要交互，不暴露第三方能力扩展叙事
+
 ## 我现在要做什么
 - 老师日常教学闭环：`docs/how-to/teacher-daily-workflow.md`
 - 学生登录与提交作业：`docs/how-to/student-login-and-submit.md`
@@ -13,6 +18,11 @@
 
 ## 快速开始
 - 首次部署与最小可运行：`docs/getting-started/quickstart.md`
+
+## 运行时与边界
+- 运行时契约：`docs/reference/agent-runtime-contract.md`
+- 模型策略：`docs/reference/model-policy.md`
+- 模块边界：`docs/architecture/module-boundaries.md`
 
 ## 参考文档
 - HTTP API：`docs/http_api.md`

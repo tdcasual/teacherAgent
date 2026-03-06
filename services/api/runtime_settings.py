@@ -173,7 +173,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> AppSettings:
             500, _env_int(source, "TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS", 2400)
         ),
         teacher_memory_auto_apply_enabled=_env_bool(
-            source, "TEACHER_MEMORY_AUTO_APPLY_ENABLED", "1"
+            source, "TEACHER_MEMORY_AUTO_APPLY_ENABLED", "0"
         ),
         teacher_memory_auto_apply_targets_raw=_env_str(
             source, "TEACHER_MEMORY_AUTO_APPLY_TARGETS", "DAILY,MEMORY"

@@ -95,7 +95,7 @@ export const parseInvocationInput = (input: string, options: ParseInvocationOpti
     if (knownSkills.has(requestedSkillId)) {
       effectiveSkillId = requestedSkillId
     } else {
-      warnings.push(`未识别的技能：$${requestedSkillId}，已使用 ${effectiveSkillId || '默认技能'}`)
+      warnings.push(`未识别的能力：$${requestedSkillId}，已使用 ${effectiveSkillId || '默认能力'}`)
     }
   }
 

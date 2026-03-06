@@ -23,6 +23,37 @@ class TeacherMemoryProposeDeps:
     apply: Callable[[str, str, bool], Dict[str, Any]]
 
 
+
+
+def _teacher_memory_provenance(source: str, meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    source_norm = str(source or "manual").strip().lower() or "manual"
+    meta_dict = meta if isinstance(meta, dict) else {}
+    origin = "manual_input"
+    if source_norm == "auto_flush":
+        origin = "session_summary"
+    elif source_norm in {"auto_intent", "auto_infer"}:
+        origin = "session_context"
+    elif source_norm.startswith("auto_"):
+        origin = "workflow_auto_proposal"
+    provenance = {
+        "layer": "memory_proposal",
+        "source": source_norm,
+        "origin": origin,
+    }
+    side_effect_source = str(meta_dict.get("side_effect_source") or "").strip()
+    if side_effect_source:
+        provenance["side_effect_source"] = side_effect_source
+    side_effect_provenance = meta_dict.get("side_effect_provenance") if isinstance(meta_dict.get("side_effect_provenance"), dict) else None
+    if side_effect_provenance:
+        provenance["upstream"] = side_effect_provenance
+    session_id = str(meta_dict.get("session_id") or "").strip()
+    if session_id:
+        provenance["session_id"] = session_id
+    trigger = str(meta_dict.get("trigger") or "").strip()
+    if trigger:
+        provenance["trigger"] = trigger
+    return provenance
+
 def teacher_memory_propose(
     teacher_id: str,
     target: str,
@@ -64,13 +95,14 @@ def teacher_memory_propose(
         record["expires_at"] = expire_at.isoformat(timespec="seconds")
     if isinstance(meta, dict) and meta:
         record["meta"] = meta
+    record["provenance"] = _teacher_memory_provenance(source_norm, meta if isinstance(meta, dict) else None)
     if dedupe_key:
         record["dedupe_key"] = str(dedupe_key).strip()[:120]
     path = deps.proposal_path(teacher_id, proposal_id)
     deps.atomic_write_json(path, record)
 
     if not deps.auto_apply_enabled:
-        return {"ok": True, "proposal_id": proposal_id, "proposal": record}
+        return {"ok": True, "proposal_id": proposal_id, "status": "proposed", "proposal": record}
 
     if target_norm not in deps.auto_apply_targets:
         stamp = deps.now_iso()

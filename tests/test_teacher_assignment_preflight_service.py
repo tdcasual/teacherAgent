@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from services.api.teacher_assignment_preflight_service import (
     TeacherAssignmentPreflightDeps,
     teacher_assignment_preflight,
+    teacher_workflow_preflight_reply,
 )
 
 
@@ -279,6 +280,58 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertEqual(generated, [])
         self.assertTrue(any(event == "teacher_preflight.subject_total_auto_extract_subject" for event, _ in logs))
         self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
+
+
+    def test_exam_analysis_workflow_requires_exam_or_attachment(self):
+        deps, _logs, _saved, _generated = self._deps(analysis=None)
+        req = _Req(messages=[_Msg(role="user", content="请做一次考试分析并给出讲评建议")], skill_id="physics-teacher-ops")
+
+        result = teacher_workflow_preflight_reply(
+            req,
+            effective_skill_id="physics-teacher-ops",
+            last_user_text="请做一次考试分析并给出讲评建议",
+            attachment_context="",
+            deps=deps,
+        )
+
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("考试编号", result)
+        self.assertIn("成绩单", result)
+
+    def test_student_focus_workflow_requires_specific_student_when_reference_is_ambiguous(self):
+        deps, _logs, _saved, _generated = self._deps(analysis=None)
+        req = _Req(messages=[_Msg(role="user", content="请分析这个学生最近为什么掉分")], skill_id="physics-student-focus")
+
+        result = teacher_workflow_preflight_reply(
+            req,
+            effective_skill_id="physics-student-focus",
+            last_user_text="请分析这个学生最近为什么掉分",
+            attachment_context="",
+            deps=deps,
+        )
+
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("学生", result)
+        self.assertIn("姓名", result)
+
+    def test_lesson_capture_workflow_requires_attachment_or_lesson_id(self):
+        deps, _logs, _saved, _generated = self._deps(analysis=None)
+        req = _Req(messages=[_Msg(role="user", content="把这节课的板书整理成讲义")], skill_id="physics-lesson-capture")
+
+        result = teacher_workflow_preflight_reply(
+            req,
+            effective_skill_id="physics-lesson-capture",
+            last_user_text="把这节课的板书整理成讲义",
+            attachment_context="",
+            deps=deps,
+        )
+
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("上传", result)
+        self.assertIn("课堂材料", result)
 
 
 if __name__ == "__main__":

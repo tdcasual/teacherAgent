@@ -1,7 +1,7 @@
 import { expect, type Page, type Route } from '@playwright/test'
 
 export const TEACHER_COMPOSER_PLACEHOLDER =
-  '输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行'
+  '输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行'
 
 type LocalStorageState = Record<string, string | null | undefined>
 

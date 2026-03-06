@@ -15,6 +15,26 @@ _ASSISTANT_DELTA_COALESCE_WINDOW_SEC = 0.04
 _ASSISTANT_DELTA_COALESCE_MAX_CHARS = 96
 
 
+def _default_teacher_workflow_preflight(
+    _req: Any,
+    effective_skill_id: str,
+    last_user_text: str,
+    attachment_context: str,
+) -> Optional[str]:
+    del effective_skill_id, last_user_text, attachment_context
+    return None
+
+
+def _default_resolve_teacher_workflow(
+    _req: Any,
+    effective_skill_id: str,
+    last_user_text: str,
+    attachment_context: str,
+) -> Dict[str, Any]:
+    del effective_skill_id, last_user_text, attachment_context
+    return {}
+
+
 @dataclass(frozen=True)
 class ComputeChatReplyDeps:
     detect_role: Callable[[str], Optional[str]]
@@ -36,6 +56,8 @@ class ComputeChatReplyDeps:
     run_agent: Callable[..., Dict[str, Any]]
     normalize_math_delimiters: Callable[[str], str]
     resolve_effective_skill: Callable[[Optional[str], Optional[str], str], Dict[str, Any]]
+    teacher_workflow_preflight: Callable[[Any, str, str, str], Optional[str]] = _default_teacher_workflow_preflight
+    resolve_teacher_workflow: Callable[[Any, str, str, str], Dict[str, Any]] = _default_resolve_teacher_workflow
 
 
 def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
@@ -99,6 +121,77 @@ def _looks_like_attachment_reference(text: str) -> bool:
     return any(token in content for token in cn_tokens) or any(token in lowered for token in ("pdf", "xlsx", "xls", "ocr"))
 
 
+def _normalize_workflow_resolution_payload(
+    requested_skill_id: str,
+    effective_skill_id: str,
+    resolve_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {
+        "requested_skill_id": str(requested_skill_id or "").strip(),
+        "effective_skill_id": str(effective_skill_id or "").strip(),
+    }
+
+    reason = str(resolve_payload.get("reason") or "").strip()
+    if reason:
+        normalized["reason"] = reason
+
+    confidence_raw = resolve_payload.get("confidence")
+    if confidence_raw is not None:
+        try:
+            normalized["confidence"] = float(confidence_raw)
+        except Exception:  # policy: allowed-broad-except
+            _log.warning("numeric conversion failed", exc_info=True)
+
+    candidates_raw = resolve_payload.get("candidates")
+    if isinstance(candidates_raw, list):
+        candidates: List[Dict[str, Any]] = []
+        for item in candidates_raw[:3]:
+            if not isinstance(item, dict):
+                continue
+            skill_id = str(item.get("skill_id") or "").strip()
+            if not skill_id:
+                continue
+            candidate: Dict[str, Any] = {"skill_id": skill_id}
+            score_raw = item.get("score")
+            if score_raw is not None:
+                try:
+                    candidate["score"] = int(score_raw)
+                except Exception:  # policy: allowed-broad-except
+                    _log.warning("numeric conversion failed", exc_info=True)
+            hits_raw = item.get("hits")
+            if isinstance(hits_raw, list):
+                hits = [str(hit or "").strip() for hit in hits_raw if str(hit or "").strip()]
+                if hits:
+                    candidate["hits"] = hits[:6]
+            candidates.append(candidate)
+        normalized["candidates"] = candidates
+
+    return normalized
+
+
+def _workflow_resolution_job_updates(payload: Dict[str, Any]) -> Dict[str, Any]:
+    updates: Dict[str, Any] = {}
+    requested = str(payload.get("requested_skill_id") or "").strip()
+    effective = str(payload.get("effective_skill_id") or "").strip()
+    reason = str(payload.get("reason") or "").strip()
+    if requested or "requested_skill_id" in payload:
+        updates["skill_id_requested"] = requested
+    if effective:
+        updates["skill_id_effective"] = effective
+    if reason:
+        updates["skill_reason"] = reason
+    confidence_raw = payload.get("confidence")
+    if confidence_raw is not None:
+        try:
+            updates["skill_confidence"] = float(confidence_raw)
+        except Exception:  # policy: allowed-broad-except
+            _log.warning("numeric conversion failed", exc_info=True)
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list):
+        updates["skill_candidates"] = candidates
+    return updates
+
+
 def _resolve_effective_skill_id(
     req: Any,
     *,
@@ -106,8 +199,9 @@ def _resolve_effective_skill_id(
     role_hint: Optional[str],
     requested_skill_id: str,
     last_user_text: str,
-) -> str:
+) -> tuple[str, Dict[str, Any]]:
     effective_skill_id = requested_skill_id
+    resolution_payload = _normalize_workflow_resolution_payload(requested_skill_id, effective_skill_id, {})
     try:
         resolve_payload = (
             deps.resolve_effective_skill(role_hint, requested_skill_id, last_user_text) or {}
@@ -116,6 +210,11 @@ def _resolve_effective_skill_id(
         if resolved and resolved != requested_skill_id:
             req.skill_id = resolved
         effective_skill_id = str(getattr(req, "skill_id", "") or "").strip()
+        resolution_payload = _normalize_workflow_resolution_payload(
+            requested_skill_id,
+            effective_skill_id,
+            resolve_payload,
+        )
         deps.diag_log(
             "skill.resolve",
             {
@@ -142,7 +241,19 @@ def _resolve_effective_skill_id(
                 "error": str(exc)[:200],
             },
         )
-    return effective_skill_id
+    return effective_skill_id, resolution_payload
+
+
+def _emit_workflow_resolution_event(
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+    payload: Dict[str, Any],
+) -> None:
+    if not callable(event_sink):
+        return
+    effective = str(payload.get("effective_skill_id") or "").strip()
+    if not effective:
+        return
+    event_sink("workflow.resolved", payload)
 
 
 def _teacher_preflight_reply(
@@ -152,7 +263,10 @@ def _teacher_preflight_reply(
     last_user_text: str,
     requested_skill_id: str,
     effective_skill_id: str,
+    attachment_context: str,
+    workflow_payload: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
+    workflow_payload = workflow_payload if isinstance(workflow_payload, dict) else {}
     deps.diag_log(
         "teacher_chat.in",
         {
@@ -160,14 +274,37 @@ def _teacher_preflight_reply(
             "skill_id": effective_skill_id,
             "skill_id_requested": requested_skill_id,
             "skill_id_effective": effective_skill_id,
+            "workflow_id": str(workflow_payload.get("workflow_id") or ""),
         },
     )
+    workflow_preflight = deps.teacher_workflow_preflight(
+        req,
+        effective_skill_id,
+        last_user_text,
+        attachment_context,
+    )
+    if workflow_preflight:
+        deps.diag_log("teacher_chat.workflow_preflight_reply", {"reply_preview": workflow_preflight[:500]})
+        return workflow_preflight
     preflight = deps.teacher_assignment_preflight(req)
     if preflight:
         deps.diag_log("teacher_chat.preflight_reply", {"reply_preview": preflight[:500]})
         return preflight
     return None
 
+
+
+
+def _merge_teacher_extra_system(teacher_context: Optional[str], workflow_payload: Dict[str, Any]) -> Optional[str]:
+    workflow_label = str(workflow_payload.get("workflow_label") or "").strip()
+    workflow_extra = str(workflow_payload.get("extra_system") or "").strip()
+    blocks: List[str] = []
+    if workflow_extra:
+        heading = f"【教学 workflow：{workflow_label}】" if workflow_label else "【教学 workflow】"
+        blocks.append(f"{heading}\n{workflow_extra}".strip())
+    if teacher_context:
+        blocks.append(str(teacher_context).strip())
+    return "\n\n".join([block for block in blocks if block]).strip() or None
 
 def _teacher_extra_system(
     req: Any,
@@ -176,10 +313,12 @@ def _teacher_extra_system(
     last_user_text: str,
     session_id: str,
     teacher_id_override: Optional[str],
+    workflow_payload: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     teacher_id = deps.resolve_teacher_id(teacher_id_override or req.teacher_id)
+    teacher_context = deps.teacher_build_context(teacher_id, last_user_text, 6000, str(session_id or "main"))
     return (
-        deps.teacher_build_context(teacher_id, last_user_text, 6000, str(session_id or "main")),
+        _merge_teacher_extra_system(teacher_context, workflow_payload or {}),
         teacher_id,
     )
 
@@ -263,13 +402,32 @@ def compute_chat_reply_sync(
             last_user_text,
         )
 
-    effective_skill_id = _resolve_effective_skill_id(
+    effective_skill_id, workflow_resolution = _resolve_effective_skill_id(
         req,
         deps=deps,
         role_hint=role_hint,
         requested_skill_id=requested_skill_id,
         last_user_text=last_user_text,
     )
+
+    teacher_workflow: Dict[str, Any] = {}
+    if role_hint == "teacher":
+        teacher_workflow = deps.resolve_teacher_workflow(
+            req,
+            effective_skill_id,
+            last_user_text,
+            attachment_context,
+        ) or {}
+        _emit_workflow_resolution_event(event_sink, workflow_resolution)
+        if teacher_workflow:
+            deps.diag_log(
+                "teacher.workflow.orchestrated",
+                {
+                    "workflow_id": str(teacher_workflow.get("workflow_id") or ""),
+                    "workflow_label": str(teacher_workflow.get("workflow_label") or ""),
+                    "skill_id": effective_skill_id,
+                },
+            )
 
     if role_hint == "teacher":
         preflight = _teacher_preflight_reply(
@@ -278,6 +436,8 @@ def compute_chat_reply_sync(
             last_user_text=last_user_text,
             requested_skill_id=requested_skill_id,
             effective_skill_id=effective_skill_id,
+            attachment_context=attachment_context,
+            workflow_payload=teacher_workflow,
         )
         if preflight:
             return preflight, role_hint, last_user_text
@@ -295,6 +455,7 @@ def compute_chat_reply_sync(
             last_user_text=last_user_text,
             session_id=session_id,
             teacher_id_override=teacher_id_override,
+            workflow_payload=teacher_workflow,
         )
     elif role_hint == "student":
         extra_system = _student_extra_system(
@@ -417,6 +578,11 @@ class _ChatJobStatusWriter:
                         "reply": payload.get("reply"),
                         "error": payload.get("error"),
                         "error_detail": payload.get("error_detail"),
+                        "skill_id_requested": payload.get("skill_id_requested"),
+                        "skill_id_effective": payload.get("skill_id_effective"),
+                        "skill_reason": payload.get("skill_reason"),
+                        "skill_confidence": payload.get("skill_confidence"),
+                        "skill_candidates": payload.get("skill_candidates"),
                     },
                 )
             except Exception:  # policy: allowed-broad-except
@@ -463,6 +629,10 @@ class _BufferedRuntimeEventWriter:
             self.deps.append_chat_event(self.job_id, event_type, payload)
             if event_type == "assistant.done":
                 self.event_state["assistant_done"] = True
+            elif event_type == "workflow.resolved":
+                updates = _workflow_resolution_job_updates(payload)
+                if updates:
+                    self.deps.write_chat_job(self.job_id, updates)
         except Exception:  # policy: allowed-broad-except
             _log.warning(
                 "failed to append runtime event %s for job %s",
@@ -698,6 +868,8 @@ def _run_teacher_post_done_side_effects(
             session_id=session_id,
             user_text=last_user_text,
             assistant_text=reply_text,
+            source="chat_job_post_done",
+            provenance={"layer": "session_context", "origin": "chat_job", "session_id": session_id},
         )
         if auto_intent.get("created"):
             deps.diag_log(
@@ -716,7 +888,12 @@ def _run_teacher_post_done_side_effects(
             {"teacher_id": teacher_id, "session_id": session_id, "error": str(exc)[:200]},
         )
     try:
-        auto_flush = deps.teacher_memory_auto_flush_from_session(teacher_id, session_id=session_id)
+        auto_flush = deps.teacher_memory_auto_flush_from_session(
+            teacher_id,
+            session_id=session_id,
+            source="chat_job_post_done",
+            provenance={"layer": "session_summary", "origin": "chat_job", "session_id": session_id},
+        )
         if auto_flush.get("created"):
             deps.diag_log(
                 "teacher.memory.auto_flush.proposed",
@@ -765,6 +942,8 @@ def _run_student_post_done_side_effects(
             user_text=last_user_text,
             assistant_text=reply_text,
             request_id=request_id,
+            source="chat_job_post_done",
+            provenance={"layer": "session_context", "origin": "chat_job", "session_id": str(session_id or "")},
         )
         if auto.get("created"):
             deps.diag_log(
@@ -816,6 +995,8 @@ def _run_student_post_done_side_effects(
             assignment_id=assignment_id,
             evidence=evidence,
             request_id=request_id or None,
+            source="chat_job_post_done",
+            provenance={"layer": "tool_data", "origin": "assignment_progress", "assignment_id": assignment_id},
         )
         if auto_evidence.get("created"):
             deps.diag_log(

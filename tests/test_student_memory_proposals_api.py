@@ -48,7 +48,9 @@ class StudentMemoryProposalsApiTest(unittest.TestCase):
                     params={"teacher_id": teacher_id, "student_id": "S001", "status": "proposed"},
                 )
                 self.assertEqual(listed.status_code, 200)
-                self.assertTrue(any(p.get("proposal_id") == proposal_id for p in listed.json().get("proposals") or []))
+                proposal = next(p for p in listed.json().get("proposals") or [] if p.get("proposal_id") == proposal_id)
+                self.assertEqual((proposal.get("provenance") or {}).get("layer"), "memory_proposal")
+                self.assertEqual((proposal.get("provenance") or {}).get("source"), "manual")
 
                 reviewed = client.post(
                     f"/teacher/student-memory/proposals/{proposal_id}/review",

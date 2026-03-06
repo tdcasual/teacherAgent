@@ -50,7 +50,7 @@ export default function ChatComposer({
       <div className="w-full max-w-[var(--chat-content-max-width)] border border-border bg-white rounded-[12px] px-3 py-[10px] shadow-sm grid gap-[10px]">
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center border border-border rounded-lg px-2 py-[2px] text-[11px] text-[#4b5563] bg-[#f8fafc]">
-            {skillPinned ? `技能: $${activeSkillId || 'physics-teacher-ops'}` : '技能: 自动路由'}
+            {skillPinned ? `能力: $${activeSkillId || 'physics-teacher-ops'}` : '能力: 自动推荐'}
           </span>
         </div>
         {attachments.length ? (
@@ -81,7 +81,7 @@ export default function ChatComposer({
           onClick={(e) => onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)}
           onKeyUp={(e) => onInputKeyUp((e.target as HTMLTextAreaElement).selectionStart || input.length)}
           onKeyDown={onInputKeyDown}
-          placeholder="输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行"
+          placeholder="输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行"
           rows={3}
           disabled={pendingChatJob}
         />
@@ -107,7 +107,7 @@ export default function ChatComposer({
                 e.currentTarget.value = ''
               }}
             />
-            <span className="composer-hint text-[12px] text-muted truncate">{chatQueueHint || '$ 技能 | 回车发送'}</span>
+            <span className="composer-hint text-[12px] text-muted truncate">{chatQueueHint || '$ 能力 | 回车发送'}</span>
           </div>
           <button
             type="submit"

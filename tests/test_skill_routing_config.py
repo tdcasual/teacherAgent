@@ -37,5 +37,23 @@ class SkillRoutingConfigTest(unittest.TestCase):
             self.assertGreaterEqual(len(intents), 1, f"{skill_id} routing.intents should not be empty")
 
 
+    def test_teacher_workflow_skills_define_explicit_tool_policies(self):
+        loaded = load_skills(APP_ROOT / "skills")
+
+        teacher_ops = loaded.skills["physics-teacher-ops"]
+        self.assertIsNotNone(teacher_ops.agent.tools.allow)
+        self.assertIn("exam.get", list(teacher_ops.agent.tools.allow or []))
+        self.assertIn("exam.analysis.get", list(teacher_ops.agent.tools.allow or []))
+        self.assertNotIn("assignment.generate", list(teacher_ops.agent.tools.allow or []))
+
+        homework = loaded.skills["physics-homework-generator"]
+        self.assertIn("assignment.generate", list(homework.agent.tools.allow or []))
+        self.assertNotIn("exam.analysis.get", list(homework.agent.tools.allow or []))
+
+        capture = loaded.skills["physics-lesson-capture"]
+        self.assertIn("lesson.capture", list(capture.agent.tools.allow or []))
+        self.assertNotIn("student.profile.update", list(capture.agent.tools.allow or []))
+
+
 if __name__ == "__main__":
     unittest.main()

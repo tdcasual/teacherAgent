@@ -6,12 +6,17 @@ from fastapi.testclient import TestClient
 from tests.helpers.app_factory import create_test_app
 
 
-def load_app(tmp_dir: Path, *, auto_apply_enabled: bool = True):
+def load_app(tmp_dir: Path, *, auto_apply_enabled: bool | None = None):
+    env_overrides = {}
+    env_unset: list[str] = []
+    if auto_apply_enabled is not None:
+        env_overrides["TEACHER_MEMORY_AUTO_APPLY_ENABLED"] = "1" if auto_apply_enabled else "0"
+    else:
+        env_unset.append("TEACHER_MEMORY_AUTO_APPLY_ENABLED")
     return create_test_app(
         tmp_dir,
-        env_overrides={
-            "TEACHER_MEMORY_AUTO_APPLY_ENABLED": "1" if auto_apply_enabled else "0",
-        },
+        env_overrides=env_overrides,
+        env_unset=env_unset,
         reset_modules=True,
     )
 
@@ -102,6 +107,9 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 data = listed.json()
                 self.assertTrue(data.get("ok"))
                 self.assertTrue(any(p.get("proposal_id") == proposal_id for p in data.get("proposals") or []))
+                proposal = next(p for p in data.get("proposals") or [] if p.get("proposal_id") == proposal_id)
+                self.assertEqual((proposal.get("provenance") or {}).get("layer"), "memory_proposal")
+                self.assertEqual((proposal.get("provenance") or {}).get("source"), "manual")
 
                 review = client.post(
                     f"/teacher/memory/proposals/{proposal_id}/review",
@@ -116,6 +124,28 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
                 )
                 self.assertEqual(listed_rejected.status_code, 200)
                 self.assertTrue(any(p.get("proposal_id") == proposal_id for p in listed_rejected.json().get("proposals") or []))
+
+    def test_default_mode_keeps_proposal_unapplied_and_exposes_provenance(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td), auto_apply_enabled=None)
+            teacher_id = app_mod.get_core().resolve_teacher_id("teacher")
+            prop = app_mod.get_core().teacher_memory_propose(
+                teacher_id,
+                target="MEMORY",
+                title="偏好默认安全",
+                content="默认先给结论。",
+            )
+            proposal_id = prop["proposal_id"]
+            self.assertEqual((prop.get("proposal") or {}).get("status"), "proposed")
+
+            with TestClient(app_mod.app) as client:
+                listed = client.get("/teacher/memory/proposals", params={"teacher_id": teacher_id, "status": "proposed"})
+                self.assertEqual(listed.status_code, 200)
+                proposals = listed.json().get("proposals") or []
+                proposal = next(p for p in proposals if p.get("proposal_id") == proposal_id)
+                self.assertEqual(proposal.get("status"), "proposed")
+                self.assertEqual((proposal.get("provenance") or {}).get("layer"), "memory_proposal")
+                self.assertEqual((proposal.get("provenance") or {}).get("source"), "manual")
 
     def test_default_auto_apply_lists_applied(self):
         with TemporaryDirectory() as td:

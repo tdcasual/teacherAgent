@@ -67,6 +67,7 @@ def teacher_memory_apply(
     title = str(record.get("title") or "").strip()
     content = str(record.get("content") or "").strip()
     source = str(record.get("source") or "manual").strip().lower() or "manual"
+    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {"layer": "memory_proposal", "source": source, "origin": "manual_input"}
     if not content:
         return {"error": "empty content", "proposal_id": proposal_id}
     if deps.auto_apply_strict and deps.is_sensitive(content):
@@ -103,6 +104,8 @@ def teacher_memory_apply(
     entry_lines.append(f"- ts: {stamp}")
     entry_lines.append(f"- entry_id: {proposal_id}")
     entry_lines.append(f"- source: {source}")
+    if provenance:
+        entry_lines.append(f"- provenance: {str(provenance.get('origin') or 'unknown')}:{str(provenance.get('source') or source)}")
     if supersedes:
         entry_lines.append(f"- supersedes: {', '.join(supersedes)}")
     entry_lines.append("")
@@ -172,7 +175,7 @@ def teacher_memory_apply(
             "expired": bool(deps.is_expired_record(record)),
         },
     )
-    out: Dict[str, Any] = {"ok": True, "proposal_id": proposal_id, "status": "applied", "applied_to": str(out_path)}
+    out: Dict[str, Any] = {"ok": True, "proposal_id": proposal_id, "status": "applied", "applied_to": str(out_path), "provenance": provenance}
     if mem0_info is not None:
         out["mem0"] = mem0_info
     if supersedes:

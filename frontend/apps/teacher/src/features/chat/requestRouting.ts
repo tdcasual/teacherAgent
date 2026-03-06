@@ -24,8 +24,8 @@ export const decideSkillRouting = ({
     explicitSkillRequested && parsedInvocation.effectiveSkillId === parsedInvocation.requestedSkillId
   const shouldPinEffectiveSkill = explicitSkillResolved && Boolean(parsedInvocation.effectiveSkillId)
   const normalizedWarnings = parsedInvocation.warnings.map((warning) => {
-    if (!skillPinned && explicitSkillRequested && !explicitSkillResolved && warning.startsWith('未识别的技能：$')) {
-      return `未识别的技能：$${parsedInvocation.requestedSkillId}，已使用自动路由`
+    if (!skillPinned && explicitSkillRequested && !explicitSkillResolved && warning.startsWith('未识别的能力：$')) {
+      return `未识别的能力：$${parsedInvocation.requestedSkillId}，已使用自动路由`
     }
     return warning
   })

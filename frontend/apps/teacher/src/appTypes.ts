@@ -21,6 +21,15 @@ export type ChatJobStatus = {
   lane_queue_position?: number
   lane_queue_size?: number
   lane_active?: boolean
+  skill_id_requested?: string
+  skill_id_effective?: string
+  skill_reason?: string
+  skill_confidence?: number
+  skill_candidates?: Array<{
+    skill_id: string
+    score?: number
+    hits?: string[]
+  }>
 }
 
 export type ChatStartResult = {

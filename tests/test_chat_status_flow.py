@@ -43,6 +43,31 @@ class ChatStatusServiceTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             get_chat_status("missing", deps=deps)
 
+    def test_get_chat_status_preserves_workflow_resolution_fields(self):
+        deps = ChatStatusDeps(
+            load_chat_job=lambda job_id: {
+                "job_id": job_id,
+                "status": "done",
+                "lane_id": "lane:teacher:main",
+                "skill_id_requested": "",
+                "skill_id_effective": "physics-homework-generator",
+                "skill_reason": "auto_rule",
+                "skill_confidence": 0.64,
+                "skill_candidates": [{"skill_id": "physics-homework-generator", "score": 17}],
+            },
+            enqueue_chat_job=lambda job_id, lane_id: {},
+            resolve_chat_lane_id_from_job=lambda job: "lane:fallback",
+            chat_job_lock=threading.Lock(),
+            chat_lane_load_locked=lambda lane_id: {"queued": 0, "active": 1, "total": 1},
+            chat_find_position_locked=lambda lane_id, job_id: 0,
+        )
+
+        result = get_chat_status("cjob_003", deps=deps)
+        self.assertEqual(result["skill_id_effective"], "physics-homework-generator")
+        self.assertEqual(result["skill_reason"], "auto_rule")
+        self.assertAlmostEqual(float(result["skill_confidence"]), 0.64)
+        self.assertEqual(result["skill_candidates"][0]["skill_id"], "physics-homework-generator")
+
     def test_get_chat_status_normalizes_empty_status_and_reenqueues(self):
         enqueue_calls = []
         deps = ChatStatusDeps(

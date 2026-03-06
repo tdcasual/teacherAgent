@@ -539,6 +539,48 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
         self.assertEqual(evidence_calls[0].get("student_id"), "S001")
         self.assertEqual(evidence_calls[0].get("assignment_id"), "HW_6")
 
+    def test_teacher_memory_hooks_receive_provenance_context(self):
+        events: list[str] = []
+        propose_calls: list[dict] = []
+        flush_calls: list[dict] = []
+
+        def _teacher_auto_propose(teacher_id, session_id, user_text, assistant_text, **kwargs):
+            propose_calls.append({
+                "teacher_id": teacher_id,
+                "session_id": session_id,
+                "user_text": user_text,
+                "assistant_text": assistant_text,
+                **dict(kwargs or {}),
+            })
+            events.append("teacher_auto_propose")
+            return {"ok": True, "created": True, "proposal_id": "tmem_001", "status": "proposed"}
+
+        def _teacher_auto_flush(teacher_id, session_id, **kwargs):
+            flush_calls.append({"teacher_id": teacher_id, "session_id": session_id, **dict(kwargs or {})})
+            events.append("teacher_auto_flush")
+            return {"ok": True, "created": True, "proposal_id": "tmem_002", "status": "proposed"}
+
+        deps = self._deps(events=events)
+        deps = ChatJobProcessDeps(**{
+            **deps.__dict__,
+            "teacher_memory_auto_propose_from_turn": _teacher_auto_propose,
+            "teacher_memory_auto_flush_from_session": _teacher_auto_flush,
+        })
+
+        process_chat_job("cjob_test_001", deps=deps)
+
+        self.assertIn("write:done", events)
+        self.assertIn("teacher_auto_propose", events)
+        self.assertIn("teacher_auto_flush", events)
+        self.assertEqual(propose_calls[0].get("teacher_id"), "teacher")
+        self.assertEqual(propose_calls[0].get("session_id"), "session_test_001")
+        self.assertEqual(propose_calls[0].get("source"), "chat_job_post_done")
+        self.assertEqual((propose_calls[0].get("provenance") or {}).get("layer"), "session_context")
+        self.assertEqual((propose_calls[0].get("provenance") or {}).get("origin"), "chat_job")
+        self.assertEqual(flush_calls[0].get("source"), "chat_job_post_done")
+        self.assertEqual((flush_calls[0].get("provenance") or {}).get("origin"), "chat_job")
+
+
     def test_process_chat_job_rejects_uninspectable_legacy_compute_callable_without_event_sink(self):
         events: list[str] = []
 

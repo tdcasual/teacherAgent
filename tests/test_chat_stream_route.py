@@ -104,6 +104,35 @@ def test_chat_stream_route_replays_and_finishes(tmp_path: Path) -> None:
     assert "event: job.done" in text
 
 
+def test_chat_stream_route_replays_workflow_resolution_event(tmp_path: Path) -> None:
+    deps = _deps(tmp_path)
+    append_chat_event("job-stream-workflow", "job.processing", {"status": "processing"}, deps=deps)
+    append_chat_event(
+        "job-stream-workflow",
+        "workflow.resolved",
+        {
+            "requested_skill_id": "",
+            "effective_skill_id": "physics-homework-generator",
+            "reason": "auto_rule",
+            "confidence": 0.64,
+        },
+        deps=deps,
+    )
+    append_chat_event(
+        "job-stream-workflow",
+        "job.done",
+        {"status": "done", "reply": "hello world"},
+        deps=deps,
+    )
+
+    app = _build_app_with_core(deps)
+    text = _stream_text(app, job_id="job-stream-workflow")
+
+    assert "event: workflow.resolved" in text
+    assert 'physics-homework-generator' in text
+    assert 'auto_rule' in text
+
+
 def test_chat_stream_route_resumes_from_query_last_event_id(tmp_path: Path) -> None:
     deps = _deps(tmp_path)
     _append_terminal_events("job-stream-2", deps=deps)

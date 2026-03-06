@@ -147,7 +147,7 @@ const openTeacherApp = async (page: Page, options: SetupOptions = {}) => {
   const mocks = await setupApiMocks(page, options)
   await page.goto('/')
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
-  await expect(page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')).toBeVisible()
+  await expect(page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')).toBeVisible()
   return mocks
 }
 
@@ -175,7 +175,7 @@ const buildSkills = (count: number) =>
 
 test('uses $skill tokens and sends cleaned payload', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
 
   await composer.click()
   await composer.fill('$')
@@ -224,7 +224,7 @@ test('desktop enforces isolated scroll contract', async ({ page }) => {
 test('desktop wheel on chat does not move page or side panel anchors', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   for (let i = 1; i <= 28; i += 1) {
@@ -301,7 +301,7 @@ test('desktop wheel follows native hovered scroll container', async ({ page }) =
   })
   await page.goto('/')
 
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   for (let i = 1; i <= 24; i += 1) {
@@ -383,7 +383,7 @@ test('desktop wheel follows native hovered scroll container', async ({ page }) =
 
 test('auto route mode omits skill_id and warns on unknown $skill', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
 
   await expect(page.getByText('技能: 自动路由')).toBeVisible()
   await composer.fill('$ghost-skill 讲解受力分析')
@@ -398,7 +398,7 @@ test('auto route mode omits skill_id and warns on unknown $skill', async ({ page
 
 test('manual skill pin sends skill_id and auto route toggle clears it', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const homeworkSkillCard = page
@@ -658,7 +658,7 @@ test('keeps pending user message visible when switching sessions before reply fi
 
   await page.goto('/')
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const userText = '会话切换期间不应丢失'
@@ -807,7 +807,7 @@ test('restores pending messages when chat/start resolves after session switch', 
 
   await page.goto('/')
   await page.getByRole('button', { name: '展开会话' }).click()
-  const composer = page.getByPlaceholder('输入指令或问题，使用 $ 查看技能。回车发送，上档键+回车换行')
+  const composer = page.getByPlaceholder('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')
   const sendBtn = page.getByRole('button', { name: '发送' })
 
   const userText = '延迟建任务时也不能丢消息'

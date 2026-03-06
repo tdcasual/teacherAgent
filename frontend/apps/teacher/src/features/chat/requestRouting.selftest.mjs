@@ -37,7 +37,7 @@ const unknownSkillInAuto = decideSkillRouting({
     cleanedInput: '讲解受力分析',
     requestedSkillId: 'ghost-skill',
     effectiveSkillId: 'physics-teacher-ops',
-    warnings: ['未识别的技能：$ghost-skill，已使用 physics-teacher-ops'],
+    warnings: ['未识别的能力：$ghost-skill，已使用 physics-teacher-ops'],
     tokens: [],
   },
   activeSkillId: 'physics-teacher-ops',
@@ -45,6 +45,6 @@ const unknownSkillInAuto = decideSkillRouting({
 })
 
 assert.equal(unknownSkillInAuto.skillIdForRequest, undefined)
-assert.equal(unknownSkillInAuto.normalizedWarnings[0], '未识别的技能：$ghost-skill，已使用自动路由')
+assert.equal(unknownSkillInAuto.normalizedWarnings[0], '未识别的能力：$ghost-skill，已使用自动路由')
 
 console.log('request routing selftest passed')

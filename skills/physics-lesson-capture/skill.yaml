@@ -33,8 +33,8 @@ agent:
       - chart.agent.run
       - chart.exec
   budgets:
-    max_tool_rounds: 4
-    max_tool_calls: 10
+    max_tool_rounds: 3
+    max_tool_calls: 6
   model_policy:
     enabled: true
     default:

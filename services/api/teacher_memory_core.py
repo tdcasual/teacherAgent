@@ -373,6 +373,34 @@ def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
     return base / f"{safe_fs_id(proposal_id, prefix='proposal')}.json"
 
 
+
+
+def _ensure_teacher_memory_provenance(rec: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(rec, dict):
+        return {}
+    provenance = rec.get("provenance") if isinstance(rec.get("provenance"), dict) else None
+    if provenance:
+        return provenance
+    source = str(rec.get("source") or "manual").strip().lower() or "manual"
+    meta = rec.get("meta") if isinstance(rec.get("meta"), dict) else {}
+    origin = "manual_input"
+    if source == "auto_flush":
+        origin = "session_summary"
+    elif source in {"auto_intent", "auto_infer"}:
+        origin = "session_context"
+    provenance = {"layer": "memory_proposal", "source": source, "origin": origin}
+    session_id = str(meta.get("session_id") or "").strip()
+    if session_id:
+        provenance["session_id"] = session_id
+    side_effect_source = str(meta.get("side_effect_source") or "").strip()
+    if side_effect_source:
+        provenance["side_effect_source"] = side_effect_source
+    side_effect_provenance = meta.get("side_effect_provenance") if isinstance(meta.get("side_effect_provenance"), dict) else None
+    if side_effect_provenance:
+        provenance["upstream"] = side_effect_provenance
+    rec["provenance"] = provenance
+    return provenance
+
 def teacher_memory_list_proposals(
     teacher_id: str,
     status: Optional[str] = None,
@@ -414,6 +442,7 @@ def teacher_memory_list_proposals(
             continue
         if "proposal_id" not in rec:
             rec["proposal_id"] = path.stem
+        _ensure_teacher_memory_provenance(rec)
         items.append(rec)
         if len(items) >= take:
             break
@@ -757,20 +786,33 @@ def teacher_memory_auto_propose_from_turn(
     session_id: str,
     user_text: str,
     assistant_text: str,
+    *,
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return _teacher_memory_auto_propose_from_turn_impl(
         teacher_id,
         session_id,
         user_text,
         assistant_text,
+        source=source,
+        provenance=provenance,
         deps=_teacher_memory_auto_deps(),
     )
 
 
-def teacher_memory_auto_flush_from_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
+def teacher_memory_auto_flush_from_session(
+    teacher_id: str,
+    session_id: str,
+    *,
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     return _teacher_memory_auto_flush_from_session_impl(
         teacher_id,
         session_id,
+        source=source,
+        provenance=provenance,
         deps=_teacher_memory_auto_deps(),
     )
 

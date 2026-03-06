@@ -9,6 +9,9 @@
 3. `application` 负责用例编排与跨服务组合，不直接依赖 FastAPI 对象。
 4. `domain/services` 承载业务规则；可依赖仓储接口，不依赖 HTTP 层。
 5. `infrastructure` 负责外部系统与 IO，不反向引用上层业务编排。
+6. 对老师高频链路，优先补显式 workflow 编排与前置校验，而不是把业务状态推给自由工具循环。
+7. tool loop 是 workflow 的执行器，不是产品主流程的业务真相来源。
+
 
 ## Backend Context Boundaries
 
@@ -16,9 +19,12 @@
 - 入口：`services/api/routes/chat_routes.py`
 - 应用编排：`services/api/chat_status_service.py`、`services/api/chat_job_processing_service.py`
 - 状态规则：`services/api/chat_job_state_machine.py`
+- workflow 解析：`services/api/skill_auto_router.py`
 - 约束：
   - 所有状态迁移必须通过 `ChatJobStateMachine`
   - 不允许在路由层直接写入 job/lane 持久化状态
+  - 老师端 workflow 解释（`requested -> effective -> reason -> confidence`）属于 chat application contract
+  - 高频教学场景优先在 chat application 层补 workflow orchestration / preflight，不把“猜下一步”外包给模型
 
 ### Exam Context
 - 入口：`services/api/routes/exam_routes.py`

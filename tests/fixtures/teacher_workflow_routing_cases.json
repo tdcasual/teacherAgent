@@ -1,0 +1,225 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "homework_generate_with_assignment_id",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
+      "expected_skill_id": "physics-homework-generator",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-homework-generator"
+    },
+    {
+      "name": "exam_analysis_with_exam_id",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "根据 EX20260209 的成绩，帮我做考试分析并给出讲评建议",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-teacher-ops"
+    },
+    {
+      "name": "student_diagnosis_request",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "分析一下张三这次考试的薄弱点，给我学生诊断",
+      "expected_skill_id": "physics-student-focus",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-student-focus"
+    },
+    {
+      "name": "lesson_capture_from_board_and_oral_notes",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "把这节课的板书和口述内容做课堂材料采集整理",
+      "expected_skill_id": "physics-lesson-capture",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-lesson-capture"
+    },
+    {
+      "name": "core_examples_by_ce_ids",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "帮我整理 CE102 和 CE103 的变式题讲解",
+      "expected_skill_id": "physics-core-examples",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-core-examples"
+    },
+    {
+      "name": "generic_teaching_schedule_defaults",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "我想看一下本周教学安排",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "expect_candidates_empty": true
+    },
+    {
+      "name": "explicit_homework_selection_stays_pinned",
+      "role_hint": "teacher",
+      "requested_skill_id": "physics-homework-generator",
+      "last_user_text": "顺便分析一下学生薄弱点",
+      "expected_skill_id": "physics-homework-generator",
+      "expected_reason": "explicit",
+      "min_confidence": 1.0,
+      "expect_candidates_empty": true
+    },
+    {
+      "name": "teacher_model_config_query_defaults",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "读取当前模型路由配置，然后告诉我默认模型",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "expect_candidates_empty": true
+    },
+    {
+      "name": "provider_registry_query_defaults",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "配置一个 provider registry，设置 base url 和 api key",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "expect_candidates_empty": true
+    },
+    {
+      "name": "lesson_capture_from_ocr_board",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "课堂 OCR 采集一下这份板书",
+      "expected_skill_id": "physics-lesson-capture",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-lesson-capture"
+    },
+    {
+      "name": "homework_related_but_threshold_blocked",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "帮我找出李四在最近三次作业里的错误模式",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_threshold_blocked_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "physics-homework-generator"
+    },
+    {
+      "name": "core_examples_by_variants",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "给我一套匀变速直线运动的例题和变式题",
+      "expected_skill_id": "physics-core-examples",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-core-examples"
+    },
+    {
+      "name": "exam_analysis_from_attachment_scoresheet",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "根据附件里的成绩单做考试分析",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-teacher-ops"
+    },
+    {
+      "name": "lesson_capture_from_classroom_photos",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "帮我采集课堂拍照内容并输出知识点",
+      "expected_skill_id": "physics-lesson-capture",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-lesson-capture"
+    },
+    {
+      "name": "tiered_homework_generation",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "生成分层作业，基础题 8 道，提高题 4 道",
+      "expected_skill_id": "physics-homework-generator",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-homework-generator"
+    },
+    {
+      "name": "student_focus_low_confidence_but_selected",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "做一个学生重点分析，看看王五最近哪里掉分",
+      "expected_skill_id": "physics-student-focus",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.52,
+      "first_candidate_skill_id": "physics-student-focus"
+    },
+    {
+      "name": "core_examples_lecture_card",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "CE201 这个核心例题给我做成课堂讲解卡片",
+      "expected_skill_id": "physics-core-examples",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-core-examples"
+    },
+    {
+      "name": "teacher_prep_request",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "帮我备课，下周讲电场",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.60,
+      "first_candidate_skill_id": "physics-teacher-ops"
+    },
+    {
+      "name": "exam_review_request",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "把考试讲评和错因分析整理一下",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.60,
+      "first_candidate_skill_id": "physics-teacher-ops"
+    },
+    {
+      "name": "lesson_capture_board_summary",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "根据课堂图片 OCR 结果生成板书纪要",
+      "expected_skill_id": "physics-lesson-capture",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.70,
+      "first_candidate_skill_id": "physics-lesson-capture"
+    },
+    {
+      "name": "student_focus_recent_class_state",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "这个学生最近上课状态怎么样",
+      "expected_skill_id": "physics-student-focus",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.52,
+      "first_candidate_skill_id": "physics-student-focus"
+    },
+    {
+      "name": "ambiguous_analysis_defaults",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "我想要一个分析方案",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "expect_candidates_empty": true
+    }
+  ]
+}

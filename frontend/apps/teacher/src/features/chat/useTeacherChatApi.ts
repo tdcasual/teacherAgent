@@ -97,6 +97,32 @@ const toErrorMessage = (error: unknown, fallback = '请求失败') => {
   return toUserFacingErrorMessage(error, fallback)
 }
 
+const resolveWorkflowHint = (
+  payload: {
+    requested_skill_id?: string
+    effective_skill_id?: string
+    reason?: string
+    skill_id_requested?: string
+    skill_id_effective?: string
+    skill_reason?: string
+    confidence?: number
+    skill_confidence?: number
+  },
+  skillList: Skill[],
+): string => {
+  const reason = String(payload.reason || payload.skill_reason || '').trim()
+  const requested = String(payload.requested_skill_id || payload.skill_id_requested || '').trim()
+  const effective = String(payload.effective_skill_id || payload.skill_id_effective || '').trim()
+  const confidenceRaw = Number(payload.confidence ?? payload.skill_confidence ?? Number.NaN)
+  const confidence = Number.isFinite(confidenceRaw) ? confidenceRaw : undefined
+  if (!effective || reason === 'explicit') return ''
+  const title = skillList.find((item) => item.id === effective)?.title || effective
+  if (requested && requested === effective) return ''
+  if (reason.includes('default')) return `当前未明确指定，先按「${title}」工作流继续。`
+  if (confidence !== undefined && confidence < 0.56) return `已优先按「${title}」工作流处理；如需切换，可显式选择能力。`
+  return `已按「${title}」工作流处理。`
+}
+
 export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   const {
     apiBase,
@@ -544,7 +570,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       }
       setSkillList(teacherSkills.map((skill) => buildSkill(skill)))
     } catch (err: unknown) {
-      setSkillsError(toErrorMessage(err, '无法加载技能列表'))
+      setSkillsError(toErrorMessage(err, '无法加载能力列表'))
       setSkillList(fallbackSkills)
     } finally {
       setSkillsLoading(false)
@@ -835,6 +861,15 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           setPendingStreamStage('处理中...')
           return
         }
+        if (eventType === 'workflow.resolved') {
+          const workflowHint = resolveWorkflowHint({
+            requested_skill_id: String(payload.requested_skill_id || ''),
+            effective_skill_id: String(payload.effective_skill_id || ''),
+            reason: String(payload.reason || ''),
+          }, skillList)
+          if (workflowHint) setComposerWarning(workflowHint)
+          return
+        }
         if (eventType === 'tool.start') {
           toolCounter += 1
           const toolName = String(payload.tool_name || '').trim() || 'tool'
@@ -983,6 +1018,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             stopped = true
             return
           }
+          const workflowHint = resolveWorkflowHint(statusData, skillList)
+          if (workflowHint) setComposerWarning(workflowHint)
           const lanePos = Number(statusData.lane_queue_position || 0)
           const laneSize = Number(statusData.lane_queue_size || 0)
           if (statusData.status === 'queued') {
@@ -1023,7 +1060,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       setPendingToolRuns([])
       if (pollCleanup) pollCleanup()
     }
-  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setSending])
+  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setSending, setComposerWarning, skillList])
 
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {

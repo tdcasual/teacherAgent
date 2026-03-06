@@ -91,16 +91,26 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
     const [pendingChatJob, setPendingChatJob] = React.useState<PendingChatJob | null>(null)
     const [, setSending] = React.useState(false)
     const [, setInput] = React.useState('')
-    const [, setComposerWarning] = React.useState('')
+    const [composerWarning, setComposerWarning] = React.useState('')
     const [chatQueueHint, setChatQueueHintState] = React.useState('')
     const [pendingStreamStage, setPendingStreamStageState] = React.useState('')
     const [pendingToolRuns, setPendingToolRunsState] = React.useState<PendingToolRun[]>([])
     const [skillList, setSkillList] = React.useState<Skill[]>([
       {
         id: 'physics-teacher-ops',
-        title: 'Physics Ops',
+        title: '考试分析',
         desc: 'ops',
         instructions: 'ops',
+        prompts: [],
+        examples: [],
+        keywords: [],
+        source_type: 'system',
+      },
+      {
+        id: 'physics-homework-generator',
+        title: '作业生成',
+        desc: 'homework',
+        instructions: 'homework',
         prompts: [],
         examples: [],
         keywords: [],
@@ -213,6 +223,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
       chatQueueHint,
       streamLogs: logsRef.current,
       historySessions,
+      composerWarning,
     }
   })
 
@@ -223,6 +234,109 @@ afterEach(() => {
 })
 
 describe('useTeacherChatApi stream mapping', () => {
+  it('shows a low-noise workflow explanation when the backend resolves a capability', async () => {
+    const localStorageMock = installLocalStorageMock()
+    localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' }))
+
+    const streamBody = [
+      toSseEvent(1, 'job.processing', {}),
+      toSseEvent(2, 'workflow.resolved', {
+        requested_skill_id: '',
+        effective_skill_id: 'physics-homework-generator',
+        reason: 'auto_rule',
+        confidence: 0.64,
+      }),
+      toSseEvent(3, 'job.done', { reply: '已完成' }),
+    ].join('')
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = toUrl(input)
+      if (url.endsWith('/chat/start')) {
+        return jsonResponse({ ok: true, job_id: 'job-2', status: 'queued' })
+      }
+      if (url.includes('/chat/stream')) {
+        return sseResponse(streamBody)
+      }
+      if (url.includes('/teacher/history/sessions')) {
+        return jsonResponse({ ok: true, teacher_id: 'teacher-1', sessions: [], next_cursor: null })
+      }
+      if (url.includes('/skills')) {
+        return jsonResponse({
+          skills: [
+            { id: 'physics-teacher-ops', title: 'Physics Ops', desc: 'ops' },
+            { id: 'physics-homework-generator', title: '作业生成', desc: 'homework' },
+          ],
+        })
+      }
+      return jsonResponse({ ok: true })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderTeacherChatHarness()
+
+    await act(async () => {
+      const ok = await result.current.api.submitMessage('请帮我生成作业')
+      expect(ok).toBe(true)
+    })
+
+    await waitFor(() => {
+      expect(result.current.composerWarning).toContain('作业生成')
+    })
+    expect(result.current.composerWarning).toContain('已按')
+  })
+
+  it('shows a light fallback hint when the backend falls back to the default workflow', async () => {
+    const localStorageMock = installLocalStorageMock()
+    localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' }))
+
+    const streamBody = [
+      toSseEvent(1, 'job.processing', {}),
+      toSseEvent(2, 'workflow.resolved', {
+        requested_skill_id: '',
+        effective_skill_id: 'physics-teacher-ops',
+        reason: 'role_default',
+        confidence: 0.28,
+      }),
+      toSseEvent(3, 'job.done', { reply: '已完成' }),
+    ].join('')
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
+      const url = toUrl(input)
+      if (url.endsWith('/chat/start')) {
+        return jsonResponse({ ok: true, job_id: 'job-default', status: 'queued' })
+      }
+      if (url.includes('/chat/stream')) {
+        return sseResponse(streamBody)
+      }
+      if (url.includes('/teacher/history/sessions')) {
+        return jsonResponse({ ok: true, teacher_id: 'teacher-1', sessions: [], next_cursor: null })
+      }
+      if (url.includes('/skills')) {
+        return jsonResponse({
+          skills: [
+            { id: 'physics-teacher-ops', title: '考试分析', desc: 'ops' },
+          ],
+        })
+      }
+      return jsonResponse({ ok: true })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderTeacherChatHarness()
+
+    await act(async () => {
+      const ok = await result.current.api.submitMessage('我想要一个分析方案')
+      expect(ok).toBe(true)
+    })
+
+    await waitFor(() => {
+      expect(result.current.composerWarning).toContain('未明确指定')
+    })
+    expect(result.current.composerWarning).toContain('考试分析')
+  })
+
   it('reflects queue + tool progress and completes assistant reply from SSE events', async () => {
     const localStorageMock = installLocalStorageMock()
     localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')

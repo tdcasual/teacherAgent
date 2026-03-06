@@ -41,5 +41,22 @@ class SkillsPolicyConsistencyTest(unittest.TestCase):
                 self.assertGreaterEqual(b.max_tool_rounds, 1, f"{skill_id}: max_tool_rounds must be >= 1")
 
 
+    def test_core_teacher_workflow_budgets_are_tightened(self):
+        from services.api.config import APP_ROOT
+        from services.api.skills.loader import load_skills
+
+        loaded = load_skills(Path(APP_ROOT) / "skills")
+        expected = {
+            "physics-teacher-ops": (3, 8),
+            "physics-student-focus": (3, 7),
+            "physics-homework-generator": (3, 6),
+            "physics-lesson-capture": (3, 6),
+        }
+        for skill_id, (max_rounds, max_calls) in expected.items():
+            spec = loaded.skills[skill_id]
+            self.assertEqual(spec.agent.budgets.max_tool_rounds, max_rounds, f"{skill_id}: unexpected max_tool_rounds")
+            self.assertEqual(spec.agent.budgets.max_tool_calls, max_calls, f"{skill_id}: unexpected max_tool_calls")
+
+
 if __name__ == "__main__":
     unittest.main()

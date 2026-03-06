@@ -51,7 +51,7 @@ export default function SkillsTab(props: SkillsTabProps) {
             className="w-full"
             value={skillQuery}
             onChange={(event) => setSkillQuery(event.target.value)}
-            placeholder="搜索技能"
+            placeholder="搜索教学能力"
           />
         </div>
         <div className="inline-flex items-center gap-[8px] flex-wrap">
@@ -61,10 +61,10 @@ export default function SkillsTab(props: SkillsTabProps) {
             disabled={!skillPinned}
             onClick={() => {
               setSkillPinned(false)
-              setComposerWarning('已切换到自动技能路由（未显式指定时由后端自动选择）。')
+              setComposerWarning('已切换到自动工作流推荐（未显式指定时由后端自动选择）。')
             }}
           >
-            使用自动路由
+            切回自动推荐
           </button>
           <label className="inline-flex items-center gap-[6px] text-[12px] text-muted whitespace-nowrap">
             <input
@@ -78,10 +78,10 @@ export default function SkillsTab(props: SkillsTabProps) {
       </div>
 
       <div className="mb-[10px] rounded-[8px] border border-border bg-surface-soft px-[10px] py-[8px] text-[12px] text-muted">
-        已移除自定义技能增删改导能力，仅保留系统技能选择与调用。
+        当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。
       </div>
 
-      {skillsLoading ? <div className="text-[12px] text-muted mb-[8px]">正在加载技能...</div> : null}
+      {skillsLoading ? <div className="text-[12px] text-muted mb-[8px]">正在加载能力...</div> : null}
       {skillsError ? <div className="text-[12px] text-[#8a1f1f] mb-[8px]">{skillsError}</div> : null}
 
       <div className="skills-body grid gap-[12px] overflow-y-auto flex-1 min-h-0 pr-[4px]" style={{ overscrollBehavior: 'contain' }}>
@@ -98,7 +98,7 @@ export default function SkillsTab(props: SkillsTabProps) {
                 type="button"
                 className={`border-none bg-transparent cursor-pointer text-[16px] ${favorites.includes(skill.id) ? 'text-[#d38b2f]' : 'text-muted'}`}
                 onClick={() => toggleFavorite(skill.id)}
-                aria-label="收藏技能"
+                aria-label="收藏能力"
               >
                 {favorites.includes(skill.id) ? '★' : '☆'}
               </button>

@@ -40,6 +40,7 @@ class TeacherAssignmentPreflightDeps:
 
 
 _EXAM_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(EX[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
+_LESSON_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(L[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
 
 
 def _looks_like_full_template_prompt(prompt: str) -> bool:
@@ -74,6 +75,71 @@ def _extract_exam_id_from_messages(req: Any, deps: TeacherAssignmentPreflightDep
         fallback = _EXAM_ID_FALLBACK_RE.search(content)
         if fallback:
             return fallback.group(1)
+    return None
+
+
+def _extract_lesson_id_from_messages(req: Any) -> Optional[str]:
+    messages = list(getattr(req, "messages", []) or [])
+    for msg in reversed(messages):
+        content = str(getattr(msg, "content", "") or "")
+        fallback = _LESSON_ID_FALLBACK_RE.search(content)
+        if fallback:
+            return fallback.group(1)
+    return None
+
+
+def _looks_like_exam_analysis_request(text: str) -> bool:
+    content = str(text or "").strip()
+    return any(token in content for token in ("考试分析", "讲评", "成绩", "试卷", "班级分析", "exam"))
+
+
+def _looks_like_ambiguous_student_focus_request(text: str) -> bool:
+    content = str(text or "").strip()
+    ambiguous_markers = ("这个学生", "该学生", "某个学生", "一位学生", "这个同学", "该同学")
+    return any(marker in content for marker in ambiguous_markers)
+
+
+def teacher_workflow_preflight_reply(
+    req: Any,
+    *,
+    effective_skill_id: str,
+    last_user_text: str,
+    attachment_context: str,
+    deps: TeacherAssignmentPreflightDeps,
+) -> Optional[str]:
+    skill_id = str(effective_skill_id or "").strip()
+    attachment = str(attachment_context or "").strip()
+
+    if skill_id == "physics-teacher-ops" and _looks_like_exam_analysis_request(last_user_text):
+        exam_id = _extract_exam_id_from_messages(req, deps)
+        if not exam_id and not attachment:
+            deps.diag_log(
+                "teacher_preflight.workflow_exam_analysis_missing_context",
+                {"skill_id": skill_id, "query_preview": str(last_user_text or "")[:160]},
+            )
+            return (
+                "当前按考试分析 workflow 处理。请补充考试编号（如 EX20260209_9b92e1），"
+                "或上传成绩单 / 分析文件后继续。"
+            )
+
+    if skill_id == "physics-student-focus":
+        student_id = str(getattr(req, "student_id", "") or "").strip()
+        if not student_id and _looks_like_ambiguous_student_focus_request(last_user_text):
+            deps.diag_log(
+                "teacher_preflight.workflow_student_focus_missing_identity",
+                {"skill_id": skill_id, "query_preview": str(last_user_text or "")[:160]},
+            )
+            return "当前按学生重点分析 workflow 处理。请补充学生姓名、学号或班级信息后继续。"
+
+    if skill_id == "physics-lesson-capture":
+        lesson_id = _extract_lesson_id_from_messages(req)
+        if not attachment and not lesson_id:
+            deps.diag_log(
+                "teacher_preflight.workflow_lesson_capture_missing_material",
+                {"skill_id": skill_id, "query_preview": str(last_user_text or "")[:160]},
+            )
+            return "当前按课堂材料采集 workflow 处理。请上传课堂材料，或提供课堂编号后继续。"
+
     return None
 
 

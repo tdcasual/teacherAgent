@@ -1,8 +1,14 @@
-# Physics Teaching Helper Agent
+# Teaching Workflow Product
 [![Teacher E2E](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml/badge.svg?branch=main)](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml)
 
-面向老师、学生与管理员的教学流程助手。
-目标是把“上传材料、生成讲评、提交作业、账号管理”这些高频动作，变成可复用、可追踪、可运维的闭环。
+面向老师、学生与管理员的教学 workflow 产品。
+目标是把“考试分析、学生诊断、作业生成、课堂材料采集、账号管理”等高频动作，收敛成可解释、可回归、可运维的闭环，而不是继续扩展通用 agent 平台。
+
+## 产品真相
+- 产品定位：教学 workflow 产品，不是插件市场或通用 agent 平台
+- 运行时主链路：`role -> workflow(skill) -> prompt stack -> tool policy -> chat job -> memory side effects -> history persistence`
+- 老师端核心价值：自动推荐教学能力，但保留显式 workflow 入口与可解释路由结果
+- 运行时契约：`docs/reference/agent-runtime-contract.md`
 
 ## 30 秒定位
 - 老师：看 `docs/how-to/teacher-daily-workflow.md`
@@ -45,6 +51,11 @@ docker compose up -d api
 ```
 2. 学生或老师登录失败：看 `docs/how-to/auth-and-account-troubleshooting.md`
 3. token 失效：通常是重置凭据后版本变化，重新登录即可。
+
+## 关键参考
+- 运行时契约：`docs/reference/agent-runtime-contract.md`
+- 模型策略：`docs/reference/model-policy.md`
+- 架构边界：`docs/architecture/module-boundaries.md`
 
 ## 进阶文档
 - 快速开始扩展版：`docs/getting-started/quickstart.md`

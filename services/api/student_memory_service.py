@@ -159,6 +159,32 @@ def _validate_candidate(memory_type: str, content: str) -> Dict[str, Any]:
     return {"ok": True, "memory_type": mt, "content": text, "risk_flags": []}
 
 
+
+
+def _build_student_memory_provenance(
+    source: Optional[str],
+    *,
+    evidence_refs: Optional[List[str]],
+    provenance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    source_norm = str(source or "manual").strip() or "manual"
+    origin = "manual_input"
+    if source_norm == "auto_student_infer":
+        origin = "session_context"
+    elif source_norm == "auto_assignment_evidence":
+        origin = "tool_data"
+    result: Dict[str, Any] = {
+        "layer": "memory_proposal",
+        "source": source_norm,
+        "origin": origin,
+    }
+    refs = [str(item).strip() for item in (evidence_refs or []) if str(item).strip()]
+    if refs:
+        result["evidence_refs"] = refs
+    if isinstance(provenance, dict) and provenance:
+        result["upstream"] = provenance
+    return result
+
 def create_proposal_api(
     *,
     teacher_id: Optional[str],
@@ -167,6 +193,7 @@ def create_proposal_api(
     content: str,
     evidence_refs: Optional[List[str]],
     source: Optional[str],
+    provenance: Optional[Dict[str, Any]] = None,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
     teacher_id_final = deps.resolve_teacher_id(teacher_id)
@@ -207,6 +234,7 @@ def create_proposal_api(
         "status": "proposed",
         "created_at": stamp,
         "risk_flags": [],
+        "provenance": _build_student_memory_provenance(source, evidence_refs=evidence_refs, provenance=provenance),
     }
     path = _proposal_path(teacher_id_final, proposal_id, deps=deps)
     _atomic_write_json(path, record)
@@ -364,6 +392,8 @@ def student_memory_auto_propose_from_turn_api(
     user_text: str,
     assistant_text: str,
     request_id: Optional[str],
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
     teacher_input = str(teacher_id or "").strip()
@@ -425,6 +455,7 @@ def student_memory_auto_propose_from_turn_api(
         content=str(candidate.get("content") or ""),
         evidence_refs=refs or None,
         source="auto_student_infer",
+        provenance=provenance if isinstance(provenance, dict) else {"side_effect_source": str(source or "").strip(), "session_id": sid_ref or ""},
         deps=deps,
     )
     if not created.get("ok"):
@@ -452,6 +483,8 @@ def student_memory_auto_propose_from_assignment_evidence_api(
     assignment_id: str,
     evidence: Optional[Dict[str, Any]],
     request_id: Optional[str],
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
     teacher_input = str(teacher_id or "").strip()
@@ -528,6 +561,7 @@ def student_memory_auto_propose_from_assignment_evidence_api(
         content=str(candidate.get("content") or ""),
         evidence_refs=refs,
         source="auto_assignment_evidence",
+        provenance=provenance if isinstance(provenance, dict) else {"side_effect_source": str(source or "").strip(), "assignment_id": aid},
         deps=deps,
     )
     if not created.get("ok"):
@@ -587,6 +621,11 @@ def list_proposals_api(
             continue
         if "proposal_id" not in rec:
             rec["proposal_id"] = path.stem
+        if not isinstance(rec.get("provenance"), dict):
+            rec["provenance"] = _build_student_memory_provenance(
+                rec.get("source"),
+                evidence_refs=rec.get("evidence_refs") if isinstance(rec.get("evidence_refs"), list) else None,
+            )
         items.append(rec)
         if len(items) >= take:
             break

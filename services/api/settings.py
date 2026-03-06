@@ -151,7 +151,7 @@ def teacher_memory_flush_max_source_chars() -> int:
 
 
 def teacher_memory_auto_apply_enabled() -> bool:
-    return env_bool("TEACHER_MEMORY_AUTO_APPLY_ENABLED", "1")
+    return env_bool("TEACHER_MEMORY_AUTO_APPLY_ENABLED", "0")
 
 
 def teacher_memory_auto_apply_targets_raw() -> str:

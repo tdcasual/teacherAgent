@@ -43,6 +43,8 @@ def teacher_memory_auto_propose_from_turn(
     user_text: str,
     assistant_text: str,
     *,
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
     deps: TeacherMemoryAutoDeps,
 ) -> Dict[str, Any]:
     if not deps.auto_enabled:
@@ -75,6 +77,8 @@ def teacher_memory_auto_propose_from_turn(
             "similar_hits": int(inferred.get("similar_hits") or 0),
             "user_text_preview": text[:160],
             "assistant_text_preview": str(assistant_text or "")[:160],
+            "side_effect_source": str(source or "").strip(),
+            "side_effect_provenance": provenance if isinstance(provenance, dict) else None,
         }
     else:
         target = "DAILY" if any(p.search(text) for p in deps.temporary_hint_patterns) else "MEMORY"
@@ -87,6 +91,8 @@ def teacher_memory_auto_propose_from_turn(
             "trigger": "explicit_intent",
             "user_text_preview": text[:160],
             "assistant_text_preview": str(assistant_text or "")[:160],
+            "side_effect_source": str(source or "").strip(),
+            "side_effect_provenance": provenance if isinstance(provenance, dict) else None,
         }
     priority_score = deps.priority_score(
         target=target,
@@ -141,7 +147,7 @@ def teacher_memory_auto_propose_from_turn(
         "created": True,
         "target": target,
         "proposal_id": result.get("proposal_id"),
-        "status": str(result.get("status") or "applied"),
+        "status": str(result.get("status") or "proposed"),
         "priority_score": priority_score,
     }
 
@@ -150,6 +156,8 @@ def teacher_memory_auto_flush_from_session(
     teacher_id: str,
     session_id: str,
     *,
+    source: Optional[str] = None,
+    provenance: Optional[Dict[str, Any]] = None,
     deps: TeacherMemoryAutoDeps,
 ) -> Dict[str, Any]:
     if not deps.auto_enabled or not deps.auto_flush_enabled:
@@ -229,6 +237,8 @@ def teacher_memory_auto_flush_from_session(
             "dialog_messages": len(dialog),
             "compact_threshold": deps.session_compact_max_messages,
             "soft_margin_messages": deps.memory_flush_margin_messages,
+            "side_effect_source": str(source or "").strip(),
+            "side_effect_provenance": provenance if isinstance(provenance, dict) else None,
         },
         dedupe_key=dedupe_key,
     )
@@ -246,6 +256,6 @@ def teacher_memory_auto_flush_from_session(
         "created": True,
         "target": "DAILY",
         "proposal_id": result.get("proposal_id"),
-        "status": str(result.get("status") or "applied"),
+        "status": str(result.get("status") or "proposed"),
         "cycle": cycle_no,
     }

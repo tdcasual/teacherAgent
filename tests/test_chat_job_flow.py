@@ -228,6 +228,9 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertIn("echo:teacher:", data.get("reply", ""))
                 self.assertEqual(data.get("skill_id_requested"), "")
                 self.assertEqual(data.get("skill_id_effective"), "physics-homework-generator")
+                self.assertEqual(data.get("skill_reason"), "auto_rule")
+                self.assertGreater(float(data.get("skill_confidence") or 0.0), 0.28)
+                self.assertEqual((data.get("skill_candidates") or [])[0].get("skill_id"), "physics-homework-generator")
                 self.assertEqual(captured["skill_id"], "physics-homework-generator")
 
     def test_chat_status_missing_job(self):
