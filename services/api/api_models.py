@@ -200,3 +200,41 @@ class TeacherModelConfigUpdateRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
+
+
+class SurveyWebhookAckResponse(BaseModel):
+    ok: bool = True
+    job_id: str
+    status: str
+    accepted_at: Optional[str] = None
+
+
+class SurveyReportSummary(BaseModel):
+    report_id: str
+    teacher_id: str
+    class_name: Optional[str] = None
+    status: str
+    confidence: Optional[float] = None
+    summary: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SurveyReportDetail(BaseModel):
+    report: SurveyReportSummary
+    analysis_artifact: Dict[str, Any]
+    bundle_meta: Dict[str, Any]
+    review_required: bool = False
+
+
+class SurveyReportRerunRequest(BaseModel):
+    teacher_id: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class SurveyReviewQueueItemSummary(BaseModel):
+    report_id: str
+    teacher_id: str
+    reason: str
+    confidence: Optional[float] = None
+    created_at: Optional[str] = None

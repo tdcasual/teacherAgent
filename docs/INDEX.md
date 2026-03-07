@@ -32,6 +32,7 @@
 - 责任归属：`docs/architecture/ownership-map.md`
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
+- 问卷分析发布清单：`docs/operations/survey-analysis-release-checklist.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
 - PR 变更模板：`.github/pull_request_template.md`
@@ -41,7 +42,10 @@
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
+- 问卷分析契约：`docs/reference/survey-analysis-contract.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 
 ## 设计与演进
 - 历史设计与实现文档：`docs/plans/`
+- 问卷多 Agent 设计：`docs/plans/2026-03-06-survey-multi-agent-design.md`
+- 问卷多 Agent 实施计划：`docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md`

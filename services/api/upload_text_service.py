@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import html as html_lib
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +21,7 @@ class UploadTextDeps:
     diag_log: Callable[..., None]
     limit: Callable[[Any], Any]
     ocr_semaphore: Any
+
 
 
 def parse_timeout_env(name: str) -> Optional[float]:
@@ -65,6 +68,7 @@ async def save_upload_file(
     return await run_in_threadpool(_copy)
 
 
+
 def load_ocr_utils() -> Tuple[Any, Any]:
     global _OCR_UTILS
     if _OCR_UTILS is not None:
@@ -72,7 +76,6 @@ def load_ocr_utils() -> Tuple[Any, Any]:
     try:
         from ocr_utils import load_env_from_dotenv, ocr_with_sdk  # type: ignore
 
-        # Load once on first use; repeated file reads can become a hot-path under load.
         load_env_from_dotenv(Path(".env"))
         _OCR_UTILS = (load_env_from_dotenv, ocr_with_sdk)
         return _OCR_UTILS
@@ -82,9 +85,22 @@ def load_ocr_utils() -> Tuple[Any, Any]:
         return _OCR_UTILS
 
 
+
 def clean_ocr_text(text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     return "\n".join(lines)
+
+
+
+def extract_text_from_html(content: str) -> str:
+    raw = str(content or "")
+    if not raw.strip():
+        return ""
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", " ", raw)
+    text = re.sub(r"(?s)<[^>]+>", "\n", text)
+    text = html_lib.unescape(text)
+    return clean_ocr_text(text)
+
 
 
 def extract_text_from_pdf(
@@ -98,6 +114,7 @@ def extract_text_from_pdf(
     text = ""
     try:
         import pdfplumber  # type: ignore
+
         t1 = time.monotonic()
         pages_text = []
         with pdfplumber.open(str(path)) as pdf:
@@ -146,6 +163,7 @@ def extract_text_from_pdf(
     return clean_ocr_text(text)
 
 
+
 def extract_text_from_image(
     path: Path,
     *,
@@ -176,6 +194,7 @@ def extract_text_from_image(
         raise
 
 
+
 def extract_text_from_file(
     path: Path,
     *,
@@ -189,7 +208,7 @@ def extract_text_from_file(
         return extract_text_from_pdf(path, deps=deps, language=language, ocr_mode=ocr_mode, prompt=prompt)
     if suffix in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}:
         return extract_text_from_image(path, deps=deps, language=language, ocr_mode=ocr_mode, prompt=prompt)
-    if suffix in {".md", ".markdown", ".tex", ".txt"}:
+    if suffix in {".md", ".markdown", ".tex", ".txt", ".html", ".htm"}:
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except Exception:
@@ -203,5 +222,7 @@ def extract_text_from_file(
                     continue
                 lines.append(line)
             text = "\n".join(lines)
+        if suffix in {".html", ".htm"}:
+            return extract_text_from_html(text)
         return clean_ocr_text(text)
     raise RuntimeError(f"不支持的文件类型：{suffix or path.name}")

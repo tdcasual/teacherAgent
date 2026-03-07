@@ -76,6 +76,7 @@ from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
 from . import get_app_core as _app_core
 from .exam_wiring import _exam_longform_deps
+from .survey_wiring import build_survey_specialist_runtime
 
 
 def _tool_dispatch_deps(core: Any | None = None):
@@ -117,6 +118,9 @@ def _tool_dispatch_deps(core: Any | None = None):
         teacher_memory_search=_ac.teacher_memory_search,
         teacher_memory_propose=_ac.teacher_memory_propose,
         teacher_memory_apply=_ac.teacher_memory_apply,
+        survey_report_list=_ac.survey_list_reports,
+        survey_report_get=_ac.survey_get_report,
+        survey_report_rerun=_ac.survey_rerun_report,
     )
 
 
@@ -240,6 +244,10 @@ def _agent_runtime_deps(core: Any | None = None):
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
+        survey_list_reports=_ac.survey_list_reports,
+        survey_get_report=_ac.survey_get_report,
+        load_survey_bundle=_ac.survey_load_bundle,
+        survey_specialist_runtime=build_survey_specialist_runtime(_ac),
     )
 
 

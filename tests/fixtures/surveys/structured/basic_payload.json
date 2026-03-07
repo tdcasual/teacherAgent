@@ -1,0 +1,50 @@
+{
+  "case_id": "structured_basic_payload",
+  "mode": "structured",
+  "provider": "provider",
+  "payload": {
+    "submission_id": "sub-structured-1",
+    "title": "课堂反馈问卷",
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "sample_size": 35,
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "本节课难度如何？",
+        "response_type": "single_choice",
+        "stats": {
+          "偏难": 12,
+          "适中": 20,
+          "偏易": 3
+        }
+      }
+    ],
+    "groups": [
+      {
+        "group_name": "实验班",
+        "sample_size": 20,
+        "stats": {
+          "Q1:偏难": 10
+        }
+      }
+    ],
+    "text_signals": [
+      {
+        "theme": "公式推导",
+        "evidence_count": 5,
+        "excerpts": ["推导太快了", "例题太少"]
+      }
+    ]
+  },
+  "expected": {
+    "min_confidence": 0.95,
+    "required_fields_present": [
+      "title",
+      "teacher_id",
+      "class_name",
+      "sample_size",
+      "question_summaries"
+    ]
+  }
+}

@@ -28,6 +28,10 @@ def enqueue_exam_job(job_id: str, *, backend: QueueBackend) -> None:
     backend.enqueue_exam_job(job_id)
 
 
+def enqueue_survey_job(job_id: str, *, backend: QueueBackend) -> None:
+    backend.enqueue_survey_job(job_id)
+
+
 def enqueue_profile_update(payload: Dict[str, Any], *, backend: QueueBackend) -> None:
     backend.enqueue_profile_update(payload)
 
@@ -47,6 +51,10 @@ def scan_pending_upload_jobs(*, backend: QueueBackend) -> int:
 
 def scan_pending_exam_jobs(*, backend: QueueBackend) -> int:
     return int(backend.scan_pending_exam_jobs() or 0)
+
+
+def scan_pending_survey_jobs(*, backend: QueueBackend) -> int:
+    return int(backend.scan_pending_survey_jobs() or 0)
 
 
 def scan_pending_chat_jobs(*, backend: QueueBackend) -> int:
