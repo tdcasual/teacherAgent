@@ -39,18 +39,21 @@ def test_survey_webhook_route_calls_application_layer(monkeypatch) -> None:
 
 
 
-def test_survey_report_list_route_calls_application_layer(monkeypatch) -> None:
+def test_survey_report_list_route_calls_unified_analysis_plane(monkeypatch) -> None:
     class _Core:
         pass
 
     called = {}
 
-    async def _fake_list(*, teacher_id, status, deps):
+    def _fake_list(*, teacher_id, domain, status, strategy_id, target_type, deps):
         called["teacher_id"] = teacher_id
+        called["domain"] = domain
         called["status"] = status
-        return {"ok": True, "reports": []}
+        called["strategy_id"] = strategy_id
+        called["target_type"] = target_type
+        return {"items": []}
 
-    monkeypatch.setattr(survey_routes.survey_application, "list_survey_reports", _fake_list)
+    monkeypatch.setattr(survey_routes, "list_analysis_reports", _fake_list, raising=False)
     monkeypatch.setattr(survey_routes.survey_deps, "build_survey_application_deps", lambda _core: object())
 
     app = FastAPI()
@@ -60,4 +63,7 @@ def test_survey_report_list_route_calls_application_layer(monkeypatch) -> None:
 
     assert res.status_code == 200
     assert called["teacher_id"] == "teacher_1"
+    assert called["domain"] == "survey"
     assert called["status"] == "analysis_ready"
+    assert called["strategy_id"] is None
+    assert called["target_type"] is None

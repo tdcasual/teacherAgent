@@ -196,6 +196,67 @@ export type WorkflowSummaryCardProps = {
   formatProgressSummary: FormatProgressSummary
 }
 
+export type AnalysisReportSummary = {
+  report_id: string
+  domain?: string | null
+  analysis_type: string
+  target_type: string
+  target_id: string
+  strategy_id: string
+  teacher_id: string
+  status: string
+  confidence?: number | null
+  summary?: string | null
+  review_required: boolean
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AnalysisReportDetail = {
+  report: AnalysisReportSummary
+  analysis_artifact: Record<string, unknown>
+  artifact_meta: Record<string, unknown>
+}
+
+export type AnalysisReviewQueueItem = {
+  item_id: string
+  domain: string
+  report_id: string
+  teacher_id: string
+  status: string
+  reason: string
+  confidence?: number | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type AnalysisReportSectionProps = {
+  analysisFeatureEnabled: boolean
+  analysisFeatureShadowMode: boolean
+  analysisReportsLoading: boolean
+  analysisReportsError: string
+  analysisReports: AnalysisReportSummary[]
+  selectedAnalysisReportId: string
+  selectedAnalysisReport: AnalysisReportDetail | null
+  analysisReviewQueue: AnalysisReviewQueueItem[]
+  analysisDomainFilter: string
+  analysisStatusFilter: string
+  analysisStrategyFilter: string
+  analysisTargetTypeFilter: string
+  setAnalysisDomainFilter: (value: string) => void
+  setAnalysisStatusFilter: (value: string) => void
+  setAnalysisStrategyFilter: (value: string) => void
+  setAnalysisTargetTypeFilter: (value: string) => void
+  refreshAnalysisReports: () => void | Promise<void>
+  selectAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
+  rerunAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
+}
+
+export type VideoHomeworkAnalysisSectionProps = {
+  videoHomeworkFeatureEnabled: boolean
+  analysisReports: AnalysisReportSummary[]
+  selectedAnalysisReport: AnalysisReportDetail | null
+}
 
 export type SurveyReportSummary = {
   report_id: string

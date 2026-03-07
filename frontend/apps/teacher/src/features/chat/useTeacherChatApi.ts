@@ -31,6 +31,7 @@ import type {
   WheelScrollZone,
   WorkbenchTab,
 } from '../../appTypes'
+import type { AnalysisReportSummary } from '../../types/workflow'
 
 export type UseTeacherChatApiParams = {
   apiBase: string
@@ -45,6 +46,7 @@ export type UseTeacherChatApiParams = {
   studentMemoryStudentFilter: string
   skillsOpen: boolean
   workbenchTab: WorkbenchTab
+  selectedAnalysisTarget: AnalysisReportSummary | null
 
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setSending: React.Dispatch<React.SetStateAction<boolean>>
@@ -97,6 +99,23 @@ const toErrorMessage = (error: unknown, fallback = '请求失败') => {
   return toUserFacingErrorMessage(error, fallback)
 }
 
+const buildAnalysisTargetContextMessage = (target: AnalysisReportSummary | null): string => {
+  if (!target) return ''
+  const reportId = String(target.report_id || '').trim()
+  const targetId = String(target.target_id || reportId).trim()
+  if (!targetId) return ''
+  const domain = String(target.domain || target.analysis_type || '').trim()
+  const targetType = String(target.target_type || '').trim()
+  const strategyId = String(target.strategy_id || '').trim()
+  const parts = ['[analysis_target]']
+  if (domain) parts.push(`domain=${domain}`)
+  if (targetType) parts.push(`target_type=${targetType}`)
+  parts.push(`target_id=${targetId}`)
+  if (reportId) parts.push(`report_id=${reportId}`)
+  if (strategyId) parts.push(`strategy_id=${strategyId}`)
+  return parts.join(' ')
+}
+
 const resolveWorkflowHint = (
   payload: {
     requested_skill_id?: string
@@ -137,6 +156,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     studentMemoryStudentFilter,
     skillsOpen,
     workbenchTab,
+    selectedAnalysisTarget,
     setMessages,
     setSending,
     setActiveSessionId,
@@ -633,7 +653,11 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       })
       setInput('')
 
-      const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
+      const analysisTargetContext = buildAnalysisTargetContextMessage(selectedAnalysisTarget)
+      const contextSeed = analysisTargetContext
+        ? [...messages, { id: 'analysis_target', role: 'assistant' as const, content: analysisTargetContext, time: '' }]
+        : [...messages]
+      const contextMessages = [...contextSeed, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
         .slice(-40)
         .map((msg) => ({ role: msg.role, content: msg.content }))
 
@@ -701,7 +725,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     },
     [
       pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
-      authToken,
+      authToken, selectedAnalysisTarget,
       setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
       setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setPendingChatJob,
     ],

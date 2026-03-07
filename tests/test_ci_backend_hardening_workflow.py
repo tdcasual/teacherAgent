@@ -18,3 +18,11 @@ def test_ci_runs_full_backend_suite_and_teacher_build_for_survey_rollout() -> No
     assert 'python -m pytest tests/ -x -q -m "not stress"' in text
     assert 'npm run build:teacher' in text
     assert 'Run maintainability guardrails' in text
+
+
+def test_ci_runs_analysis_eval_and_docs_guardrails_for_multi_domain_rollout() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only' in text
+    assert 'tests/test_analysis_strategy_eval.py' in text
+    assert 'tests/test_docs_architecture_presence.py' in text
+    assert 'tests/test_ci_backend_hardening_workflow.py' in text

@@ -5,9 +5,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from . import settings
 from .job_repository import load_survey_job, write_survey_job
-from .specialist_agents.contracts import ArtifactRef, HandoffContract
 from .survey.deps import build_survey_application_deps
 from .survey_bundle_models import SurveyEvidenceBundle
+from .strategies.planner import build_handoff_plan
+from .strategies.selector import build_default_strategy_selector
 from .survey_delivery_service import build_survey_delivery_deps, deliver_survey_report
 from .survey_job_state_machine import is_terminal_survey_job_status, transition_survey_job_status
 from .survey_repository import list_survey_raw_payloads, write_survey_bundle
@@ -113,41 +114,43 @@ def process_survey_job(job_id: str, *, deps: SurveyOrchestratorDeps) -> Dict[str
         deps.write_survey_bundle(job_id, bundle.model_dump())
         job = _transition_job(job_id, job, "bundle_ready", deps, report_id=str(job.get("report_id") or job_id))
 
-        if float(bundle.parse_confidence) < float(deps.review_confidence_floor()):
+        teacher_context = deps.build_teacher_context(job, bundle.model_dump())
+        artifact = bundle.to_artifact_envelope()
+        strategy = build_default_strategy_selector(float(deps.review_confidence_floor())).select(
+            role='teacher',
+            artifact=artifact,
+            task_kind='survey.analysis',
+            target_scope='class',
+        )
+        if strategy.review_required:
             item = deps.enqueue_survey_review_item(
                 job=job,
-                reason="low_confidence_bundle",
+                reason='low_confidence_bundle',
                 confidence=float(bundle.parse_confidence),
             )
             job = _transition_job(
                 job_id,
                 job,
-                "review",
+                'review',
                 deps,
-                report_id=item["report_id"],
-                review_reason=item["reason"],
-                review_confidence=item["confidence"],
+                report_id=item['report_id'],
+                review_reason=item['reason'],
+                review_confidence=item['confidence'],
             )
-            return {"ok": True, "job_id": job_id, "status": job["status"], "report_id": item["report_id"]}
+            return {'ok': True, 'job_id': job_id, 'status': job['status'], 'report_id': item['report_id']}
 
-        teacher_context = deps.build_teacher_context(job, bundle.model_dump())
-        handoff = HandoffContract(
-            handoff_id=f"survey-handoff-{job_id}",
-            from_agent="coordinator",
-            to_agent="survey_analyst",
-            task_kind="survey.analysis",
-            artifact_refs=[ArtifactRef(artifact_id=job_id, artifact_type="survey_evidence_bundle")],
-            goal="输出班级问卷洞察和教学建议",
-            constraints={
-                "survey_evidence_bundle": bundle.model_dump(),
-                "teacher_context": teacher_context,
-            },
-            budget={"max_tokens": 1600, "timeout_sec": 45, "max_steps": 2},
-            return_schema={"type": "analysis_artifact"},
-            status="prepared",
+        plan = build_handoff_plan(
+            strategy=strategy,
+            artifact=artifact,
+            artifact_id=job_id,
+            handoff_id=f'survey-handoff-{job_id}',
+            from_agent='coordinator',
+            goal='输出班级问卷洞察和教学建议',
+            extra_constraints={'teacher_context': teacher_context},
+            fallback_policy='enqueue_review',
         )
-        job = _transition_job(job_id, job, "analysis_running", deps)
-        result = deps.specialist_runtime.run(handoff)
+        job = _transition_job(job_id, job, 'analysis_running', deps)
+        result = deps.specialist_runtime.run(plan.handoff)
         job = _transition_job(job_id, job, "analysis_ready", deps, analysis_confidence=result.confidence)
         report = deps.deliver_survey_report(
             job=job,

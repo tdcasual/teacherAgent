@@ -92,6 +92,11 @@ def clean_ocr_text(text: str) -> str:
 
 
 
+def split_nonempty_lines(text: str) -> list[str]:
+    return [line.strip() for line in clean_ocr_text(text).splitlines() if line.strip()]
+
+
+
 def extract_text_from_html(content: str) -> str:
     raw = str(content or "")
     if not raw.strip():

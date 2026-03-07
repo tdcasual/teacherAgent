@@ -232,6 +232,12 @@ class SurveyReportRerunRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class AnalysisReportRerunRequest(BaseModel):
+    teacher_id: str
+    domain: Optional[str] = None
+    reason: Optional[str] = None
+
+
 class SurveyReviewQueueItemSummary(BaseModel):
     report_id: str
     teacher_id: str

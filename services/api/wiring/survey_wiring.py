@@ -2,10 +2,26 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from ..artifacts.registry import ArtifactAdapterRegistry, ArtifactAdapterSpec
+from ..artifacts.runtime import ArtifactAdapterRuntime
+from ..class_signal_bundle_models import ClassSignalBundle
+from ..multimodal_submission_models import MultimodalSubmissionBundle
+from ..specialist_agents.class_signal_analyst import (
+    ClassSignalAnalystDeps,
+    load_class_signal_analyst_prompt,
+    run_class_signal_analyst,
+)
+from ..specialist_agents.governor import SpecialistAgentGovernor
 from ..specialist_agents.registry import SpecialistAgentRegistry, SpecialistAgentSpec
 from ..specialist_agents.runtime import SpecialistAgentRuntime
 from ..specialist_agents.survey_analyst import SurveyAnalystDeps, load_survey_analyst_prompt, run_survey_analyst
+from ..specialist_agents.video_homework_analyst import (
+    VideoHomeworkAnalystDeps,
+    load_video_homework_analyst_prompt,
+    run_video_homework_analyst,
+)
 from ..survey.deps import SurveyApplicationDeps, build_survey_application_deps
+from ..survey_bundle_models import SurveyEvidenceBundle
 from ..survey_report_service import (
     build_survey_report_deps,
     get_survey_report as _get_survey_report_impl,
@@ -25,10 +41,50 @@ def build_survey_deps(core: Any) -> SurveyApplicationDeps:
 
 def build_survey_analyst_deps(core: Any) -> SurveyAnalystDeps:
     return SurveyAnalystDeps(
-        call_llm=getattr(core, "call_llm", lambda *_args, **_kwargs: {}),
+        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
         prompt_loader=load_survey_analyst_prompt,
-        diag_log=getattr(core, "diag_log", lambda *_args, **_kwargs: None),
+        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
     )
+
+
+
+def build_class_signal_analyst_deps(core: Any) -> ClassSignalAnalystDeps:
+    return ClassSignalAnalystDeps(
+        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
+        prompt_loader=load_class_signal_analyst_prompt,
+        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
+    )
+
+
+
+def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
+    return VideoHomeworkAnalystDeps(
+        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
+        prompt_loader=load_video_homework_analyst_prompt,
+        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
+    )
+
+
+
+def build_survey_artifact_registry(core: Any) -> ArtifactAdapterRegistry:
+    _ = core
+    registry = ArtifactAdapterRegistry()
+    registry.register(
+        ArtifactAdapterSpec(
+            adapter_id='survey.bundle.adapter',
+            accepted_inputs=['survey_bundle'],
+            output_artifact_type='survey_evidence_bundle',
+            task_kinds=['survey.analysis', 'survey.chat_followup'],
+            validation_rules=[],
+        ),
+        adapter=lambda payload, _context=None: SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope(),
+    )
+    return registry
+
+
+
+def build_survey_artifact_runtime(core: Any) -> ArtifactAdapterRuntime:
+    return ArtifactAdapterRuntime(build_survey_artifact_registry(core))
 
 
 
@@ -40,26 +96,26 @@ def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
         constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
         return run_survey_analyst(
             handoff=handoff,
-            survey_evidence_bundle=dict(constraints.get("survey_evidence_bundle") or {}),
-            teacher_context=dict(constraints.get("teacher_context") or {}),
-            task_goal=str(handoff.goal or "").strip(),
+            survey_evidence_bundle=dict(constraints.get('survey_evidence_bundle') or {}),
+            teacher_context=dict(constraints.get('teacher_context') or {}),
+            task_goal=str(handoff.goal or '').strip(),
             deps=analyst_deps,
         )
 
     registry.register(
         SpecialistAgentSpec(
-            agent_id="survey_analyst",
-            display_name="Survey Analyst",
-            roles=["teacher"],
-            accepted_artifacts=["survey_evidence_bundle"],
-            task_kinds=["survey.analysis"],
+            agent_id='survey_analyst',
+            display_name='Survey Analyst',
+            roles=['teacher'],
+            accepted_artifacts=['survey_evidence_bundle'],
+            task_kinds=['survey.analysis'],
             direct_answer_capable=False,
-            takeover_policy="coordinator_only",
-            tool_allowlist=["llm.generate"],
-            budgets={"default": {"max_tokens": 1600, "timeout_sec": 45, "max_steps": 2}},
-            memory_policy="no_direct_memory_write",
-            output_schema={"type": "analysis_artifact"},
-            evaluation_suite=["survey_v1_golden"],
+            takeover_policy='coordinator_only',
+            tool_allowlist=['llm.generate'],
+            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
+            memory_policy='no_direct_memory_write',
+            output_schema={'type': 'analysis_artifact'},
+            evaluation_suite=['survey_v1_golden'],
         ),
         runner=_runner,
     )
@@ -67,8 +123,111 @@ def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
 
 
 
+def build_class_report_specialist_registry(core: Any) -> SpecialistAgentRegistry:
+    registry = SpecialistAgentRegistry()
+    analyst_deps = build_class_signal_analyst_deps(core)
+
+    def _runner(handoff):
+        constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
+        return run_class_signal_analyst(
+            handoff=handoff,
+            class_signal_bundle=ClassSignalBundle.model_validate(dict(constraints.get('class_signal_bundle') or {})),
+            teacher_context=dict(constraints.get('teacher_context') or {}),
+            task_goal=str(handoff.goal or '').strip(),
+            deps=analyst_deps,
+        )
+
+    registry.register(
+        SpecialistAgentSpec(
+            agent_id='class_signal_analyst',
+            display_name='Class Signal Analyst',
+            roles=['teacher'],
+            accepted_artifacts=['class_signal_bundle'],
+            task_kinds=['class_report.analysis'],
+            direct_answer_capable=False,
+            takeover_policy='coordinator_only',
+            tool_allowlist=['llm.generate'],
+            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
+            memory_policy='no_direct_memory_write',
+            output_schema={'type': 'analysis_artifact'},
+            evaluation_suite=['class_report_v1_golden'],
+        ),
+        runner=_runner,
+    )
+    return registry
+
+
+
+def build_multimodal_specialist_registry(core: Any) -> SpecialistAgentRegistry:
+    registry = SpecialistAgentRegistry()
+    analyst_deps = build_video_homework_analyst_deps(core)
+
+    def _runner(handoff):
+        constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
+        return run_video_homework_analyst(
+            handoff=handoff,
+            multimodal_submission_bundle=MultimodalSubmissionBundle.model_validate(
+                dict(constraints.get('multimodal_submission_bundle') or {})
+            ),
+            teacher_context=dict(constraints.get('teacher_context') or {}),
+            task_goal=str(handoff.goal or '').strip(),
+            deps=analyst_deps,
+        )
+
+    registry.register(
+        SpecialistAgentSpec(
+            agent_id='video_homework_analyst',
+            display_name='Video Homework Analyst',
+            roles=['teacher'],
+            accepted_artifacts=['multimodal_submission_bundle'],
+            task_kinds=['video_homework.analysis'],
+            direct_answer_capable=False,
+            takeover_policy='coordinator_only',
+            tool_allowlist=['llm.generate'],
+            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
+            memory_policy='no_direct_memory_write',
+            output_schema={'type': 'analysis_artifact'},
+            evaluation_suite=['video_homework_v1_golden'],
+        ),
+        runner=_runner,
+    )
+    return registry
+
+
+
+def _build_specialist_runtime(registry: SpecialistAgentRegistry, core: Any) -> SpecialistAgentRuntime:
+    diag_log = getattr(core, 'diag_log', lambda *_args, **_kwargs: None)
+
+    def _event_sink(event) -> None:
+        diag_log(
+            f'specialist.runtime.{event.phase}',
+            {
+                'handoff_id': event.handoff_id,
+                'agent_id': event.agent_id,
+                'task_kind': event.task_kind,
+                **dict(event.metadata or {}),
+            },
+        )
+
+    return SpecialistAgentRuntime(
+        registry,
+        governor=SpecialistAgentGovernor(event_sink=_event_sink),
+    )
+
+
+
 def build_survey_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
-    return SpecialistAgentRuntime(build_survey_specialist_registry(core))
+    return _build_specialist_runtime(build_survey_specialist_registry(core), core)
+
+
+
+def build_class_report_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
+    return _build_specialist_runtime(build_class_report_specialist_registry(core), core)
+
+
+
+def build_multimodal_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
+    return _build_specialist_runtime(build_multimodal_specialist_registry(core), core)
 
 
 

@@ -271,6 +271,57 @@ def build_default_registry() -> ToolRegistry:
         ),
     )
 
+    # Unified analysis report tools
+    tools["analysis.report.list"] = ToolDef(
+        name="analysis.report.list",
+        description="List teacher-visible analysis reports across domains",
+        parameters=_schema_object(
+            {
+                "teacher_id": {"type": "string"},
+                "domain": {"type": "string"},
+                "status": {"type": "string"},
+                "strategy_id": {"type": "string"},
+                "target_type": {"type": "string"},
+            }
+        ),
+    )
+    tools["analysis.report.get"] = ToolDef(
+        name="analysis.report.get",
+        description="Get one analysis report by report_id or target_id",
+        parameters=_schema_object(
+            {
+                "report_id": {"type": "string"},
+                "target_id": {"type": "string"},
+                "teacher_id": {"type": "string"},
+                "domain": {"type": "string"},
+            }
+        ),
+    )
+    tools["analysis.report.rerun"] = ToolDef(
+        name="analysis.report.rerun",
+        description="Request rerun for one analysis report by report_id or target_id",
+        parameters=_schema_object(
+            {
+                "report_id": {"type": "string"},
+                "target_id": {"type": "string"},
+                "teacher_id": {"type": "string"},
+                "domain": {"type": "string"},
+                "reason": {"type": "string"},
+            }
+        ),
+    )
+    tools["analysis.review.list"] = ToolDef(
+        name="analysis.review.list",
+        description="List analysis review queue items across domains",
+        parameters=_schema_object(
+            {
+                "teacher_id": {"type": "string"},
+                "domain": {"type": "string"},
+                "status": {"type": "string"},
+            }
+        ),
+    )
+
     # Survey report tools
     tools["survey.report.list"] = ToolDef(
         name="survey.report.list",
@@ -284,25 +335,25 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["survey.report.get"] = ToolDef(
         name="survey.report.get",
-        description="Get one survey analysis report by report_id",
+        description="Get one survey analysis report by report_id or target_id",
         parameters=_schema_object(
             {
                 "report_id": {"type": "string"},
+                "target_id": {"type": "string"},
                 "teacher_id": {"type": "string"},
-            },
-            required=["report_id"],
+            }
         ),
     )
     tools["survey.report.rerun"] = ToolDef(
         name="survey.report.rerun",
-        description="Request rerun for one survey analysis report",
+        description="Request rerun for one survey analysis report by report_id or target_id",
         parameters=_schema_object(
             {
                 "report_id": {"type": "string"},
+                "target_id": {"type": "string"},
                 "teacher_id": {"type": "string"},
                 "reason": {"type": "string"},
-            },
-            required=["report_id"],
+            }
         ),
     )
 

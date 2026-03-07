@@ -21,6 +21,7 @@
 
 ## 运行时与边界
 - 运行时契约：`docs/reference/agent-runtime-contract.md`
+- 分析运行时契约：`docs/reference/analysis-runtime-contract.md`
 - 模型策略：`docs/reference/model-policy.md`
 - 模块边界：`docs/architecture/module-boundaries.md`
 
@@ -32,6 +33,7 @@
 - 责任归属：`docs/architecture/ownership-map.md`
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
+- 多域分析发布清单：`docs/operations/multi-domain-analysis-rollout-checklist.md`
 - 问卷分析发布清单：`docs/operations/survey-analysis-release-checklist.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
@@ -49,3 +51,5 @@
 - 历史设计与实现文档：`docs/plans/`
 - 问卷多 Agent 设计：`docs/plans/2026-03-06-survey-multi-agent-design.md`
 - 问卷多 Agent 实施计划：`docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md`
+
+- B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`

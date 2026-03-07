@@ -125,6 +125,33 @@ def survey_review_queue_path(core: Any | None = None) -> Path:
     return data_dir / "survey_review_queue.jsonl"
 
 
+
+# ---------------------------------------------------------------------------
+# Multimodal submission paths
+# ---------------------------------------------------------------------------
+
+def multimodal_submission_path(submission_id: str, core: Any | None = None) -> Path:
+    uploads_dir = _path_from_core(core, "UPLOADS_DIR", UPLOADS_DIR)
+    safe = safe_fs_id(submission_id, prefix="submission")
+    return uploads_dir / "multimodal_submissions" / safe
+
+
+def multimodal_submission_meta_path(submission_id: str, core: Any | None = None) -> Path:
+    return multimodal_submission_path(submission_id, core=core) / "submission.json"
+
+
+def multimodal_submission_media_dir(submission_id: str, core: Any | None = None) -> Path:
+    return multimodal_submission_path(submission_id, core=core) / "media"
+
+
+def multimodal_submission_derived_dir(submission_id: str, core: Any | None = None) -> Path:
+    return multimodal_submission_path(submission_id, core=core) / "derived"
+
+
+def multimodal_extraction_path(submission_id: str, core: Any | None = None) -> Path:
+    return multimodal_submission_derived_dir(submission_id, core=core) / "extraction.json"
+
+
 # ---------------------------------------------------------------------------
 # Student session paths
 # ---------------------------------------------------------------------------

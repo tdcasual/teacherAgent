@@ -12,7 +12,16 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 from services.api.specialist_agents.contracts import ArtifactRef, HandoffContract
 
+from .analysis_target_resolution_service import (
+    AnalysisTargetResolutionError,
+    build_recent_target_from_messages,
+    extract_report_id_from_text,
+    resolve_analysis_target,
+)
 from .llm_agent_tooling_service import parse_tool_json_safe
+from .strategies.planner import build_handoff_plan
+from .strategies.selector import build_default_strategy_selector
+from .survey_bundle_models import SurveyEvidenceBundle
 from .subject_score_guard_service import (
     looks_like_subject_score_request,
     should_guard_total_mode_subject_request,
@@ -187,6 +196,7 @@ def _format_survey_handoff_reply(report: Dict[str, Any], artifact: Dict[str, Any
 def _maybe_handle_survey_handoff(
     deps: AgentRuntimeDeps,
     *,
+    messages: List[Dict[str, Any]],
     last_user_text: str,
     teacher_id: Optional[str],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -201,10 +211,27 @@ def _maybe_handle_survey_handoff(
         items = reports.get("items") if isinstance(reports, dict) else []
         if not isinstance(items, list) or not items:
             return None
-        latest = items[0] if isinstance(items[0], dict) else {}
-        report_id = str(latest.get("report_id") or "").strip()
-        if not report_id:
-            return None
+        explicit_target_id = extract_report_id_from_text(last_user_text)
+        session_recent_target = build_recent_target_from_messages(
+            messages[:-1] if messages else [],
+            teacher_id=teacher_id_final,
+            source_domain="survey",
+            artifact_type="survey_evidence_bundle",
+        )
+        target = resolve_analysis_target(
+            explicit_target_id=explicit_target_id,
+            target_type="report",
+            artifact_type="survey_evidence_bundle",
+            teacher_id=teacher_id_final,
+            source_domain="survey",
+            candidates=items,
+            session_recent_target=session_recent_target,
+        )
+        report_id = target.target_id
+        latest = next(
+            (item for item in items if isinstance(item, dict) and str(item.get("report_id") or item.get("target_id") or "").strip() == report_id),
+            {},
+        )
         detail = deps.survey_get_report(report_id, teacher_id_final)
         if not isinstance(detail, dict):
             return None
@@ -213,30 +240,49 @@ def _maybe_handle_survey_handoff(
         bundle = deps.load_survey_bundle(job_id) if job_id else {}
         if not isinstance(bundle, dict) or not bundle:
             return None
-        handoff = HandoffContract(
-            handoff_id=f"chat-survey-{report_id}",
-            from_agent="coordinator",
-            to_agent="survey_analyst",
-            task_kind="survey.analysis",
-            artifact_refs=[ArtifactRef(artifact_id=job_id, artifact_type="survey_evidence_bundle")],
-            goal="输出班级问卷洞察和教学建议",
-            constraints={
-                "survey_evidence_bundle": bundle,
-                "teacher_context": {
-                    "teacher_id": teacher_id_final,
-                    "class_name": latest.get("class_name"),
-                    "report_mode": "chat_followup",
-                    "analysis_depth": "deeper",
-                },
-            },
-            budget={"max_tokens": 1600, "timeout_sec": 45, "max_steps": 2},
-            return_schema={"type": "analysis_artifact"},
-            status="prepared",
+        artifact = SurveyEvidenceBundle.model_validate(bundle).to_artifact_envelope()
+        strategy = build_default_strategy_selector().select(
+            role='teacher',
+            artifact=artifact,
+            task_kind='survey.chat_followup',
+            target_scope='class',
         )
-        result = deps.survey_specialist_runtime.run(handoff)
+        plan = build_handoff_plan(
+            strategy=strategy,
+            artifact=artifact,
+            artifact_id=job_id,
+            handoff_id=f"chat-survey-{report_id}",
+            from_agent='coordinator',
+            goal='输出班级问卷洞察和教学建议',
+            extra_constraints={
+                'teacher_context': {
+                    'teacher_id': teacher_id_final,
+                    'class_name': latest.get('class_name'),
+                    'report_mode': 'chat_followup',
+                    'analysis_depth': 'deeper',
+                }
+            },
+            fallback_policy='ask_user_to_clarify',
+        )
+        if plan.review_required:
+            return {'reply': '当前问卷证据置信度偏低，建议先进入复核队列，确认后我再继续深入复盘。'}
+        result = deps.survey_specialist_runtime.run(plan.handoff)
         if callable(event_sink):
-            event_sink("survey.handoff", {"report_id": report_id, "agent_id": "survey_analyst"})
-        return {"reply": _format_survey_handoff_reply(detail.get("report") or latest, result.output)}
+            event_sink(
+                'survey.handoff',
+                {
+                    'report_id': report_id,
+                    'agent_id': plan.handoff.to_agent,
+                    'resolution_reason': target.resolution_reason,
+                    'strategy_id': plan.strategy_id,
+                },
+            )
+        return {'reply': _format_survey_handoff_reply(detail.get('report') or latest, result.output)}
+    except AnalysisTargetResolutionError as exc:
+        if exc.code == "ambiguous_target":
+            return {"reply": "当前有多个可分析的问卷报告，请先告诉我 report_id（例如 report_123），我再继续深入复盘。"}
+        deps.diag_log("survey.handoff.target_resolution_failed", {"code": exc.code, "error": str(exc)[:200]})
+        return None
     except Exception as exc:  # policy: allowed-broad-except
         deps.diag_log("survey.handoff.failed", {"error": str(exc)[:200]})
         return None
@@ -979,6 +1025,7 @@ def run_agent_runtime(
     if role_hint == "teacher":
         survey_handoff_reply = _maybe_handle_survey_handoff(
             deps,
+            messages=messages,
             last_user_text=last_user_text,
             teacher_id=teacher_id,
             event_sink=event_sink,

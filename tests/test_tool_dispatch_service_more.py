@@ -295,3 +295,99 @@ def test_tool_dispatch_falls_back_to_unknown_when_registry_accepts_unhandled_nam
     deps, _ = _deps({"custom.unhandled"})
     out = tool_dispatch("custom.unhandled", {"x": 1}, role="teacher", deps=deps)
     assert out == {"error": "unknown tool: custom.unhandled"}
+
+
+def test_tool_dispatch_survey_report_tools_accept_target_id_alias():
+    deps, calls = _deps({"survey.report.get", "survey.report.rerun"})
+    deps = ToolDispatchDeps(
+        **{**deps.__dict__,
+           "survey_report_get": lambda report_id, teacher_id: {"tool": "survey.report.get", "payload": (report_id, teacher_id)},
+           "survey_report_rerun": lambda report_id, teacher_id, reason=None: {
+               "tool": "survey.report.rerun",
+               "payload": (report_id, teacher_id, reason),
+           }}
+    )
+
+    got = tool_dispatch(
+        "survey.report.get",
+        {"target_id": "report_9", "teacher_id": "t1"},
+        role="teacher",
+        deps=deps,
+    )
+    rerun = tool_dispatch(
+        "survey.report.rerun",
+        {"target_id": "report_9", "teacher_id": "t1", "reason": "need-refresh"},
+        role="teacher",
+        deps=deps,
+    )
+
+    assert got["payload"] == ("report_9", "t1-resolved")
+    assert rerun["payload"] == ("report_9", "t1-resolved", "need-refresh")
+
+
+
+def test_tool_dispatch_survey_report_tools_require_report_id_or_target_id():
+    deps, _ = _deps({"survey.report.get", "survey.report.rerun"})
+
+    got = tool_dispatch("survey.report.get", {"teacher_id": "t1"}, role="teacher", deps=deps)
+    rerun = tool_dispatch("survey.report.rerun", {"teacher_id": "t1"}, role="teacher", deps=deps)
+
+    assert got["error"] == "invalid_arguments"
+    assert any("target_id" in issue for issue in got["issues"])
+    assert rerun["error"] == "invalid_arguments"
+    assert any("target_id" in issue for issue in rerun["issues"])
+
+
+def test_tool_dispatch_analysis_report_tools_cover_unified_report_plane():
+    deps, _ = _deps({"analysis.report.list", "analysis.report.get", "analysis.report.rerun", "analysis.review.list"})
+    deps = ToolDispatchDeps(
+        **{
+            **deps.__dict__,
+            'analysis_report_list': lambda teacher_id, domain=None, status=None, strategy_id=None, target_type=None: {
+                'tool': 'analysis.report.list',
+                'payload': (teacher_id, domain, status, strategy_id, target_type),
+            },
+            'analysis_report_get': lambda report_id, teacher_id, domain=None: {
+                'tool': 'analysis.report.get',
+                'payload': (report_id, teacher_id, domain),
+            },
+            'analysis_report_rerun': lambda report_id, teacher_id, domain=None, reason=None: {
+                'tool': 'analysis.report.rerun',
+                'payload': (report_id, teacher_id, domain, reason),
+            },
+            'analysis_review_list': lambda teacher_id, domain=None, status=None: {
+                'tool': 'analysis.review.list',
+                'payload': (teacher_id, domain, status),
+            },
+        }
+    )
+
+    listed = tool_dispatch(
+        'analysis.report.list',
+        {'teacher_id': 't1', 'domain': 'survey', 'status': 'analysis_ready', 'strategy_id': 'survey.teacher.report', 'target_type': 'report'},
+        role='teacher',
+        deps=deps,
+    )
+    got = tool_dispatch(
+        'analysis.report.get',
+        {'teacher_id': 't1', 'domain': 'survey', 'report_id': 'report_1'},
+        role='teacher',
+        deps=deps,
+    )
+    rerun = tool_dispatch(
+        'analysis.report.rerun',
+        {'teacher_id': 't1', 'domain': 'survey', 'target_id': 'report_1', 'reason': 'refresh'},
+        role='teacher',
+        deps=deps,
+    )
+    review = tool_dispatch(
+        'analysis.review.list',
+        {'teacher_id': 't1', 'domain': 'survey', 'status': 'queued'},
+        role='teacher',
+        deps=deps,
+    )
+
+    assert listed['payload'] == ('t1-resolved', 'survey', 'analysis_ready', 'survey.teacher.report', 'report')
+    assert got['payload'] == ('report_1', 't1-resolved', 'survey')
+    assert rerun['payload'] == ('report_1', 't1-resolved', 'survey', 'refresh')
+    assert review['payload'] == ('t1-resolved', 'survey', 'queued')

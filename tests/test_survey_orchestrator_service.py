@@ -113,3 +113,50 @@ def test_process_survey_job_routes_low_confidence_bundle_to_review(tmp_path: Pat
     assert job["status"] == "review"
     assert queue[-1]["report_id"] == "job_low"
     assert queue[-1]["reason"] == "low_confidence_bundle"
+
+
+def test_process_survey_job_persists_analysis_report_plane_metadata(tmp_path: Path) -> None:
+    content = json.dumps(
+        {
+            'executive_summary': '班级整体在实验设计题上失分较多。',
+            'key_signals': [],
+            'group_differences': [],
+            'teaching_recommendations': ['下节课增加实验设计拆解练习。'],
+            'confidence_and_gaps': {'confidence': 0.81, 'gaps': []},
+        },
+        ensure_ascii=False,
+    )
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {'choices': [{'message': {'content': content}}]})
+    write_survey_job(
+        'job_meta',
+        {
+            'job_id': 'job_meta',
+            'provider': 'provider',
+            'teacher_id': 'teacher_1',
+            'class_name': '高二2403班',
+            'status': 'webhook_received',
+            'created_at': '2026-03-06T10:00:00',
+        },
+        core=core,
+    )
+    write_survey_raw_payload(
+        'job_meta',
+        'provider.json',
+        {
+            'submission_id': 'sub-1',
+            'title': '课堂反馈问卷',
+            'teacher_id': 'teacher_1',
+            'class_name': '高二2403班',
+            'sample_size': 35,
+            'questions': [{'id': 'Q1', 'prompt': '本节课难度如何？', 'response_type': 'single_choice', 'stats': {'偏难': 12}}],
+        },
+        core=core,
+    )
+
+    process_survey_job('job_meta', deps=build_survey_orchestrator_deps(core))
+    report = load_survey_report('job_meta', core=core)
+
+    assert report['analysis_type'] == 'survey'
+    assert report['strategy_id'] == 'survey.teacher.report'
+    assert report['target_type'] == 'report'
+    assert report['target_id'] == 'job_meta'

@@ -132,6 +132,16 @@ jobs:
             tests/test_observability_store.py \
             tests/test_operability_evidence.py
 
+      - name: Run analysis rollout guardrails
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only
+          python -m pytest -q \
+            tests/test_analysis_strategy_eval.py \
+            tests/test_docs_architecture_presence.py \
+            tests/test_ci_backend_hardening_workflow.py
+
   frontend-quality:
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
+from .analysis_target_resolution_service import extract_report_id_from_text
+
 _log = logging.getLogger(__name__)
 
 
@@ -69,6 +71,18 @@ def _extract_attachment_ids(req: Any) -> List[str]:
         ids.append(value)
         seen.add(value)
     return ids
+
+def _extract_recent_analysis_target_id(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ''
+    history = messages[:-1] if messages else []
+    for item in reversed(history):
+        if not isinstance(item, dict):
+            continue
+        target_id = extract_report_id_from_text(item.get('content'))
+        if target_id:
+            return target_id
+    return ''
 
 
 def _load_job_or_stub(job_id: str, *, mode: str, deps: ChatStartDeps) -> Dict[str, Any]:
@@ -147,11 +161,13 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     req_payload["attachments"] = [{"attachment_id": aid} for aid in attachment_ids]
     req_payload["attachment_context"] = attachment_context
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
+    analysis_target_id = _extract_recent_analysis_target_id(req_payload.get('messages'))
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
             str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
+            str(analysis_target_id or ''),
             ",".join(attachment_ids),
         ]
     )

@@ -73,3 +73,45 @@ def test_teacher_survey_report_routes_expose_list_detail_rerun_and_review_queue(
     assert rerun_res.json()["status"] == "rerun_requested"
     assert review_res.status_code == 200
     assert review_res.json()["items"][0]["reason"] == "low_confidence"
+
+
+def test_teacher_survey_report_routes_delegate_to_analysis_report_plane(monkeypatch, tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    called = {}
+
+    import services.api.routes.survey_routes as survey_routes
+
+    def _list(**kwargs):
+        called['list'] = kwargs
+        return {'items': []}
+
+    def _get(**kwargs):
+        called['get'] = kwargs
+        return {'report': {'report_id': kwargs['report_id']}, 'analysis_artifact': {}, 'artifact_meta': {}}
+
+    def _rerun(**kwargs):
+        called['rerun'] = kwargs
+        return {'ok': True, 'status': 'rerun_requested', 'domain': 'survey'}
+
+    def _review(**kwargs):
+        called['review'] = kwargs
+        return {'items': []}
+
+    monkeypatch.setattr(survey_routes, 'list_analysis_reports', _list, raising=False)
+    monkeypatch.setattr(survey_routes, 'get_analysis_report', _get, raising=False)
+    monkeypatch.setattr(survey_routes, 'rerun_analysis_report', _rerun, raising=False)
+    monkeypatch.setattr(survey_routes, 'list_analysis_review_queue', _review, raising=False)
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        client.get('/teacher/surveys/reports', params={'teacher_id': 'teacher_1'})
+        client.get('/teacher/surveys/reports/report_1', params={'teacher_id': 'teacher_1'})
+        client.post('/teacher/surveys/reports/report_1/rerun', json={'teacher_id': 'teacher_1', 'reason': 'refresh'})
+        client.get('/teacher/surveys/review-queue', params={'teacher_id': 'teacher_1'})
+
+    assert called['list']['domain'] == 'survey'
+    assert called['get']['domain'] == 'survey'
+    assert called['rerun']['domain'] == 'survey'
+    assert called['review']['domain'] == 'survey'

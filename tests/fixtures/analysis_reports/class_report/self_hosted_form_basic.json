@@ -1,0 +1,32 @@
+{
+  "case_id": "class_report_self_hosted_form_basic",
+  "domain": "class_report",
+  "mode": "self_hosted_form_json",
+  "payload": {
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "sample_size": 36,
+    "report_id": "class_report_1",
+    "title": "课堂反馈周报",
+    "questions": [
+      {
+        "id": "Q1",
+        "prompt": "课堂难点",
+        "summary": "实验设计题仍是主要难点。",
+        "stats": {"实验设计": 15, "计算": 8}
+      }
+    ],
+    "themes": [
+      {"theme": "实验设计", "summary": "变量控制仍是高频问题。", "evidence_count": 6, "excerpts": ["变量控制不清"]}
+    ],
+    "risks": [
+      {"risk": "受力分析概念混淆", "severity": "medium", "summary": "平衡态与受力图判断混淆"}
+    ],
+    "summary": "班级整体在实验设计题上失分较多。"
+  },
+  "expected": {
+    "min_confidence": 0.75,
+    "required_fields_present": ["title", "teacher_id", "class_name", "question_like_signals", "theme_like_signals"],
+    "strategy_id": "class_signal.teacher.report"
+  }
+}

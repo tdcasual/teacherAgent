@@ -9,6 +9,9 @@ Date: 2026-03-06
 - V1 聚焦“问卷系统 webhook 推送 -> 证据归一化 -> 班级洞察与教学建议 -> 老师可读报告”。
 - V1 输入支持结构化 payload 与非结构化附件（PDF、截图、网页导出）。
 
+- 本域已接入统一分析运行时契约：`docs/reference/analysis-runtime-contract.md`
+- 老师读取统一 analysis report plane，survey facade 只做轻量 domain 转发。
+
 ## 2. 入口与读取接口
 
 ### 2.1 Webhook 入口

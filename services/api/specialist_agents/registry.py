@@ -50,6 +50,12 @@ class SpecialistAgentRegistry:
             raise SpecialistAgentNotFoundError(str(agent_id or ""))
         return entry.spec
 
+    def get_entry(self, agent_id: str) -> RegisteredSpecialistAgent:
+        entry = self._entries.get(str(agent_id or "").strip())
+        if entry is None:
+            raise SpecialistAgentNotFoundError(str(agent_id or ""))
+        return entry
+
     def get_runner(self, agent_id: str) -> Callable[[HandoffContract], SpecialistAgentResult]:
         entry = self._entries.get(str(agent_id or "").strip())
         if entry is None:

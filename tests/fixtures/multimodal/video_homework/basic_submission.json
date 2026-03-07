@@ -1,0 +1,59 @@
+{
+  "case_id": "video_homework_basic_submission",
+  "domain": "video_homework",
+  "mode": "artifact",
+  "payload": {
+    "source_meta": {
+      "source_type": "video_homework_upload",
+      "title": "物理实验讲解",
+      "submission_id": "submission_1",
+      "uploaded_at": "2026-03-07T10:00:00"
+    },
+    "scope": {
+      "teacher_id": "teacher_1",
+      "student_id": "student_1",
+      "class_name": "高二2403班",
+      "assignment_id": "assignment_1",
+      "submission_kind": "video_homework"
+    },
+    "media_files": [
+      {
+        "file_id": "video_1",
+        "kind": "video",
+        "storage_path": "/tmp/video_1.mp4",
+        "mime_type": "video/mp4",
+        "bytes": 2048,
+        "duration_sec": 58.0
+      }
+    ],
+    "transcript_segments": [
+      {
+        "segment_id": "asr_1",
+        "kind": "asr",
+        "start_sec": 0.0,
+        "end_sec": 4.0,
+        "text": "首先介绍实验器材与步骤。",
+        "confidence": 0.92,
+        "evidence_refs": ["segment:asr_1"]
+      }
+    ],
+    "keyframe_evidence": [
+      {
+        "frame_id": "frame_1",
+        "timestamp_sec": 1.2,
+        "image_path": "derived/frame_1.jpg",
+        "ocr_text": "酒精灯与铁架台",
+        "confidence": 0.81
+      }
+    ],
+    "extraction_status": "completed",
+    "parse_confidence": 0.84,
+    "missing_fields": ["teacher_rubric"],
+    "provenance": {"source": "upload"}
+  },
+  "expected": {
+    "min_confidence": 0.8,
+    "required_fields_present": ["submission_id", "teacher_id", "student_id", "media_files", "evidence_channels"],
+    "strategy_id": "video_homework.teacher.report"
+  }
+}

@@ -348,3 +348,20 @@ def survey_beta_teacher_allowlist() -> list[str]:
         seen.add(value)
         items.append(value)
     return items
+
+
+
+def multimodal_enabled() -> bool:
+    return env_bool("MULTIMODAL_ENABLED", "1")
+
+
+def multimodal_max_upload_bytes() -> int:
+    return max(1024 * 1024, env_int("MULTIMODAL_MAX_UPLOAD_BYTES", 200 * 1024 * 1024))
+
+
+def multimodal_max_duration_sec() -> int:
+    return max(10, env_int("MULTIMODAL_MAX_DURATION_SEC", 15 * 60))
+
+
+def multimodal_extract_timeout_sec() -> int:
+    return max(5, env_int("MULTIMODAL_EXTRACT_TIMEOUT_SEC", 90))

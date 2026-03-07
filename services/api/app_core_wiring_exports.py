@@ -146,5 +146,9 @@ __all__ = [
     "survey_worker_deps",
     "profile_update_worker_deps",
     "process_survey_job",
+    "survey_get_report",
     "survey_list_reports",
+    "survey_list_review_queue",
+    "survey_load_bundle",
+    "survey_rerun_report",
 ]

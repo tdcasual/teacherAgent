@@ -28,6 +28,13 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 from ..agent_service import (
     AgentRuntimeDeps,
 )
+from ..analysis_report_service import (
+    build_analysis_report_deps as _build_analysis_report_deps,
+    get_analysis_report as _get_analysis_report_impl,
+    list_analysis_reports as _list_analysis_reports_impl,
+    list_analysis_review_queue as _list_analysis_review_queue_impl,
+    rerun_analysis_report as _rerun_analysis_report_impl,
+)
 from ..agent_service import (
     default_load_skill_runtime as _default_load_skill_runtime_impl,
 )
@@ -121,6 +128,33 @@ def _tool_dispatch_deps(core: Any | None = None):
         survey_report_list=_ac.survey_list_reports,
         survey_report_get=_ac.survey_get_report,
         survey_report_rerun=_ac.survey_rerun_report,
+        analysis_report_list=lambda teacher_id, domain=None, status=None, strategy_id=None, target_type=None: _list_analysis_reports_impl(
+            teacher_id=teacher_id,
+            domain=domain,
+            status=status,
+            strategy_id=strategy_id,
+            target_type=target_type,
+            deps=_build_analysis_report_deps(core),
+        ),
+        analysis_report_get=lambda report_id, teacher_id, domain=None: _get_analysis_report_impl(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            domain=domain,
+            deps=_build_analysis_report_deps(core),
+        ),
+        analysis_report_rerun=lambda report_id, teacher_id, domain=None, reason=None: _rerun_analysis_report_impl(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            domain=domain,
+            reason=reason,
+            deps=_build_analysis_report_deps(core),
+        ),
+        analysis_review_list=lambda teacher_id, domain=None, status=None: _list_analysis_review_queue_impl(
+            teacher_id=teacher_id,
+            domain=domain,
+            status=status,
+            deps=_build_analysis_report_deps(core),
+        ),
     )
 
 

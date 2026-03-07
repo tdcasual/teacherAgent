@@ -4,10 +4,17 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
 
+from ..analysis_report_service import (
+    AnalysisReportServiceError,
+    build_analysis_report_deps,
+    get_analysis_report,
+    list_analysis_reports,
+    list_analysis_review_queue,
+    rerun_analysis_report,
+)
 from ..api_models import SurveyReportRerunRequest
 from ..survey import application as survey_application
 from ..survey import deps as survey_deps
-
 
 
 def _raise_http_exception(exc: Exception) -> None:
@@ -16,10 +23,20 @@ def _raise_http_exception(exc: Exception) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def _to_survey_detail(payload: Dict[str, Any]) -> Dict[str, Any]:
+    report = dict(payload.get("report") or {})
+    return {
+        "report": report,
+        "analysis_artifact": dict(payload.get("analysis_artifact") or {}),
+        "bundle_meta": dict(payload.get("artifact_meta") or payload.get("bundle_meta") or {}),
+        "review_required": bool(report.get("review_required")),
+    }
+
 
 def build_router(core: Any) -> APIRouter:
     router = APIRouter()
     app_deps = survey_deps.build_survey_application_deps(core)
+    analysis_deps = build_analysis_report_deps(core)
 
     @router.post("/webhooks/surveys/provider")
     async def survey_webhook_provider(
@@ -42,23 +59,29 @@ def build_router(core: Any) -> APIRouter:
         status: str = Query(default=""),
     ) -> Any:
         try:
-            return await survey_application.list_survey_reports(
+            return list_analysis_reports(
                 teacher_id=teacher_id,
+                domain="survey",
                 status=status or None,
-                deps=app_deps,
+                strategy_id=None,
+                target_type=None,
+                deps=analysis_deps,
             )
-        except Exception as exc:
+        except (AnalysisReportServiceError, Exception) as exc:
             _raise_http_exception(exc)
 
     @router.get("/teacher/surveys/reports/{report_id}")
     async def teacher_survey_report(report_id: str, teacher_id: str = Query(default="")) -> Any:
         try:
-            return await survey_application.get_survey_report(
-                report_id,
-                teacher_id=teacher_id,
-                deps=app_deps,
+            return _to_survey_detail(
+                get_analysis_report(
+                    report_id=report_id,
+                    teacher_id=teacher_id,
+                    domain="survey",
+                    deps=analysis_deps,
+                )
             )
-        except Exception as exc:
+        except (AnalysisReportServiceError, Exception) as exc:
             _raise_http_exception(exc)
 
     @router.post("/teacher/surveys/reports/{report_id}/rerun")
@@ -67,18 +90,26 @@ def build_router(core: Any) -> APIRouter:
         req: SurveyReportRerunRequest,
     ) -> Any:
         try:
-            return await survey_application.rerun_survey_report(report_id, req, deps=app_deps)
-        except Exception as exc:
+            return rerun_analysis_report(
+                report_id=report_id,
+                teacher_id=req.teacher_id or "",
+                domain="survey",
+                reason=req.reason,
+                deps=analysis_deps,
+            )
+        except (AnalysisReportServiceError, Exception) as exc:
             _raise_http_exception(exc)
 
     @router.get("/teacher/surveys/review-queue")
     async def teacher_survey_review_queue(teacher_id: str = Query(default="")) -> Any:
         try:
-            return await survey_application.list_survey_review_queue(
+            return list_analysis_review_queue(
                 teacher_id=teacher_id,
-                deps=app_deps,
+                domain="survey",
+                status=None,
+                deps=analysis_deps,
             )
-        except Exception as exc:
+        except (AnalysisReportServiceError, Exception) as exc:
             _raise_http_exception(exc)
 
     return router

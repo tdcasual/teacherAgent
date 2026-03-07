@@ -1,0 +1,175 @@
+# 统一分析运行时契约（Analysis Runtime Contract）
+
+Date: 2026-03-07
+
+## 1. 目标与边界
+
+- 本系统是教学 workflow 产品，不是开放式多 Agent 平台。
+- `Coordinator` 仍然是唯一默认前台 Agent；specialist agent 只通过内部 handoff 执行，不直接抢占老师会话。
+- A/B/C 三类分析能力统一走同一平台平面：`target resolver -> artifact adapter -> strategy selector -> specialist runtime -> analysis report / review queue`。
+- 后续扩域时优先新增 fixture、adapter、strategy 与 rollout 配置，而不是复制一条平行架构。
+
+## 2. 统一平台平面
+
+### 2.1 Target Resolver
+
+target resolver 负责把老师当前对话中的分析对象显式化，避免“默认猜最新报告”的隐式推测。
+
+当前统一 contract：
+
+- `target_type`
+- `target_id`
+- `analysis_type`
+- `strategy_id`（可为空，由 selector 决定）
+- `domain`
+
+代表实现：
+
+- `services/api/analysis_target_resolution_service.py`
+- `services/api/chat_start_service.py`
+- teacher workbench 中的显式目标选择
+
+### 2.2 Artifact Adapter
+
+artifact adapter 负责把不同来源输入归一化为 specialist 可消费的 artifact。
+
+统一要求：
+
+- 输入来源可以多样，但输出 artifact_type 必须稳定
+- adapter 只做归一化与 provenance 保留，不直接输出老师结论
+- adapter 必须显式给出 `confidence`、`missing_fields`、`provenance`
+
+当前平台内建 artifact：
+
+- `survey_evidence_bundle`
+- `class_signal_bundle`
+- `multimodal_submission_bundle`
+
+### 2.3 Strategy Selector
+
+strategy selector 负责根据：
+
+- `artifact_type`
+- `task_kind`
+- `role`
+- `target_scope`
+- `confidence`
+
+选择：
+
+- `strategy_id`
+- `specialist_agent`
+- `delivery_mode`
+- `review_required`
+
+当前代表策略：
+
+- `survey.teacher.report`
+- `survey.chat.followup`
+- `class_signal.teacher.report`
+- `video_homework.teacher.report`
+
+## 3. Specialist Runtime
+
+specialist runtime 负责治理 specialist 执行，不直接感知前台会话。
+
+统一约束：
+
+- 输入契约使用 `HandoffContract`
+- 输出契约使用 `SpecialistAgentResult`
+- specialist 只返回 `analysis_artifact`
+- 不直接写长期 memory
+- 不直接切换用户会话控制权
+
+治理要求：
+
+- budget 控制
+- event sink / diag_log
+- output schema 校验
+- 低置信度不直接展示给老师，而是走 review queue
+
+## 4. Analysis Report Plane
+
+analysis report plane 是老师侧统一读取面，不区分 survey / class_report / video_homework 的基础读取协议。
+
+统一接口：
+
+- `GET /teacher/analysis/reports`
+- `GET /teacher/analysis/reports/{report_id}`
+- `POST /teacher/analysis/reports/{report_id}/rerun`
+- `GET /teacher/analysis/review-queue`
+
+domain-specific facade 可存在，但应尽量只做轻量转发：
+
+- `survey`
+- `class_report`
+- `video_homework`
+
+这里的关键原则是统一 analysis report plane，而不是每个 domain 单独发明一套老师读取模型。
+
+## 5. Review Queue
+
+review queue 是统一降级面，不是某个 domain 的私有补丁。
+
+统一字段：
+
+- `item_id`
+- `domain`
+- `report_id`
+- `teacher_id`
+- `target_type`
+- `target_id`
+- `status`
+- `reason`
+- `confidence`
+- `created_at`
+- `updated_at`
+
+统一规则：
+
+- 当 artifact / specialist 置信度低于阈值时，进入 review queue
+- review queue 项保留 domain 信息，便于跨域筛选
+- review queue 不直接污染老师主界面和长期 memory
+
+## 6. Domain 映射
+
+### 6.1 Survey
+
+- domain: `survey`
+- artifact: `survey_evidence_bundle`
+- task_kind: `survey.analysis`
+- specialist: `survey_analyst`
+- primary target_scope: `class`
+
+### 6.2 Class Report
+
+- domain: `class_report`
+- artifact: `class_signal_bundle`
+- task_kind: `class_report.analysis`
+- specialist: `class_signal_analyst`
+- primary target_scope: `class`
+
+### 6.3 Video Homework
+
+- domain: `video_homework`
+- artifact: `multimodal_submission_bundle`
+- task_kind: `video_homework.analysis`
+- specialist: `video_homework_analyst`
+- primary target_scope: `student`
+
+## 7. 扩展规则
+
+新增能力时，优先按下面顺序扩：
+
+1. 明确 target contract
+2. 新增或复用 artifact adapter
+3. 为 artifact + task_kind 加 strategy
+4. 只有认知职责明显不同，才新增 specialist agent
+5. 接入统一 analysis report plane 与 review queue
+6. 补 fixture、离线 eval、rollout checklist
+
+## 8. 关联文档
+
+- Survey 契约：`docs/reference/survey-analysis-contract.md`
+- 多域 rollout checklist：`docs/operations/multi-domain-analysis-rollout-checklist.md`
+- B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`

@@ -6,9 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .analysis_metadata_repository import FileBackedAnalysisMetadataRepository
 from .api_models import SurveyReportDetail, SurveyReportSummary, SurveyReviewQueueItemSummary
 from .config import DATA_DIR, UPLOADS_DIR
 from .job_repository import load_survey_job, write_survey_job
+from .review_queue_service import ReviewQueueDeps, has_open_review_item, list_review_items
 from .survey_repository import (
     load_survey_bundle,
     load_survey_report,
@@ -34,6 +36,7 @@ class SurveyReportReadDeps:
     load_survey_job: Callable[[str], Dict[str, Any]]
     write_survey_job: Callable[[str, Dict[str, Any]], Any]
     read_survey_review_queue: Callable[[], List[Dict[str, Any]]]
+    review_queue_deps: ReviewQueueDeps
     now_iso: Callable[[], str]
 
 
@@ -50,6 +53,11 @@ def build_survey_report_deps(core: Any | None = None) -> SurveyReportReadDeps:
         load_survey_job=lambda job_id: load_survey_job(job_id, core=core),
         write_survey_job=lambda job_id, payload: write_survey_job(job_id, payload, core=core),
         read_survey_review_queue=lambda: read_survey_review_queue(core=core),
+        review_queue_deps=ReviewQueueDeps(
+            metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=data_dir),
+            queue_log='survey_review_queue.jsonl',
+            now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+        ),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
@@ -131,9 +139,11 @@ def _bundle_meta_for_job(job_id: Optional[str], deps: SurveyReportReadDeps) -> D
 
 
 def _review_required(report_id: str, teacher_id: str, deps: SurveyReportReadDeps) -> bool:
-    return any(
-        str(item.get("report_id") or "") == report_id and str(item.get("teacher_id") or "") == teacher_id
-        for item in deps.read_survey_review_queue()
+    return has_open_review_item(
+        report_id=report_id,
+        teacher_id=teacher_id,
+        domain='survey',
+        deps=deps.review_queue_deps,
     )
 
 
@@ -359,16 +369,15 @@ def rerun_survey_report(
 
 def list_survey_review_queue(*, teacher_id: str, deps: SurveyReportReadDeps) -> Dict[str, Any]:
     teacher_id_final = _require_teacher_id(teacher_id)
+    payload = list_review_items(teacher_id=teacher_id_final, domain='survey', status=None, deps=deps.review_queue_deps)
     items: List[Dict[str, Any]] = []
-    for raw in deps.read_survey_review_queue():
-        if str(raw.get("teacher_id") or "").strip() != teacher_id_final:
-            continue
+    for raw in payload.get('items') or []:
         item = SurveyReviewQueueItemSummary(
-            report_id=str(raw.get("report_id") or "").strip(),
+            report_id=str(raw.get('report_id') or '').strip(),
             teacher_id=teacher_id_final,
-            reason=str(raw.get("reason") or "").strip(),
-            confidence=_safe_float(raw.get("confidence")),
-            created_at=str(raw.get("created_at") or "").strip() or None,
+            reason=str(raw.get('reason') or '').strip(),
+            confidence=_safe_float(raw.get('confidence')),
+            created_at=str(raw.get('created_at') or '').strip() or None,
         )
         items.append(item.model_dump())
-    return {"items": items}
+    return {'items': items}

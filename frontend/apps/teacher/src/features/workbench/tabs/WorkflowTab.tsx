@@ -4,7 +4,8 @@ import type {
   AssignmentDraftSectionProps,
   ExamDraftSectionProps,
   WorkflowSummaryCardProps,
-  SurveyAnalysisSectionProps,
+  AnalysisReportSectionProps,
+  VideoHomeworkAnalysisSectionProps,
 } from '../../../types/workflow'
 
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
@@ -12,24 +13,18 @@ import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
 import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
-import SurveyAnalysisSection from '../workflow/SurveyAnalysisSection'
+import AnalysisReportSection from '../workflow/AnalysisReportSection'
+import VideoHomeworkAnalysisSection from '../workflow/VideoHomeworkAnalysisSection'
 
 export type WorkflowTabProps =
-  // WorkflowSummaryCard props
   WorkflowSummaryCardProps &
-  // UploadSection props
   UploadSectionProps &
-  // AssignmentDraftSection props
   AssignmentDraftSectionProps &
-  // ExamDraftSection props
   ExamDraftSectionProps &
-  // SurveyAnalysisSection props
-  SurveyAnalysisSectionProps & {
-    // UploadSection extras (uploading flags)
+  AnalysisReportSectionProps &
+  VideoHomeworkAnalysisSectionProps & {
     uploading: boolean
     examUploading: boolean
-
-    // AssignmentProgressSection props
     progressPanelCollapsed: boolean
     setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
     progressAssignmentId: string
@@ -37,14 +32,10 @@ export type WorkflowTabProps =
     progressOnlyIncomplete: boolean
     setProgressOnlyIncomplete: (v: boolean) => void
     progressError: string
-
-    // AssignmentDraftSection extras
     draftLoading: boolean
     draftError: string
     draftSaving: boolean
     uploadConfirming: boolean
-
-    // ExamDraftSection extras
     examDraftLoading: boolean
     examDraftSaving: boolean
     examConfirming: boolean
@@ -79,18 +70,31 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         progressLoading={props.progressLoading}
         fetchAssignmentProgress={props.fetchAssignmentProgress}
       />
-      <SurveyAnalysisSection
-        surveyFeatureEnabled={props.surveyFeatureEnabled}
-        surveyFeatureShadowMode={props.surveyFeatureShadowMode}
-        surveyReportsLoading={props.surveyReportsLoading}
-        surveyReportsError={props.surveyReportsError}
-        surveyReports={props.surveyReports}
-        selectedSurveyReportId={props.selectedSurveyReportId}
-        selectedSurveyReport={props.selectedSurveyReport}
-        surveyReviewQueue={props.surveyReviewQueue}
-        refreshSurveyReports={props.refreshSurveyReports}
-        selectSurveyReport={props.selectSurveyReport}
-        rerunSurveyReport={props.rerunSurveyReport}
+      <AnalysisReportSection
+        analysisFeatureEnabled={props.analysisFeatureEnabled}
+        analysisFeatureShadowMode={props.analysisFeatureShadowMode}
+        analysisReportsLoading={props.analysisReportsLoading}
+        analysisReportsError={props.analysisReportsError}
+        analysisReports={props.analysisReports}
+        selectedAnalysisReportId={props.selectedAnalysisReportId}
+        selectedAnalysisReport={props.selectedAnalysisReport}
+        analysisReviewQueue={props.analysisReviewQueue}
+        analysisDomainFilter={props.analysisDomainFilter}
+        analysisStatusFilter={props.analysisStatusFilter}
+        analysisStrategyFilter={props.analysisStrategyFilter}
+        analysisTargetTypeFilter={props.analysisTargetTypeFilter}
+        setAnalysisDomainFilter={props.setAnalysisDomainFilter}
+        setAnalysisStatusFilter={props.setAnalysisStatusFilter}
+        setAnalysisStrategyFilter={props.setAnalysisStrategyFilter}
+        setAnalysisTargetTypeFilter={props.setAnalysisTargetTypeFilter}
+        refreshAnalysisReports={props.refreshAnalysisReports}
+        selectAnalysisReport={props.selectAnalysisReport}
+        rerunAnalysisReport={props.rerunAnalysisReport}
+      />
+      <VideoHomeworkAnalysisSection
+        videoHomeworkFeatureEnabled={props.videoHomeworkFeatureEnabled}
+        analysisReports={props.analysisReports}
+        selectedAnalysisReport={props.selectedAnalysisReport}
       />
       <UploadSection
         uploadMode={props.uploadMode}
