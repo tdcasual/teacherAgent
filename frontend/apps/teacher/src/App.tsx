@@ -36,7 +36,7 @@ import {
   parseCommaList,
   parseLineList,
 } from './features/workbench/workbenchUtils'
-import { readFeatureFlag } from '../../shared/featureFlags'
+import { readFeatureFlag, readTeacherSurveyAnalysisFlag, readTeacherSurveyShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
 import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
@@ -51,6 +51,7 @@ import { makeId } from './utils/id'
 import { formatSessionUpdatedLabel, nowTime } from './utils/time'
 import { useTeacherWorkbenchState } from './features/state/useTeacherWorkbenchState'
 import { useDraftMutations } from './features/workbench/hooks/useDraftMutations'
+import { useSurveyReports } from './features/workbench/hooks/useSurveyReports'
 import { useWheelScrollZone } from './features/chat/useWheelScrollZone'
 import { useLocalStorageSync } from './features/state/useLocalStorageSync'
 import { useSessionActions } from './features/chat/useSessionActions'
@@ -443,6 +444,49 @@ export default function App() {
   })
 
   const attachmentTeacherId = String(readTeacherAuthSubject()?.teacher_id || '').trim()
+  const teacherSurveyAnalysisEnabled = useMemo(() => {
+    const source: Record<string, string | undefined> = {
+      teacherSurveyAnalysis: import.meta.env.VITE_TEACHER_SURVEY_ANALYSIS,
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const localOverride = window.localStorage.getItem('teacherSurveyAnalysis')
+        if (localOverride != null) source.teacherSurveyAnalysis = localOverride
+      } catch {
+        // ignore localStorage read failures
+      }
+    }
+    return readTeacherSurveyAnalysisFlag(source)
+  }, [])
+  const teacherSurveyShadowMode = useMemo(() => {
+    const source: Record<string, string | undefined> = {
+      teacherSurveyAnalysisShadow: import.meta.env.VITE_TEACHER_SURVEY_ANALYSIS_SHADOW,
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const localOverride = window.localStorage.getItem('teacherSurveyAnalysisShadow')
+        if (localOverride != null) source.teacherSurveyAnalysisShadow = localOverride
+      } catch {
+        // ignore localStorage read failures
+      }
+    }
+    return readTeacherSurveyShadowFlag(source)
+  }, [])
+  const {
+    surveyReports,
+    surveyReportsLoading,
+    surveyReportsError,
+    selectedSurveyReportId,
+    selectedSurveyReport,
+    surveyReviewQueue,
+    refreshSurveyReports,
+    selectSurveyReport,
+    rerunSurveyReport,
+  } = useSurveyReports({
+    apiBase,
+    teacherId: attachmentTeacherId,
+    enabled: teacherSurveyAnalysisEnabled,
+  })
   const {
     attachments,
     addFiles,
@@ -640,7 +684,10 @@ export default function App() {
     onDeleteProposal: deleteMemoryProposal,
     onReviewStudentProposal: reviewStudentMemoryProposal,
     onDeleteStudentProposal: deleteStudentMemoryProposal,
-    refreshWorkflowWorkbench,
+    refreshWorkflowWorkbench: () => {
+      refreshWorkflowWorkbench()
+      void refreshSurveyReports()
+    },
     saveDraft,
     saveExamDraft,
     scrollToWorkflowSection,
@@ -661,6 +708,17 @@ export default function App() {
     updateExamDraftMeta,
     updateExamScoreSchemaSelectedCandidate,
     updateExamQuestionField,
+    surveyFeatureEnabled: teacherSurveyAnalysisEnabled,
+    surveyFeatureShadowMode: teacherSurveyShadowMode,
+    surveyReports,
+    surveyReportsLoading,
+    surveyReportsError,
+    selectedSurveyReportId,
+    selectedSurveyReport,
+    surveyReviewQueue,
+    refreshSurveyReports,
+    selectSurveyReport,
+    rerunSurveyReport,
   })
 
 

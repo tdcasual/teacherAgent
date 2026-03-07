@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Mapping
 
 _log = logging.getLogger(__name__)
@@ -308,3 +309,42 @@ def load_app_settings(env: Mapping[str, str] | None = None) -> Any:
     from .runtime_settings import load_settings
 
     return load_settings(env)
+
+
+def survey_analysis_enabled() -> bool:
+    return env_bool("SURVEY_ANALYSIS_ENABLED", "0")
+
+
+def survey_webhook_secret() -> str:
+    return env_str("SURVEY_WEBHOOK_SECRET", "")
+
+
+def survey_shadow_mode() -> bool:
+    return env_bool("SURVEY_SHADOW_MODE", "1")
+
+
+def survey_max_attachment_bytes() -> int:
+    return max(1024, env_int("SURVEY_MAX_ATTACHMENT_BYTES", 10 * 1024 * 1024))
+
+
+def survey_review_confidence_floor() -> float:
+    return min(1.0, max(0.0, env_float("SURVEY_REVIEW_CONFIDENCE_FLOOR", 0.65)))
+
+
+def survey_beta_teacher_allowlist_raw() -> str:
+    return env_str("SURVEY_BETA_TEACHER_ALLOWLIST", "")
+
+
+def survey_beta_teacher_allowlist() -> list[str]:
+    raw = survey_beta_teacher_allowlist_raw()
+    if not raw.strip():
+        return []
+    items: list[str] = []
+    seen: set[str] = set()
+    for token in re.split(r"[\s,]+", raw):
+        value = str(token or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        items.append(value)
+    return items

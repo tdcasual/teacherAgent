@@ -195,3 +195,44 @@ export type WorkflowSummaryCardProps = {
   formatExamJobSummary: FormatExamJobSummary
   formatProgressSummary: FormatProgressSummary
 }
+
+
+export type SurveyReportSummary = {
+  report_id: string
+  teacher_id: string
+  class_name?: string | null
+  status: string
+  confidence?: number | null
+  summary?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type SurveyReportDetail = {
+  report: SurveyReportSummary
+  analysis_artifact: Record<string, unknown>
+  bundle_meta: Record<string, unknown>
+  review_required: boolean
+}
+
+export type SurveyReviewQueueItem = {
+  report_id: string
+  teacher_id: string
+  reason: string
+  confidence?: number | null
+  created_at?: string | null
+}
+
+export type SurveyAnalysisSectionProps = {
+  surveyFeatureEnabled: boolean
+  surveyFeatureShadowMode: boolean
+  surveyReportsLoading: boolean
+  surveyReportsError: string
+  surveyReports: SurveyReportSummary[]
+  selectedSurveyReportId: string
+  selectedSurveyReport: SurveyReportDetail | null
+  surveyReviewQueue: SurveyReviewQueueItem[]
+  refreshSurveyReports: () => void | Promise<void>
+  selectSurveyReport: (reportId: string) => void | Promise<void>
+  rerunSurveyReport: (reportId: string) => void | Promise<void>
+}

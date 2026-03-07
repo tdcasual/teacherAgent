@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+from services.api.specialist_agents.contracts import ArtifactRef, HandoffContract
 
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .subject_score_guard_service import (
@@ -117,6 +118,10 @@ class AgentRuntimeDeps:
     call_llm: Callable[..., Dict[str, Any]]
     tool_dispatch: Callable[..., Dict[str, Any]]
     teacher_tools_to_openai: Callable[..., List[Dict[str, Any]]]
+    survey_list_reports: Callable[[str, Optional[str]], Dict[str, Any]] = lambda _teacher_id, _status=None: {"items": []}
+    survey_get_report: Callable[[str, str], Dict[str, Any]] = lambda _report_id, _teacher_id: {}
+    load_survey_bundle: Callable[[str], Dict[str, Any]] = lambda _job_id: {}
+    survey_specialist_runtime: Any = None
 
 
 def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
@@ -148,6 +153,93 @@ def _default_teacher_tools_to_openai(
         if static_tool is not None:
             out.append(static_tool.to_openai())
     return out
+
+
+def _looks_like_survey_handoff_request(text: str) -> bool:
+    content = str(text or "").strip()
+    if not content:
+        return False
+    lowered = content.lower()
+    if "问卷" not in content and "survey" not in lowered:
+        return False
+    keywords = ("深入", "深挖", "复盘", "进一步", "教学建议", "洞察")
+    return any(token in content for token in keywords)
+
+
+
+def _format_survey_handoff_reply(report: Dict[str, Any], artifact: Dict[str, Any]) -> str:
+    summary = str(artifact.get("executive_summary") or report.get("summary") or "已完成问卷分析。").strip()
+    recommendations = [
+        str(item or "").strip()
+        for item in (artifact.get("teaching_recommendations") or [])
+        if str(item or "").strip()
+    ]
+    lines = [summary]
+    if recommendations:
+        lines.append("教学建议：")
+        lines.extend(f"- {item}" for item in recommendations[:3])
+    confidence = (artifact.get("confidence_and_gaps") or {}).get("confidence")
+    if confidence is not None:
+        lines.append(f"证据置信度：{confidence}")
+    return "\n".join(lines).strip()
+
+
+def _maybe_handle_survey_handoff(
+    deps: AgentRuntimeDeps,
+    *,
+    last_user_text: str,
+    teacher_id: Optional[str],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Optional[Dict[str, Any]]:
+    teacher_id_final = str(teacher_id or "").strip()
+    if not teacher_id_final or not _looks_like_survey_handoff_request(last_user_text):
+        return None
+    if deps.survey_specialist_runtime is None:
+        return None
+    try:
+        reports = deps.survey_list_reports(teacher_id_final, "analysis_ready")
+        items = reports.get("items") if isinstance(reports, dict) else []
+        if not isinstance(items, list) or not items:
+            return None
+        latest = items[0] if isinstance(items[0], dict) else {}
+        report_id = str(latest.get("report_id") or "").strip()
+        if not report_id:
+            return None
+        detail = deps.survey_get_report(report_id, teacher_id_final)
+        if not isinstance(detail, dict):
+            return None
+        bundle_meta = detail.get("bundle_meta") if isinstance(detail.get("bundle_meta"), dict) else {}
+        job_id = str(bundle_meta.get("job_id") or report_id).strip()
+        bundle = deps.load_survey_bundle(job_id) if job_id else {}
+        if not isinstance(bundle, dict) or not bundle:
+            return None
+        handoff = HandoffContract(
+            handoff_id=f"chat-survey-{report_id}",
+            from_agent="coordinator",
+            to_agent="survey_analyst",
+            task_kind="survey.analysis",
+            artifact_refs=[ArtifactRef(artifact_id=job_id, artifact_type="survey_evidence_bundle")],
+            goal="输出班级问卷洞察和教学建议",
+            constraints={
+                "survey_evidence_bundle": bundle,
+                "teacher_context": {
+                    "teacher_id": teacher_id_final,
+                    "class_name": latest.get("class_name"),
+                    "report_mode": "chat_followup",
+                    "analysis_depth": "deeper",
+                },
+            },
+            budget={"max_tokens": 1600, "timeout_sec": 45, "max_steps": 2},
+            return_schema={"type": "analysis_artifact"},
+            status="prepared",
+        )
+        result = deps.survey_specialist_runtime.run(handoff)
+        if callable(event_sink):
+            event_sink("survey.handoff", {"report_id": report_id, "agent_id": "survey_analyst"})
+        return {"reply": _format_survey_handoff_reply(detail.get("report") or latest, result.output)}
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log("survey.handoff.failed", {"error": str(exc)[:200]})
+        return None
 
 
 def _load_skill_runtime_with_logging(
@@ -885,6 +977,14 @@ def run_agent_runtime(
     allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
 
     if role_hint == "teacher":
+        survey_handoff_reply = _maybe_handle_survey_handoff(
+            deps,
+            last_user_text=last_user_text,
+            teacher_id=teacher_id,
+            event_sink=event_sink,
+        )
+        if survey_handoff_reply:
+            return survey_handoff_reply
         guarded_reply = _maybe_guard_teacher_subject_total(deps, messages, last_user_text)
         if guarded_reply:
             return guarded_reply

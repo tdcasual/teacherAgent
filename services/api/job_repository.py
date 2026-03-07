@@ -22,7 +22,7 @@ from .chat_lock_service import (
 from .chat_lock_service import (
     try_acquire_lockfile as _try_acquire_lockfile_impl,
 )
-from .paths import exam_job_path, upload_job_path
+from .paths import exam_job_path, survey_job_path, upload_job_path
 from .upload_io_service import sanitize_filename_io
 from .upload_text_service import save_upload_file as _save_upload_file_impl
 
@@ -185,3 +185,51 @@ async def save_upload_file(upload: UploadFile, dest: Path, chunk_size: int = 102
 
 def sanitize_filename(name: str) -> str:
     return sanitize_filename_io(name)
+
+
+# ---------------------------------------------------------------------------
+# Survey job I/O
+# ---------------------------------------------------------------------------
+
+def load_survey_job(job_id: str, core: Any | None = None) -> Dict[str, Any]:
+    job_dir = survey_job_path(job_id, core=core)
+    job_path = job_dir / "job.json"
+    try:
+        data = json.loads(job_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise FileNotFoundError(f"survey job not found: {job_id}")
+    if not isinstance(data, dict):
+        raise ValueError(f"survey job data for {job_id} is not a JSON object")
+    return data
+
+
+def write_survey_job(
+    job_id: str,
+    updates: Dict[str, Any],
+    overwrite: bool = False,
+    *,
+    core: Any | None = None,
+) -> Dict[str, Any]:
+    job_dir = survey_job_path(job_id, core=core)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    job_path = job_dir / "job.json"
+    lock_path = job_dir / ".job.lock"
+    lock_fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        data: Dict[str, Any] = {}
+        if job_path.exists() and not overwrite:
+            try:
+                data = json.loads(job_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                _log.warning("corrupt survey job.json for %s, resetting: %s", job_id, exc)
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data.update(updates)
+        data["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        _atomic_write_json(job_path, data)
+        return data
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)

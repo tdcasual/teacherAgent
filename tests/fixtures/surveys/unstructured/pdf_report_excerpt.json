@@ -1,0 +1,27 @@
+{
+  "case_id": "unstructured_pdf_report_excerpt",
+  "mode": "unstructured",
+  "provider": "provider",
+  "payload": {
+    "submission_id": "sub-pdf-1",
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "attachments": [
+      {
+        "name": "report.pdf",
+        "kind": "pdf",
+        "text": "问卷标题: 课堂反馈问卷\n样本量: 35\nQ1: 本节课难度如何？\n偏难=12\n适中=20\n偏易=3\nQ2: 节奏是否合适？\n偏快=8\n适中=24\n偏慢=3\n分组: 实验班 | sample_size=20 | 偏难=10\n主题: 公式推导 | count=5 | excerpts=推导太快了；例题太少"
+      }
+    ]
+  },
+  "expected": {
+    "min_confidence": 0.8,
+    "required_fields_present": [
+      "title",
+      "teacher_id",
+      "class_name",
+      "sample_size",
+      "question_summaries"
+    ]
+  }
+}

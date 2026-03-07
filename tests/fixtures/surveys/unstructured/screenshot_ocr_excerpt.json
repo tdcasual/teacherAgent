@@ -1,0 +1,22 @@
+{
+  "case_id": "unstructured_screenshot_ocr_excerpt",
+  "mode": "unstructured",
+  "provider": "provider",
+  "payload": {
+    "attachments": [
+      {
+        "name": "ocr-shot.png",
+        "kind": "image",
+        "text": "### 班 级 : 高二2403班\n?? 样 本 量 : 41\nQ1 : 听懂程度\n听懂=21\n一般=15\n没听懂=5"
+      }
+    ]
+  },
+  "expected": {
+    "min_confidence": 0.45,
+    "required_fields_present": [
+      "class_name",
+      "sample_size",
+      "question_summaries"
+    ]
+  }
+}

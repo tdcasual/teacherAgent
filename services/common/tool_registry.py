@@ -271,6 +271,41 @@ def build_default_registry() -> ToolRegistry:
         ),
     )
 
+    # Survey report tools
+    tools["survey.report.list"] = ToolDef(
+        name="survey.report.list",
+        description="List teacher-visible survey analysis reports",
+        parameters=_schema_object(
+            {
+                "teacher_id": {"type": "string"},
+                "status": {"type": "string"},
+            }
+        ),
+    )
+    tools["survey.report.get"] = ToolDef(
+        name="survey.report.get",
+        description="Get one survey analysis report by report_id",
+        parameters=_schema_object(
+            {
+                "report_id": {"type": "string"},
+                "teacher_id": {"type": "string"},
+            },
+            required=["report_id"],
+        ),
+    )
+    tools["survey.report.rerun"] = ToolDef(
+        name="survey.report.rerun",
+        description="Request rerun for one survey analysis report",
+        parameters=_schema_object(
+            {
+                "report_id": {"type": "string"},
+                "teacher_id": {"type": "string"},
+                "reason": {"type": "string"},
+            },
+            required=["report_id"],
+        ),
+    )
+
     # Assignments & lessons
     tools["assignment.list"] = ToolDef(
         name="assignment.list",

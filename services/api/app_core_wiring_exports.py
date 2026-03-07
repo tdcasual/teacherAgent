@@ -68,8 +68,17 @@ from .wiring.teacher_wiring import (
     teacher_model_config_deps,
     teacher_provider_registry_deps,
 )
+from .survey_orchestrator_service import process_survey_job
+from .wiring.survey_wiring import (
+    survey_get_report,
+    survey_list_reports,
+    survey_list_review_queue,
+    survey_load_bundle,
+    survey_rerun_report,
+)
 from .wiring.worker_wiring import (
     exam_worker_deps,
+    survey_worker_deps,
     profile_update_worker_deps,
     upload_worker_deps,
 )
@@ -134,5 +143,8 @@ __all__ = [
     "teacher_provider_registry_deps",
     "upload_worker_deps",
     "exam_worker_deps",
+    "survey_worker_deps",
     "profile_update_worker_deps",
+    "process_survey_job",
+    "survey_list_reports",
 ]

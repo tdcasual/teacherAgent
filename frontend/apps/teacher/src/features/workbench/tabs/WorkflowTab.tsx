@@ -4,6 +4,7 @@ import type {
   AssignmentDraftSectionProps,
   ExamDraftSectionProps,
   WorkflowSummaryCardProps,
+  SurveyAnalysisSectionProps,
 } from '../../../types/workflow'
 
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
@@ -11,6 +12,7 @@ import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
 import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
+import SurveyAnalysisSection from '../workflow/SurveyAnalysisSection'
 
 export type WorkflowTabProps =
   // WorkflowSummaryCard props
@@ -20,7 +22,9 @@ export type WorkflowTabProps =
   // AssignmentDraftSection props
   AssignmentDraftSectionProps &
   // ExamDraftSection props
-  ExamDraftSectionProps & {
+  ExamDraftSectionProps &
+  // SurveyAnalysisSection props
+  SurveyAnalysisSectionProps & {
     // UploadSection extras (uploading flags)
     uploading: boolean
     examUploading: boolean
@@ -74,6 +78,19 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         progressAssignmentId={props.progressAssignmentId}
         progressLoading={props.progressLoading}
         fetchAssignmentProgress={props.fetchAssignmentProgress}
+      />
+      <SurveyAnalysisSection
+        surveyFeatureEnabled={props.surveyFeatureEnabled}
+        surveyFeatureShadowMode={props.surveyFeatureShadowMode}
+        surveyReportsLoading={props.surveyReportsLoading}
+        surveyReportsError={props.surveyReportsError}
+        surveyReports={props.surveyReports}
+        selectedSurveyReportId={props.selectedSurveyReportId}
+        selectedSurveyReport={props.selectedSurveyReport}
+        surveyReviewQueue={props.surveyReviewQueue}
+        refreshSurveyReports={props.refreshSurveyReports}
+        selectSurveyReport={props.selectSurveyReport}
+        rerunSurveyReport={props.rerunSurveyReport}
       />
       <UploadSection
         uploadMode={props.uploadMode}

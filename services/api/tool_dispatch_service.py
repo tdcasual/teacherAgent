@@ -1,7 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+
+
+def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
+    return {"items": []}
+
+
+
+def _default_survey_report_get(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
+    return {"error": "survey_not_available"}
+
+
+
+def _default_survey_report_rerun(
+    _report_id: str,
+    _teacher_id: str,
+    _reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {"error": "survey_not_available"}
 
 
 @dataclass(frozen=True)
@@ -42,12 +61,17 @@ class ToolDispatchDeps:
     teacher_memory_search: Callable[[str, str, int], Dict[str, Any]]
     teacher_memory_propose: Callable[..., Dict[str, Any]]
     teacher_memory_apply: Callable[..., Dict[str, Any]]
+    survey_report_list: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_report_list
+    survey_report_get: Callable[[str, str], Dict[str, Any]] = _default_survey_report_get
+    survey_report_rerun: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_survey_report_rerun
+
 
 
 def _require_teacher(role: Optional[str], detail: str) -> Optional[Dict[str, Any]]:
     if role == "teacher":
         return None
     return {"error": "permission denied", "detail": detail}
+
 
 
 def _teacher_memory_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
@@ -68,6 +92,7 @@ def _teacher_memory_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[st
         "file": str(path),
         "content": deps.teacher_read_text(path, max_chars=max_chars),
     }
+
 
 
 def _build_handlers(
@@ -127,6 +152,10 @@ def _build_handlers(
         approve = bool(args.get("approve", True))
         return deps.teacher_memory_apply(teacher_id_resolved, proposal_id=proposal_id, approve=approve)
 
+    def _resolve_tool_teacher_id(args: Dict[str, Any]) -> str:
+        raw_teacher_id = args.get("teacher_id") or teacher_id or ""
+        return deps.resolve_teacher_id(raw_teacher_id)
+
     return {
         "exam.list": lambda _args: deps.list_exams(),
         "exam.get": lambda args: deps.exam_get(args.get("exam_id", "")),
@@ -167,6 +196,22 @@ def _build_handlers(
             question_nos=args.get("question_nos"),
             top_n=args.get("top_n", 5),
         ),
+        "survey.report.list": teacher_only(
+            "survey.report.list requires teacher role",
+            lambda args: deps.survey_report_list(_resolve_tool_teacher_id(args), str(args.get("status") or "").strip() or None),
+        ),
+        "survey.report.get": teacher_only(
+            "survey.report.get requires teacher role",
+            lambda args: deps.survey_report_get(str(args.get("report_id") or ""), _resolve_tool_teacher_id(args)),
+        ),
+        "survey.report.rerun": teacher_only(
+            "survey.report.rerun requires teacher role",
+            lambda args: deps.survey_report_rerun(
+                str(args.get("report_id") or ""),
+                _resolve_tool_teacher_id(args),
+                str(args.get("reason") or "").strip() or None,
+            ),
+        ),
         "assignment.list": lambda _args: deps.list_assignments(),
         "lesson.list": lambda _args: deps.list_lessons(),
         "lesson.capture": lambda args: deps.lesson_capture(args),
@@ -205,6 +250,7 @@ def _build_handlers(
         "teacher.memory.propose": _teacher_memory_propose,
         "teacher.memory.apply": _teacher_memory_apply,
     }
+
 
 
 def tool_dispatch(
