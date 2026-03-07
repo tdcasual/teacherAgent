@@ -34,6 +34,8 @@
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
 - 多域分析发布清单：`docs/operations/multi-domain-analysis-rollout-checklist.md`
+- 多域分析发布说明：`docs/operations/2026-03-07-multi-domain-analysis-release-notes.md`
+- 多域分析 go-live 摘要：`docs/operations/2026-03-07-multi-domain-analysis-go-live-summary.md`
 - 问卷分析发布清单：`docs/operations/survey-analysis-release-checklist.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
