@@ -92,3 +92,13 @@ def test_selector_supports_video_homework_teacher_report() -> None:
     assert decision.strategy_id == 'video_homework.teacher.report'
     assert decision.specialist_agent == 'video_homework_analyst'
     assert decision.delivery_mode == 'teacher_report'
+
+
+def test_selector_rejects_disabled_strategy_ids(monkeypatch) -> None:
+    monkeypatch.setenv('ANALYSIS_DISABLED_STRATEGIES', 'survey.teacher.report')
+    selector = build_default_strategy_selector()
+
+    with pytest.raises(StrategySelectionError) as exc_info:
+        selector.select(role='teacher', artifact=_survey_artifact(), task_kind='survey.analysis', target_scope='class')
+
+    assert exc_info.value.code == 'strategy_disabled'

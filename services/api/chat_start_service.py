@@ -85,6 +85,51 @@ def _extract_recent_analysis_target_id(messages: Any) -> str:
     return ''
 
 
+def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, Any]]:
+    if raw_target is None:
+        return None
+    if isinstance(raw_target, dict):
+        raw = dict(raw_target)
+    else:
+        model_dump = getattr(raw_target, 'model_dump', None)
+        if callable(model_dump):
+            dumped = model_dump(exclude_none=True)
+            raw = dict(dumped) if isinstance(dumped, dict) else {}
+        else:
+            raw = {
+                key: getattr(raw_target, key, None)
+                for key in ('target_type', 'target_id', 'report_id', 'source_domain', 'domain', 'artifact_type', 'teacher_id', 'strategy_id')
+                if getattr(raw_target, key, None) is not None
+            }
+    target_id = str(raw.get('target_id') or raw.get('report_id') or '').strip()
+    if not target_id:
+        return None
+    target_type = str(raw.get('target_type') or '').strip() or 'report'
+    source_domain = str(raw.get('source_domain') or raw.get('domain') or '').strip()
+    artifact_type = str(raw.get('artifact_type') or '').strip()
+    strategy_id = str(raw.get('strategy_id') or '').strip()
+    teacher_id = str(raw.get('teacher_id') or '').strip()
+    report_id = str(raw.get('report_id') or '').strip()
+    if target_type == 'report' and not report_id:
+        report_id = target_id
+
+    normalized: Dict[str, Any] = {
+        'target_type': target_type,
+        'target_id': target_id,
+    }
+    if source_domain:
+        normalized['source_domain'] = source_domain
+    if artifact_type:
+        normalized['artifact_type'] = artifact_type
+    if report_id:
+        normalized['report_id'] = report_id
+    if strategy_id:
+        normalized['strategy_id'] = strategy_id
+    if teacher_id:
+        normalized['teacher_id'] = teacher_id
+    return normalized
+
+
 def _load_job_or_stub(job_id: str, *, mode: str, deps: ChatStartDeps) -> Dict[str, Any]:
     try:
         return deps.load_chat_job(job_id)
@@ -144,6 +189,11 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "assignment_date": req.assignment_date,
         "auto_generate_assignment": req.auto_generate_assignment,
     }
+    analysis_target = _normalize_analysis_target_payload(getattr(req, 'analysis_target', None))
+    if analysis_target is not None:
+        if role_hint == 'teacher' and teacher_id and not str(analysis_target.get('teacher_id') or '').strip():
+            analysis_target['teacher_id'] = teacher_id
+        req_payload['analysis_target'] = analysis_target
     attachment_ids = _extract_attachment_ids(req)
     attachment_payload = deps.resolve_chat_attachment_context(
         role=role_hint,
@@ -161,7 +211,9 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     req_payload["attachments"] = [{"attachment_id": aid} for aid in attachment_ids]
     req_payload["attachment_context"] = attachment_context
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
-    analysis_target_id = _extract_recent_analysis_target_id(req_payload.get('messages'))
+    analysis_target_id = str((analysis_target or {}).get('target_id') or '').strip()
+    if not analysis_target_id:
+        analysis_target_id = _extract_recent_analysis_target_id(req_payload.get('messages'))
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),

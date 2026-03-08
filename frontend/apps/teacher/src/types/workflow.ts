@@ -225,9 +225,34 @@ export type AnalysisReviewQueueItem = {
   teacher_id: string
   status: string
   reason: string
+  reason_code?: string | null
+  disposition?: string | null
+  reviewer_id?: string | null
+  operator_note?: string | null
   confidence?: number | null
   created_at?: string | null
   updated_at?: string | null
+  claimed_at?: string | null
+  resolved_at?: string | null
+  rejected_at?: string | null
+  dismissed_at?: string | null
+  escalated_at?: string | null
+  retried_at?: string | null
+}
+
+export type AnalysisReviewQueueSummary = {
+  total_items: number
+  unresolved_items: number
+  status_counts?: Record<string, number>
+  reason_counts?: Record<string, number>
+  domains: Array<{
+    domain: string
+    total_items: number
+    unresolved_items: number
+    status_counts?: Record<string, number>
+    reason_counts?: Record<string, number>
+  }>
+  generated_at?: string | null
 }
 
 export type AnalysisReportSectionProps = {

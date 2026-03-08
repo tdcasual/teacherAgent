@@ -1,0 +1,27 @@
+{
+  "case_id": "class_report_pdf_summary_low_confidence",
+  "domain": "class_report",
+  "mode": "pdf_report_summary",
+  "edge_case_tags": [
+    "low_confidence_parse",
+    "ocr_noise"
+  ],
+  "payload": {
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "report_id": "class_report_pdf_1",
+    "title": "PDF 摘要报告（低置信）",
+    "parse_confidence": 0.36,
+    "text": "# P D F 摘要\n班 级 : 高二2403班\nTheme: 实验设计\nRisk: 变量控制? 混乱\nSummary: OCR 有噪声，但仍可识别出实验设计是主要问题。\nRecommendation: 先做变量控制专项讲评。"
+  },
+  "expected": {
+    "min_confidence": 0.3,
+    "required_fields_present": [
+      "title",
+      "teacher_id",
+      "class_name",
+      "theme_like_signals"
+    ],
+    "strategy_id": "class_signal.teacher.report"
+  }
+}

@@ -71,3 +71,64 @@ def test_analysis_report_routes_expose_unified_list_detail_rerun_and_review_queu
     assert rerun_res.json()['domain'] == 'survey'
     assert review_res.status_code == 200
     assert review_res.json()['items'][0]['domain'] == 'survey'
+
+
+def test_analysis_report_routes_expose_review_queue_summary_and_actions(monkeypatch, tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    called = {}
+
+    import services.api.routes.analysis_report_routes as analysis_report_routes
+
+    def _review(**kwargs):
+        called['review'] = kwargs
+        return {
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'report_id': 'report_1',
+                    'teacher_id': 'teacher_1',
+                    'status': 'queued',
+                    'reason': 'low_confidence_bundle',
+                    'reason_code': 'low_confidence',
+                    'disposition': 'open',
+                }
+            ],
+            'summary': {'total_items': 1, 'unresolved_items': 1, 'domains': [{'domain': 'survey', 'total_items': 1, 'unresolved_items': 1}]},
+        }
+
+    def _action(**kwargs):
+        called['action'] = kwargs
+        return {
+            'item_id': 'rvw_1',
+            'domain': 'survey',
+            'status': 'retry_requested',
+            'disposition': 'retry_requested',
+        }
+
+    monkeypatch.setattr(analysis_report_routes, 'list_analysis_review_queue', _review, raising=False)
+    monkeypatch.setattr(analysis_report_routes, 'operate_analysis_review_queue_item', _action, raising=False)
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        review_res = client.get('/teacher/analysis/review-queue', params={'teacher_id': 'teacher_1', 'status': 'unresolved'})
+        action_res = client.post(
+            '/teacher/analysis/review-queue/rvw_1/actions',
+            json={
+                'teacher_id': 'teacher_1',
+                'domain': 'survey',
+                'action': 'retry',
+                'reviewer_id': 'reviewer_1',
+                'operator_note': 'rerun requested from workbench',
+            },
+        )
+
+    assert review_res.status_code == 200
+    assert review_res.json()['summary']['unresolved_items'] == 1
+    assert action_res.status_code == 200
+    assert action_res.json()['status'] == 'retry_requested'
+    assert called['review']['status'] == 'unresolved'
+    assert called['action']['action'] == 'retry'
+    assert called['action']['item_id'] == 'rvw_1'

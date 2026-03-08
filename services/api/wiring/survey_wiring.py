@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ..artifacts.registry import ArtifactAdapterRegistry, ArtifactAdapterSpec
+from ..artifacts.registry import ArtifactAdapterRegistry, build_artifact_registry_from_manifests
 from ..artifacts.runtime import ArtifactAdapterRuntime
 from ..class_signal_bundle_models import ClassSignalBundle
+from ..domains.manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
 from ..multimodal_submission_models import MultimodalSubmissionBundle
 from ..specialist_agents.class_signal_analyst import (
     ClassSignalAnalystDeps,
@@ -12,7 +13,7 @@ from ..specialist_agents.class_signal_analyst import (
     run_class_signal_analyst,
 )
 from ..specialist_agents.governor import SpecialistAgentGovernor
-from ..specialist_agents.registry import SpecialistAgentRegistry, SpecialistAgentSpec
+from ..specialist_agents.registry import SpecialistAgentRegistry
 from ..specialist_agents.runtime import SpecialistAgentRuntime
 from ..specialist_agents.survey_analyst import SurveyAnalystDeps, load_survey_analyst_prompt, run_survey_analyst
 from ..specialist_agents.video_homework_analyst import (
@@ -21,7 +22,6 @@ from ..specialist_agents.video_homework_analyst import (
     run_video_homework_analyst,
 )
 from ..survey.deps import SurveyApplicationDeps, build_survey_application_deps
-from ..survey_bundle_models import SurveyEvidenceBundle
 from ..survey_report_service import (
     build_survey_report_deps,
     get_survey_report as _get_survey_report_impl,
@@ -66,20 +66,15 @@ def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
 
 
 
+def _domain_manifests() -> DomainManifestRegistry:
+    return build_default_domain_manifest_registry()
+
+
+
 def build_survey_artifact_registry(core: Any) -> ArtifactAdapterRegistry:
     _ = core
-    registry = ArtifactAdapterRegistry()
-    registry.register(
-        ArtifactAdapterSpec(
-            adapter_id='survey.bundle.adapter',
-            accepted_inputs=['survey_bundle'],
-            output_artifact_type='survey_evidence_bundle',
-            task_kinds=['survey.analysis', 'survey.chat_followup'],
-            validation_rules=[],
-        ),
-        adapter=lambda payload, _context=None: SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope(),
-    )
-    return registry
+    manifests = _domain_manifests()
+    return build_artifact_registry_from_manifests([manifests.get('survey')])
 
 
 
@@ -91,6 +86,7 @@ def build_survey_artifact_runtime(core: Any) -> ArtifactAdapterRuntime:
 def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
     registry = SpecialistAgentRegistry()
     analyst_deps = build_survey_analyst_deps(core)
+    manifest_spec = _domain_manifests().get('survey').specialists[0]
 
     def _runner(handoff):
         constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
@@ -102,23 +98,7 @@ def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
             deps=analyst_deps,
         )
 
-    registry.register(
-        SpecialistAgentSpec(
-            agent_id='survey_analyst',
-            display_name='Survey Analyst',
-            roles=['teacher'],
-            accepted_artifacts=['survey_evidence_bundle'],
-            task_kinds=['survey.analysis'],
-            direct_answer_capable=False,
-            takeover_policy='coordinator_only',
-            tool_allowlist=['llm.generate'],
-            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
-            memory_policy='no_direct_memory_write',
-            output_schema={'type': 'analysis_artifact'},
-            evaluation_suite=['survey_v1_golden'],
-        ),
-        runner=_runner,
-    )
+    registry.register(manifest_spec, runner=_runner)
     return registry
 
 
@@ -126,6 +106,7 @@ def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
 def build_class_report_specialist_registry(core: Any) -> SpecialistAgentRegistry:
     registry = SpecialistAgentRegistry()
     analyst_deps = build_class_signal_analyst_deps(core)
+    manifest_spec = _domain_manifests().get('class_report').specialists[0]
 
     def _runner(handoff):
         constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
@@ -137,23 +118,7 @@ def build_class_report_specialist_registry(core: Any) -> SpecialistAgentRegistry
             deps=analyst_deps,
         )
 
-    registry.register(
-        SpecialistAgentSpec(
-            agent_id='class_signal_analyst',
-            display_name='Class Signal Analyst',
-            roles=['teacher'],
-            accepted_artifacts=['class_signal_bundle'],
-            task_kinds=['class_report.analysis'],
-            direct_answer_capable=False,
-            takeover_policy='coordinator_only',
-            tool_allowlist=['llm.generate'],
-            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
-            memory_policy='no_direct_memory_write',
-            output_schema={'type': 'analysis_artifact'},
-            evaluation_suite=['class_report_v1_golden'],
-        ),
-        runner=_runner,
-    )
+    registry.register(manifest_spec, runner=_runner)
     return registry
 
 
@@ -161,6 +126,7 @@ def build_class_report_specialist_registry(core: Any) -> SpecialistAgentRegistry
 def build_multimodal_specialist_registry(core: Any) -> SpecialistAgentRegistry:
     registry = SpecialistAgentRegistry()
     analyst_deps = build_video_homework_analyst_deps(core)
+    manifest_spec = _domain_manifests().get('video_homework').specialists[0]
 
     def _runner(handoff):
         constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
@@ -174,23 +140,7 @@ def build_multimodal_specialist_registry(core: Any) -> SpecialistAgentRegistry:
             deps=analyst_deps,
         )
 
-    registry.register(
-        SpecialistAgentSpec(
-            agent_id='video_homework_analyst',
-            display_name='Video Homework Analyst',
-            roles=['teacher'],
-            accepted_artifacts=['multimodal_submission_bundle'],
-            task_kinds=['video_homework.analysis'],
-            direct_answer_capable=False,
-            takeover_policy='coordinator_only',
-            tool_allowlist=['llm.generate'],
-            budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
-            memory_policy='no_direct_memory_write',
-            output_schema={'type': 'analysis_artifact'},
-            evaluation_suite=['video_homework_v1_golden'],
-        ),
-        runner=_runner,
-    )
+    registry.register(manifest_spec, runner=_runner)
     return registry
 
 

@@ -10,9 +10,10 @@ from ..analysis_report_service import (
     get_analysis_report,
     list_analysis_reports,
     list_analysis_review_queue,
+    operate_analysis_review_queue_item,
     rerun_analysis_report,
 )
-from ..api_models import AnalysisReportRerunRequest
+from ..api_models import AnalysisReportRerunRequest, AnalysisReviewQueueActionRequest
 
 
 
@@ -78,6 +79,21 @@ def build_router(core: Any) -> APIRouter:
                 teacher_id=teacher_id,
                 domain=domain or None,
                 status=status or None,
+                deps=deps,
+            )
+        except (AnalysisReportServiceError, Exception) as exc:
+            _raise_http_exception(exc)
+
+    @router.post('/teacher/analysis/review-queue/{item_id}/actions')
+    async def teacher_analysis_review_queue_action(item_id: str, req: AnalysisReviewQueueActionRequest) -> Any:
+        try:
+            return operate_analysis_review_queue_item(
+                item_id=item_id,
+                teacher_id=req.teacher_id,
+                domain=req.domain,
+                action=req.action,
+                reviewer_id=req.reviewer_id,
+                operator_note=req.operator_note,
                 deps=deps,
             )
         except (AnalysisReportServiceError, Exception) as exc:

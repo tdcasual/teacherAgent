@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class ChatMessage(BaseModel):
@@ -12,6 +12,38 @@ class ChatMessage(BaseModel):
 
 class ChatAttachmentRef(BaseModel):
     attachment_id: str
+
+
+class ChatAnalysisTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_type: str
+    target_id: str
+    source_domain: Optional[str] = None
+    artifact_type: Optional[str] = None
+    report_id: Optional[str] = None
+    strategy_id: Optional[str] = None
+    teacher_id: Optional[str] = None
+
+    @field_validator("target_type", "target_id")
+    @classmethod
+    def _require_non_empty(cls, value: str) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError("analysis target field is required")
+        return normalized
+
+    @model_validator(mode="after")
+    def _normalize_report_metadata(self) -> 'ChatAnalysisTarget':
+        self.source_domain = str(self.source_domain or '').strip() or None
+        self.artifact_type = str(self.artifact_type or '').strip() or None
+        self.strategy_id = str(self.strategy_id or '').strip() or None
+        self.teacher_id = str(self.teacher_id or '').strip() or None
+        report_id = str(self.report_id or '').strip()
+        if self.target_type == 'report' and not report_id:
+            report_id = self.target_id
+        self.report_id = report_id or None
+        return self
 
 
 class ChatRequest(BaseModel):
@@ -27,6 +59,7 @@ class ChatRequest(BaseModel):
     auto_generate_assignment: Optional[bool] = None
     attachments: Optional[List[ChatAttachmentRef]] = None
     attachment_context: Optional[str] = None
+    analysis_target: Optional[ChatAnalysisTarget] = None
 
 
 class ChatStartRequest(ChatRequest):
@@ -236,6 +269,14 @@ class AnalysisReportRerunRequest(BaseModel):
     teacher_id: str
     domain: Optional[str] = None
     reason: Optional[str] = None
+
+
+class AnalysisReviewQueueActionRequest(BaseModel):
+    teacher_id: str
+    domain: Optional[str] = None
+    action: str
+    reviewer_id: Optional[str] = None
+    operator_note: Optional[str] = None
 
 
 class SurveyReviewQueueItemSummary(BaseModel):

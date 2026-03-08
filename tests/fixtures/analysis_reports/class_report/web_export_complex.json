@@ -1,0 +1,27 @@
+{
+  "case_id": "class_report_web_export_complex",
+  "domain": "class_report",
+  "mode": "web_export_html",
+  "edge_case_tags": [
+    "web_export_complex"
+  ],
+  "payload": {
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "report_id": "class_report_web_1",
+    "title": "课堂反馈网页导出复杂版",
+    "parse_confidence": 0.79,
+    "source_uri": "https://example.local/report/export/1",
+    "html": "<html><body><h1>课堂反馈网页导出</h1><p>Theme: 实验设计</p><p>Theme: 图像分析</p><p>Risk: 变量控制不清</p><p>Risk: 图像读取失误</p><p>Summary: 班级在实验设计与图像分析上仍有分层。</p><p>Recommendation: 先做变量控制复盘，再做图像读数对照训练。</p></body></html>"
+  },
+  "expected": {
+    "min_confidence": 0.75,
+    "required_fields_present": [
+      "title",
+      "teacher_id",
+      "class_name",
+      "theme_like_signals"
+    ],
+    "strategy_id": "class_signal.teacher.report"
+  }
+}

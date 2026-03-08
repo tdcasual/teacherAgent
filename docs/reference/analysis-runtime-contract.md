@@ -45,6 +45,12 @@ artifact adapter 负责把不同来源输入归一化为 specialist 可消费的
 - `class_signal_bundle`
 - `multimodal_submission_bundle`
 
+manifest-driven 注册要求：
+
+- domain 元数据应集中登记为 manifest，而不是散落在单个 wiring 文件中
+- manifest 至少声明 `domain`、artifact adapter spec、strategy spec、specialist spec、rollout metadata、feature flags
+- runtime 运行时注册可以继续绑定具体 runner / adapter，但元数据来源应优先来自 manifest registry
+
 ### 2.3 Strategy Selector
 
 strategy selector 负责根据：

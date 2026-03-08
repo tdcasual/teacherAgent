@@ -23,7 +23,18 @@ from services.api.upload_text_service import extract_text_from_html
 SURVEY_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'sample_size', 'question_summaries')
 CLASS_REPORT_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'question_like_signals', 'theme_like_signals')
 VIDEO_HOMEWORK_REQUIRED_FIELDS = ('submission_id', 'teacher_id', 'student_id', 'media_files', 'evidence_channels')
-
+MIN_FIXTURE_COUNT_BY_DOMAIN = {
+    'survey': 3,
+    'class_report': 3,
+    'video_homework': 3,
+}
+REQUIRED_EDGE_CASE_TAGS = (
+    'provider_attachment_noise',
+    'long_duration_submission',
+    'low_confidence_parse',
+    'ocr_noise',
+    'web_export_complex',
+)
 
 
 def _parse_deps() -> SurveyReportParseDeps:
@@ -206,6 +217,19 @@ def _confidence_bucket(confidence: float) -> str:
 
 
 
+def _normalize_edge_case_tags(fixture: Dict[str, Any]) -> List[str]:
+    seen: set[str] = set()
+    tags: List[str] = []
+    for raw in fixture.get('edge_case_tags') or []:
+        tag = str(raw or '').strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        tags.append(tag)
+    return tags
+
+
+
 def evaluate_fixture(path: Path) -> Dict[str, Any]:
     fixture = _load_json(path)
     domain, bundle, artifact, task_kind, target_scope = _build_artifact(path, fixture)
@@ -251,7 +275,71 @@ def evaluate_fixture(path: Path) -> Dict[str, Any]:
         'selected_strategy_id': decision.strategy_id,
         'selected_delivery_mode': decision.delivery_mode,
         'review_required': bool(decision.review_required),
+        'edge_case_tags': _normalize_edge_case_tags(fixture),
         'expectation_failures': expectation_failures,
+    }
+
+
+
+def _aggregate_failure_reasons(cases: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for item in cases:
+        for raw_reason in item.get('expectation_failures') or []:
+            reason = str(raw_reason or '').strip()
+            if not reason:
+                continue
+            normalized = reason
+            if ':' in normalized:
+                normalized = normalized.split(':', 1)[0]
+            elif '<' in normalized:
+                normalized = normalized.split('<', 1)[0]
+            counts[normalized] = counts.get(normalized, 0) + 1
+    return counts
+
+
+
+def _count_edge_cases(cases: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for item in cases:
+        for raw_tag in item.get('edge_case_tags') or []:
+            tag = str(raw_tag or '').strip()
+            if not tag:
+                continue
+            counts[tag] = counts.get(tag, 0) + 1
+    return counts
+
+
+
+def _build_rollout_recommendations(
+    *,
+    domain_summaries: Dict[str, Any],
+    edge_case_counts: Dict[str, int],
+    expectation_failures: int,
+) -> Dict[str, Any]:
+    minimum_fixture_counts = {
+        domain: {
+            'required': int(MIN_FIXTURE_COUNT_BY_DOMAIN.get(domain, 0)),
+            'actual': int(summary.get('fixture_count') or 0),
+            'meets': bool(summary.get('meets_minimum_fixture_count')),
+        }
+        for domain, summary in domain_summaries.items()
+    }
+    required_edge_cases = {
+        tag: {
+            'covered': int(edge_case_counts.get(tag, 0)) > 0,
+            'count': int(edge_case_counts.get(tag, 0)),
+        }
+        for tag in REQUIRED_EDGE_CASE_TAGS
+    }
+    ready_for_expansion = (
+        expectation_failures == 0
+        and all(item['meets'] for item in minimum_fixture_counts.values())
+        and all(item['covered'] for item in required_edge_cases.values())
+    )
+    return {
+        'ready_for_expansion': ready_for_expansion,
+        'minimum_fixture_counts': minimum_fixture_counts,
+        'required_edge_cases': required_edge_cases,
     }
 
 
@@ -263,29 +351,50 @@ def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
         buckets[str(item['confidence_bucket'])] += 1
 
     domain_summaries: Dict[str, Any] = {}
+    edge_case_by_domain: Dict[str, Dict[str, int]] = {}
     for domain in sorted({str(item['domain']) for item in cases}):
         items = [item for item in cases if item['domain'] == domain]
         item_count = len(items)
         domain_buckets = {'low': 0, 'medium': 0, 'high': 0}
         for item in items:
             domain_buckets[str(item['confidence_bucket'])] += 1
+        edge_case_counts = _count_edge_cases(items)
+        edge_case_by_domain[domain] = edge_case_counts
+        minimum_fixture_count = int(MIN_FIXTURE_COUNT_BY_DOMAIN.get(domain, 0))
         domain_summaries[domain] = {
             'fixture_count': item_count,
+            'minimum_fixture_count': minimum_fixture_count,
+            'meets_minimum_fixture_count': item_count >= minimum_fixture_count,
             'average_required_field_coverage': round(sum(float(item['required_field_coverage']) for item in items) / item_count, 4),
             'average_missing_field_rate': round(sum(float(item['missing_field_rate']) for item in items) / item_count, 4),
             'average_artifact_completeness': round(sum(float(item['artifact_completeness']) for item in items) / item_count, 4),
             'confidence_buckets': domain_buckets,
+            'edge_case_counts': edge_case_counts,
             'expectation_failures': sum(len(item['expectation_failures']) for item in items),
+            'expectation_failure_reasons': _aggregate_failure_reasons(items),
         }
 
+    overall_edge_case_counts = _count_edge_cases(cases)
+    expectation_failures = sum(len(item['expectation_failures']) for item in cases)
+    expectation_failure_reasons = _aggregate_failure_reasons(cases)
     return {
         'fixture_count': fixture_count,
         'average_required_field_coverage': round(sum(float(item['required_field_coverage']) for item in cases) / fixture_count, 4),
         'average_missing_field_rate': round(sum(float(item['missing_field_rate']) for item in cases) / fixture_count, 4),
         'average_artifact_completeness': round(sum(float(item['artifact_completeness']) for item in cases) / fixture_count, 4),
         'confidence_buckets': buckets,
-        'expectation_failures': sum(len(item['expectation_failures']) for item in cases),
+        'edge_case_coverage': {
+            'overall': overall_edge_case_counts,
+            'by_domain': edge_case_by_domain,
+        },
+        'expectation_failures': expectation_failures,
+        'expectation_failure_reasons': expectation_failure_reasons,
         'domain_summaries': domain_summaries,
+        'rollout_recommendations': _build_rollout_recommendations(
+            domain_summaries=domain_summaries,
+            edge_case_counts=overall_edge_case_counts,
+            expectation_failures=expectation_failures,
+        ),
         'cases': cases,
     }
 
@@ -310,17 +419,20 @@ def _format_human(report: Dict[str, Any], *, summary_only: bool) -> str:
         'confidence buckets:',
         f"  low={report['confidence_buckets']['low']} medium={report['confidence_buckets']['medium']} high={report['confidence_buckets']['high']}",
         f"expectation failures: {report['expectation_failures']}",
+        f"failure reasons: {report['expectation_failure_reasons']}",
+        f"edge cases: {report['edge_case_coverage']['overall']}",
+        f"ready for expansion: {report['rollout_recommendations']['ready_for_expansion']}",
         'domains:',
     ]
     for domain, summary in report['domain_summaries'].items():
         lines.append(
-            f"  - {domain}: fixtures={summary['fixture_count']} coverage={summary['average_required_field_coverage']} missing={summary['average_missing_field_rate']} failures={summary['expectation_failures']}"
+            f"  - {domain}: fixtures={summary['fixture_count']} min={summary['minimum_fixture_count']} coverage={summary['average_required_field_coverage']} missing={summary['average_missing_field_rate']} failures={summary['expectation_failures']} edge_cases={summary['edge_case_counts']}"
         )
     if not summary_only:
         lines.append('cases:')
         for item in report['cases']:
             lines.append(
-                f"  - {item['case_id']}: domain={item['domain']} confidence={item['parse_confidence']} coverage={item['required_field_coverage']} strategy={item['selected_strategy_id']} failures={len(item['expectation_failures'])}"
+                f"  - {item['case_id']}: domain={item['domain']} confidence={item['parse_confidence']} coverage={item['required_field_coverage']} strategy={item['selected_strategy_id']} edge_cases={item['edge_case_tags']} failures={len(item['expectation_failures'])}"
             )
     return '\n'.join(lines) + '\n'
 
@@ -339,9 +451,9 @@ def main(argv: List[str] | None = None) -> int:
         payload.pop('cases', None)
 
     if args.json:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + '\n')
     else:
-        print(_format_human(payload if args.summary_only else report, summary_only=args.summary_only), end='')
+        sys.stdout.write(_format_human(payload, summary_only=args.summary_only))
     return 0
 
 
