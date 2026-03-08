@@ -16,6 +16,7 @@ class ArtifactEvidenceRef(BaseModel):
 class ArtifactEnvelope(BaseModel):
     artifact_type: str
     schema_version: str = 'v1'
+    adapter_version: str = 'v1'
     subject_scope: Dict[str, Any] = Field(default_factory=dict)
     evidence_refs: List[ArtifactEvidenceRef] = Field(default_factory=list)
     confidence: Optional[float] = None

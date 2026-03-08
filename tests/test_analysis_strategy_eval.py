@@ -113,3 +113,33 @@ def test_analysis_strategy_eval_help() -> None:
     )
     assert proc.returncode == 0, proc.stderr or proc.stdout
     assert 'usage:' in proc.stdout.lower()
+
+
+def test_analysis_strategy_eval_reads_review_feedback(tmp_path: Path) -> None:
+    module = _load_module()
+    feedback_path = tmp_path / 'review_feedback.json'
+    feedback_path.write_text(
+        json.dumps(
+            {
+                'total_items': 2,
+                'by_action': {'reject': 1, 'retry': 1},
+                'by_domain': {'survey': 2},
+                'by_reason_code': {'low_confidence': 2},
+            },
+            ensure_ascii=False,
+        ),
+        encoding='utf-8',
+    )
+
+    payload = module.load_review_feedback_summary(feedback_path)
+
+    assert payload['total_items'] == 2
+    assert payload['by_action']['reject'] == 1
+
+
+def test_analysis_strategy_eval_includes_review_feedback_in_report() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(FIXTURES_DIR, review_feedback={'total_items': 3, 'by_action': {'resolve': 2}})
+
+    assert report['review_feedback']['total_items'] == 3
+    assert report['review_feedback']['by_action']['resolve'] == 2

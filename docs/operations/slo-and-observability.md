@@ -58,6 +58,14 @@ Dashboard config is versioned at:
 This artifact is intended to be imported into Grafana (JSON model) and includes
 panels for request volume, error rate, latency p95, and SLO status.
 
+对于统一 analysis runtime，还应补充 specialist 维度指标：
+
+- `by_phase`：`prepared` / `started` / `completed` / `failed`
+- `by_domain`：至少区分 `survey` / `class_report` / `video_homework`
+- `by_strategy`：至少可按 `strategy_id` 聚合
+- `by_agent`：至少可按 specialist `agent_id` 聚合
+- `by_reason`：至少记录 `timeout`、`budget_exceeded`、`invalid_output`、`specialist_execution_failed`
+
 ## Operational Runbook Hooks
 
 Alert thresholds (initial):

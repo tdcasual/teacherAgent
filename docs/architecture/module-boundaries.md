@@ -47,6 +47,7 @@
 - 约束：
   - 新依赖通过容器挂载到 `app.state.container`
   - 禁止新增模块级全局依赖入口作为默认路径
+  - analysis domain 的 specialist runtime 优先通过 `services/api/domains/runtime_builder.py` 组装；`services/api/wiring/*` 只保留薄封装或兼容入口
 
 ## Frontend Boundaries (Student App)
 

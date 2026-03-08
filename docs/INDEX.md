@@ -47,6 +47,7 @@
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
 - 问卷分析契约：`docs/reference/survey-analysis-contract.md`
+- 分析域扩展模板：`docs/reference/analysis-domain-extension-template.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 
 ## 设计与演进
@@ -56,3 +57,5 @@
 
 - B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`
 - Agent 系统优先级优化计划：`docs/plans/2026-03-07-agent-system-priority-optimization-plan.md`
+- Agent 设计评审：`docs/plans/2026-03-08-agent-design-review-and-optimization-design.md`
+- Agent 优化实施计划：`docs/plans/2026-03-08-agent-design-optimization-implementation-plan.md`

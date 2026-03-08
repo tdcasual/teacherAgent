@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List
 
 from . import settings
 from .job_repository import load_survey_job, write_survey_job
-from .strategies.planner import build_handoff_plan
+from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .survey.deps import build_survey_application_deps
 from .survey_bundle_models import SurveyEvidenceBundle
@@ -158,7 +158,13 @@ def process_survey_job(job_id: str, *, deps: SurveyOrchestratorDeps) -> Dict[str
                 return _mark_job_failed(job_id, deps, error='analysis_strategy_disabled')
             raise
 
-        job = deps.write_survey_job(job_id, {'strategy_id': strategy.strategy_id})
+        job = deps.write_survey_job(
+            job_id,
+            {
+                'strategy_id': strategy.strategy_id,
+                **build_lineage_metadata(strategy=strategy, artifact=artifact),
+            },
+        )
         if strategy.review_required:
             confidence = float(bundle.parse_confidence) if bundle.parse_confidence is not None else None
             item = deps.enqueue_survey_review_item(

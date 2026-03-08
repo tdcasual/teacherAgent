@@ -23,11 +23,14 @@ class HandoffContract(BaseModel):
     from_agent: str
     to_agent: str
     task_kind: str
+    strategy_id: Optional[str] = None
     artifact_refs: List[ArtifactRef] = Field(default_factory=list)
     goal: str
     constraints: Dict[str, Any] = Field(default_factory=dict)
     budget: AgentExecutionBudget = Field(default_factory=AgentExecutionBudget)
     return_schema: Dict[str, Any] = Field(default_factory=dict)
+    prompt_version: Optional[str] = None
+    runtime_version: Optional[str] = None
     status: str = "prepared"
 
 

@@ -96,6 +96,10 @@ def deliver_class_report(
         'target_type': str(job.get('target_type') or 'report').strip() or 'report',
         'target_id': str(job.get('target_id') or report_id).strip() or report_id,
         'strategy_id': str(job.get('strategy_id') or 'class_signal.teacher.report').strip() or 'class_signal.teacher.report',
+        'strategy_version': str(job.get('strategy_version') or 'v1').strip() or 'v1',
+        'prompt_version': str(job.get('prompt_version') or 'v1').strip() or 'v1',
+        'adapter_version': str(job.get('adapter_version') or 'v1').strip() or 'v1',
+        'runtime_version': str(job.get('runtime_version') or 'v1').strip() or 'v1',
         'status': 'analysis_ready',
         'confidence': _safe_float((analysis_artifact.get('confidence_and_gaps') or {}).get('confidence'))
         or _safe_float(bundle.get('parse_confidence')),

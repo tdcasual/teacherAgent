@@ -133,3 +133,34 @@ def test_governor_rejects_invalid_output_for_analysis_artifact_schema() -> None:
         )
 
     assert exc_info.value.code == 'invalid_output'
+
+
+def test_governor_emits_domain_and_strategy_context_in_events() -> None:
+    events = []
+    governor = SpecialistAgentGovernor(event_sink=lambda event: events.append(event))
+
+    governor.run(
+        handoff=HandoffContract(
+            handoff_id='handoff_1',
+            from_agent='coordinator',
+            to_agent='survey_analyst',
+            task_kind='survey.analysis',
+            artifact_refs=[],
+            goal='提炼班级洞察',
+            constraints={},
+            budget={'max_tokens': 800, 'timeout_sec': 5, 'max_steps': 2},
+            return_schema={'type': 'analysis_artifact'},
+            strategy_id='survey.teacher.report',
+            status='prepared',
+        ),
+        spec=_spec(),
+        runner=lambda handoff: SpecialistAgentResult(
+            handoff_id=handoff.handoff_id,
+            agent_id=handoff.to_agent,
+            status='completed',
+            output={'executive_summary': 'ok'},
+        ),
+    )
+
+    assert events[-1].domain == 'survey'
+    assert events[-1].strategy_id == 'survey.teacher.report'

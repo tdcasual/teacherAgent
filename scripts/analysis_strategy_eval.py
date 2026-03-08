@@ -400,12 +400,20 @@ def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 
-def evaluate_fixture_tree(fixtures_dir: Path) -> Dict[str, Any]:
+def load_review_feedback_summary(path: Path) -> Dict[str, Any]:
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    return dict(payload or {}) if isinstance(payload, dict) else {}
+
+
+
+def evaluate_fixture_tree(fixtures_dir: Path, review_feedback: Dict[str, Any] | None = None) -> Dict[str, Any]:
     paths = list(_iter_fixture_paths(fixtures_dir))
     if not paths:
         raise SystemExit(f'No analysis fixtures found under {fixtures_dir}')
     cases = [evaluate_fixture(path) for path in paths]
-    return _aggregate_cases(cases)
+    report = _aggregate_cases(cases)
+    report['review_feedback'] = dict(review_feedback or {})
+    return report
 
 
 
@@ -441,11 +449,13 @@ def _format_human(report: Dict[str, Any], *, summary_only: bool) -> str:
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Evaluate analysis artifacts across survey, class-report, and video-homework fixtures.')
     parser.add_argument('--fixtures', default='tests/fixtures', help='fixture directory to scan')
+    parser.add_argument('--review-feedback', default='', help='optional JSON summary generated from review outcomes')
     parser.add_argument('--json', action='store_true', help='print JSON summary')
     parser.add_argument('--summary-only', action='store_true', help='omit per-case output')
     args = parser.parse_args(argv)
 
-    report = evaluate_fixture_tree(Path(args.fixtures))
+    review_feedback = load_review_feedback_summary(Path(args.review_feedback)) if args.review_feedback else None
+    report = evaluate_fixture_tree(Path(args.fixtures), review_feedback=review_feedback)
     payload: Dict[str, Any] = dict(report)
     if args.summary_only:
         payload.pop('cases', None)

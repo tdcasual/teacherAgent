@@ -5,7 +5,7 @@ from dataclasses import replace
 from ..artifacts.registry import ArtifactAdapterSpec
 from ..specialist_agents.registry import SpecialistAgentSpec
 from ..strategies.contracts import StrategySpec
-from .manifest_models import DomainManifest
+from .manifest_models import DomainManifest, DomainRuntimeBinding
 
 
 class DomainManifestNotFoundError(KeyError):
@@ -83,10 +83,14 @@ def _survey_manifest(review_confidence_floor: float) -> DomainManifest:
                 tool_allowlist=['llm.generate'],
                 budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
                 memory_policy='no_direct_memory_write',
-                output_schema={'type': 'analysis_artifact'},
+                output_schema={'type': 'survey.analysis_artifact'},
                 evaluation_suite=['survey_v1_golden'],
             ),
         ],
+        runtime_binding=DomainRuntimeBinding(
+            specialist_deps_factory='build_survey_analyst_deps',
+            payload_constraint_key='survey_evidence_bundle',
+        ),
         rollout_stage='shadow_or_beta',
         feature_flags=['SURVEY_ANALYSIS_ENABLED', 'SURVEY_SHADOW_MODE', 'SURVEY_BETA_TEACHER_ALLOWLIST'],
     )
@@ -147,10 +151,14 @@ def _class_report_manifest(review_confidence_floor: float) -> DomainManifest:
                 tool_allowlist=['llm.generate'],
                 budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
                 memory_policy='no_direct_memory_write',
-                output_schema={'type': 'analysis_artifact'},
+                output_schema={'type': 'class_report.analysis_artifact'},
                 evaluation_suite=['class_report_v1_golden'],
             ),
         ],
+        runtime_binding=DomainRuntimeBinding(
+            specialist_deps_factory='build_class_signal_analyst_deps',
+            payload_constraint_key='class_signal_bundle',
+        ),
         rollout_stage='internal_only',
         feature_flags=[],
     )
@@ -189,10 +197,14 @@ def _video_homework_manifest(review_confidence_floor: float) -> DomainManifest:
                 tool_allowlist=['llm.generate'],
                 budgets={'default': {'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2}},
                 memory_policy='no_direct_memory_write',
-                output_schema={'type': 'analysis_artifact'},
+                output_schema={'type': 'video_homework.analysis_artifact'},
                 evaluation_suite=['video_homework_v1_golden'],
             ),
         ],
+        runtime_binding=DomainRuntimeBinding(
+            specialist_deps_factory='build_video_homework_analyst_deps',
+            payload_constraint_key='multimodal_submission_bundle',
+        ),
         rollout_stage='controlled_beta',
         feature_flags=[
             'MULTIMODAL_ENABLED',

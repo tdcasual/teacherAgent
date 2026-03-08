@@ -4,22 +4,13 @@ from typing import Any, Optional
 
 from ..artifacts.registry import ArtifactAdapterRegistry, build_artifact_registry_from_manifests
 from ..artifacts.runtime import ArtifactAdapterRuntime
-from ..class_signal_bundle_models import ClassSignalBundle
 from ..domains.manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
-from ..multimodal_submission_models import MultimodalSubmissionBundle
-from ..specialist_agents.class_signal_analyst import (
-    ClassSignalAnalystDeps,
-    load_class_signal_analyst_prompt,
-    run_class_signal_analyst,
-)
-from ..specialist_agents.governor import SpecialistAgentGovernor
-from ..specialist_agents.registry import SpecialistAgentRegistry
-from ..specialist_agents.runtime import SpecialistAgentRuntime
-from ..specialist_agents.survey_analyst import SurveyAnalystDeps, load_survey_analyst_prompt, run_survey_analyst
-from ..specialist_agents.video_homework_analyst import (
-    VideoHomeworkAnalystDeps,
-    load_video_homework_analyst_prompt,
-    run_video_homework_analyst,
+from ..domains.runtime_builder import (
+    build_class_signal_analyst_deps as _build_class_signal_analyst_deps,
+    build_domain_specialist_registry,
+    build_domain_specialist_runtime,
+    build_survey_analyst_deps as _build_survey_analyst_deps,
+    build_video_homework_analyst_deps as _build_video_homework_analyst_deps,
 )
 from ..survey.deps import SurveyApplicationDeps, build_survey_application_deps
 from ..survey_report_service import (
@@ -40,29 +31,17 @@ def build_survey_deps(core: Any) -> SurveyApplicationDeps:
 
 
 def build_survey_analyst_deps(core: Any) -> SurveyAnalystDeps:
-    return SurveyAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_survey_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
+    return _build_survey_analyst_deps(core)
 
 
 
 def build_class_signal_analyst_deps(core: Any) -> ClassSignalAnalystDeps:
-    return ClassSignalAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_class_signal_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
+    return _build_class_signal_analyst_deps(core)
 
 
 
 def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
-    return VideoHomeworkAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_video_homework_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
+    return _build_video_homework_analyst_deps(core)
 
 
 
@@ -84,100 +63,32 @@ def build_survey_artifact_runtime(core: Any) -> ArtifactAdapterRuntime:
 
 
 def build_survey_specialist_registry(core: Any) -> SpecialistAgentRegistry:
-    registry = SpecialistAgentRegistry()
-    analyst_deps = build_survey_analyst_deps(core)
-    manifest_spec = _domain_manifests().get('survey').specialists[0]
-
-    def _runner(handoff):
-        constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
-        return run_survey_analyst(
-            handoff=handoff,
-            survey_evidence_bundle=dict(constraints.get('survey_evidence_bundle') or {}),
-            teacher_context=dict(constraints.get('teacher_context') or {}),
-            task_goal=str(handoff.goal or '').strip(),
-            deps=analyst_deps,
-        )
-
-    registry.register(manifest_spec, runner=_runner)
-    return registry
+    return build_domain_specialist_registry(domain_id='survey', manifests=_domain_manifests(), core=core)
 
 
 
 def build_class_report_specialist_registry(core: Any) -> SpecialistAgentRegistry:
-    registry = SpecialistAgentRegistry()
-    analyst_deps = build_class_signal_analyst_deps(core)
-    manifest_spec = _domain_manifests().get('class_report').specialists[0]
-
-    def _runner(handoff):
-        constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
-        return run_class_signal_analyst(
-            handoff=handoff,
-            class_signal_bundle=ClassSignalBundle.model_validate(dict(constraints.get('class_signal_bundle') or {})),
-            teacher_context=dict(constraints.get('teacher_context') or {}),
-            task_goal=str(handoff.goal or '').strip(),
-            deps=analyst_deps,
-        )
-
-    registry.register(manifest_spec, runner=_runner)
-    return registry
+    return build_domain_specialist_registry(domain_id='class_report', manifests=_domain_manifests(), core=core)
 
 
 
 def build_multimodal_specialist_registry(core: Any) -> SpecialistAgentRegistry:
-    registry = SpecialistAgentRegistry()
-    analyst_deps = build_video_homework_analyst_deps(core)
-    manifest_spec = _domain_manifests().get('video_homework').specialists[0]
-
-    def _runner(handoff):
-        constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
-        return run_video_homework_analyst(
-            handoff=handoff,
-            multimodal_submission_bundle=MultimodalSubmissionBundle.model_validate(
-                dict(constraints.get('multimodal_submission_bundle') or {})
-            ),
-            teacher_context=dict(constraints.get('teacher_context') or {}),
-            task_goal=str(handoff.goal or '').strip(),
-            deps=analyst_deps,
-        )
-
-    registry.register(manifest_spec, runner=_runner)
-    return registry
-
-
-
-def _build_specialist_runtime(registry: SpecialistAgentRegistry, core: Any) -> SpecialistAgentRuntime:
-    diag_log = getattr(core, 'diag_log', lambda *_args, **_kwargs: None)
-
-    def _event_sink(event) -> None:
-        diag_log(
-            f'specialist.runtime.{event.phase}',
-            {
-                'handoff_id': event.handoff_id,
-                'agent_id': event.agent_id,
-                'task_kind': event.task_kind,
-                **dict(event.metadata or {}),
-            },
-        )
-
-    return SpecialistAgentRuntime(
-        registry,
-        governor=SpecialistAgentGovernor(event_sink=_event_sink),
-    )
+    return build_domain_specialist_registry(domain_id='video_homework', manifests=_domain_manifests(), core=core)
 
 
 
 def build_survey_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
-    return _build_specialist_runtime(build_survey_specialist_registry(core), core)
+    return build_domain_specialist_runtime(domain_id='survey', manifests=_domain_manifests(), core=core)
 
 
 
 def build_class_report_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
-    return _build_specialist_runtime(build_class_report_specialist_registry(core), core)
+    return build_domain_specialist_runtime(domain_id='class_report', manifests=_domain_manifests(), core=core)
 
 
 
 def build_multimodal_specialist_runtime(core: Any) -> SpecialistAgentRuntime:
-    return _build_specialist_runtime(build_multimodal_specialist_registry(core), core)
+    return build_domain_specialist_runtime(domain_id='video_homework', manifests=_domain_manifests(), core=core)
 
 
 

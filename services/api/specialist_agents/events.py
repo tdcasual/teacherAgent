@@ -10,4 +10,6 @@ class SpecialistRuntimeEvent(BaseModel):
     handoff_id: str
     agent_id: str
     task_kind: str
+    domain: str | None = None
+    strategy_id: str | None = None
     metadata: Dict[str, Any] = Field(default_factory=dict)

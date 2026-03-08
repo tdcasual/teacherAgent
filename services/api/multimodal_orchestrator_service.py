@@ -13,7 +13,9 @@ from .multimodal_report_service import (
 )
 from .multimodal_repository import load_multimodal_submission_view
 from .multimodal_submission_models import MultimodalSubmissionBundle
-from .strategies.planner import build_handoff_plan
+from .specialist_agents.job_graph_models import JobGraphNode, SpecialistJobGraph
+from .specialist_agents.job_graph_runtime import SpecialistJobGraphRuntime
+from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .wiring.survey_wiring import build_multimodal_specialist_runtime
 
@@ -124,7 +126,13 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
                 return _mark_job_failed(submission_id, deps, error='analysis_strategy_disabled')
             raise
 
-        job = deps.write_job(submission_id, {'strategy_id': strategy.strategy_id})
+        job = deps.write_job(
+            submission_id,
+            {
+                'strategy_id': strategy.strategy_id,
+                **build_lineage_metadata(strategy=strategy, artifact=artifact),
+            },
+        )
         if strategy.review_required:
             item = deps.enqueue_review_item(
                 report_id=report_id,
@@ -155,8 +163,25 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
             extra_constraints={'teacher_context': teacher_context},
             fallback_policy='enqueue_review',
         )
+        graph = SpecialistJobGraph(
+            nodes=[
+                JobGraphNode(
+                    node_id='analyze',
+                    handoff=plan.handoff.model_copy(update={'handoff_id': f'{plan.handoff.handoff_id}:analyze'}),
+                ),
+                JobGraphNode(
+                    node_id='verify',
+                    handoff=plan.handoff.model_copy(
+                        update={
+                            'handoff_id': f'{plan.handoff.handoff_id}:verify',
+                            'goal': '校验视频作业反馈结构完整性与证据一致性',
+                        }
+                    ),
+                ),
+            ]
+        )
         job = deps.write_job(submission_id, {'status': 'analysis_running'})
-        result = deps.specialist_runtime.run(plan.handoff)
+        result = SpecialistJobGraphRuntime(executor=deps.specialist_runtime.run).run(graph).final_result
         job = deps.write_job(submission_id, {'status': 'analysis_ready', 'analysis_confidence': result.confidence})
         report = deps.deliver_report(job=job, bundle=bundle.model_dump(), analysis_artifact=result.output)
         job = deps.write_job(submission_id, {'status': 'teacher_notified', 'report_id': report['report_id']})

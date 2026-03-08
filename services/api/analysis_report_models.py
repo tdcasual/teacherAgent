@@ -11,6 +11,10 @@ class AnalysisReportSummary(BaseModel):
     target_type: str
     target_id: str
     strategy_id: str
+    strategy_version: Optional[str] = None
+    prompt_version: Optional[str] = None
+    adapter_version: Optional[str] = None
+    runtime_version: Optional[str] = None
     teacher_id: str
     status: str
     confidence: Optional[float] = None

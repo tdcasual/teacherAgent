@@ -15,7 +15,7 @@ from .class_report_service import (
     write_class_signal_bundle,
 )
 from .class_signal_bundle_models import ClassSignalBundle
-from .strategies.planner import build_handoff_plan
+from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .wiring.survey_wiring import build_class_report_specialist_runtime
 
@@ -129,7 +129,13 @@ def process_class_report_job(job_id: str, *, deps: ClassReportOrchestratorDeps) 
                 return _mark_job_failed(job_id, deps, error='analysis_strategy_disabled')
             raise
 
-        job = deps.write_job(job_id, {'strategy_id': strategy.strategy_id})
+        job = deps.write_job(
+            job_id,
+            {
+                'strategy_id': strategy.strategy_id,
+                **build_lineage_metadata(strategy=strategy, artifact=artifact),
+            },
+        )
         if strategy.review_required:
             item = deps.enqueue_review_item(
                 report_id=report_id,

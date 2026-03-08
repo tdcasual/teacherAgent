@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from .contracts import HandoffContract, SpecialistAgentResult
 from .events import SpecialistRuntimeEvent
+from .output_schemas import OutputSchemaValidationError, validate_specialist_output
 from .registry import SpecialistAgentSpec
 
 
@@ -73,8 +74,10 @@ class SpecialistAgentGovernor:
 
     def _validate_output(self, spec: SpecialistAgentSpec, result: SpecialistAgentResult) -> None:
         schema_type = str((spec.output_schema or {}).get('type') or '').strip()
-        if schema_type and not dict(result.output or {}):
-            raise SpecialistAgentRuntimeError('invalid_output', 'Specialist output did not satisfy required schema.')
+        try:
+            validate_specialist_output(schema_type=schema_type, output=dict(result.output or {}))
+        except (OutputSchemaValidationError, ValueError):
+            raise SpecialistAgentRuntimeError('invalid_output', 'Specialist output did not satisfy required schema.') from None
 
     def _emit(
         self,
@@ -92,6 +95,8 @@ class SpecialistAgentGovernor:
                 handoff_id=handoff.handoff_id,
                 agent_id=spec.agent_id,
                 task_kind=handoff.task_kind,
+                domain=str(handoff.task_kind or '').strip().split('.', 1)[0] or None,
+                strategy_id=str(handoff.strategy_id or '').strip() or None,
                 metadata=dict(metadata or {}),
             )
         )
