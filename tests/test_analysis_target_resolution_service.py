@@ -10,8 +10,45 @@ from services.api.analysis_target_resolution_service import (
 )
 
 
+def test_resolve_analysis_target_prefers_explicit_target_contract() -> None:
+    target = resolve_analysis_target(
+        explicit_target={
+            'target_type': 'submission',
+            'target_id': 'submission_7',
+            'source_domain': 'video_homework',
+            'artifact_type': 'video_submission_bundle',
+            'strategy_id': 'video_homework.teacher.submission_review',
+        },
+        explicit_target_id='report_2',
+        target_type='report',
+        artifact_type='survey_evidence_bundle',
+        teacher_id='teacher_1',
+        source_domain='survey',
+        candidates=[
+            {'report_id': 'report_1', 'teacher_id': 'teacher_1'},
+            {'report_id': 'report_2', 'teacher_id': 'teacher_1'},
+        ],
+        session_recent_target={
+            'target_id': 'report_1',
+            'target_type': 'report',
+            'artifact_type': 'survey_evidence_bundle',
+            'teacher_id': 'teacher_1',
+            'source_domain': 'survey',
+        },
+    )
+
+    assert target.target_type == 'submission'
+    assert target.target_id == 'submission_7'
+    assert target.source_domain == 'video_homework'
+    assert target.artifact_type == 'video_submission_bundle'
+    assert target.strategy_id == 'video_homework.teacher.submission_review'
+    assert target.resolution_reason == 'explicit_target'
+
+
+
 def test_resolve_analysis_target_prefers_explicit_report_id() -> None:
     target = resolve_analysis_target(
+        explicit_target=None,
         explicit_target_id='report_2',
         target_type='report',
         artifact_type='survey_evidence_bundle',
@@ -37,6 +74,7 @@ def test_resolve_analysis_target_prefers_explicit_report_id() -> None:
 
 def test_resolve_analysis_target_falls_back_to_recent_session_target() -> None:
     target = resolve_analysis_target(
+        explicit_target=None,
         explicit_target_id=None,
         target_type='report',
         artifact_type='survey_evidence_bundle',
@@ -60,9 +98,30 @@ def test_resolve_analysis_target_falls_back_to_recent_session_target() -> None:
 
 
 
+def test_resolve_analysis_target_supports_class_candidates() -> None:
+    target = resolve_analysis_target(
+        explicit_target=None,
+        explicit_target_id=None,
+        target_type='class',
+        artifact_type='class_report_bundle',
+        teacher_id='teacher_1',
+        source_domain='class_report',
+        candidates=[
+            {'class_id': 'class_2403', 'teacher_id': 'teacher_1'},
+        ],
+        session_recent_target=None,
+    )
+
+    assert target.target_type == 'class'
+    assert target.target_id == 'class_2403'
+    assert target.resolution_reason == 'single_candidate'
+
+
+
 def test_resolve_analysis_target_rejects_ambiguous_candidates_without_explicit_target() -> None:
     with pytest.raises(AnalysisTargetResolutionError) as exc_info:
         resolve_analysis_target(
+            explicit_target=None,
             explicit_target_id=None,
             target_type='report',
             artifact_type='survey_evidence_bundle',
@@ -94,6 +153,7 @@ def test_extract_report_id_from_text_and_build_recent_target_from_messages() -> 
 
     assert recent is not None
     assert recent['target_id'] == 'report_3'
+
 
 
 def test_build_recent_target_from_messages_accepts_structured_ui_target_marker() -> None:

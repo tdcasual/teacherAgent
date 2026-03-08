@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from . import settings
+from .artifacts.registry import build_platform_artifact_registry
 from .artifacts.runtime import ArtifactAdapterRuntime
 from .class_report_service import (
     build_class_report_deps,
@@ -15,9 +16,8 @@ from .class_report_service import (
 )
 from .class_signal_bundle_models import ClassSignalBundle
 from .strategies.planner import build_handoff_plan
-from .strategies.selector import build_default_strategy_selector
+from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .wiring.survey_wiring import build_class_report_specialist_runtime
-from .artifacts.registry import build_platform_artifact_registry
 
 
 @dataclass(frozen=True)
@@ -30,6 +30,8 @@ class ClassReportOrchestratorDeps:
     deliver_report: Callable[..., Dict[str, Any]]
     enqueue_review_item: Callable[..., Dict[str, Any]]
     review_confidence_floor: Callable[[], float]
+    domain_enabled: Callable[[], bool]
+    domain_review_only: Callable[[], bool]
     diag_log: Callable[..., None]
     build_teacher_context: Callable[[Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 
@@ -47,6 +49,8 @@ def build_class_report_orchestrator_deps(core: Any | None = None) -> ClassReport
         deliver_report=lambda **kwargs: deliver_class_report(deps=service_deps, **kwargs),
         enqueue_review_item=lambda **kwargs: enqueue_class_report_review_item(deps=service_deps, **kwargs),
         review_confidence_floor=settings.survey_review_confidence_floor,
+        domain_enabled=lambda: settings.analysis_domain_enabled('class_report'),
+        domain_review_only=lambda: settings.analysis_domain_review_only('class_report'),
         diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
         build_teacher_context=lambda job, bundle: {
             'teacher_id': str(job.get('teacher_id') or '').strip(),
@@ -59,6 +63,25 @@ def build_class_report_orchestrator_deps(core: Any | None = None) -> ClassReport
 
 
 
+def _review_queue_reason(strategy_reason: str) -> str:
+    reason = str(strategy_reason or '').strip()
+    if reason == 'low_confidence_review':
+        return 'low_confidence_bundle'
+    return reason or 'needs_review'
+
+
+
+def _mark_job_failed(job_id: str, deps: ClassReportOrchestratorDeps, *, error: str) -> Dict[str, Any]:
+    job = deps.write_job(job_id, {'status': 'failed', 'error': error})
+    return {
+        'ok': False,
+        'job_id': job_id,
+        'status': str(job.get('status') or 'failed'),
+        'error': error,
+    }
+
+
+
 def process_class_report_job(job_id: str, *, deps: ClassReportOrchestratorDeps) -> Dict[str, Any]:
     job = deps.load_job(job_id)
     status = str(job.get('status') or '').strip().lower()
@@ -66,6 +89,9 @@ def process_class_report_job(job_id: str, *, deps: ClassReportOrchestratorDeps) 
         return {'ok': True, 'job_id': job_id, 'status': str(job.get('status') or '')}
 
     try:
+        if not deps.domain_enabled():
+            return _mark_job_failed(job_id, deps, error='analysis_domain_disabled')
+
         payload = dict(job.get('raw_payload') or {})
         input_type = str(job.get('input_type') or payload.get('input_type') or 'self_hosted_form_json').strip() or 'self_hosted_form_json'
         report_id = str(job.get('report_id') or job_id).strip() or job_id
@@ -90,18 +116,25 @@ def process_class_report_job(job_id: str, *, deps: ClassReportOrchestratorDeps) 
         deps.write_bundle(job_id, bundle.model_dump())
         job = deps.write_job(job_id, {'status': 'bundle_ready'})
 
-        strategy = build_default_strategy_selector(float(deps.review_confidence_floor())).select(
-            role='teacher',
-            artifact=artifact,
-            task_kind='class_report.analysis',
-            target_scope='class',
-        )
+        try:
+            strategy = build_default_strategy_selector(float(deps.review_confidence_floor())).select(
+                role='teacher',
+                artifact=artifact,
+                task_kind='class_report.analysis',
+                target_scope='class',
+                force_review_only=deps.domain_review_only(),
+            )
+        except StrategySelectionError as exc:
+            if exc.code == 'strategy_disabled':
+                return _mark_job_failed(job_id, deps, error='analysis_strategy_disabled')
+            raise
+
         job = deps.write_job(job_id, {'strategy_id': strategy.strategy_id})
         if strategy.review_required:
             item = deps.enqueue_review_item(
                 report_id=report_id,
                 teacher_id=str(job.get('teacher_id') or '').strip(),
-                reason='low_confidence_bundle',
+                reason=_review_queue_reason(strategy.reason),
                 confidence=artifact.confidence,
                 target_id=report_id,
             )

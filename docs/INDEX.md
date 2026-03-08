@@ -55,3 +55,4 @@
 - 问卷多 Agent 实施计划：`docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md`
 
 - B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`
+- Agent 系统优先级优化计划：`docs/plans/2026-03-07-agent-system-priority-optimization-plan.md`

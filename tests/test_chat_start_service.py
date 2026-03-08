@@ -20,6 +20,7 @@ class _FakeRequest:
         self.auto_generate_assignment = None
         self.messages = kwargs.get('messages', [_FakeMsg('user', 'hello')])
         self.attachments = kwargs.get('attachments', [])
+        self.analysis_target = kwargs.get('analysis_target', None)
 
 
 class _FakeMsg:
@@ -136,6 +137,34 @@ class ChatStartServiceTest(unittest.TestCase):
             start_chat_orchestration(req, deps=deps)
         self.assertIn('429', str(ctx.exception))
 
+    def test_request_payload_carries_explicit_analysis_target_contract(self):
+        writes: list[tuple[bool, dict[str, object]]] = []
+
+        def track_write(jid, data, overwrite):
+            writes.append((overwrite, data))
+            return data
+
+        deps, _ = _make_deps(write_chat_job=track_write)
+        req = _FakeRequest(
+            role='teacher',
+            teacher_id='teacher_1',
+            analysis_target={
+                'target_type': 'submission',
+                'target_id': 'submission_7',
+                'source_domain': 'video_homework',
+                'artifact_type': 'video_submission_bundle',
+                'strategy_id': 'video_homework.teacher.submission_review',
+            },
+            messages=[_FakeMsg('user', '请继续深入分析')],
+        )
+
+        start_chat_orchestration(req, deps=deps)
+        initial_record = next(data for overwrite, data in writes if overwrite and 'request' in data)
+        request_payload = initial_record['request']
+        self.assertEqual(request_payload['analysis_target']['target_id'], 'submission_7')
+        self.assertEqual(request_payload['analysis_target']['target_type'], 'submission')
+        self.assertEqual(request_payload['analysis_target']['source_domain'], 'video_homework')
+
     def test_fingerprint_seed_excludes_removed_persona_field(self):
         captured_seed: dict[str, str] = {}
 
@@ -147,6 +176,27 @@ class ChatStartServiceTest(unittest.TestCase):
         req = _FakeRequest(persona_id='persona_lin_dai_yu')
         start_chat_orchestration(req, deps=deps)
         self.assertNotIn('persona_lin_dai_yu', captured_seed.get('value', ''))
+
+    def test_fingerprint_seed_includes_explicit_analysis_target_contract(self):
+        captured_seed: dict[str, str] = {}
+
+        def _capture_seed(seed: str) -> str:
+            captured_seed['value'] = seed
+            return 'fp-static'
+
+        deps, _ = _make_deps(chat_text_fingerprint=_capture_seed)
+        req = _FakeRequest(
+            role='teacher',
+            teacher_id='teacher_1',
+            analysis_target={
+                'target_type': 'submission',
+                'target_id': 'submission_7',
+                'source_domain': 'video_homework',
+            },
+            messages=[_FakeMsg('user', '请继续深入分析')],
+        )
+        start_chat_orchestration(req, deps=deps)
+        self.assertIn('submission_7', captured_seed.get('value', ''))
 
     def test_fingerprint_seed_includes_explicit_analysis_target_marker(self):
         captured_seed: dict[str, str] = {}

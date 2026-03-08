@@ -1,0 +1,75 @@
+{
+  "case_id": "video_homework_long_duration_trimmed",
+  "domain": "video_homework",
+  "mode": "artifact",
+  "edge_case_tags": [
+    "long_duration_submission"
+  ],
+  "payload": {
+    "source_meta": {
+      "source_type": "video_homework_upload",
+      "title": "长视频实验讲解（已裁剪）",
+      "submission_id": "submission_long_1",
+      "uploaded_at": "2026-03-07T10:00:00"
+    },
+    "scope": {
+      "teacher_id": "teacher_1",
+      "student_id": "student_2",
+      "class_name": "高二2403班",
+      "assignment_id": "assignment_2",
+      "submission_kind": "video_homework"
+    },
+    "media_files": [
+      {
+        "file_id": "video_long_1",
+        "kind": "video",
+        "storage_path": "/tmp/video_long_1.mp4",
+        "mime_type": "video/mp4",
+        "bytes": 8192,
+        "duration_sec": 420.0
+      }
+    ],
+    "transcript_segments": [
+      {
+        "segment_id": "asr_long_1",
+        "kind": "asr",
+        "start_sec": 0.0,
+        "end_sec": 12.0,
+        "text": "我先展示器材，再说明为什么只保留关键实验片段。",
+        "confidence": 0.9,
+        "evidence_refs": ["segment:asr_long_1"]
+      }
+    ],
+    "keyframe_evidence": [
+      {
+        "frame_id": "frame_long_1",
+        "timestamp_sec": 18.4,
+        "image_path": "derived/frame_long_1.jpg",
+        "ocr_text": "保留关键实验步骤",
+        "confidence": 0.83
+      }
+    ],
+    "narrative_blocks": [
+      "视频较长，但已裁剪为关键实验步骤与结论讲解。"
+    ],
+    "extraction_status": "completed",
+    "parse_confidence": 0.82,
+    "missing_fields": ["teacher_rubric"],
+    "provenance": {
+      "source": "upload",
+      "trimmed": true,
+      "original_duration_sec": 780.0
+    }
+  },
+  "expected": {
+    "min_confidence": 0.8,
+    "required_fields_present": [
+      "submission_id",
+      "teacher_id",
+      "student_id",
+      "media_files",
+      "evidence_channels"
+    ],
+    "strategy_id": "video_homework.teacher.report"
+  }
+}

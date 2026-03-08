@@ -3,6 +3,7 @@ import type {
   AnalysisReportDetail,
   AnalysisReportSummary,
   AnalysisReviewQueueItem,
+  AnalysisReviewQueueSummary,
 } from '../../../types/workflow'
 
 type UseAnalysisReportsParams = {
@@ -38,6 +39,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
   const [selectedAnalysisReportId, setSelectedAnalysisReportId] = useState('')
   const [selectedAnalysisReport, setSelectedAnalysisReport] = useState<AnalysisReportDetail | null>(null)
   const [analysisReviewQueue, setAnalysisReviewQueue] = useState<AnalysisReviewQueueItem[]>([])
+  const [analysisReviewSummary, setAnalysisReviewSummary] = useState<AnalysisReviewQueueSummary | null>(null)
   const [analysisDomainFilter, setAnalysisDomainFilter] = useState('')
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState('')
   const [analysisStrategyFilter, setAnalysisStrategyFilter] = useState('')
@@ -65,6 +67,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     if (!enabled || !teacherId) {
       setAnalysisReports([])
       setAnalysisReviewQueue([])
+      setAnalysisReviewSummary(null)
       setSelectedAnalysisReportId('')
       setSelectedAnalysisReport(null)
       setAnalysisReportsError('')
@@ -86,12 +89,14 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
 
       const [reportsRes, reviewRes] = await Promise.all([
         fetchJson<{ items: AnalysisReportSummary[] }>(reportsUrl),
-        fetchJson<{ items: AnalysisReviewQueueItem[] }>(reviewUrl),
+        fetchJson<{ items: AnalysisReviewQueueItem[]; summary?: AnalysisReviewQueueSummary }>(reviewUrl),
       ])
       const nextReports = Array.isArray(reportsRes.items) ? reportsRes.items : []
       const nextReviewQueue = Array.isArray(reviewRes.items) ? reviewRes.items : []
+      const nextReviewSummary = reviewRes.summary ?? null
       setAnalysisReports(nextReports)
       setAnalysisReviewQueue(nextReviewQueue)
+      setAnalysisReviewSummary(nextReviewSummary)
       setAnalysisReportsError('')
 
       if (selectedAnalysisReportId) {
@@ -157,6 +162,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     selectedAnalysisReportId,
     selectedAnalysisReport,
     analysisReviewQueue,
+    analysisReviewSummary,
     analysisDomainFilter,
     analysisStatusFilter,
     analysisStrategyFilter,

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
+from .. import settings
 from ..artifacts.contracts import ArtifactEnvelope
 from .contracts import StrategyDecision, StrategySpec
 
@@ -13,8 +14,18 @@ class StrategySelectionError(RuntimeError):
 
 
 class StrategySelector:
-    def __init__(self, specs: Iterable[StrategySpec]):
+    def __init__(
+        self,
+        specs: Iterable[StrategySpec],
+        *,
+        disabled_strategy_ids: Iterable[str] | None = None,
+    ):
         self._specs = list(specs)
+        self._disabled_strategy_ids = {
+            str(strategy_id or '').strip().lower()
+            for strategy_id in list(disabled_strategy_ids or [])
+            if str(strategy_id or '').strip()
+        }
 
     def select(
         self,
@@ -23,6 +34,7 @@ class StrategySelector:
         artifact: ArtifactEnvelope,
         task_kind: str,
         target_scope: Optional[str] = None,
+        force_review_only: bool = False,
     ) -> StrategyDecision:
         role_final = str(role or '').strip()
         task_kind_final = str(task_kind or '').strip()
@@ -54,11 +66,19 @@ class StrategySelector:
             ),
             reverse=True,
         )[0]
+        strategy_id = str(spec.strategy_id or '').strip()
+        if strategy_id.lower() in self._disabled_strategy_ids:
+            raise StrategySelectionError('strategy_disabled', f'Strategy disabled: {strategy_id}')
+
         confidence = artifact.confidence
         review_required = spec.review_policy == 'always_review'
         delivery_mode = spec.delivery_mode
         reason = 'selected'
-        if (
+        if force_review_only:
+            review_required = True
+            delivery_mode = 'review_queue'
+            reason = 'domain_review_only'
+        elif (
             spec.review_policy == 'auto_on_low_confidence'
             and spec.confidence_floor is not None
             and confidence is not None
@@ -69,7 +89,7 @@ class StrategySelector:
             reason = 'low_confidence_review'
 
         return StrategyDecision(
-            strategy_id=spec.strategy_id,
+            strategy_id=strategy_id,
             specialist_agent=spec.specialist_agent,
             task_kind=task_kind_final,
             review_policy=spec.review_policy,
@@ -82,60 +102,17 @@ class StrategySelector:
 
 
 
-def build_default_strategy_selector(review_confidence_floor: float = 0.7) -> StrategySelector:
-    return StrategySelector(
-        [
-            StrategySpec(
-                strategy_id='survey.teacher.report',
-                accepted_artifacts=['survey_evidence_bundle'],
-                task_kinds=['survey.analysis'],
-                specialist_agent='survey_analyst',
-                review_policy='auto_on_low_confidence',
-                delivery_mode='teacher_report',
-                roles=['teacher'],
-                target_scopes=['class'],
-                confidence_floor=float(review_confidence_floor),
-                budget={'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2},
-                return_schema={'type': 'analysis_artifact'},
-            ),
-            StrategySpec(
-                strategy_id='survey.chat.followup',
-                accepted_artifacts=['survey_evidence_bundle'],
-                task_kinds=['survey.chat_followup'],
-                specialist_agent='survey_analyst',
-                review_policy='auto_on_low_confidence',
-                delivery_mode='chat_reply',
-                roles=['teacher'],
-                target_scopes=['class'],
-                confidence_floor=float(review_confidence_floor),
-                budget={'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2},
-                return_schema={'type': 'analysis_artifact'},
-            ),
-            StrategySpec(
-                strategy_id='class_signal.teacher.report',
-                accepted_artifacts=['class_signal_bundle'],
-                task_kinds=['class_report.analysis'],
-                specialist_agent='class_signal_analyst',
-                review_policy='auto_on_low_confidence',
-                delivery_mode='teacher_report',
-                roles=['teacher'],
-                target_scopes=['class'],
-                confidence_floor=float(review_confidence_floor),
-                budget={'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2},
-                return_schema={'type': 'analysis_artifact'},
-            ),
-            StrategySpec(
-                strategy_id='video_homework.teacher.report',
-                accepted_artifacts=['multimodal_submission_bundle'],
-                task_kinds=['video_homework.analysis'],
-                specialist_agent='video_homework_analyst',
-                review_policy='auto_on_low_confidence',
-                delivery_mode='teacher_report',
-                roles=['teacher'],
-                target_scopes=['student'],
-                confidence_floor=float(review_confidence_floor),
-                budget={'max_tokens': 1600, 'timeout_sec': 45, 'max_steps': 2},
-                return_schema={'type': 'analysis_artifact'},
-            ),
-        ]
-    )
+def build_default_strategy_selector(
+    review_confidence_floor: float = 0.7,
+    *,
+    manifest_registry: Any | None = None,
+    disabled_strategy_ids: Iterable[str] | None = None,
+) -> StrategySelector:
+    if manifest_registry is None:
+        from ..domains.manifest_registry import build_default_domain_manifest_registry
+
+        manifest_registry = build_default_domain_manifest_registry(review_confidence_floor)
+    if disabled_strategy_ids is None:
+        disabled_strategy_ids = settings.analysis_disabled_strategies()
+    specs = [spec for manifest in manifest_registry.list() for spec in manifest.strategies]
+    return StrategySelector(specs, disabled_strategy_ids=disabled_strategy_ids)

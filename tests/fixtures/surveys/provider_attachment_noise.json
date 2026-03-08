@@ -1,0 +1,40 @@
+{
+  "case_id": "survey_provider_attachment_noise",
+  "mode": "unstructured",
+  "provider": "provider",
+  "edge_case_tags": [
+    "provider_attachment_noise"
+  ],
+  "payload": {
+    "submission_id": "sub-provider-noise-1",
+    "teacher_id": "teacher_1",
+    "class_name": "高二2403班",
+    "attachments": [
+      {
+        "name": "voice-note.m4a",
+        "kind": "audio",
+        "text": "学生自由讨论录音，和问卷统计无直接关系。"
+      },
+      {
+        "name": "cover.png",
+        "kind": "image",
+        "text": "封面截图 无关键统计字段"
+      },
+      {
+        "name": "report.html",
+        "kind": "web",
+        "html": "<div>问卷标题: 课堂反馈问卷</div><div>样本量: 38</div><div>Q1: 课堂节奏是否合适？</div><div>适中=24</div><div>偏快=9</div><div>偏慢=5</div><div>主题: 作业讲解节奏 | count=4 | excerpts=例题讲解略快；希望多一点停顿</div>"
+      }
+    ]
+  },
+  "expected": {
+    "min_confidence": 0.55,
+    "required_fields_present": [
+      "title",
+      "teacher_id",
+      "class_name",
+      "sample_size",
+      "question_summaries"
+    ]
+  }
+}

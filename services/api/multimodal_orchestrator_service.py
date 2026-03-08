@@ -14,7 +14,7 @@ from .multimodal_report_service import (
 from .multimodal_repository import load_multimodal_submission_view
 from .multimodal_submission_models import MultimodalSubmissionBundle
 from .strategies.planner import build_handoff_plan
-from .strategies.selector import build_default_strategy_selector
+from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .wiring.survey_wiring import build_multimodal_specialist_runtime
 
 
@@ -27,6 +27,8 @@ class MultimodalOrchestratorDeps:
     deliver_report: Callable[..., Dict[str, Any]]
     enqueue_review_item: Callable[..., Dict[str, Any]]
     review_confidence_floor: Callable[[], float]
+    domain_enabled: Callable[[], bool]
+    domain_review_only: Callable[[], bool]
     diag_log: Callable[..., None]
     build_teacher_context: Callable[[Dict[str, Any]], Dict[str, Any]]
 
@@ -42,6 +44,8 @@ def build_multimodal_orchestrator_deps(core: Any | None = None) -> MultimodalOrc
         deliver_report=lambda **kwargs: deliver_multimodal_report(deps=service_deps, **kwargs),
         enqueue_review_item=lambda **kwargs: enqueue_multimodal_review_item(deps=service_deps, **kwargs),
         review_confidence_floor=settings.survey_review_confidence_floor,
+        domain_enabled=lambda: settings.analysis_domain_enabled('video_homework'),
+        domain_review_only=lambda: settings.analysis_domain_review_only('video_homework'),
         diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
         build_teacher_context=lambda bundle: {
             'teacher_id': str((bundle.get('scope') or {}).get('teacher_id') or '').strip(),
@@ -55,6 +59,25 @@ def build_multimodal_orchestrator_deps(core: Any | None = None) -> MultimodalOrc
 
 
 
+def _review_queue_reason(strategy_reason: str) -> str:
+    reason = str(strategy_reason or '').strip()
+    if reason == 'low_confidence_review':
+        return 'low_confidence_bundle'
+    return reason or 'needs_review'
+
+
+
+def _mark_job_failed(submission_id: str, deps: MultimodalOrchestratorDeps, *, error: str) -> Dict[str, Any]:
+    job = deps.write_job(submission_id, {'status': 'failed', 'error': error})
+    return {
+        'ok': False,
+        'submission_id': submission_id,
+        'status': str(job.get('status') or 'failed'),
+        'error': error,
+    }
+
+
+
 def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchestratorDeps) -> Dict[str, Any]:
     job = deps.load_job(submission_id)
     status = str(job.get('status') or '').strip().lower()
@@ -62,6 +85,9 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
         return {'ok': True, 'submission_id': submission_id, 'status': str(job.get('status') or '')}
 
     try:
+        if not deps.domain_enabled():
+            return _mark_job_failed(submission_id, deps, error='analysis_domain_disabled')
+
         bundle = MultimodalSubmissionBundle.model_validate(deps.load_submission(submission_id))
         if bundle.extraction_status not in {'completed', 'partial'}:
             raise ValueError('multimodal_artifact_not_ready')
@@ -85,18 +111,25 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
         )
 
         artifact = bundle.to_artifact_envelope()
-        strategy = build_default_strategy_selector(float(deps.review_confidence_floor())).select(
-            role='teacher',
-            artifact=artifact,
-            task_kind='video_homework.analysis',
-            target_scope='student',
-        )
+        try:
+            strategy = build_default_strategy_selector(float(deps.review_confidence_floor())).select(
+                role='teacher',
+                artifact=artifact,
+                task_kind='video_homework.analysis',
+                target_scope='student',
+                force_review_only=deps.domain_review_only(),
+            )
+        except StrategySelectionError as exc:
+            if exc.code == 'strategy_disabled':
+                return _mark_job_failed(submission_id, deps, error='analysis_strategy_disabled')
+            raise
+
         job = deps.write_job(submission_id, {'strategy_id': strategy.strategy_id})
         if strategy.review_required:
             item = deps.enqueue_review_item(
                 report_id=report_id,
                 teacher_id=teacher_id,
-                reason='low_confidence_bundle',
+                reason=_review_queue_reason(strategy.reason),
                 confidence=artifact.confidence,
                 target_id=submission_id,
             )

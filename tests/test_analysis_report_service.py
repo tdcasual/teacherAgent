@@ -204,3 +204,50 @@ def test_list_analysis_reports_supports_video_homework_domain(tmp_path: Path) ->
     assert [item['report_id'] for item in result['items']] == ['submission_1']
     assert result['items'][0]['analysis_type'] == 'video_homework'
     assert result['items'][0]['target_type'] == 'submission'
+
+
+def test_list_analysis_review_queue_returns_summary_and_unresolved_filter() -> None:
+    deps = build_analysis_report_deps(object())
+    deps = deps.__class__(
+        providers=deps.providers,
+        now_iso=deps.now_iso,
+        list_review_queue=lambda teacher_id, domain=None, status=None: {
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'report_id': 'report_1',
+                    'teacher_id': 'teacher_1',
+                    'status': 'queued',
+                    'reason': 'low_confidence_bundle',
+                    'reason_code': 'low_confidence',
+                    'disposition': 'open',
+                },
+                {
+                    'item_id': 'rvw_2',
+                    'domain': 'class_report',
+                    'report_id': 'report_9',
+                    'teacher_id': 'teacher_1',
+                    'status': 'dismissed',
+                    'reason': 'missing_fields',
+                    'reason_code': 'missing_fields',
+                    'disposition': 'dismissed',
+                },
+            ],
+            'summary': {
+                'total_items': 2,
+                'unresolved_items': 1,
+                'reason_counts': {'low_confidence': 1, 'missing_fields': 1},
+                'domains': [
+                    {'domain': 'class_report', 'total_items': 1, 'unresolved_items': 0},
+                    {'domain': 'survey', 'total_items': 1, 'unresolved_items': 1},
+                ],
+            },
+        },
+    )
+
+    result = list_analysis_review_queue(teacher_id='teacher_1', domain=None, status='unresolved', deps=deps)
+
+    assert [item['item_id'] for item in result['items']] == ['rvw_1']
+    assert result['summary']['unresolved_items'] == 1
+    assert result['summary']['reason_counts']['low_confidence'] == 1

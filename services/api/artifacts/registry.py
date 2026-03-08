@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from .contracts import ArtifactEnvelope
 
@@ -76,8 +76,7 @@ class ArtifactAdapterRegistry:
 
 
 
-def build_platform_artifact_registry(core: Any | None = None) -> ArtifactAdapterRegistry:
-    del core
+def _default_adapter_lookup() -> Dict[str, ArtifactAdapter]:
     from ..report_adapters import (
         adapt_pdf_report_summary,
         adapt_self_hosted_form_json,
@@ -85,45 +84,32 @@ def build_platform_artifact_registry(core: Any | None = None) -> ArtifactAdapter
     )
     from ..survey_bundle_models import SurveyEvidenceBundle
 
+    return {
+        'survey.bundle.adapter': lambda payload, _context=None: SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope(),
+        'class_report.self_hosted_form.adapter': adapt_self_hosted_form_json,
+        'class_report.web_export.adapter': adapt_web_export_html,
+        'class_report.pdf_summary.adapter': adapt_pdf_report_summary,
+    }
+
+
+
+def build_artifact_registry_from_manifests(manifests: Iterable[Any]) -> ArtifactAdapterRegistry:
     registry = ArtifactAdapterRegistry()
-    registry.register(
-        ArtifactAdapterSpec(
-            adapter_id='survey.bundle.adapter',
-            accepted_inputs=['survey_bundle'],
-            output_artifact_type='survey_evidence_bundle',
-            task_kinds=['survey.analysis', 'survey.chat_followup'],
-            validation_rules=[],
-        ),
-        adapter=lambda payload, _context=None: SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope(),
-    )
-    registry.register(
-        ArtifactAdapterSpec(
-            adapter_id='class_report.self_hosted_form.adapter',
-            accepted_inputs=['self_hosted_form_json'],
-            output_artifact_type='class_signal_bundle',
-            task_kinds=['class_report.analysis'],
-            validation_rules=['teacher_id_required'],
-        ),
-        adapter=adapt_self_hosted_form_json,
-    )
-    registry.register(
-        ArtifactAdapterSpec(
-            adapter_id='class_report.web_export.adapter',
-            accepted_inputs=['web_export_html'],
-            output_artifact_type='class_signal_bundle',
-            task_kinds=['class_report.analysis'],
-            validation_rules=['teacher_id_required'],
-        ),
-        adapter=adapt_web_export_html,
-    )
-    registry.register(
-        ArtifactAdapterSpec(
-            adapter_id='class_report.pdf_summary.adapter',
-            accepted_inputs=['pdf_report_summary'],
-            output_artifact_type='class_signal_bundle',
-            task_kinds=['class_report.analysis'],
-            validation_rules=['teacher_id_required'],
-        ),
-        adapter=adapt_pdf_report_summary,
-    )
+    adapter_lookup = _default_adapter_lookup()
+    for manifest in manifests:
+        for spec in list(getattr(manifest, 'artifact_adapters', []) or []):
+            adapter = adapter_lookup.get(spec.adapter_id)
+            if adapter is None:
+                raise ArtifactAdapterNotFoundError(spec.adapter_id)
+            registry.register(spec, adapter=adapter)
     return registry
+
+
+
+def build_platform_artifact_registry(core: Any | None = None, *, manifest_registry: Any | None = None) -> ArtifactAdapterRegistry:
+    del core
+    if manifest_registry is None:
+        from ..domains.manifest_registry import build_default_domain_manifest_registry
+
+        manifest_registry = build_default_domain_manifest_registry()
+    return build_artifact_registry_from_manifests(manifest_registry.list())

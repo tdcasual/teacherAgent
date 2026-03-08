@@ -46,7 +46,7 @@ export type UseTeacherChatApiParams = {
   studentMemoryStudentFilter: string
   skillsOpen: boolean
   workbenchTab: WorkbenchTab
-  selectedAnalysisTarget: AnalysisReportSummary | null
+  selectedAnalysisTarget?: AnalysisReportSummary | null
 
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setSending: React.Dispatch<React.SetStateAction<boolean>>
@@ -99,7 +99,25 @@ const toErrorMessage = (error: unknown, fallback = '请求失败') => {
   return toUserFacingErrorMessage(error, fallback)
 }
 
-const buildAnalysisTargetContextMessage = (target: AnalysisReportSummary | null): string => {
+const buildAnalysisTargetContract = (target: AnalysisReportSummary | null | undefined): Record<string, string> | null => {
+  if (!target) return null
+  const reportId = String(target.report_id || '').trim()
+  const targetId = String(target.target_id || reportId).trim()
+  if (!targetId) return null
+  const domain = String(target.domain || target.analysis_type || '').trim()
+  const targetType = String(target.target_type || '').trim() || 'report'
+  const strategyId = String(target.strategy_id || '').trim()
+  const analysisTarget: Record<string, string> = {
+    target_type: targetType,
+    target_id: targetId,
+  }
+  if (domain) analysisTarget.source_domain = domain
+  if (targetType === 'report' && reportId) analysisTarget.report_id = reportId
+  if (strategyId) analysisTarget.strategy_id = strategyId
+  return analysisTarget
+}
+
+const buildAnalysisTargetContextMessage = (target: AnalysisReportSummary | null | undefined): string => {
   if (!target) return ''
   const reportId = String(target.report_id || '').trim()
   const targetId = String(target.target_id || reportId).trim()
@@ -653,6 +671,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       })
       setInput('')
 
+      const analysisTarget = buildAnalysisTargetContract(selectedAnalysisTarget)
       const analysisTargetContext = buildAnalysisTargetContextMessage(selectedAnalysisTarget)
       const contextSeed = analysisTargetContext
         ? [...messages, { id: 'analysis_target', role: 'assistant' as const, content: analysisTargetContext, time: '' }]
@@ -674,6 +693,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             teacher_id: teacherId || undefined,
             skill_id: routingDecision.skillIdForRequest,
             attachments: attachmentRefs.length ? attachmentRefs : undefined,
+            analysis_target: analysisTarget || undefined,
           }),
         })
         if (!res.ok) {

@@ -1,0 +1,71 @@
+{
+  "case_id": "video_homework_ocr_noise_case",
+  "domain": "video_homework",
+  "mode": "artifact",
+  "edge_case_tags": [
+    "ocr_noise"
+  ],
+  "payload": {
+    "source_meta": {
+      "source_type": "video_homework_upload",
+      "title": "OCR 噪声短视频作业",
+      "submission_id": "submission_ocr_1",
+      "uploaded_at": "2026-03-07T10:00:00"
+    },
+    "scope": {
+      "teacher_id": "teacher_1",
+      "student_id": "student_3",
+      "class_name": "高二2403班",
+      "assignment_id": "assignment_3",
+      "submission_kind": "video_homework"
+    },
+    "media_files": [
+      {
+        "file_id": "video_ocr_1",
+        "kind": "video",
+        "storage_path": "/tmp/video_ocr_1.mp4",
+        "mime_type": "video/mp4",
+        "bytes": 4096,
+        "duration_sec": 64.0
+      }
+    ],
+    "transcript_segments": [
+      {
+        "segment_id": "asr_ocr_1",
+        "kind": "asr",
+        "start_sec": 0.0,
+        "end_sec": 5.0,
+        "text": "我先解释实验误差来源。",
+        "confidence": 0.78,
+        "evidence_refs": ["segment:asr_ocr_1"]
+      }
+    ],
+    "keyframe_evidence": [
+      {
+        "frame_id": "frame_ocr_1",
+        "timestamp_sec": 6.2,
+        "image_path": "derived/frame_ocr_1.jpg",
+        "ocr_text": "酒?灯 量筒 ???",
+        "confidence": 0.44
+      }
+    ],
+    "extraction_status": "completed",
+    "parse_confidence": 0.64,
+    "missing_fields": ["teacher_rubric", "clear_frame_labels"],
+    "provenance": {
+      "source": "upload",
+      "ocr_noise": true
+    }
+  },
+  "expected": {
+    "min_confidence": 0.6,
+    "required_fields_present": [
+      "submission_id",
+      "teacher_id",
+      "student_id",
+      "media_files",
+      "evidence_channels"
+    ],
+    "strategy_id": "video_homework.teacher.report"
+  }
+}
