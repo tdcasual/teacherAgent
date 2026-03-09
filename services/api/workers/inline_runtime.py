@@ -7,11 +7,11 @@ from services.api.workers.exam_worker_service import (
     start_exam_upload_worker,
     stop_exam_upload_worker,
 )
-from services.api.workers.survey_worker_service import start_survey_worker, stop_survey_worker
 from services.api.workers.profile_update_worker_service import (
     start_profile_update_worker,
     stop_profile_update_worker,
 )
+from services.api.workers.survey_worker_service import start_survey_worker, stop_survey_worker
 from services.api.workers.upload_worker_service import start_upload_worker, stop_upload_worker
 
 

@@ -6,7 +6,10 @@ from fastapi import APIRouter, Body, HTTPException
 
 from .. import settings
 from ..media_extract_service import build_media_extract_deps, extract_multimodal_submission
-from ..multimodal_orchestrator_service import build_multimodal_orchestrator_deps, process_multimodal_submission
+from ..multimodal_orchestrator_service import (
+    build_multimodal_orchestrator_deps,
+    process_multimodal_submission,
+)
 from ..multimodal_repository import (
     ensure_multimodal_media_dir,
     load_multimodal_submission,
@@ -17,7 +20,6 @@ from ..multimodal_repository import (
 from ..multimodal_submission_models import MultimodalSubmissionBundle
 from ..paths import safe_fs_id
 from .teacher_route_helpers import scoped_teacher_id
-
 
 
 def _enforce_submission_teacher_scope(payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -75,8 +75,9 @@ def enqueue_review_item(
     )
     deps.metadata_repo.append_jsonl(deps.queue_log, item.model_dump(exclude_none=True))
     metrics_service = getattr(deps, 'metrics_service', None)
-    if hasattr(metrics_service, 'record_review_downgrade'):
-        metrics_service.record_review_downgrade(
+    record_review_downgrade = getattr(metrics_service, 'record_review_downgrade', None)
+    if callable(record_review_downgrade):
+        record_review_downgrade(
             domain=item.domain,
             strategy_id=item.strategy_id,
             agent_id=None,

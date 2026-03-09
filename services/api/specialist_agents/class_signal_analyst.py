@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ..class_signal_bundle_models import ClassSignalBundle
@@ -143,7 +142,8 @@ def _normalize_recommendations(value: Any, fallback: List[str]) -> List[str]:
 
 
 def _normalize_artifact(parsed: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:
-    confidence_and_gaps = parsed.get('confidence_and_gaps') if isinstance(parsed.get('confidence_and_gaps'), dict) else {}
+    raw_confidence_and_gaps = parsed.get('confidence_and_gaps')
+    confidence_and_gaps: Dict[str, Any] = raw_confidence_and_gaps if isinstance(raw_confidence_and_gaps, dict) else {}
     confidence = _safe_float(confidence_and_gaps.get('confidence'))
     if confidence is None:
         confidence = _safe_float((fallback.get('confidence_and_gaps') or {}).get('confidence'))

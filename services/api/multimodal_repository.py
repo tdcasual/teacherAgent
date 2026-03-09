@@ -5,8 +5,11 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .job_repository import _atomic_write_json
-from .paths import multimodal_extraction_path, multimodal_submission_media_dir, multimodal_submission_meta_path
-
+from .paths import (
+    multimodal_extraction_path,
+    multimodal_submission_media_dir,
+    multimodal_submission_meta_path,
+)
 
 
 def write_multimodal_submission(submission_id: str, payload: Dict[str, Any], *, core: Any | None = None) -> Path:

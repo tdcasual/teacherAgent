@@ -181,7 +181,8 @@ def _normalize_recommendations(value: Any, fallback: List[str]) -> List[str]:
 
 def _normalize_artifact(parsed: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:
     sanitized = {key: value for key, value in parsed.items() if key not in _DISALLOWED_OUTPUT_KEYS}
-    confidence_and_gaps = sanitized.get('confidence_and_gaps') if isinstance(sanitized.get('confidence_and_gaps'), dict) else {}
+    raw_confidence_and_gaps = sanitized.get('confidence_and_gaps')
+    confidence_and_gaps: Dict[str, Any] = raw_confidence_and_gaps if isinstance(raw_confidence_and_gaps, dict) else {}
     confidence = _safe_float(confidence_and_gaps.get('confidence'))
     if confidence is None:
         confidence = _safe_float((fallback.get('confidence_and_gaps') or {}).get('confidence'))

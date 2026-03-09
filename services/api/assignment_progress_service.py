@@ -146,12 +146,14 @@ def _attempt_meets_min_graded_total(attempt: Dict[str, Any], min_graded_total: i
     if attempt.get("valid_submission") is False:
         return False
     try:
-        if float(attempt.get("score_earned")) > 0:
+        score_earned_raw = attempt.get("score_earned")
+        if score_earned_raw is not None and float(str(score_earned_raw)) > 0:
             return True
     except Exception:  # policy: allowed-broad-except
         pass  # policy: allowed-broad-except
     try:
-        if float(attempt.get("score")) > 0:
+        score_raw = attempt.get("score")
+        if score_raw is not None and float(str(score_raw)) > 0:
             return True
     except Exception:  # policy: allowed-broad-except
         pass  # policy: allowed-broad-except

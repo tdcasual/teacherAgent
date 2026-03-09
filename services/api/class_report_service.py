@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .analysis_lineage_service import extract_analysis_lineage
 from .analysis_metadata_repository import FileBackedAnalysisMetadataRepository
@@ -21,7 +21,7 @@ class ClassReportServiceError(Exception):
 class ClassReportDeps:
     metadata_repo: FileBackedAnalysisMetadataRepository
     review_queue_deps: ReviewQueueDeps
-    now_iso: callable
+    now_iso: Callable[[], str]
     metrics_service: Any | None = None
 
 
@@ -251,8 +251,9 @@ def rerun_class_report(report_id: str, *, teacher_id: str, reason: str | None, d
     else:
         write_class_report_job(report_id, updates, deps=deps)
     metrics_service = getattr(deps, 'metrics_service', None)
-    if hasattr(metrics_service, 'record_rerun'):
-        metrics_service.record_rerun(
+    record_rerun = getattr(metrics_service, 'record_rerun', None)
+    if callable(record_rerun):
+        record_rerun(
             domain='class_report',
             strategy_id=str(payload.get('strategy_id') or 'class_signal.teacher.report').strip() or 'class_signal.teacher.report',
         )

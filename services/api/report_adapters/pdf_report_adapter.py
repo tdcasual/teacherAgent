@@ -11,11 +11,10 @@ from ..class_signal_bundle_models import (
 )
 from ..upload_text_service import clean_ocr_text, split_nonempty_lines
 
-
 _ADAPTER_ID = 'class_report.pdf_summary.adapter'
 
 
-def adapt_pdf_report_summary(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None):
+def adapt_pdf_report_summary(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     payload_final = dict(payload or {})
     context_final = dict(context or {})
     normalized_text = clean_ocr_text(str(payload_final.get('text') or payload_final.get('report_text') or ''))

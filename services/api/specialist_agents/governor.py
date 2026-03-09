@@ -30,7 +30,7 @@ class SpecialistAgentGovernor:
         *,
         handoff: HandoffContract,
         spec: SpecialistAgentSpec,
-        runner,
+        runner: Callable[[HandoffContract], SpecialistAgentResult],
     ) -> SpecialistAgentResult:
         request = HandoffContract.model_validate(handoff)
         self._emit('prepared', request, spec)

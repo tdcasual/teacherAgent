@@ -12,7 +12,6 @@ from .survey_bundle_models import (
 )
 
 
-
 def _missing_fields(payload: Dict[str, Any]) -> List[str]:
     required = ("title", "teacher_id", "class_name")
     return [name for name in required if not str(payload.get(name) or "").strip()]

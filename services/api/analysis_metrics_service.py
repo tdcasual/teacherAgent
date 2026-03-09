@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import DefaultDict, Dict
+from typing import Any, DefaultDict, Dict
 
 from .specialist_agents.events import SpecialistRuntimeEvent
 
@@ -85,7 +85,7 @@ class AnalysisMetricsService:
             counter_key='rerun_count',
         )
 
-    def snapshot(self) -> Dict[str, Dict]:
+    def snapshot(self) -> Dict[str, Any]:
         counters = dict(_COUNTER_DEFAULTS)
         counters.update({key: int(value) for key, value in self._counters.items()})
         return {

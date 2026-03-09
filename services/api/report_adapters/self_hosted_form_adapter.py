@@ -11,11 +11,10 @@ from ..class_signal_bundle_models import (
     ClassSignalThemeLike,
 )
 
-
 _ADAPTER_ID = 'class_report.self_hosted_form.adapter'
 
 
-def adapt_self_hosted_form_json(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None):
+def adapt_self_hosted_form_json(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     payload_final = dict(payload or {})
     context_final = dict(context or {})
     teacher_id = str(payload_final.get('teacher_id') or '').strip()

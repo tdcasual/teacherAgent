@@ -249,7 +249,7 @@ def _handle_specialist_runtime_failure(
     return {'ok': True, 'submission_id': submission_id, 'status': job['status'], 'report_id': item['report_id']}
 
 
-def _load_job_optional(submission_id: str, service_deps) -> Dict[str, Any]:
+def _load_job_optional(submission_id: str, service_deps: Any) -> Dict[str, Any]:
     try:
         return load_multimodal_report_job(submission_id, deps=service_deps)
     except FileNotFoundError:

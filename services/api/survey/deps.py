@@ -2,16 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Literal
 
 from ..survey_bundle_merge_service import merge_survey_evidence_bundles
 from ..survey_normalize_structured_service import normalize_structured_survey_payload
 from ..survey_report_parse_service import SurveyReportParseDeps, parse_survey_report_payload
 from ..survey_report_service import (
     build_survey_report_deps,
+)
+from ..survey_report_service import (
     get_survey_report as _get_survey_report_impl,
+)
+from ..survey_report_service import (
     list_survey_reports as _list_survey_reports_impl,
+)
+from ..survey_report_service import (
     list_survey_review_queue as _list_survey_review_queue_impl,
+)
+from ..survey_report_service import (
     rerun_survey_report as _rerun_survey_report_impl,
 )
 from ..upload_text_service import (
@@ -38,7 +46,7 @@ class _NoopLimit:
     def __enter__(self) -> None:
         return None
 
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Literal[False]:
         return False
 
 

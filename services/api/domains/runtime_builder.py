@@ -7,6 +7,7 @@ from ..specialist_agents.class_signal_analyst import (
     load_class_signal_analyst_prompt,
     run_class_signal_analyst,
 )
+from ..specialist_agents.events import SpecialistRuntimeEvent
 from ..specialist_agents.governor import SpecialistAgentGovernor
 from ..specialist_agents.registry import SpecialistAgentRegistry
 from ..specialist_agents.runtime import SpecialistAgentRuntime
@@ -117,7 +118,7 @@ def build_domain_specialist_runtime(
     diag_log = getattr(core, 'diag_log', lambda *_args, **_kwargs: None)
     metrics = getattr(core, 'analysis_metrics_service', None)
 
-    def _event_sink(event) -> None:
+    def _event_sink(event: SpecialistRuntimeEvent) -> None:
         diag_log(
             f'specialist.runtime.{event.phase}',
             {
@@ -130,8 +131,9 @@ def build_domain_specialist_runtime(
                 **dict(event.metadata or {}),
             },
         )
-        if hasattr(metrics, 'record'):
-            metrics.record(event)
+        metrics_record = getattr(metrics, 'record', None)
+        if callable(metrics_record):
+            metrics_record(event)
 
     return SpecialistAgentRuntime(
         registry,
@@ -146,8 +148,8 @@ def _build_runner(
     deps: Any,
     payload_constraint_key: str,
     teacher_context_key: str,
-):
-    def _runner(handoff):
+) -> Runner:
+    def _runner(handoff: Any) -> Any:
         constraints = handoff.constraints if isinstance(handoff.constraints, dict) else {}
         return runner_impl(
             handoff=handoff,

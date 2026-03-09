@@ -14,7 +14,6 @@ from .paths import (
 )
 
 
-
 def _safe_payload_name(name: str) -> str:
     cleaned = re.sub(r"[^\w.-]+", "_", str(name or "payload.json")).strip("._")
     return cleaned or "payload.json"

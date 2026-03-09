@@ -387,8 +387,9 @@ def rerun_survey_report(
     else:
         deps.write_survey_job(report_id, updates)
     metrics_service = getattr(deps, 'metrics_service', None)
-    if hasattr(metrics_service, 'record_rerun'):
-        metrics_service.record_rerun(
+    record_rerun = getattr(metrics_service, 'record_rerun', None)
+    if callable(record_rerun):
+        record_rerun(
             domain='survey',
             strategy_id=str(payload.get('strategy_id') or 'survey.teacher.report').strip() or 'survey.teacher.report',
         )

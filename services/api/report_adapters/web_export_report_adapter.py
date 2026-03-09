@@ -11,11 +11,10 @@ from ..class_signal_bundle_models import (
 )
 from ..upload_text_service import extract_text_from_html, split_nonempty_lines
 
-
 _ADAPTER_ID = 'class_report.web_export.adapter'
 
 
-def adapt_web_export_html(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None):
+def adapt_web_export_html(payload: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     payload_final = dict(payload or {})
     context_final = dict(context or {})
     raw_html = str(payload_final.get('html') or '').strip()

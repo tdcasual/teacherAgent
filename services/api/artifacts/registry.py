@@ -8,6 +8,16 @@ from .contracts import ArtifactEnvelope
 ArtifactAdapter = Callable[[Dict[str, Any], Optional[Dict[str, Any]]], ArtifactEnvelope | Dict[str, Any]]
 
 
+def _adapt_survey_bundle(
+    payload: Dict[str, Any],
+    _context: Optional[Dict[str, Any]] = None,
+) -> ArtifactEnvelope:
+    del _context
+    from ..survey_bundle_models import SurveyEvidenceBundle
+
+    return SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope()
+
+
 class ArtifactAdapterNotFoundError(KeyError):
     pass
 
@@ -82,10 +92,9 @@ def _default_adapter_lookup() -> Dict[str, ArtifactAdapter]:
         adapt_self_hosted_form_json,
         adapt_web_export_html,
     )
-    from ..survey_bundle_models import SurveyEvidenceBundle
 
     return {
-        'survey.bundle.adapter': lambda payload, _context=None: SurveyEvidenceBundle.model_validate(payload).to_artifact_envelope(),
+        'survey.bundle.adapter': _adapt_survey_bundle,
         'class_report.self_hosted_form.adapter': adapt_self_hosted_form_json,
         'class_report.web_export.adapter': adapt_web_export_html,
         'class_report.pdf_summary.adapter': adapt_pdf_report_summary,

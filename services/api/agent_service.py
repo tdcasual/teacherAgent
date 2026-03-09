@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
-from services.api.specialist_agents.contracts import ArtifactRef, HandoffContract
 
 from .analysis_target_resolution_service import (
     AnalysisTargetResolutionError,
@@ -21,12 +20,12 @@ from .analysis_target_resolution_service import (
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .strategies.planner import build_handoff_plan
 from .strategies.selector import build_default_strategy_selector
-from .survey_bundle_models import SurveyEvidenceBundle
 from .subject_score_guard_service import (
     looks_like_subject_score_request,
     should_guard_total_mode_subject_request,
     subject_display,
 )
+from .survey_bundle_models import SurveyEvidenceBundle
 
 _log = logging.getLogger(__name__)
 
@@ -110,6 +109,18 @@ def _build_subject_total_mode_reply(
     )
 
 
+def _default_survey_list_reports(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
+    return {"items": []}
+
+
+def _default_survey_get_report(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
+    return {}
+
+
+def _default_load_survey_bundle(_job_id: str) -> Dict[str, Any]:
+    return {}
+
+
 @dataclass(frozen=True)
 class AgentRuntimeDeps:
     app_root: Path
@@ -127,9 +138,9 @@ class AgentRuntimeDeps:
     call_llm: Callable[..., Dict[str, Any]]
     tool_dispatch: Callable[..., Dict[str, Any]]
     teacher_tools_to_openai: Callable[..., List[Dict[str, Any]]]
-    survey_list_reports: Callable[[str, Optional[str]], Dict[str, Any]] = lambda _teacher_id, _status=None: {"items": []}
-    survey_get_report: Callable[[str, str], Dict[str, Any]] = lambda _report_id, _teacher_id: {}
-    load_survey_bundle: Callable[[str], Dict[str, Any]] = lambda _job_id: {}
+    survey_list_reports: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_list_reports
+    survey_get_report: Callable[[str, str], Dict[str, Any]] = _default_survey_get_report
+    load_survey_bundle: Callable[[str], Dict[str, Any]] = _default_load_survey_bundle
     survey_specialist_runtime: Any = None
 
 
@@ -235,7 +246,8 @@ def _maybe_handle_survey_handoff(
         detail = deps.survey_get_report(report_id, teacher_id_final)
         if not isinstance(detail, dict):
             return None
-        bundle_meta = detail.get("bundle_meta") if isinstance(detail.get("bundle_meta"), dict) else {}
+        raw_bundle_meta = detail.get("bundle_meta")
+        bundle_meta: Dict[str, Any] = raw_bundle_meta if isinstance(raw_bundle_meta, dict) else {}
         job_id = str(bundle_meta.get("job_id") or report_id).strip()
         bundle = deps.load_survey_bundle(job_id) if job_id else {}
         if not isinstance(bundle, dict) or not bundle:

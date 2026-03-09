@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
-
 def _signal_line(item: Dict[str, Any]) -> str:
     title = str(item.get("title") or "").strip()
     detail = str(item.get("detail") or "").strip()

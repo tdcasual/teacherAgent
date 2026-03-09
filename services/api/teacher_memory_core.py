@@ -382,7 +382,8 @@ def _ensure_teacher_memory_provenance(rec: Dict[str, Any]) -> Dict[str, Any]:
     if provenance:
         return provenance
     source = str(rec.get("source") or "manual").strip().lower() or "manual"
-    meta = rec.get("meta") if isinstance(rec.get("meta"), dict) else {}
+    raw_meta = rec.get("meta")
+    meta: Dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
     origin = "manual_input"
     if source == "auto_flush":
         origin = "session_summary"

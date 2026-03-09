@@ -109,8 +109,9 @@ def build_router(core: Any) -> APIRouter:
     async def teacher_analysis_metrics() -> Any:
         scoped_teacher_id(None)
         metrics_service = getattr(core, 'analysis_metrics_service', None)
-        if hasattr(metrics_service, 'snapshot'):
-            snapshot = metrics_service.snapshot()
+        metrics_snapshot = getattr(metrics_service, 'snapshot', None)
+        if callable(metrics_snapshot):
+            snapshot = metrics_snapshot()
         else:
             snapshot = AnalysisMetricsService().snapshot()
         return {'ok': True, 'metrics': snapshot}

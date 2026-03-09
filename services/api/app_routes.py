@@ -12,8 +12,8 @@ from .routes.exam_routes import build_router as build_exam_router
 from .routes.misc_routes import build_router as build_misc_router
 from .routes.multimodal_routes import build_router as build_multimodal_router
 from .routes.skill_routes import build_router as build_skill_router
-from .routes.survey_routes import build_router as build_survey_router
 from .routes.student_routes import build_router as build_student_router
+from .routes.survey_routes import build_router as build_survey_router
 from .routes.teacher_routes import build_router as build_teacher_router
 
 

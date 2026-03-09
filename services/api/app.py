@@ -76,8 +76,8 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
 
 def create_app(settings: AppSettings) -> FastAPI:
     core = build_core_runtime(settings=settings)
-    if not hasattr(core, 'analysis_metrics_service'):
-        core.analysis_metrics_service = AnalysisMetricsService()
+    if getattr(core, 'analysis_metrics_service', None) is None:
+        setattr(core, 'analysis_metrics_service', AnalysisMetricsService())
     set_default_core(core)
     app_obj = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
     app_obj.state.settings = settings

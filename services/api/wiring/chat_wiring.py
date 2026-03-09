@@ -104,7 +104,6 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
-from ..teacher_workflows import resolve_teacher_workflow as _resolve_teacher_workflow_impl
 from ..student_memory_service import (
     StudentMemoryDeps,
 )
@@ -121,8 +120,13 @@ from ..teacher_model_config_service import (
 from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
+from ..teacher_workflows import resolve_teacher_workflow as _resolve_teacher_workflow_impl
 from . import get_app_core as _app_core
-from .teacher_wiring import _teacher_assignment_preflight_deps, _teacher_model_config_deps, _teacher_provider_registry_deps
+from .teacher_wiring import (
+    _teacher_assignment_preflight_deps,
+    _teacher_model_config_deps,
+    _teacher_provider_registry_deps,
+)
 from .worker_wiring import (
     _chat_worker_started_get,
     _chat_worker_started_set,

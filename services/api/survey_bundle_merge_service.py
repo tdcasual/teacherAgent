@@ -13,7 +13,6 @@ from .survey_bundle_models import (
 )
 
 
-
 def _to_bundle(value: SurveyEvidenceBundle | Dict[str, Any]) -> SurveyEvidenceBundle:
     if isinstance(value, SurveyEvidenceBundle):
         return value

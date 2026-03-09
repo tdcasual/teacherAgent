@@ -241,8 +241,9 @@ def rerun_multimodal_report(report_id: str, *, teacher_id: str, reason: str | No
     else:
         write_multimodal_report_job(report_id, updates, deps=deps)
     metrics_service = getattr(deps, 'metrics_service', None)
-    if hasattr(metrics_service, 'record_rerun'):
-        metrics_service.record_rerun(
+    record_rerun = getattr(metrics_service, 'record_rerun', None)
+    if callable(record_rerun):
+        record_rerun(
             domain='video_homework',
             strategy_id=str(payload.get('strategy_id') or 'video_homework.teacher.report').strip() or 'video_homework.teacher.report',
         )
