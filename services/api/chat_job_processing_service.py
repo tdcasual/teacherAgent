@@ -121,6 +121,17 @@ def _looks_like_attachment_reference(text: str) -> bool:
     return any(token in content for token in cn_tokens) or any(token in lowered for token in ("pdf", "xlsx", "xls", "ocr"))
 
 
+def _workflow_resolution_mode(reason: str) -> str:
+    normalized = str(reason or "").strip()
+    if normalized == "explicit":
+        return "explicit"
+    if "auto_rule" in normalized and not normalized.endswith("_default"):
+        return "auto"
+    if normalized.endswith("_default") or normalized == "role_default":
+        return "default"
+    return "fallback" if normalized else "unknown"
+
+
 def _normalize_workflow_resolution_payload(
     requested_skill_id: str,
     effective_skill_id: str,
@@ -166,6 +177,25 @@ def _normalize_workflow_resolution_payload(
             candidates.append(candidate)
         normalized["candidates"] = candidates
 
+    resolution_mode = str(resolve_payload.get("resolution_mode") or "").strip()
+    if not resolution_mode:
+        resolution_mode = _workflow_resolution_mode(reason)
+    normalized["resolution_mode"] = resolution_mode
+
+    auto_selected = resolve_payload.get("auto_selected")
+    if auto_selected is None:
+        auto_selected = resolution_mode == "auto"
+    normalized["auto_selected"] = bool(auto_selected)
+
+    requested_rewritten = resolve_payload.get("requested_rewritten")
+    if requested_rewritten is None:
+        requested_rewritten = bool(
+            normalized["requested_skill_id"]
+            and normalized["effective_skill_id"]
+            and normalized["requested_skill_id"] != normalized["effective_skill_id"]
+        )
+    normalized["requested_rewritten"] = bool(requested_rewritten)
+
     return normalized
 
 
@@ -189,7 +219,54 @@ def _workflow_resolution_job_updates(payload: Dict[str, Any]) -> Dict[str, Any]:
     candidates = payload.get("candidates")
     if isinstance(candidates, list):
         updates["skill_candidates"] = candidates
+    resolution_mode = str(payload.get("resolution_mode") or "").strip()
+    if resolution_mode:
+        updates["skill_resolution_mode"] = resolution_mode
+    if payload.get("auto_selected") is not None:
+        updates["skill_auto_selected"] = bool(payload.get("auto_selected"))
+    if payload.get("requested_rewritten") is not None:
+        updates["skill_requested_rewritten"] = bool(payload.get("requested_rewritten"))
     return updates
+
+
+def _workflow_outcome_job_updates(job: Dict[str, Any], *, outcome: str, outcome_reason: str | None = None) -> Dict[str, Any]:
+    requested = str(job.get('skill_id_requested') or '').strip()
+    effective = str(job.get('skill_id_effective') or '').strip()
+    reason = str(job.get('skill_reason') or '').strip()
+    if not requested and not effective and not reason:
+        return {}
+    final_reason = str(outcome_reason or '').strip() or str(outcome or '').strip() or 'unknown'
+    return {
+        'skill_outcome': str(outcome or '').strip() or 'unknown',
+        'skill_outcome_reason': final_reason,
+    }
+
+
+def _workflow_resolution_metrics_payload(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    request_payload = job.get('request') if isinstance(job.get('request'), dict) else {}
+    return {
+        'role': str(job.get('role') or request_payload.get('role') or '').strip() or None,
+        'requested_skill_id': str(payload.get('requested_skill_id') or '').strip(),
+        'effective_skill_id': str(payload.get('effective_skill_id') or '').strip(),
+        'reason': str(payload.get('reason') or '').strip(),
+        'confidence': payload.get('confidence'),
+        'resolution_mode': str(payload.get('resolution_mode') or '').strip() or None,
+        'auto_selected': bool(payload.get('auto_selected')) if payload.get('auto_selected') is not None else False,
+        'requested_rewritten': bool(payload.get('requested_rewritten')) if payload.get('requested_rewritten') is not None else False,
+    }
+
+
+def _workflow_outcome_metrics_payload(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    request_payload = job.get('request') if isinstance(job.get('request'), dict) else {}
+    return {
+        'role': str(job.get('role') or request_payload.get('role') or payload.get('role') or '').strip() or None,
+        'requested_skill_id': str(payload.get('skill_id_requested') or job.get('skill_id_requested') or '').strip(),
+        'effective_skill_id': str(payload.get('skill_id_effective') or job.get('skill_id_effective') or '').strip(),
+        'reason': str(payload.get('skill_reason') or job.get('skill_reason') or '').strip(),
+        'resolution_mode': str(payload.get('skill_resolution_mode') or job.get('skill_resolution_mode') or '').strip() or None,
+        'outcome': str(payload.get('skill_outcome') or job.get('skill_outcome') or '').strip() or 'unknown',
+        'outcome_reason': str(payload.get('skill_outcome_reason') or job.get('skill_outcome_reason') or '').strip() or 'unknown',
+    }
 
 
 def _resolve_effective_skill_id(
@@ -473,13 +550,19 @@ def compute_chat_reply_sync(
     )
 
     def _run_agent_with_optional_events() -> Dict[str, Any]:
+        run_agent_kwargs = {
+            'extra_system': extra_system,
+            'skill_id': req.skill_id,
+            'teacher_id': effective_teacher_id or req.teacher_id,
+            'event_sink': event_sink,
+        }
+        analysis_target = getattr(req, 'analysis_target', None)
+        if analysis_target is not None:
+            run_agent_kwargs['analysis_target'] = analysis_target
         return deps.run_agent(
             messages,
             role_hint,
-            extra_system=extra_system,
-            skill_id=req.skill_id,
-            teacher_id=effective_teacher_id or req.teacher_id,
-            event_sink=event_sink,
+            **run_agent_kwargs,
         )
 
     if role_hint == "student":
@@ -528,6 +611,12 @@ class ChatJobProcessDeps:
     append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
         lambda _job_id, _event_type, _payload: {}
     )
+    record_workflow_resolution: Callable[[Dict[str, Any]], None] = (
+        lambda _payload: None
+    )
+    record_workflow_outcome: Callable[[Dict[str, Any]], None] = (
+        lambda _payload: None
+    )
 
 
 class _ChatJobStatusWriter:
@@ -559,6 +648,18 @@ class _ChatJobStatusWriter:
 
         payload = dict(updates or {})
         payload["status"] = resolved
+        current_job: Dict[str, Any] = {}
+        if resolved in {"done", "failed", "cancelled"}:
+            try:
+                current_job = self.deps.load_chat_job(self.job_id)
+            except Exception:
+                current_job = {}
+            outcome_reason = str(payload.get('error') or payload.get('error_detail') or resolved).strip() or resolved
+            payload.update(_workflow_outcome_job_updates({**current_job, **payload}, outcome=resolved, outcome_reason=outcome_reason))
+            try:
+                self.deps.record_workflow_outcome(_workflow_outcome_metrics_payload(current_job, payload))
+            except Exception:  # policy: allowed-broad-except
+                _log.warning("workflow outcome metrics failed for job %s", self.job_id, exc_info=True)
         self.deps.write_chat_job(self.job_id, payload)
         event_type = ""
         if resolved == "processing":
@@ -633,6 +734,14 @@ class _BufferedRuntimeEventWriter:
                 updates = _workflow_resolution_job_updates(payload)
                 if updates:
                     self.deps.write_chat_job(self.job_id, updates)
+                try:
+                    job = self.deps.load_chat_job(self.job_id)
+                except Exception:
+                    job = {}
+                try:
+                    self.deps.record_workflow_resolution(_workflow_resolution_metrics_payload(job, payload))
+                except Exception:  # policy: allowed-broad-except
+                    _log.warning("workflow resolution metrics failed for job %s", self.job_id, exc_info=True)
         except Exception:  # policy: allowed-broad-except
             _log.warning(
                 "failed to append runtime event %s for job %s",

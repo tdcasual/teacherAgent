@@ -54,3 +54,51 @@ def test_analysis_report_includes_strategy_prompt_adapter_and_runtime_versions(t
     assert detail['report']['prompt_version'] == 'v1'
     assert detail['report']['adapter_version'] == 'v1'
     assert detail['report']['runtime_version'] == 'v1'
+
+
+
+def test_handoff_plan_uses_manifest_prompt_runtime_and_adapter_versions() -> None:
+    from services.api.strategies.planner import build_handoff_plan, build_lineage_metadata
+    from services.api.strategies.selector import build_default_strategy_selector
+    from services.api.survey_bundle_models import SurveyEvidenceBundle
+
+    artifact = SurveyEvidenceBundle.model_validate(
+        {
+            'survey_meta': {'title': '课堂反馈问卷', 'provider': 'provider', 'submission_id': 'sub-1'},
+            'audience_scope': {'teacher_id': 'teacher_1', 'class_name': '高二2403班', 'sample_size': 35},
+            'question_summaries': [],
+            'group_breakdowns': [],
+            'free_text_signals': [],
+            'attachments': [],
+            'parse_confidence': 0.83,
+            'missing_fields': [],
+            'provenance': {'source': 'structured'},
+        }
+    ).to_artifact_envelope()
+    decision = build_default_strategy_selector().select(
+        role='teacher',
+        artifact=artifact,
+        task_kind='survey.chat_followup',
+        target_scope='class',
+    )
+
+    plan = build_handoff_plan(
+        strategy=decision,
+        artifact=artifact,
+        artifact_id='job_1',
+        handoff_id='handoff_1',
+        from_agent='coordinator',
+        goal='输出班级问卷洞察和教学建议',
+        extra_constraints={'teacher_context': {'teacher_id': 'teacher_1'}},
+        fallback_policy='ask_user_to_clarify',
+    )
+    lineage = build_lineage_metadata(strategy=decision, artifact=artifact)
+
+    assert plan.prompt_version == 'survey.chat_followup.prompt.v1'
+    assert plan.runtime_version == 'survey.runtime.v1'
+    assert plan.adapter_version == 'survey.bundle.adapter.v1'
+    assert plan.handoff.prompt_version == 'survey.chat_followup.prompt.v1'
+    assert plan.handoff.runtime_version == 'survey.runtime.v1'
+    assert lineage['prompt_version'] == 'survey.chat_followup.prompt.v1'
+    assert lineage['runtime_version'] == 'survey.runtime.v1'
+    assert lineage['adapter_version'] == 'survey.bundle.adapter.v1'

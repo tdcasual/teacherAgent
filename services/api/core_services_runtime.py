@@ -367,6 +367,7 @@ def run_agent(
     extra_system: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     core: Any | None = None,
 ) -> Dict[str, Any]:
@@ -377,6 +378,7 @@ def run_agent(
         extra_system=extra_system,
         skill_id=skill_id,
         teacher_id=teacher_id,
+        analysis_target=analysis_target,
         event_sink=event_sink,
     )
 

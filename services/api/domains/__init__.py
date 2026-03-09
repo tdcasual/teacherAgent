@@ -1,3 +1,4 @@
+from . import binding_registry
 from .manifest_models import DomainManifest
 from .manifest_registry import (
     DomainManifestNotFoundError,
@@ -6,6 +7,7 @@ from .manifest_registry import (
 )
 
 __all__ = [
+    'binding_registry',
     'DomainManifest',
     'DomainManifestNotFoundError',
     'DomainManifestRegistry',

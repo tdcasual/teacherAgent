@@ -53,6 +53,7 @@ manifest-driven 注册要求：
 - manifest 还应声明最小 runtime binding 元信息，例如 `specialist_deps_factory`、`payload_constraint_key`、`teacher_context_constraint_key`；binding 值可为受控引用名，也可为运行时可解析的 callable，以减少中心 lookup 胶水
 - specialist spec 应显式声明自身 runner binding；strategy selector 在装配阶段必须校验 `strategy -> specialist -> artifact` 的最小一致性，不允许静默 fallback
 - manifest 还应声明 analysis report provider 装配元信息，使 report plane 不再依赖按 domain 手工硬编码 provider 表
+- runtime / report 的命名 binding 应通过共享 binding registry 解析，避免在多个中心模块各自维护一份 lookup 真相
 - domain specialist runtime 与 analysis report provider 都应优先通过统一 builder / registry 组装，而不是在单个 wiring 文件里为每个 domain 重复手写 glue
 
 ### 2.3 Strategy Selector

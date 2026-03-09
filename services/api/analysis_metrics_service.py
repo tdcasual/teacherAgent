@@ -27,6 +27,13 @@ class AnalysisMetricsService:
         self._by_domain: DefaultDict[str, DefaultDict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._by_strategy: DefaultDict[str, DefaultDict[str, int]] = defaultdict(lambda: defaultdict(int))
         self._by_agent: DefaultDict[str, DefaultDict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._workflow_counters: DefaultDict[str, int] = defaultdict(int)
+        self._workflow_by_effective_skill: DefaultDict[str, DefaultDict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._workflow_by_role: DefaultDict[str, DefaultDict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._workflow_by_reason: DefaultDict[str, int] = defaultdict(int)
+        self._workflow_by_resolution_mode: DefaultDict[str, int] = defaultdict(int)
+        self._workflow_by_outcome: DefaultDict[str, int] = defaultdict(int)
+        self._workflow_by_outcome_reason: DefaultDict[str, int] = defaultdict(int)
 
     def record(self, event: SpecialistRuntimeEvent) -> None:
         normalized = SpecialistRuntimeEvent.model_validate(event)
@@ -85,9 +92,65 @@ class AnalysisMetricsService:
             counter_key='rerun_count',
         )
 
+    def record_workflow_resolution(
+        self,
+        *,
+        role: str | None,
+        requested_skill_id: str | None,
+        effective_skill_id: str | None,
+        reason: str | None,
+        confidence: float | None = None,
+        resolution_mode: str | None = None,
+        auto_selected: bool = False,
+        requested_rewritten: bool = False,
+    ) -> None:
+        del requested_skill_id, confidence
+        effective = self._bucket(effective_skill_id)
+        role_bucket = self._bucket(role)
+        reason_bucket = self._bucket(reason)
+        resolution_bucket = self._bucket(resolution_mode)
+        self._workflow_counters['resolution_count'] += 1
+        if auto_selected:
+            self._workflow_counters['auto_selected_count'] += 1
+        if requested_rewritten:
+            self._workflow_counters['requested_rewritten_count'] += 1
+        self._workflow_by_effective_skill[effective]['resolved'] += 1
+        self._workflow_by_role[role_bucket]['resolved'] += 1
+        self._workflow_by_reason[reason_bucket] += 1
+        self._workflow_by_resolution_mode[resolution_bucket] += 1
+
+    def record_workflow_outcome(
+        self,
+        *,
+        role: str | None,
+        requested_skill_id: str | None,
+        effective_skill_id: str | None,
+        reason: str | None,
+        resolution_mode: str | None = None,
+        outcome: str | None,
+        outcome_reason: str | None = None,
+    ) -> None:
+        del requested_skill_id, reason, resolution_mode
+        effective = self._bucket(effective_skill_id)
+        role_bucket = self._bucket(role)
+        outcome_bucket = self._bucket(outcome)
+        outcome_reason_bucket = self._bucket(outcome_reason)
+        self._workflow_counters['outcome_count'] += 1
+        self._workflow_by_effective_skill[effective][outcome_bucket] += 1
+        self._workflow_by_role[role_bucket][outcome_bucket] += 1
+        self._workflow_by_outcome[outcome_bucket] += 1
+        self._workflow_by_outcome_reason[outcome_reason_bucket] += 1
+
     def snapshot(self) -> Dict[str, Any]:
         counters = dict(_COUNTER_DEFAULTS)
         counters.update({key: int(value) for key, value in self._counters.items()})
+        workflow_counters = {
+            'resolution_count': 0,
+            'auto_selected_count': 0,
+            'requested_rewritten_count': 0,
+            'outcome_count': 0,
+        }
+        workflow_counters.update({key: int(value) for key, value in self._workflow_counters.items()})
         return {
             'schema_version': 'v1',
             'counters': counters,
@@ -96,6 +159,15 @@ class AnalysisMetricsService:
             'by_domain': {key: dict(value) for key, value in self._by_domain.items()},
             'by_strategy': {key: dict(value) for key, value in self._by_strategy.items()},
             'by_agent': {key: dict(value) for key, value in self._by_agent.items()},
+            'workflow_routing': {
+                'counters': workflow_counters,
+                'by_effective_skill': {key: dict(value) for key, value in self._workflow_by_effective_skill.items()},
+                'by_role': {key: dict(value) for key, value in self._workflow_by_role.items()},
+                'by_reason': dict(self._workflow_by_reason),
+                'by_resolution_mode': dict(self._workflow_by_resolution_mode),
+                'by_outcome': dict(self._workflow_by_outcome),
+                'by_outcome_reason': dict(self._workflow_by_outcome_reason),
+            },
         }
 
     def _record_auxiliary_phase(
