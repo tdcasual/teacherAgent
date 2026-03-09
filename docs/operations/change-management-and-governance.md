@@ -73,6 +73,7 @@ Last updated: 2026-02-15
 1. 从 review queue 日志导出结构化 feedback dataset：`./.venv/bin/python scripts/export_review_feedback_dataset.py --input <review_queue.jsonl>`
 2. 将 feedback dataset 或其 summary 输入离线评测：`./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only`
 3. 记录 `by_domain` / `by_strategy` / `by_reason_code` 漂移，确认此次变更没有把错误从线上 review queue 悄悄转移到线下盲区。
+4. 如需形成周报或灰度评估结论，可额外运行：`./.venv/bin/python scripts/build_review_drift_report.py --input <dataset.json>`。
 
 ## 回滚后核验
 

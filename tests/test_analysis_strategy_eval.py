@@ -174,3 +174,33 @@ def test_analysis_strategy_eval_summarizes_review_feedback_dataset_items() -> No
     assert report['review_feedback']['by_strategy']['survey.teacher.report'] == 1
     assert report['review_feedback']['by_domain_reason_code']['survey']['low_confidence'] == 1
     assert report['review_feedback']['by_domain_reason_code']['class_report']['missing_fields'] == 1
+
+
+def test_analysis_strategy_eval_includes_review_feedback_drift_summary() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(
+        FIXTURES_DIR,
+        review_feedback={
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'strategy_id': 'survey.teacher.report',
+                    'operation': 'reject',
+                    'disposition': 'rejected',
+                    'reason_code': 'invalid_output',
+                },
+                {
+                    'item_id': 'rvw_2',
+                    'domain': 'survey',
+                    'strategy_id': 'survey.teacher.report',
+                    'operation': 'retry',
+                    'disposition': 'retry_requested',
+                    'reason_code': 'low_confidence',
+                },
+            ]
+        },
+    )
+
+    assert report['review_feedback']['drift_summary']['top_regression_domains'][0]['domain'] == 'survey'
+    assert report['review_feedback']['drift_summary']['top_regression_strategies'][0]['strategy_id'] == 'survey.teacher.report'

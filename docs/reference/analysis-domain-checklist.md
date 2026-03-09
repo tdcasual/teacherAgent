@@ -38,6 +38,7 @@
 ## 6. Feature Flags 与文档
 
 - 可执行 contract check：`./.venv/bin/python scripts/check_analysis_domain_contract.py --json`
+- [ ] CI 已执行 `scripts/check_analysis_domain_contract.py --json` 并通过
 - [ ] feature flags 已定义并写入 rollout 文档
 - [ ] 已更新 `docs/reference/analysis-runtime-contract.md`
 - [ ] 已更新 `docs/operations/multi-domain-analysis-rollout-checklist.md`

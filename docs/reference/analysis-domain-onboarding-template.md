@@ -79,6 +79,7 @@ review queue 至少应保留：
 ## 7. Rollout Flags 与文档
 
 - 可执行 contract check：`./.venv/bin/python scripts/check_analysis_domain_contract.py --json`
+- CI 必须执行 `scripts/check_analysis_domain_contract.py --json`，确保 manifest / binding / docs / replay-compare 能力没有漂移。
 上线前至少补齐：
 
 - feature flags

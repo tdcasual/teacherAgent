@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .analysis_metrics_service import AnalysisMetricsService
+from .analysis_metrics_store import AnalysisMetricsStore
 from .app_routes import register_routes
 from .auth_service import require_principal
 from .container import build_app_container
@@ -77,7 +78,9 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
 def create_app(settings: AppSettings) -> FastAPI:
     core = build_core_runtime(settings=settings)
     if getattr(core, 'analysis_metrics_service', None) is None:
-        setattr(core, 'analysis_metrics_service', AnalysisMetricsService())
+        data_dir = Path(getattr(core, 'DATA_DIR', '.'))
+        metrics_store = AnalysisMetricsStore(data_dir / 'analysis' / 'metrics_snapshot.json')
+        setattr(core, 'analysis_metrics_service', AnalysisMetricsService(store=metrics_store))
     set_default_core(core)
     app_obj = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
     app_obj.state.settings = settings

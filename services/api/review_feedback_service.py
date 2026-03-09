@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, Iterable
+from typing import Any, DefaultDict, Dict, Iterable, List
+
 
 
 def build_review_feedback_dataset(*, items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
@@ -9,6 +10,7 @@ def build_review_feedback_dataset(*, items: Iterable[Dict[str, Any]]) -> Dict[st
     return {
         'items': rows,
         'summary': build_review_feedback_summary(items=rows),
+        'drift_summary': summarize_review_feedback_drift(items=rows),
     }
 
 
@@ -61,6 +63,42 @@ def build_review_feedback_summary(*, items: Iterable[Dict[str, Any]]) -> Dict[st
         'by_domain_reason_code': {key: dict(value) for key, value in by_domain_reason_code.items()},
         'by_domain_strategy': {key: dict(value) for key, value in by_domain_strategy.items()},
     }
+
+
+
+def summarize_review_feedback_drift(*, items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [_normalize_feedback_row(raw) for raw in items]
+    by_domain: DefaultDict[str, int] = defaultdict(int)
+    by_strategy: DefaultDict[str, int] = defaultdict(int)
+    by_reason_code: DefaultDict[str, int] = defaultdict(int)
+
+    for item in rows:
+        domain = str(item.get('domain') or '').strip()
+        strategy_id = str(item.get('strategy_id') or '').strip()
+        reason_code = str(item.get('reason_code') or '').strip()
+        if domain:
+            by_domain[domain] += 1
+        if strategy_id:
+            by_strategy[strategy_id] += 1
+        if reason_code:
+            by_reason_code[reason_code] += 1
+
+    return {
+        'total_items': len(rows),
+        'by_domain': dict(by_domain),
+        'by_strategy': dict(by_strategy),
+        'by_reason_code': dict(by_reason_code),
+        'top_regression_domains': _top_counts('domain', by_domain),
+        'top_regression_strategies': _top_counts('strategy_id', by_strategy),
+        'top_reason_codes': _top_counts('reason_code', by_reason_code),
+    }
+
+
+
+def _top_counts(key: str, values: Dict[str, int], *, limit: int = 5) -> List[Dict[str, Any]]:
+    rows = [{key: name, 'count': int(count)} for name, count in values.items() if str(name or '').strip()]
+    rows.sort(key=lambda item: (-int(item['count']), str(item[key])))
+    return rows[:limit]
 
 
 
