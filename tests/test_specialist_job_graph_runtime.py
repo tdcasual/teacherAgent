@@ -8,7 +8,6 @@ from services.api.specialist_agents.job_graph_models import JobGraphNode, Specia
 from services.api.specialist_agents.job_graph_runtime import SpecialistJobGraphRuntime
 
 
-
 def _handoff(node_id: str) -> HandoffContract:
     return HandoffContract(
         handoff_id=node_id,
@@ -73,3 +72,31 @@ def test_job_graph_runtime_stops_on_invalid_verify_step() -> None:
         runtime.run(graph)
 
     assert exc_info.value.code == 'invalid_output'
+
+
+def test_job_graph_runtime_rejects_node_budget_over_cap() -> None:
+    runtime = SpecialistJobGraphRuntime(
+        executor=lambda handoff: SpecialistAgentResult(
+            handoff_id=handoff.handoff_id,
+            agent_id=handoff.to_agent,
+            status='completed',
+            output={'executive_summary': handoff.handoff_id},
+        )
+    )
+    graph = SpecialistJobGraph(
+        graph_id='video_homework.teacher.report',
+        domain='video_homework',
+        nodes=[
+            JobGraphNode(
+                node_id='analyze',
+                node_type='analyze',
+                max_budget={'max_tokens': 400},
+                handoff=_handoff('analyze'),
+            )
+        ],
+    )
+
+    with pytest.raises(SpecialistAgentRuntimeError) as exc_info:
+        runtime.run(graph)
+
+    assert exc_info.value.code == 'budget_exceeded'

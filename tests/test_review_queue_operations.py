@@ -125,3 +125,30 @@ def test_review_queue_supports_retry_dismiss_and_escalate_states(tmp_path: Path)
     assert escalated_item['disposition'] == 'escalated'
     assert escalated_item['operator_note'] == 'needs multimodal specialist review'
     assert escalated_item['escalated_at'] == '2026-03-07T10:00:00'
+
+
+def test_review_queue_persists_strategy_id_across_transitions(tmp_path: Path) -> None:
+    deps = _deps(tmp_path)
+    queued = enqueue_review_item(
+        domain='survey',
+        report_id='report_1',
+        teacher_id='teacher_1',
+        reason='low_confidence',
+        confidence=0.41,
+        target_type='report',
+        target_id='report_1',
+        strategy_id='survey.teacher.report',
+        deps=deps,
+    )
+
+    retried = retry_review_item(
+        item_id=queued['item_id'],
+        reviewer_id='reviewer_1',
+        operator_note='rerun with latest prompt',
+        deps=deps,
+    )
+    listed = list_review_items(teacher_id='teacher_1', domain='survey', status=None, deps=deps)
+
+    assert queued['strategy_id'] == 'survey.teacher.report'
+    assert retried['strategy_id'] == 'survey.teacher.report'
+    assert listed['items'][0]['strategy_id'] == 'survey.teacher.report'

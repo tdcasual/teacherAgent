@@ -3,10 +3,7 @@ import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resiz
 import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
 import TeacherTopbar from './features/layout/TeacherTopbar'
 import { useChatScroll } from './features/chat/useChatScroll'
-import {
-  readTeacherLocalViewState,
-  type SessionViewStatePayload,
-} from './features/chat/viewState'
+import { readTeacherLocalViewState, type SessionViewStatePayload } from './features/chat/viewState'
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
 import { withPendingChatOverlay } from './features/chat/pendingOverlay'
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
@@ -18,37 +15,14 @@ import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWork
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
 import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeacherWorkbenchPanelControls'
-import {
-  formatDraftSummary,
-  formatExamDraftSummary,
-  formatExamJobStatus,
-  formatExamJobSummary,
-  formatProgressSummary,
-  formatUploadJobStatus,
-  formatUploadJobSummary,
-} from './features/workbench/workbenchFormatters'
+import { formatDraftSummary, formatExamDraftSummary, formatExamJobStatus, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
 import { buildExamWorkflowIndicator } from './features/workbench/workflowIndicators'
-import {
-  difficultyLabel,
-  difficultyOptions,
-  formatMissingRequirements,
-  normalizeDifficulty,
-  parseCommaList,
-  parseLineList,
-} from './features/workbench/workbenchUtils'
-import {
-  readFeatureFlag,
-  readTeacherAnalysisWorkbenchFlag,
-  readTeacherAnalysisWorkbenchShadowFlag,
-} from '../../shared/featureFlags'
+import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
+import { readFeatureFlag, readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
 import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
-import {
-  MobileTabChatIcon,
-  MobileTabSessionIcon,
-  MobileTabWorkbenchIcon,
-} from '../../shared/mobile/tabIcons'
+import { MobileTabChatIcon, MobileTabSessionIcon, MobileTabWorkbenchIcon } from '../../shared/mobile/tabIcons'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -68,18 +42,8 @@ import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
 import { parsePendingChatJob } from './features/chat/pendingChatJob'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import { readTeacherAuthSubject } from './features/auth/teacherAuth'
-import {
-  isTeacherMobileTab,
-  teacherMobilePanelsFromTab,
-} from './features/layout/mobileShellState'
-import type {
-  Message,
-  PendingChatJob,
-  PendingToolRun,
-  Skill,
-  WorkbenchTab,
-  WorkflowIndicator,
-} from './appTypes'
+import { isTeacherMobileTab, teacherMobilePanelsFromTab } from './features/layout/mobileShellState'
+import type { Message, PendingChatJob, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
 import 'katex/dist/katex.min.css'
 const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const DESKTOP_BREAKPOINT = 900
@@ -97,7 +61,6 @@ const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
 }
-
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const workbenchPanelRef = useRef<PanelImperativeHandle | null>(null)
@@ -209,11 +172,9 @@ export default function App() {
     parsePendingChatJob(safeLocalStorageGetItem(PENDING_CHAT_KEY)),
   )
   const [topbarHeight, setTopbarHeight] = useState(64)
-
   const appRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const topbarRef = useRef<HTMLElement | null>(null)
-
   const {
     messagesRef,
     showScrollToBottom,
@@ -225,23 +186,19 @@ export default function App() {
     messages,
     sending,
   })
-
   const {
     updateExamDraftMeta,
     updateExamQuestionField,
     updateExamAnswerKeyText,
     updateExamScoreSchemaSelectedCandidate,
   } = useDraftMutations({ uploadDraft, setUploadDraft: workbench.setUploadDraft, examDraft, setExamDraft: workbench.setExamDraft })
-
   const { setWheelScrollZone } = useWheelScrollZone({
     appRef, sessionSidebarOpen, skillsOpen,
   })
-
   const chooseSkill = (skillId: string, pinned = true) => {
     setActiveSkillId(skillId)
     setSkillPinned(pinned)
   }
-
   const attachmentTeacherId = String(readTeacherAuthSubject()?.teacher_id || '').trim()
   const teacherAnalysisWorkbenchEnabled = useMemo(() => {
     const source: Record<string, string | undefined> = {
@@ -304,7 +261,6 @@ export default function App() {
     () => selectedAnalysisReport?.report || analysisReports.find((item) => item.report_id === selectedAnalysisReportId) || null,
     [analysisReports, selectedAnalysisReport, selectedAnalysisReportId],
   )
-
   const {
     refreshTeacherSessions, loadTeacherSessionMessages,
     refreshMemoryProposals, refreshMemoryInsights, deleteMemoryProposal,
@@ -327,7 +283,6 @@ export default function App() {
     setSkillList, setSkillsLoading, setSkillsError,
     chooseSkill, enableAutoScroll, setWheelScrollZone,
   })
-
   useLocalStorageSync({
     apiBase, favorites, skillsOpen, workbenchTab, sessionSidebarOpen,
     activeSkillId, skillPinned, localDraftSessionIds, activeSessionId, uploadMode,
@@ -344,7 +299,6 @@ export default function App() {
     examDraftError, examDraftActionError, examDraftPanelCollapsed, setExamDraftPanelCollapsed,
     markdownCacheRef,
   })
-
   const {
     handleUploadAssignment, saveDraft, handleConfirmUpload,
     fetchAssignmentProgress, refreshWorkflowWorkbench, scrollToWorkflowSection,
@@ -366,13 +320,11 @@ export default function App() {
     setProgressPanelCollapsed, setProgressAssignmentId, setProgressLoading, setProgressError, setProgressData,
     setExamStatusPollNonce,
   })
-
   useEffect(() => {
     const sid = String(pendingChatJob?.session_id || '').trim()
     if (!sid || sid === 'main') return
     setLocalDraftSessionIds((prev) => (prev.includes(sid) ? prev : [sid, ...prev]))
   }, [pendingChatJob?.session_id, setLocalDraftSessionIds])
-
   useTeacherSessionViewStateSync({
     apiBase,
     activeSessionId,
@@ -384,7 +336,6 @@ export default function App() {
     setViewStateUpdatedAt,
     initialState: initialViewStateRef.current,
   })
-
   useEffect(() => {
     // Refresh recovery: resume polling for the last active upload job.
     const raw = safeLocalStorageGetItem('teacherActiveUpload')
@@ -402,18 +353,15 @@ export default function App() {
       // ignore
     }
   }, [setExamJobId, setUploadJobId, setUploadMode])
-
   useEffect(() => {
     if (pendingChatJob) safeLocalStorageSetItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
     else safeLocalStorageRemoveItem(PENDING_CHAT_KEY)
   }, [pendingChatJob, PENDING_CHAT_KEY])
-
   useEffect(() => {
     if (pendingChatJob?.job_id) return
     setPendingStreamStage('')
     setPendingToolRuns([])
   }, [pendingChatJob?.job_id])
-
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
     if (!activeSessionId || pendingChatJob.session_id !== activeSessionId) return
@@ -427,7 +375,6 @@ export default function App() {
     pendingChatJob?.session_id,
     pendingChatJob?.user_text,
   ])
-
   useEffect(() => {
     if (!pendingChatJob?.job_id) return
     if (pendingChatJob.session_id && pendingChatJob.session_id !== activeSessionId) {
@@ -436,8 +383,6 @@ export default function App() {
     // Run only on mount to recover the original pending session once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-
   useAssignmentUploadStatusPolling({
     apiBase,
     uploadJobId,
@@ -447,7 +392,6 @@ export default function App() {
     setUploadJobInfo,
     setUploadStatus,
   })
-
   useExamUploadStatusPolling({
     apiBase,
     examJobId,
@@ -457,7 +401,6 @@ export default function App() {
     setExamUploadError,
     setExamUploadStatus,
   })
-
   const examWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
     return buildExamWorkflowIndicator({
       examJobId,
@@ -470,9 +413,7 @@ export default function App() {
       examDraftActionError,
     })
   }, [examConfirming, examDraft, examDraftActionError, examDraftError, examJobId, examJobInfo?.status, examUploadError, examUploading])
-
   const activeWorkflowIndicator = uploadMode === 'assignment' ? assignmentWorkflowIndicator : examWorkflowIndicator
-
   const examWorkflowAutoState = useMemo(() => {
     const stepState = (key: string) => examWorkflowIndicator.steps.find((s) => s.key === key)?.state || 'todo'
     const uploadStep = stepState('upload')
@@ -489,7 +430,6 @@ export default function App() {
     if (uploadStep === 'active') return 'uploading'
     return 'idle'
   }, [examWorkflowIndicator])
-
   const {
     handleUploadExam, saveExamDraft, handleConfirmExamUpload,
   } = useExamWorkflow({
@@ -510,7 +450,6 @@ export default function App() {
     setUploadCardCollapsed,
     setExamStatusPollNonce,
   })
-
   const {
     attachments,
     addFiles,
@@ -525,7 +464,6 @@ export default function App() {
     sessionId: activeSessionId || 'main',
     teacherId: attachmentTeacherId,
   })
-
   const {
     mention,
     mentionIndex,
@@ -559,7 +497,6 @@ export default function App() {
     pendingChatJob,
     sending,
   })
-
   const {
     visibleHistorySessions,
     groupedHistorySessions,
@@ -574,12 +511,10 @@ export default function App() {
     showArchivedSessions,
     archiveDialogSessionId,
   })
-
   const isMobileViewport = useCallback(() => {
     if (typeof window === 'undefined') return false
     return window.matchMedia('(max-width: 900px)').matches
   }, [])
-
   const {
     startNewTeacherSession, renameSession, toggleSessionMenu,
     toggleSessionArchive,
@@ -596,7 +531,6 @@ export default function App() {
     setSessionTitleMap, setDeletedSessionIds, setSessionSidebarOpen, setSkillsOpen,
     isMobileViewport,
   })
-
   const {
     toggleSkillsWorkbench,
     requestCloseSettings,
@@ -610,19 +544,16 @@ export default function App() {
     settingsOpen,
     setSettingsOpen,
   })
-
   useEffect(() => {
     if (!teacherUseMobileShellV2) return
     const nextPanels = teacherMobilePanelsFromTab(mobileTab)
     if (sessionSidebarOpen !== nextPanels.sessionSidebarOpen) setSessionSidebarOpen(nextPanels.sessionSidebarOpen)
     if (skillsOpen !== nextPanels.skillsOpen) setSkillsOpen(nextPanels.skillsOpen)
   }, [teacherUseMobileShellV2, mobileTab, sessionSidebarOpen, skillsOpen, setSessionSidebarOpen, setSkillsOpen])
-
   const handleTeacherMobileTabChange = useCallback((tabId: string) => {
     if (!isTeacherMobileTab(tabId)) return
     setMobileTab(tabId)
   }, [])
-
   const handleSelectSessionFromSheet = useCallback((sessionId: string) => {
     const sid = String(sessionId || '').trim()
     if (!sid) return
@@ -639,7 +570,6 @@ export default function App() {
     setSessionError,
     setOpenSessionMenuId,
   ])
-
   const handleTopbarSessionToggle = useCallback(() => {
     if (!teacherUseMobileShellV2) {
       toggleSessionSidebar()
@@ -647,7 +577,6 @@ export default function App() {
     }
     setMobileTab((prev) => (prev === 'sessions' ? 'chat' : 'sessions'))
   }, [teacherUseMobileShellV2, toggleSessionSidebar])
-
   const handleTopbarWorkbenchToggle = useCallback(() => {
     if (!teacherUseMobileShellV2) {
       toggleSkillsWorkbench()
@@ -655,7 +584,6 @@ export default function App() {
     }
     setMobileTab((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))
   }, [teacherUseMobileShellV2, toggleSkillsWorkbench])
-
   const {
     isWorkbenchResizing,
     startWorkbenchResize,
@@ -669,7 +597,6 @@ export default function App() {
     workbenchMinWidth: WORKBENCH_MIN_WIDTH,
     defaultWorkbenchWidth: WORKBENCH_DEFAULT_WIDTH,
   })
-
   const teacherWorkbenchViewModel = buildTeacherWorkbenchViewModel({
     workbench,
     skillsOpen,
@@ -753,13 +680,10 @@ export default function App() {
     selectAnalysisReport,
     rerunAnalysisReport,
   })
-
-
   const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
     '--teacher-topbar-height': `${topbarHeight}px`,
     overscrollBehavior: 'none',
   }
-
   return (
     <div
       ref={appRef}
@@ -777,14 +701,12 @@ export default function App() {
         onToggleSkillsWorkbench={handleTopbarWorkbenchToggle}
         onToggleSettingsPanel={toggleSettingsPanel}
       />
-
       <TeacherSettingsPanel
         open={settingsOpen}
         onClose={requestCloseSettings}
         apiBase={apiBase}
         onApiBaseChange={setApiBase}
       />
-
       <div
         className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${
           teacherUseMobileShellV2
@@ -832,7 +754,6 @@ export default function App() {
             formatSessionUpdatedLabel={formatSessionUpdatedLabel}
           />
         )}
-
         <div className="min-w-0 min-h-0 flex overflow-hidden">
           <Group
             orientation="horizontal"
@@ -914,7 +835,6 @@ export default function App() {
           </Group>
         </div>
       </div>
-
       <BottomSheet
         open={teacherUseMobileShellV2 && mobileTab === 'sessions'}
         onClose={() => {
@@ -951,7 +871,6 @@ export default function App() {
           formatSessionUpdatedLabel={formatSessionUpdatedLabel}
         />
       </BottomSheet>
-
       <BottomSheet
         open={teacherUseMobileShellV2 && mobileTab === 'workbench'}
         onClose={() => {
@@ -961,7 +880,6 @@ export default function App() {
       >
         <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
       </BottomSheet>
-
       {teacherUseMobileShellV2 ? (
         <MobileTabBar
           items={TEACHER_MOBILE_TAB_ITEMS}
@@ -970,7 +888,6 @@ export default function App() {
           ariaLabel="教师端移动导航"
         />
       ) : null}
-
       <PromptDialog
         open={Boolean(renameDialogSessionId)}
         title="重命名会话"

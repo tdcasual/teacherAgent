@@ -16,7 +16,16 @@ from ..multimodal_repository import (
 )
 from ..multimodal_submission_models import MultimodalSubmissionBundle
 from ..paths import safe_fs_id
+from .teacher_route_helpers import scoped_teacher_id
 
+
+
+def _enforce_submission_teacher_scope(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = dict(payload or {})
+    scope = dict(data.get('scope') or {})
+    scope['teacher_id'] = scoped_teacher_id(scope.get('teacher_id')) or ''
+    data['scope'] = scope
+    return data
 
 
 def build_router(core: Any) -> APIRouter:
@@ -28,7 +37,7 @@ def build_router(core: Any) -> APIRouter:
     async def create_multimodal_submission(payload: Dict[str, Any] = Body(default={})) -> Any:
         _ensure_enabled()
         try:
-            bundle = MultimodalSubmissionBundle.model_validate(dict(payload or {}))
+            bundle = MultimodalSubmissionBundle.model_validate(_enforce_submission_teacher_scope(dict(payload or {})))
             submission_id = str(bundle.source_meta.submission_id or '').strip() or safe_fs_id(
                 f"{bundle.scope.teacher_id}_{bundle.scope.student_id}_{bundle.source_meta.title}",
                 prefix='submission',
@@ -64,7 +73,9 @@ def build_router(core: Any) -> APIRouter:
     async def get_multimodal_submission(submission_id: str) -> Any:
         _ensure_enabled()
         try:
-            return {'submission': load_multimodal_submission_view(submission_id, core=core)}
+            submission = load_multimodal_submission_view(submission_id, core=core)
+            _enforce_submission_teacher_scope(submission)
+            return {'submission': submission}
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
 
@@ -73,6 +84,7 @@ def build_router(core: Any) -> APIRouter:
         _ensure_enabled()
         try:
             payload = load_multimodal_submission(submission_id, core=core)
+            payload = _enforce_submission_teacher_scope(payload)
             result = extract_multimodal_submission(payload, deps=extract_deps)
             write_multimodal_extraction(submission_id, result.model_dump(), core=core)
             return {'ok': True, 'submission': result.model_dump()}
@@ -87,6 +99,7 @@ def build_router(core: Any) -> APIRouter:
     async def analyze_submission(submission_id: str) -> Any:
         _ensure_enabled()
         try:
+            _enforce_submission_teacher_scope(load_multimodal_submission(submission_id, core=core))
             return process_multimodal_submission(submission_id, deps=orchestrator_deps)
         except FileNotFoundError:
             raise HTTPException(status_code=404, detail='multimodal_submission_not_found')

@@ -36,14 +36,14 @@ def _resolve_submission_base(
 def counted_grade_item(item: Dict[str, Any], *, deps: AssignmentSubmissionAttemptDeps) -> bool:
     try:
         status = str(item.get("status") or "")
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
         status = ""
     if status == "ungraded":
         return False
     try:
         conf = float(item.get("confidence") or 0.0)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("numeric conversion failed", exc_info=True)
         conf = 0.0
     return conf >= deps.grade_count_conf_threshold
@@ -55,7 +55,7 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
         return None
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("corrupt grading_report.json at %s", report_path, exc_info=True)
         return None
     if not isinstance(report, dict):
@@ -74,23 +74,23 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
             counted += 1
             try:
                 score_earned += float(it.get("score") or 0.0)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.warning("numeric conversion failed", exc_info=True)
-                pass
+                pass  # policy: allowed-broad-except
 
     try:
         graded_total = int(report.get("graded_total") or 0)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("numeric conversion failed", exc_info=True)
         graded_total = counted
     try:
         correct = int(report.get("correct") or 0)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("numeric conversion failed", exc_info=True)
         correct = 0
     try:
         ungraded = int(report.get("ungraded") or 0)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("numeric conversion failed", exc_info=True)
         ungraded = 0
 
@@ -100,13 +100,13 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
         if m:
             dt = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")
             submitted_at = dt.isoformat(timespec="seconds")
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
         submitted_at = ""
     if not submitted_at:
         try:
             submitted_at = datetime.fromtimestamp(report_path.stat().st_mtime).isoformat(timespec="seconds")
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("file stat failed", exc_info=True)
             submitted_at = ""
 
@@ -151,7 +151,7 @@ def best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str
     def _ts(v: str) -> float:
         try:
             return datetime.fromisoformat(v).timestamp()
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("operation failed", exc_info=True)
             return 0.0
 

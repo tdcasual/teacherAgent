@@ -71,7 +71,7 @@ def _upload_worker_started_get(core: Any | None = None) -> bool:
 
 def _upload_worker_started_set(core: Any | None = None, value: bool = False) -> None:
     _ac = _app_core(core)
-    _ac.UPLOAD_JOB_WORKER_STARTED = bool(value)
+    setattr(_ac, "UPLOAD_JOB_WORKER_STARTED", bool(value))
 
 
 def _upload_worker_thread_get(core: Any | None = None):
@@ -80,7 +80,7 @@ def _upload_worker_thread_get(core: Any | None = None):
 
 def _upload_worker_thread_set(core: Any | None = None, value: Any = None) -> None:
     _ac = _app_core(core)
-    _ac.UPLOAD_JOB_WORKER_THREAD = value
+    setattr(_ac, "UPLOAD_JOB_WORKER_THREAD", value)
 
 
 def upload_worker_deps(core: Any | None = None) -> UploadWorkerDeps:
@@ -110,7 +110,7 @@ def _exam_worker_started_get(core: Any | None = None) -> bool:
 
 def _exam_worker_started_set(core: Any | None = None, value: bool = False) -> None:
     _ac = _app_core(core)
-    _ac.EXAM_JOB_WORKER_STARTED = bool(value)
+    setattr(_ac, "EXAM_JOB_WORKER_STARTED", bool(value))
 
 
 def _exam_worker_thread_get(core: Any | None = None):
@@ -119,7 +119,7 @@ def _exam_worker_thread_get(core: Any | None = None):
 
 def _exam_worker_thread_set(core: Any | None = None, value: Any = None) -> None:
     _ac = _app_core(core)
-    _ac.EXAM_JOB_WORKER_THREAD = value
+    setattr(_ac, "EXAM_JOB_WORKER_THREAD", value)
 
 
 def exam_worker_deps(core: Any | None = None) -> ExamWorkerDeps:
@@ -150,7 +150,7 @@ def _survey_worker_started_get(core: Any | None = None) -> bool:
 
 def _survey_worker_started_set(core: Any | None = None, value: bool = False) -> None:
     _ac = _app_core(core)
-    _ac.SURVEY_JOB_WORKER_STARTED = bool(value)
+    setattr(_ac, "SURVEY_JOB_WORKER_STARTED", bool(value))
 
 
 def _survey_worker_thread_get(core: Any | None = None):
@@ -159,7 +159,7 @@ def _survey_worker_thread_get(core: Any | None = None):
 
 def _survey_worker_thread_set(core: Any | None = None, value: Any = None) -> None:
     _ac = _app_core(core)
-    _ac.SURVEY_JOB_WORKER_THREAD = value
+    setattr(_ac, "SURVEY_JOB_WORKER_THREAD", value)
 
 
 def survey_worker_deps(core: Any | None = None) -> SurveyWorkerDeps:
@@ -188,7 +188,7 @@ def _profile_update_worker_started_get(core: Any | None = None) -> bool:
 
 def _profile_update_worker_started_set(core: Any | None = None, value: bool = False) -> None:
     _ac = _app_core(core)
-    _ac._PROFILE_UPDATE_WORKER_STARTED = bool(value)
+    setattr(_ac, "_PROFILE_UPDATE_WORKER_STARTED", bool(value))
 
 
 def _profile_update_worker_thread_get(core: Any | None = None):
@@ -197,7 +197,7 @@ def _profile_update_worker_thread_get(core: Any | None = None):
 
 def _profile_update_worker_thread_set(core: Any | None = None, value: Any = None) -> None:
     _ac = _app_core(core)
-    _ac._PROFILE_UPDATE_WORKER_THREAD = value
+    setattr(_ac, "_PROFILE_UPDATE_WORKER_THREAD", value)
 
 
 def profile_update_worker_deps(core: Any | None = None) -> ProfileUpdateWorkerDeps:
@@ -227,4 +227,4 @@ def _chat_worker_started_get(core: Any | None = None) -> bool:
 
 def _chat_worker_started_set(core: Any | None = None, value: bool = False) -> None:
     _ac = _app_core(core)
-    _ac.CHAT_JOB_WORKER_STARTED = bool(value)
+    setattr(_ac, "CHAT_JOB_WORKER_STARTED", bool(value))

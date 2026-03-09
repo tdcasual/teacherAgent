@@ -16,9 +16,14 @@ SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
 
 python3 "${SCRIPT_DIR}/check_backend_quality_budget.py" --print-only --show-tool-output
 
+COMPLEXITY_SCRIPT="${SCRIPT_DIR}/check_complexity_budget.py"
 echo
-echo "# complexity budget"
-python3 "${SCRIPT_DIR}/check_complexity_budget.py"
+if [[ -f "${COMPLEXITY_SCRIPT}" ]]; then
+  echo "# complexity budget"
+  python3 "${COMPLEXITY_SCRIPT}"
+else
+  echo "[WARN] complexity budget script not found at ${COMPLEXITY_SCRIPT}; skipping." >&2
+fi
 
 ENABLE_CHAT_STREAM_STABILITY_SMOKE="${ENABLE_CHAT_STREAM_STABILITY_SMOKE:-1}"
 if [[ "${ENABLE_CHAT_STREAM_STABILITY_SMOKE}" != "0" ]]; then

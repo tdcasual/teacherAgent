@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from services.api.analysis_report_service import (
     build_analysis_report_deps,
     get_analysis_report,
@@ -9,8 +11,17 @@ from services.api.analysis_report_service import (
     list_analysis_review_queue,
     rerun_analysis_report,
 )
-from services.api.survey_repository import append_survey_review_queue_item, write_survey_bundle, write_survey_report
+from services.api.domains.manifest_models import DomainManifest, DomainReportBinding
+from services.api.domains.manifest_registry import (
+    DomainManifestRegistry,
+    build_default_domain_manifest_registry,
+)
 from services.api.job_repository import write_survey_job
+from services.api.survey_repository import (
+    append_survey_review_queue_item,
+    write_survey_bundle,
+    write_survey_report,
+)
 
 
 class _Core:
@@ -121,6 +132,9 @@ def test_get_and_rerun_analysis_report_bridge_to_survey_provider(tmp_path: Path)
     assert detail['report']['analysis_type'] == 'survey'
     assert detail['report']['strategy_id'] == 'survey.teacher.report'
     assert detail['artifact_meta']['parse_confidence'] == 0.41
+    assert detail['replay_context']['lineage']['runtime_version'] == 'v1'
+    assert detail['replay_context']['artifact_payload']['survey_meta']['title'] == '课堂反馈问卷'
+    assert detail['replay_context']['strategy_target']['strategy_id'] == 'survey.teacher.report'
     assert rerun['status'] == 'rerun_requested'
     assert rerun['domain'] == 'survey'
 
@@ -168,7 +182,10 @@ def test_list_analysis_review_queue_filters_by_domain() -> None:
 
 
 def test_list_analysis_reports_supports_video_homework_domain(tmp_path: Path) -> None:
-    from services.api.multimodal_report_service import build_multimodal_report_deps, write_multimodal_report
+    from services.api.multimodal_report_service import (
+        build_multimodal_report_deps,
+        write_multimodal_report,
+    )
 
     core = _Core(tmp_path)
     multimodal_deps = build_multimodal_report_deps(core)
@@ -251,3 +268,52 @@ def test_list_analysis_review_queue_returns_summary_and_unresolved_filter() -> N
     assert [item['item_id'] for item in result['items']] == ['rvw_1']
     assert result['summary']['unresolved_items'] == 1
     assert result['summary']['reason_counts']['low_confidence'] == 1
+
+
+
+def test_build_analysis_report_deps_uses_manifest_registry_subset(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    registry = DomainManifestRegistry()
+    default_registry = build_default_domain_manifest_registry(review_confidence_floor=0.65)
+    registry.register(default_registry.get('survey'))
+
+    deps = build_analysis_report_deps(core, manifest_registry=registry)
+
+    assert sorted(deps.providers.keys()) == ['survey']
+
+
+
+def test_build_analysis_report_deps_requires_report_binding_metadata() -> None:
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='broken',
+            display_name='Broken',
+            report_binding=DomainReportBinding(provider_factory=''),
+        )
+    )
+
+    with pytest.raises(ValueError, match='report binding'):
+        build_analysis_report_deps(object(), manifest_registry=registry)
+
+
+
+def test_rerun_analysis_report_returns_previous_lineage(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    _seed_survey_report(core)
+
+    deps = build_analysis_report_deps(core)
+    rerun = rerun_analysis_report(
+        report_id='report_1',
+        teacher_id='teacher_1',
+        domain='survey',
+        reason='refresh',
+        deps=deps,
+    )
+    detail = get_analysis_report(report_id='report_1', teacher_id='teacher_1', domain='survey', deps=deps)
+
+    assert rerun['previous_lineage']['strategy_version'] == 'v1'
+    assert rerun['previous_lineage']['prompt_version'] == 'v1'
+    assert rerun['previous_lineage']['adapter_version'] == 'v1'
+    assert rerun['previous_lineage']['runtime_version'] == 'v1'
+    assert detail['artifact_meta']['rerun_base_lineage']['runtime_version'] == 'v1'

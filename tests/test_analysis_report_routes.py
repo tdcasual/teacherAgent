@@ -5,14 +5,20 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from services.api.analysis_metrics_service import AnalysisMetricsService
 from services.api.routes.analysis_report_routes import build_router
-from services.api.survey_repository import append_survey_review_queue_item, write_survey_bundle, write_survey_report
+from services.api.survey_repository import (
+    append_survey_review_queue_item,
+    write_survey_bundle,
+    write_survey_report,
+)
 
 
 class _Core:
     def __init__(self, root: Path) -> None:
         self.DATA_DIR = root / 'data'
         self.UPLOADS_DIR = root / 'uploads'
+        self.analysis_metrics_service = AnalysisMetricsService()
 
 
 
@@ -71,6 +77,7 @@ def test_analysis_report_routes_expose_unified_list_detail_rerun_and_review_queu
     assert rerun_res.json()['domain'] == 'survey'
     assert review_res.status_code == 200
     assert review_res.json()['items'][0]['domain'] == 'survey'
+    assert core.analysis_metrics_service.snapshot()['counters']['rerun_count'] == 1
 
 
 def test_analysis_report_routes_expose_review_queue_summary_and_actions(monkeypatch, tmp_path: Path) -> None:
@@ -132,3 +139,26 @@ def test_analysis_report_routes_expose_review_queue_summary_and_actions(monkeypa
     assert called['review']['status'] == 'unresolved'
     assert called['action']['action'] == 'retry'
     assert called['action']['item_id'] == 'rvw_1'
+
+
+def test_analysis_report_routes_expose_analysis_metrics_snapshot(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    core.analysis_metrics_service.record_review_downgrade(
+        domain='survey',
+        strategy_id='survey.teacher.report',
+        agent_id='survey_analyst',
+        reason_code='invalid_output',
+    )
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        metrics_res = client.get('/teacher/analysis/metrics')
+
+    assert metrics_res.status_code == 200
+    payload = metrics_res.json()
+    assert payload['ok'] is True
+    assert payload['metrics']['schema_version'] == 'v1'
+    assert payload['metrics']['counters']['review_downgrade_count'] == 1
+    assert payload['metrics']['by_domain']['survey']['review_downgraded'] == 1

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from services.api.job_repository import load_survey_job, write_survey_job
-from services.api.survey_orchestrator_service import build_survey_orchestrator_deps, process_survey_job
+from services.api.specialist_agents.governor import SpecialistAgentRuntimeError
+from services.api.survey_orchestrator_service import (
+    build_survey_orchestrator_deps,
+    process_survey_job,
+)
 from services.api.survey_repository import (
     load_survey_bundle,
     load_survey_report,
@@ -160,3 +165,63 @@ def test_process_survey_job_persists_analysis_report_plane_metadata(tmp_path: Pa
     assert report['strategy_id'] == 'survey.teacher.report'
     assert report['target_type'] == 'report'
     assert report['target_id'] == 'job_meta'
+
+
+
+def test_process_survey_job_routes_invalid_output_to_review(tmp_path: Path) -> None:
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    write_survey_job(
+        'job_invalid',
+        {
+            'job_id': 'job_invalid',
+            'provider': 'provider',
+            'teacher_id': 'teacher_1',
+            'class_name': '高二2403班',
+            'status': 'webhook_received',
+            'created_at': '2026-03-06T10:00:00',
+        },
+        core=core,
+    )
+    write_survey_raw_payload(
+        'job_invalid',
+        'provider.json',
+        {
+            'submission_id': 'sub-invalid',
+            'title': '课堂反馈问卷',
+            'teacher_id': 'teacher_1',
+            'class_name': '高二2403班',
+            'sample_size': 35,
+            'questions': [
+                {
+                    'id': 'Q1',
+                    'prompt': '本节课难度如何？',
+                    'response_type': 'single_choice',
+                    'stats': {'偏难': 12, '适中': 20, '偏易': 3},
+                }
+            ],
+        },
+        core=core,
+    )
+
+    deps = replace(
+        build_survey_orchestrator_deps(core),
+        specialist_runtime=type(
+            '_InvalidRuntime',
+            (),
+            {
+                'run': lambda self, _handoff: (_ for _ in ()).throw(
+                    SpecialistAgentRuntimeError('invalid_output', 'typed artifact validation failed')
+                )
+            },
+        )(),
+    )
+
+    result = process_survey_job('job_invalid', deps=deps)
+    job = load_survey_job('job_invalid', core=core)
+    queue = read_survey_review_queue(core=core)
+
+    assert result['status'] == 'review'
+    assert job['status'] == 'review'
+    assert queue[-1]['report_id'] == 'job_invalid'
+    assert queue[-1]['reason'] == 'invalid_output'
+    assert queue[-1]['reason_code'] == 'invalid_output'

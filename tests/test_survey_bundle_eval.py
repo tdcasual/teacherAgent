@@ -31,13 +31,18 @@ def test_survey_bundle_eval_produces_summary_for_fixture_tree() -> None:
     module = _load_module()
     report = module.evaluate_fixture_tree(FIXTURES_DIR)
 
-    assert report['fixture_count'] == 3
+    assert report['fixture_count'] == 4
     assert set(report['confidence_buckets']) == {'low', 'medium', 'high'}
     assert 0.0 <= report['average_required_field_coverage'] <= 1.0
     assert 0.0 <= report['average_missing_field_rate'] <= 1.0
     assert 0.0 <= report['average_artifact_completeness'] <= 1.0
     case_ids = {item['case_id'] for item in report['cases']}
-    assert case_ids == {'structured_basic_payload', 'unstructured_pdf_report_excerpt', 'unstructured_screenshot_ocr_excerpt'}
+    assert case_ids == {
+        'structured_basic_payload',
+        'unstructured_pdf_report_excerpt',
+        'unstructured_screenshot_ocr_excerpt',
+        'survey_provider_attachment_noise',
+    }
 
 
 
@@ -50,7 +55,7 @@ def test_survey_bundle_eval_cli_json_output() -> None:
     )
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
-    assert payload['fixture_count'] == 3
+    assert payload['fixture_count'] == 4
     assert 'average_required_field_coverage' in payload
 
 

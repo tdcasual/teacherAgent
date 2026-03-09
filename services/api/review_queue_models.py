@@ -10,6 +10,7 @@ class ReviewQueueItem(BaseModel):
     domain: str
     report_id: str
     teacher_id: str
+    strategy_id: Optional[str] = None
     target_type: str
     target_id: str
     status: str

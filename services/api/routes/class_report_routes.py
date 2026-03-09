@@ -13,6 +13,7 @@ from ..analysis_report_service import (
     rerun_analysis_report,
 )
 from ..api_models import AnalysisReportRerunRequest
+from .teacher_route_helpers import scoped_teacher_id
 
 
 
@@ -41,9 +42,10 @@ def build_router(core: Any) -> APIRouter:
         teacher_id: str = Query(default=''),
         status: str = Query(default=''),
     ) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ''
         try:
             return list_analysis_reports(
-                teacher_id=teacher_id,
+                teacher_id=teacher_id_scoped,
                 domain='class_report',
                 status=status or None,
                 strategy_id=None,
@@ -55,11 +57,12 @@ def build_router(core: Any) -> APIRouter:
 
     @router.get('/teacher/class-reports/reports/{report_id}')
     async def teacher_class_report(report_id: str, teacher_id: str = Query(default='')) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ''
         try:
             return _to_class_report_detail(
                 get_analysis_report(
                     report_id=report_id,
-                    teacher_id=teacher_id,
+                    teacher_id=teacher_id_scoped,
                     domain='class_report',
                     deps=analysis_deps,
                 )
@@ -69,10 +72,11 @@ def build_router(core: Any) -> APIRouter:
 
     @router.post('/teacher/class-reports/reports/{report_id}/rerun')
     async def teacher_class_report_rerun(report_id: str, req: AnalysisReportRerunRequest) -> Any:
+        teacher_id_scoped = scoped_teacher_id(req.teacher_id) or ''
         try:
             return rerun_analysis_report(
                 report_id=report_id,
-                teacher_id=req.teacher_id or '',
+                teacher_id=teacher_id_scoped,
                 domain='class_report',
                 reason=req.reason,
                 deps=analysis_deps,
@@ -82,9 +86,10 @@ def build_router(core: Any) -> APIRouter:
 
     @router.get('/teacher/class-reports/review-queue')
     async def teacher_class_report_review_queue(teacher_id: str = Query(default='')) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ''
         try:
             return list_analysis_review_queue(
-                teacher_id=teacher_id,
+                teacher_id=teacher_id_scoped,
                 domain='class_report',
                 status=None,
                 deps=analysis_deps,

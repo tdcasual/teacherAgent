@@ -75,6 +75,9 @@ def test_ops_metrics_exposes_observability_snapshot() -> None:
                 assert metrics["http_requests_total"] >= 1
                 assert "http_latency_sec" in metrics
                 assert "slo" in metrics
+                assert "analysis_runtime" in metrics
+                assert metrics["analysis_runtime"]["schema_version"] == "v1"
+                assert metrics["analysis_runtime"]["counters"]["run_count"] == 0
                 assert "GET /health" in metrics["requests_by_route"]
                 assert response.headers.get("x-request-id")
 

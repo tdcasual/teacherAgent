@@ -40,15 +40,25 @@ class SpecialistAgentGovernor:
         try:
             raw_result = runner(request)
         except Exception:
-            self._emit('failed', request, spec, metadata={'code': 'specialist_execution_failed'})
+            self._emit('failed', request, spec, reason_code='specialist_execution_failed')
             raise SpecialistAgentRuntimeError('specialist_execution_failed', 'Specialist agent execution failed.') from None
         elapsed_sec = self._monotonic() - started_at
         timeout_sec = request.budget.timeout_sec or ((spec.budgets.get('default') or {}).get('timeout_sec'))
         if timeout_sec is not None and float(elapsed_sec) > float(timeout_sec):
-            self._emit('failed', request, spec, metadata={'code': 'timeout', 'elapsed_sec': round(float(elapsed_sec), 4)})
+            self._emit(
+                'failed',
+                request,
+                spec,
+                reason_code='timeout',
+                metadata={'elapsed_sec': round(float(elapsed_sec), 4)},
+            )
             raise SpecialistAgentRuntimeError('timeout', 'Specialist agent timed out.')
         result = SpecialistAgentResult.model_validate(raw_result)
-        self._validate_output(spec, result)
+        try:
+            self._validate_output(spec, result)
+        except SpecialistAgentRuntimeError as exc:
+            self._emit('failed', request, spec, reason_code=exc.code)
+            raise
         self._emit(
             'completed',
             request,
@@ -69,7 +79,7 @@ class SpecialistAgentGovernor:
             if requested is None or allowed is None:
                 continue
             if float(requested) > float(allowed):
-                self._emit('failed', handoff, spec, metadata={'code': 'budget_exceeded', 'budget_field': key})
+                self._emit('failed', handoff, spec, reason_code='budget_exceeded', metadata={'budget_field': key})
                 raise SpecialistAgentRuntimeError('budget_exceeded', f'Specialist budget exceeded for {key}.')
 
     def _validate_output(self, spec: SpecialistAgentSpec, result: SpecialistAgentResult) -> None:
@@ -85,10 +95,14 @@ class SpecialistAgentGovernor:
         handoff: HandoffContract,
         spec: SpecialistAgentSpec,
         *,
+        reason_code: str | None = None,
         metadata: Optional[dict] = None,
     ) -> None:
         if not callable(self._event_sink):
             return
+        payload = dict(metadata or {})
+        if reason_code and not payload.get('code'):
+            payload['code'] = reason_code
         self._event_sink(
             SpecialistRuntimeEvent(
                 phase=phase,
@@ -97,6 +111,7 @@ class SpecialistAgentGovernor:
                 task_kind=handoff.task_kind,
                 domain=str(handoff.task_kind or '').strip().split('.', 1)[0] or None,
                 strategy_id=str(handoff.strategy_id or '').strip() or None,
-                metadata=dict(metadata or {}),
+                reason_code=reason_code,
+                metadata=payload,
             )
         )

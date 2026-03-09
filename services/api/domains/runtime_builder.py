@@ -10,14 +10,17 @@ from ..specialist_agents.class_signal_analyst import (
 from ..specialist_agents.governor import SpecialistAgentGovernor
 from ..specialist_agents.registry import SpecialistAgentRegistry
 from ..specialist_agents.runtime import SpecialistAgentRuntime
-from ..specialist_agents.survey_analyst import SurveyAnalystDeps, load_survey_analyst_prompt, run_survey_analyst
+from ..specialist_agents.survey_analyst import (
+    SurveyAnalystDeps,
+    load_survey_analyst_prompt,
+    run_survey_analyst,
+)
 from ..specialist_agents.video_homework_analyst import (
     VideoHomeworkAnalystDeps,
     load_video_homework_analyst_prompt,
     run_video_homework_analyst,
 )
 from .manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
-
 
 Runner = Callable[..., Any]
 DepsFactory = Callable[[Any], Any]
@@ -123,6 +126,7 @@ def build_domain_specialist_runtime(
                 'task_kind': event.task_kind,
                 'domain': event.domain,
                 'strategy_id': event.strategy_id,
+                'reason_code': event.reason_code,
                 **dict(event.metadata or {}),
             },
         )

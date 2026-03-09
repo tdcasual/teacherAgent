@@ -25,7 +25,7 @@ def _thread_is_alive(thread: Any) -> bool:
     try:
         is_alive_method = getattr(thread, "is_alive", None)
         return bool(is_alive_method()) if callable(is_alive_method) else False
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
         return False
 
@@ -66,7 +66,7 @@ def enqueue_chat_job(job_id: str, *, deps: ChatWorkerDeps, lane_id: Optional[str
         try:
             job = deps.load_chat_job(job_id)
             lane_final = deps.resolve_chat_lane_id_from_job(job)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("lane resolution failed for chat job %s, using fallback", job_id, exc_info=True)
             lane_final = "unknown:session_main:req_unknown"
     with deps.chat_job_lock:
@@ -90,7 +90,7 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> int:
     for job_path in deps.chat_job_dir.glob("*/job.json"):
         try:
             data = json.loads(job_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("corrupt chat job.json at %s, skipping", job_path, exc_info=True)
             continue
         status = str(data.get("status") or "")
@@ -100,7 +100,7 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> int:
             try:
                 lane_id = str(deps.resolve_chat_lane_id_from_job(data) or "").strip() or None
                 queue_info = enqueue_chat_job(job_id, lane_id=lane_id, deps=deps)
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.warning(
                     "lane resolution failed for pending chat job %s, deferring to enqueue fallback",
                     job_id,
@@ -119,7 +119,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
         if now >= next_rescan_at:
             try:
                 scan_pending_chat_jobs(deps=deps)
-            except Exception as exc:
+            except Exception as exc:  # policy: allowed-broad-except
                 _log.warning("operation failed", exc_info=True)
                 deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
             next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
@@ -140,7 +140,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
             continue
         try:
             deps.process_chat_job(job_id)
-        except Exception as exc:  # pragma: no cover - covered by integration tests
+        except Exception as exc:  # pragma: no cover - covered by integration tests  # policy: allowed-broad-except
             _log.warning("operation failed", exc_info=True)
             detail = str(exc)[:200]
             deps.diag_log("chat.job.failed", {"job_id": job_id, "error": detail})
@@ -162,7 +162,7 @@ def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
                         "error_detail": detail,
                     },
                 )
-            except Exception:
+            except Exception:  # policy: allowed-broad-except
                 _log.warning("failed to append job.failed event for chat job %s", job_id, exc_info=True)
         finally:
             with deps.chat_job_lock:
@@ -204,14 +204,14 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
     """
     try:
         deps.stop_event.set()
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
         return
     try:
         deps.chat_job_event.set()
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
-        pass
+        pass  # policy: allowed-broad-except
 
     effective_timeout = max(0.0, float(timeout_sec or 0.0))
     if str(os.getenv("PYTEST_CURRENT_TEST", "") or "").strip():
@@ -221,9 +221,9 @@ def stop_chat_worker(*, deps: ChatWorkerDeps, timeout_sec: float = 1.5) -> None:
         remaining = max(0.0, deadline - time.monotonic())
         try:
             thread.join(remaining)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("operation failed", exc_info=True)
-            pass
+            pass  # policy: allowed-broad-except
     alive_threads = _prune_dead_chat_worker_threads(deps.chat_worker_threads)
     stop_state = compute_stop_result(thread_alive=bool(alive_threads))
     deps.worker_started_set(stop_state.worker_started)

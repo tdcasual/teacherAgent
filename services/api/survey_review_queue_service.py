@@ -20,6 +20,7 @@ class SurveyReviewQueueDeps:
 
 def build_survey_review_queue_deps(core: Any | None = None) -> SurveyReviewQueueDeps:
     target = Path(getattr(core, 'DATA_DIR', '.')) / 'survey_review_queue.jsonl'
+    metrics_service = getattr(core, 'analysis_metrics_service', None)
     return SurveyReviewQueueDeps(
         append_item=lambda item: append_survey_review_queue_item(item, core=core),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
@@ -27,6 +28,7 @@ def build_survey_review_queue_deps(core: Any | None = None) -> SurveyReviewQueue
             metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=target.parent),
             queue_log=target.name,
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            metrics_service=metrics_service,
         ),
     )
 
@@ -47,6 +49,7 @@ def enqueue_survey_review_item(
         confidence=confidence,
         target_type='report',
         target_id=str(job.get('report_id') or job.get('job_id') or '').strip(),
+        strategy_id=str(job.get('strategy_id') or 'survey.teacher.report').strip() or 'survey.teacher.report',
         deps=deps.review_queue_deps,
     )
     item['job_id'] = str(job.get('job_id') or '').strip() or None

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from . import settings
+from .analysis_specialist_failure_service import classify_specialist_failure
 from .artifacts.registry import build_platform_artifact_registry
 from .artifacts.runtime import ArtifactAdapterRuntime
 from .class_report_service import (
@@ -15,6 +16,7 @@ from .class_report_service import (
     write_class_signal_bundle,
 )
 from .class_signal_bundle_models import ClassSignalBundle
+from .specialist_agents.governor import SpecialistAgentRuntimeError
 from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .wiring.survey_wiring import build_class_report_specialist_runtime
@@ -69,6 +71,43 @@ def _review_queue_reason(strategy_reason: str) -> str:
         return 'low_confidence_bundle'
     return reason or 'needs_review'
 
+
+
+
+def _handle_specialist_runtime_failure(
+    job_id: str,
+    report_id: str,
+    job: Dict[str, Any],
+    artifact_confidence: Any,
+    deps: ClassReportOrchestratorDeps,
+    *,
+    exc: SpecialistAgentRuntimeError,
+) -> Dict[str, Any]:
+    decision = classify_specialist_failure(exc)
+    deps.diag_log(
+        'class_report.orchestrator.specialist_failed',
+        {'job_id': job_id, 'report_id': report_id, 'code': decision.reason, 'error': decision.error},
+    )
+    if decision.action != 'review':
+        return _mark_job_failed(job_id, deps, error=decision.reason)
+    item = deps.enqueue_review_item(
+        report_id=report_id,
+        teacher_id=str(job.get('teacher_id') or '').strip(),
+        reason=decision.reason,
+        confidence=artifact_confidence,
+        target_id=report_id,
+    )
+    job = deps.write_job(
+        job_id,
+        {
+            'status': 'review',
+            'report_id': item['report_id'],
+            'review_reason': item['reason'],
+            'review_confidence': item.get('confidence'),
+            'error': decision.error,
+        },
+    )
+    return {'ok': True, 'job_id': job_id, 'status': job['status'], 'report_id': item['report_id']}
 
 
 def _mark_job_failed(job_id: str, deps: ClassReportOrchestratorDeps, *, error: str) -> Dict[str, Any]:
@@ -172,6 +211,8 @@ def process_class_report_job(job_id: str, *, deps: ClassReportOrchestratorDeps) 
         report = deps.deliver_report(job=job, bundle=bundle.model_dump(), analysis_artifact=result.output)
         job = deps.write_job(job_id, {'status': 'teacher_notified', 'report_id': report['report_id']})
         return {'ok': True, 'job_id': job_id, 'report_id': report['report_id'], 'status': job['status']}
+    except SpecialistAgentRuntimeError as exc:
+        return _handle_specialist_runtime_failure(job_id, report_id, job, artifact.confidence, deps, exc=exc)
     except Exception as exc:
         deps.diag_log('class_report.orchestrator.failed', {'job_id': job_id, 'error': str(exc)[:200]})
         deps.write_job(job_id, {'status': 'failed', 'error': str(exc)[:200]})

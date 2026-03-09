@@ -28,6 +28,7 @@ class AnalysisReportDetail(BaseModel):
     report: AnalysisReportSummary
     analysis_artifact: Dict[str, Any] = Field(default_factory=dict)
     artifact_meta: Dict[str, Any] = Field(default_factory=dict)
+    replay_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalysisReviewQueueItemSummary(BaseModel):
@@ -35,6 +36,7 @@ class AnalysisReviewQueueItemSummary(BaseModel):
     domain: str
     report_id: str
     teacher_id: str
+    strategy_id: Optional[str] = None
     status: str
     reason: str
     reason_code: Optional[str] = None

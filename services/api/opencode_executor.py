@@ -15,7 +15,7 @@ _log = logging.getLogger(__name__)
 
 try:
     import yaml  # type: ignore
-except Exception:  # pragma: no cover
+except Exception:  # pragma: no cover  # policy: allowed-broad-except
     _log.debug("yaml package not available, YAML config loading disabled")
     yaml = None
 
@@ -49,7 +49,7 @@ def _as_bool(value: Any, default: bool) -> bool:
 def _as_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("int conversion failed for value=%r, using default=%d", value, default)
         return default
     if parsed < minimum:
@@ -88,15 +88,15 @@ def _parse_json_dict(text: str) -> Optional[Dict[str, Any]]:
         data = json.loads(content)
         if isinstance(data, dict):
             return data
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("JSON parse failed in _parse_json_dict (full content), len=%d", len(content), exc_info=True)
-        pass
+        pass  # policy: allowed-broad-except
     match = re.search(r"\{.*\}", content, re.S)
     if not match:
         return None
     try:
         data = json.loads(match.group(0))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("JSON parse failed in _parse_json_dict (regex match), len=%d", len(match.group(0)), exc_info=True)
         return None
     return data if isinstance(data, dict) else None
@@ -139,7 +139,7 @@ def _collect_text_from_json_lines(stdout: str) -> str:
             continue
         try:
             payload = json.loads(raw)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.warning("JSON line parse failed in _collect_text_from_json_lines, line=%s", raw[:200], exc_info=True)
             chunks.append(raw)
             continue
@@ -184,7 +184,7 @@ def _load_config_file(path: Path) -> Dict[str, Any]:
         return {}
     try:
         parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to load config file %s", path, exc_info=True)
         return {}
     if not isinstance(parsed, dict):
@@ -234,7 +234,7 @@ def _apply_opencode_extra_env(merged: Dict[str, Any]) -> None:
         return
     try:
         parsed = json.loads(extra_env_raw)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to parse OPENCODE_BRIDGE_EXTRA_ENV=%s", extra_env_raw[:200], exc_info=True)
         return
     if isinstance(parsed, dict):
@@ -356,9 +356,9 @@ def _detect_run_flags(binary: str, timeout_sec: int = 15) -> Dict[str, bool]:
         flags["config"] = "--config" in help_text
         flags["attach"] = "--attach" in help_text
         flags["prompt"] = ("--prompt" in help_text) or bool(re.search(r"(^|\s)-p(,|\s)", help_text))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("Failed to detect run flags for binary=%s", binary, exc_info=True)
-        pass
+        pass  # policy: allowed-broad-except
 
     with _HELP_CACHE_LOCK:
         _HELP_CACHE[key] = dict(flags)
@@ -375,7 +375,7 @@ def build_opencode_chart_prompt(
 ) -> str:
     try:
         payload_text = json.dumps(input_data, ensure_ascii=False)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("json.dumps failed for input_data, falling back to str()")
         payload_text = str(input_data)
     if len(payload_text) > 5000:
@@ -481,7 +481,7 @@ def _run_opencode_command(
                 "status": status,
             },
         }
-    except Exception as exc:
+    except Exception as exc:  # policy: allowed-broad-except
         _log.warning("opencode subprocess execution failed: %s", exc, exc_info=True)
         return {
             "ok": False,

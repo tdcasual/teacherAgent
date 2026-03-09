@@ -68,6 +68,12 @@ Last updated: 2026-02-15
 
 建议将 `scripts/quality/collect_backend_quality.sh` 的输出附到发布记录中，作为发布前门禁摘要。
 
+对于 analysis runtime 的 M/H 变更，还应额外保留以下质量闭环证据：
+
+1. 从 review queue 日志导出结构化 feedback dataset：`./.venv/bin/python scripts/export_review_feedback_dataset.py --input <review_queue.jsonl>`
+2. 将 feedback dataset 或其 summary 输入离线评测：`./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only`
+3. 记录 `by_domain` / `by_strategy` / `by_reason_code` 漂移，确认此次变更没有把错误从线上 review queue 悄悄转移到线下盲区。
+
 ## 回滚后核验
 
 若发生回滚，值守人员必须在回滚完成后补充以下检查：

@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List
 
 from . import settings
+from .analysis_specialist_failure_service import classify_specialist_failure
 from .job_repository import load_survey_job, write_survey_job
+from .specialist_agents.governor import SpecialistAgentRuntimeError
 from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
 from .survey.deps import build_survey_application_deps
@@ -100,6 +102,37 @@ def _review_queue_reason(strategy_reason: str) -> str:
         return 'low_confidence_bundle'
     return reason or 'needs_review'
 
+
+
+
+def _handle_specialist_runtime_failure(
+    job_id: str,
+    job: Dict[str, Any],
+    bundle: SurveyEvidenceBundle,
+    deps: SurveyOrchestratorDeps,
+    *,
+    exc: SpecialistAgentRuntimeError,
+) -> Dict[str, Any]:
+    decision = classify_specialist_failure(exc)
+    deps.diag_log(
+        'survey.orchestrator.specialist_failed',
+        {'job_id': job_id, 'code': decision.reason, 'error': decision.error},
+    )
+    if decision.action != 'review':
+        return _mark_job_failed(job_id, deps, error=decision.reason)
+    confidence = float(bundle.parse_confidence) if bundle.parse_confidence is not None else None
+    item = deps.enqueue_survey_review_item(job=job, reason=decision.reason, confidence=confidence)
+    job = _transition_job(
+        job_id,
+        job,
+        'review',
+        deps,
+        report_id=item['report_id'],
+        review_reason=item['reason'],
+        review_confidence=item.get('confidence'),
+        error=decision.error,
+    )
+    return {'ok': True, 'job_id': job_id, 'status': job['status'], 'report_id': item['report_id']}
 
 
 def _mark_job_failed(job_id: str, deps: SurveyOrchestratorDeps, *, error: str) -> Dict[str, Any]:
@@ -203,6 +236,8 @@ def process_survey_job(job_id: str, *, deps: SurveyOrchestratorDeps) -> Dict[str
         )
         job = _transition_job(job_id, job, 'teacher_notified', deps, report_id=report['report_id'])
         return {'ok': True, 'job_id': job_id, 'report_id': report['report_id'], 'status': job['status']}
+    except SpecialistAgentRuntimeError as exc:
+        return _handle_specialist_runtime_failure(job_id, job, bundle, deps, exc=exc)
     except Exception as exc:
         deps.diag_log('survey.orchestrator.failed', {'job_id': job_id, 'error': str(exc)[:200]})
         deps.write_survey_job(job_id, {'status': 'failed', 'error': str(exc)[:200]})

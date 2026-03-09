@@ -11,14 +11,21 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from services.api.class_signal_bundle_models import ClassSignalBundle
-from services.api.multimodal_submission_models import MultimodalSubmissionBundle
-from services.api.report_adapters import adapt_pdf_report_summary, adapt_self_hosted_form_json, adapt_web_export_html
-from services.api.strategies.selector import build_default_strategy_selector
-from services.api.survey_bundle_models import SurveyEvidenceBundle
-from services.api.survey_normalize_structured_service import normalize_structured_survey_payload
-from services.api.survey_report_parse_service import SurveyReportParseDeps, parse_survey_report_payload
-from services.api.upload_text_service import extract_text_from_html
+import services.api.survey_normalize_structured_service as survey_normalize_structured_service  # noqa: E402
+from services.api.class_signal_bundle_models import ClassSignalBundle  # noqa: E402
+from services.api.multimodal_submission_models import MultimodalSubmissionBundle  # noqa: E402
+from services.api.report_adapters import (  # noqa: E402
+    adapt_pdf_report_summary,
+    adapt_self_hosted_form_json,
+    adapt_web_export_html,
+)
+from services.api.review_feedback_service import build_review_feedback_dataset  # noqa: E402
+from services.api.strategies.selector import build_default_strategy_selector  # noqa: E402
+from services.api.survey_report_parse_service import (  # noqa: E402
+    SurveyReportParseDeps,
+    parse_survey_report_payload,
+)
+from services.api.upload_text_service import extract_text_from_html  # noqa: E402
 
 SURVEY_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'sample_size', 'question_summaries')
 CLASS_REPORT_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'question_like_signals', 'theme_like_signals')
@@ -87,7 +94,7 @@ def _build_artifact(path: Path, fixture: Dict[str, Any]):
     if domain == 'survey':
         provider = str(fixture.get('provider') or 'provider').strip() or 'provider'
         if mode == 'structured':
-            bundle = normalize_structured_survey_payload(provider=provider, payload=payload)
+            bundle = survey_normalize_structured_service.normalize_structured_survey_payload(provider=provider, payload=payload)
         elif mode == 'unstructured':
             bundle = parse_survey_report_payload(provider=provider, payload=payload, deps=_parse_deps())
         else:
@@ -400,9 +407,20 @@ def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 
+def _normalize_review_feedback(payload: Dict[str, Any] | None) -> Dict[str, Any]:
+    normalized = dict(payload or {})
+    items = normalized.get('items')
+    if isinstance(items, list):
+        dataset = build_review_feedback_dataset(items=[dict(item or {}) for item in items if isinstance(item, dict)])
+        normalized.update(dataset.get('summary') or {})
+        normalized['items'] = dataset.get('items') or []
+        normalized['summary'] = dataset.get('summary') or {}
+    return normalized
+
+
 def load_review_feedback_summary(path: Path) -> Dict[str, Any]:
     payload = json.loads(path.read_text(encoding='utf-8'))
-    return dict(payload or {}) if isinstance(payload, dict) else {}
+    return _normalize_review_feedback(dict(payload or {}) if isinstance(payload, dict) else {})
 
 
 
@@ -412,7 +430,7 @@ def evaluate_fixture_tree(fixtures_dir: Path, review_feedback: Dict[str, Any] | 
         raise SystemExit(f'No analysis fixtures found under {fixtures_dir}')
     cases = [evaluate_fixture(path) for path in paths]
     report = _aggregate_cases(cases)
-    report['review_feedback'] = dict(review_feedback or {})
+    report['review_feedback'] = _normalize_review_feedback(review_feedback)
     return report
 
 

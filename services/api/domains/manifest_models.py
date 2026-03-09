@@ -15,6 +15,11 @@ class DomainRuntimeBinding:
 
 
 @dataclass(frozen=True)
+class DomainReportBinding:
+    provider_factory: str
+
+
+@dataclass(frozen=True)
 class DomainManifest:
     domain_id: str
     display_name: str = ''
@@ -22,5 +27,6 @@ class DomainManifest:
     strategies: list[StrategySpec] = field(default_factory=list)
     specialists: list[SpecialistAgentSpec] = field(default_factory=list)
     runtime_binding: DomainRuntimeBinding | None = None
+    report_binding: DomainReportBinding | None = None
     rollout_stage: str = 'controlled'
     feature_flags: list[str] = field(default_factory=list)

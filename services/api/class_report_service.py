@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .analysis_lineage_service import extract_analysis_lineage
 from .analysis_metadata_repository import FileBackedAnalysisMetadataRepository
 from .review_queue_service import ReviewQueueDeps, enqueue_review_item, list_review_items
 
@@ -21,20 +22,24 @@ class ClassReportDeps:
     metadata_repo: FileBackedAnalysisMetadataRepository
     review_queue_deps: ReviewQueueDeps
     now_iso: callable
+    metrics_service: Any | None = None
 
 
 
 def build_class_report_deps(core: Any | None = None) -> ClassReportDeps:
     base_dir = Path(getattr(core, 'DATA_DIR', '.')) / 'class_reports'
     metadata_repo = FileBackedAnalysisMetadataRepository(base_dir=base_dir)
+    metrics_service = getattr(core, 'analysis_metrics_service', None)
     return ClassReportDeps(
         metadata_repo=metadata_repo,
         review_queue_deps=ReviewQueueDeps(
             metadata_repo=metadata_repo,
             queue_log='review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+        metrics_service=metrics_service,
     )
 
 
@@ -130,6 +135,7 @@ def enqueue_class_report_review_item(
     reason: str,
     confidence: Optional[float],
     target_id: str,
+    strategy_id: str | None = None,
     deps: ClassReportDeps,
 ) -> Dict[str, Any]:
     return enqueue_review_item(
@@ -140,6 +146,7 @@ def enqueue_class_report_review_item(
         confidence=confidence,
         target_type='report',
         target_id=target_id,
+        strategy_id=str(strategy_id or 'class_signal.teacher.report').strip() or 'class_signal.teacher.report',
         deps=deps.review_queue_deps,
     )
 
@@ -181,6 +188,8 @@ def get_class_report(report_id: str, *, teacher_id: str, deps: ClassReportDeps) 
 
     if report is not None:
         summary = _summary_from_report(report)
+        job_id = str(report.get('job_id') or summary['report_id'] or '').strip()
+        replay_artifact = _read_optional_json(_bundle_relative_path(job_id), deps) or {} if job_id else {}
         artifact_meta = dict(report.get('artifact_meta') or {})
         if report.get('rerun_requested') is not None:
             artifact_meta['rerun_requested'] = bool(report.get('rerun_requested'))
@@ -188,10 +197,13 @@ def get_class_report(report_id: str, *, teacher_id: str, deps: ClassReportDeps) 
             artifact_meta['rerun_reason'] = report.get('rerun_reason')
         if report.get('rerun_requested_at') is not None:
             artifact_meta['rerun_requested_at'] = report.get('rerun_requested_at')
+        if report.get('rerun_base_lineage') is not None:
+            artifact_meta['rerun_base_lineage'] = dict(report.get('rerun_base_lineage') or {})
         return {
             'report': summary,
             'analysis_artifact': dict(report.get('analysis_artifact') or {}),
             'artifact_meta': artifact_meta,
+            'replay_artifact': dict(replay_artifact or {}),
         }
 
     assert job is not None
@@ -210,7 +222,9 @@ def get_class_report(report_id: str, *, teacher_id: str, deps: ClassReportDeps) 
             'missing_fields': list(bundle.get('missing_fields') or []),
             'provenance': dict(bundle.get('provenance') or {}),
             'job_status': summary['status'],
+            **({'rerun_base_lineage': dict(job.get('rerun_base_lineage') or {})} if job.get('rerun_base_lineage') is not None else {}),
         },
+        'replay_artifact': dict(bundle or {}),
     }
 
 
@@ -222,11 +236,13 @@ def rerun_class_report(report_id: str, *, teacher_id: str, reason: str | None, d
     if payload is None or str(payload.get('teacher_id') or '').strip() != teacher_id_final:
         raise ClassReportServiceError(404, 'class_report_not_found')
 
+    previous_lineage = extract_analysis_lineage(payload)
     updates = {
         'rerun_requested': True,
         'rerun_reason': str(reason or '').strip() or None,
         'rerun_requested_at': deps.now_iso(),
         'rerun_requested_by': teacher_id_final,
+        'rerun_base_lineage': previous_lineage,
     }
     if report is not None:
         merged = dict(report)
@@ -234,11 +250,18 @@ def rerun_class_report(report_id: str, *, teacher_id: str, reason: str | None, d
         write_class_report(report_id, merged, deps=deps)
     else:
         write_class_report_job(report_id, updates, deps=deps)
+    metrics_service = getattr(deps, 'metrics_service', None)
+    if hasattr(metrics_service, 'record_rerun'):
+        metrics_service.record_rerun(
+            domain='class_report',
+            strategy_id=str(payload.get('strategy_id') or 'class_signal.teacher.report').strip() or 'class_signal.teacher.report',
+        )
     return {
         'ok': True,
         'report_id': report_id,
         'status': 'rerun_requested',
         'reason': updates['rerun_reason'],
+        'previous_lineage': previous_lineage,
     }
 
 

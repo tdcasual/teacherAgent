@@ -15,6 +15,7 @@ from ..analysis_report_service import (
 from ..api_models import SurveyReportRerunRequest
 from ..survey import application as survey_application
 from ..survey import deps as survey_deps
+from .teacher_route_helpers import scoped_teacher_id
 
 
 def _raise_http_exception(exc: Exception) -> None:
@@ -58,9 +59,10 @@ def build_router(core: Any) -> APIRouter:
         teacher_id: str = Query(default=""),
         status: str = Query(default=""),
     ) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ""
         try:
             return list_analysis_reports(
-                teacher_id=teacher_id,
+                teacher_id=teacher_id_scoped,
                 domain="survey",
                 status=status or None,
                 strategy_id=None,
@@ -72,11 +74,12 @@ def build_router(core: Any) -> APIRouter:
 
     @router.get("/teacher/surveys/reports/{report_id}")
     async def teacher_survey_report(report_id: str, teacher_id: str = Query(default="")) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ""
         try:
             return _to_survey_detail(
                 get_analysis_report(
                     report_id=report_id,
-                    teacher_id=teacher_id,
+                    teacher_id=teacher_id_scoped,
                     domain="survey",
                     deps=analysis_deps,
                 )
@@ -89,10 +92,11 @@ def build_router(core: Any) -> APIRouter:
         report_id: str,
         req: SurveyReportRerunRequest,
     ) -> Any:
+        teacher_id_scoped = scoped_teacher_id(req.teacher_id) or ""
         try:
             return rerun_analysis_report(
                 report_id=report_id,
-                teacher_id=req.teacher_id or "",
+                teacher_id=teacher_id_scoped,
                 domain="survey",
                 reason=req.reason,
                 deps=analysis_deps,
@@ -102,9 +106,10 @@ def build_router(core: Any) -> APIRouter:
 
     @router.get("/teacher/surveys/review-queue")
     async def teacher_survey_review_queue(teacher_id: str = Query(default="")) -> Any:
+        teacher_id_scoped = scoped_teacher_id(teacher_id) or ""
         try:
             return list_analysis_review_queue(
-                teacher_id=teacher_id,
+                teacher_id=teacher_id_scoped,
                 domain="survey",
                 status=None,
                 deps=analysis_deps,

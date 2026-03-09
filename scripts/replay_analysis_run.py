@@ -5,29 +5,35 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+from services.api.strategies.planner import build_replay_request
 
 
 def replay_analysis_run(*, report_path: Path) -> Dict[str, Any]:
     payload = json.loads(Path(report_path).read_text(encoding='utf-8'))
     report = dict(payload.get('report') or payload)
+    analysis_artifact = dict(payload.get('analysis_artifact') or {})
     artifact_meta = dict(payload.get('artifact_meta') or payload.get('bundle_meta') or {})
-    lineage = {
-        'report_id': str(report.get('report_id') or '').strip(),
-        'strategy_id': str(report.get('strategy_id') or '').strip(),
-        'strategy_version': str(report.get('strategy_version') or 'v1').strip() or 'v1',
-        'prompt_version': str(report.get('prompt_version') or 'v1').strip() or 'v1',
-        'adapter_version': str(report.get('adapter_version') or 'v1').strip() or 'v1',
-        'runtime_version': str(report.get('runtime_version') or 'v1').strip() or 'v1',
-    }
+    replay_context = dict(payload.get('replay_context') or {})
+    artifact_payload = dict(replay_context.get('artifact_payload') or payload.get('artifact_payload') or {})
+    if not artifact_payload:
+        raise ValueError('artifact payload required for replay')
+    replay_request = build_replay_request(
+        domain=str(report.get('analysis_type') or replay_context.get('domain') or '').strip(),
+        report=report,
+        artifact_payload=artifact_payload,
+        artifact_meta=artifact_meta,
+        analysis_artifact=analysis_artifact,
+    )
     return {
-        'lineage': lineage,
+        'lineage': dict(replay_request.get('lineage') or {}),
         'artifact_meta': artifact_meta,
+        'replay_request': replay_request,
     }
 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description='Rebuild minimal analysis lineage context from a stored report payload.')
+    parser = argparse.ArgumentParser(description='Rebuild a replayable analysis request from a stored report payload.')
     parser.add_argument('report_path', help='path to stored report JSON')
     args = parser.parse_args(argv)
 

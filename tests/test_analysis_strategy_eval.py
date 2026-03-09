@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-
 SCRIPT_PATH = Path('scripts/analysis_strategy_eval.py')
 FIXTURES_DIR = Path('tests/fixtures')
 
@@ -143,3 +142,35 @@ def test_analysis_strategy_eval_includes_review_feedback_in_report() -> None:
 
     assert report['review_feedback']['total_items'] == 3
     assert report['review_feedback']['by_action']['resolve'] == 2
+
+
+def test_analysis_strategy_eval_summarizes_review_feedback_dataset_items() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(
+        FIXTURES_DIR,
+        review_feedback={
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'strategy_id': 'survey.teacher.report',
+                    'operation': 'retry',
+                    'disposition': 'retry_requested',
+                    'reason_code': 'low_confidence',
+                },
+                {
+                    'item_id': 'rvw_2',
+                    'domain': 'class_report',
+                    'strategy_id': 'class_signal.teacher.report',
+                    'operation': 'reject',
+                    'disposition': 'rejected',
+                    'reason_code': 'missing_fields',
+                },
+            ]
+        },
+    )
+
+    assert report['review_feedback']['total_items'] == 2
+    assert report['review_feedback']['by_strategy']['survey.teacher.report'] == 1
+    assert report['review_feedback']['by_domain_reason_code']['survey']['low_confidence'] == 1
+    assert report['review_feedback']['by_domain_reason_code']['class_report']['missing_fields'] == 1

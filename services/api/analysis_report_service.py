@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from .analysis_report_models import (
@@ -18,6 +19,10 @@ from .class_report_service import (
     list_class_reports,
     rerun_class_report,
 )
+from .domains.manifest_registry import (
+    DomainManifestRegistry,
+    build_default_domain_manifest_registry,
+)
 from .multimodal_report_service import (
     MultimodalReportServiceError,
     build_multimodal_report_deps,
@@ -34,6 +39,7 @@ from .review_queue_service import (
     resolve_review_item,
     retry_review_item,
 )
+from .strategies.planner import build_replay_request
 from .survey_report_service import (
     SurveyReportServiceError,
     build_survey_report_deps,
@@ -56,11 +62,105 @@ class AnalysisReportServiceError(Exception):
 @dataclass(frozen=True)
 class AnalysisReportProvider:
     domain: str
+    default_strategy_id: str
+    now_iso: Callable[[], str]
     list_reports: Callable[[str, Optional[str]], Dict[str, Any]]
     get_report: Callable[[str, str], Dict[str, Any]]
     rerun_report: Callable[[str, str, Optional[str]], Dict[str, Any]]
     list_review_queue: Callable[[str], Dict[str, Any]]
     operate_review_queue_item: Callable[[str, str, str, Optional[str]], Dict[str, Any]]
+
+
+
+
+def build_survey_analysis_report_provider(core: Any | None = None) -> AnalysisReportProvider:
+    survey_deps = build_survey_report_deps(core)
+    return AnalysisReportProvider(
+        domain='survey',
+        default_strategy_id='survey.teacher.report',
+        now_iso=survey_deps.now_iso,
+        list_reports=lambda teacher_id, status=None: list_survey_reports(teacher_id=teacher_id, status=status, deps=survey_deps),
+        get_report=lambda report_id, teacher_id: get_survey_report(report_id=report_id, teacher_id=teacher_id, deps=survey_deps),
+        rerun_report=lambda report_id, teacher_id, reason=None: rerun_survey_report(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            reason=reason,
+            deps=survey_deps,
+        ),
+        list_review_queue=lambda teacher_id: list_survey_review_queue(teacher_id=teacher_id, deps=survey_deps),
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
+            item_id=item_id,
+            action=action,
+            reviewer_id=reviewer_id,
+            operator_note=operator_note,
+            queue_deps=survey_deps.review_queue_deps,
+        ),
+    )
+
+
+def build_class_report_analysis_report_provider(core: Any | None = None) -> AnalysisReportProvider:
+    class_report_deps = build_class_report_deps(core)
+    return AnalysisReportProvider(
+        domain='class_report',
+        default_strategy_id='class_signal.teacher.report',
+        now_iso=class_report_deps.now_iso,
+        list_reports=lambda teacher_id, status=None: list_class_reports(teacher_id=teacher_id, status=status, deps=class_report_deps),
+        get_report=lambda report_id, teacher_id: get_class_report(report_id=report_id, teacher_id=teacher_id, deps=class_report_deps),
+        rerun_report=lambda report_id, teacher_id, reason=None: rerun_class_report(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            reason=reason,
+            deps=class_report_deps,
+        ),
+        list_review_queue=lambda teacher_id: list_class_report_review_queue(teacher_id=teacher_id, deps=class_report_deps),
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
+            item_id=item_id,
+            action=action,
+            reviewer_id=reviewer_id,
+            operator_note=operator_note,
+            queue_deps=class_report_deps.review_queue_deps,
+        ),
+    )
+
+
+def build_video_homework_analysis_report_provider(core: Any | None = None) -> AnalysisReportProvider:
+    multimodal_deps = build_multimodal_report_deps(core)
+    return AnalysisReportProvider(
+        domain='video_homework',
+        default_strategy_id='video_homework.teacher.report',
+        now_iso=multimodal_deps.now_iso,
+        list_reports=lambda teacher_id, status=None: list_multimodal_reports(
+            teacher_id=teacher_id,
+            status=status,
+            deps=multimodal_deps,
+        ),
+        get_report=lambda report_id, teacher_id: get_multimodal_report(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            deps=multimodal_deps,
+        ),
+        rerun_report=lambda report_id, teacher_id, reason=None: rerun_multimodal_report(
+            report_id=report_id,
+            teacher_id=teacher_id,
+            reason=reason,
+            deps=multimodal_deps,
+        ),
+        list_review_queue=lambda teacher_id: list_multimodal_review_queue(teacher_id=teacher_id, deps=multimodal_deps),
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
+            item_id=item_id,
+            action=action,
+            reviewer_id=reviewer_id,
+            operator_note=operator_note,
+            queue_deps=multimodal_deps.review_queue_deps,
+        ),
+    )
+
+
+_REPORT_PROVIDER_FACTORY_LOOKUP = {
+    'build_class_report_analysis_report_provider': build_class_report_analysis_report_provider,
+    'build_survey_analysis_report_provider': build_survey_analysis_report_provider,
+    'build_video_homework_analysis_report_provider': build_video_homework_analysis_report_provider,
+}
 
 
 @dataclass(frozen=True)
@@ -71,86 +171,35 @@ class AnalysisReportDeps:
 
 
 
-def build_analysis_report_deps(core: Any | None = None) -> AnalysisReportDeps:
-    survey_deps = build_survey_report_deps(core)
-    class_report_deps = build_class_report_deps(core)
-    multimodal_deps = build_multimodal_report_deps(core)
-    providers = {
-        'class_report': AnalysisReportProvider(
-            domain='class_report',
-            list_reports=lambda teacher_id, status=None: list_class_reports(teacher_id=teacher_id, status=status, deps=class_report_deps),
-            get_report=lambda report_id, teacher_id: get_class_report(report_id=report_id, teacher_id=teacher_id, deps=class_report_deps),
-            rerun_report=lambda report_id, teacher_id, reason=None: rerun_class_report(
-                report_id=report_id,
-                teacher_id=teacher_id,
-                reason=reason,
-                deps=class_report_deps,
-            ),
-            list_review_queue=lambda teacher_id: list_class_report_review_queue(teacher_id=teacher_id, deps=class_report_deps),
-            operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
-                item_id=item_id,
-                action=action,
-                reviewer_id=reviewer_id,
-                operator_note=operator_note,
-                queue_deps=class_report_deps.review_queue_deps,
-            ),
-        ),
-        'survey': AnalysisReportProvider(
-            domain='survey',
-            list_reports=lambda teacher_id, status=None: list_survey_reports(teacher_id=teacher_id, status=status, deps=survey_deps),
-            get_report=lambda report_id, teacher_id: get_survey_report(report_id=report_id, teacher_id=teacher_id, deps=survey_deps),
-            rerun_report=lambda report_id, teacher_id, reason=None: rerun_survey_report(
-                report_id=report_id,
-                teacher_id=teacher_id,
-                reason=reason,
-                deps=survey_deps,
-            ),
-            list_review_queue=lambda teacher_id: list_survey_review_queue(teacher_id=teacher_id, deps=survey_deps),
-            operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
-                item_id=item_id,
-                action=action,
-                reviewer_id=reviewer_id,
-                operator_note=operator_note,
-                queue_deps=survey_deps.review_queue_deps,
-            ),
-        ),
-        'video_homework': AnalysisReportProvider(
-            domain='video_homework',
-            list_reports=lambda teacher_id, status=None: list_multimodal_reports(
-                teacher_id=teacher_id,
-                status=status,
-                deps=multimodal_deps,
-            ),
-            get_report=lambda report_id, teacher_id: get_multimodal_report(
-                report_id=report_id,
-                teacher_id=teacher_id,
-                deps=multimodal_deps,
-            ),
-            rerun_report=lambda report_id, teacher_id, reason=None: rerun_multimodal_report(
-                report_id=report_id,
-                teacher_id=teacher_id,
-                reason=reason,
-                deps=multimodal_deps,
-            ),
-            list_review_queue=lambda teacher_id: list_multimodal_review_queue(teacher_id=teacher_id, deps=multimodal_deps),
-            operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: _operate_review_queue_item_with_deps(
-                item_id=item_id,
-                action=action,
-                reviewer_id=reviewer_id,
-                operator_note=operator_note,
-                queue_deps=multimodal_deps.review_queue_deps,
-            ),
-        ),
-    }
+def build_analysis_report_deps(
+    core: Any | None = None,
+    *,
+    manifest_registry: DomainManifestRegistry | None = None,
+) -> AnalysisReportDeps:
+    manifest_registry = manifest_registry or build_default_domain_manifest_registry()
+    providers: Dict[str, AnalysisReportProvider] = {}
+    for manifest in manifest_registry.list():
+        report_binding = manifest.report_binding
+        if report_binding is None:
+            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        provider_factory_name = str(report_binding.provider_factory or '').strip()
+        if not provider_factory_name:
+            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        provider_factory = _REPORT_PROVIDER_FACTORY_LOOKUP.get(provider_factory_name)
+        if provider_factory is None:
+            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        provider = provider_factory(core)
+        providers[provider.domain] = provider
+    now_iso = next(iter(providers.values())).now_iso if providers else (lambda: datetime.now().isoformat(timespec='seconds'))
     return AnalysisReportDeps(
         providers=providers,
-        now_iso=survey_deps.now_iso,
+        now_iso=now_iso,
         list_review_queue=lambda teacher_id, domain=None, status=None: _list_review_queue_with_providers(
             teacher_id=teacher_id,
             domain=domain,
             status=status,
             providers=providers,
-            now_iso=survey_deps.now_iso,
+            now_iso=now_iso,
         ),
     )
 
@@ -171,7 +220,7 @@ def list_analysis_reports(
     for provider in _iter_providers(deps.providers, domain):
         payload = provider.list_reports(teacher_id, status)
         for raw in payload.get('items') or []:
-            summary = _to_analysis_summary(provider.domain, raw, report_id_hint=str(raw.get('report_id') or ''))
+            summary = _to_analysis_summary(provider, raw, report_id_hint=str(raw.get('report_id') or ''))
             if strategy_id and summary.strategy_id != strategy_id:
                 continue
             if target_type and summary.target_type != target_type:
@@ -190,12 +239,16 @@ def get_analysis_report(*, report_id: str, teacher_id: str, domain: str | None, 
     except (SurveyReportServiceError, ClassReportServiceError, MultimodalReportServiceError) as exc:
         raise AnalysisReportServiceError(exc.status_code, exc.detail)
     review_queue = deps.list_review_queue(teacher_id, provider.domain, 'queued')
-    report = _to_analysis_summary(provider.domain, detail.get('report') or {}, report_id_hint=report_id)
+    report = _to_analysis_summary(provider, detail.get('report') or {}, report_id_hint=report_id)
     report.review_required = any(str(item.get('report_id') or '') == report.report_id for item in review_queue.get('items') or [])
+    analysis_artifact = dict(detail.get('analysis_artifact') or {})
+    artifact_meta = dict(detail.get('bundle_meta') or detail.get('artifact_meta') or {})
+    replay_context = _build_replay_context(provider=provider, report=report.model_dump(), detail=detail, artifact_meta=artifact_meta, analysis_artifact=analysis_artifact)
     generic_detail = AnalysisReportDetail(
         report=report,
-        analysis_artifact=dict(detail.get('analysis_artifact') or {}),
-        artifact_meta=dict(detail.get('bundle_meta') or detail.get('artifact_meta') or {}),
+        analysis_artifact=analysis_artifact,
+        artifact_meta=artifact_meta,
+        replay_context=replay_context,
     )
     return generic_detail.model_dump()
 
@@ -306,14 +359,10 @@ def _resolve_review_queue_provider(
 
 
 
-def _to_analysis_summary(domain: str, raw: Dict[str, Any], *, report_id_hint: str) -> AnalysisReportSummary:
+def _to_analysis_summary(provider: AnalysisReportProvider, raw: Dict[str, Any], *, report_id_hint: str) -> AnalysisReportSummary:
     report_id = str(raw.get('report_id') or report_id_hint or '').strip()
-    default_strategy_by_domain = {
-        'class_report': 'class_signal.teacher.report',
-        'survey': 'survey.teacher.report',
-        'video_homework': 'video_homework.teacher.report',
-    }
-    default_strategy_id = default_strategy_by_domain.get(domain, 'survey.teacher.report')
+    domain = provider.domain
+    default_strategy_id = str(provider.default_strategy_id or '').strip() or 'survey.teacher.report'
     return AnalysisReportSummary(
         report_id=report_id,
         analysis_type=str(raw.get('analysis_type') or domain).strip() or domain,
@@ -335,6 +384,30 @@ def _to_analysis_summary(domain: str, raw: Dict[str, Any], *, report_id_hint: st
 
 
 
+def _build_replay_context(
+    *,
+    provider: AnalysisReportProvider,
+    report: Dict[str, Any],
+    detail: Dict[str, Any],
+    artifact_meta: Dict[str, Any],
+    analysis_artifact: Dict[str, Any],
+) -> Dict[str, Any]:
+    artifact_payload = dict(detail.get('replay_artifact') or {})
+    if not artifact_payload:
+        return {}
+    try:
+        return build_replay_request(
+            domain=provider.domain,
+            report=report,
+            artifact_payload=artifact_payload,
+            artifact_meta=artifact_meta,
+            analysis_artifact=analysis_artifact,
+        )
+    except ValueError:
+        return {}
+
+
+
 def _safe_float(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -351,6 +424,7 @@ def _to_analysis_review_queue_item(provider: AnalysisReportProvider, raw: Dict[s
         domain=provider.domain,
         report_id=str(raw.get('report_id') or '').strip(),
         teacher_id=str(raw.get('teacher_id') or '').strip(),
+        strategy_id=str(raw.get('strategy_id') or provider.default_strategy_id).strip() or provider.default_strategy_id,
         status=str(raw.get('status') or 'queued').strip() or 'queued',
         reason=str(raw.get('reason') or '').strip(),
         reason_code=str(raw.get('reason_code') or '').strip() or None,

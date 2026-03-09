@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .analysis_metrics_service import AnalysisMetricsService
 from .app_routes import register_routes
 from .auth_service import require_principal
 from .container import build_app_container
@@ -41,11 +42,22 @@ def _attach_request_id_filter_once() -> None:
     root.addFilter(RequestIdFilter())
 
 
+def _ops_metrics_payload(core: Any) -> dict[str, Any]:
+    metrics = dict(OBSERVABILITY.snapshot())
+    analysis_metrics = getattr(core, 'analysis_metrics_service', None)
+    analysis_snapshot = getattr(analysis_metrics, 'snapshot', None)
+    if callable(analysis_snapshot):
+        metrics['analysis_runtime'] = analysis_snapshot()
+    else:
+        metrics['analysis_runtime'] = AnalysisMetricsService().snapshot()
+    return metrics
+
+
 def _register_ops_routes(app_obj: FastAPI) -> None:
     @app_obj.get("/ops/metrics")
     async def ops_metrics():
         require_principal(roles=("service", "admin"))
-        return {"ok": True, "metrics": OBSERVABILITY.snapshot()}
+        return {"ok": True, "metrics": _ops_metrics_payload(app_obj.state.core)}
 
     @app_obj.get("/ops/slo")
     async def ops_slo():
@@ -64,6 +76,8 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
 
 def create_app(settings: AppSettings) -> FastAPI:
     core = build_core_runtime(settings=settings)
+    if not hasattr(core, 'analysis_metrics_service'):
+        core.analysis_metrics_service = AnalysisMetricsService()
     set_default_core(core)
     app_obj = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
     app_obj.state.settings = settings
@@ -85,7 +99,6 @@ def create_app(settings: AppSettings) -> FastAPI:
     _register_ops_routes(app_obj)
     _attach_request_id_filter_once()
 
-    # Fallback runtime context for non-request code paths.
     CURRENT_CORE.set(core)
     return app_obj
 

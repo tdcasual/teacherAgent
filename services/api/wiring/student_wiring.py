@@ -29,8 +29,9 @@ from . import get_app_core as _app_core
 
 def _student_submit_deps(core=None):
     _ac = _app_core(core)
+    resolve_teacher_id = _ac.resolve_teacher_id
     student_memory_deps = StudentMemoryDeps(
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=resolve_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
@@ -51,15 +52,16 @@ def _student_submit_deps(core=None):
             evidence=kwargs.get("evidence") if isinstance(kwargs.get("evidence"), dict) else None,
             request_id=(str(kwargs.get("request_id") or "") or None),
         ),
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=resolve_teacher_id,
         diag_log=_ac.diag_log,
     )
 
 
 def _student_import_deps(core=None):
     _ac = _app_core(core)
+    app_root = getattr(_ac, "APP_ROOT")
     return StudentImportDeps(
-        app_root=_ac.APP_ROOT,
+        app_root=app_root,
         data_dir=_ac.DATA_DIR,
         load_profile_file=_ac.load_profile_file,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),

@@ -36,6 +36,7 @@ class ReviewQueueDeps:
     metadata_repo: AnalysisMetadataRepository
     queue_log: str
     now_iso: Any
+    metrics_service: Any | None = None
 
 
 
@@ -48,6 +49,7 @@ def enqueue_review_item(
     confidence: Optional[float],
     target_type: str,
     target_id: str,
+    strategy_id: Optional[str] = None,
     deps: ReviewQueueDeps,
 ) -> Dict[str, Any]:
     current_items = _load_latest_items(deps)
@@ -59,6 +61,7 @@ def enqueue_review_item(
         domain=str(domain or '').strip(),
         report_id=str(report_id or '').strip(),
         teacher_id=str(teacher_id or '').strip(),
+        strategy_id=str(strategy_id or '').strip() or None,
         target_type=str(target_type or '').strip(),
         target_id=str(target_id or '').strip(),
         status='queued',
@@ -71,6 +74,14 @@ def enqueue_review_item(
         updated_at=timestamp,
     )
     deps.metadata_repo.append_jsonl(deps.queue_log, item.model_dump(exclude_none=True))
+    metrics_service = getattr(deps, 'metrics_service', None)
+    if hasattr(metrics_service, 'record_review_downgrade'):
+        metrics_service.record_review_downgrade(
+            domain=item.domain,
+            strategy_id=item.strategy_id,
+            agent_id=None,
+            reason_code=item.reason_code,
+        )
     return item.model_dump(exclude_none=True)
 
 
@@ -251,6 +262,7 @@ def _normalize_item(raw: Dict[str, Any], *, index: int) -> ReviewQueueItem:
         domain=domain,
         report_id=report_id,
         teacher_id=str(raw.get('teacher_id') or '').strip(),
+        strategy_id=str(raw.get('strategy_id') or '').strip() or None,
         target_type=target_type,
         target_id=target_id,
         status=status,

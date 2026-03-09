@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 from . import settings
+from .analysis_specialist_failure_service import classify_specialist_failure
 from .multimodal_report_service import (
     build_multimodal_report_deps,
     deliver_multimodal_report,
@@ -13,6 +14,7 @@ from .multimodal_report_service import (
 )
 from .multimodal_repository import load_multimodal_submission_view
 from .multimodal_submission_models import MultimodalSubmissionBundle
+from .specialist_agents.governor import SpecialistAgentRuntimeError
 from .specialist_agents.job_graph_models import JobGraphNode, SpecialistJobGraph
 from .specialist_agents.job_graph_runtime import SpecialistJobGraphRuntime
 from .strategies.planner import build_handoff_plan, build_lineage_metadata
@@ -164,13 +166,27 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
             fallback_policy='enqueue_review',
         )
         graph = SpecialistJobGraph(
+            graph_id=str(strategy.strategy_id),
+            domain='video_homework',
             nodes=[
                 JobGraphNode(
                     node_id='analyze',
+                    node_type='analyze',
+                    max_budget={
+                        'max_tokens': float(plan.handoff.budget.max_tokens or 0),
+                        'timeout_sec': float(plan.handoff.budget.timeout_sec or 0),
+                        'max_steps': float(plan.handoff.budget.max_steps or 0),
+                    },
                     handoff=plan.handoff.model_copy(update={'handoff_id': f'{plan.handoff.handoff_id}:analyze'}),
                 ),
                 JobGraphNode(
                     node_id='verify',
+                    node_type='verify',
+                    max_budget={
+                        'max_tokens': float(plan.handoff.budget.max_tokens or 0),
+                        'timeout_sec': float(plan.handoff.budget.timeout_sec or 0),
+                        'max_steps': float(plan.handoff.budget.max_steps or 0),
+                    },
                     handoff=plan.handoff.model_copy(
                         update={
                             'handoff_id': f'{plan.handoff.handoff_id}:verify',
@@ -186,11 +202,51 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
         report = deps.deliver_report(job=job, bundle=bundle.model_dump(), analysis_artifact=result.output)
         job = deps.write_job(submission_id, {'status': 'teacher_notified', 'report_id': report['report_id']})
         return {'ok': True, 'submission_id': submission_id, 'report_id': report['report_id'], 'status': job['status']}
+    except SpecialistAgentRuntimeError as exc:
+        return _handle_specialist_runtime_failure(submission_id, report_id, teacher_id, job, artifact.confidence, deps, exc=exc)
     except Exception as exc:
         deps.diag_log('multimodal.orchestrator.failed', {'submission_id': submission_id, 'error': str(exc)[:200]})
         deps.write_job(submission_id, {'status': 'failed', 'error': str(exc)[:200]})
         raise
 
+
+
+
+def _handle_specialist_runtime_failure(
+    submission_id: str,
+    report_id: str,
+    teacher_id: str,
+    job: Dict[str, Any],
+    artifact_confidence: Any,
+    deps: MultimodalOrchestratorDeps,
+    *,
+    exc: SpecialistAgentRuntimeError,
+) -> Dict[str, Any]:
+    decision = classify_specialist_failure(exc)
+    deps.diag_log(
+        'multimodal.orchestrator.specialist_failed',
+        {'submission_id': submission_id, 'report_id': report_id, 'code': decision.reason, 'error': decision.error},
+    )
+    if decision.action != 'review':
+        return _mark_job_failed(submission_id, deps, error=decision.reason)
+    item = deps.enqueue_review_item(
+        report_id=report_id,
+        teacher_id=teacher_id,
+        reason=decision.reason,
+        confidence=artifact_confidence,
+        target_id=submission_id,
+    )
+    job = deps.write_job(
+        submission_id,
+        {
+            'status': 'review',
+            'report_id': item['report_id'],
+            'review_reason': item['reason'],
+            'review_confidence': item.get('confidence'),
+            'error': decision.error,
+        },
+    )
+    return {'ok': True, 'submission_id': submission_id, 'status': job['status'], 'report_id': item['report_id']}
 
 
 def _load_job_optional(submission_id: str, service_deps) -> Dict[str, Any]:

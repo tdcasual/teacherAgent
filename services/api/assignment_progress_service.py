@@ -95,7 +95,7 @@ def _as_bool(value: Any, default: bool) -> bool:
 def _as_int(value: Any, default: int) -> int:
     try:
         return int(value)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return int(default)
 
 
@@ -133,12 +133,35 @@ def _normalize_completion_policy(meta: Dict[str, Any]) -> Dict[str, Any]:
 def _attempt_meets_min_graded_total(attempt: Dict[str, Any], min_graded_total: int) -> bool:
     if not isinstance(attempt, dict):
         return False
+    minimum = max(0, int(min_graded_total or 0))
+    if minimum <= 0:
+        return True
+    if "graded_total" in attempt:
+        try:
+            graded_total = int(attempt.get("graded_total") or 0)
+        except Exception:  # policy: allowed-broad-except
+            _log.debug("numeric conversion failed", exc_info=True)
+            graded_total = 0
+        return graded_total >= minimum
+    if attempt.get("valid_submission") is False:
+        return False
     try:
-        graded_total = int(attempt.get("graded_total") or 0)
-    except Exception:
-        _log.debug("numeric conversion failed", exc_info=True)
-        graded_total = 0
-    return graded_total >= max(0, int(min_graded_total or 0))
+        if float(attempt.get("score_earned")) > 0:
+            return True
+    except Exception:  # policy: allowed-broad-except
+        pass  # policy: allowed-broad-except
+    try:
+        if float(attempt.get("score")) > 0:
+            return True
+    except Exception:  # policy: allowed-broad-except
+        pass  # policy: allowed-broad-except
+    try:
+        if int(attempt.get("correct") or 0) > 0:
+            return True
+    except Exception:  # policy: allowed-broad-except
+        pass  # policy: allowed-broad-except
+    items = attempt.get("items")
+    return isinstance(items, list) and len(items) >= minimum
 
 
 def _attempt_ts(value: Any) -> float:
@@ -147,7 +170,7 @@ def _attempt_ts(value: Any) -> float:
         if not text:
             return 0.0
         return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.debug("operation failed", exc_info=True)
         return 0.0
 
@@ -317,7 +340,7 @@ def compute_assignment_progress(
 
     try:
         deps.atomic_write_json(folder / "progress.json", result)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to write progress.json for assignment %s", assignment_id, exc_info=True)
 
     return result

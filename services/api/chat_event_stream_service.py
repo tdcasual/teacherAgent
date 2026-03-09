@@ -41,7 +41,7 @@ def _trim_signal_capacity_locked() -> None:
     while len(_STREAM_SIGNALS) > cap:
         try:
             _STREAM_SIGNALS.popitem(last=False)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             break
 
 
@@ -137,7 +137,7 @@ def _chat_event_seq_path(job_id: str, *, deps: ChatEventStreamDeps) -> Path:
 def _coerce_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return int(default)
 
 
@@ -153,7 +153,7 @@ def _load_max_event_id_from_log(path: Path) -> int:
                     continue
                 try:
                     item = json.loads(text)
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("JSON parse failed", exc_info=True)
                     continue
                 if not isinstance(item, dict):
@@ -161,7 +161,7 @@ def _load_max_event_id_from_log(path: Path) -> int:
                 event_id = _coerce_int(item.get("event_id"), 0)
                 if event_id > max_id:
                     max_id = event_id
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to scan chat event log: %s", path, exc_info=True)
         return 0
     return max_id
@@ -172,7 +172,7 @@ def _read_current_event_id(job_id: str, *, deps: ChatEventStreamDeps) -> int:
     if seq_path.exists():
         try:
             return _coerce_int(seq_path.read_text(encoding="utf-8").strip(), 0)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.debug("operation failed", exc_info=True)
     return _load_max_event_id_from_log(chat_event_log_path(job_id, deps=deps))
 
@@ -206,12 +206,12 @@ def append_chat_event(
             handle.write(json.dumps(event, ensure_ascii=False) + "\n")
         try:
             seq_path.write_text(str(next_id), encoding="utf-8")
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.debug("operation failed", exc_info=True)
         try:
             if callable(deps.notify_job_event):
                 deps.notify_job_event(job_id)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             _log.debug("operation failed", exc_info=True)
         if event_name in {"job.done", "job.failed", "job.cancelled"}:
             clear_chat_stream_signal(job_id)
@@ -239,7 +239,7 @@ def load_chat_events(
                     continue
                 try:
                     item = json.loads(text)
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("JSON parse failed", exc_info=True)
                     continue
                 if not isinstance(item, dict):
@@ -250,7 +250,7 @@ def load_chat_events(
                 out.append(item)
                 if len(out) >= cap:
                     break
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to load chat events for job=%s", job_id, exc_info=True)
         return []
     return out
@@ -278,7 +278,7 @@ def load_chat_events_incremental(
             if use_hint:
                 try:
                     size = path.stat().st_size
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     size = 0
                 if hint is None or hint < 0 or hint > size:
                     use_hint = False
@@ -295,7 +295,7 @@ def load_chat_events_incremental(
                     continue
                 try:
                     item = json.loads(text)
-                except Exception:
+                except Exception:  # policy: allowed-broad-except
                     _log.debug("JSON parse failed", exc_info=True)
                     continue
                 if not isinstance(item, dict):
@@ -307,7 +307,7 @@ def load_chat_events_incremental(
                 if len(out) >= cap:
                     break
             next_offset = max(0, _coerce_int(handle.tell(), 0))
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         _log.warning("failed to load incremental chat events for job=%s", job_id, exc_info=True)
         return [], max(0, int(hint or 0))
     return out, next_offset

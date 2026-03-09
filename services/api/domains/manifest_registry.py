@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ..artifacts.registry import ArtifactAdapterSpec
 from ..specialist_agents.registry import SpecialistAgentSpec
 from ..strategies.contracts import StrategySpec
-from .manifest_models import DomainManifest, DomainRuntimeBinding
+from .manifest_models import DomainManifest, DomainReportBinding, DomainRuntimeBinding
 
 
 class DomainManifestNotFoundError(KeyError):
@@ -91,6 +89,7 @@ def _survey_manifest(review_confidence_floor: float) -> DomainManifest:
             specialist_deps_factory='build_survey_analyst_deps',
             payload_constraint_key='survey_evidence_bundle',
         ),
+        report_binding=DomainReportBinding(provider_factory='build_survey_analysis_report_provider'),
         rollout_stage='shadow_or_beta',
         feature_flags=['SURVEY_ANALYSIS_ENABLED', 'SURVEY_SHADOW_MODE', 'SURVEY_BETA_TEACHER_ALLOWLIST'],
     )
@@ -159,6 +158,7 @@ def _class_report_manifest(review_confidence_floor: float) -> DomainManifest:
             specialist_deps_factory='build_class_signal_analyst_deps',
             payload_constraint_key='class_signal_bundle',
         ),
+        report_binding=DomainReportBinding(provider_factory='build_class_report_analysis_report_provider'),
         rollout_stage='internal_only',
         feature_flags=[],
     )
@@ -205,6 +205,7 @@ def _video_homework_manifest(review_confidence_floor: float) -> DomainManifest:
             specialist_deps_factory='build_video_homework_analyst_deps',
             payload_constraint_key='multimodal_submission_bundle',
         ),
+        report_binding=DomainReportBinding(provider_factory='build_video_homework_analysis_report_provider'),
         rollout_stage='controlled_beta',
         feature_flags=[
             'MULTIMODAL_ENABLED',

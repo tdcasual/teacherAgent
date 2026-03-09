@@ -48,6 +48,8 @@
   - 新依赖通过容器挂载到 `app.state.container`
   - 禁止新增模块级全局依赖入口作为默认路径
   - analysis domain 的 specialist runtime 优先通过 `services/api/domains/runtime_builder.py` 组装；`services/api/wiring/*` 只保留薄封装或兼容入口
+  - analysis report plane 的 domain provider 优先由 manifest 元信息驱动装配，不再在应用层维护一份独立的按域硬编码真相表
+  - 新增 analysis domain 前，先按 `docs/reference/analysis-domain-onboarding-template.md` 设计 manifest / strategy / report plane / review queue，再进入实现
 
 ## Frontend Boundaries (Student App)
 

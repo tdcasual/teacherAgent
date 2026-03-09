@@ -38,6 +38,8 @@ agent:
       - lesson.list
       - student.search
       - student.profile.get
+      - chart.agent.run
+      - chart.exec
   budgets:
     max_tool_rounds: 3
     max_tool_calls: 6

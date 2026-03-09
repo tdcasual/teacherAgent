@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .analysis_lineage_service import extract_analysis_lineage
 from .analysis_metadata_repository import FileBackedAnalysisMetadataRepository
 from .api_models import SurveyReportDetail, SurveyReportSummary, SurveyReviewQueueItemSummary
 from .config import DATA_DIR, UPLOADS_DIR
@@ -38,12 +39,14 @@ class SurveyReportReadDeps:
     read_survey_review_queue: Callable[[], List[Dict[str, Any]]]
     review_queue_deps: ReviewQueueDeps
     now_iso: Callable[[], str]
+    metrics_service: Any | None = None
 
 
 
 def build_survey_report_deps(core: Any | None = None) -> SurveyReportReadDeps:
     data_dir = Path(getattr(core, "DATA_DIR", DATA_DIR))
     uploads_dir = Path(getattr(core, "UPLOADS_DIR", UPLOADS_DIR))
+    metrics_service = getattr(core, 'analysis_metrics_service', None)
     return SurveyReportReadDeps(
         data_dir=data_dir,
         uploads_dir=uploads_dir,
@@ -57,8 +60,10 @@ def build_survey_report_deps(core: Any | None = None) -> SurveyReportReadDeps:
             metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=data_dir),
             queue_log='survey_review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        metrics_service=metrics_service,
     )
 
 
@@ -117,6 +122,17 @@ def _safe_float(value: Any) -> Optional[float]:
         return float(value)
     except Exception:
         return None
+
+
+
+def _load_bundle_optional(job_id: Optional[str], deps: SurveyReportReadDeps) -> Dict[str, Any]:
+    if not job_id:
+        return {}
+    try:
+        bundle = deps.load_survey_bundle(job_id)
+    except FileNotFoundError:
+        return {}
+    return bundle if isinstance(bundle, dict) else {}
 
 
 
@@ -292,6 +308,7 @@ def get_survey_report(report_id: str, *, teacher_id: str, deps: SurveyReportRead
         effective_report_id = summary["report_id"]
         job_id = str(report.get("job_id") or effective_report_id or "").strip() or None
         bundle_meta = dict(report.get("bundle_meta") or {})
+        replay_artifact = _load_bundle_optional(job_id, deps)
         bundle_meta_from_job = _bundle_meta_for_job(job_id, deps)
         bundle_meta.setdefault("parse_confidence", bundle_meta_from_job.get("parse_confidence"))
         bundle_meta.setdefault("missing_fields", bundle_meta_from_job.get("missing_fields") or [])
@@ -306,30 +323,39 @@ def get_survey_report(report_id: str, *, teacher_id: str, deps: SurveyReportRead
             bundle_meta["rerun_reason"] = report.get("rerun_reason")
         if report.get("rerun_requested_at") is not None:
             bundle_meta["rerun_requested_at"] = report.get("rerun_requested_at")
+        if report.get("rerun_base_lineage") is not None:
+            bundle_meta["rerun_base_lineage"] = dict(report.get("rerun_base_lineage") or {})
         detail = SurveyReportDetail(
             report=SurveyReportSummary.model_validate(summary),
             analysis_artifact=dict(report.get("analysis_artifact") or {}),
             bundle_meta=bundle_meta,
             review_required=_review_required(effective_report_id, teacher_id_final, deps),
         )
-        return detail.model_dump()
+        payload = detail.model_dump()
+        payload['replay_artifact'] = dict(replay_artifact or {})
+        return payload
 
     assert job is not None
     summary = _summary_from_job(job, deps)
     effective_report_id = summary["report_id"]
     job_id = str(job.get("job_id") or effective_report_id or "").strip() or None
+    replay_artifact = _load_bundle_optional(job_id, deps)
     bundle_meta = _bundle_meta_for_job(job_id, deps)
     if job_id is not None:
         bundle_meta["job_id"] = job_id
     bundle_meta["report_id"] = effective_report_id
     bundle_meta["job_status"] = summary["status"]
+    if job.get("rerun_base_lineage") is not None:
+        bundle_meta["rerun_base_lineage"] = dict(job.get("rerun_base_lineage") or {})
     detail = SurveyReportDetail(
         report=SurveyReportSummary.model_validate(summary),
         analysis_artifact={},
         bundle_meta=bundle_meta,
         review_required=_review_required(effective_report_id, teacher_id_final, deps),
     )
-    return detail.model_dump()
+    payload = detail.model_dump()
+    payload['replay_artifact'] = dict(replay_artifact or {})
+    return payload
 
 
 
@@ -346,11 +372,13 @@ def rerun_survey_report(
     if payload is None or str(payload.get("teacher_id") or "").strip() != teacher_id_final:
         raise SurveyReportServiceError(404, "survey_report_not_found")
 
+    previous_lineage = extract_analysis_lineage(payload)
     updates = {
         "rerun_requested": True,
         "rerun_reason": str(reason or "").strip() or None,
         "rerun_requested_at": deps.now_iso(),
         "rerun_requested_by": teacher_id_final,
+        "rerun_base_lineage": previous_lineage,
     }
     if report is not None:
         merged_report = dict(report)
@@ -358,11 +386,18 @@ def rerun_survey_report(
         deps.write_survey_report(report_id, merged_report)
     else:
         deps.write_survey_job(report_id, updates)
+    metrics_service = getattr(deps, 'metrics_service', None)
+    if hasattr(metrics_service, 'record_rerun'):
+        metrics_service.record_rerun(
+            domain='survey',
+            strategy_id=str(payload.get('strategy_id') or 'survey.teacher.report').strip() or 'survey.teacher.report',
+        )
     return {
         "ok": True,
         "report_id": report_id,
         "status": "rerun_requested",
         "reason": updates["rerun_reason"],
+        "previous_lineage": previous_lineage,
     }
 
 

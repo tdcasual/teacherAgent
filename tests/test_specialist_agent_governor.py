@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from services.api.specialist_agents.contracts import HandoffContract, SpecialistAgentResult
-from services.api.specialist_agents.governor import SpecialistAgentGovernor, SpecialistAgentRuntimeError
+from services.api.specialist_agents.governor import (
+    SpecialistAgentGovernor,
+    SpecialistAgentRuntimeError,
+)
 from services.api.specialist_agents.registry import SpecialistAgentSpec
-
 
 
 def _spec() -> SpecialistAgentSpec:
@@ -133,6 +135,28 @@ def test_governor_rejects_invalid_output_for_analysis_artifact_schema() -> None:
         )
 
     assert exc_info.value.code == 'invalid_output'
+
+
+def test_governor_emits_reason_code_on_failed_events() -> None:
+    events = []
+    governor = SpecialistAgentGovernor(event_sink=lambda event: events.append(event))
+
+    with pytest.raises(SpecialistAgentRuntimeError) as exc_info:
+        governor.run(
+            handoff=_handoff(max_tokens=3200),
+            spec=_spec(),
+            runner=lambda handoff: SpecialistAgentResult(
+                handoff_id=handoff.handoff_id,
+                agent_id=handoff.to_agent,
+                status='completed',
+                output={'executive_summary': 'ok'},
+            ),
+        )
+
+    assert exc_info.value.code == 'budget_exceeded'
+    assert events[-1].phase == 'failed'
+    assert events[-1].reason_code == 'budget_exceeded'
+    assert events[-1].metadata['code'] == 'budget_exceeded'
 
 
 def test_governor_emits_domain_and_strategy_context_in_events() -> None:

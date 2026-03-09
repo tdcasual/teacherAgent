@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
-from services.api.multimodal_orchestrator_service import build_multimodal_orchestrator_deps, process_multimodal_submission
+from services.api.multimodal_orchestrator_service import (
+    build_multimodal_orchestrator_deps,
+    process_multimodal_submission,
+)
 from services.api.multimodal_report_service import (
     build_multimodal_report_deps,
     list_multimodal_review_queue,
     load_multimodal_report,
     load_multimodal_report_job,
 )
-from services.api.multimodal_repository import write_multimodal_extraction, write_multimodal_submission
+from services.api.multimodal_repository import (
+    write_multimodal_extraction,
+    write_multimodal_submission,
+)
+from services.api.specialist_agents.governor import SpecialistAgentRuntimeError
 
 
 class _Core:
@@ -125,3 +133,85 @@ def test_process_multimodal_submission_routes_low_confidence_artifact_to_review(
     assert review_queue['items'][0]['report_id'] == 'submission_1'
     assert review_queue['items'][0]['reason'] == 'low_confidence_bundle'
     assert review_queue['items'][0]['domain'] == 'video_homework'
+
+
+
+def test_process_multimodal_submission_routes_invalid_output_to_review(tmp_path: Path) -> None:
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    report_deps = build_multimodal_report_deps(core)
+    payload = _submission_payload(parse_confidence=0.84)
+    write_multimodal_submission('submission_invalid', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_invalid'}}, core=core)
+    write_multimodal_extraction('submission_invalid', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_invalid'}}, core=core)
+
+    deps = replace(
+        build_multimodal_orchestrator_deps(core),
+        specialist_runtime=type(
+            '_InvalidRuntime',
+            (),
+            {
+                'run': lambda self, _handoff: (_ for _ in ()).throw(
+                    SpecialistAgentRuntimeError('invalid_output', 'typed artifact validation failed')
+                )
+            },
+        )(),
+    )
+
+    result = process_multimodal_submission('submission_invalid', deps=deps)
+    job = load_multimodal_report_job('submission_invalid', deps=report_deps)
+    review_queue = list_multimodal_review_queue(teacher_id='teacher_1', deps=report_deps)
+
+    assert result['status'] == 'review'
+    assert job['status'] == 'review'
+    assert review_queue['items'][0]['report_id'] == 'submission_invalid'
+    assert review_queue['items'][0]['reason'] == 'invalid_output'
+    assert review_queue['items'][0]['reason_code'] == 'invalid_output'
+
+
+def test_process_multimodal_submission_uses_controlled_graph_and_verify_failures_downgrade(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    import services.api.multimodal_orchestrator_service as multimodal_orchestrator_service
+    from services.api.specialist_agents.contracts import SpecialistAgentResult
+
+    class _CapturingGraphRuntime:
+        def __init__(self, *, executor):
+            self._executor = executor
+
+        def run(self, graph):
+            captured['graph'] = graph
+            for node in graph.nodes:
+                if node.node_id == 'verify':
+                    raise SpecialistAgentRuntimeError('invalid_output', 'verify contract failed')
+                self._executor(node.handoff)
+            return type(
+                '_GraphResult',
+                (),
+                {
+                    'final_result': SpecialistAgentResult(
+                        handoff_id='verify',
+                        agent_id='video_homework_analyst',
+                        status='completed',
+                        output={'executive_summary': 'ok'},
+                    )
+                },
+            )()
+
+    monkeypatch.setattr(multimodal_orchestrator_service, 'SpecialistJobGraphRuntime', _CapturingGraphRuntime)
+
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    report_deps = build_multimodal_report_deps(core)
+    payload = _submission_payload(parse_confidence=0.84)
+    write_multimodal_submission('submission_graph', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_graph'}}, core=core)
+    write_multimodal_extraction('submission_graph', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_graph'}}, core=core)
+
+    result = process_multimodal_submission('submission_graph', deps=build_multimodal_orchestrator_deps(core))
+    job = load_multimodal_report_job('submission_graph', deps=report_deps)
+    review_queue = list_multimodal_review_queue(teacher_id='teacher_1', deps=report_deps)
+
+    assert [node.node_id for node in captured['graph'].nodes] == ['analyze', 'verify']
+    assert [node.node_type for node in captured['graph'].nodes] == ['analyze', 'verify']
+    assert captured['graph'].graph_id == 'video_homework.teacher.report'
+    assert result['status'] == 'review'
+    assert job['status'] == 'review'
+    assert review_queue['items'][0]['report_id'] == 'submission_graph'
+    assert review_queue['items'][0]['reason_code'] == 'invalid_output'

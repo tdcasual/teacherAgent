@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
-from services.api.class_report_orchestrator_service import build_class_report_orchestrator_deps, process_class_report_job
+from services.api.class_report_orchestrator_service import (
+    build_class_report_orchestrator_deps,
+    process_class_report_job,
+)
 from services.api.class_report_service import (
     build_class_report_deps,
     list_class_report_review_queue,
@@ -12,6 +16,7 @@ from services.api.class_report_service import (
     load_class_signal_bundle,
     write_class_report_job,
 )
+from services.api.specialist_agents.governor import SpecialistAgentRuntimeError
 
 
 class _Core:
@@ -125,3 +130,61 @@ def test_process_class_report_job_routes_low_confidence_bundle_to_review(tmp_pat
     assert review_queue['items'][0]['report_id'] == 'class_report_low'
     assert review_queue['items'][0]['reason'] == 'low_confidence_bundle'
     assert review_queue['items'][0]['domain'] == 'class_report'
+
+
+
+def test_process_class_report_job_routes_invalid_output_to_review(tmp_path: Path) -> None:
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    service_deps = build_class_report_deps(core)
+    write_class_report_job(
+        'job_invalid',
+        {
+            'job_id': 'job_invalid',
+            'report_id': 'class_report_invalid',
+            'teacher_id': 'teacher_1',
+            'class_name': '高二2403班',
+            'status': 'webhook_received',
+            'created_at': '2026-03-07T10:00:00',
+            'input_type': 'self_hosted_form_json',
+            'raw_payload': {
+                'teacher_id': 'teacher_1',
+                'class_name': '高二2403班',
+                'sample_size': 36,
+                'report_id': 'class_report_invalid',
+                'title': '课堂反馈周报',
+                'questions': [
+                    {
+                        'id': 'Q1',
+                        'prompt': '课堂难点',
+                        'summary': '实验设计题仍是主要难点。',
+                        'stats': {'实验设计': 15, '计算': 8},
+                    }
+                ],
+                'summary': '班级整体在实验设计题上失分较多。',
+            },
+        },
+        deps=service_deps,
+    )
+
+    deps = replace(
+        build_class_report_orchestrator_deps(core),
+        specialist_runtime=type(
+            '_InvalidRuntime',
+            (),
+            {
+                'run': lambda self, _handoff: (_ for _ in ()).throw(
+                    SpecialistAgentRuntimeError('invalid_output', 'typed artifact validation failed')
+                )
+            },
+        )(),
+    )
+
+    result = process_class_report_job('job_invalid', deps=deps)
+    job = load_class_report_job('job_invalid', deps=service_deps)
+    review_queue = list_class_report_review_queue(teacher_id='teacher_1', deps=service_deps)
+
+    assert result['status'] == 'review'
+    assert job['status'] == 'review'
+    assert review_queue['items'][0]['report_id'] == 'class_report_invalid'
+    assert review_queue['items'][0]['reason'] == 'invalid_output'
+    assert review_queue['items'][0]['reason_code'] == 'invalid_output'

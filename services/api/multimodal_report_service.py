@@ -5,7 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .analysis_lineage_service import extract_analysis_lineage
 from .analysis_metadata_repository import FileBackedAnalysisMetadataRepository
+from .multimodal_repository import load_multimodal_submission_view
 from .review_queue_service import ReviewQueueDeps, enqueue_review_item, list_review_items
 
 
@@ -21,20 +23,26 @@ class MultimodalReportDeps:
     metadata_repo: FileBackedAnalysisMetadataRepository
     review_queue_deps: ReviewQueueDeps
     now_iso: Callable[[], str]
+    load_submission_view: Callable[[str], Dict[str, Any]]
+    metrics_service: Any | None = None
 
 
 
 def build_multimodal_report_deps(core: Any | None = None) -> MultimodalReportDeps:
     base_dir = Path(getattr(core, 'DATA_DIR', '.')) / 'video_homework_reports'
     metadata_repo = FileBackedAnalysisMetadataRepository(base_dir=base_dir)
+    metrics_service = getattr(core, 'analysis_metrics_service', None)
     return MultimodalReportDeps(
         metadata_repo=metadata_repo,
         review_queue_deps=ReviewQueueDeps(
             metadata_repo=metadata_repo,
             queue_log='review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+        load_submission_view=lambda submission_id: load_multimodal_submission_view(submission_id, core=core),
+        metrics_service=metrics_service,
     )
 
 
@@ -124,6 +132,7 @@ def enqueue_multimodal_review_item(
     reason: str,
     confidence: Optional[float],
     target_id: str,
+    strategy_id: str | None = None,
     deps: MultimodalReportDeps,
 ) -> Dict[str, Any]:
     return enqueue_review_item(
@@ -134,6 +143,7 @@ def enqueue_multimodal_review_item(
         confidence=confidence,
         target_type='submission',
         target_id=target_id,
+        strategy_id=str(strategy_id or 'video_homework.teacher.report').strip() or 'video_homework.teacher.report',
         deps=deps.review_queue_deps,
     )
 
@@ -175,6 +185,8 @@ def get_multimodal_report(report_id: str, *, teacher_id: str, deps: MultimodalRe
 
     if report is not None:
         summary = _summary_from_report(report)
+        submission_id = str(report.get('submission_id') or summary['target_id'] or '').strip()
+        replay_artifact = deps.load_submission_view(submission_id) if submission_id else {}
         artifact_meta = dict(report.get('artifact_meta') or {})
         if report.get('rerun_requested') is not None:
             artifact_meta['rerun_requested'] = bool(report.get('rerun_requested'))
@@ -182,21 +194,27 @@ def get_multimodal_report(report_id: str, *, teacher_id: str, deps: MultimodalRe
             artifact_meta['rerun_reason'] = report.get('rerun_reason')
         if report.get('rerun_requested_at') is not None:
             artifact_meta['rerun_requested_at'] = report.get('rerun_requested_at')
+        if report.get('rerun_base_lineage') is not None:
+            artifact_meta['rerun_base_lineage'] = dict(report.get('rerun_base_lineage') or {})
         return {
             'report': summary,
             'analysis_artifact': dict(report.get('analysis_artifact') or {}),
             'artifact_meta': artifact_meta,
+            'replay_artifact': dict(replay_artifact or {}),
         }
 
     assert job is not None
     summary = _summary_from_job(job)
+    replay_artifact = deps.load_submission_view(summary['target_id']) if summary.get('target_id') else {}
     return {
         'report': summary,
         'analysis_artifact': {},
         'artifact_meta': {
             'submission_id': summary['target_id'],
             'job_status': summary['status'],
+            **({'rerun_base_lineage': dict(job.get('rerun_base_lineage') or {})} if job.get('rerun_base_lineage') is not None else {}),
         },
+        'replay_artifact': dict(replay_artifact or {}),
     }
 
 
@@ -208,11 +226,13 @@ def rerun_multimodal_report(report_id: str, *, teacher_id: str, reason: str | No
     if payload is None or str(payload.get('teacher_id') or '').strip() != teacher_id_final:
         raise MultimodalReportServiceError(404, 'video_homework_report_not_found')
 
+    previous_lineage = extract_analysis_lineage(payload)
     updates = {
         'rerun_requested': True,
         'rerun_reason': str(reason or '').strip() or None,
         'rerun_requested_at': deps.now_iso(),
         'rerun_requested_by': teacher_id_final,
+        'rerun_base_lineage': previous_lineage,
     }
     if report is not None:
         merged = dict(report)
@@ -220,11 +240,18 @@ def rerun_multimodal_report(report_id: str, *, teacher_id: str, reason: str | No
         write_multimodal_report(report_id, merged, deps=deps)
     else:
         write_multimodal_report_job(report_id, updates, deps=deps)
+    metrics_service = getattr(deps, 'metrics_service', None)
+    if hasattr(metrics_service, 'record_rerun'):
+        metrics_service.record_rerun(
+            domain='video_homework',
+            strategy_id=str(payload.get('strategy_id') or 'video_homework.teacher.report').strip() or 'video_homework.teacher.report',
+        )
     return {
         'ok': True,
         'report_id': report_id,
         'status': 'rerun_requested',
         'reason': updates['rerun_reason'],
+        'previous_lineage': previous_lineage,
     }
 
 

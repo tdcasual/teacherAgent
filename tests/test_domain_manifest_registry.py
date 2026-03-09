@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+from scripts.check_analysis_domain_contract import check_analysis_domain_contract
 from services.api.artifacts.registry import build_platform_artifact_registry
 from services.api.domains.manifest_registry import build_default_domain_manifest_registry
 from services.api.strategies.selector import build_default_strategy_selector
@@ -8,7 +14,6 @@ from services.api.wiring.survey_wiring import (
     build_multimodal_specialist_registry,
     build_survey_specialist_registry,
 )
-
 
 
 def test_default_domain_manifest_registry_exposes_supported_domains_and_rollout_flags() -> None:
@@ -91,3 +96,46 @@ def test_specialist_registries_reuse_manifest_specs() -> None:
     assert build_survey_specialist_registry(object()).get('survey_analyst') == survey_manifest.specialists[0]
     assert build_class_report_specialist_registry(object()).get('class_signal_analyst') == class_report_manifest.specialists[0]
     assert build_multimodal_specialist_registry(object()).get('video_homework_analyst') == video_homework_manifest.specialists[0]
+
+
+
+def test_default_manifest_registry_declares_report_binding_metadata() -> None:
+    registry = build_default_domain_manifest_registry(review_confidence_floor=0.65)
+
+    survey = registry.get('survey')
+    class_report = registry.get('class_report')
+    video_homework = registry.get('video_homework')
+
+    assert survey.report_binding is not None
+    assert survey.report_binding.provider_factory == 'build_survey_analysis_report_provider'
+    assert class_report.report_binding is not None
+    assert class_report.report_binding.provider_factory == 'build_class_report_analysis_report_provider'
+    assert video_homework.report_binding is not None
+    assert video_homework.report_binding.provider_factory == 'build_video_homework_analysis_report_provider'
+
+
+SCRIPT_PATH = Path('scripts/check_analysis_domain_contract.py')
+
+
+def test_analysis_domain_contract_checker_reports_default_registry_ready() -> None:
+    payload = check_analysis_domain_contract()
+
+    assert payload['ok'] is True
+    assert payload['domains']['survey']['has_runtime_binding'] is True
+    assert payload['domains']['survey']['has_report_binding'] is True
+    assert payload['domains']['survey']['strategy_ids'] == ['survey.chat.followup', 'survey.teacher.report']
+    assert payload['domains']['video_homework']['specialist_ids'] == ['video_homework_analyst']
+
+
+def test_analysis_domain_contract_checker_cli_json_output() -> None:
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), '--json'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload['ok'] is True
+    assert 'class_report' in payload['domains']

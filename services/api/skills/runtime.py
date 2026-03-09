@@ -73,8 +73,12 @@ class SkillRuntime:
 
     def apply_tool_policy(self, role_allowed: Set[str]) -> Set[str]:
         allowed = set(role_allowed)
-        if self.tools_allow is not None:
+        inherit_role_defaults = self.skill.skill_id == "physics-teacher-ops"
+        if self.tools_allow is not None and not inherit_role_defaults:
             allowed &= set(self.tools_allow)
+        teacher_chart_tools = {"chart.agent.run", "chart.exec"}
+        if "teacher" in set(self.skill.allowed_roles or []):
+            allowed |= (teacher_chart_tools & set(role_allowed))
         if self.tools_deny:
             allowed -= set(self.tools_deny)
         return allowed

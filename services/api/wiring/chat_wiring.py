@@ -122,7 +122,7 @@ from ..teacher_provider_registry_service import (
     resolve_provider_target as _resolve_provider_target_impl,
 )
 from . import get_app_core as _app_core
-from .teacher_wiring import _teacher_model_config_deps, _teacher_provider_registry_deps
+from .teacher_wiring import _teacher_assignment_preflight_deps, _teacher_model_config_deps, _teacher_provider_registry_deps
 from .worker_wiring import (
     _chat_worker_started_get,
     _chat_worker_started_set,
