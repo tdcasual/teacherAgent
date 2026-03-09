@@ -360,3 +360,88 @@ def test_build_analysis_report_deps_supports_callable_provider_binding(tmp_path:
     deps = build_analysis_report_deps(core, manifest_registry=registry)
 
     assert sorted(deps.providers.keys()) == ['callable']
+
+
+
+def _build_shared_report_provider(_core: object | None = None) -> AnalysisReportProvider:
+    return AnalysisReportProvider(
+        domain='shared',
+        default_strategy_id='shared.teacher.report',
+        now_iso=lambda: '2026-03-09T10:00:00',
+        list_reports=lambda teacher_id, status=None: {'items': []},
+        get_report=lambda report_id, teacher_id: {'report': {'report_id': report_id, 'teacher_id': teacher_id}},
+        rerun_report=lambda report_id, teacher_id, reason=None: {'report_id': report_id, 'teacher_id': teacher_id, 'reason': reason},
+        list_review_queue=lambda teacher_id: {'items': []},
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: {'item_id': item_id, 'action': action},
+    )
+
+
+def _build_mismatched_report_provider(_core: object | None = None) -> AnalysisReportProvider:
+    return AnalysisReportProvider(
+        domain='other-domain',
+        default_strategy_id='shared.teacher.report',
+        now_iso=lambda: '2026-03-09T10:00:00',
+        list_reports=lambda teacher_id, status=None: {'items': []},
+        get_report=lambda report_id, teacher_id: {'report': {'report_id': report_id, 'teacher_id': teacher_id}},
+        rerun_report=lambda report_id, teacher_id, reason=None: {'report_id': report_id, 'teacher_id': teacher_id, 'reason': reason},
+        list_review_queue=lambda teacher_id: {'items': []},
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: {'item_id': item_id, 'action': action},
+    )
+
+
+def test_build_analysis_report_deps_uses_shared_binding_registry(monkeypatch, tmp_path: Path) -> None:
+    from services.api.domains import binding_registry
+    from services.api.domains.manifest_models import DomainManifest, DomainReportBinding
+    from services.api.domains.manifest_registry import DomainManifestRegistry
+    from services.api.strategies.contracts import StrategySpec
+
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='shared',
+            display_name='Shared',
+            strategies=[
+                StrategySpec(
+                    strategy_id='shared.teacher.report',
+                    accepted_artifacts=['shared_artifact'],
+                    task_kinds=['shared.analysis'],
+                    specialist_agent='shared_analyst',
+                    roles=['teacher'],
+                )
+            ],
+            report_binding=DomainReportBinding(provider_factory='shared_provider'),
+        )
+    )
+
+    monkeypatch.setattr(binding_registry, 'report_provider_factory_lookup', lambda: {'shared_provider': _build_shared_report_provider})
+
+    deps = build_analysis_report_deps(_Core(tmp_path), manifest_registry=registry)
+
+    assert sorted(deps.providers.keys()) == ['shared']
+
+
+def test_build_analysis_report_deps_rejects_provider_domain_mismatch(tmp_path: Path) -> None:
+    from services.api.domains.manifest_models import DomainManifest, DomainReportBinding
+    from services.api.domains.manifest_registry import DomainManifestRegistry
+    from services.api.strategies.contracts import StrategySpec
+
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='shared',
+            display_name='Shared',
+            strategies=[
+                StrategySpec(
+                    strategy_id='shared.teacher.report',
+                    accepted_artifacts=['shared_artifact'],
+                    task_kinds=['shared.analysis'],
+                    specialist_agent='shared_analyst',
+                    roles=['teacher'],
+                )
+            ],
+            report_binding=DomainReportBinding(provider_factory=_build_mismatched_report_provider),
+        )
+    )
+
+    with pytest.raises(ValueError, match='report binding'):
+        build_analysis_report_deps(_Core(tmp_path), manifest_registry=registry)

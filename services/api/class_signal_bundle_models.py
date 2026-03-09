@@ -61,6 +61,7 @@ class ClassSignalBundle(BaseModel):
         return ArtifactEnvelope(
             artifact_type='class_signal_bundle',
             schema_version='v1',
+            adapter_version=_adapter_version_for_source_type(self.source_meta.source_type),
             subject_scope={
                 'teacher_id': self.class_scope.teacher_id,
                 'class_name': self.class_scope.class_name,
@@ -88,3 +89,15 @@ def _attachment_to_artifact_ref(attachment: Dict[str, Any], index: int) -> Artif
             if key not in {'name', 'id', 'kind', 'uri', 'mime_type', 'content_type'}
         },
     )
+
+
+
+def _adapter_version_for_source_type(source_type: str | None) -> str:
+    normalized = str(source_type or '').strip().lower()
+    if normalized == 'self_hosted_form':
+        return 'class_report.self_hosted_form.adapter.v1'
+    if normalized == 'web_export':
+        return 'class_report.web_export.adapter.v1'
+    if normalized in {'pdf_report_summary', 'pdf_summary'}:
+        return 'class_report.pdf_summary.adapter.v1'
+    return 'class_report.bundle.adapter.v1'

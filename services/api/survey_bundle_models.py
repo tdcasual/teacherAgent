@@ -53,6 +53,7 @@ class SurveyEvidenceBundle(BaseModel):
         return ArtifactEnvelope(
             artifact_type='survey_evidence_bundle',
             schema_version='v1',
+            adapter_version='survey.bundle.adapter.v1',
             subject_scope={
                 'teacher_id': self.audience_scope.teacher_id,
                 'class_name': self.audience_scope.class_name,

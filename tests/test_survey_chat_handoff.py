@@ -69,7 +69,8 @@ def test_run_agent_runtime_uses_internal_survey_handoff_for_deeper_teacher_follo
     assert "更深入的班级复盘" in str(result.get("reply") or "")
     assert "教学建议" in str(result.get("reply") or "")
     assert llm_calls == []
-    assert events[0][0] == "survey.handoff"
+    assert events[0][0] == "analysis.followup"
+    assert events[0][1]["domain"] == "survey"
 
 
 

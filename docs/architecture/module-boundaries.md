@@ -48,7 +48,7 @@
   - 新依赖通过容器挂载到 `app.state.container`
   - 禁止新增模块级全局依赖入口作为默认路径
   - analysis domain 的 specialist runtime 优先通过 `services/api/domains/runtime_builder.py` 组装；`services/api/wiring/*` 只保留薄封装或兼容入口
-  - runtime / report 的 binding 优先由 manifest 元信息声明，并通过统一 resolver 解析；避免在单个 builder 内继续扩张 domain 专属 lookup 逻辑
+  - runtime / report 的 binding 优先由 manifest 元信息声明，并通过统一 resolver 与共享 binding registry 解析；避免在多个中心模块继续扩张 domain 专属 lookup 逻辑
   - analysis report plane 的 domain provider 优先由 manifest 元信息驱动装配，不再在应用层维护一份独立的按域硬编码真相表
   - strategy 元数据若引用不存在的 specialist 或 artifact，必须在装配期直接失败，而不是等运行时静默退化
   - 新增 analysis domain 前，先按 `docs/reference/analysis-domain-onboarding-template.md` 设计 manifest / strategy / report plane / review queue，再进入实现

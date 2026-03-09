@@ -370,6 +370,9 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                         "reason": "auto_rule",
                         "confidence": 0.64,
                         "candidates": [{"skill_id": "physics-homework-generator", "score": 12}],
+                        "resolution_mode": "auto",
+                        "auto_selected": True,
+                        "requested_rewritten": False,
                     },
                 ),
                 events,
@@ -417,6 +420,62 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertEqual(role_hint, "teacher")
             self.assertIn("考试编号", reply)
             self.assertEqual(calls["run_agent"], 0)
+
+    def test_compute_chat_reply_passes_explicit_analysis_target_to_run_agent(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"analysis_target": None}
+
+            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, analysis_target=None, event_sink=None):
+                del messages, role_hint, extra_system, skill_id, teacher_id, event_sink
+                captured["analysis_target"] = analysis_target
+                return {"reply": "OK"}
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "teacher",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher-1"),
+                teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
+                detect_student_study_trigger=lambda _text: False,
+                load_profile_file=lambda _path: {},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "",
+                build_assignment_detail_cached=lambda *_args, **_kwargs: {},
+                find_assignment_for_date=lambda *_args, **_kwargs: None,
+                parse_date_str=lambda raw: str(raw or ""),
+                build_assignment_context=lambda *_args, **_kwargs: "",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=_run_agent,
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
+                    "effective_skill_id": "physics-teacher-ops",
+                    "reason": "explicit",
+                    "confidence": 1.0,
+                },
+                resolve_teacher_workflow=lambda _req, effective_skill_id, last_user_text, attachment_context: {},
+            )
+
+            req = _TeacherReq("请继续复盘这个分析对象")
+            req.analysis_target = {
+                "source_domain": "survey",
+                "target_type": "report",
+                "target_id": "report_9",
+                "report_id": "report_9",
+            }
+
+            reply, role_hint, _last_user = compute_chat_reply_sync(
+                req,
+                deps=deps,
+            )
+
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "teacher")
+            self.assertIsNotNone(captured["analysis_target"])
+            self.assertEqual(captured["analysis_target"]["target_id"], "report_9")
+
 
     def test_compute_chat_reply_merges_teacher_workflow_extra_system(self):
         with TemporaryDirectory() as td:

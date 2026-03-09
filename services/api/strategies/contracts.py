@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 class StrategySpec:
     strategy_id: str
     strategy_version: str = 'v1'
+    prompt_version: str = 'v1'
+    runtime_version: str = 'v1'
     accepted_artifacts: List[str] = field(default_factory=list)
     task_kinds: List[str] = field(default_factory=list)
     specialist_agent: str = ''
@@ -30,5 +32,7 @@ class StrategyDecision:
     review_required: bool
     reason: str
     strategy_version: str = 'v1'
+    prompt_version: str = 'v1'
+    runtime_version: str = 'v1'
     budget: Dict[str, Any] = field(default_factory=dict)
     return_schema: Dict[str, Any] = field(default_factory=dict)

@@ -54,6 +54,11 @@ class ChatStatusServiceTest(unittest.TestCase):
                 "skill_reason": "auto_rule",
                 "skill_confidence": 0.64,
                 "skill_candidates": [{"skill_id": "physics-homework-generator", "score": 17}],
+                "skill_resolution_mode": "auto",
+                "skill_auto_selected": True,
+                "skill_requested_rewritten": False,
+                "skill_outcome": "done",
+                "skill_outcome_reason": "done",
             },
             enqueue_chat_job=lambda job_id, lane_id: {},
             resolve_chat_lane_id_from_job=lambda job: "lane:fallback",
@@ -67,6 +72,11 @@ class ChatStatusServiceTest(unittest.TestCase):
         self.assertEqual(result["skill_reason"], "auto_rule")
         self.assertAlmostEqual(float(result["skill_confidence"]), 0.64)
         self.assertEqual(result["skill_candidates"][0]["skill_id"], "physics-homework-generator")
+        self.assertEqual(result["skill_resolution_mode"], "auto")
+        self.assertTrue(bool(result["skill_auto_selected"]))
+        self.assertFalse(bool(result["skill_requested_rewritten"]))
+        self.assertEqual(result["skill_outcome"], "done")
+        self.assertEqual(result["skill_outcome_reason"], "done")
 
     def test_get_chat_status_normalizes_empty_status_and_reenqueues(self):
         enqueue_calls = []

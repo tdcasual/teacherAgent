@@ -177,3 +177,56 @@ def test_runtime_builder_supports_manifest_declared_callable_bindings() -> None:
 
     assert result.agent_id == 'callable_analyst'
     assert result.output['executive_summary'] == '生成可复用结论:callable manifest'
+
+
+def test_runtime_builder_uses_shared_binding_registry_for_named_bindings(monkeypatch) -> None:
+    from services.api.domains import binding_registry
+
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='shared',
+            display_name='Shared',
+            specialists=[
+                SpecialistAgentSpec(
+                    agent_id='shared_analyst',
+                    display_name='Shared Analyst',
+                    roles=['teacher'],
+                    accepted_artifacts=['shared_artifact'],
+                    task_kinds=['shared.analysis'],
+                    budgets={'default': {'max_tokens': 100, 'timeout_sec': 5, 'max_steps': 1}},
+                    output_schema={'type': 'analysis_artifact'},
+                    runner_factory='shared_runner',
+                )
+            ],
+            runtime_binding=DomainRuntimeBinding(
+                specialist_deps_factory='shared_deps',
+                payload_constraint_key='custom_payload',
+            ),
+        )
+    )
+
+    monkeypatch.setattr(binding_registry, 'runtime_deps_factory_lookup', lambda: {'shared_deps': _callable_deps_factory})
+    monkeypatch.setattr(binding_registry, 'runtime_runner_lookup', lambda: {'shared_runner': _callable_runner})
+
+    runtime = build_domain_specialist_runtime(domain_id='shared', manifests=registry, core=object())
+    result = runtime.run(
+        HandoffContract(
+            handoff_id='shared_handoff',
+            from_agent='coordinator',
+            to_agent='shared_analyst',
+            task_kind='shared.analysis',
+            artifact_refs=[],
+            goal='生成可复用结论',
+            constraints={
+                'teacher_context': {'teacher_id': 'teacher_1'},
+                'custom_payload': {'summary': 'shared lookup'},
+            },
+            budget={'max_tokens': 100, 'timeout_sec': 5, 'max_steps': 1},
+            return_schema={'type': 'analysis_artifact'},
+            status='prepared',
+        )
+    )
+
+    assert result.agent_id == 'shared_analyst'
+    assert result.output['executive_summary'] == '生成可复用结论:shared lookup'

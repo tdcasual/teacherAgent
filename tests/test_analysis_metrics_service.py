@@ -85,3 +85,40 @@ def test_metrics_service_exports_stable_counters_unknown_buckets_and_aux_events(
     assert snapshot['by_phase']['review_downgraded'] == 1
     assert snapshot['by_phase']['rerun_requested'] == 1
     assert snapshot['by_reason']['invalid_output'] == 2
+
+
+
+def test_metrics_service_tracks_workflow_resolution_and_outcome_feedback_loop() -> None:
+    service = AnalysisMetricsService()
+    service.record_workflow_resolution(
+        role='teacher',
+        requested_skill_id='',
+        effective_skill_id='physics-homework-generator',
+        reason='auto_rule',
+        confidence=0.64,
+        resolution_mode='auto',
+        auto_selected=True,
+        requested_rewritten=False,
+    )
+    service.record_workflow_outcome(
+        role='teacher',
+        requested_skill_id='',
+        effective_skill_id='physics-homework-generator',
+        reason='auto_rule',
+        resolution_mode='auto',
+        outcome='done',
+        outcome_reason='done',
+    )
+
+    snapshot = service.snapshot()
+    routing = snapshot['workflow_routing']
+
+    assert routing['counters']['resolution_count'] == 1
+    assert routing['counters']['auto_selected_count'] == 1
+    assert routing['counters']['outcome_count'] == 1
+    assert routing['by_effective_skill']['physics-homework-generator']['resolved'] == 1
+    assert routing['by_effective_skill']['physics-homework-generator']['done'] == 1
+    assert routing['by_reason']['auto_rule'] == 1
+    assert routing['by_resolution_mode']['auto'] == 1
+    assert routing['by_outcome']['done'] == 1
+    assert routing['by_outcome_reason']['done'] == 1

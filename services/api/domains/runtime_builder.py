@@ -21,6 +21,7 @@ from ..specialist_agents.video_homework_analyst import (
     load_video_homework_analyst_prompt,
     run_video_homework_analyst,
 )
+from . import binding_registry
 from .binding_resolver import resolve_manifest_binding
 from .manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
 
@@ -54,18 +55,6 @@ def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
     )
 
 
-_DEPS_FACTORY_LOOKUP: dict[str, DepsFactory] = {
-    'build_survey_analyst_deps': build_survey_analyst_deps,
-    'build_class_signal_analyst_deps': build_class_signal_analyst_deps,
-    'build_video_homework_analyst_deps': build_video_homework_analyst_deps,
-}
-
-
-_RUNNER_LOOKUP: dict[str, Runner] = {
-    'survey_analyst': run_survey_analyst,
-    'class_signal_analyst': run_class_signal_analyst,
-    'video_homework_analyst': run_video_homework_analyst,
-}
 
 
 
@@ -87,7 +76,7 @@ def build_domain_specialist_registry(
 
     deps_factory = resolve_manifest_binding(
         binding.specialist_deps_factory,
-        lookup=_DEPS_FACTORY_LOOKUP,
+        lookup=binding_registry.runtime_deps_factory_lookup(),
         domain_id=domain_id,
         label='runtime binding',
     )
@@ -97,7 +86,7 @@ def build_domain_specialist_registry(
     for spec in manifest.specialists:
         runner_impl = resolve_manifest_binding(
             spec.runner_factory if spec.runner_factory is not None else spec.agent_id,
-            lookup=_RUNNER_LOOKUP,
+            lookup=binding_registry.runtime_runner_lookup(),
             domain_id=domain_id,
             label='runtime binding',
         )

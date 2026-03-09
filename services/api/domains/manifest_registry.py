@@ -44,6 +44,8 @@ def _survey_manifest(review_confidence_floor: float) -> DomainManifest:
         strategies=[
             StrategySpec(
                 strategy_id='survey.teacher.report',
+                prompt_version='survey.teacher.report.prompt.v1',
+                runtime_version='survey.runtime.v1',
                 accepted_artifacts=['survey_evidence_bundle'],
                 task_kinds=['survey.analysis'],
                 specialist_agent='survey_analyst',
@@ -57,6 +59,8 @@ def _survey_manifest(review_confidence_floor: float) -> DomainManifest:
             ),
             StrategySpec(
                 strategy_id='survey.chat.followup',
+                prompt_version='survey.chat_followup.prompt.v1',
+                runtime_version='survey.runtime.v1',
                 accepted_artifacts=['survey_evidence_bundle'],
                 task_kinds=['survey.chat_followup'],
                 specialist_agent='survey_analyst',
@@ -126,6 +130,8 @@ def _class_report_manifest(review_confidence_floor: float) -> DomainManifest:
         strategies=[
             StrategySpec(
                 strategy_id='class_signal.teacher.report',
+                prompt_version='class_report.teacher.report.prompt.v1',
+                runtime_version='class_report.runtime.v1',
                 accepted_artifacts=['class_signal_bundle'],
                 task_kinds=['class_report.analysis'],
                 specialist_agent='class_signal_analyst',
@@ -173,6 +179,8 @@ def _video_homework_manifest(review_confidence_floor: float) -> DomainManifest:
         strategies=[
             StrategySpec(
                 strategy_id='video_homework.teacher.report',
+                prompt_version='video_homework.teacher.report.prompt.v1',
+                runtime_version='video_homework.runtime.v1',
                 accepted_artifacts=['multimodal_submission_bundle'],
                 task_kinds=['video_homework.analysis'],
                 specialist_agent='video_homework_analyst',

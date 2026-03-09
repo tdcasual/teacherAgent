@@ -18,6 +18,9 @@ class SkillAutoRouterTest(unittest.TestCase):
         )
         self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
         self.assertEqual(result.get("reason"), "explicit")
+        self.assertEqual(result.get("resolution_mode"), "explicit")
+        self.assertFalse(bool(result.get("auto_selected")))
+        self.assertFalse(bool(result.get("requested_rewritten")))
 
     def test_teacher_auto_routes_assignment_to_homework_skill(self):
         result = resolve_effective_skill(
@@ -29,6 +32,8 @@ class SkillAutoRouterTest(unittest.TestCase):
         )
         self.assertEqual(result.get("effective_skill_id"), "physics-homework-generator")
         self.assertIn("auto_rule", str(result.get("reason") or ""))
+        self.assertEqual(result.get("resolution_mode"), "auto")
+        self.assertTrue(bool(result.get("auto_selected")))
 
     def test_teacher_model_config_requests_fall_back_to_teacher_ops(self):
         result = resolve_effective_skill(

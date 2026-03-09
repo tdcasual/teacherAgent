@@ -91,6 +91,8 @@ class StrategySelector:
         return StrategyDecision(
             strategy_id=strategy_id,
             strategy_version=str(spec.strategy_version or 'v1').strip() or 'v1',
+            prompt_version=str(spec.prompt_version or 'v1').strip() or 'v1',
+            runtime_version=str(spec.runtime_version or 'v1').strip() or 'v1',
             specialist_agent=spec.specialist_agent,
             task_kind=task_kind_final,
             review_policy=spec.review_policy,

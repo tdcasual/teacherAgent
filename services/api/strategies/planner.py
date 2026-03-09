@@ -41,8 +41,8 @@ def build_handoff_plan(
     extra_constraints: Optional[Dict[str, Any]] = None,
     fallback_policy: str = 'none',
 ) -> HandoffPlan:
-    prompt_version = 'v1'
-    runtime_version = 'v1'
+    prompt_version = str(getattr(strategy, 'prompt_version', 'v1') or 'v1').strip() or 'v1'
+    runtime_version = str(getattr(strategy, 'runtime_version', 'v1') or 'v1').strip() or 'v1'
     constraints: Dict[str, Any] = {artifact.artifact_type: dict(artifact.payload or {})}
     if extra_constraints:
         constraints.update(dict(extra_constraints or {}))
@@ -85,9 +85,9 @@ def build_handoff_plan(
 def build_lineage_metadata(*, strategy: StrategyDecision, artifact: ArtifactEnvelope) -> Dict[str, str]:
     return {
         'strategy_version': str(strategy.strategy_version or 'v1').strip() or 'v1',
-        'prompt_version': 'v1',
+        'prompt_version': str(getattr(strategy, 'prompt_version', 'v1') or 'v1').strip() or 'v1',
         'adapter_version': str(getattr(artifact, 'adapter_version', 'v1') or 'v1').strip() or 'v1',
-        'runtime_version': 'v1',
+        'runtime_version': str(getattr(strategy, 'runtime_version', 'v1') or 'v1').strip() or 'v1',
     }
 
 

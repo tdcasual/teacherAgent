@@ -19,6 +19,7 @@ from .class_report_service import (
     list_class_reports,
     rerun_class_report,
 )
+from .domains import binding_registry
 from .domains.binding_resolver import resolve_manifest_binding
 from .domains.manifest_registry import (
     DomainManifestRegistry,
@@ -220,11 +221,7 @@ def build_video_homework_analysis_report_provider(core: Any | None = None) -> An
     )
 
 
-_REPORT_PROVIDER_FACTORY_LOOKUP = {
-    'build_class_report_analysis_report_provider': build_class_report_analysis_report_provider,
-    'build_survey_analysis_report_provider': build_survey_analysis_report_provider,
-    'build_video_homework_analysis_report_provider': build_video_homework_analysis_report_provider,
-}
+
 
 
 @dataclass(frozen=True)
@@ -248,12 +245,19 @@ def build_analysis_report_deps(
             raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
         provider_factory = resolve_manifest_binding(
             report_binding.provider_factory,
-            lookup=_REPORT_PROVIDER_FACTORY_LOOKUP,
+            lookup=binding_registry.report_provider_factory_lookup(),
             domain_id=manifest.domain_id,
             label='report binding',
         )
         provider = provider_factory(core)
-        providers[provider.domain] = provider
+        provider_domain = str(provider.domain or '').strip()
+        if provider_domain != str(manifest.domain_id or '').strip():
+            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        manifest_strategy_ids = {str(spec.strategy_id or '').strip() for spec in manifest.strategies if str(spec.strategy_id or '').strip()}
+        default_strategy_id = str(provider.default_strategy_id or '').strip()
+        if default_strategy_id and manifest_strategy_ids and default_strategy_id not in manifest_strategy_ids:
+            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        providers[provider_domain] = provider
 
     def default_now_iso() -> str:
         return datetime.now().isoformat(timespec='seconds')

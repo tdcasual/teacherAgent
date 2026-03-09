@@ -32,6 +32,7 @@
 ### Step 5: `chat job`
 - 每次请求都被包装成 chat job，并经过 `queued -> processing -> done|failed|cancelled` 状态机。
 - 老师 job 会持久化 workflow 解析结果，并通过状态接口与 SSE 暴露轻量解释事件 `workflow.resolved`。
+- teacher chat 中的分析 follow-up 优先通过统一 `analysis_target` / 历史 target 解析与内部 follow-up router 进入 analysis plane，而不是在前台 agent 中按 domain 写私有分支。
 - SSE 主要承载排队、处理、工具调用、assistant 输出与 workflow 解释。
 
 ### Step 6: `memory side effects`

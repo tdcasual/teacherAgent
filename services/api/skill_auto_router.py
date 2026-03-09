@@ -226,6 +226,29 @@ def _requested_reason_prefix(
     return ""
 
 
+def _resolution_mode(reason: str) -> str:
+    normalized = str(reason or '').strip()
+    if normalized == 'explicit':
+        return 'explicit'
+    if 'auto_rule' in normalized and not normalized.endswith('_default'):
+        return 'auto'
+    if normalized.endswith('_default') or normalized == 'role_default':
+        return 'default'
+    return 'fallback' if normalized else 'unknown'
+
+
+def _with_resolution_metadata(payload: Dict[str, Any]) -> Dict[str, Any]:
+    requested = str(payload.get('requested_skill_id') or '').strip()
+    effective = str(payload.get('effective_skill_id') or '').strip()
+    reason = str(payload.get('reason') or '').strip()
+    mode = _resolution_mode(reason)
+    finalized = dict(payload or {})
+    finalized['resolution_mode'] = mode
+    finalized['auto_selected'] = mode == 'auto'
+    finalized['requested_rewritten'] = bool(requested and effective and requested != effective)
+    return finalized
+
+
 def _resolve_assignment_intent(
     role: str,
     *,
@@ -325,7 +348,7 @@ def _build_best_match_result(
         requested_allowed=requested_allowed,
     )
     if not threshold_blocked and not ambiguous:
-        return {
+        return _with_resolution_metadata({
             "requested_skill_id": requested,
             "effective_skill_id": best.skill_id,
             "reason": f"{reason_prefix}auto_rule",
@@ -336,7 +359,7 @@ def _build_best_match_result(
             "second_score": int(second_score),
             "threshold_blocked": False,
             "load_errors": load_errors,
-        }
+        })
 
     blocked_reason = "ambiguous_auto_rule_default" if ambiguous else "auto_threshold_blocked_default"
     reason = f"{reason_prefix}{blocked_reason}" if reason_prefix else blocked_reason
@@ -375,7 +398,7 @@ def resolve_effective_skill(
     requested_valid, requested_exists, requested_allowed = _requested_state(requested, skills, available_ids)
 
     if requested and requested_valid and requested_allowed:
-        return {
+        return _with_resolution_metadata({
             "requested_skill_id": requested,
             "effective_skill_id": requested,
             "reason": "explicit",
@@ -386,7 +409,7 @@ def resolve_effective_skill(
             "second_score": 0,
             "threshold_blocked": False,
             "load_errors": load_errors,
-        }
+        })
 
     assignment_intent = _resolve_assignment_intent(
         role,
@@ -431,7 +454,7 @@ def resolve_effective_skill(
         effective = available_ids[0]
         reason = f"{reason}_first_available"
 
-    return {
+    return _with_resolution_metadata({
         "requested_skill_id": requested,
         "effective_skill_id": effective,
         "reason": reason,
@@ -442,4 +465,4 @@ def resolve_effective_skill(
         "second_score": 0,
         "threshold_blocked": False,
         "load_errors": load_errors,
-    }
+    })

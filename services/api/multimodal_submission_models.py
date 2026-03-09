@@ -56,6 +56,7 @@ class MultimodalSubmissionBundle(BaseModel):
         return ArtifactEnvelope(
             artifact_type='multimodal_submission_bundle',
             schema_version='v1',
+            adapter_version='video_homework.submission.bundle.v1',
             subject_scope={
                 'teacher_id': self.scope.teacher_id,
                 'student_id': self.scope.student_id,

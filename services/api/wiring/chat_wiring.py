@@ -349,6 +349,9 @@ def _chat_job_process_deps(core: Any | None = None):
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
         assignment_evidence_low_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
+    metrics_service = getattr(_ac, 'analysis_metrics_service', None)
+    record_workflow_resolution = getattr(metrics_service, 'record_workflow_resolution', None)
+    record_workflow_outcome = getattr(metrics_service, 'record_workflow_outcome', None)
     return ChatJobProcessDeps(
         chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps(core))
         / "claim.lock",
@@ -407,6 +410,12 @@ def _chat_job_process_deps(core: Any | None = None):
             event_type,
             payload,
             deps=_chat_event_stream_deps(core),
+        ),
+        record_workflow_resolution=(
+            lambda payload: record_workflow_resolution(**payload) if callable(record_workflow_resolution) else None
+        ),
+        record_workflow_outcome=(
+            lambda payload: record_workflow_outcome(**payload) if callable(record_workflow_outcome) else None
         ),
     )
 
