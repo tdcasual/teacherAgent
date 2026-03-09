@@ -24,6 +24,7 @@ class SpecialistAgentSpec:
     memory_policy: str = "no_direct_memory_write"
     output_schema: Dict[str, Any] = field(default_factory=dict)
     evaluation_suite: List[str] = field(default_factory=list)
+    runner_factory: Any | None = None
 
 
 @dataclass(frozen=True)

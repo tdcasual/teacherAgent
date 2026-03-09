@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 
 from scripts.check_analysis_domain_contract import check_analysis_domain_contract
-from services.api.artifacts.registry import build_platform_artifact_registry
-from services.api.domains.manifest_registry import build_default_domain_manifest_registry
+from services.api.artifacts.registry import ArtifactAdapterSpec, build_platform_artifact_registry
+from services.api.domains.manifest_models import DomainManifest
+from services.api.domains.manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
+from services.api.specialist_agents.registry import SpecialistAgentSpec
+from services.api.strategies.contracts import StrategySpec
 from services.api.strategies.selector import build_default_strategy_selector
 from services.api.wiring.survey_wiring import (
     build_class_report_specialist_registry,
@@ -139,3 +144,47 @@ def test_analysis_domain_contract_checker_cli_json_output() -> None:
     payload = json.loads(proc.stdout)
     assert payload['ok'] is True
     assert 'class_report' in payload['domains']
+
+
+
+def test_strategy_selector_rejects_manifest_strategy_with_missing_specialist_binding() -> None:
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='broken',
+            display_name='Broken Strategy Metadata',
+            artifact_adapters=[
+                ArtifactAdapterSpec(
+                    adapter_id='broken.adapter',
+                    accepted_inputs=['broken_input'],
+                    output_artifact_type='broken_artifact',
+                    task_kinds=['broken.analysis'],
+                    validation_rules=[],
+                )
+            ],
+            strategies=[
+                StrategySpec(
+                    strategy_id='broken.teacher.report',
+                    accepted_artifacts=['broken_artifact'],
+                    task_kinds=['broken.analysis'],
+                    specialist_agent='missing_analyst',
+                    roles=['teacher'],
+                    target_scopes=['class'],
+                )
+            ],
+            specialists=[
+                SpecialistAgentSpec(
+                    agent_id='other_analyst',
+                    display_name='Other Analyst',
+                    roles=['teacher'],
+                    accepted_artifacts=['broken_artifact'],
+                    task_kinds=['broken.analysis'],
+                    budgets={'default': {'max_tokens': 100, 'timeout_sec': 5, 'max_steps': 1}},
+                    output_schema={'type': 'analysis_artifact'},
+                )
+            ],
+        )
+    )
+
+    with pytest.raises(ValueError, match='strategy manifest'):
+        build_default_strategy_selector(manifest_registry=registry)

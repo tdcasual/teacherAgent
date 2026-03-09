@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from services.api.analysis_report_service import (
+    AnalysisReportProvider,
     build_analysis_report_deps,
     get_analysis_report,
     list_analysis_reports,
@@ -316,4 +317,46 @@ def test_rerun_analysis_report_returns_previous_lineage(tmp_path: Path) -> None:
     assert rerun['previous_lineage']['prompt_version'] == 'v1'
     assert rerun['previous_lineage']['adapter_version'] == 'v1'
     assert rerun['previous_lineage']['runtime_version'] == 'v1'
+    assert rerun['current_lineage']['strategy_version'] == 'v1'
+    assert rerun['current_lineage']['prompt_version'] == 'v1'
+    assert rerun['current_lineage']['adapter_version'] == 'v1'
+    assert rerun['current_lineage']['runtime_version'] == 'v1'
     assert detail['artifact_meta']['rerun_base_lineage']['runtime_version'] == 'v1'
+
+
+
+def _build_callable_report_provider(_core: object | None = None) -> AnalysisReportProvider:
+    return AnalysisReportProvider(
+        domain='callable',
+        default_strategy_id='callable.teacher.report',
+        now_iso=lambda: '2026-03-09T00:00:00',
+        list_reports=lambda teacher_id, status=None: {'items': []},
+        get_report=lambda report_id, teacher_id: {'report_id': report_id, 'teacher_id': teacher_id},
+        rerun_report=lambda report_id, teacher_id, reason=None: {'report_id': report_id, 'teacher_id': teacher_id, 'reason': reason},
+        list_review_queue=lambda teacher_id: {
+            'items': [],
+            'summary': {'total_items': 0, 'unresolved_items': 0, 'reason_counts': {}, 'domains': []},
+        },
+        operate_review_queue_item=lambda item_id, action, reviewer_id, operator_note=None: {
+            'item_id': item_id,
+            'action': action,
+            'reviewer_id': reviewer_id,
+            'operator_note': operator_note,
+        },
+    )
+
+
+def test_build_analysis_report_deps_supports_callable_provider_binding(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='callable',
+            display_name='Callable Reports',
+            report_binding=DomainReportBinding(provider_factory=_build_callable_report_provider),
+        )
+    )
+
+    deps = build_analysis_report_deps(core, manifest_registry=registry)
+
+    assert sorted(deps.providers.keys()) == ['callable']

@@ -113,3 +113,67 @@ def test_manifest_requires_runtime_binding_metadata() -> None:
 
     with pytest.raises(ValueError, match='runtime binding'):
         build_domain_specialist_runtime(domain_id='broken', manifests=registry, core=object())
+
+
+
+def _callable_deps_factory(_core: object) -> object:
+    return object()
+
+
+def _callable_runner(*, handoff, teacher_context, task_goal, deps, custom_payload):
+    return {
+        'handoff_id': handoff.handoff_id,
+        'agent_id': handoff.to_agent,
+        'status': 'completed',
+        'output': {'executive_summary': f"{task_goal}:{custom_payload.get('summary', 'ok')}"},
+        'confidence': 0.93,
+        'artifacts': [],
+    }
+
+
+def test_runtime_builder_supports_manifest_declared_callable_bindings() -> None:
+    registry = DomainManifestRegistry()
+    registry.register(
+        DomainManifest(
+            domain_id='callable',
+            display_name='Callable Runtime',
+            specialists=[
+                SpecialistAgentSpec(
+                    agent_id='callable_analyst',
+                    display_name='Callable Analyst',
+                    roles=['teacher'],
+                    accepted_artifacts=['callable_artifact'],
+                    task_kinds=['callable.analysis'],
+                    budgets={'default': {'max_tokens': 100, 'timeout_sec': 5, 'max_steps': 1}},
+                    output_schema={'type': 'analysis_artifact'},
+                    runner_factory=_callable_runner,
+                )
+            ],
+            runtime_binding=DomainRuntimeBinding(
+                specialist_deps_factory=_callable_deps_factory,
+                payload_constraint_key='custom_payload',
+            ),
+        )
+    )
+
+    runtime = build_domain_specialist_runtime(domain_id='callable', manifests=registry, core=object())
+    result = runtime.run(
+        HandoffContract(
+            handoff_id='callable_handoff',
+            from_agent='coordinator',
+            to_agent='callable_analyst',
+            task_kind='callable.analysis',
+            artifact_refs=[],
+            goal='生成可复用结论',
+            constraints={
+                'teacher_context': {'teacher_id': 'teacher_1'},
+                'custom_payload': {'summary': 'callable manifest'},
+            },
+            budget={'max_tokens': 50, 'timeout_sec': 5, 'max_steps': 1},
+            return_schema={'type': 'analysis_artifact'},
+            status='prepared',
+        )
+    )
+
+    assert result.agent_id == 'callable_analyst'
+    assert result.output['executive_summary'] == '生成可复用结论:callable manifest'

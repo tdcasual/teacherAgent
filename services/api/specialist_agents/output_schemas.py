@@ -83,4 +83,7 @@ def validate_specialist_output(*, schema_type: str, output: dict[str, Any]) -> N
     schema = _SCHEMA_BY_TYPE.get(schema_type_final)
     if schema is None:
         raise OutputSchemaValidationError(f'unknown schema type: {schema_type_final}')
-    schema.model_validate(output)
+    validated = schema.model_validate(output)
+    recommendations = getattr(validated, 'teaching_recommendations', None)
+    if recommendations is not None and not list(recommendations):
+        raise OutputSchemaValidationError('teaching_recommendations must not be empty')

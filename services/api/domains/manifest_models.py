@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..artifacts.registry import ArtifactAdapterSpec
 from ..specialist_agents.registry import SpecialistAgentSpec
@@ -9,14 +10,14 @@ from ..strategies.contracts import StrategySpec
 
 @dataclass(frozen=True)
 class DomainRuntimeBinding:
-    specialist_deps_factory: str
+    specialist_deps_factory: Any
     payload_constraint_key: str
     teacher_context_constraint_key: str = 'teacher_context'
 
 
 @dataclass(frozen=True)
 class DomainReportBinding:
-    provider_factory: str
+    provider_factory: Any
 
 
 @dataclass(frozen=True)

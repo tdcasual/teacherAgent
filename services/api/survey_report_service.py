@@ -373,6 +373,7 @@ def rerun_survey_report(
         raise SurveyReportServiceError(404, "survey_report_not_found")
 
     previous_lineage = extract_analysis_lineage(payload)
+    current_lineage = extract_analysis_lineage(payload)
     updates = {
         "rerun_requested": True,
         "rerun_reason": str(reason or "").strip() or None,
@@ -399,6 +400,7 @@ def rerun_survey_report(
         "status": "rerun_requested",
         "reason": updates["rerun_reason"],
         "previous_lineage": previous_lineage,
+        "current_lineage": current_lineage,
     }
 
 

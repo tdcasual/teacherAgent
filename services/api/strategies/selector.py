@@ -102,6 +102,37 @@ class StrategySelector:
         )
 
 
+def _validate_manifest_strategy_specs(manifest_registry: Any) -> None:
+    for manifest in manifest_registry.list():
+        specialist_ids = {str(spec.agent_id or '').strip() for spec in manifest.specialists}
+        declared_artifacts = {str(spec.output_artifact_type or '').strip() for spec in manifest.artifact_adapters}
+        specialist_artifacts = {
+            str(artifact or '').strip()
+            for specialist in manifest.specialists
+            for artifact in specialist.accepted_artifacts
+        }
+        for strategy in manifest.strategies:
+            strategy_id = str(strategy.strategy_id or '').strip() or 'unknown_strategy'
+            specialist_agent = str(strategy.specialist_agent or '').strip()
+            if specialist_agent and specialist_agent not in specialist_ids:
+                raise ValueError(
+                    f'invalid strategy manifest for domain {manifest.domain_id}: '
+                    f'{strategy_id} references missing specialist {specialist_agent}'
+                )
+            missing_artifacts = [
+                artifact
+                for artifact in strategy.accepted_artifacts
+                if str(artifact or '').strip()
+                and str(artifact or '').strip() not in declared_artifacts
+                and str(artifact or '').strip() not in specialist_artifacts
+            ]
+            if missing_artifacts:
+                raise ValueError(
+                    f'invalid strategy manifest for domain {manifest.domain_id}: '
+                    f'{strategy_id} references unknown artifacts {missing_artifacts}'
+                )
+
+
 
 def build_default_strategy_selector(
     review_confidence_floor: float = 0.7,
@@ -115,5 +146,6 @@ def build_default_strategy_selector(
         manifest_registry = build_default_domain_manifest_registry(review_confidence_floor)
     if disabled_strategy_ids is None:
         disabled_strategy_ids = settings.analysis_disabled_strategies()
+    _validate_manifest_strategy_specs(manifest_registry)
     specs = [spec for manifest in manifest_registry.list() for spec in manifest.strategies]
     return StrategySelector(specs, disabled_strategy_ids=disabled_strategy_ids)

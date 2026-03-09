@@ -21,6 +21,7 @@ from ..specialist_agents.video_homework_analyst import (
     load_video_homework_analyst_prompt,
     run_video_homework_analyst,
 )
+from .binding_resolver import resolve_manifest_binding
 from .manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
 
 Runner = Callable[..., Any]
@@ -79,22 +80,27 @@ def build_domain_specialist_registry(
     binding = manifest.runtime_binding
     if binding is None:
         raise ValueError(f'invalid runtime binding for domain {domain_id}')
-    deps_factory_name = str(binding.specialist_deps_factory or '').strip()
     payload_constraint_key = str(binding.payload_constraint_key or '').strip()
     teacher_context_key = str(binding.teacher_context_constraint_key or '').strip() or 'teacher_context'
-    if not deps_factory_name or not payload_constraint_key:
+    if not payload_constraint_key:
         raise ValueError(f'invalid runtime binding for domain {domain_id}')
 
-    deps_factory = _DEPS_FACTORY_LOOKUP.get(deps_factory_name)
-    if deps_factory is None:
-        raise ValueError(f'invalid runtime binding for domain {domain_id}')
+    deps_factory = resolve_manifest_binding(
+        binding.specialist_deps_factory,
+        lookup=_DEPS_FACTORY_LOOKUP,
+        domain_id=domain_id,
+        label='runtime binding',
+    )
     deps = deps_factory(core)
 
     registry = SpecialistAgentRegistry()
     for spec in manifest.specialists:
-        runner_impl = _RUNNER_LOOKUP.get(spec.agent_id)
-        if runner_impl is None:
-            raise ValueError(f'invalid runtime binding for domain {domain_id}')
+        runner_impl = resolve_manifest_binding(
+            spec.runner_factory if spec.runner_factory is not None else spec.agent_id,
+            lookup=_RUNNER_LOOKUP,
+            domain_id=domain_id,
+            label='runtime binding',
+        )
         registry.register(
             spec,
             runner=_build_runner(

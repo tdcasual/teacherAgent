@@ -50,7 +50,8 @@ manifest-driven 注册要求：
 - domain 元数据应集中登记为 manifest，而不是散落在单个 wiring 文件中
 - manifest 至少声明 `domain`、artifact adapter spec、strategy spec、specialist spec、rollout metadata、feature flags
 - runtime 运行时注册可以继续绑定具体 runner / adapter，但元数据来源应优先来自 manifest registry
-- manifest 还应声明最小 runtime binding 元信息，例如 `specialist_deps_factory`、`payload_constraint_key`、`teacher_context_constraint_key`
+- manifest 还应声明最小 runtime binding 元信息，例如 `specialist_deps_factory`、`payload_constraint_key`、`teacher_context_constraint_key`；binding 值可为受控引用名，也可为运行时可解析的 callable，以减少中心 lookup 胶水
+- specialist spec 应显式声明自身 runner binding；strategy selector 在装配阶段必须校验 `strategy -> specialist -> artifact` 的最小一致性，不允许静默 fallback
 - manifest 还应声明 analysis report provider 装配元信息，使 report plane 不再依赖按 domain 手工硬编码 provider 表
 - domain specialist runtime 与 analysis report provider 都应优先通过统一 builder / registry 组装，而不是在单个 wiring 文件里为每个 domain 重复手写 glue
 
@@ -102,6 +103,8 @@ specialist 的 `output_schema` 应优先使用 domain-specific typed artifact，
 
 当 specialist 输出不满足 typed schema 时，runtime 必须返回 `invalid_output`，而不是把不完整结果当作老师可读真相继续下游传播。
 
+对于带 `teaching_recommendations` 的 typed artifact，仅仅“字段存在”并不足够；若建议列表为空，仍应视为 `invalid_output`，因为这类结果还不具备老师可用的最小交付质量。
+
 对于更高风险域，可以在统一 runtime 内引入小型固定 job graph，例如 `analyze -> verify`。但这类 graph 必须是受控、有限、可审计的内部 orchestration，不应演进为自由 agent-to-agent 对话网。
 
 当前 `video_homework` 域采用 fixed graph 试点：
@@ -140,6 +143,8 @@ domain-specific facade 可存在，但应尽量只做轻量转发：
 - `runtime_version`
 
 这样 report plane 不仅是统一读取面，也能成为统一审计与 replay 输入面。
+
+当老师触发 rerun 时，统一返回体至少应携带 `previous_lineage` 与 `current_lineage`，以支持最小差异比较、回归核验与回滚判断。
 
 ## 5. Review Queue
 

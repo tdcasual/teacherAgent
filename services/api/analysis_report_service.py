@@ -19,6 +19,7 @@ from .class_report_service import (
     list_class_reports,
     rerun_class_report,
 )
+from .domains.binding_resolver import resolve_manifest_binding
 from .domains.manifest_registry import (
     DomainManifestRegistry,
     build_default_domain_manifest_registry,
@@ -245,12 +246,12 @@ def build_analysis_report_deps(
         report_binding = manifest.report_binding
         if report_binding is None:
             raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
-        provider_factory_name = str(report_binding.provider_factory or '').strip()
-        if not provider_factory_name:
-            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
-        provider_factory = _REPORT_PROVIDER_FACTORY_LOOKUP.get(provider_factory_name)
-        if provider_factory is None:
-            raise ValueError(f'invalid report binding for domain {manifest.domain_id}')
+        provider_factory = resolve_manifest_binding(
+            report_binding.provider_factory,
+            lookup=_REPORT_PROVIDER_FACTORY_LOOKUP,
+            domain_id=manifest.domain_id,
+            label='report binding',
+        )
         provider = provider_factory(core)
         providers[provider.domain] = provider
 

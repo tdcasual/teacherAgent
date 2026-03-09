@@ -227,6 +227,7 @@ def rerun_multimodal_report(report_id: str, *, teacher_id: str, reason: str | No
         raise MultimodalReportServiceError(404, 'video_homework_report_not_found')
 
     previous_lineage = extract_analysis_lineage(payload)
+    current_lineage = extract_analysis_lineage(payload)
     updates = {
         'rerun_requested': True,
         'rerun_reason': str(reason or '').strip() or None,
@@ -253,6 +254,7 @@ def rerun_multimodal_report(report_id: str, *, teacher_id: str, reason: str | No
         'status': 'rerun_requested',
         'reason': updates['rerun_reason'],
         'previous_lineage': previous_lineage,
+        'current_lineage': current_lineage,
     }
 
 
