@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict
+from typing import Any, DefaultDict, Dict, Optional
 
+from .analysis_metrics_store import AnalysisMetricsStore
 from .specialist_agents.events import SpecialistRuntimeEvent
 
 _COUNTER_DEFAULTS = {
@@ -17,10 +18,17 @@ _RUNTIME_REASON_COUNTERS = {
     'timeout': 'timeout_count',
     'invalid_output': 'invalid_output_count',
 }
+_WORKFLOW_COUNTER_DEFAULTS = {
+    'resolution_count': 0,
+    'auto_selected_count': 0,
+    'requested_rewritten_count': 0,
+    'outcome_count': 0,
+}
 
 
 class AnalysisMetricsService:
-    def __init__(self) -> None:
+    def __init__(self, *, store: Optional[AnalysisMetricsStore] = None) -> None:
+        self._store = store
         self._counters: DefaultDict[str, int] = defaultdict(int)
         self._by_phase: DefaultDict[str, int] = defaultdict(int)
         self._by_reason: DefaultDict[str, int] = defaultdict(int)
@@ -34,6 +42,7 @@ class AnalysisMetricsService:
         self._workflow_by_resolution_mode: DefaultDict[str, int] = defaultdict(int)
         self._workflow_by_outcome: DefaultDict[str, int] = defaultdict(int)
         self._workflow_by_outcome_reason: DefaultDict[str, int] = defaultdict(int)
+        self._restore_snapshot(self._load_persisted_snapshot())
 
     def record(self, event: SpecialistRuntimeEvent) -> None:
         normalized = SpecialistRuntimeEvent.model_validate(event)
@@ -58,6 +67,7 @@ class AnalysisMetricsService:
             counter_key = _RUNTIME_REASON_COUNTERS.get(reason_code)
             if counter_key:
                 self._counters[counter_key] += 1
+        self._persist()
 
     def record_review_downgrade(
         self,
@@ -75,6 +85,7 @@ class AnalysisMetricsService:
             reason_code=reason_code,
             counter_key='review_downgrade_count',
         )
+        self._persist()
 
     def record_rerun(
         self,
@@ -91,6 +102,7 @@ class AnalysisMetricsService:
             reason_code=None,
             counter_key='rerun_count',
         )
+        self._persist()
 
     def record_workflow_resolution(
         self,
@@ -118,6 +130,7 @@ class AnalysisMetricsService:
         self._workflow_by_role[role_bucket]['resolved'] += 1
         self._workflow_by_reason[reason_bucket] += 1
         self._workflow_by_resolution_mode[resolution_bucket] += 1
+        self._persist()
 
     def record_workflow_outcome(
         self,
@@ -140,16 +153,12 @@ class AnalysisMetricsService:
         self._workflow_by_role[role_bucket][outcome_bucket] += 1
         self._workflow_by_outcome[outcome_bucket] += 1
         self._workflow_by_outcome_reason[outcome_reason_bucket] += 1
+        self._persist()
 
     def snapshot(self) -> Dict[str, Any]:
         counters = dict(_COUNTER_DEFAULTS)
         counters.update({key: int(value) for key, value in self._counters.items()})
-        workflow_counters = {
-            'resolution_count': 0,
-            'auto_selected_count': 0,
-            'requested_rewritten_count': 0,
-            'outcome_count': 0,
-        }
+        workflow_counters = dict(_WORKFLOW_COUNTER_DEFAULTS)
         workflow_counters.update({key: int(value) for key, value in self._workflow_counters.items()})
         return {
             'schema_version': 'v1',
@@ -169,6 +178,35 @@ class AnalysisMetricsService:
                 'by_outcome_reason': dict(self._workflow_by_outcome_reason),
             },
         }
+
+    def _load_persisted_snapshot(self) -> Dict[str, Any]:
+        if self._store is None:
+            return {}
+        loaded = self._store.load_snapshot()
+        return loaded if isinstance(loaded, dict) else {}
+
+    def _persist(self) -> None:
+        if self._store is None:
+            return
+        self._store.save_snapshot(self.snapshot())
+
+    def _restore_snapshot(self, snapshot: Dict[str, Any]) -> None:
+        if not isinstance(snapshot, dict):
+            return
+        self._update_counter_map(self._counters, snapshot.get('counters'))
+        self._update_counter_map(self._by_phase, snapshot.get('by_phase'))
+        self._update_counter_map(self._by_reason, snapshot.get('by_reason'))
+        self._update_nested_counter_map(self._by_domain, snapshot.get('by_domain'))
+        self._update_nested_counter_map(self._by_strategy, snapshot.get('by_strategy'))
+        self._update_nested_counter_map(self._by_agent, snapshot.get('by_agent'))
+        workflow = snapshot.get('workflow_routing') if isinstance(snapshot.get('workflow_routing'), dict) else {}
+        self._update_counter_map(self._workflow_counters, workflow.get('counters'))
+        self._update_nested_counter_map(self._workflow_by_effective_skill, workflow.get('by_effective_skill'))
+        self._update_nested_counter_map(self._workflow_by_role, workflow.get('by_role'))
+        self._update_counter_map(self._workflow_by_reason, workflow.get('by_reason'))
+        self._update_counter_map(self._workflow_by_resolution_mode, workflow.get('by_resolution_mode'))
+        self._update_counter_map(self._workflow_by_outcome, workflow.get('by_outcome'))
+        self._update_counter_map(self._workflow_by_outcome_reason, workflow.get('by_outcome_reason'))
 
     def _record_auxiliary_phase(
         self,
@@ -196,6 +234,33 @@ class AnalysisMetricsService:
         self._by_domain[domain][phase] += 1
         self._by_strategy[strategy_id][phase] += 1
         self._by_agent[agent_id][phase] += 1
+
+    @staticmethod
+    def _update_counter_map(target: DefaultDict[str, int], raw: Any) -> None:
+        if not isinstance(raw, dict):
+            return
+        for key, value in raw.items():
+            try:
+                target[str(key)] = int(value)
+            except Exception:
+                continue
+
+    @staticmethod
+    def _update_nested_counter_map(
+        target: DefaultDict[str, DefaultDict[str, int]],
+        raw: Any,
+    ) -> None:
+        if not isinstance(raw, dict):
+            return
+        for outer_key, inner in raw.items():
+            if not isinstance(inner, dict):
+                continue
+            bucket = target[str(outer_key)]
+            for inner_key, value in inner.items():
+                try:
+                    bucket[str(inner_key)] = int(value)
+                except Exception:
+                    continue
 
     @staticmethod
     def _bucket(value: str | None) -> str:

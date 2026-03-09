@@ -415,6 +415,7 @@ def _normalize_review_feedback(payload: Dict[str, Any] | None) -> Dict[str, Any]
         normalized.update(dataset.get('summary') or {})
         normalized['items'] = dataset.get('items') or []
         normalized['summary'] = dataset.get('summary') or {}
+        normalized['drift_summary'] = dataset.get('drift_summary') or {}
     return normalized
 
 

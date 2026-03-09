@@ -118,3 +118,43 @@ def test_export_review_feedback_dataset_script_outputs_json_summary(tmp_path: Pa
     payload = json.loads(proc.stdout)
     assert payload['summary']['total_items'] == 1
     assert payload['summary']['by_strategy']['survey.teacher.report'] == 1
+
+
+def test_review_feedback_service_builds_drift_summary() -> None:
+    from services.api.review_feedback_service import summarize_review_feedback_drift
+
+    summary = summarize_review_feedback_drift(
+        items=[
+            {
+                'item_id': 'rvw_1',
+                'domain': 'survey',
+                'strategy_id': 'survey.teacher.report',
+                'operation': 'reject',
+                'disposition': 'rejected',
+                'reason_code': 'invalid_output',
+            },
+            {
+                'item_id': 'rvw_2',
+                'domain': 'survey',
+                'strategy_id': 'survey.teacher.report',
+                'operation': 'retry',
+                'disposition': 'retry_requested',
+                'reason_code': 'low_confidence',
+            },
+            {
+                'item_id': 'rvw_3',
+                'domain': 'class_report',
+                'strategy_id': 'class_signal.teacher.report',
+                'operation': 'resolve',
+                'disposition': 'resolved',
+                'reason_code': 'missing_fields',
+            },
+        ]
+    )
+
+    assert summary['total_items'] == 3
+    assert summary['by_domain']['survey'] == 2
+    assert summary['by_strategy']['survey.teacher.report'] == 2
+    assert summary['by_reason_code']['invalid_output'] == 1
+    assert summary['top_regression_domains'][0]['domain'] == 'survey'
+    assert summary['top_regression_strategies'][0]['strategy_id'] == 'survey.teacher.report'

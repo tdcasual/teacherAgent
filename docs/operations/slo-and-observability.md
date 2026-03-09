@@ -72,6 +72,8 @@ panels for request volume, error rate, latency p95, and SLO status.
 - `by_strategy`：可按 `strategy_id` 聚合，缺失上下文统一落入 `unknown` bucket；
 - `by_agent`：可按 specialist `agent_id` 聚合，缺失上下文统一落入 `unknown` bucket；
 - `by_reason`：至少记录 `timeout`、`budget_exceeded`、`invalid_output`、`specialist_execution_failed` 以及 review downgrade 的原因分布。
+- runtime snapshot 应持久化到本地 metrics store，避免进程重启后丢失 analysis runtime 与 workflow routing 统计。
+- `workflow_routing`：至少暴露 resolution / outcome counters，以及 `by_effective_skill`、`by_resolution_mode`、`by_outcome`。
 
 ## Operational Runbook Hooks
 
