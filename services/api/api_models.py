@@ -271,6 +271,32 @@ class AnalysisReportRerunRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class AnalysisReportBulkRerunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    teacher_id: str
+    report_ids: List[str]
+    domain: Optional[str] = None
+    reason: Optional[str] = None
+
+    @field_validator('report_ids')
+    @classmethod
+    def _normalize_report_ids(cls, value: List[str]) -> List[str]:
+        normalized = [str(item or '').strip() for item in value if str(item or '').strip()]
+        if not normalized:
+            raise ValueError('report_ids must not be empty')
+        if len(normalized) > 20:
+            raise ValueError('report_ids must not exceed 20 items')
+        deduped: List[str] = []
+        seen: set[str] = set()
+        for item in normalized:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return deduped
+
+
 class AnalysisReviewQueueActionRequest(BaseModel):
     teacher_id: str
     domain: Optional[str] = None

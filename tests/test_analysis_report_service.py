@@ -445,3 +445,26 @@ def test_build_analysis_report_deps_rejects_provider_domain_mismatch(tmp_path: P
 
     with pytest.raises(ValueError, match='report binding'):
         build_analysis_report_deps(_Core(tmp_path), manifest_registry=registry)
+
+
+def test_list_analysis_reports_returns_ops_summary(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    _seed_survey_report(core)
+
+    deps = build_analysis_report_deps(core)
+    result = list_analysis_reports(
+        teacher_id='teacher_1',
+        domain=None,
+        status='analysis_ready',
+        strategy_id=None,
+        target_type=None,
+        deps=deps,
+    )
+
+    assert result['summary']['total_reports'] == 1
+    assert result['summary']['review_required_reports'] == 1
+    assert result['summary']['status_counts']['analysis_ready'] == 1
+    assert result['summary']['domains'][0]['domain'] == 'survey'
+    assert result['summary']['domains'][0]['total_reports'] == 1
+    assert result['summary']['domains'][0]['review_required_reports'] == 1
+    assert result['summary']['domains'][0]['queued_review_items'] == 1

@@ -79,6 +79,8 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         selectedAnalysisReportId={props.selectedAnalysisReportId}
         selectedAnalysisReport={props.selectedAnalysisReport}
         analysisReviewQueue={props.analysisReviewQueue}
+        analysisReportsSummary={props.analysisReportsSummary}
+        analysisReviewSummary={props.analysisReviewSummary}
         analysisDomainFilter={props.analysisDomainFilter}
         analysisStatusFilter={props.analysisStatusFilter}
         analysisStrategyFilter={props.analysisStrategyFilter}
@@ -90,6 +92,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         refreshAnalysisReports={props.refreshAnalysisReports}
         selectAnalysisReport={props.selectAnalysisReport}
         rerunAnalysisReport={props.rerunAnalysisReport}
+        rerunAnalysisReportsBulk={props.rerunAnalysisReportsBulk}
       />
       <VideoHomeworkAnalysisSection
         videoHomeworkFeatureEnabled={props.videoHomeworkFeatureEnabled}

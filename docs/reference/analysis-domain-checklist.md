@@ -40,8 +40,10 @@
 - 可执行 contract check：`./.venv/bin/python scripts/check_analysis_domain_contract.py --json`
 - [ ] CI 已执行 `scripts/check_analysis_domain_contract.py --json` 并通过
 - [ ] feature flags 已定义并写入 rollout 文档
+- [ ] 已对照 `docs/reference/analysis-domain-onboarding-contract.md` 完成 contract 自检
 - [ ] 已更新 `docs/reference/analysis-runtime-contract.md`
 - [ ] 已更新 `docs/operations/multi-domain-analysis-rollout-checklist.md`
 - [ ] 已更新 `docs/INDEX.md`
+- [ ] 已基于 `docs/plans/templates/analysis-domain-extension-template.md` 准备该域实施计划
 - [ ] 已对照 `docs/reference/analysis-domain-capability-matrix.md` 核对该域的 rollout / runtime / replay-compare 能力
 - [ ] reviewer 可直接按本 checklist 完成验收

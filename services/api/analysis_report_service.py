@@ -295,7 +295,8 @@ def list_analysis_reports(
     deps: AnalysisReportDeps,
 ) -> Dict[str, Any]:
     review_queue = deps.list_review_queue(teacher_id, domain, 'queued')
-    open_review_ids = {str(item.get('report_id') or '').strip() for item in review_queue.get('items') or [] if str(item.get('report_id') or '').strip()}
+    review_items = list(review_queue.get('items') or [])
+    open_review_ids = {str(item.get('report_id') or '').strip() for item in review_items if str(item.get('report_id') or '').strip()}
     items: List[Dict[str, Any]] = []
     for provider in _iter_providers(deps.providers, domain):
         payload = provider.list_reports(teacher_id, status)
@@ -308,7 +309,10 @@ def list_analysis_reports(
             summary.review_required = summary.report_id in open_review_ids
             items.append(summary.model_dump())
     items.sort(key=lambda item: (str(item.get('updated_at') or ''), str(item.get('created_at') or ''), str(item.get('report_id') or '')), reverse=True)
-    return {'items': items}
+    return {
+        'items': items,
+        'summary': _build_analysis_reports_summary(items=items, review_items=review_items),
+    }
 
 
 
@@ -350,6 +354,48 @@ def rerun_analysis_report(
     payload = dict(result or {})
     payload['domain'] = provider.domain
     return payload
+
+
+
+def rerun_analysis_reports_bulk(
+    *,
+    teacher_id: str,
+    report_ids: List[str],
+    domain: str | None,
+    reason: str | None,
+    deps: AnalysisReportDeps,
+) -> Dict[str, Any]:
+    teacher_id_final = str(teacher_id or '').strip()
+    if not teacher_id_final:
+        raise AnalysisReportServiceError(400, 'teacher_id_required')
+
+    report_ids_final: List[str] = []
+    seen: set[str] = set()
+    for raw in report_ids:
+        report_id_final = str(raw or '').strip()
+        if not report_id_final or report_id_final in seen:
+            continue
+        seen.add(report_id_final)
+        report_ids_final.append(report_id_final)
+    if not report_ids_final:
+        raise AnalysisReportServiceError(400, 'report_ids_required')
+
+    items: List[Dict[str, Any]] = []
+    for report_id in report_ids_final:
+        provider = _resolve_report_provider(deps.providers, teacher_id=teacher_id_final, report_id=report_id, domain=domain)
+        try:
+            result = provider.rerun_report(report_id, teacher_id_final, reason)
+        except (SurveyReportServiceError, ClassReportServiceError, MultimodalReportServiceError) as exc:
+            raise AnalysisReportServiceError(exc.status_code, exc.detail)
+        payload = dict(result or {})
+        payload['domain'] = payload.get('domain') or provider.domain
+        items.append(payload)
+
+    return {
+        'requested_count': len(report_ids_final),
+        'accepted_count': len(items),
+        'items': items,
+    }
 
 
 
@@ -436,6 +482,84 @@ def _resolve_review_queue_provider(
             if str(raw.get('item_id') or '').strip() == item_id_final:
                 return provider
     raise AnalysisReportServiceError(404, 'review_queue_item_not_found')
+
+
+
+def _build_analysis_reports_summary(*, items: List[Dict[str, Any]], review_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    status_counts: Dict[str, int] = {}
+    domain_summaries: Dict[str, Dict[str, Any]] = {}
+    queued_review_by_domain: Dict[str, int] = {}
+    review_required_reports = 0
+
+    for raw in review_items:
+        domain = str(raw.get('domain') or '').strip() or 'unknown'
+        queued_review_by_domain[domain] = queued_review_by_domain.get(domain, 0) + 1
+
+    for item in items:
+        status = str(item.get('status') or 'unknown').strip() or 'unknown'
+        status_counts[status] = status_counts.get(status, 0) + 1
+        review_required = bool(item.get('review_required'))
+        if review_required:
+            review_required_reports += 1
+        domain = str(item.get('domain') or item.get('analysis_type') or '').strip() or 'unknown'
+        domain_summary = domain_summaries.get(domain)
+        if domain_summary is None:
+            domain_summary = {
+                'domain': domain,
+                'total_reports': 0,
+                'review_required_reports': 0,
+                'queued_review_items': 0,
+                'status_counts': {},
+            }
+            domain_summaries[domain] = domain_summary
+        domain_summary['total_reports'] += 1
+        if review_required:
+            domain_summary['review_required_reports'] += 1
+        domain_status_counts = domain_summary['status_counts']
+        domain_status_counts[status] = domain_status_counts.get(status, 0) + 1
+
+    for domain, count in queued_review_by_domain.items():
+        domain_summary = domain_summaries.get(domain)
+        if domain_summary is None:
+            domain_summary = {
+                'domain': domain,
+                'total_reports': 0,
+                'review_required_reports': 0,
+                'queued_review_items': 0,
+                'status_counts': {},
+            }
+            domain_summaries[domain] = domain_summary
+        domain_summary['queued_review_items'] = count
+
+    return {
+        'total_reports': len(items),
+        'review_required_reports': review_required_reports,
+        'status_counts': status_counts,
+        'domains': [domain_summaries[key] for key in sorted(domain_summaries.keys())],
+    }
+
+
+
+def _resolve_report_provider(
+    providers: Dict[str, AnalysisReportProvider],
+    *,
+    teacher_id: str,
+    report_id: str,
+    domain: str | None,
+) -> AnalysisReportProvider:
+    if str(domain or '').strip():
+        return _resolve_provider(providers, domain)
+
+    report_id_final = str(report_id or '').strip()
+    for provider in _iter_providers(providers, None):
+        try:
+            detail = provider.get_report(report_id_final, teacher_id)
+        except (SurveyReportServiceError, ClassReportServiceError, MultimodalReportServiceError, KeyError):
+            continue
+        raw_report = detail.get('report') if isinstance(detail.get('report'), dict) else detail
+        if str((raw_report or {}).get('report_id') or report_id_final).strip() == report_id_final:
+            return provider
+    raise AnalysisReportServiceError(404, 'analysis_report_not_found')
 
 
 

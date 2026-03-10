@@ -43,6 +43,8 @@ def test_multi_domain_analysis_docs_are_indexed_and_actionable() -> None:
     assert 'docs/reference/analysis-runtime-contract.md' in index_text
     assert 'docs/operations/multi-domain-analysis-rollout-checklist.md' in index_text
     assert 'docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md' in index_text
+    assert 'docs/reference/analysis-domain-onboarding-contract.md' in index_text
+    assert 'docs/plans/templates/analysis-domain-extension-template.md' in index_text
 
     runtime_text = Path('docs/reference/analysis-runtime-contract.md').read_text(encoding='utf-8')
     assert 'target resolver' in runtime_text.lower()
@@ -53,6 +55,7 @@ def test_multi_domain_analysis_docs_are_indexed_and_actionable() -> None:
     assert 'survey' in runtime_text
     assert 'class_report' in runtime_text
     assert 'video_homework' in runtime_text
+    assert 'analysis-domain-onboarding-contract.md' in runtime_text
 
     checklist_text = Path('docs/operations/multi-domain-analysis-rollout-checklist.md').read_text(encoding='utf-8')
     assert '## 5. Shadow 发布清单' in checklist_text

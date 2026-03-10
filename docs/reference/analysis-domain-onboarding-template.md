@@ -1,6 +1,6 @@
 # Analysis Domain Onboarding Template
 
-用于新增新的 analysis domain，并把隐性经验转成可执行工程模板。
+用于新增新的 analysis domain，并把隐性经验转成可执行工程模板。开始前先对照 canonical contract：`docs/reference/analysis-domain-onboarding-contract.md`。
 
 ## 1. Domain 定义
 
@@ -89,4 +89,4 @@ review queue 至少应保留：
 - docs index 导航
 - release notes / go-live summary（如进入 beta 或 release）
 
-建议 PR 描述直接引用 `docs/reference/analysis-domain-checklist.md` 逐项验收。
+建议 PR 描述直接引用 `docs/reference/analysis-domain-checklist.md` 逐项验收，并基于 `docs/plans/templates/analysis-domain-extension-template.md` 准备实施计划。

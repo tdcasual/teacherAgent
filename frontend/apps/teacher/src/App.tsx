@@ -241,6 +241,8 @@ export default function App() {
     selectedAnalysisReportId,
     selectedAnalysisReport,
     analysisReviewQueue,
+    analysisReportsSummary,
+    analysisReviewSummary,
     analysisDomainFilter,
     analysisStatusFilter,
     analysisStrategyFilter,
@@ -252,6 +254,7 @@ export default function App() {
     refreshAnalysisReports,
     selectAnalysisReport,
     rerunAnalysisReport,
+    rerunAnalysisReportsBulk,
   } = useAnalysisReports({
     apiBase,
     teacherId: attachmentTeacherId,
@@ -668,6 +671,8 @@ export default function App() {
     selectedAnalysisReportId,
     selectedAnalysisReport,
     analysisReviewQueue,
+    analysisReportsSummary,
+    analysisReviewSummary,
     analysisDomainFilter,
     analysisStatusFilter,
     analysisStrategyFilter,
@@ -679,6 +684,7 @@ export default function App() {
     refreshAnalysisReports,
     selectAnalysisReport,
     rerunAnalysisReport,
+    rerunAnalysisReportsBulk,
   })
   const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
     '--teacher-topbar-height': `${topbarHeight}px`,

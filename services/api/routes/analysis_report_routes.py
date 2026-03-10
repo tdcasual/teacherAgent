@@ -13,8 +13,9 @@ from ..analysis_report_service import (
     list_analysis_review_queue,
     operate_analysis_review_queue_item,
     rerun_analysis_report,
+    rerun_analysis_reports_bulk,
 )
-from ..api_models import AnalysisReportRerunRequest, AnalysisReviewQueueActionRequest
+from ..api_models import AnalysisReportBulkRerunRequest, AnalysisReportRerunRequest, AnalysisReviewQueueActionRequest
 from .teacher_route_helpers import scoped_teacher_id
 
 
@@ -65,6 +66,20 @@ def build_router(core: Any) -> APIRouter:
             return rerun_analysis_report(
                 report_id=report_id,
                 teacher_id=teacher_id_scoped,
+                domain=req.domain,
+                reason=req.reason,
+                deps=deps,
+            )
+        except (AnalysisReportServiceError, Exception) as exc:
+            _raise_http_exception(exc)
+
+    @router.post('/teacher/analysis/reports/bulk-rerun')
+    async def teacher_analysis_reports_bulk_rerun(req: AnalysisReportBulkRerunRequest) -> Any:
+        teacher_id_scoped = scoped_teacher_id(req.teacher_id) or ''
+        try:
+            return rerun_analysis_reports_bulk(
+                teacher_id=teacher_id_scoped,
+                report_ids=req.report_ids,
                 domain=req.domain,
                 reason=req.reason,
                 deps=deps,

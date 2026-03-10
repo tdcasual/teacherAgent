@@ -221,6 +221,9 @@ review queue 是统一降级面，不是某个 domain 的私有补丁。
 
 ## 9. Onboarding References
 
+- Domain onboarding contract: `docs/reference/analysis-domain-onboarding-contract.md`
 - Domain onboarding template: `docs/reference/analysis-domain-onboarding-template.md`
 - Domain checklist: `docs/reference/analysis-domain-checklist.md`
+- Capability matrix: `docs/reference/analysis-domain-capability-matrix.md`
+- Extension plan template: `docs/plans/templates/analysis-domain-extension-template.md`
 - Historical extension template: `docs/reference/analysis-domain-extension-template.md`

@@ -12,6 +12,8 @@ const baseProps = (): AnalysisReportSectionProps => ({
   selectedAnalysisReportId: '',
   selectedAnalysisReport: null,
   analysisReviewQueue: [],
+  analysisReportsSummary: null,
+  analysisReviewSummary: null,
   analysisDomainFilter: '',
   analysisStatusFilter: '',
   analysisStrategyFilter: '',
@@ -23,6 +25,7 @@ const baseProps = (): AnalysisReportSectionProps => ({
   refreshAnalysisReports: vi.fn(),
   selectAnalysisReport: vi.fn(),
   rerunAnalysisReport: vi.fn(),
+  rerunAnalysisReportsBulk: vi.fn(),
 })
 
 describe('AnalysisReportSection', () => {
@@ -47,6 +50,7 @@ describe('AnalysisReportSection', () => {
     const setAnalysisTargetTypeFilter = vi.fn()
     const selectAnalysisReport = vi.fn()
     const rerunAnalysisReport = vi.fn()
+    const rerunAnalysisReportsBulk = vi.fn()
 
     const view = render(
       <AnalysisReportSection
@@ -82,6 +86,19 @@ describe('AnalysisReportSection', () => {
             updated_at: null,
           },
         ]}
+        analysisReportsSummary={{
+          total_reports: 1,
+          review_required_reports: 1,
+          status_counts: { analysis_ready: 1 },
+          domains: [{ domain: 'survey', total_reports: 1, review_required_reports: 1, queued_review_items: 1, status_counts: { analysis_ready: 1 } }],
+        }}
+        analysisReviewSummary={{
+          total_items: 1,
+          unresolved_items: 1,
+          status_counts: { queued: 1 },
+          reason_counts: { low_confidence: 1 },
+          domains: [{ domain: 'survey', total_items: 1, unresolved_items: 1 }],
+        }}
         selectedAnalysisReportId="report_1"
         selectedAnalysisReport={{
           report: {
@@ -117,6 +134,7 @@ describe('AnalysisReportSection', () => {
         setAnalysisTargetTypeFilter={setAnalysisTargetTypeFilter}
         selectAnalysisReport={selectAnalysisReport}
         rerunAnalysisReport={rerunAnalysisReport}
+        rerunAnalysisReportsBulk={rerunAnalysisReportsBulk}
       />,
     )
 
@@ -132,6 +150,7 @@ describe('AnalysisReportSection', () => {
     fireEvent.change(scoped.getByLabelText('对象类型'), { target: { value: 'report' } })
     fireEvent.click(scoped.getByRole('button', { name: '选择对象' }))
     fireEvent.click(scoped.getByRole('button', { name: '重新分析' }))
+    fireEvent.click(scoped.getByRole('button', { name: '批量重跑当前筛选（1）' }))
     fireEvent.click(scoped.getByRole('button', { name: '清除当前对象' }))
 
     expect(setAnalysisDomainFilter).toHaveBeenCalledWith('survey')
@@ -140,6 +159,7 @@ describe('AnalysisReportSection', () => {
     expect(setAnalysisTargetTypeFilter).toHaveBeenCalledWith('report')
     expect(selectAnalysisReport).toHaveBeenCalledWith('report_1', 'survey')
     expect(rerunAnalysisReport).toHaveBeenCalledWith('report_1', 'survey')
+    expect(rerunAnalysisReportsBulk).toHaveBeenCalledWith(['report_1'])
     expect(selectAnalysisReport).toHaveBeenCalledWith('', '')
   })
 })

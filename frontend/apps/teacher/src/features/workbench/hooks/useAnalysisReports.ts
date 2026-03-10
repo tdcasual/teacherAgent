@@ -4,6 +4,7 @@ import type {
   AnalysisReportSummary,
   AnalysisReviewQueueItem,
   AnalysisReviewQueueSummary,
+  AnalysisReportsSummary,
 } from '../../../types/workflow'
 
 type UseAnalysisReportsParams = {
@@ -39,6 +40,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
   const [selectedAnalysisReportId, setSelectedAnalysisReportId] = useState('')
   const [selectedAnalysisReport, setSelectedAnalysisReport] = useState<AnalysisReportDetail | null>(null)
   const [analysisReviewQueue, setAnalysisReviewQueue] = useState<AnalysisReviewQueueItem[]>([])
+  const [analysisReportsSummary, setAnalysisReportsSummary] = useState<AnalysisReportsSummary | null>(null)
   const [analysisReviewSummary, setAnalysisReviewSummary] = useState<AnalysisReviewQueueSummary | null>(null)
   const [analysisDomainFilter, setAnalysisDomainFilter] = useState('')
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState('')
@@ -67,6 +69,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     if (!enabled || !teacherId) {
       setAnalysisReports([])
       setAnalysisReviewQueue([])
+      setAnalysisReportsSummary(null)
       setAnalysisReviewSummary(null)
       setSelectedAnalysisReportId('')
       setSelectedAnalysisReport(null)
@@ -88,13 +91,15 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
       if (analysisDomainFilter) reviewUrl.searchParams.set('domain', analysisDomainFilter)
 
       const [reportsRes, reviewRes] = await Promise.all([
-        fetchJson<{ items: AnalysisReportSummary[] }>(reportsUrl),
+        fetchJson<{ items: AnalysisReportSummary[]; summary?: AnalysisReportsSummary }>(reportsUrl),
         fetchJson<{ items: AnalysisReviewQueueItem[]; summary?: AnalysisReviewQueueSummary }>(reviewUrl),
       ])
       const nextReports = Array.isArray(reportsRes.items) ? reportsRes.items : []
+      const nextReportsSummary = reportsRes.summary ?? null
       const nextReviewQueue = Array.isArray(reviewRes.items) ? reviewRes.items : []
       const nextReviewSummary = reviewRes.summary ?? null
       setAnalysisReports(nextReports)
+      setAnalysisReportsSummary(nextReportsSummary)
       setAnalysisReviewQueue(nextReviewQueue)
       setAnalysisReviewSummary(nextReviewSummary)
       setAnalysisReportsError('')
@@ -151,6 +156,25 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     [apiBase, enabled, refreshAnalysisReports, selectAnalysisReport, teacherId],
   )
 
+  const rerunAnalysisReportsBulk = useCallback(
+    async (reportIds: string[]) => {
+      const normalized = reportIds.map((item) => String(item || '').trim()).filter(Boolean)
+      if (!enabled || !teacherId || normalized.length === 0) return
+      await fetchJson<{ accepted_count: number }>(`${apiBase}/teacher/analysis/reports/bulk-rerun`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacher_id: teacherId,
+          report_ids: normalized,
+          domain: analysisDomainFilter || undefined,
+          reason: 'teacher_workbench_bulk_rerun',
+        }),
+      })
+      await refreshAnalysisReports()
+    },
+    [analysisDomainFilter, apiBase, enabled, refreshAnalysisReports, teacherId],
+  )
+
   useEffect(() => {
     void refreshAnalysisReports()
   }, [refreshAnalysisReports])
@@ -162,6 +186,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     selectedAnalysisReportId,
     selectedAnalysisReport,
     analysisReviewQueue,
+    analysisReportsSummary,
     analysisReviewSummary,
     analysisDomainFilter,
     analysisStatusFilter,
@@ -174,5 +199,6 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     refreshAnalysisReports,
     selectAnalysisReport,
     rerunAnalysisReport,
+    rerunAnalysisReportsBulk,
   }
 }

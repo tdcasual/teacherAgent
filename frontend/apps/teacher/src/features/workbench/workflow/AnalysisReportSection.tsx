@@ -3,6 +3,8 @@ import type {
   AnalysisReportSummary,
 } from '../../../types/workflow'
 
+import AnalysisOpsSection from './AnalysisOpsSection'
+
 const asStringArray = (value: unknown): string[] => {
   if (!Array.isArray(value)) return []
   return value.map((item) => String(item || '').trim()).filter(Boolean)
@@ -51,6 +53,15 @@ export default function AnalysisReportSection(props: AnalysisReportSectionProps)
           刷新
         </button>
       </div>
+
+      <AnalysisOpsSection
+        analysisReports={props.analysisReports}
+        analysisReportsSummary={props.analysisReportsSummary}
+        analysisReviewSummary={props.analysisReviewSummary}
+        analysisDomainFilter={props.analysisDomainFilter}
+        setAnalysisDomainFilter={props.setAnalysisDomainFilter}
+        rerunAnalysisReportsBulk={props.rerunAnalysisReportsBulk}
+      />
 
       <div className="grid gap-2 md:grid-cols-4">
         <label className="grid gap-1 text-[12px] text-muted">

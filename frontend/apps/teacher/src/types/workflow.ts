@@ -255,6 +255,30 @@ export type AnalysisReviewQueueSummary = {
   generated_at?: string | null
 }
 
+export type AnalysisReportsDomainSummary = {
+  domain: string
+  total_reports: number
+  review_required_reports: number
+  queued_review_items: number
+  status_counts?: Record<string, number>
+}
+
+export type AnalysisReportsSummary = {
+  total_reports: number
+  review_required_reports: number
+  status_counts?: Record<string, number>
+  domains: AnalysisReportsDomainSummary[]
+}
+
+export type AnalysisOpsSectionProps = {
+  analysisReports: AnalysisReportSummary[]
+  analysisReportsSummary: AnalysisReportsSummary | null
+  analysisReviewSummary: AnalysisReviewQueueSummary | null
+  analysisDomainFilter: string
+  setAnalysisDomainFilter: (value: string) => void
+  rerunAnalysisReportsBulk: (reportIds: string[]) => void | Promise<void>
+}
+
 export type AnalysisReportSectionProps = {
   analysisFeatureEnabled: boolean
   analysisFeatureShadowMode: boolean
@@ -264,6 +288,8 @@ export type AnalysisReportSectionProps = {
   selectedAnalysisReportId: string
   selectedAnalysisReport: AnalysisReportDetail | null
   analysisReviewQueue: AnalysisReviewQueueItem[]
+  analysisReportsSummary: AnalysisReportsSummary | null
+  analysisReviewSummary: AnalysisReviewQueueSummary | null
   analysisDomainFilter: string
   analysisStatusFilter: string
   analysisStrategyFilter: string
@@ -275,6 +301,7 @@ export type AnalysisReportSectionProps = {
   refreshAnalysisReports: () => void | Promise<void>
   selectAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
   rerunAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
+  rerunAnalysisReportsBulk: (reportIds: string[]) => void | Promise<void>
 }
 
 export type VideoHomeworkAnalysisSectionProps = {

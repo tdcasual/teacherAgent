@@ -20,6 +20,8 @@ def test_analysis_domain_onboarding_docs_are_indexed_and_actionable() -> None:
     assert 'docs/reference/analysis-domain-onboarding-template.md' in index_text
     assert 'docs/reference/analysis-domain-checklist.md' in index_text
     assert 'docs/reference/analysis-domain-capability-matrix.md' in index_text
+    assert 'docs/reference/analysis-domain-onboarding-contract.md' in index_text
+    assert 'docs/plans/templates/analysis-domain-extension-template.md' in index_text
 
     onboarding_text = Path('docs/reference/analysis-domain-onboarding-template.md').read_text(encoding='utf-8')
     for keyword in [
@@ -34,12 +36,16 @@ def test_analysis_domain_onboarding_docs_are_indexed_and_actionable() -> None:
         'observability',
     ]:
         assert keyword in onboarding_text.lower()
+    assert 'analysis-domain-onboarding-contract.md' in onboarding_text
+    assert 'docs/plans/templates/analysis-domain-extension-template.md' in onboarding_text
 
     checklist_text = Path('docs/reference/analysis-domain-checklist.md').read_text(encoding='utf-8')
     assert 'feature flags' in checklist_text.lower()
     assert 'analysis report plane' in checklist_text.lower()
     assert 'review queue' in checklist_text.lower()
     assert 'scripts/analysis_strategy_eval.py' in checklist_text
+    assert 'analysis-domain-onboarding-contract.md' in checklist_text
+    assert 'docs/plans/templates/analysis-domain-extension-template.md' in checklist_text
 
     module_boundaries_text = Path('docs/architecture/module-boundaries.md').read_text(encoding='utf-8')
     assert 'analysis-domain-onboarding-template.md' in module_boundaries_text
