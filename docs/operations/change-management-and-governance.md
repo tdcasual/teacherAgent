@@ -74,6 +74,7 @@ Last updated: 2026-02-15
 2. 将 feedback dataset 或其 summary 输入离线评测：`./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only`
 3. 记录 `by_domain` / `by_strategy` / `by_reason_code` 漂移，确认此次变更没有把错误从线上 review queue 悄悄转移到线下盲区。
 4. 如需形成周报或灰度评估结论，可额外运行：`./.venv/bin/python scripts/build_review_drift_report.py --input <dataset.json>`。
+5. 如需判断当前批次是否具备放量条件，可额外运行：`./.venv/bin/python scripts/build_analysis_release_readiness_report.py --contract-check <contract.json> --metrics <metrics.json> --drift-summary <drift.json> --shadow-compare <shadow.json>`。
 
 ## 回滚后核验
 

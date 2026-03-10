@@ -43,4 +43,5 @@
 - [ ] 已更新 `docs/reference/analysis-runtime-contract.md`
 - [ ] 已更新 `docs/operations/multi-domain-analysis-rollout-checklist.md`
 - [ ] 已更新 `docs/INDEX.md`
+- [ ] 已对照 `docs/reference/analysis-domain-capability-matrix.md` 核对该域的 rollout / runtime / replay-compare 能力
 - [ ] reviewer 可直接按本 checklist 完成验收

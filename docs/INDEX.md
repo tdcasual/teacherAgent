@@ -49,6 +49,7 @@
 - 问卷分析契约：`docs/reference/survey-analysis-contract.md`
 - 分析域 onboarding 模板：`docs/reference/analysis-domain-onboarding-template.md`
 - 分析域接入 checklist：`docs/reference/analysis-domain-checklist.md`
+- 分析域能力矩阵：`docs/reference/analysis-domain-capability-matrix.md`
 - 历史分析域扩展模板：`docs/reference/analysis-domain-extension-template.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 

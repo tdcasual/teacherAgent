@@ -73,6 +73,7 @@ review queue 至少应保留：
 - fixtures：happy path、low confidence、missing fields、provider noise、资源边界
 - offline eval：`scripts/analysis_strategy_eval.py` 可纳入该域
 - replay/compare：`scripts/replay_analysis_run.py` 与 `scripts/compare_analysis_runs.py` 可读取该域 report
+- capability matrix：`docs/reference/analysis-domain-capability-matrix.md` 可快速核对已有 domain 的 rollout 阶段与平台能力面
 - observability：`/ops/metrics.metrics.analysis_runtime` 和 `GET /teacher/analysis/metrics` 中能看到该域指标
 - review feedback：可导出 feedback dataset，并按 `domain / strategy_id / reason_code` 分析 drift
 

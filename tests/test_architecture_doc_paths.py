@@ -19,6 +19,7 @@ def test_analysis_domain_onboarding_docs_are_indexed_and_actionable() -> None:
     index_text = Path('docs/INDEX.md').read_text(encoding='utf-8')
     assert 'docs/reference/analysis-domain-onboarding-template.md' in index_text
     assert 'docs/reference/analysis-domain-checklist.md' in index_text
+    assert 'docs/reference/analysis-domain-capability-matrix.md' in index_text
 
     onboarding_text = Path('docs/reference/analysis-domain-onboarding-template.md').read_text(encoding='utf-8')
     for keyword in [
