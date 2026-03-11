@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from services.api.analysis_policy_service import (
     get_default_analysis_policy,
+    load_analysis_policy,
     load_analysis_policy_from_path,
 )
 
@@ -54,3 +57,51 @@ def test_analysis_policy_service_merges_partial_override_file(tmp_path: Path) ->
     assert policy['review_feedback']['reason_recommendation_specs']['invalid_output']['owner_hint'] == 'runtime_and_prompt'
     assert policy['strategy_eval']['required_edge_case_tags'] == ['provider_attachment_noise', 'brand_new_edge_case']
     assert policy['strategy_eval']['minimum_fixture_count_by_domain']['video_homework'] == 3
+
+
+
+def test_analysis_policy_service_rejects_invalid_threshold_ranges() -> None:
+    with pytest.raises(ValueError):
+        load_analysis_policy(
+            policy={
+                'release_readiness': {
+                    'thresholds': {
+                        'max_timeout_rate': 1.2,
+                    }
+                }
+            }
+        )
+
+
+
+def test_analysis_policy_service_rejects_invalid_priority_and_blank_edge_case() -> None:
+    with pytest.raises(ValueError):
+        load_analysis_policy(
+            policy={
+                'review_feedback': {
+                    'reason_recommendation_specs': {
+                        'invalid_output': {
+                            'default_priority': 'urgent',
+                        }
+                    }
+                },
+                'strategy_eval': {
+                    'required_edge_case_tags': ['provider_attachment_noise', ''],
+                },
+            }
+        )
+
+
+
+def test_analysis_policy_service_rejects_non_positive_window_and_negative_counts() -> None:
+    with pytest.raises(ValueError):
+        load_analysis_policy(
+            policy={
+                'release_readiness': {
+                    'thresholds': {
+                        'window_sec': 0,
+                        'max_timeout_count': -1,
+                    }
+                }
+            }
+        )

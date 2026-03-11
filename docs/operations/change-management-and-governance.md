@@ -129,6 +129,8 @@ Last updated: 2026-02-15
 
 ## Analysis Policy Change Governance
 
+
+5. policy 变更前需先运行：`./.venv/bin/python scripts/quality/check_analysis_policy.py --config <policy.json>`；若该步失败，不进入 release-readiness / drift / eval 阶段。
 当变更只涉及 analysis 质量阈值、feedback tuning recommendation 规则或 strategy eval rollout 要求时，仍按受控变更处理，不视为“纯配置可忽略变更”。发布记录至少应包含：
 
 1. `config/analysis_policy.json` 或临时 `--policy-config` 文件的 diff；
