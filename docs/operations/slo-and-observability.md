@@ -165,6 +165,7 @@ Review cadence:
 
 ## Policy File And Override Workflow
 
+- 做正式放量前，推荐直接跑统一门禁：`./.venv/bin/python scripts/quality/check_analysis_preflight.py --fixtures tests/fixtures --review-feedback <dataset.jsonl> --metrics <metrics.json> --baseline-dir <baseline_dir> --candidate-dir <candidate_dir>`；
 
 - 调整 policy 前先跑：`./.venv/bin/python scripts/quality/check_analysis_policy.py`；若只做预览可加 `--print-only`；
 当前 analysis 质量门禁与反馈闭环规则默认来自 `config/analysis_policy.json`。建议操作方式：

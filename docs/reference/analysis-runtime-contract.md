@@ -276,6 +276,7 @@ review queue 不再只是人工兜底入口，也作为策略调优输入：
 
 ## 8. Policy-Driven Gates And Feedback Rules
 
+- 需要一次性聚合 policy、contract、review drift、strategy eval、shadow compare 与 release-readiness 时，优先运行 `./.venv/bin/python scripts/quality/check_analysis_preflight.py --fixtures tests/fixtures --review-feedback <dataset.jsonl> --metrics <metrics.json> --baseline-dir <baseline_dir> --candidate-dir <candidate_dir>`；
 
 - 在消费或修改 `config/analysis_policy.json` 前，应先运行 `./.venv/bin/python scripts/quality/check_analysis_policy.py`，确认 merge 后的 effective policy 仍满足 schema 与边界约束；
 为避免每次调整发布门禁或 feedback 闭环规则都修改 Python 代码，统一 analysis plane 现在把以下可调项集中在 `config/analysis_policy.json`：
