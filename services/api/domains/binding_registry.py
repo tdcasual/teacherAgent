@@ -24,6 +24,7 @@ def runtime_deps_factory_lookup() -> dict[str, BindingFactory]:
 
 def runtime_runner_lookup() -> dict[str, BindingFactory]:
     from ..specialist_agents.class_signal_analyst import run_class_signal_analyst
+    from ..specialist_agents.reviewer_analyst import run_reviewer_analyst
     from ..specialist_agents.survey_analyst import run_survey_analyst
     from ..specialist_agents.video_homework_analyst import run_video_homework_analyst
 
@@ -31,6 +32,7 @@ def runtime_runner_lookup() -> dict[str, BindingFactory]:
         'survey_analyst': run_survey_analyst,
         'class_signal_analyst': run_class_signal_analyst,
         'video_homework_analyst': run_video_homework_analyst,
+        'reviewer_analyst': run_reviewer_analyst,
     }
 
 

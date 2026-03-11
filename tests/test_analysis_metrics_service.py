@@ -122,3 +122,104 @@ def test_metrics_service_tracks_workflow_resolution_and_outcome_feedback_loop() 
     assert routing['by_resolution_mode']['auto'] == 1
     assert routing['by_outcome']['done'] == 1
     assert routing['by_outcome_reason']['done'] == 1
+
+
+def test_metrics_service_counts_budget_rejections_and_fallback_failures() -> None:
+    service = AnalysisMetricsService()
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_budget',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+        )
+    )
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='failed',
+            handoff_id='handoff_budget',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+            metadata={'code': 'budget_exceeded'},
+        )
+    )
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='failed',
+            handoff_id='handoff_fallback',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+            metadata={'code': 'specialist_execution_failed'},
+        )
+    )
+
+    snapshot = service.snapshot()
+
+    assert snapshot['counters']['budget_rejection_count'] == 1
+    assert snapshot['counters']['fallback_count'] == 1
+    assert snapshot['by_reason']['budget_exceeded'] == 1
+    assert snapshot['by_reason']['specialist_execution_failed'] == 1
+
+
+def test_metrics_service_filters_runtime_snapshot_by_window_and_groups_by_strategy() -> None:
+    current_ts = [1_000.0]
+    service = AnalysisMetricsService(now_ts=lambda: current_ts[0])
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_old',
+            agent_id='survey_analyst',
+            task_kind='survey.analysis',
+            domain='survey',
+            strategy_id='survey.teacher.report',
+        )
+    )
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='completed',
+            handoff_id='handoff_old',
+            agent_id='survey_analyst',
+            task_kind='survey.analysis',
+            domain='survey',
+            strategy_id='survey.teacher.report',
+        )
+    )
+
+    current_ts[0] = 8_200.0
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_new',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+        )
+    )
+    service.record(
+        SpecialistRuntimeEvent(
+            phase='failed',
+            handoff_id='handoff_new',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+            metadata={'code': 'timeout'},
+        )
+    )
+
+    windowed = service.snapshot(window_sec=3600)
+    grouped = service.grouped_runtime_snapshot(group_by='strategy', window_sec=3600)
+
+    assert windowed['window_sec'] == 3600
+    assert windowed['counters']['run_count'] == 1
+    assert 'survey' not in windowed['by_domain']
+    assert windowed['by_domain']['video_homework']['failed'] == 1
+    assert grouped['video_homework.teacher.report']['counters']['timeout_count'] == 1
+    assert 'survey.teacher.report' not in grouped

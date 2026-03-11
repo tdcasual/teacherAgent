@@ -183,23 +183,62 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
                     node_id='verify',
                     node_type='verify',
                     max_budget={
-                        'max_tokens': float(plan.handoff.budget.max_tokens or 0),
-                        'timeout_sec': float(plan.handoff.budget.timeout_sec or 0),
-                        'max_steps': float(plan.handoff.budget.max_steps or 0),
+                        'max_tokens': 400.0,
+                        'timeout_sec': 10.0,
+                        'max_steps': 1.0,
                     },
                     handoff=plan.handoff.model_copy(
                         update={
                             'handoff_id': f'{plan.handoff.handoff_id}:verify',
+                            'to_agent': str(strategy.reviewer_agent or '').strip() or plan.handoff.to_agent,
                             'goal': '校验视频作业反馈结构完整性与证据一致性',
+                            'return_schema': {'type': 'reviewer_critique_v2'},
+                            'budget': plan.handoff.budget.model_copy(
+                                update={'max_tokens': 400, 'timeout_sec': 10, 'max_steps': 1}
+                            ),
                         }
                     ),
                 ),
-            ]
+            ],
         )
         job = deps.write_job(submission_id, {'status': 'analysis_running'})
-        result = SpecialistJobGraphRuntime(executor=deps.specialist_runtime.run).run(graph).final_result
-        job = deps.write_job(submission_id, {'status': 'analysis_ready', 'analysis_confidence': result.confidence})
-        report = deps.deliver_report(job=job, bundle=bundle.model_dump(), analysis_artifact=result.output)
+        graph_result = SpecialistJobGraphRuntime(executor=deps.specialist_runtime.run).run(graph)
+        review_metadata = dict(graph_result.review_metadata or {})
+        if review_metadata and not bool(review_metadata.get('approved')):
+            reason = _review_rejection_reason(review_metadata)
+            item = deps.enqueue_review_item(
+                report_id=report_id,
+                teacher_id=teacher_id,
+                reason=reason,
+                confidence=artifact.confidence,
+                target_id=submission_id,
+            )
+            job = deps.write_job(
+                submission_id,
+                {
+                    'status': 'review',
+                    'report_id': item['report_id'],
+                    'review_reason': item['reason'],
+                    'review_confidence': item.get('confidence'),
+                    'review_metadata': review_metadata,
+                },
+            )
+            return {'ok': True, 'submission_id': submission_id, 'status': job['status'], 'report_id': item['report_id']}
+        result = graph_result.final_result
+        job = deps.write_job(
+            submission_id,
+            {
+                'status': 'analysis_ready',
+                'analysis_confidence': result.confidence,
+                'review_metadata': review_metadata,
+            },
+        )
+        report = deps.deliver_report(
+            job=job,
+            bundle=bundle.model_dump(),
+            analysis_artifact=result.output,
+            review_metadata=review_metadata,
+        )
         job = deps.write_job(submission_id, {'status': 'teacher_notified', 'report_id': report['report_id']})
         return {'ok': True, 'submission_id': submission_id, 'report_id': report['report_id'], 'status': job['status']}
     except SpecialistAgentRuntimeError as exc:
@@ -209,6 +248,16 @@ def process_multimodal_submission(submission_id: str, *, deps: MultimodalOrchest
         deps.write_job(submission_id, {'status': 'failed', 'error': str(exc)[:200]})
         raise
 
+
+
+def _review_rejection_reason(review_metadata: Dict[str, Any]) -> str:
+    reason_codes = review_metadata.get('reason_codes') if isinstance(review_metadata, dict) else []
+    if isinstance(reason_codes, list):
+        for item in reason_codes:
+            reason = str(item or '').strip()
+            if reason:
+                return reason
+    return 'review_rejected'
 
 
 
@@ -247,6 +296,7 @@ def _handle_specialist_runtime_failure(
         },
     )
     return {'ok': True, 'submission_id': submission_id, 'status': job['status'], 'report_id': item['report_id']}
+
 
 
 def _load_job_optional(submission_id: str, service_deps: Any) -> Dict[str, Any]:

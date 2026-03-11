@@ -215,3 +215,172 @@ def test_process_multimodal_submission_uses_controlled_graph_and_verify_failures
     assert job['status'] == 'review'
     assert review_queue['items'][0]['report_id'] == 'submission_graph'
     assert review_queue['items'][0]['reason_code'] == 'invalid_output'
+
+
+def test_process_multimodal_submission_uses_internal_reviewer_and_delivers_primary_artifact(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    import services.api.multimodal_orchestrator_service as multimodal_orchestrator_service
+    from services.api.specialist_agents.contracts import SpecialistAgentResult
+
+    class _CapturingGraphRuntime:
+        def __init__(self, *, executor):
+            self._executor = executor
+
+        def run(self, graph):
+            captured['graph'] = graph
+            return type(
+                '_GraphResult',
+                (),
+                {
+                    'final_result': SpecialistAgentResult(
+                        handoff_id='analyze',
+                        agent_id='video_homework_analyst',
+                        status='completed',
+                        output={
+                            'executive_summary': 'primary analysis',
+                            'completion_overview': {'status': 'completed', 'summary': 'ok'},
+                            'key_signals': [],
+                            'expression_signals': [],
+                            'evidence_clips': [{'label': '器材介绍', 'evidence_ref': 'segment:asr_1'}],
+                            'teaching_recommendations': ['增加术语表达模板练习。'],
+                            'confidence_and_gaps': {'confidence': 0.86, 'gaps': []},
+                        },
+                    ),
+                    'review_metadata': {
+                        'approved': True,
+                        'critique_summary': '结构完整，可直接交付。',
+                        'reason_codes': [],
+                        'recommended_action': 'deliver',
+                        'checked_sections': ['executive_summary', 'evidence_clips'],
+                    },
+                },
+            )()
+
+    monkeypatch.setattr(multimodal_orchestrator_service, 'SpecialistJobGraphRuntime', _CapturingGraphRuntime)
+
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    report_deps = build_multimodal_report_deps(core)
+    payload = _submission_payload(parse_confidence=0.84)
+    write_multimodal_submission('submission_reviewer_ok', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_ok'}}, core=core)
+    write_multimodal_extraction('submission_reviewer_ok', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_ok'}}, core=core)
+
+    result = process_multimodal_submission('submission_reviewer_ok', deps=build_multimodal_orchestrator_deps(core))
+    report = load_multimodal_report('submission_reviewer_ok', deps=report_deps)
+
+    assert captured['graph'].nodes[0].handoff.to_agent == 'video_homework_analyst'
+    assert captured['graph'].nodes[1].handoff.to_agent == 'reviewer_analyst'
+    assert result['status'] == 'teacher_notified'
+    assert report['analysis_artifact']['executive_summary'] == 'primary analysis'
+    assert report['artifact_meta']['review_metadata']['approved'] is True
+
+
+
+def test_process_multimodal_submission_routes_reviewer_rejection_to_review_queue(monkeypatch, tmp_path: Path) -> None:
+    import services.api.multimodal_orchestrator_service as multimodal_orchestrator_service
+    from services.api.specialist_agents.contracts import SpecialistAgentResult
+
+    class _RejectingGraphRuntime:
+        def __init__(self, *, executor):
+            self._executor = executor
+
+        def run(self, graph):
+            return type(
+                '_GraphResult',
+                (),
+                {
+                    'final_result': SpecialistAgentResult(
+                        handoff_id='analyze',
+                        agent_id='video_homework_analyst',
+                        status='completed',
+                        output={
+                            'executive_summary': 'primary analysis',
+                            'completion_overview': {'status': 'completed', 'summary': 'ok'},
+                            'key_signals': [],
+                            'expression_signals': [],
+                            'evidence_clips': [],
+                            'teaching_recommendations': ['增加术语表达模板练习。'],
+                            'confidence_and_gaps': {'confidence': 0.86, 'gaps': []},
+                        },
+                    ),
+                    'review_metadata': {
+                        'approved': False,
+                        'critique_summary': '缺少证据片段，不能自动直出。',
+                        'reason_codes': ['missing_evidence_clips'],
+                        'recommended_action': 'enqueue_review',
+                        'checked_sections': ['executive_summary', 'evidence_clips'],
+                    },
+                },
+            )()
+
+    monkeypatch.setattr(multimodal_orchestrator_service, 'SpecialistJobGraphRuntime', _RejectingGraphRuntime)
+
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    report_deps = build_multimodal_report_deps(core)
+    payload = _submission_payload(parse_confidence=0.84)
+    write_multimodal_submission('submission_reviewer_reject', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_reject'}}, core=core)
+    write_multimodal_extraction('submission_reviewer_reject', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_reject'}}, core=core)
+
+    result = process_multimodal_submission('submission_reviewer_reject', deps=build_multimodal_orchestrator_deps(core))
+    job = load_multimodal_report_job('submission_reviewer_reject', deps=report_deps)
+    review_queue = list_multimodal_review_queue(teacher_id='teacher_1', deps=report_deps)
+
+    assert result['status'] == 'review'
+    assert job['status'] == 'review'
+    assert review_queue['items'][0]['report_id'] == 'submission_reviewer_reject'
+    assert review_queue['items'][0]['reason'] == 'missing_evidence_clips'
+    assert review_queue['items'][0]['reason_code'] == 'missing_evidence_clips'
+
+
+def test_process_multimodal_submission_uses_reviewer_v2_schema(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    import services.api.multimodal_orchestrator_service as multimodal_orchestrator_service
+    from services.api.specialist_agents.contracts import SpecialistAgentResult
+
+    class _CapturingGraphRuntime:
+        def __init__(self, *, executor):
+            self._executor = executor
+
+        def run(self, graph):
+            captured['graph'] = graph
+            return type(
+                '_GraphResult',
+                (),
+                {
+                    'final_result': SpecialistAgentResult(
+                        handoff_id='analyze',
+                        agent_id='video_homework_analyst',
+                        status='completed',
+                        output={
+                            'executive_summary': 'primary analysis',
+                            'completion_overview': {'status': 'completed', 'summary': 'ok'},
+                            'key_signals': [],
+                            'expression_signals': [],
+                            'evidence_clips': [{'label': '器材介绍', 'evidence_ref': 'segment:asr_1'}],
+                            'teaching_recommendations': ['增加术语表达模板练习。'],
+                            'confidence_and_gaps': {'confidence': 0.86, 'gaps': []},
+                        },
+                    ),
+                    'review_metadata': {
+                        'approved': True,
+                        'critique_summary': '结构完整，可直接交付。',
+                        'reason_codes': [],
+                        'recommended_action': 'deliver',
+                        'checked_sections': ['executive_summary'],
+                        'quality_score': 1.0,
+                        'issue_list': [],
+                    },
+                },
+            )()
+
+    monkeypatch.setattr(multimodal_orchestrator_service, 'SpecialistJobGraphRuntime', _CapturingGraphRuntime)
+
+    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
+    payload = _submission_payload(parse_confidence=0.84)
+    write_multimodal_submission('submission_reviewer_v2', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_v2'}}, core=core)
+    write_multimodal_extraction('submission_reviewer_v2', payload | {'source_meta': payload['source_meta'] | {'submission_id': 'submission_reviewer_v2'}}, core=core)
+
+    process_multimodal_submission('submission_reviewer_v2', deps=build_multimodal_orchestrator_deps(core))
+
+    assert captured['graph'].nodes[1].handoff.return_schema['type'] == 'reviewer_critique_v2'

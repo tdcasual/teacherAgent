@@ -97,3 +97,49 @@ Last updated: 2026-02-15
 3. 高风险变更占比；
 4. 风险登记闭环率（到期复审是否完成）；
 5. 文档滞后率（代码合并后未更新文档的比例）。
+
+## Analysis Runtime Reviewer And Quality Gate Requirements
+
+当变更触及 unified analysis runtime、job graph、strategy selector 或 review queue 时，除通用门禁外，还应补充以下证据：
+
+1. 高风险域若启用 internal reviewer，必须明确 reviewer 仅作为内部 verify node，不得直接暴露为前台 agent；
+2. 变更后需保留 `/teacher/analysis/metrics` 的 `specialist_quality` 快照，确认 timeout / invalid / budget / fallback 未越线；
+3. 发布前需运行 `./.venv/bin/python scripts/build_analysis_release_readiness_report.py --contract-check <contract.json> --metrics <metrics.json> --drift-summary <drift.json> --shadow-compare <shadow.json>`，并把结果附到发布记录；
+4. 若 release-readiness 因 `specialist_quality` 阻断，必须先修复或降级，不允许以“先上线再观察”替代门禁。
+
+## Strategy-Specific Release Gates
+
+当 analysis runtime 变更影响某个具体策略时，发布记录必须同时提供：
+
+1. 全局 `specialist_quality`；
+2. 对应策略的 `specialist_quality_by_strategy[strategy_id]`；
+3. 所用滑窗参数（默认 `window_sec=3600`）；
+4. 若 reviewer v2 参与高风险 verify，还需记录 `quality_score` 与主要 `issue_list` 分布是否异常。
+
+若目标策略的 strategy-level gate 不通过，即使全局 gate 通过，也不应继续放量。
+
+## Feedback-Loop Governance
+
+当 release 或 rerun 周期依赖 review feedback 调优时，变更记录还应包含：
+
+1. 最新 `tuning_recommendations` 列表；
+2. `feedback_loop_summary.high_priority_count` 是否归零；
+3. 对应 `strategy_id` 的修复动作是否已经在 fixture eval 中得到覆盖；
+4. 若高优先级 recommendation 仍存在，说明变更尚未真正闭环，不应把 review queue 压力解释为“已解决”。
+
+## Analysis Policy Change Governance
+
+当变更只涉及 analysis 质量阈值、feedback tuning recommendation 规则或 strategy eval rollout 要求时，仍按受控变更处理，不视为“纯配置可忽略变更”。发布记录至少应包含：
+
+1. `config/analysis_policy.json` 或临时 `--policy-config` 文件的 diff；
+2. `./.venv/bin/python scripts/build_analysis_release_readiness_report.py ... --policy-config <policy.json>` 输出；
+3. `./.venv/bin/python scripts/build_review_drift_report.py --input <dataset.json> --policy-config <policy.json>` 输出；
+4. `./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only --policy-config <policy.json>` 输出。
+
+若 policy 调整导致：
+
+- 放宽 release gate；
+- 降低 tuning recommendation priority；
+- 减少 required edge-case coverage；
+
+则默认按 M/H 变更处理，并要求说明为何这是风险可接受的显式决策，而不是为了让门禁“变绿”。

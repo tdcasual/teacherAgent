@@ -105,3 +105,76 @@ Review cadence:
 - 回滚后 P95 延迟是否恢复；
 - 是否仍存在 inflight 请求堆积；
 - 是否需要继续执行事件响应 runbook。
+
+## Specialist Runtime Quality Gates
+
+针对 unified analysis runtime，除通用错误率外，还应持续观察 specialist 质量门禁：
+
+- `success_rate`：`completed_count / run_count`
+- `timeout_rate`：`timeout_count / run_count`
+- `invalid_output_rate`：`invalid_output_count / run_count`
+- `budget_rejection_rate`：`budget_rejection_count / run_count`
+- `fallback_rate`：`fallback_count / run_count`
+
+初始发布阈值：
+
+- `timeout_rate <= 0.05`
+- `invalid_output_rate <= 0.05`
+- `budget_rejection_rate <= 0.02`
+- `fallback_rate <= 0.10`
+
+观测入口：
+
+- `/teacher/analysis/metrics` 返回原始 runtime snapshot 与派生 `specialist_quality`；
+- `scripts/build_analysis_release_readiness_report.py` 会把 `specialist_quality` 作为发布阻断信号；
+- 若 `specialist_quality.ready_for_release = false`，M/H 发布默认不得继续放量。
+
+建议告警：
+
+- Warning：任一 specialist rate 连续两个观测周期越线；
+- Critical：`timeout_rate` 或 `fallback_rate` 连续越线且 review queue unresolved item 同时上升。
+
+## Windowed And Grouped Specialist Quality
+
+当前推荐的质量观测方式：
+
+- 默认观察窗口：最近 `3600` 秒；
+- 默认读取路径：`GET /teacher/analysis/metrics?window_sec=3600`；
+- 按策略观测：`GET /teacher/analysis/metrics?window_sec=3600&group_by=strategy`；
+- 按 agent 观测：`GET /teacher/analysis/metrics?window_sec=3600&group_by=agent`。
+
+运维建议：
+
+- 日常巡检优先看 1h 滑窗，发现异常后再扩大到更长窗口；
+- 灰度/放量前优先看 `specialist_quality_by_strategy`，不要只看全局 `specialist_quality`；
+- `video_homework.teacher.report` 这类高风险策略，默认必须通过 strategy-level gate 才允许继续放量。
+
+## Closed-Loop Review Signals
+
+建议的 P9 运行顺序：
+
+- 先导出 review feedback dataset：`./.venv/bin/python scripts/export_review_feedback_dataset.py --input <review_queue.jsonl>`
+- 再生成 drift + tuning 建议：`./.venv/bin/python scripts/build_review_drift_report.py --input <review_feedback.jsonl>`
+- 最后在离线评测里消费 feedback：`./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only`
+
+运维上需要重点观察：
+
+- `feedback_loop_summary.high_priority_count`
+- `tuning_recommendations` 是否持续集中在单一 `strategy_id`
+- `invalid_output` / `missing_fields` / `low_confidence` 是否重复出现且未在后续评测中下降
+
+## Policy File And Override Workflow
+
+当前 analysis 质量门禁与反馈闭环规则默认来自 `config/analysis_policy.json`。建议操作方式：
+
+- 查看全局默认策略：直接审阅 `config/analysis_policy.json`；
+- 做灰度/预演时，用临时 policy 文件调用：
+  - `./.venv/bin/python scripts/build_analysis_release_readiness_report.py ... --policy-config <policy.json>`
+  - `./.venv/bin/python scripts/build_review_drift_report.py --input <dataset.json> --policy-config <policy.json>`
+  - `./.venv/bin/python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --review-feedback <dataset.json> --json --summary-only --policy-config <policy.json>`
+- 若只调整阈值/推荐规则而不改 runtime 代码，仍应保留上述三类输出，证明 change 只改变 policy，不改变实现语义边界。
+
+运维解释口径：
+
+- `window_sec=3600` 只是默认 policy，不再视为硬编码契约；
+- 若 strategy-level gate、feedback priority 或 required edge-case 发生变化，应首先检查对应 policy diff，而不是先怀疑 runtime 逻辑漂移。

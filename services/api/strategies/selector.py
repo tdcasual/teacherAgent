@@ -94,6 +94,7 @@ class StrategySelector:
             prompt_version=str(spec.prompt_version or 'v1').strip() or 'v1',
             runtime_version=str(spec.runtime_version or 'v1').strip() or 'v1',
             specialist_agent=spec.specialist_agent,
+            reviewer_agent=spec.reviewer_agent,
             task_kind=task_kind_final,
             review_policy=spec.review_policy,
             delivery_mode=delivery_mode,
@@ -102,6 +103,7 @@ class StrategySelector:
             budget=dict(spec.budget or {}),
             return_schema=dict(spec.return_schema or {}),
         )
+
 
 
 def _validate_manifest_strategy_specs(manifest_registry: Any) -> None:
@@ -116,10 +118,16 @@ def _validate_manifest_strategy_specs(manifest_registry: Any) -> None:
         for strategy in manifest.strategies:
             strategy_id = str(strategy.strategy_id or '').strip() or 'unknown_strategy'
             specialist_agent = str(strategy.specialist_agent or '').strip()
+            reviewer_agent = str(getattr(strategy, 'reviewer_agent', '') or '').strip()
             if specialist_agent and specialist_agent not in specialist_ids:
                 raise ValueError(
                     f'invalid strategy manifest for domain {manifest.domain_id}: '
                     f'{strategy_id} references missing specialist {specialist_agent}'
+                )
+            if reviewer_agent and reviewer_agent not in specialist_ids:
+                raise ValueError(
+                    f'invalid strategy manifest for domain {manifest.domain_id}: '
+                    f'{strategy_id} references missing reviewer {reviewer_agent}'
                 )
             missing_artifacts = [
                 artifact

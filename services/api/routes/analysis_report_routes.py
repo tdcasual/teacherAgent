@@ -16,7 +16,9 @@ from ..analysis_report_service import (
     rerun_analysis_reports_bulk,
 )
 from ..api_models import AnalysisReportBulkRerunRequest, AnalysisReportRerunRequest, AnalysisReviewQueueActionRequest
+from ..specialist_agents.metrics_service import SpecialistMetricsService
 from .teacher_route_helpers import scoped_teacher_id
+
 
 
 def _raise_http_exception(exc: Exception) -> None:
@@ -121,14 +123,25 @@ def build_router(core: Any) -> APIRouter:
             _raise_http_exception(exc)
 
     @router.get('/teacher/analysis/metrics')
-    async def teacher_analysis_metrics() -> Any:
+    async def teacher_analysis_metrics(
+        window_sec: int = Query(default=3600, ge=1),
+        group_by: str = Query(default=''),
+    ) -> Any:
         scoped_teacher_id(None)
         metrics_service = getattr(core, 'analysis_metrics_service', None)
         metrics_snapshot = getattr(metrics_service, 'snapshot', None)
+        grouped_runtime_snapshot = getattr(metrics_service, 'grouped_runtime_snapshot', None)
         if callable(metrics_snapshot):
-            snapshot = metrics_snapshot()
+            snapshot = metrics_snapshot(window_sec=window_sec)
         else:
-            snapshot = AnalysisMetricsService().snapshot()
-        return {'ok': True, 'metrics': snapshot}
+            snapshot = AnalysisMetricsService().snapshot(window_sec=window_sec)
+        payload = dict(snapshot or {})
+        summary_service = SpecialistMetricsService()
+        payload['specialist_quality'] = summary_service.summarize(payload)
+        group_by_final = str(group_by or '').strip()
+        if group_by_final in {'strategy', 'agent'} and callable(grouped_runtime_snapshot):
+            grouped_payload = grouped_runtime_snapshot(group_by=group_by_final, window_sec=window_sec)
+            payload[f'specialist_quality_by_{group_by_final}'] = summary_service.summarize_grouped(grouped_payload)
+        return {'ok': True, 'metrics': payload}
 
     return router

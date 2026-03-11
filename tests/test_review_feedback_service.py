@@ -158,3 +158,68 @@ def test_review_feedback_service_builds_drift_summary() -> None:
     assert summary['by_reason_code']['invalid_output'] == 1
     assert summary['top_regression_domains'][0]['domain'] == 'survey'
     assert summary['top_regression_strategies'][0]['strategy_id'] == 'survey.teacher.report'
+
+
+def test_review_feedback_dataset_builds_tuning_recommendations() -> None:
+    dataset = build_review_feedback_dataset(
+        items=[
+            {
+                'item_id': 'rvw_1',
+                'domain': 'survey',
+                'strategy_id': 'survey.teacher.report',
+                'operation': 'reject',
+                'disposition': 'rejected',
+                'reason_code': 'invalid_output',
+            },
+            {
+                'item_id': 'rvw_2',
+                'domain': 'survey',
+                'strategy_id': 'survey.teacher.report',
+                'operation': 'retry',
+                'disposition': 'retry_requested',
+                'reason_code': 'low_confidence',
+            },
+        ]
+    )
+
+    assert dataset['feedback_loop_summary']['total_recommendations'] >= 2
+    assert any(item['scope_id'] == 'survey.teacher.report' and item['action_type'] == 'harden_output_schema' for item in dataset['tuning_recommendations'])
+    assert any(item['scope_id'] == 'survey.teacher.report' and item['action_type'] == 'tune_selector_thresholds' for item in dataset['tuning_recommendations'])
+
+
+def test_review_feedback_dataset_uses_policy_reason_specs_and_priority_rules() -> None:
+    dataset = build_review_feedback_dataset(
+        items=[
+            {
+                'item_id': 'rvw_1',
+                'domain': 'survey',
+                'strategy_id': 'survey.teacher.report',
+                'operation': 'reject',
+                'disposition': 'rejected',
+                'reason_code': 'invalid_output',
+            }
+        ],
+        policy={
+            'review_feedback': {
+                'reason_recommendation_specs': {
+                    'invalid_output': {
+                        'action_type': 'custom_invalid_output_fix',
+                        'default_priority': 'low',
+                        'recommended_action': 'Use the custom invalid-output playbook.',
+                        'owner_hint': 'runtime_owner',
+                    }
+                },
+                'priority_rules': {
+                    'high_if_rejected_count_at_least': 2,
+                    'medium_if_retry_count_at_least': 1,
+                    'medium_if_item_count_at_least': 1,
+                },
+            }
+        },
+    )
+
+    recommendation = dataset['tuning_recommendations'][0]
+    assert recommendation['action_type'] == 'custom_invalid_output_fix'
+    assert recommendation['recommended_action'] == 'Use the custom invalid-output playbook.'
+    assert recommendation['owner_hint'] == 'runtime_owner'
+    assert recommendation['priority'] == 'medium'

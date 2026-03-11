@@ -3,14 +3,21 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, Iterable, List
 
+from .analysis_policy_service import load_analysis_policy
+
+_PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
 
 
-def build_review_feedback_dataset(*, items: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+
+def build_review_feedback_dataset(*, items: Iterable[Dict[str, Any]], policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
     rows = [_normalize_feedback_row(raw) for raw in items]
+    recommendations = build_review_feedback_recommendations(items=rows, policy=policy)
     return {
         'items': rows,
         'summary': build_review_feedback_summary(items=rows),
         'drift_summary': summarize_review_feedback_drift(items=rows),
+        'tuning_recommendations': recommendations,
+        'feedback_loop_summary': build_feedback_loop_summary(recommendations=recommendations),
     }
 
 
@@ -95,10 +102,155 @@ def summarize_review_feedback_drift(*, items: Iterable[Dict[str, Any]]) -> Dict[
 
 
 
+def build_review_feedback_recommendations(*, items: Iterable[Dict[str, Any]], policy: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
+    rows = [_normalize_feedback_row(raw) for raw in items]
+    review_policy = load_analysis_policy(policy=policy).get('review_feedback') or {}
+    grouped: dict[tuple[str, str, str, str], Dict[str, Any]] = {}
+    high_impact_dispositions = {str(item).strip() for item in list(review_policy.get('high_impact_dispositions') or []) if str(item).strip()}
+    retry_dispositions = {str(item).strip() for item in list(review_policy.get('retry_dispositions') or []) if str(item).strip()}
+
+    for item in rows:
+        reason_code = str(item.get('reason_code') or '').strip()
+        if not reason_code:
+            continue
+        domain = str(item.get('domain') or '').strip() or 'unknown'
+        strategy_id = str(item.get('strategy_id') or '').strip()
+        scope_type = 'strategy' if strategy_id else 'domain'
+        scope_id = strategy_id or domain
+        spec = _recommendation_spec(reason_code=reason_code, review_policy=review_policy)
+        key = (scope_type, scope_id, str(spec['action_type']), reason_code)
+        if key not in grouped:
+            grouped[key] = {
+                'scope_type': scope_type,
+                'scope_id': scope_id,
+                'action_type': spec['action_type'],
+                'reason_code': reason_code,
+                'recommended_action': spec['recommended_action'],
+                'owner_hint': spec['owner_hint'],
+                'default_priority': spec['default_priority'],
+                'item_count': 0,
+                'rejected_count': 0,
+                'retry_count': 0,
+                'sample_domains': set(),
+                'sample_strategies': set(),
+            }
+        bucket = grouped[key]
+        bucket['item_count'] += 1
+        bucket['sample_domains'].add(domain)
+        if strategy_id:
+            bucket['sample_strategies'].add(strategy_id)
+        disposition = str(item.get('disposition') or '').strip()
+        operation = str(item.get('operation') or '').strip()
+        if disposition in high_impact_dispositions or operation == 'reject':
+            bucket['rejected_count'] += 1
+        if disposition in retry_dispositions or operation == 'retry':
+            bucket['retry_count'] += 1
+
+    recommendations: List[Dict[str, Any]] = []
+    for bucket in grouped.values():
+        priority = _recommendation_priority(bucket=bucket, review_policy=review_policy)
+        recommendations.append(
+            {
+                'scope_type': bucket['scope_type'],
+                'scope_id': bucket['scope_id'],
+                'action_type': bucket['action_type'],
+                'priority': priority,
+                'reason_code': bucket['reason_code'],
+                'reason_codes': [bucket['reason_code']],
+                'recommended_action': bucket['recommended_action'],
+                'owner_hint': bucket['owner_hint'],
+                'evidence': {
+                    'item_count': int(bucket['item_count']),
+                    'rejected_count': int(bucket['rejected_count']),
+                    'retry_count': int(bucket['retry_count']),
+                    'sample_domains': sorted(bucket['sample_domains']),
+                    'sample_strategies': sorted(bucket['sample_strategies']),
+                },
+            }
+        )
+    recommendations.sort(
+        key=lambda item: (
+            _PRIORITY_ORDER.get(str(item.get('priority') or 'low'), 99),
+            -int(((item.get('evidence') or {}).get('item_count') or 0)),
+            str(item.get('scope_id') or ''),
+            str(item.get('action_type') or ''),
+        )
+    )
+    return recommendations
+
+
+
+def build_feedback_loop_summary(*, recommendations: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [dict(item or {}) for item in recommendations if isinstance(item, dict)]
+    by_priority: DefaultDict[str, int] = defaultdict(int)
+    by_action_type: DefaultDict[str, int] = defaultdict(int)
+    by_scope: DefaultDict[str, int] = defaultdict(int)
+
+    for item in rows:
+        priority = str(item.get('priority') or '').strip() or 'unknown'
+        action_type = str(item.get('action_type') or '').strip() or 'unknown'
+        scope_id = str(item.get('scope_id') or '').strip() or 'unknown'
+        by_priority[priority] += 1
+        by_action_type[action_type] += 1
+        by_scope[scope_id] += 1
+
+    return {
+        'total_recommendations': len(rows),
+        'by_priority': dict(by_priority),
+        'by_action_type': dict(by_action_type),
+        'high_priority_count': int(by_priority.get('high') or 0),
+        'top_targets': _top_counts('scope_id', by_scope),
+    }
+
+
+
 def _top_counts(key: str, values: Dict[str, int], *, limit: int = 5) -> List[Dict[str, Any]]:
     rows = [{key: name, 'count': int(count)} for name, count in values.items() if str(name or '').strip()]
     rows.sort(key=lambda item: (-int(item['count']), str(item[key])))
     return rows[:limit]
+
+
+
+def _recommendation_spec(*, reason_code: str, review_policy: Dict[str, Any]) -> Dict[str, str]:
+    normalized = str(reason_code or '').strip()
+    default = dict(review_policy.get('fallback_recommendation') or {})
+    if not default:
+        default = {
+            'action_type': 'investigate_review_feedback',
+            'default_priority': 'medium',
+            'recommended_action': 'Inspect review feedback samples and convert them into explicit strategy fixes.',
+            'owner_hint': 'strategy_owner',
+        }
+    specs = dict(review_policy.get('reason_recommendation_specs') or {})
+    if not normalized:
+        return default
+    resolved = specs.get(normalized)
+    if not isinstance(resolved, dict):
+        return default
+    return {
+        'action_type': str(resolved.get('action_type') or default['action_type']),
+        'default_priority': str(resolved.get('default_priority') or default['default_priority']),
+        'recommended_action': str(resolved.get('recommended_action') or default['recommended_action']),
+        'owner_hint': str(resolved.get('owner_hint') or default['owner_hint']),
+    }
+
+
+
+def _recommendation_priority(*, bucket: Dict[str, Any], review_policy: Dict[str, Any]) -> str:
+    default_priority = str(bucket.get('default_priority') or 'medium').strip() or 'medium'
+    item_count = int(bucket.get('item_count') or 0)
+    rejected_count = int(bucket.get('rejected_count') or 0)
+    retry_count = int(bucket.get('retry_count') or 0)
+    priority_rules = dict(review_policy.get('priority_rules') or {})
+    high_rejected_threshold = int(priority_rules.get('high_if_rejected_count_at_least') or 1)
+    medium_retry_threshold = int(priority_rules.get('medium_if_retry_count_at_least') or 1)
+    medium_item_threshold = int(priority_rules.get('medium_if_item_count_at_least') or 2)
+
+    if rejected_count >= high_rejected_threshold or default_priority == 'high':
+        return 'high'
+    if retry_count >= medium_retry_threshold or item_count >= medium_item_threshold or default_priority == 'medium':
+        return 'medium'
+    return 'low'
 
 
 

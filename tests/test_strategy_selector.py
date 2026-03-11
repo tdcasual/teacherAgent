@@ -102,3 +102,16 @@ def test_selector_rejects_disabled_strategy_ids(monkeypatch) -> None:
         selector.select(role='teacher', artifact=_survey_artifact(), task_kind='survey.analysis', target_scope='class')
 
     assert exc_info.value.code == 'strategy_disabled'
+
+
+def test_selector_marks_video_homework_strategy_with_internal_reviewer() -> None:
+    selector = build_default_strategy_selector()
+
+    decision = selector.select(
+        role='teacher',
+        artifact=_multimodal_artifact(),
+        task_kind='video_homework.analysis',
+        target_scope='student',
+    )
+
+    assert decision.reviewer_agent == 'reviewer_analyst'

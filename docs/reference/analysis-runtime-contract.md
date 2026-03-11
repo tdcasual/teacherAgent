@@ -227,3 +227,63 @@ review queue 是统一降级面，不是某个 domain 的私有补丁。
 - Capability matrix: `docs/reference/analysis-domain-capability-matrix.md`
 - Extension plan template: `docs/plans/templates/analysis-domain-extension-template.md`
 - Historical extension template: `docs/reference/analysis-domain-extension-template.md`
+
+## 7. Reviewer Verify Contract
+
+`video_homework.teacher.report` 现采用受控 `analyze -> verify` 图，但 `verify` 不再重复执行同一 analyst，而是固定走内部 `reviewer_analyst`：
+
+- `analyze` 节点继续产出老师可见的 primary analysis artifact；
+- `verify` 节点只读取上游结果，不直接改写老师可见 artifact；
+- runtime 会把 `job_graph_previous_result`、`job_graph_results`、`job_graph_trace` 注入下游 handoff constraints；
+- 若 `verify` 返回 reviewer critique（`approved` / `reason_codes` / `recommended_action` / `checked_sections`），graph result 必须把它放入 `review_metadata`，同时保留 primary artifact 作为 `final_result`；
+- 若 reviewer 拒绝，orchestrator 必须 fail-closed 到 review queue；若 reviewer 通过，才允许交付 primary artifact。
+
+reviewer critique 的最小 schema：
+
+- `approved`: `bool`
+- `critique_summary`: `str`
+- `reason_codes`: `list[str]`
+- `recommended_action`: `deliver | enqueue_review`
+- `checked_sections`: `list[str]`
+
+## 8. Strategy-Level Quality Gates
+
+`/teacher/analysis/metrics` 现支持窗口化 specialist runtime 质量视图：
+
+- 默认 `window_sec=3600`，即最近 1 小时滑窗；
+- 支持 `group_by=strategy|agent`，用于输出 `specialist_quality_by_strategy` / `specialist_quality_by_agent`；
+- strategy-level gate 用于避免某一策略质量劣化被全局平均掩盖；
+- release-readiness 可按 `strategy_id` 读取对应分组阻断信号，而不是只看全局汇总。
+
+## 9. Reviewer Critique V2
+
+internal reviewer 现升级为 `reviewer_critique_v2` contract，在保留 `approved` / `reason_codes` / `recommended_action` / `checked_sections` 的同时，新增：
+
+- `quality_score`：0.0 - 1.0 的结构化质量分；
+- `issue_list`：逐条 issue，至少包含 `severity`、`section`、`detail`、`recommended_fix`、`reason_code`；
+- reviewer 仍只作为内部 verify node，不直接替换 primary artifact；
+- orchestrator 继续基于 reviewer metadata 决定 `deliver` 或 `enqueue_review`。
+
+## 10. Review Feedback Closed Loop
+
+review queue 不再只是人工兜底入口，也作为策略调优输入：
+
+- `scripts/export_review_feedback_dataset.py` 负责把 review queue 样本归一化为 feedback dataset；
+- dataset 除 `summary` / `drift_summary` 外，还应输出 `tuning_recommendations` 与 `feedback_loop_summary`；
+- `scripts/build_review_drift_report.py` 用于快速查看 regression drift 与当前建议动作；
+- `scripts/analysis_strategy_eval.py` 会消费 review feedback，并在评测报告里输出 `closed_loop_recommendations`；
+- rollout 判断不仅看 fixture coverage，也要看是否仍存在高优先级 tuning recommendation。
+
+## 8. Policy-Driven Gates And Feedback Rules
+
+为避免每次调整发布门禁或 feedback 闭环规则都修改 Python 代码，统一 analysis plane 现在把以下可调项集中在 `config/analysis_policy.json`：
+
+- `release_readiness.thresholds`：release-readiness 的 changed ratio、timeout/invalid/budget/fallback count/rate 与默认 `window_sec`；
+- `review_feedback.*`：`reason_code -> action_type/default_priority/recommended_action/owner_hint` 映射，以及 recommendation priority 判定阈值；
+- `strategy_eval.*`：各 domain 最低 fixture 数、required edge-case tags、评测闭环 recommendation 模板。
+
+约束：
+
+- 线上默认生效的是仓库内 `config/analysis_policy.json`；
+- 离线评测或发布演练可通过脚本 `--policy-config <path>` 临时覆盖，但覆盖文件必须纳入变更记录；
+- `build_analysis_release_readiness_report.py`、`build_review_drift_report.py`、`analysis_strategy_eval.py` 都应输出 policy 生效后的结果，而不是只反映代码默认值。

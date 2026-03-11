@@ -13,6 +13,7 @@ class StrategySpec:
     accepted_artifacts: List[str] = field(default_factory=list)
     task_kinds: List[str] = field(default_factory=list)
     specialist_agent: str = ''
+    reviewer_agent: str = ''
     review_policy: str = 'none'
     delivery_mode: str = 'teacher_report'
     roles: List[str] = field(default_factory=list)
@@ -26,11 +27,12 @@ class StrategySpec:
 class StrategyDecision:
     strategy_id: str
     specialist_agent: str
-    task_kind: str
-    review_policy: str
-    delivery_mode: str
-    review_required: bool
-    reason: str
+    reviewer_agent: str = ''
+    task_kind: str = ''
+    review_policy: str = 'none'
+    delivery_mode: str = 'teacher_report'
+    review_required: bool = False
+    reason: str = 'selected'
     strategy_version: str = 'v1'
     prompt_version: str = 'v1'
     runtime_version: str = 'v1'

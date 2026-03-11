@@ -80,6 +80,7 @@ def deliver_multimodal_report(
     job: Dict[str, Any],
     bundle: Dict[str, Any],
     analysis_artifact: Dict[str, Any],
+    review_metadata: Dict[str, Any] | None = None,
     deps: MultimodalReportDeps,
 ) -> Dict[str, Any]:
     submission_id = str(job.get('submission_id') or '').strip()
@@ -116,6 +117,8 @@ def deliver_multimodal_report(
         'missing_fields': list(bundle.get('missing_fields') or []),
         'provenance': dict(bundle.get('provenance') or {}),
     }
+    if isinstance(review_metadata, dict) and review_metadata:
+        artifact_meta['review_metadata'] = dict(review_metadata)
     payload = {
         **report_summary,
         'analysis_artifact': dict(analysis_artifact or {}),
