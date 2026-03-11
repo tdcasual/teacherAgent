@@ -290,3 +290,5 @@ review queue 不再只是人工兜底入口，也作为策略调优输入：
 - 线上默认生效的是仓库内 `config/analysis_policy.json`；
 - 离线评测或发布演练可通过脚本 `--policy-config <path>` 临时覆盖，但覆盖文件必须纳入变更记录；
 - `build_analysis_release_readiness_report.py`、`build_review_drift_report.py`、`analysis_strategy_eval.py` 都应输出 policy 生效后的结果，而不是只反映代码默认值。
+- `check_analysis_preflight.py` 还会输出 `classified_blocking_issues`、`ownership_summary.by_owner` 与 `ownership_summary.top_actions`，把阻断项显式路由到 `Platform/API`、`Runtime`、`Evaluation` 等 owner，避免 gate 失败后进入模糊 triage。
+- 若 policy 文件本身不合法，preflight 应返回结构化 `policy_validation_failed`，而不是退化为通用执行失败。

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -12,10 +13,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.build_analysis_release_readiness_report import build_analysis_release_readiness_report  # noqa: E402
-from scripts.build_analysis_shadow_compare_report import build_analysis_shadow_compare_report  # noqa: E402
-from scripts.check_analysis_domain_contract import check_analysis_domain_contract  # noqa: E402
 from scripts.analysis_strategy_eval import evaluate_fixture_tree  # noqa: E402
+from scripts.build_analysis_release_readiness_report import (
+    build_analysis_release_readiness_report,  # noqa: E402
+)
+from scripts.build_analysis_shadow_compare_report import (
+    build_analysis_shadow_compare_report,  # noqa: E402
+)
+from scripts.check_analysis_domain_contract import check_analysis_domain_contract  # noqa: E402
+from services.api.analysis_gate_ownership_service import (  # noqa: E402
+    classify_blocking_issues,
+    summarize_issue_ownership,
+)
 from services.api.analysis_policy_service import (  # noqa: E402
     DEFAULT_ANALYSIS_POLICY_PATH,
     build_analysis_policy_summary,
@@ -23,6 +32,13 @@ from services.api.analysis_policy_service import (  # noqa: E402
     load_analysis_policy_from_path,
 )
 from services.api.review_feedback_service import build_review_feedback_dataset  # noqa: E402
+
+
+class AnalysisPreflightPolicyError(ValueError):
+    def __init__(self, *, config_path: Path, detail: str) -> None:
+        super().__init__(detail)
+        self.config_path = str(config_path)
+        self.detail = str(detail)
 
 
 
@@ -75,6 +91,66 @@ def _strategy_eval_blocking_issues(strategy_eval_report: Dict[str, Any]) -> List
 
 
 
+def _resolve_policy(policy_config_path: Path | None) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    config_path = Path(policy_config_path) if policy_config_path else DEFAULT_ANALYSIS_POLICY_PATH
+    try:
+        policy = load_analysis_policy_from_path(config_path) if policy_config_path else load_analysis_policy()
+    except (FileNotFoundError, ValueError) as exc:
+        raise AnalysisPreflightPolicyError(config_path=config_path, detail=str(exc)) from exc
+    return policy, {
+        'config_path': str(config_path),
+        'valid': True,
+        'summary': build_analysis_policy_summary(policy),
+    }
+
+
+
+def _empty_review_feedback() -> Dict[str, Any]:
+    return {
+        'summary': {},
+        'drift_summary': {},
+        'feedback_loop_summary': {},
+        'tuning_recommendations': [],
+    }
+
+
+
+def _build_preflight_payload(
+    *,
+    blocking_issues: Sequence[Dict[str, Any]] | None,
+    warnings: Sequence[Dict[str, Any]] | None,
+    policy_check: Dict[str, Any] | None = None,
+    contract_check: Dict[str, Any] | None = None,
+    review_feedback: Dict[str, Any] | None = None,
+    strategy_eval: Dict[str, Any] | None = None,
+    shadow_compare: Dict[str, Any] | None = None,
+    release_readiness: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    normalized_blocking_issues = [dict(item or {}) for item in list(blocking_issues or []) if isinstance(item, dict)]
+    normalized_warnings = [dict(item or {}) for item in list(warnings or []) if isinstance(item, dict)]
+    review_feedback_payload = dict(review_feedback or _empty_review_feedback())
+    tuning_recommendations = list(review_feedback_payload.get('tuning_recommendations') or [])
+    classified_blocking_issues = classify_blocking_issues(
+        blocking_issues=normalized_blocking_issues,
+        tuning_recommendations=tuning_recommendations,
+    )
+    return {
+        'generated_at': datetime.now(timezone.utc).isoformat(),
+        'ok': len(normalized_blocking_issues) == 0,
+        'blocking_issues': normalized_blocking_issues,
+        'classified_blocking_issues': classified_blocking_issues,
+        'ownership_summary': summarize_issue_ownership(classified_issues=classified_blocking_issues),
+        'warnings': normalized_warnings,
+        'policy_check': dict(policy_check or {}),
+        'contract_check': dict(contract_check or {}),
+        'review_feedback': review_feedback_payload,
+        'strategy_eval': dict(strategy_eval or {}),
+        'shadow_compare': dict(shadow_compare or {}),
+        'release_readiness': dict(release_readiness or {}),
+    }
+
+
+
 def build_analysis_preflight_report(
     *,
     fixtures_dir: Path,
@@ -84,12 +160,7 @@ def build_analysis_preflight_report(
     candidate_dir: Path,
     policy_config_path: Path | None,
 ) -> Dict[str, Any]:
-    policy = load_analysis_policy_from_path(policy_config_path) if policy_config_path else load_analysis_policy()
-    policy_check = {
-        'config_path': str(policy_config_path or DEFAULT_ANALYSIS_POLICY_PATH),
-        'valid': True,
-        'summary': build_analysis_policy_summary(policy),
-    }
+    policy, policy_check = _resolve_policy(policy_config_path)
     contract_check = check_analysis_domain_contract()
     review_feedback_items = _load_review_feedback_items(review_feedback_path)
     review_feedback_dataset = build_review_feedback_dataset(items=review_feedback_items, policy=policy)
@@ -122,23 +193,22 @@ def build_analysis_preflight_report(
             }
         )
 
-    return {
-        'generated_at': datetime.now(timezone.utc).isoformat(),
-        'ok': len(blocking_issues) == 0,
-        'blocking_issues': blocking_issues,
-        'warnings': warnings,
-        'policy_check': policy_check,
-        'contract_check': contract_check,
-        'review_feedback': {
-            'summary': review_feedback_dataset.get('summary') or {},
-            'drift_summary': review_feedback_dataset.get('drift_summary') or {},
-            'feedback_loop_summary': review_feedback_dataset.get('feedback_loop_summary') or {},
-            'tuning_recommendations': review_feedback_dataset.get('tuning_recommendations') or [],
-        },
-        'strategy_eval': strategy_eval,
-        'shadow_compare': shadow_compare,
-        'release_readiness': release_readiness,
+    review_feedback = {
+        'summary': review_feedback_dataset.get('summary') or {},
+        'drift_summary': review_feedback_dataset.get('drift_summary') or {},
+        'feedback_loop_summary': review_feedback_dataset.get('feedback_loop_summary') or {},
+        'tuning_recommendations': review_feedback_dataset.get('tuning_recommendations') or [],
     }
+    return _build_preflight_payload(
+        blocking_issues=blocking_issues,
+        warnings=warnings,
+        policy_check=policy_check,
+        contract_check=contract_check,
+        review_feedback=review_feedback,
+        strategy_eval=strategy_eval,
+        shadow_compare=shadow_compare,
+        release_readiness=release_readiness,
+    )
 
 
 
@@ -162,13 +232,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             candidate_dir=Path(args.candidate_dir),
             policy_config_path=Path(args.policy_config) if args.policy_config else None,
         )
+    except AnalysisPreflightPolicyError as exc:
+        payload = _build_preflight_payload(
+            blocking_issues=[{'code': 'policy_validation_failed', 'detail': exc.detail}],
+            warnings=[],
+            policy_check={
+                'config_path': exc.config_path,
+                'valid': False,
+                'error': exc.detail,
+            },
+        )
+        rendered = json.dumps(payload, ensure_ascii=False)
+        if args.output:
+            Path(args.output).write_text(rendered + '\n', encoding='utf-8')
+        print(rendered)
+        print(f'[FAIL] {exc.detail}', file=sys.stderr)
+        return 1
     except Exception as exc:
-        payload = {
-            'generated_at': datetime.now(timezone.utc).isoformat(),
-            'ok': False,
-            'blocking_issues': [{'code': 'analysis_preflight_execution_failed', 'detail': str(exc)}],
-            'warnings': [],
-        }
+        payload = _build_preflight_payload(
+            blocking_issues=[{'code': 'analysis_preflight_execution_failed', 'detail': str(exc)}],
+            warnings=[],
+        )
         rendered = json.dumps(payload, ensure_ascii=False)
         if args.output:
             Path(args.output).write_text(rendered + '\n', encoding='utf-8')

@@ -169,3 +169,96 @@ def test_analysis_preflight_gate_cli_accepts_policy_config_and_blocks_on_eval(tm
     payload = json.loads(proc.stdout.splitlines()[0])
     assert payload['ok'] is False
     assert any(issue['code'] == 'strategy_eval_not_ready_for_expansion' for issue in payload['blocking_issues'])
+
+
+
+def test_analysis_preflight_gate_adds_owner_classification_for_release_readiness_block(tmp_path: Path) -> None:
+    module = _load_module()
+    metrics_path = tmp_path / 'metrics.json'
+    review_feedback_path = tmp_path / 'review_feedback.jsonl'
+    metrics_path.write_text(
+        json.dumps({'counters': {'invalid_output_count': 1, 'timeout_count': 0, 'review_downgrade_count': 0}}, ensure_ascii=False),
+        encoding='utf-8',
+    )
+    review_feedback_path.write_text('', encoding='utf-8')
+    baseline_dir, candidate_dir = _write_shadow_dirs(tmp_path)
+
+    payload = module.build_analysis_preflight_report(
+        fixtures_dir=FIXTURES_DIR,
+        review_feedback_path=review_feedback_path,
+        metrics_path=metrics_path,
+        baseline_dir=baseline_dir,
+        candidate_dir=candidate_dir,
+        policy_config_path=None,
+    )
+
+    classified = list(payload['classified_blocking_issues'])
+    assert any(issue['code'] == 'invalid_output_count_exceeded' and issue['owner'] == 'runtime' for issue in classified)
+    assert payload['ownership_summary']['by_owner']['runtime']['count'] >= 1
+
+
+
+def test_analysis_preflight_gate_adds_owner_classification_for_eval_block(tmp_path: Path) -> None:
+    module = _load_module()
+    metrics_path = tmp_path / 'metrics.json'
+    review_feedback_path = tmp_path / 'review_feedback.jsonl'
+    policy_path = tmp_path / 'analysis_policy.json'
+    metrics_path.write_text(json.dumps({'counters': {'invalid_output_count': 0, 'timeout_count': 0, 'review_downgrade_count': 0}}, ensure_ascii=False), encoding='utf-8')
+    review_feedback_path.write_text('', encoding='utf-8')
+    baseline_dir, candidate_dir = _write_shadow_dirs(tmp_path)
+    policy_path.write_text(
+        json.dumps({'strategy_eval': {'required_edge_case_tags': ['provider_attachment_noise', 'brand_new_edge_case']}}, ensure_ascii=False),
+        encoding='utf-8',
+    )
+
+    payload = module.build_analysis_preflight_report(
+        fixtures_dir=FIXTURES_DIR,
+        review_feedback_path=review_feedback_path,
+        metrics_path=metrics_path,
+        baseline_dir=baseline_dir,
+        candidate_dir=candidate_dir,
+        policy_config_path=policy_path,
+    )
+
+    classified = list(payload['classified_blocking_issues'])
+    assert any(issue['code'] == 'strategy_eval_not_ready_for_expansion' and issue['owner'] == 'evaluation' for issue in classified)
+    assert payload['ownership_summary']['by_owner']['evaluation']['count'] >= 1
+
+
+
+def test_analysis_preflight_gate_cli_reports_structured_policy_validation_failure(tmp_path: Path) -> None:
+    metrics_path = tmp_path / 'metrics.json'
+    review_feedback_path = tmp_path / 'review_feedback.jsonl'
+    policy_path = tmp_path / 'analysis_policy.json'
+    metrics_path.write_text(json.dumps({'counters': {'invalid_output_count': 0, 'timeout_count': 0, 'review_downgrade_count': 0}}, ensure_ascii=False), encoding='utf-8')
+    review_feedback_path.write_text('', encoding='utf-8')
+    baseline_dir, candidate_dir = _write_shadow_dirs(tmp_path)
+    policy_path.write_text(json.dumps({'strategy_eval': {'required_edge_case_tags': ['']}}, ensure_ascii=False), encoding='utf-8')
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            '--fixtures',
+            str(FIXTURES_DIR),
+            '--review-feedback',
+            str(review_feedback_path),
+            '--metrics',
+            str(metrics_path),
+            '--baseline-dir',
+            str(baseline_dir),
+            '--candidate-dir',
+            str(candidate_dir),
+            '--policy-config',
+            str(policy_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout.splitlines()[0])
+    assert payload['ok'] is False
+    assert any(issue['code'] == 'policy_validation_failed' for issue in payload['blocking_issues'])
+    assert payload['ownership_summary']['by_owner']['platform_api']['count'] >= 1
