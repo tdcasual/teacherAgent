@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -64,10 +64,30 @@ class VideoHomeworkAnalysisArtifact(BaseModel):
     confidence_and_gaps: ConfidenceAndGaps
 
 
+class ReviewerIssue(BaseModel):
+    severity: Literal['low', 'medium', 'high']
+    section: str
+    detail: str
+    recommended_fix: str
+    reason_code: str | None = None
+
+
+class ReviewerCritiqueArtifact(BaseModel):
+    approved: bool
+    critique_summary: str
+    reason_codes: list[str] = Field(default_factory=list)
+    recommended_action: str
+    checked_sections: list[str] = Field(default_factory=list)
+    quality_score: float = 0.0
+    issue_list: list[ReviewerIssue] = Field(default_factory=list)
+
+
 _SCHEMA_BY_TYPE: dict[str, type[BaseModel]] = {
     'survey.analysis_artifact': SurveyAnalysisArtifact,
     'class_report.analysis_artifact': ClassReportAnalysisArtifact,
     'video_homework.analysis_artifact': VideoHomeworkAnalysisArtifact,
+    'reviewer_critique': ReviewerCritiqueArtifact,
+    'reviewer_critique_v2': ReviewerCritiqueArtifact,
 }
 
 

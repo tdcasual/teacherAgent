@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from services.api.analysis_metrics_service import AnalysisMetricsService
+from services.api.specialist_agents.events import SpecialistRuntimeEvent
 from services.api.routes.analysis_report_routes import build_router
 from services.api.survey_repository import (
     append_survey_review_queue_item,
@@ -162,3 +163,100 @@ def test_analysis_report_routes_expose_analysis_metrics_snapshot(tmp_path: Path)
     assert payload['metrics']['schema_version'] == 'v1'
     assert payload['metrics']['counters']['review_downgrade_count'] == 1
     assert payload['metrics']['by_domain']['survey']['review_downgraded'] == 1
+
+
+def test_analysis_report_routes_expose_specialist_quality_summary(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_1',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+        )
+    )
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='failed',
+            handoff_id='handoff_1',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+            metadata={'code': 'budget_exceeded'},
+        )
+    )
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        metrics_res = client.get('/teacher/analysis/metrics')
+
+    assert metrics_res.status_code == 200
+    payload = metrics_res.json()
+    assert payload['metrics']['specialist_quality']['budget_rejection_rate'] == 1.0
+    assert payload['metrics']['specialist_quality']['ready_for_release'] is False
+
+
+def test_analysis_report_routes_support_windowed_strategy_quality(tmp_path: Path) -> None:
+    current_ts = [1_000.0]
+    core = _Core(tmp_path)
+    core.analysis_metrics_service = AnalysisMetricsService(now_ts=lambda: current_ts[0])
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_old',
+            agent_id='survey_analyst',
+            task_kind='survey.analysis',
+            domain='survey',
+            strategy_id='survey.teacher.report',
+        )
+    )
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='completed',
+            handoff_id='handoff_old',
+            agent_id='survey_analyst',
+            task_kind='survey.analysis',
+            domain='survey',
+            strategy_id='survey.teacher.report',
+        )
+    )
+    current_ts[0] = 8_200.0
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='started',
+            handoff_id='handoff_new',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+        )
+    )
+    core.analysis_metrics_service.record(
+        SpecialistRuntimeEvent(
+            phase='failed',
+            handoff_id='handoff_new',
+            agent_id='video_homework_analyst',
+            task_kind='video_homework.analysis',
+            domain='video_homework',
+            strategy_id='video_homework.teacher.report',
+            metadata={'code': 'timeout'},
+        )
+    )
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        metrics_res = client.get('/teacher/analysis/metrics', params={'window_sec': 3600, 'group_by': 'strategy'})
+
+    assert metrics_res.status_code == 200
+    payload = metrics_res.json()['metrics']
+    assert payload['window_sec'] == 3600
+    assert 'survey' not in payload['by_domain']
+    assert payload['specialist_quality_by_strategy']['video_homework.teacher.report']['ready_for_release'] is False
+    assert 'survey.teacher.report' not in payload['specialist_quality_by_strategy']

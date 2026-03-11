@@ -204,3 +204,109 @@ def test_analysis_strategy_eval_includes_review_feedback_drift_summary() -> None
 
     assert report['review_feedback']['drift_summary']['top_regression_domains'][0]['domain'] == 'survey'
     assert report['review_feedback']['drift_summary']['top_regression_strategies'][0]['strategy_id'] == 'survey.teacher.report'
+
+
+def test_analysis_strategy_eval_builds_closed_loop_recommendations_from_review_feedback() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(
+        FIXTURES_DIR,
+        review_feedback={
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'strategy_id': 'survey.teacher.report',
+                    'operation': 'reject',
+                    'disposition': 'rejected',
+                    'reason_code': 'invalid_output',
+                }
+            ]
+        },
+    )
+
+    assert report['closed_loop_recommendations']
+    assert any(item['scope_id'] == 'survey.teacher.report' and item['action_type'] == 'harden_output_schema' for item in report['closed_loop_recommendations'])
+
+
+
+def test_analysis_strategy_eval_rollout_recommendations_block_on_high_priority_feedback() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(
+        FIXTURES_DIR,
+        review_feedback={
+            'items': [
+                {
+                    'item_id': 'rvw_1',
+                    'domain': 'survey',
+                    'strategy_id': 'survey.teacher.report',
+                    'operation': 'reject',
+                    'disposition': 'rejected',
+                    'reason_code': 'invalid_output',
+                }
+            ]
+        },
+    )
+
+    assert report['rollout_recommendations']['feedback_loop_ready'] is False
+    assert report['rollout_recommendations']['ready_for_expansion'] is False
+
+
+def test_analysis_strategy_eval_uses_policy_rollout_requirements_and_closed_loop_templates() -> None:
+    module = _load_module()
+    report = module.evaluate_fixture_tree(
+        FIXTURES_DIR,
+        policy={
+            'strategy_eval': {
+                'minimum_fixture_count_by_domain': {
+                    'survey': 5,
+                    'class_report': 3,
+                    'video_homework': 3,
+                },
+                'required_edge_case_tags': ['provider_attachment_noise', 'brand_new_edge_case'],
+                'closed_loop_recommendations': {
+                    'missing_edge_case_coverage': {
+                        'action_type': 'add_policy_edge_case_fixtures',
+                        'priority': 'high',
+                        'recommended_action': 'Add fixtures for policy-defined edge cases before rollout.',
+                        'owner_hint': 'policy_owner',
+                    }
+                },
+            }
+        },
+    )
+
+    assert report['rollout_recommendations']['ready_for_expansion'] is False
+    assert report['rollout_recommendations']['minimum_fixture_counts']['survey']['required'] == 5
+    assert report['rollout_recommendations']['required_edge_cases']['brand_new_edge_case']['covered'] is False
+    assert any(
+        item['action_type'] == 'add_policy_edge_case_fixtures'
+        and item['priority'] == 'high'
+        and item['owner_hint'] == 'policy_owner'
+        for item in report['closed_loop_recommendations']
+    )
+
+
+
+def test_analysis_strategy_eval_cli_accepts_policy_config(tmp_path: Path) -> None:
+    policy_path = tmp_path / 'analysis_policy.json'
+    policy_path.write_text(
+        json.dumps(
+            {
+                'strategy_eval': {
+                    'required_edge_case_tags': ['provider_attachment_noise', 'brand_new_edge_case'],
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding='utf-8',
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), '--fixtures', str(FIXTURES_DIR), '--json', '--summary-only', '--policy-config', str(policy_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    payload = json.loads(proc.stdout)
+    assert payload['rollout_recommendations']['required_edge_cases']['brand_new_edge_case']['covered'] is False

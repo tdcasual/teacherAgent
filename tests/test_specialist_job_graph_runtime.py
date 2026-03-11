@@ -100,3 +100,81 @@ def test_job_graph_runtime_rejects_node_budget_over_cap() -> None:
         runtime.run(graph)
 
     assert exc_info.value.code == 'budget_exceeded'
+
+
+def test_job_graph_runtime_injects_upstream_results_into_downstream_constraints() -> None:
+    captured: list[HandoffContract] = []
+
+    def _executor(handoff: HandoffContract) -> SpecialistAgentResult:
+        captured.append(handoff)
+        return SpecialistAgentResult(
+            handoff_id=handoff.handoff_id,
+            agent_id=handoff.to_agent,
+            status='completed',
+            output={'executive_summary': handoff.handoff_id},
+        )
+
+    runtime = SpecialistJobGraphRuntime(executor=_executor)
+    graph = SpecialistJobGraph(
+        nodes=[
+            JobGraphNode(node_id='analyze', handoff=_handoff('analyze')),
+            JobGraphNode(
+                node_id='verify',
+                node_type='verify',
+                handoff=_handoff('verify').model_copy(
+                    update={'to_agent': 'reviewer_analyst', 'constraints': {'keep_existing': True}}
+                ),
+            ),
+        ]
+    )
+
+    runtime.run(graph)
+
+    verify_handoff = captured[1]
+    assert verify_handoff.constraints['keep_existing'] is True
+    assert verify_handoff.constraints['job_graph_previous_result']['handoff_id'] == 'analyze'
+    assert verify_handoff.constraints['job_graph_results']['analyze']['handoff_id'] == 'analyze'
+    assert verify_handoff.constraints['job_graph_trace'] == ['analyze']
+
+
+
+def test_job_graph_runtime_preserves_primary_result_when_verify_node_is_reviewer() -> None:
+    def _executor(handoff: HandoffContract) -> SpecialistAgentResult:
+        if handoff.handoff_id == 'analyze':
+            return SpecialistAgentResult(
+                handoff_id='analyze',
+                agent_id='video_homework_analyst',
+                status='completed',
+                output={'executive_summary': 'primary analysis'},
+            )
+        return SpecialistAgentResult(
+            handoff_id='verify',
+            agent_id='reviewer_analyst',
+            status='completed',
+            output={
+                'approved': False,
+                'critique_summary': '缺少证据片段。',
+                'reason_codes': ['missing_evidence_clips'],
+                'recommended_action': 'enqueue_review',
+                'checked_sections': ['executive_summary'],
+            },
+        )
+
+    runtime = SpecialistJobGraphRuntime(executor=_executor)
+    graph = SpecialistJobGraph(
+        nodes=[
+            JobGraphNode(node_id='analyze', handoff=_handoff('analyze')),
+            JobGraphNode(
+                node_id='verify',
+                node_type='verify',
+                handoff=_handoff('verify').model_copy(update={'to_agent': 'reviewer_analyst'}),
+            ),
+        ]
+    )
+
+    result = runtime.run(graph)
+
+    assert result.final_result.agent_id == 'video_homework_analyst'
+    assert result.final_result.output['executive_summary'] == 'primary analysis'
+    assert result.review_metadata['approved'] is False
+    assert result.review_metadata['reason_codes'] == ['missing_evidence_clips']

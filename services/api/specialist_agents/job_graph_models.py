@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Literal
+from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,3 +26,4 @@ class SpecialistJobGraphResult(BaseModel):
     trace: List[str] = Field(default_factory=list)
     results: List[SpecialistAgentResult] = Field(default_factory=list)
     final_result: SpecialistAgentResult
+    review_metadata: Dict[str, Any] = Field(default_factory=dict)

@@ -11,7 +11,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from services.api.review_feedback_service import summarize_review_feedback_drift  # noqa: E402
+from services.api.analysis_policy_service import load_analysis_policy_from_path  # noqa: E402
+from services.api.review_feedback_service import build_review_feedback_dataset  # noqa: E402
+
 
 
 def _load_items(path: Path) -> List[Dict[str, Any]]:
@@ -40,10 +42,17 @@ def _load_items(path: Path) -> List[Dict[str, Any]]:
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Build a compact drift summary from review feedback data.')
     parser.add_argument('--input', required=True, help='input JSON or JSONL review feedback payload')
+    parser.add_argument('--policy-config', default='', help='optional analysis policy JSON path')
     parser.add_argument('--output', default='', help='optional output file path, defaults to stdout')
     args = parser.parse_args(argv)
 
-    payload = {'summary': summarize_review_feedback_drift(items=_load_items(Path(args.input)))}
+    policy = load_analysis_policy_from_path(Path(args.policy_config)) if args.policy_config else None
+    dataset = build_review_feedback_dataset(items=_load_items(Path(args.input)), policy=policy)
+    payload = {
+        'summary': dataset.get('drift_summary') or {},
+        'tuning_recommendations': dataset.get('tuning_recommendations') or [],
+        'feedback_loop_summary': dataset.get('feedback_loop_summary') or {},
+    }
     rendered = json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
     if args.output:
         Path(args.output).write_text(rendered, encoding='utf-8')

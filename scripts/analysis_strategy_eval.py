@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import services.api.survey_normalize_structured_service as survey_normalize_structured_service  # noqa: E402
+from services.api.analysis_policy_service import load_analysis_policy, load_analysis_policy_from_path  # noqa: E402
 from services.api.class_signal_bundle_models import ClassSignalBundle  # noqa: E402
 from services.api.multimodal_submission_models import MultimodalSubmissionBundle  # noqa: E402
 from services.api.report_adapters import (  # noqa: E402
@@ -42,6 +43,19 @@ REQUIRED_EDGE_CASE_TAGS = (
     'ocr_noise',
     'web_export_complex',
 )
+
+
+def _strategy_eval_policy(policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    return dict((load_analysis_policy(policy=policy).get('strategy_eval') or {}))
+
+
+
+def _closed_loop_template(name: str, policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    strategy_policy = _strategy_eval_policy(policy)
+    templates = dict(strategy_policy.get('closed_loop_recommendations') or {})
+    template = templates.get(name)
+    return dict(template or {}) if isinstance(template, dict) else {}
+
 
 
 def _parse_deps() -> SurveyReportParseDeps:
@@ -322,10 +336,14 @@ def _build_rollout_recommendations(
     domain_summaries: Dict[str, Any],
     edge_case_counts: Dict[str, int],
     expectation_failures: int,
+    policy: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    strategy_policy = _strategy_eval_policy(policy)
+    minimum_fixture_policy = dict(strategy_policy.get('minimum_fixture_count_by_domain') or {})
+    required_edge_case_tags = [str(item).strip() for item in list(strategy_policy.get('required_edge_case_tags') or REQUIRED_EDGE_CASE_TAGS) if str(item).strip()]
     minimum_fixture_counts = {
         domain: {
-            'required': int(MIN_FIXTURE_COUNT_BY_DOMAIN.get(domain, 0)),
+            'required': int(minimum_fixture_policy.get(domain, 0)),
             'actual': int(summary.get('fixture_count') or 0),
             'meets': bool(summary.get('meets_minimum_fixture_count')),
         }
@@ -336,7 +354,7 @@ def _build_rollout_recommendations(
             'covered': int(edge_case_counts.get(tag, 0)) > 0,
             'count': int(edge_case_counts.get(tag, 0)),
         }
-        for tag in REQUIRED_EDGE_CASE_TAGS
+        for tag in required_edge_case_tags
     }
     ready_for_expansion = (
         expectation_failures == 0
@@ -345,15 +363,19 @@ def _build_rollout_recommendations(
     )
     return {
         'ready_for_expansion': ready_for_expansion,
+        'feedback_loop_ready': True,
+        'high_priority_tuning_recommendations': 0,
         'minimum_fixture_counts': minimum_fixture_counts,
         'required_edge_cases': required_edge_cases,
     }
 
 
 
-def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _aggregate_cases(cases: List[Dict[str, Any]], policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
     fixture_count = len(cases)
     buckets = {'low': 0, 'medium': 0, 'high': 0}
+    strategy_policy = _strategy_eval_policy(policy)
+    minimum_fixture_policy = dict(strategy_policy.get('minimum_fixture_count_by_domain') or {})
     for item in cases:
         buckets[str(item['confidence_bucket'])] += 1
 
@@ -367,7 +389,7 @@ def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
             domain_buckets[str(item['confidence_bucket'])] += 1
         edge_case_counts = _count_edge_cases(items)
         edge_case_by_domain[domain] = edge_case_counts
-        minimum_fixture_count = int(MIN_FIXTURE_COUNT_BY_DOMAIN.get(domain, 0))
+        minimum_fixture_count = int(minimum_fixture_policy.get(domain, 0))
         domain_summaries[domain] = {
             'fixture_count': item_count,
             'minimum_fixture_count': minimum_fixture_count,
@@ -401,39 +423,124 @@ def _aggregate_cases(cases: List[Dict[str, Any]]) -> Dict[str, Any]:
             domain_summaries=domain_summaries,
             edge_case_counts=overall_edge_case_counts,
             expectation_failures=expectation_failures,
+            policy=policy,
         ),
         'cases': cases,
     }
 
 
 
-def _normalize_review_feedback(payload: Dict[str, Any] | None) -> Dict[str, Any]:
+def _normalize_review_feedback(payload: Dict[str, Any] | None, policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
     normalized = dict(payload or {})
     items = normalized.get('items')
     if isinstance(items, list):
-        dataset = build_review_feedback_dataset(items=[dict(item or {}) for item in items if isinstance(item, dict)])
+        dataset = build_review_feedback_dataset(items=[dict(item or {}) for item in items if isinstance(item, dict)], policy=policy)
         normalized.update(dataset.get('summary') or {})
         normalized['items'] = dataset.get('items') or []
         normalized['summary'] = dataset.get('summary') or {}
         normalized['drift_summary'] = dataset.get('drift_summary') or {}
+        normalized['tuning_recommendations'] = dataset.get('tuning_recommendations') or []
+        normalized['feedback_loop_summary'] = dataset.get('feedback_loop_summary') or {}
     return normalized
 
 
-def load_review_feedback_summary(path: Path) -> Dict[str, Any]:
+def load_review_feedback_summary(path: Path, policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
     payload = json.loads(path.read_text(encoding='utf-8'))
-    return _normalize_review_feedback(dict(payload or {}) if isinstance(payload, dict) else {})
+    return _normalize_review_feedback(dict(payload or {}) if isinstance(payload, dict) else {}, policy=policy)
 
 
 
-def evaluate_fixture_tree(fixtures_dir: Path, review_feedback: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def evaluate_fixture_tree(
+    fixtures_dir: Path,
+    review_feedback: Dict[str, Any] | None = None,
+    policy: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     paths = list(_iter_fixture_paths(fixtures_dir))
     if not paths:
         raise SystemExit(f'No analysis fixtures found under {fixtures_dir}')
     cases = [evaluate_fixture(path) for path in paths]
-    report = _aggregate_cases(cases)
-    report['review_feedback'] = _normalize_review_feedback(review_feedback)
+    report = _aggregate_cases(cases, policy=policy)
+    normalized_feedback = _normalize_review_feedback(review_feedback, policy=policy)
+    report['review_feedback'] = normalized_feedback
+    report['rollout_recommendations'] = _apply_feedback_loop_to_rollout(
+        rollout_recommendations=report['rollout_recommendations'],
+        review_feedback=normalized_feedback,
+    )
+    report['closed_loop_recommendations'] = _build_closed_loop_recommendations(
+        report=report,
+        review_feedback=normalized_feedback,
+        policy=policy,
+    )
     return report
 
+
+
+
+
+def _apply_feedback_loop_to_rollout(
+    *,
+    rollout_recommendations: Dict[str, Any],
+    review_feedback: Dict[str, Any],
+) -> Dict[str, Any]:
+    updated = dict(rollout_recommendations or {})
+    tuning_recommendations = [
+        dict(item or {})
+        for item in list(review_feedback.get('tuning_recommendations') or [])
+        if isinstance(item, dict)
+    ]
+    high_priority = [item for item in tuning_recommendations if str(item.get('priority') or '').strip() == 'high']
+    feedback_loop_ready = len(high_priority) == 0
+    updated['feedback_loop_ready'] = feedback_loop_ready
+    updated['high_priority_tuning_recommendations'] = len(high_priority)
+    updated['ready_for_expansion'] = bool(updated.get('ready_for_expansion')) and feedback_loop_ready
+    return updated
+
+
+
+def _build_closed_loop_recommendations(
+    *,
+    report: Dict[str, Any],
+    review_feedback: Dict[str, Any],
+    policy: Dict[str, Any] | None = None,
+) -> List[Dict[str, Any]]:
+    recommendations = [
+        dict(item or {})
+        for item in list(review_feedback.get('tuning_recommendations') or [])
+        if isinstance(item, dict)
+    ]
+    if int(report.get('expectation_failures') or 0) > 0:
+        template = _closed_loop_template('expectation_failures', policy=policy)
+        recommendations.append(
+            {
+                'scope_type': 'eval',
+                'scope_id': 'fixture_tree',
+                'action_type': str(template.get('action_type') or 'fix_eval_expectations'),
+                'priority': str(template.get('priority') or 'high'),
+                'reason_codes': ['expectation_failures'],
+                'recommended_action': str(template.get('recommended_action') or 'Investigate failing fixtures and convert failures into explicit strategy fixes.'),
+                'owner_hint': str(template.get('owner_hint') or 'evaluation'),
+            }
+        )
+    missing_edge_cases = [
+        tag
+        for tag, status in dict((report.get('rollout_recommendations') or {}).get('required_edge_cases') or {}).items()
+        if not bool((status or {}).get('covered'))
+    ]
+    if missing_edge_cases:
+        template = _closed_loop_template('missing_edge_case_coverage', policy=policy)
+        recommendations.append(
+            {
+                'scope_type': 'eval',
+                'scope_id': 'edge_case_coverage',
+                'action_type': str(template.get('action_type') or 'expand_edge_case_fixtures'),
+                'priority': str(template.get('priority') or 'medium'),
+                'reason_codes': ['missing_edge_case_coverage'],
+                'recommended_action': str(template.get('recommended_action') or 'Add fixtures for uncovered edge cases before expanding rollout.'),
+                'owner_hint': str(template.get('owner_hint') or 'evaluation'),
+                'missing_edge_cases': missing_edge_cases,
+            }
+        )
+    return recommendations
 
 
 def _format_human(report: Dict[str, Any], *, summary_only: bool) -> str:
@@ -469,12 +576,14 @@ def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Evaluate analysis artifacts across survey, class-report, and video-homework fixtures.')
     parser.add_argument('--fixtures', default='tests/fixtures', help='fixture directory to scan')
     parser.add_argument('--review-feedback', default='', help='optional JSON summary generated from review outcomes')
+    parser.add_argument('--policy-config', default='', help='optional analysis policy JSON path')
     parser.add_argument('--json', action='store_true', help='print JSON summary')
     parser.add_argument('--summary-only', action='store_true', help='omit per-case output')
     args = parser.parse_args(argv)
 
-    review_feedback = load_review_feedback_summary(Path(args.review_feedback)) if args.review_feedback else None
-    report = evaluate_fixture_tree(Path(args.fixtures), review_feedback=review_feedback)
+    policy = load_analysis_policy_from_path(Path(args.policy_config)) if args.policy_config else None
+    review_feedback = load_review_feedback_summary(Path(args.review_feedback), policy=policy) if args.review_feedback else None
+    report = evaluate_fixture_tree(Path(args.fixtures), review_feedback=review_feedback, policy=policy)
     payload: Dict[str, Any] = dict(report)
     if args.summary_only:
         payload.pop('cases', None)
