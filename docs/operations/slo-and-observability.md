@@ -184,4 +184,8 @@ Review cadence:
 
 主 CI 已执行统一 analysis preflight gate，因此本地预演失败通常意味着后续 PR 也会在 analysis rollout guardrails 阶段被阻断。
 
-CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json` 与 `analysis-preflight.json`；GitHub job summary 则提供快速结论摘要。
+CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json`、`analysis-preflight.json`、`analysis-rollout-decision.json`、`analysis-rollout-brief.md`、`analysis-go-live-summary.md`、`analysis-release-notes.md`、`analysis-artifact-manifest.json` 与 `analysis-artifact-integrity.json`；当 integrity checker 发现链路异常时，summary 与 upload 会一并停止，避免错误产物继续扩散。
+
+若需要在本地复现同一视图，可先运行 `./.venv/bin/python scripts/quality/build_analysis_rollout_decision.py --artifact-dir <artifact_dir>`，再运行 `./.venv/bin/python scripts/quality/build_analysis_rollout_brief.py --artifact-dir <artifact_dir>`，再运行 `./.venv/bin/python scripts/quality/build_analysis_go_live_summary.py --artifact-dir <artifact_dir> --date <YYYY-MM-DD> --release-ref <ref>`，再运行 `./.venv/bin/python scripts/quality/build_analysis_release_notes.py --artifact-dir <artifact_dir> --date <YYYY-MM-DD> --release-ref <ref>`，再运行 `./.venv/bin/python scripts/quality/build_analysis_artifact_manifest.py --artifact-dir <artifact_dir>`，随后运行 `./.venv/bin/python scripts/quality/check_analysis_artifact_integrity.py --manifest <artifact_dir>/analysis-artifact-manifest.json`。建议先看 manifest 的 `build_sequence` / `depends_on` / `generated_by`，再结合 integrity 输出中的 `unknown_dependency`、`build_sequence_mismatch`、`missing_dependency_artifact` 等 `code` 判断是声明漂移还是实际缺件。
+
+建议把 `ownership_summary.top_owners` 作为 rollout 值班入口：若 CI summary 连续指向同一 owner，说明问题已从偶发失败转为明确的责任面收敛。

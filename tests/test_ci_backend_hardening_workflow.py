@@ -58,3 +58,22 @@ def test_ci_writes_analysis_rollout_summary() -> None:
     assert 'GITHUB_STEP_SUMMARY' in text
     assert 'analysis-policy.json' in text
     assert 'analysis-preflight.json' in text
+
+
+
+def test_ci_analysis_rollout_summary_includes_ownership_routing() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'build_analysis_rollout_decision.py' in text
+    assert 'analysis-rollout-decision.json' in text
+    assert 'build_analysis_rollout_brief.py' in text
+    assert 'analysis-rollout-brief.md' in text
+    assert 'build_analysis_go_live_summary.py' in text
+    assert 'analysis-go-live-summary.md' in text
+    assert 'build_analysis_release_notes.py' in text
+    assert 'analysis-release-notes.md' in text
+    assert 'build_analysis_artifact_manifest.py' in text
+    assert 'analysis-artifact-manifest.json' in text
+    assert 'check_analysis_artifact_integrity.py' in text
+    assert 'render_analysis_rollout_summary.py' in text
+    assert 'analysis-artifacts' in text
+    assert 'GITHUB_STEP_SUMMARY' in text

@@ -149,4 +149,12 @@ Last updated: 2026-02-15
 
 CI 现已在主流水线执行 `scripts/quality/check_analysis_policy.py` 与 `scripts/quality/check_analysis_preflight.py`，本地放量前应保持与 CI 相同输入口径。
 
-CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json` 与 `analysis-preflight.json`；GitHub job summary 则提供快速结论摘要。
+CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json`、`analysis-preflight.json`、`analysis-rollout-decision.json`、`analysis-rollout-brief.md`、`analysis-go-live-summary.md`、`analysis-release-notes.md`、`analysis-artifact-manifest.json` 与 `analysis-artifact-integrity.json`；只有 integrity checker 通过后，GitHub job summary 与 artifact upload 才会继续消费该产物链。
+
+本地预演时可直接运行 `./.venv/bin/python scripts/quality/build_analysis_rollout_decision.py --artifact-dir <artifact_dir>` 生成结构化放量结论，再运行 `./.venv/bin/python scripts/quality/build_analysis_rollout_brief.py --artifact-dir <artifact_dir>` 生成 markdown brief，再运行 `./.venv/bin/python scripts/quality/build_analysis_go_live_summary.py --artifact-dir <artifact_dir> --date <YYYY-MM-DD> --release-ref <ref>` 生成 go-live summary 草稿，再运行 `./.venv/bin/python scripts/quality/build_analysis_release_notes.py --artifact-dir <artifact_dir> --date <YYYY-MM-DD> --release-ref <ref>` 生成 release notes 草稿，再运行 `./.venv/bin/python scripts/quality/build_analysis_artifact_manifest.py --artifact-dir <artifact_dir>` 生成 artifact 索引，随后运行 `./.venv/bin/python scripts/quality/check_analysis_artifact_integrity.py --manifest <artifact_dir>/analysis-artifact-manifest.json` 做完整性校验，最后运行 `./.venv/bin/python scripts/quality/render_analysis_rollout_summary.py --artifact-dir <artifact_dir>` 查看与 CI 一致的 owner / action 摘要。manifest 中的 `build_sequence`、`depends_on` 与 `generated_by` 用于定位链路，`analysis-artifact-integrity.json` 中的 `code` 则用于确认是未知依赖、顺序漂移还是磁盘缺件。
+
+若 unified preflight gate 失败，首先读取 `analysis-preflight.json` 中的 `classified_blocking_issues` 与 `ownership_summary`：
+
+- `policy_validation_failed`、`contract_check_failed` 默认回到 `Platform/API`；
+- timeout / invalid_output / fallback / specialist failure 默认回到 `Runtime`；
+- strategy eval 与 shadow compare 阻断默认回到 `Evaluation`。

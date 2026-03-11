@@ -154,45 +154,55 @@ jobs:
             tests/test_ci_backend_hardening_workflow.py \
             tests/test_analysis_preflight_ci_fixtures.py
 
-      - name: Summarize analysis rollout artifacts
+      - name: Build analysis rollout decision artifact
         if: always()
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          python scripts/quality/build_analysis_rollout_decision.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-decision.json
 
-          artifact_dir = Path('analysis-artifacts')
-          policy_path = artifact_dir / 'analysis-policy.json'
-          preflight_path = artifact_dir / 'analysis-preflight.json'
-          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+      - name: Build analysis rollout brief artifact
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/build_analysis_rollout_brief.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-brief.md
 
-          lines = ['### Analysis rollout guardrails', '']
-          if policy_path.exists():
-              payload = json.loads(policy_path.read_text(encoding='utf-8'))
-              lines.append(f"- policy valid: {payload.get('valid')}")
-              lines.append(
-                  f"- policy summary: reason_specs={((payload.get('summary') or {}).get('reason_recommendation_spec_count'))} edge_cases={((payload.get('summary') or {}).get('required_edge_case_count'))}"
-              )
-          else:
-              lines.append('- policy artifact missing')
+      - name: Build analysis go-live summary artifact
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/build_analysis_go_live_summary.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-go-live-summary.md
 
-          if preflight_path.exists():
-              payload = json.loads(preflight_path.read_text(encoding='utf-8'))
-              lines.append(f"- preflight ok: {payload.get('ok')}")
-              lines.append(f"- preflight blocking issues: {len(list(payload.get('blocking_issues') or []))}")
-              lines.append(f"- preflight warnings: {len(list(payload.get('warnings') or []))}")
-          else:
-              lines.append('- preflight artifact missing')
+      - name: Build analysis release notes artifact
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/build_analysis_release_notes.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-release-notes.md
 
-          with summary_path.open('a', encoding='utf-8') as handle:
-              handle.write('\n'.join(lines) + '\n')
-          PY
+      - name: Build analysis artifact manifest
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/build_analysis_artifact_manifest.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-artifact-manifest.json
+
+      - name: Check analysis artifact integrity
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/check_analysis_artifact_integrity.py             --manifest analysis-artifacts/analysis-artifact-manifest.json             --output analysis-artifacts/analysis-artifact-integrity.json
+
+      - name: Summarize analysis rollout artifacts
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python scripts/quality/render_analysis_rollout_summary.py --artifact-dir analysis-artifacts >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload analysis rollout artifacts
-        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: analysis-rollout-artifacts
