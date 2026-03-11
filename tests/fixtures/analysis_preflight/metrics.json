@@ -1,0 +1,13 @@
+{
+  "counters": {
+    "invalid_output_count": 0,
+    "timeout_count": 0,
+    "review_downgrade_count": 0,
+    "run_count": 1,
+    "budget_rejection_count": 0,
+    "fallback_count": 0
+  },
+  "by_phase": {
+    "completed": 1
+  }
+}

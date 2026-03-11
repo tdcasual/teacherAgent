@@ -1,0 +1,36 @@
+{
+  "report": {
+    "report_id": "report_1",
+    "analysis_type": "survey",
+    "target_type": "report",
+    "target_id": "report_1",
+    "strategy_id": "survey.teacher.report",
+    "strategy_version": "v1",
+    "prompt_version": "v1",
+    "adapter_version": "v1",
+    "runtime_version": "v1"
+  },
+  "analysis_artifact": {
+    "executive_summary": "班级对实验设计的理解偏弱",
+    "teaching_recommendations": ["补充实验设计例题讲解"],
+    "confidence_and_gaps": {"confidence": 0.73}
+  },
+  "artifact_meta": {
+    "parse_confidence": 0.73,
+    "missing_fields": ["question_summaries"],
+    "review_reason": "low_confidence"
+  },
+  "replay_context": {
+    "artifact_payload": {
+      "survey_meta": {"title": "课堂反馈问卷", "provider": "provider"},
+      "audience_scope": {"teacher_id": "teacher_1", "class_name": "高二2403班", "sample_size": 35},
+      "question_summaries": [],
+      "group_breakdowns": [],
+      "free_text_signals": [],
+      "attachments": [],
+      "parse_confidence": 0.73,
+      "missing_fields": ["question_summaries"],
+      "provenance": {"source": "structured"}
+    }
+  }
+}

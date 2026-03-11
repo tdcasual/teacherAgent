@@ -31,3 +31,17 @@ def test_ci_runs_analysis_eval_and_docs_guardrails_for_multi_domain_rollout() ->
 def test_ci_runs_analysis_domain_contract_checker() -> None:
     text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
     assert 'scripts/check_analysis_domain_contract.py --json' in text
+
+
+def test_ci_runs_analysis_policy_gate() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'scripts/quality/check_analysis_policy.py' in text
+
+
+def test_ci_runs_unified_analysis_preflight_gate() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'scripts/quality/check_analysis_preflight.py' in text
+    assert 'tests/fixtures/analysis_preflight/review_feedback.jsonl' in text
+    assert 'tests/fixtures/analysis_preflight/metrics.json' in text
+    assert 'tests/fixtures/analysis_preflight/baseline' in text
+    assert 'tests/fixtures/analysis_preflight/candidate' in text

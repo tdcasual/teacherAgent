@@ -181,3 +181,5 @@ Review cadence:
 
 - `window_sec=3600` 只是默认 policy，不再视为硬编码契约；
 - 若 strategy-level gate、feedback priority 或 required edge-case 发生变化，应首先检查对应 policy diff，而不是先怀疑 runtime 逻辑漂移。
+
+主 CI 已执行统一 analysis preflight gate，因此本地预演失败通常意味着后续 PR 也会在 analysis rollout guardrails 阶段被阻断。
