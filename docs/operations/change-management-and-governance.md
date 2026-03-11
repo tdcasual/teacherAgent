@@ -129,6 +129,7 @@ Last updated: 2026-02-15
 
 ## Analysis Policy Change Governance
 
+6. 如需形成一次性预发布结论，优先运行统一 gate：`./.venv/bin/python scripts/quality/check_analysis_preflight.py --fixtures tests/fixtures --review-feedback <dataset.jsonl> --metrics <metrics.json> --baseline-dir <baseline_dir> --candidate-dir <candidate_dir>`；仅当该 gate 通过，才进入放量。
 
 5. policy 变更前需先运行：`./.venv/bin/python scripts/quality/check_analysis_policy.py --config <policy.json>`；若该步失败，不进入 release-readiness / drift / eval 阶段。
 当变更只涉及 analysis 质量阈值、feedback tuning recommendation 规则或 strategy eval rollout 要求时，仍按受控变更处理，不视为“纯配置可忽略变更”。发布记录至少应包含：
