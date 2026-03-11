@@ -148,3 +148,5 @@ Last updated: 2026-02-15
 则默认按 M/H 变更处理，并要求说明为何这是风险可接受的显式决策，而不是为了让门禁“变绿”。
 
 CI 现已在主流水线执行 `scripts/quality/check_analysis_policy.py` 与 `scripts/quality/check_analysis_preflight.py`，本地放量前应保持与 CI 相同输入口径。
+
+CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json` 与 `analysis-preflight.json`；GitHub job summary 则提供快速结论摘要。

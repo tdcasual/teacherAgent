@@ -183,3 +183,5 @@ Review cadence:
 - 若 strategy-level gate、feedback priority 或 required edge-case 发生变化，应首先检查对应 policy diff，而不是先怀疑 runtime 逻辑漂移。
 
 主 CI 已执行统一 analysis preflight gate，因此本地预演失败通常意味着后续 PR 也会在 analysis rollout guardrails 阶段被阻断。
+
+CI 会上传 `analysis-rollout-artifacts`，其中至少包含 `analysis-policy.json` 与 `analysis-preflight.json`；GitHub job summary 则提供快速结论摘要。

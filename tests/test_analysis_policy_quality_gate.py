@@ -81,3 +81,20 @@ def test_analysis_policy_quality_gate_print_only_does_not_block(tmp_path: Path) 
     payload = json.loads(proc.stdout.splitlines()[0])
     assert payload['config_path'] == str(policy_path)
     assert payload['valid'] is False
+
+
+def test_analysis_policy_quality_gate_writes_output_file(tmp_path: Path) -> None:
+    output_path = tmp_path / 'analysis_policy.json'
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), '--output', str(output_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr or proc.stdout
+    assert output_path.exists()
+    payload = json.loads(output_path.read_text(encoding='utf-8'))
+    assert payload['valid'] is True
+    assert payload['summary']['strategy_domain_count'] >= 1

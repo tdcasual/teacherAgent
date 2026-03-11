@@ -136,13 +136,16 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          python scripts/quality/check_analysis_policy.py
+          mkdir -p analysis-artifacts
+          python scripts/quality/check_analysis_policy.py \
+            --output analysis-artifacts/analysis-policy.json
           python scripts/quality/check_analysis_preflight.py \
             --fixtures tests/fixtures \
             --review-feedback tests/fixtures/analysis_preflight/review_feedback.jsonl \
             --metrics tests/fixtures/analysis_preflight/metrics.json \
             --baseline-dir tests/fixtures/analysis_preflight/baseline \
-            --candidate-dir tests/fixtures/analysis_preflight/candidate
+            --candidate-dir tests/fixtures/analysis_preflight/candidate \
+            --output analysis-artifacts/analysis-preflight.json
           python scripts/check_analysis_domain_contract.py --json
           python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only
           python -m pytest -q \
@@ -150,6 +153,51 @@ jobs:
             tests/test_docs_architecture_presence.py \
             tests/test_ci_backend_hardening_workflow.py \
             tests/test_analysis_preflight_ci_fixtures.py
+
+      - name: Summarize analysis rollout artifacts
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          artifact_dir = Path('analysis-artifacts')
+          policy_path = artifact_dir / 'analysis-policy.json'
+          preflight_path = artifact_dir / 'analysis-preflight.json'
+          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+
+          lines = ['### Analysis rollout guardrails', '']
+          if policy_path.exists():
+              payload = json.loads(policy_path.read_text(encoding='utf-8'))
+              lines.append(f"- policy valid: {payload.get('valid')}")
+              lines.append(
+                  f"- policy summary: reason_specs={((payload.get('summary') or {}).get('reason_recommendation_spec_count'))} edge_cases={((payload.get('summary') or {}).get('required_edge_case_count'))}"
+              )
+          else:
+              lines.append('- policy artifact missing')
+
+          if preflight_path.exists():
+              payload = json.loads(preflight_path.read_text(encoding='utf-8'))
+              lines.append(f"- preflight ok: {payload.get('ok')}")
+              lines.append(f"- preflight blocking issues: {len(list(payload.get('blocking_issues') or []))}")
+              lines.append(f"- preflight warnings: {len(list(payload.get('warnings') or []))}")
+          else:
+              lines.append('- preflight artifact missing')
+
+          with summary_path.open('a', encoding='utf-8') as handle:
+              handle.write('\n'.join(lines) + '\n')
+          PY
+
+      - name: Upload analysis rollout artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: analysis-rollout-artifacts
+          path: analysis-artifacts
+          if-no-files-found: warn
 
   frontend-quality:
     runs-on: ubuntu-latest
