@@ -22,6 +22,7 @@ from services.api.analysis_policy_service import (  # noqa: E402
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Validate analysis policy config and print a compact summary.')
     parser.add_argument('--config', default=str(DEFAULT_ANALYSIS_POLICY_PATH), help='analysis policy JSON path')
+    parser.add_argument('--output', default='', help='optional output JSON path')
     parser.add_argument('--print-only', action='store_true', help='print summary even if invalid without failing')
     args = parser.parse_args(argv)
 
@@ -33,7 +34,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             'valid': True,
             'summary': build_analysis_policy_summary(policy),
         }
-        print(json.dumps(payload, ensure_ascii=False))
+        rendered = json.dumps(payload, ensure_ascii=False)
+        if args.output:
+            Path(args.output).write_text(rendered + '\n', encoding='utf-8')
+        print(rendered)
         if args.print_only:
             return 0
         print('[OK] Analysis policy is valid.')
@@ -44,7 +48,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             'valid': False,
             'error': str(exc),
         }
-        print(json.dumps(payload, ensure_ascii=False))
+        rendered = json.dumps(payload, ensure_ascii=False)
+        if args.output:
+            Path(args.output).write_text(rendered + '\n', encoding='utf-8')
+        print(rendered)
         if args.print_only:
             return 0
         print(f'[FAIL] {exc}', file=sys.stderr)

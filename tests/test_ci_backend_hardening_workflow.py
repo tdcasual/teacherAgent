@@ -45,3 +45,16 @@ def test_ci_runs_unified_analysis_preflight_gate() -> None:
     assert 'tests/fixtures/analysis_preflight/metrics.json' in text
     assert 'tests/fixtures/analysis_preflight/baseline' in text
     assert 'tests/fixtures/analysis_preflight/candidate' in text
+
+
+def test_ci_uploads_analysis_rollout_artifacts() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'analysis-artifacts' in text
+    assert 'actions/upload-artifact' in text
+
+
+def test_ci_writes_analysis_rollout_summary() -> None:
+    text = Path('.github/workflows/ci.yml').read_text(encoding='utf-8')
+    assert 'GITHUB_STEP_SUMMARY' in text
+    assert 'analysis-policy.json' in text
+    assert 'analysis-preflight.json' in text
