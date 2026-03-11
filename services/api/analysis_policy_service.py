@@ -3,10 +3,16 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Annotated, Any, Dict, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ANALYSIS_POLICY_PATH = REPO_ROOT / 'config' / 'analysis_policy.json'
+
+PriorityLevel = Literal['high', 'medium', 'low']
+NonNegativeInt = Annotated[int, Field(ge=0)]
+RateValue = Annotated[float, Field(ge=0.0, le=1.0)]
 
 _BUILTIN_ANALYSIS_POLICY: Dict[str, Any] = {
     'release_readiness': {
@@ -117,12 +123,178 @@ _BUILTIN_ANALYSIS_POLICY: Dict[str, Any] = {
 }
 
 
+class RecommendationSpecModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    action_type: str
+    default_priority: PriorityLevel
+    recommended_action: str
+    owner_hint: str
+
+    @field_validator('action_type', 'recommended_action', 'owner_hint')
+    @classmethod
+    def _validate_non_empty_string(cls, value: str) -> str:
+        normalized = str(value or '').strip()
+        if not normalized:
+            raise ValueError('must be a non-empty string')
+        return normalized
+
+
+class ClosedLoopRecommendationSpecModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    action_type: str
+    priority: PriorityLevel
+    recommended_action: str
+    owner_hint: str
+
+    @field_validator('action_type', 'recommended_action', 'owner_hint')
+    @classmethod
+    def _validate_non_empty_string(cls, value: str) -> str:
+        normalized = str(value or '').strip()
+        if not normalized:
+            raise ValueError('must be a non-empty string')
+        return normalized
+
+
+class ReleaseReadinessThresholdsModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    max_changed_ratio: RateValue
+    max_invalid_output_count: NonNegativeInt
+    max_timeout_count: NonNegativeInt
+    max_timeout_rate: RateValue
+    max_invalid_output_rate: RateValue
+    max_budget_rejection_rate: RateValue
+    max_fallback_rate: RateValue
+    window_sec: Annotated[int, Field(gt=0)]
+
+
+class ReleaseReadinessPolicyModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    thresholds: ReleaseReadinessThresholdsModel
+
+
+class PriorityRulesModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    high_if_rejected_count_at_least: Annotated[int, Field(ge=1)]
+    medium_if_retry_count_at_least: Annotated[int, Field(ge=1)]
+    medium_if_item_count_at_least: Annotated[int, Field(ge=1)]
+
+
+class ReviewFeedbackPolicyModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    reason_recommendation_specs: dict[str, RecommendationSpecModel]
+    fallback_recommendation: RecommendationSpecModel
+    priority_rules: PriorityRulesModel
+    high_impact_dispositions: list[str]
+    retry_dispositions: list[str]
+
+    @field_validator('reason_recommendation_specs')
+    @classmethod
+    def _validate_reason_specs(cls, value: dict[str, RecommendationSpecModel]) -> dict[str, RecommendationSpecModel]:
+        if not value:
+            raise ValueError('reason_recommendation_specs must not be empty')
+        normalized: dict[str, RecommendationSpecModel] = {}
+        for key, item in value.items():
+            name = str(key or '').strip()
+            if not name:
+                raise ValueError('reason_recommendation_specs keys must be non-empty')
+            normalized[name] = item
+        return normalized
+
+    @field_validator('high_impact_dispositions', 'retry_dispositions')
+    @classmethod
+    def _validate_disposition_list(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            item = str(raw or '').strip()
+            if not item:
+                raise ValueError('disposition lists must not contain blank values')
+            if item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+        if not normalized:
+            raise ValueError('disposition lists must not be empty')
+        return normalized
+
+
+class StrategyEvalPolicyModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    minimum_fixture_count_by_domain: dict[str, NonNegativeInt]
+    required_edge_case_tags: list[str]
+    closed_loop_recommendations: dict[str, ClosedLoopRecommendationSpecModel]
+
+    @field_validator('minimum_fixture_count_by_domain')
+    @classmethod
+    def _validate_minimum_fixture_counts(cls, value: dict[str, int]) -> dict[str, int]:
+        if not value:
+            raise ValueError('minimum_fixture_count_by_domain must not be empty')
+        normalized: dict[str, int] = {}
+        for key, item in value.items():
+            name = str(key or '').strip()
+            if not name:
+                raise ValueError('minimum_fixture_count_by_domain keys must be non-empty')
+            normalized[name] = int(item)
+        return normalized
+
+    @field_validator('required_edge_case_tags')
+    @classmethod
+    def _validate_edge_case_tags(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            item = str(raw or '').strip()
+            if not item:
+                raise ValueError('required_edge_case_tags must not contain blank values')
+            if item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+        if not normalized:
+            raise ValueError('required_edge_case_tags must not be empty')
+        return normalized
+
+    @field_validator('closed_loop_recommendations')
+    @classmethod
+    def _validate_closed_loop_templates(
+        cls, value: dict[str, ClosedLoopRecommendationSpecModel]
+    ) -> dict[str, ClosedLoopRecommendationSpecModel]:
+        if not value:
+            raise ValueError('closed_loop_recommendations must not be empty')
+        normalized: dict[str, ClosedLoopRecommendationSpecModel] = {}
+        for key, item in value.items():
+            name = str(key or '').strip()
+            if not name:
+                raise ValueError('closed_loop_recommendations keys must be non-empty')
+            normalized[name] = item
+        return normalized
+
+
+class AnalysisPolicyModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    release_readiness: ReleaseReadinessPolicyModel
+    review_feedback: ReviewFeedbackPolicyModel
+    strategy_eval: StrategyEvalPolicyModel
+
+
+
 def get_default_analysis_policy() -> Dict[str, Any]:
     return load_analysis_policy()
 
 
 
 def load_analysis_policy_from_path(path: Path) -> Dict[str, Any]:
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
     return load_analysis_policy(path=path)
 
 
@@ -134,7 +306,33 @@ def load_analysis_policy(*, policy: Dict[str, Any] | None = None, path: Path | N
         merged = merge_analysis_policy(merged, _read_policy_file(source_path))
     if isinstance(policy, dict) and policy:
         merged = merge_analysis_policy(merged, policy)
-    return merged
+    return validate_analysis_policy(merged)
+
+
+
+def validate_analysis_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        validated = AnalysisPolicyModel.model_validate(policy)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+    return validated.model_dump(mode='python')
+
+
+
+def build_analysis_policy_summary(policy: Dict[str, Any]) -> Dict[str, Any]:
+    validated = validate_analysis_policy(policy)
+    release_thresholds = dict((validated.get('release_readiness') or {}).get('thresholds') or {})
+    review_feedback = dict(validated.get('review_feedback') or {})
+    strategy_eval = dict(validated.get('strategy_eval') or {})
+    return {
+        'thresholds': release_thresholds,
+        'reason_recommendation_spec_count': len(dict(review_feedback.get('reason_recommendation_specs') or {})),
+        'high_impact_disposition_count': len(list(review_feedback.get('high_impact_dispositions') or [])),
+        'retry_disposition_count': len(list(review_feedback.get('retry_dispositions') or [])),
+        'required_edge_case_count': len(list(strategy_eval.get('required_edge_case_tags') or [])),
+        'closed_loop_template_count': len(dict(strategy_eval.get('closed_loop_recommendations') or {})),
+        'strategy_domain_count': len(dict(strategy_eval.get('minimum_fixture_count_by_domain') or {})),
+    }
 
 
 
