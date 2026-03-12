@@ -32,7 +32,6 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "services/api/app_core.py" = ["E402", "F401", "F405", "I001"]
-"services/api/teacher_memory_core.py" = ["E402", "F401"]
 
 [tool.mypy]
 python_version = "3.13"

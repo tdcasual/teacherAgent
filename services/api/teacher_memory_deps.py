@@ -8,10 +8,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from . import mem0_adapter
 from .config import (
     _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
-    _TEACHER_MEMORY_CONFLICT_GROUPS,
     _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
+    _TEACHER_MEMORY_CONFLICT_GROUPS,
     _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
     _TEACHER_MEMORY_SENSITIVE_PATTERNS,
     _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
@@ -44,7 +45,6 @@ from .config import (
     TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
 )
 from .job_repository import _atomic_write_json
-from . import mem0_adapter
 from .paths import (
     safe_fs_id,
     teacher_daily_memory_dir,
@@ -62,14 +62,15 @@ from .teacher_context_service import (
     build_teacher_memory_context_reader,
     build_teacher_session_summary_reader,
 )
-from .teacher_memory_apply_service import TeacherMemoryApplyDeps, teacher_memory_apply as teacher_memory_apply_impl
+from .teacher_memory_apply_service import TeacherMemoryApplyDeps
+from .teacher_memory_apply_service import teacher_memory_apply as teacher_memory_apply_impl
 from .teacher_memory_auto_service import TeacherMemoryAutoDeps
 from .teacher_memory_governance_service import TeacherMemoryGovernanceDeps
 from .teacher_memory_insights_service import TeacherMemoryInsightsDeps
-from .teacher_memory_propose_service import TeacherMemoryProposeDeps, teacher_memory_propose as teacher_memory_propose_impl
+from .teacher_memory_propose_service import TeacherMemoryProposeDeps
+from .teacher_memory_propose_service import teacher_memory_propose as teacher_memory_propose_impl
 from .teacher_memory_record_service import (
     TeacherMemoryRecordDeps,
-    mark_teacher_session_memory_flush as teacher_memory_mark_session_flush,
     teacher_memory_auto_infer_candidate,
     teacher_memory_auto_quota_reached,
     teacher_memory_find_conflicting_applied,
@@ -77,6 +78,9 @@ from .teacher_memory_record_service import (
     teacher_memory_recent_proposals,
     teacher_session_compaction_cycle_no,
     teacher_session_index_item,
+)
+from .teacher_memory_record_service import (
+    mark_teacher_session_memory_flush as teacher_memory_mark_session_flush,
 )
 from .teacher_memory_rules_service import (
     teacher_memory_age_days,
@@ -95,10 +99,6 @@ from .teacher_memory_rules_service import (
 from .teacher_memory_search_service import TeacherMemorySearchDeps
 from .teacher_memory_storage_service import (
     TeacherMemoryStorageDeps,
-    ensure_teacher_memory_provenance,
-    teacher_memory_delete_proposal as teacher_memory_delete_proposal_impl,
-    teacher_memory_list_proposals,
-    teacher_memory_remove_entry_from_file,
     teacher_proposal_path,
 )
 from .teacher_memory_store_service import (
@@ -108,8 +108,23 @@ from .teacher_memory_store_service import (
     teacher_memory_load_record,
     teacher_memory_log_event,
 )
+from .teacher_session_compaction_helpers import (
+    _mark_teacher_session_compacted,
+    _teacher_compact_allowed,
+    _teacher_compact_summary,
+    _teacher_compact_transcript,
+    write_teacher_session_records,
+)
 from .teacher_session_compaction_service import TeacherSessionCompactionDeps
-from .teacher_workspace_service import TeacherWorkspaceDeps
+from .teacher_workspace_service import (
+    TeacherWorkspaceDeps,
+)
+from .teacher_workspace_service import (
+    ensure_teacher_workspace as ensure_teacher_workspace_impl,
+)
+from .teacher_workspace_service import (
+    teacher_read_text as teacher_read_text_impl,
+)
 
 __all__ = [
     "_teacher_workspace_deps",
@@ -130,11 +145,6 @@ __all__ = [
 def _app_core():
     from .wiring import get_app_core
     return get_app_core()
-
-
-def _tmc():
-    from . import teacher_memory_core as _mod
-    return _mod
 
 
 def _now_iso() -> str:
@@ -300,10 +310,13 @@ def _teacher_workspace_deps():
     )
 
 
+def _ensure_teacher_workspace(teacher_id: str):
+    return ensure_teacher_workspace_impl(teacher_id, deps=_teacher_workspace_deps())
+
+
 def _teacher_memory_search_deps():
-    tmc = _tmc()
     return TeacherMemorySearchDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
         mem0_search=mem0_adapter.teacher_mem0_search,
         search_filter_expired=TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
         load_record=_teacher_memory_load_record,
@@ -316,9 +329,8 @@ def _teacher_memory_search_deps():
 
 
 def _teacher_memory_insights_deps():
-    tmc = _tmc()
     return TeacherMemoryInsightsDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
         recent_proposals=lambda teacher_id, limit: _teacher_memory_recent_proposals(teacher_id, limit=limit),
         is_expired_record=lambda rec, now: _teacher_memory_is_expired_record(rec, now=now),
         priority_score=_teacher_memory_priority_score,
@@ -330,7 +342,6 @@ def _teacher_memory_insights_deps():
 
 
 def _teacher_memory_apply_deps():
-    tmc = _tmc()
     return TeacherMemoryApplyDeps(
         proposal_path=_teacher_proposal_path,
         atomic_write_json=_atomic_write_json,
@@ -361,9 +372,8 @@ def _teacher_memory_apply_deps():
 
 
 def _teacher_memory_propose_deps():
-    tmc = _tmc()
     return TeacherMemoryProposeDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
         proposal_path=_teacher_proposal_path,
         atomic_write_json=_atomic_write_json,
         uuid_hex=lambda: uuid.uuid4().hex,
@@ -383,9 +393,8 @@ def _teacher_memory_propose_deps():
 
 
 def _teacher_memory_record_deps():
-    tmc = _tmc()
     return TeacherMemoryRecordDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
         teacher_workspace_dir=teacher_workspace_dir,
         teacher_session_file=teacher_session_file,
         load_teacher_sessions_index=load_teacher_sessions_index,
@@ -409,7 +418,6 @@ def _teacher_memory_record_deps():
 
 
 def _teacher_memory_store_deps():
-    tmc = _tmc()
     return TeacherMemoryStoreDeps(
         teacher_workspace_dir=teacher_workspace_dir,
         proposal_path=_teacher_proposal_path,
@@ -421,7 +429,6 @@ def _teacher_memory_store_deps():
 
 
 def _teacher_memory_governance_deps():
-    tmc = _tmc()
     return TeacherMemoryGovernanceDeps(
         recent_proposals=lambda teacher_id, limit: _teacher_memory_recent_proposals(teacher_id, limit=limit),
         norm_text=_teacher_memory_norm_text,
@@ -434,9 +441,8 @@ def _teacher_memory_governance_deps():
 
 
 def _teacher_memory_storage_deps():
-    tmc = _tmc()
     return TeacherMemoryStorageDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
         teacher_workspace_dir=teacher_workspace_dir,
         safe_fs_id=safe_fs_id,
         atomic_write_json=_atomic_write_json,
@@ -448,7 +454,6 @@ def _teacher_memory_storage_deps():
 
 
 def _teacher_memory_auto_deps():
-    tmc = _tmc()
     return TeacherMemoryAutoDeps(
         auto_enabled=TEACHER_MEMORY_AUTO_ENABLED,
         auto_min_content_chars=TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
@@ -480,16 +485,15 @@ def _teacher_memory_auto_deps():
         session_compaction_cycle_no=_teacher_session_compaction_cycle_no,
         session_index_item=_teacher_session_index_item,
         teacher_session_file=teacher_session_file,
-        compact_transcript=tmc._teacher_compact_transcript,
+        compact_transcript=_teacher_compact_transcript,
         mark_session_memory_flush=_mark_teacher_session_memory_flush,
     )
 
 
 def _teacher_context_deps():
-    tmc = _tmc()
     return TeacherContextDeps(
-        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
-        teacher_read_text=tmc.teacher_read_text,
+        ensure_teacher_workspace=_ensure_teacher_workspace,
+        teacher_read_text=teacher_read_text_impl,
         teacher_workspace_file=teacher_workspace_file,
         teacher_memory_context_text=build_teacher_memory_context_reader(
             teacher_memory_active_applied_records=lambda teacher_id, target="MEMORY", limit=20: _teacher_memory_active_applied_records(
@@ -497,7 +501,7 @@ def _teacher_context_deps():
                 target=target,
                 limit=limit,
             ),
-            teacher_read_text=tmc.teacher_read_text,
+            teacher_read_text=teacher_read_text_impl,
             teacher_workspace_file=teacher_workspace_file,
             teacher_memory_rank_score=_teacher_memory_rank_score,
             teacher_memory_context_max_entries=TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
@@ -512,18 +516,16 @@ def _teacher_context_deps():
 
 
 def _teacher_session_compaction_deps():
-    tmc = _tmc()
     return TeacherSessionCompactionDeps(
         compact_enabled=TEACHER_SESSION_COMPACT_ENABLED,
         compact_main_only=TEACHER_SESSION_COMPACT_MAIN_ONLY,
         compact_max_messages=TEACHER_SESSION_COMPACT_MAX_MESSAGES,
         compact_keep_tail=TEACHER_SESSION_COMPACT_KEEP_TAIL,
         chat_max_messages_teacher=CHAT_MAX_MESSAGES_TEACHER,
-        teacher_compact_allowed=tmc._teacher_compact_allowed,
+        teacher_compact_allowed=_teacher_compact_allowed,
         teacher_session_file=teacher_session_file,
-        teacher_compact_summary=tmc._teacher_compact_summary,
-        write_teacher_session_records=tmc.write_teacher_session_records,
-        mark_teacher_session_compacted=tmc._mark_teacher_session_compacted,
+        teacher_compact_summary=_teacher_compact_summary,
+        write_teacher_session_records=write_teacher_session_records,
+        mark_teacher_session_compacted=_mark_teacher_session_compacted,
         diag_log=_app_core().diag_log,
     )
-

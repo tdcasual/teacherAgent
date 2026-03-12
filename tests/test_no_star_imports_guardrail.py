@@ -4,7 +4,6 @@ from pathlib import Path
 
 ALLOWED = {
     "services/api/app_core.py",
-    "services/api/teacher_memory_core.py",
 }
 
 
