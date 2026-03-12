@@ -36,8 +36,8 @@
 - `teacher_memory_auto_service.py`：只负责自动提案与 flush 触发。
 - `teacher_memory_governance_service.py`：负责 duplicate / quota / conflict / supersede 规则。
 - `teacher_memory_storage_service.py`：负责 proposal 路径、列表、删除与 applied markdown 清理。
-- `teacher_memory_core.py`：只保留 façade 与 deps 组装，不再承载完整治理实现。
-- `teacher_memory_deps.py`：优先直接装配 `teacher_memory_*_service.py`、`teacher_context_service.py` 与 `mem0_adapter.py` 的实现；避免把 core 私有 helper 继续当作默认真相源。
+- `teacher_memory_deps.py`：默认 wiring 真相层；优先直接装配 `teacher_memory_*_service.py`、`teacher_context_service.py`、`teacher_session_compaction_helpers.py` 与 `mem0_adapter.py` 的实现，不再回拉 `teacher_memory_core.py` 私有 helper。
+- `teacher_memory_core.py`：显式兼容 façade，只导出公开 teacher memory 入口；不再承担隐式 helper 聚合层或默认 wiring 真相源。
 
 ## Storage Guidance
 
@@ -51,4 +51,3 @@
 - `data/analysis/metrics_snapshot.json` 与 `/teacher/analysis/ops` 提供的是运行时观测与运维摘要，不应被 `auto_flush` 或 memory apply 流程误当作长期事实。
 - replay compare 候选与 lineage 元数据属于审计/回归资产，允许离线导出，但不进入 teacher / student memory proposal 生命周期。
 - memory 服务只治理 proposal、apply 与 provenance；ops telemetry 的保留、归档与清理由 analysis 运营链路负责。
-

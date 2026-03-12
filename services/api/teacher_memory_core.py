@@ -1,288 +1,74 @@
-"""Teacher memory and session compaction functions.
+"""Compatibility facade for teacher memory services.
 
-Extracted from app_core.py to reduce module size.
-All public and underscore-prefixed names are re-exported by app_core.
+This module keeps the historical public entry points stable while delegating
+all default wiring to the dedicated service and deps modules.
 """
 from __future__ import annotations
 
 import importlib as _importlib
-import logging
 import os
-import threading
-import time
-import uuid
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
-_log = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Imports from already-extracted sibling modules
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Re-exports from extracted compaction helpers
-# ---------------------------------------------------------------------------
+from . import teacher_memory_deps as _teacher_memory_deps_module
 from . import teacher_session_compaction_helpers as _compaction_helpers_module
-from .config import (
-    _TEACHER_MEMORY_AUTO_INFER_BLOCK_PATTERNS,
-    _TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
-    _TEACHER_MEMORY_CONFLICT_GROUPS,
-    _TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
-    _TEACHER_MEMORY_SENSITIVE_PATTERNS,
-    _TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
-    CHAT_MAX_MESSAGES_TEACHER,
-    DIAG_LOG_ENABLED,
-    SESSION_INDEX_MAX_ITEMS,
-    TEACHER_MEMORY_AUTO_APPLY_ENABLED,
-    TEACHER_MEMORY_AUTO_APPLY_STRICT,
-    TEACHER_MEMORY_AUTO_APPLY_TARGETS,
-    TEACHER_MEMORY_AUTO_ENABLED,
-    TEACHER_MEMORY_AUTO_INFER_ENABLED,
-    TEACHER_MEMORY_AUTO_INFER_LOOKBACK_TURNS,
-    TEACHER_MEMORY_AUTO_INFER_MIN_CHARS,
-    TEACHER_MEMORY_AUTO_INFER_MIN_PRIORITY,
-    TEACHER_MEMORY_AUTO_INFER_MIN_REPEATS,
-    TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
-    TEACHER_MEMORY_AUTO_MIN_CONTENT_CHARS,
-    TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
-    TEACHER_MEMORY_DECAY_ENABLED,
-    TEACHER_MEMORY_FLUSH_ENABLED,
-    TEACHER_MEMORY_FLUSH_MARGIN_MESSAGES,
-    TEACHER_MEMORY_FLUSH_MAX_SOURCE_CHARS,
-    TEACHER_MEMORY_SEARCH_FILTER_EXPIRED,
-    TEACHER_MEMORY_TTL_DAYS_DAILY,
-    TEACHER_MEMORY_TTL_DAYS_MEMORY,
-    TEACHER_SESSION_COMPACT_ENABLED,
-    TEACHER_SESSION_COMPACT_KEEP_TAIL,
-    TEACHER_SESSION_COMPACT_MAIN_ONLY,
-    TEACHER_SESSION_COMPACT_MAX_MESSAGES,
-    TEACHER_SESSION_COMPACT_MAX_SOURCE_CHARS,
-    TEACHER_SESSION_COMPACT_MIN_INTERVAL_SEC,
-    TEACHER_SESSION_CONTEXT_INCLUDE_SUMMARY,
-    TEACHER_SESSION_CONTEXT_SUMMARY_MAX_CHARS,
-)
-from .job_repository import _atomic_write_json
-from .paths import (
-    safe_fs_id,
-    teacher_daily_memory_dir,
-    teacher_daily_memory_path,
-    teacher_session_file,
-    teacher_workspace_dir,
-    teacher_workspace_file,
-)
-from .session_store import (
-    load_teacher_sessions_index,
-    save_teacher_sessions_index,
-)
 
 if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_compaction_helpers_module)
-# ---------------------------------------------------------------------------
-# Re-exports from extracted deps builders
-# ---------------------------------------------------------------------------
-from . import teacher_memory_deps as _teacher_memory_deps_module
-from .teacher_session_compaction_helpers import *  # noqa: F401,F403
-from .teacher_session_compaction_helpers import (
-    _mark_teacher_session_compacted,
-    _teacher_compact_allowed,
-    _teacher_compact_key,
-    _teacher_compact_summary,
-    _teacher_compact_transcript,
-    write_teacher_session_records,
-)
-
-if os.getenv("PYTEST_CURRENT_TEST"):
     _importlib.reload(_teacher_memory_deps_module)
-from .teacher_context_service import (
-    TeacherContextDeps,
-)
-from .teacher_context_service import (
-    build_teacher_context as _build_teacher_context_impl,
-)
-from .teacher_memory_apply_service import (
-    TeacherMemoryApplyDeps,
-)
-from .teacher_memory_apply_service import (
-    teacher_memory_apply as _teacher_memory_apply_impl,
-)
-from .teacher_memory_auto_service import (
-    TeacherMemoryAutoDeps,
-)
+
+from .teacher_context_service import build_teacher_context as _build_teacher_context_impl
+from .teacher_memory_apply_service import teacher_memory_apply as _teacher_memory_apply_impl
 from .teacher_memory_auto_service import (
     teacher_memory_auto_flush_from_session as _teacher_memory_auto_flush_from_session_impl,
 )
 from .teacher_memory_auto_service import (
     teacher_memory_auto_propose_from_turn as _teacher_memory_auto_propose_from_turn_impl,
 )
-from .teacher_memory_governance_service import (
-    TeacherMemoryGovernanceDeps,
-)
-from .teacher_memory_governance_service import (
-    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
-)
-from .teacher_memory_governance_service import (
-    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
-)
-from .teacher_memory_governance_service import (
-    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
-)
-from .teacher_memory_governance_service import (
-    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
-)
-from .teacher_memory_deps import *  # noqa: F401,F403
 from .teacher_memory_deps import (
     _teacher_context_deps,
     _teacher_memory_apply_deps,
     _teacher_memory_auto_deps,
-    _teacher_memory_governance_deps,
     _teacher_memory_insights_deps,
     _teacher_memory_propose_deps,
-    _teacher_memory_record_deps,
     _teacher_memory_search_deps,
     _teacher_memory_storage_deps,
-    _teacher_memory_store_deps,
     _teacher_session_compaction_deps,
     _teacher_workspace_deps,
 )
 from .teacher_memory_insights_service import (
-    TeacherMemoryInsightsDeps,
+    teacher_memory_insights as _teacher_memory_insights_impl,
 )
-from .teacher_memory_storage_service import (
-    TeacherMemoryStorageDeps,
-)
-from .teacher_memory_storage_service import (
-    ensure_teacher_memory_provenance as _ensure_teacher_memory_provenance_impl,
-)
+from .teacher_memory_propose_service import teacher_memory_propose as _teacher_memory_propose_impl
+from .teacher_memory_search_service import teacher_memory_search as _teacher_memory_search_impl
 from .teacher_memory_storage_service import (
     teacher_memory_delete_proposal as _teacher_memory_delete_proposal_impl,
 )
 from .teacher_memory_storage_service import (
     teacher_memory_list_proposals as _teacher_memory_list_proposals_impl,
 )
-from .teacher_memory_storage_service import (
-    teacher_memory_remove_entry_from_file as _teacher_memory_remove_entry_from_file_impl,
-)
-from .teacher_memory_storage_service import (
-    teacher_proposal_path as _teacher_proposal_path_impl,
-)
-from .teacher_memory_insights_service import (
-    teacher_memory_insights as _teacher_memory_insights_impl,
-)
-from .teacher_memory_propose_service import (
-    TeacherMemoryProposeDeps,
-)
-from .teacher_memory_propose_service import (
-    teacher_memory_propose as _teacher_memory_propose_impl,
-)
-from .teacher_memory_record_service import (
-    TeacherMemoryRecordDeps,
-)
-from .teacher_memory_record_service import (
-    mark_teacher_session_memory_flush as _mark_teacher_session_memory_flush_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_auto_infer_candidate as _teacher_memory_auto_infer_candidate_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_session_compaction_cycle_no as _teacher_session_compaction_cycle_no_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_session_index_item as _teacher_session_index_item_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_age_days as _teacher_memory_age_days_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_conflicts as _teacher_memory_conflicts_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_is_expired_record as _teacher_memory_is_expired_record_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_is_sensitive as _teacher_memory_is_sensitive_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_loose_match as _teacher_memory_loose_match_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_norm_text as _teacher_memory_norm_text_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_parse_dt as _teacher_memory_parse_dt_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_priority_score as _teacher_memory_priority_score_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_rank_score as _teacher_memory_rank_score_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_record_expire_at as _teacher_memory_record_expire_at_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_record_ttl_days as _teacher_memory_record_ttl_days_impl,
-)
-from .teacher_memory_rules_service import (
-    teacher_memory_stable_hash as _teacher_memory_stable_hash_impl,
-)
-from .teacher_memory_search_service import (
-    TeacherMemorySearchDeps,
-)
-from .teacher_memory_search_service import (
-    teacher_memory_search as _teacher_memory_search_impl,
-)
-from .teacher_memory_store_service import (
-    TeacherMemoryStoreDeps,
-)
-from .teacher_memory_store_service import (
-    teacher_memory_active_applied_records as _teacher_memory_active_applied_records_impl,
-)
-from .teacher_memory_store_service import (
-    teacher_memory_load_events as _teacher_memory_load_events_impl,
-)
-from .teacher_memory_store_service import (
-    teacher_memory_load_record as _teacher_memory_load_record_impl,
-)
-from .teacher_memory_store_service import (
-    teacher_memory_log_event as _teacher_memory_log_event_impl,
-)
-
-# ---------------------------------------------------------------------------
-# Imports from service modules (implementation delegates)
-# ---------------------------------------------------------------------------
-from .teacher_session_compaction_service import (
-    TeacherSessionCompactionDeps,
-)
 from .teacher_session_compaction_service import (
     maybe_compact_teacher_session as _maybe_compact_teacher_session_impl,
 )
-from .teacher_workspace_service import (
-    TeacherWorkspaceDeps,
-)
-from .teacher_workspace_service import (
-    ensure_teacher_workspace as _ensure_teacher_workspace_impl,
-)
-from .teacher_workspace_service import (
-    teacher_read_text as _teacher_read_text_impl,
-)
+from .teacher_workspace_service import ensure_teacher_workspace as _ensure_teacher_workspace_impl
+from .teacher_workspace_service import teacher_read_text as _teacher_read_text_impl
+
+__all__ = [
+    "ensure_teacher_workspace",
+    "teacher_read_text",
+    "maybe_compact_teacher_session",
+    "teacher_build_context",
+    "teacher_memory_search",
+    "teacher_memory_list_proposals",
+    "teacher_memory_insights",
+    "teacher_memory_propose",
+    "teacher_memory_apply",
+    "teacher_memory_delete_proposal",
+    "teacher_memory_auto_propose_from_turn",
+    "teacher_memory_auto_flush_from_session",
+]
 
 
-# ---------------------------------------------------------------------------
-# Lazy accessor for app_core functions that would cause circular imports
-# ---------------------------------------------------------------------------
-def _app_core():
-    """Lazy import of app_core to avoid circular dependency (tenant-aware)."""
-    from .wiring import get_app_core
-    return get_app_core()
-
-
-# ---------------------------------------------------------------------------
-# Helper: ensure_teacher_workspace / teacher_read_text
-# ---------------------------------------------------------------------------
 def ensure_teacher_workspace(teacher_id: str) -> Path:
     return _ensure_teacher_workspace_impl(teacher_id, deps=_teacher_workspace_deps())
 
@@ -290,10 +76,6 @@ def ensure_teacher_workspace(teacher_id: str) -> Path:
 def teacher_read_text(path: Path, max_chars: int = 8000) -> str:
     return _teacher_read_text_impl(path, max_chars=max_chars)
 
-
-# ===================================================================
-# Teacher session compaction functions
-# ===================================================================
 
 def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str, Any]:
     return _maybe_compact_teacher_session_impl(
@@ -303,11 +85,12 @@ def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str,
     )
 
 
-# ===================================================================
-# Teacher memory context functions
-# ===================================================================
-
-def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_chars: int = 6000, session_id: str = "main") -> str:
+def teacher_build_context(
+    teacher_id: str,
+    query: Optional[str] = None,
+    max_chars: int = 6000,
+    session_id: str = "main",
+) -> str:
     return _build_teacher_context_impl(
         teacher_id,
         deps=_teacher_context_deps(),
@@ -317,10 +100,6 @@ def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_char
     )
 
 
-# ===================================================================
-# Teacher memory search / list / insights
-# ===================================================================
-
 def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[str, Any]:
     return _teacher_memory_search_impl(
         teacher_id,
@@ -328,14 +107,6 @@ def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[s
         deps=_teacher_memory_search_deps(),
         limit=limit,
     )
-
-
-def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
-    return _teacher_proposal_path_impl(teacher_id, proposal_id, deps=_teacher_memory_storage_deps())
-
-
-def _ensure_teacher_memory_provenance(rec: Dict[str, Any]) -> Dict[str, Any]:
-    return _ensure_teacher_memory_provenance_impl(rec)
 
 
 def teacher_memory_list_proposals(
@@ -351,10 +122,6 @@ def teacher_memory_list_proposals(
     )
 
 
-def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
-    return _teacher_memory_load_events_impl(teacher_id, deps=_teacher_memory_store_deps(), limit=limit)
-
-
 def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
     return _teacher_memory_insights_impl(
         teacher_id,
@@ -362,159 +129,6 @@ def teacher_memory_insights(teacher_id: str, days: int = 14) -> Dict[str, Any]:
         days=days,
     )
 
-
-# ===================================================================
-# Teacher memory rules / utility functions
-# ===================================================================
-
-def _teacher_memory_is_sensitive(content: str) -> bool:
-    return _teacher_memory_is_sensitive_impl(content, patterns=_TEACHER_MEMORY_SENSITIVE_PATTERNS)
-
-
-def _teacher_memory_log_event(teacher_id: str, event: str, payload: Optional[Dict[str, Any]] = None) -> None:
-    _teacher_memory_log_event_impl(teacher_id, event, payload=payload, deps=_teacher_memory_store_deps())
-
-
-def _teacher_memory_parse_dt(raw: Any) -> Optional[datetime]:
-    return _teacher_memory_parse_dt_impl(raw)
-
-
-def _teacher_memory_record_ttl_days(rec: Dict[str, Any]) -> int:
-    return _teacher_memory_record_ttl_days_impl(
-        rec,
-        ttl_days_daily=TEACHER_MEMORY_TTL_DAYS_DAILY,
-        ttl_days_memory=TEACHER_MEMORY_TTL_DAYS_MEMORY,
-    )
-
-
-def _teacher_memory_record_expire_at(rec: Dict[str, Any]) -> Optional[datetime]:
-    return _teacher_memory_record_expire_at_impl(
-        rec,
-        parse_dt=_teacher_memory_parse_dt,
-        record_ttl_days=_teacher_memory_record_ttl_days,
-    )
-
-
-def _teacher_memory_is_expired_record(rec: Dict[str, Any], now: Optional[datetime] = None) -> bool:
-    return _teacher_memory_is_expired_record_impl(
-        rec,
-        decay_enabled=TEACHER_MEMORY_DECAY_ENABLED,
-        record_expire_at=_teacher_memory_record_expire_at,
-        now=now,
-    )
-
-
-def _teacher_memory_age_days(rec: Dict[str, Any], now: Optional[datetime] = None) -> int:
-    return _teacher_memory_age_days_impl(rec, parse_dt=_teacher_memory_parse_dt, now=now)
-
-
-def _teacher_memory_priority_score(
-    *,
-    target: str,
-    title: str,
-    content: str,
-    source: str,
-    meta: Optional[Dict[str, Any]] = None,
-) -> int:
-    return _teacher_memory_priority_score_impl(
-        target=target,
-        title=title,
-        content=content,
-        source=source,
-        meta=meta,
-        durable_intent_patterns=_TEACHER_MEMORY_DURABLE_INTENT_PATTERNS,
-        auto_infer_stable_patterns=_TEACHER_MEMORY_AUTO_INFER_STABLE_PATTERNS,
-        temporary_hint_patterns=_TEACHER_MEMORY_TEMPORARY_HINT_PATTERNS,
-        is_sensitive=_teacher_memory_is_sensitive,
-        norm_text=_teacher_memory_norm_text,
-    )
-
-
-def _teacher_memory_rank_score(rec: Dict[str, Any]) -> float:
-    return _teacher_memory_rank_score_impl(
-        rec,
-        decay_enabled=TEACHER_MEMORY_DECAY_ENABLED,
-        priority_score=_teacher_memory_priority_score,
-        age_days=_teacher_memory_age_days,
-        record_ttl_days=_teacher_memory_record_ttl_days,
-    )
-
-
-# ===================================================================
-# Teacher memory record functions
-# ===================================================================
-
-def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
-    return _teacher_memory_load_record_impl(teacher_id, proposal_id, deps=_teacher_memory_store_deps())
-
-
-def _teacher_memory_active_applied_records(
-    teacher_id: str,
-    *,
-    target: Optional[str] = None,
-    limit: int = 200,
-) -> List[Dict[str, Any]]:
-    return _teacher_memory_active_applied_records_impl(
-        teacher_id,
-        deps=_teacher_memory_store_deps(),
-        target=target,
-        limit=limit,
-    )
-
-
-def _teacher_memory_loose_match(a: str, b: str) -> bool:
-    return _teacher_memory_loose_match_impl(a, b, norm_text=_teacher_memory_norm_text)
-
-
-def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str) -> Optional[Dict[str, Any]]:
-    return _teacher_memory_auto_infer_candidate_impl(teacher_id, session_id, user_text, deps=_teacher_memory_record_deps())
-
-
-def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, Any]:
-    return _teacher_session_index_item_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
-
-
-def _mark_teacher_session_memory_flush(teacher_id: str, session_id: str, cycle_no: int) -> None:
-    _mark_teacher_session_memory_flush_impl(teacher_id, session_id, cycle_no, deps=_teacher_memory_record_deps())
-
-
-def _teacher_memory_conflicts(new_text: str, old_text: str) -> bool:
-    return _teacher_memory_conflicts_impl(
-        new_text,
-        old_text,
-        norm_text=_teacher_memory_norm_text,
-        conflict_groups=_TEACHER_MEMORY_CONFLICT_GROUPS,
-    )
-
-
-def _teacher_memory_find_conflicting_applied(
-    teacher_id: str,
-    *,
-    proposal_id: str,
-    target: str,
-    content: str,
-) -> List[str]:
-    return _teacher_memory_find_conflicting_applied_impl(
-        teacher_id,
-        proposal_id=proposal_id,
-        target=target,
-        content=content,
-        deps=_teacher_memory_governance_deps(),
-    )
-
-
-def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
-    _teacher_memory_mark_superseded_impl(
-        teacher_id,
-        proposal_ids,
-        by_proposal_id,
-        deps=_teacher_memory_governance_deps(),
-    )
-
-
-# ===================================================================
-# Teacher memory propose / apply
-# ===================================================================
 
 def teacher_memory_propose(
     teacher_id: str,
@@ -548,52 +162,12 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
 
 
 def teacher_memory_delete_proposal(teacher_id: str, proposal_id: str) -> Dict[str, Any]:
-    return _teacher_memory_delete_proposal_impl(teacher_id, proposal_id, deps=_teacher_memory_storage_deps())
-
-
-def _teacher_memory_norm_text(text: str) -> str:
-    return _teacher_memory_norm_text_impl(text)
-
-
-def _teacher_memory_stable_hash(*parts: str) -> str:
-    return _teacher_memory_stable_hash_impl(*parts)
-
-
-def _teacher_memory_remove_entry_from_file(path: Path, proposal_id: str) -> bool:
-    return _teacher_memory_remove_entry_from_file_impl(path, proposal_id)
-
-
-def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
-    return _teacher_memory_recent_proposals_impl(teacher_id, deps=_teacher_memory_record_deps(), limit=limit)
-
-
-def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
-    return _teacher_memory_auto_quota_reached_impl(teacher_id, deps=_teacher_memory_governance_deps())
-
-
-def _teacher_memory_find_duplicate(
-    teacher_id: str,
-    *,
-    target: str,
-    content: str,
-    dedupe_key: str,
-) -> Optional[Dict[str, Any]]:
-    return _teacher_memory_find_duplicate_impl(
+    return _teacher_memory_delete_proposal_impl(
         teacher_id,
-        target=target,
-        content=content,
-        dedupe_key=dedupe_key,
-        deps=_teacher_memory_governance_deps(),
+        proposal_id,
+        deps=_teacher_memory_storage_deps(),
     )
 
-
-def _teacher_session_compaction_cycle_no(teacher_id: str, session_id: str) -> int:
-    return _teacher_session_compaction_cycle_no_impl(teacher_id, session_id, deps=_teacher_memory_record_deps())
-
-
-# ===================================================================
-# Teacher memory auto-propose / auto-flush
-# ===================================================================
 
 def teacher_memory_auto_propose_from_turn(
     teacher_id: str,
@@ -629,8 +203,3 @@ def teacher_memory_auto_flush_from_session(
         provenance=provenance,
         deps=_teacher_memory_auto_deps(),
     )
-
-
-# ===================================================================
-# Mem0 integration functions
-# ===================================================================
