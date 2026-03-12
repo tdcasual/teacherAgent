@@ -6,10 +6,8 @@ All public and underscore-prefixed names are re-exported by app_core.
 from __future__ import annotations
 
 import importlib as _importlib
-import json
 import logging
 import os
-import re
 import threading
 import time
 import uuid
@@ -308,64 +306,6 @@ def maybe_compact_teacher_session(teacher_id: str, session_id: str) -> Dict[str,
 # ===================================================================
 # Teacher memory context functions
 # ===================================================================
-
-def _teacher_session_summary_text(teacher_id: str, session_id: str, max_chars: int) -> str:
-    if max_chars <= 0:
-        return ""
-    try:
-        path = teacher_session_file(teacher_id, session_id)
-    except Exception:  # policy: allowed-broad-except
-        _log.debug("Failed to resolve session file path for teacher=%s session=%s", teacher_id, session_id)
-        return ""
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            for _idx, line in zip(range(5), f):
-                line = (line or "").strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:  # policy: allowed-broad-except
-                    _log.debug("Skipping non-JSON line in session file %s", path)
-                    continue
-                if isinstance(obj, dict) and obj.get("kind") == "session_summary":
-                    text = str(obj.get("content") or "").strip()
-                    return (text[:max_chars] + "\u2026") if max_chars and len(text) > max_chars else text
-                # If the first meaningful record isn't summary, don't scan the whole file.
-                break
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("Failed to read session file %s for summary", path, exc_info=True)
-        return ""
-    return ""
-
-
-def _teacher_memory_context_text(teacher_id: str, max_chars: int = 4000) -> str:
-    if max_chars <= 0:
-        return ""
-    active = _teacher_memory_active_applied_records(
-        teacher_id,
-        target="MEMORY",
-        limit=TEACHER_MEMORY_CONTEXT_MAX_ENTRIES,
-    )
-    if not active:
-        return teacher_read_text(teacher_workspace_file(teacher_id, "MEMORY.md"), max_chars=max_chars).strip()
-
-    lines: List[str] = []
-    used = 0
-    for rec in active:
-        text = str(rec.get("content") or "").strip()
-        if not text:
-            continue
-        brief = re.sub(r"\s+", " ", text).strip()[:240]
-        score = int(round(_teacher_memory_rank_score(rec)))
-        source = str(rec.get("source") or "manual")
-        line = f"- [{source}|{score}] {brief}"
-        if used + len(line) > max_chars:
-            break
-        lines.append(line)
-        used += len(line) + 1
-    return "\n".join(lines).strip()
-
 
 def teacher_build_context(teacher_id: str, query: Optional[str] = None, max_chars: int = 6000, session_id: str = "main") -> str:
     return _build_teacher_context_impl(
@@ -694,33 +634,3 @@ def teacher_memory_auto_flush_from_session(
 # ===================================================================
 # Mem0 integration functions
 # ===================================================================
-
-def _teacher_mem0_search(teacher_id: str, query: str, limit: int) -> Dict[str, Any]:
-    try:
-        from .mem0_adapter import teacher_mem0_search
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("Failed to import mem0_adapter for search", exc_info=True)
-        return {"ok": False, "matches": []}
-    return teacher_mem0_search(teacher_id, query, limit=limit)
-
-
-def _teacher_mem0_should_index_target(target: str) -> bool:
-    try:
-        from .mem0_adapter import teacher_mem0_should_index_target
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("Failed to import mem0_adapter for index target check", exc_info=True)
-        return False
-    try:
-        return bool(teacher_mem0_should_index_target(target))
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("mem0 should_index_target call failed for target=%s", target, exc_info=True)
-        return False
-
-
-def _teacher_mem0_index_entry(teacher_id: str, text: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        from .mem0_adapter import teacher_mem0_index_entry
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("Failed to import mem0_adapter for index entry", exc_info=True)
-        return {"ok": False, "error": "mem0_unavailable"}
-    return teacher_mem0_index_entry(teacher_id, text, metadata=metadata)
