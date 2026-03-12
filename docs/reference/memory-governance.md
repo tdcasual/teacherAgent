@@ -37,6 +37,7 @@
 - `teacher_memory_governance_service.py`：负责 duplicate / quota / conflict / supersede 规则。
 - `teacher_memory_storage_service.py`：负责 proposal 路径、列表、删除与 applied markdown 清理。
 - `teacher_memory_core.py`：只保留 façade 与 deps 组装，不再承载完整治理实现。
+- `teacher_memory_deps.py`：优先直接装配 `teacher_memory_*_service.py`、`teacher_context_service.py` 与 `mem0_adapter.py` 的实现；避免把 core 私有 helper 继续当作默认真相源。
 
 ## Storage Guidance
 
