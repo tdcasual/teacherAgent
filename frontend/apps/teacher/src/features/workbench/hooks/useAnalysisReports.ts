@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type {
   AnalysisReportDetail,
   AnalysisReportSummary,
+  AnalysisOpsSnapshot,
   AnalysisReviewQueueItem,
   AnalysisReviewQueueSummary,
   AnalysisReportsSummary,
@@ -42,6 +43,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
   const [analysisReviewQueue, setAnalysisReviewQueue] = useState<AnalysisReviewQueueItem[]>([])
   const [analysisReportsSummary, setAnalysisReportsSummary] = useState<AnalysisReportsSummary | null>(null)
   const [analysisReviewSummary, setAnalysisReviewSummary] = useState<AnalysisReviewQueueSummary | null>(null)
+  const [analysisOpsSnapshot, setAnalysisOpsSnapshot] = useState<AnalysisOpsSnapshot | null>(null)
   const [analysisDomainFilter, setAnalysisDomainFilter] = useState('')
   const [analysisStatusFilter, setAnalysisStatusFilter] = useState('')
   const [analysisStrategyFilter, setAnalysisStrategyFilter] = useState('')
@@ -71,6 +73,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
       setAnalysisReviewQueue([])
       setAnalysisReportsSummary(null)
       setAnalysisReviewSummary(null)
+      setAnalysisOpsSnapshot(null)
       setSelectedAnalysisReportId('')
       setSelectedAnalysisReport(null)
       setAnalysisReportsError('')
@@ -90,9 +93,13 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
       reviewUrl.searchParams.set('teacher_id', teacherId)
       if (analysisDomainFilter) reviewUrl.searchParams.set('domain', analysisDomainFilter)
 
-      const [reportsRes, reviewRes] = await Promise.all([
+      const opsUrl = new URL(`${apiBase}/teacher/analysis/ops`)
+      opsUrl.searchParams.set('window_sec', '86400')
+
+      const [reportsRes, reviewRes, opsRes] = await Promise.all([
         fetchJson<{ items: AnalysisReportSummary[]; summary?: AnalysisReportsSummary }>(reportsUrl),
         fetchJson<{ items: AnalysisReviewQueueItem[]; summary?: AnalysisReviewQueueSummary }>(reviewUrl),
+        fetchJson<AnalysisOpsSnapshot>(opsUrl).catch(() => null),
       ])
       const nextReports = Array.isArray(reportsRes.items) ? reportsRes.items : []
       const nextReportsSummary = reportsRes.summary ?? null
@@ -102,6 +109,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
       setAnalysisReportsSummary(nextReportsSummary)
       setAnalysisReviewQueue(nextReviewQueue)
       setAnalysisReviewSummary(nextReviewSummary)
+      setAnalysisOpsSnapshot(opsRes ?? null)
       setAnalysisReportsError('')
 
       if (selectedAnalysisReportId) {
@@ -188,6 +196,7 @@ export function useAnalysisReports({ apiBase, teacherId, enabled }: UseAnalysisR
     analysisReviewQueue,
     analysisReportsSummary,
     analysisReviewSummary,
+    analysisOpsSnapshot,
     analysisDomainFilter,
     analysisStatusFilter,
     analysisStrategyFilter,

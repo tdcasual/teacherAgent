@@ -29,7 +29,8 @@ class MultimodalReportDeps:
 
 
 def build_multimodal_report_deps(core: Any | None = None) -> MultimodalReportDeps:
-    base_dir = Path(getattr(core, 'DATA_DIR', '.')) / 'video_homework_reports'
+    data_dir = Path(getattr(core, 'DATA_DIR', '.'))
+    base_dir = data_dir / 'video_homework_reports'
     metadata_repo = FileBackedAnalysisMetadataRepository(base_dir=base_dir)
     metrics_service = getattr(core, 'analysis_metrics_service', None)
     return MultimodalReportDeps(
@@ -38,6 +39,7 @@ def build_multimodal_report_deps(core: Any | None = None) -> MultimodalReportDep
             metadata_repo=metadata_repo,
             queue_log='review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            review_feedback_log=data_dir / 'analysis' / 'review_feedback.jsonl',
             metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec='seconds'),

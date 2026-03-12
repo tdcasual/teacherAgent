@@ -43,3 +43,11 @@
 - 保留教学上长期有价值的偏好、稳定误区、长期目标、有效干预。
 - 不把原始成绩表、逐题 OCR 噪声、短时状态抖动直接写入长期记忆。
 - 对 auto_flush 这类摘要型 proposal，优先写提案，不直接落最终记忆。
+
+## Non-memory Operational Logs
+
+- `data/analysis/review_feedback.jsonl` 用于沉淀人工 review 处理结果，服务对象是质量运营与策略调优，不是老师/学生长期记忆。
+- `data/analysis/metrics_snapshot.json` 与 `/teacher/analysis/ops` 提供的是运行时观测与运维摘要，不应被 `auto_flush` 或 memory apply 流程误当作长期事实。
+- replay compare 候选与 lineage 元数据属于审计/回归资产，允许离线导出，但不进入 teacher / student memory proposal 生命周期。
+- memory 服务只治理 proposal、apply 与 provenance；ops telemetry 的保留、归档与清理由 analysis 运营链路负责。
+

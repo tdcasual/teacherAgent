@@ -99,6 +99,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         analysisReviewQueue={props.analysisReviewQueue}
         analysisReportsSummary={props.analysisReportsSummary}
         analysisReviewSummary={props.analysisReviewSummary}
+        analysisOpsSnapshot={props.analysisOpsSnapshot}
         analysisDomainFilter={props.analysisDomainFilter}
         analysisStatusFilter={props.analysisStatusFilter}
         analysisStrategyFilter={props.analysisStrategyFilter}

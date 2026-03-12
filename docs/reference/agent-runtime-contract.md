@@ -79,3 +79,12 @@
 - 不做通用多 agent 协作平台。
 - 不把 tool loop 当作业务编排主入口。
 - 优先保证老师 / 学生 / 管理员三条主链路可解释、可验证、可回归。
+
+## Analysis Ops Feedback Loop
+
+- review queue 的终态动作（`resolve` / `reject` / `dismiss` / `escalate` / `retry`）会把规范化结果追加写入 `data/analysis/review_feedback.jsonl`。
+- `GET /teacher/analysis/ops` 负责在线聚合轻量 ops snapshot，当前返回四块核心内容：`runtime_metrics`、`review_feedback`、`replay_compare`、`ops_summary`。
+- `replay_compare` 只暴露基于 lineage 的候选对与元数据，不在请求链路内执行重放 diff。
+- 完整 replay / compare 只在显式离线入口执行：`scripts/export_analysis_ops_snapshot.py` 导出候选与 compare hint，`scripts/compare_analysis_runs.py` 负责真正的差异分析。
+- 该闭环属于 analysis 运营控制面，不改变老师/学生主对话链路与 memory proposal 契约。
+

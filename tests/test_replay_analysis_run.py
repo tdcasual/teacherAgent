@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.compare_analysis_runs import compare_analysis_runs
 from scripts.replay_analysis_run import replay_analysis_run
+
+SCRIPT_PATH = Path('scripts/export_analysis_ops_snapshot.py')
 
 
 def _detail_payload(*, summary: str = '班级对实验设计的理解偏弱', confidence: float = 0.73, review_reason: str = 'low_confidence') -> dict:
@@ -105,3 +109,35 @@ def test_compare_analysis_runs_outputs_compact_diff_summary(tmp_path: Path) -> N
     assert diff['reason_code_changed'] is True
     assert diff['diff']['confidence']['delta'] == pytest.approx(-0.12)
     assert diff['diff']['summary']['before'] == '班级对实验设计的理解偏弱'
+
+
+def test_export_analysis_ops_snapshot_script_outputs_replay_compare_summary(tmp_path: Path) -> None:
+    data_dir = tmp_path / 'data'
+    reports_dir = data_dir / 'survey_reports'
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / 'report_2.json').write_text(
+        json.dumps(
+            {
+                'report_id': 'report_2',
+                'updated_at': '2026-03-12T12:00:00',
+                'strategy_id': 'survey.teacher.report',
+                'rerun_base_lineage': {'report_id': 'report_1', 'strategy_version': 'v1'},
+            },
+            ensure_ascii=False,
+        ),
+        encoding='utf-8',
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), '--data-dir', str(data_dir), '--window-sec', '86400'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    payload = json.loads(proc.stdout)
+    assert 'runtime_metrics' in payload
+    assert 'review_feedback' in payload
+    assert payload['replay_compare']['candidate_pairs'][0]['report_id'] == 'report_2'
+

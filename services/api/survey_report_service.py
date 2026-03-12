@@ -60,6 +60,7 @@ def build_survey_report_deps(core: Any | None = None) -> SurveyReportReadDeps:
             metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=data_dir),
             queue_log='survey_review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            review_feedback_log=data_dir / 'analysis' / 'review_feedback.jsonl',
             metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),

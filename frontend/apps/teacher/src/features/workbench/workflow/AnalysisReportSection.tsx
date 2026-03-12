@@ -58,6 +58,7 @@ export default function AnalysisReportSection(props: AnalysisReportSectionProps)
         analysisReports={props.analysisReports}
         analysisReportsSummary={props.analysisReportsSummary}
         analysisReviewSummary={props.analysisReviewSummary}
+        analysisOpsSnapshot={props.analysisOpsSnapshot}
         analysisDomainFilter={props.analysisDomainFilter}
         setAnalysisDomainFilter={props.setAnalysisDomainFilter}
         rerunAnalysisReportsBulk={props.rerunAnalysisReportsBulk}

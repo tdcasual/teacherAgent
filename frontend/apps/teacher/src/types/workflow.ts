@@ -270,10 +270,34 @@ export type AnalysisReportsSummary = {
   domains: AnalysisReportsDomainSummary[]
 }
 
+export type AnalysisOpsRecommendation = {
+  action_type?: string | null
+  recommended_action?: string | null
+  priority?: string | null
+  scope_id?: string | null
+}
+
+export type AnalysisOpsSnapshot = {
+  generated_at?: string | null
+  window_sec?: number
+  workflow_routing?: Record<string, unknown>
+  runtime_metrics?: Record<string, unknown>
+  review_feedback?: {
+    summary?: Record<string, unknown>
+    recommendations?: AnalysisOpsRecommendation[]
+  } | null
+  ops_summary?: {
+    top_failure_reason?: string | null
+    top_review_reason?: string | null
+    needs_attention?: boolean | null
+  } | null
+}
+
 export type AnalysisOpsSectionProps = {
   analysisReports: AnalysisReportSummary[]
   analysisReportsSummary: AnalysisReportsSummary | null
   analysisReviewSummary: AnalysisReviewQueueSummary | null
+  analysisOpsSnapshot: AnalysisOpsSnapshot | null
   analysisDomainFilter: string
   setAnalysisDomainFilter: (value: string) => void
   rerunAnalysisReportsBulk: (reportIds: string[]) => void | Promise<void>
@@ -290,6 +314,7 @@ export type AnalysisReportSectionProps = {
   analysisReviewQueue: AnalysisReviewQueueItem[]
   analysisReportsSummary: AnalysisReportsSummary | null
   analysisReviewSummary: AnalysisReviewQueueSummary | null
+  analysisOpsSnapshot: AnalysisOpsSnapshot | null
   analysisDomainFilter: string
   analysisStatusFilter: string
   analysisStrategyFilter: string

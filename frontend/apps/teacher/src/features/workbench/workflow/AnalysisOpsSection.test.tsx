@@ -37,6 +37,7 @@ const baseProps = (): AnalysisOpsSectionProps => ({
       { domain: 'class_report', total_items: 1, unresolved_items: 1 },
     ],
   },
+  analysisOpsSnapshot: null,
   analysisDomainFilter: '',
   setAnalysisDomainFilter: vi.fn(),
   rerunAnalysisReportsBulk: vi.fn(),
@@ -92,5 +93,29 @@ describe('AnalysisOpsSection', () => {
 
     expect(setAnalysisDomainFilter).toHaveBeenCalledWith('survey')
     expect(rerunAnalysisReportsBulk).toHaveBeenCalledWith(['report_1', 'report_2'])
+  })
+
+  it('renders top review reason and top workflow risk from analysis ops snapshot', () => {
+    render(
+      <AnalysisOpsSection
+        {...baseProps()}
+        analysisOpsSnapshot={{
+          ops_summary: {
+            top_failure_reason: 'invalid_output',
+            top_review_reason: 'low_confidence',
+            needs_attention: true,
+          },
+          review_feedback: {
+            recommendations: [
+              { action_type: 'harden_output_schema', recommended_action: 'Tighten survey summary schema.' },
+            ],
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('low_confidence')).toBeTruthy()
+    expect(screen.getByText('invalid_output')).toBeTruthy()
+    expect(screen.getByText(/Tighten survey summary schema/)).toBeTruthy()
   })
 })

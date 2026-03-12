@@ -25,6 +25,15 @@ def _confidence(artifact: Dict[str, Any], artifact_meta: Dict[str, Any]) -> floa
 
 
 
+def build_compare_command(*, baseline_report_path: Path, candidate_report_path: Path) -> list[str]:
+    return [
+        'python',
+        'scripts/compare_analysis_runs.py',
+        str(baseline_report_path),
+        str(candidate_report_path),
+    ]
+
+
 def compare_analysis_runs(*, baseline_report_path: Path, candidate_report_path: Path) -> Dict[str, Any]:
     baseline = replay_analysis_run(report_path=baseline_report_path)
     candidate = replay_analysis_run(report_path=candidate_report_path)

@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from services.api.analysis_metrics_service import AnalysisMetricsService
+from services.api.review_feedback_store import append_review_feedback_row
 from services.api.routes.analysis_report_routes import build_router
 from services.api.survey_repository import (
     append_survey_review_queue_item,
@@ -17,10 +19,8 @@ class _Core:
     def __init__(self, root: Path) -> None:
         self.DATA_DIR = root / 'data'
         self.UPLOADS_DIR = root / 'uploads'
-
-        from services.api.analysis_metrics_service import AnalysisMetricsService
-
         self.analysis_metrics_service = AnalysisMetricsService()
+
 
 
 def _seed_survey_report(core: _Core) -> None:
@@ -103,3 +103,53 @@ def test_analysis_report_bulk_rerun_route_rejects_empty_ids(tmp_path: Path) -> N
         )
 
     assert res.status_code == 422
+
+
+
+def test_analysis_report_ops_route_exposes_unified_ops_snapshot(tmp_path: Path) -> None:
+    core = _Core(tmp_path)
+    core.analysis_metrics_service.record_workflow_resolution(
+        role='teacher',
+        requested_skill_id='',
+        effective_skill_id='physics-homework-generator',
+        reason='auto_rule',
+        confidence=0.64,
+        resolution_mode='auto',
+        auto_selected=True,
+        requested_rewritten=False,
+    )
+    append_review_feedback_row(
+        core.DATA_DIR / 'analysis' / 'review_feedback.jsonl',
+        {
+            'item_id': 'survey_1',
+            'report_id': 'report_1',
+            'teacher_id': 'teacher_1',
+            'domain': 'survey',
+            'strategy_id': 'survey.teacher.report',
+            'target_type': 'report',
+            'target_id': 'report_1',
+            'status': 'rejected',
+            'operation': 'reject',
+            'reason': 'low_confidence',
+            'reason_code': 'low_confidence',
+            'confidence': 0.41,
+            'reviewer_id': 'reviewer_1',
+            'operator_note': 'invalid executive summary',
+            'disposition': 'rejected',
+            'created_at': '2026-03-12T11:59:00',
+            'updated_at': '2026-03-12T12:00:00',
+        },
+    )
+
+    app = FastAPI()
+    app.include_router(build_router(core))
+
+    with TestClient(app) as client:
+        res = client.get('/teacher/analysis/ops', params={'window_sec': 86400})
+
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload['window_sec'] == 86400
+    assert payload['workflow_routing']['counters']['resolution_count'] == 1
+    assert payload['review_feedback']['summary']['total_items'] == 1
+    assert payload['ops_summary']['top_review_reason'] == 'low_confidence'

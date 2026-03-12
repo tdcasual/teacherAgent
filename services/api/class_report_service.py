@@ -27,7 +27,8 @@ class ClassReportDeps:
 
 
 def build_class_report_deps(core: Any | None = None) -> ClassReportDeps:
-    base_dir = Path(getattr(core, 'DATA_DIR', '.')) / 'class_reports'
+    data_dir = Path(getattr(core, 'DATA_DIR', '.'))
+    base_dir = data_dir / 'class_reports'
     metadata_repo = FileBackedAnalysisMetadataRepository(base_dir=base_dir)
     metrics_service = getattr(core, 'analysis_metrics_service', None)
     return ClassReportDeps(
@@ -36,6 +37,7 @@ def build_class_report_deps(core: Any | None = None) -> ClassReportDeps:
             metadata_repo=metadata_repo,
             queue_log='review_queue.jsonl',
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            review_feedback_log=data_dir / 'analysis' / 'review_feedback.jsonl',
             metrics_service=metrics_service,
         ),
         now_iso=lambda: datetime.now().isoformat(timespec='seconds'),

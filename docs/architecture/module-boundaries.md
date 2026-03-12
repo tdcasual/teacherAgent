@@ -54,6 +54,14 @@
   - strategy 元数据若引用不存在的 specialist 或 artifact，必须在装配期直接失败，而不是等运行时静默退化
   - 新增 analysis domain 前，先按 `docs/reference/analysis-domain-onboarding-template.md` 设计 manifest / strategy / report plane / review queue，再进入实现
 
+
+
+### Analysis Ops Context
+- 在线聚合层：`services/api/analysis_ops_service.py` 只读取持久化 metrics、review feedback 与报告 lineage 元数据，不在 HTTP 请求内做重放 diff。
+- 在线写入层：`services/api/review_queue_service.py` 在 review queue 终态迁移时追加 `data/analysis/review_feedback.jsonl`；这属于 ops telemetry，不反向进入 memory 治理链路。
+- HTTP 边界：`services/api/routes/analysis_report_routes.py` 仅暴露 `/teacher/analysis/ops` 的协议转换，不承载 compare 编排。
+- 离线分析层：`scripts/export_analysis_ops_snapshot.py` 与 `scripts/compare_analysis_runs.py` 负责导出候选与显式 diff，属于 operator tooling，不应被 request path 直接调用。
+
 ## Frontend Boundaries (Student App)
 
 - 应用编排入口：`frontend/apps/student/src/App.tsx`

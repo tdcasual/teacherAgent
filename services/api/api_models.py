@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ChatMessage(BaseModel):
@@ -311,3 +311,24 @@ class SurveyReviewQueueItemSummary(BaseModel):
     reason: str
     confidence: Optional[float] = None
     created_at: Optional[str] = None
+
+
+class AnalysisOpsSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    top_failure_reason: Optional[str] = None
+    top_review_reason: Optional[str] = None
+    needs_attention: bool = False
+
+
+class AnalysisOpsSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    generated_at: Optional[str] = None
+    window_sec: int
+    workflow_routing: Dict[str, Any] = Field(default_factory=dict)
+    runtime_metrics: Dict[str, Any] = Field(default_factory=dict)
+    review_feedback: Dict[str, Any] = Field(default_factory=dict)
+    replay_compare: Dict[str, Any] = Field(default_factory=dict)
+    ops_summary: AnalysisOpsSummaryResponse = Field(default_factory=AnalysisOpsSummaryResponse)
+

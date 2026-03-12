@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
 from ..analysis_metrics_service import AnalysisMetricsService
+from ..analysis_ops_service import AnalysisOpsService
 from ..analysis_report_service import (
     AnalysisReportServiceError,
     build_analysis_report_deps,
@@ -15,7 +17,12 @@ from ..analysis_report_service import (
     rerun_analysis_report,
     rerun_analysis_reports_bulk,
 )
-from ..api_models import AnalysisReportBulkRerunRequest, AnalysisReportRerunRequest, AnalysisReviewQueueActionRequest
+from ..api_models import (
+    AnalysisOpsSnapshotResponse,
+    AnalysisReportBulkRerunRequest,
+    AnalysisReportRerunRequest,
+    AnalysisReviewQueueActionRequest,
+)
 from ..specialist_agents.metrics_service import SpecialistMetricsService
 from .teacher_route_helpers import scoped_teacher_id
 
@@ -121,6 +128,20 @@ def build_router(core: Any) -> APIRouter:
             )
         except (AnalysisReportServiceError, Exception) as exc:
             _raise_http_exception(exc)
+
+    @router.get('/teacher/analysis/ops', response_model=AnalysisOpsSnapshotResponse)
+    async def teacher_analysis_ops(window_sec: int = Query(default=86400, ge=1)) -> Any:
+        scoped_teacher_id(None)
+        ops_service = getattr(core, 'analysis_ops_service', None)
+        ops_snapshot = getattr(ops_service, 'snapshot', None)
+        if callable(ops_snapshot):
+            return ops_snapshot(window_sec=window_sec)
+        fallback_service = AnalysisOpsService(
+            metrics_service=getattr(core, 'analysis_metrics_service', None),
+            review_feedback_path=Path(getattr(core, 'DATA_DIR', '.')) / 'analysis' / 'review_feedback.jsonl',
+            data_dir=Path(getattr(core, 'DATA_DIR', '.')),
+        )
+        return fallback_service.snapshot(window_sec=window_sec)
 
     @router.get('/teacher/analysis/metrics')
     async def teacher_analysis_metrics(

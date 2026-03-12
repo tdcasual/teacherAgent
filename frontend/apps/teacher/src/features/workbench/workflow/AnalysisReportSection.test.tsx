@@ -14,6 +14,7 @@ const baseProps = (): AnalysisReportSectionProps => ({
   analysisReviewQueue: [],
   analysisReportsSummary: null,
   analysisReviewSummary: null,
+  analysisOpsSnapshot: null,
   analysisDomainFilter: '',
   analysisStatusFilter: '',
   analysisStrategyFilter: '',
@@ -40,6 +41,29 @@ describe('AnalysisReportSection', () => {
       />,
     )
     expect(screen.getByText('分析报告加载中…')).toBeTruthy()
+  })
+
+  it('passes analysis ops snapshot through to the ops section', () => {
+    render(
+      <AnalysisReportSection
+        {...baseProps()}
+        analysisOpsSnapshot={{
+          ops_summary: {
+            top_failure_reason: 'invalid_output',
+            top_review_reason: 'low_confidence',
+            needs_attention: true,
+          },
+          review_feedback: {
+            recommendations: [
+              { action_type: 'harden_output_schema', recommended_action: 'Tighten survey summary schema.' },
+            ],
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('low_confidence')).toBeTruthy()
+    expect(screen.getByText(/Tighten survey summary schema/)).toBeTruthy()
   })
 
   it('renders filters, explicit target summary, detail and actions', () => {

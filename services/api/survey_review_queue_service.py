@@ -28,6 +28,7 @@ def build_survey_review_queue_deps(core: Any | None = None) -> SurveyReviewQueue
             metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=target.parent),
             queue_log=target.name,
             now_iso=lambda: datetime.now().isoformat(timespec='seconds'),
+            review_feedback_log=target.parent / 'analysis' / 'review_feedback.jsonl',
             metrics_service=metrics_service,
         ),
     )

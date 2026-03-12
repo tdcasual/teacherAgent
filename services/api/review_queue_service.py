@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .analysis_metadata_repository import AnalysisMetadataRepository
+from .review_feedback_store import append_review_feedback_row
 from .review_queue_models import ReviewQueueDomainSummary, ReviewQueueItem, ReviewQueueSummary
 
 _OPEN_STATUSES = {'queued', 'claimed', 'escalated', 'retry_requested'}
@@ -29,6 +31,7 @@ _TIMESTAMP_FIELD_BY_STATUS = {
     'escalated': 'escalated_at',
     'retry_requested': 'retried_at',
 }
+_FEEDBACK_DISPOSITIONS = {'resolved', 'rejected', 'dismissed', 'escalated', 'retry_requested'}
 
 
 @dataclass(frozen=True)
@@ -36,6 +39,7 @@ class ReviewQueueDeps:
     metadata_repo: AnalysisMetadataRepository
     queue_log: str
     now_iso: Any
+    review_feedback_log: str | Path | None = None
     metrics_service: Any | None = None
 
 
@@ -227,8 +231,34 @@ def _transition_item(
         update_payload[timestamp_field] = timestamp
     updated = current.model_copy(update=update_payload)
     deps.metadata_repo.append_jsonl(deps.queue_log, updated.model_dump(exclude_none=True))
+    _append_review_feedback_row(updated=updated, deps=deps)
     return updated.model_dump(exclude_none=True)
 
+
+
+
+
+def _append_review_feedback_row(*, updated: ReviewQueueItem, deps: ReviewQueueDeps) -> None:
+    if str(updated.disposition or '').strip() not in _FEEDBACK_DISPOSITIONS:
+        return
+    target = _resolve_review_feedback_log(deps)
+    if target is None:
+        return
+    append_review_feedback_row(target, updated.model_dump(exclude_none=True))
+
+
+
+def _resolve_review_feedback_log(deps: ReviewQueueDeps) -> Path | None:
+    target = getattr(deps, 'review_feedback_log', None)
+    if not target:
+        return None
+    path = Path(target)
+    if path.is_absolute():
+        return path
+    base_dir = getattr(deps.metadata_repo, 'base_dir', None)
+    if base_dir is not None:
+        return Path(base_dir) / path
+    return path
 
 
 def _load_latest_items(deps: ReviewQueueDeps) -> List[ReviewQueueItem]:
