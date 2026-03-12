@@ -3,6 +3,7 @@ import * as React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
+  ExecutionTimelineEntry,
   Message,
   PendingChatJob,
   PendingToolRun,
@@ -95,6 +96,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
     const [chatQueueHint, setChatQueueHintState] = React.useState('')
     const [pendingStreamStage, setPendingStreamStageState] = React.useState('')
     const [pendingToolRuns, setPendingToolRunsState] = React.useState<PendingToolRun[]>([])
+    const [executionTimeline, setExecutionTimeline] = React.useState<ExecutionTimelineEntry[]>([])
     const [skillList, setSkillList] = React.useState<Skill[]>([
       {
         id: 'physics-teacher-ops',
@@ -186,6 +188,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
       setChatQueueHint: trackedSetChatQueueHint,
       setPendingStreamStage: trackedSetPendingStreamStage,
       setPendingToolRuns: trackedSetPendingToolRuns,
+      setExecutionTimeline,
       setComposerWarning,
       setInput,
       setHistorySessions: setHistorySessionsState,
@@ -220,6 +223,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
       pendingChatJob,
       pendingStreamStage,
       pendingToolRuns,
+      executionTimeline,
       chatQueueHint,
       streamLogs: logsRef.current,
       historySessions,
@@ -410,6 +414,16 @@ describe('useTeacherChatApi stream mapping', () => {
     expect(result.current.pendingStreamStage).toBe('')
     expect(result.current.pendingToolRuns).toEqual([])
     expect(result.current.chatQueueHint).toBe('')
+    expect(result.current.executionTimeline.map((item) => item.type)).toEqual([
+      'job.queued',
+      'job.processing',
+      'tool.start',
+      'tool.finish',
+      'tool.start',
+      'tool.finish',
+      'job.done',
+    ])
+    expect(result.current.executionTimeline[result.current.executionTimeline.length - 1]?.summary).toBe('任务完成')
 
     expect(result.current.streamLogs.streamStages).toContain('排队中...')
     expect(result.current.streamLogs.streamStages).toContain('处理中...')
@@ -462,7 +476,15 @@ describe('useTeacherChatApi stream mapping', () => {
       }
       if (url.includes('/chat/status')) {
         statusCalls += 1
-        return jsonResponse({ job_id: 'job-2', status: 'done', reply: 'fallback reply' })
+        return jsonResponse({
+          job_id: 'job-2',
+          status: 'done',
+          reply: 'fallback reply',
+          execution_timeline: [
+            { type: 'job.queued', summary: '排队中（前方 1）', ts: '2026-03-12T09:00:00Z' },
+            { type: 'job.done', summary: '任务完成', ts: '2026-03-12T09:00:05Z' },
+          ],
+        })
       }
       if (url.includes('/teacher/history/sessions')) {
         return jsonResponse({ ok: true, teacher_id: 'teacher-1', sessions: [], next_cursor: null })
@@ -502,6 +524,7 @@ describe('useTeacherChatApi stream mapping', () => {
     expect(result.current.pendingStreamStage).toBe('')
     expect(result.current.pendingToolRuns).toEqual([])
     expect(result.current.chatQueueHint).toBe('')
+    expect(result.current.executionTimeline.map((item) => item.summary)).toEqual(['排队中（前方 1）', '任务完成'])
     expect(fetchMock.mock.calls.some(([input]) => toUrl(input).includes('/chat/status'))).toBe(true)
   })
 

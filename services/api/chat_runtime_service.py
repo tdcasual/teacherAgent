@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from llm_gateway import UnifiedLLMRequest
 
+from .role_runtime_policy import get_role_runtime_policy
+
 _log = logging.getLogger(__name__)
 
 
@@ -46,9 +48,10 @@ def call_llm_runtime(
         stream=bool(stream),
     )
     t0 = deps.monotonic()
-    if role_hint == "student":
+    policy = get_role_runtime_policy(role_hint)
+    if policy.limiter_kind == "student":
         limiter = deps.student_limiter
-    elif role_hint == "teacher":
+    elif policy.limiter_kind == "teacher":
         limiter = deps.teacher_limiter
     else:
         limiter = deps.default_limiter
@@ -84,7 +87,7 @@ def call_llm_runtime(
 
     with deps.limit(limiter):
         result = None
-        if role_hint == "teacher":
+        if policy.uses_teacher_model_config:
             route_actor = deps.resolve_teacher_id(teacher_id)
             try:
                 config_payload = deps.resolve_teacher_model_config(route_actor) or {}

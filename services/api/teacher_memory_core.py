@@ -117,21 +117,56 @@ from .teacher_memory_auto_service import (
 from .teacher_memory_auto_service import (
     teacher_memory_auto_propose_from_turn as _teacher_memory_auto_propose_from_turn_impl,
 )
+from .teacher_memory_governance_service import (
+    TeacherMemoryGovernanceDeps,
+)
+from .teacher_memory_governance_service import (
+    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
+)
+from .teacher_memory_governance_service import (
+    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
+)
+from .teacher_memory_governance_service import (
+    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
+)
+from .teacher_memory_governance_service import (
+    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
+)
 from .teacher_memory_deps import *  # noqa: F401,F403
 from .teacher_memory_deps import (
     _teacher_context_deps,
     _teacher_memory_apply_deps,
     _teacher_memory_auto_deps,
+    _teacher_memory_governance_deps,
     _teacher_memory_insights_deps,
     _teacher_memory_propose_deps,
     _teacher_memory_record_deps,
     _teacher_memory_search_deps,
+    _teacher_memory_storage_deps,
     _teacher_memory_store_deps,
     _teacher_session_compaction_deps,
     _teacher_workspace_deps,
 )
 from .teacher_memory_insights_service import (
     TeacherMemoryInsightsDeps,
+)
+from .teacher_memory_storage_service import (
+    TeacherMemoryStorageDeps,
+)
+from .teacher_memory_storage_service import (
+    ensure_teacher_memory_provenance as _ensure_teacher_memory_provenance_impl,
+)
+from .teacher_memory_storage_service import (
+    teacher_memory_delete_proposal as _teacher_memory_delete_proposal_impl,
+)
+from .teacher_memory_storage_service import (
+    teacher_memory_list_proposals as _teacher_memory_list_proposals_impl,
+)
+from .teacher_memory_storage_service import (
+    teacher_memory_remove_entry_from_file as _teacher_memory_remove_entry_from_file_impl,
+)
+from .teacher_memory_storage_service import (
+    teacher_proposal_path as _teacher_proposal_path_impl,
 )
 from .teacher_memory_insights_service import (
     teacher_memory_insights as _teacher_memory_insights_impl,
@@ -150,18 +185,6 @@ from .teacher_memory_record_service import (
 )
 from .teacher_memory_record_service import (
     teacher_memory_auto_infer_candidate as _teacher_memory_auto_infer_candidate_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_find_conflicting_applied as _teacher_memory_find_conflicting_applied_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_find_duplicate as _teacher_memory_find_duplicate_impl,
-)
-from .teacher_memory_record_service import (
-    teacher_memory_mark_superseded as _teacher_memory_mark_superseded_impl,
 )
 from .teacher_memory_record_service import (
     teacher_memory_recent_proposals as _teacher_memory_recent_proposals_impl,
@@ -368,86 +391,24 @@ def teacher_memory_search(teacher_id: str, query: str, limit: int = 5) -> Dict[s
 
 
 def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Path:
-    ensure_teacher_workspace(teacher_id)
-    base = teacher_workspace_dir(teacher_id) / "proposals"
-    return base / f"{safe_fs_id(proposal_id, prefix='proposal')}.json"
-
-
+    return _teacher_proposal_path_impl(teacher_id, proposal_id, deps=_teacher_memory_storage_deps())
 
 
 def _ensure_teacher_memory_provenance(rec: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(rec, dict):
-        return {}
-    provenance = rec.get("provenance") if isinstance(rec.get("provenance"), dict) else None
-    if provenance:
-        return provenance
-    source = str(rec.get("source") or "manual").strip().lower() or "manual"
-    raw_meta = rec.get("meta")
-    meta: Dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
-    origin = "manual_input"
-    if source == "auto_flush":
-        origin = "session_summary"
-    elif source in {"auto_intent", "auto_infer"}:
-        origin = "session_context"
-    provenance = {"layer": "memory_proposal", "source": source, "origin": origin}
-    session_id = str(meta.get("session_id") or "").strip()
-    if session_id:
-        provenance["session_id"] = session_id
-    side_effect_source = str(meta.get("side_effect_source") or "").strip()
-    if side_effect_source:
-        provenance["side_effect_source"] = side_effect_source
-    side_effect_provenance = meta.get("side_effect_provenance") if isinstance(meta.get("side_effect_provenance"), dict) else None
-    if side_effect_provenance:
-        provenance["upstream"] = side_effect_provenance
-    rec["provenance"] = provenance
-    return provenance
+    return _ensure_teacher_memory_provenance_impl(rec)
+
 
 def teacher_memory_list_proposals(
     teacher_id: str,
     status: Optional[str] = None,
     limit: int = 20,
 ) -> Dict[str, Any]:
-    ensure_teacher_workspace(teacher_id)
-    proposals_dir = teacher_workspace_dir(teacher_id) / "proposals"
-    proposals_dir.mkdir(parents=True, exist_ok=True)
-    status_norm = (status or "").strip().lower() or None
-    if status_norm and status_norm not in {"proposed", "applied", "rejected"}:
-        return {"ok": False, "error": "invalid_status", "teacher_id": teacher_id}
-
-    take = max(1, min(int(limit or 20), 200))
-
-    def _safe_mtime(p: Path) -> float:
-        try:
-            return p.stat().st_mtime
-        except OSError:
-            return 0.0
-
-    files = sorted(
-        proposals_dir.glob("*.json"),
-        key=_safe_mtime,
-        reverse=True,
+    return _teacher_memory_list_proposals_impl(
+        teacher_id,
+        deps=_teacher_memory_storage_deps(),
+        status=status,
+        limit=limit,
     )
-    items: List[Dict[str, Any]] = []
-    for path in files:
-        try:
-            rec = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:  # policy: allowed-broad-except
-            _log.warning("Failed to read proposal file %s", path, exc_info=True)
-            continue
-        if not isinstance(rec, dict):
-            continue
-        rec_status = str(rec.get("status") or "").strip().lower()
-        if rec_status == "deleted":
-            continue
-        if status_norm and rec_status != status_norm:
-            continue
-        if "proposal_id" not in rec:
-            rec["proposal_id"] = path.stem
-        _ensure_teacher_memory_provenance(rec)
-        items.append(rec)
-        if len(items) >= take:
-            break
-    return {"ok": True, "teacher_id": teacher_id, "proposals": items}
 
 
 def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
@@ -598,12 +559,17 @@ def _teacher_memory_find_conflicting_applied(
         proposal_id=proposal_id,
         target=target,
         content=content,
-        deps=_teacher_memory_record_deps(),
+        deps=_teacher_memory_governance_deps(),
     )
 
 
 def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
-    _teacher_memory_mark_superseded_impl(teacher_id, proposal_ids, by_proposal_id, deps=_teacher_memory_record_deps())
+    _teacher_memory_mark_superseded_impl(
+        teacher_id,
+        proposal_ids,
+        by_proposal_id,
+        deps=_teacher_memory_governance_deps(),
+    )
 
 
 # ===================================================================
@@ -642,61 +608,7 @@ def teacher_memory_apply(teacher_id: str, proposal_id: str, approve: bool = True
 
 
 def teacher_memory_delete_proposal(teacher_id: str, proposal_id: str) -> Dict[str, Any]:
-    pid = str(proposal_id or "").strip()
-    if not pid:
-        return {"ok": False, "error": "proposal_id_required"}
-    path = _teacher_proposal_path(teacher_id, pid)
-    if not path.exists():
-        return {"ok": False, "error": "proposal not found", "proposal_id": pid}
-
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("failed to read proposal file for delete teacher=%s proposal=%s", teacher_id, pid, exc_info=True)
-        record = {}
-    if not isinstance(record, dict):
-        record = {}
-
-    status_before = str(record.get("status") or "proposed").strip().lower() or "proposed"
-    if status_before == "deleted":
-        return {"ok": True, "proposal_id": pid, "status": "deleted", "detail": "already_deleted"}
-
-    deleted_applied_path = ""
-    if status_before == "applied":
-        applied_path_raw = str(record.get("applied_to") or "").strip()
-        candidate_paths: List[Path] = []
-        if applied_path_raw:
-            candidate_paths.append(Path(applied_path_raw))
-        target = str(record.get("target") or "MEMORY").upper()
-        if target == "DAILY":
-            candidate_paths.append(teacher_daily_memory_path(teacher_id))
-        elif target in {"MEMORY", "USER", "AGENTS", "SOUL", "HEARTBEAT"}:
-            candidate_paths.append(teacher_workspace_file(teacher_id, f"{target}.md" if target != "MEMORY" else "MEMORY.md"))
-        else:
-            candidate_paths.append(teacher_workspace_file(teacher_id, "MEMORY.md"))
-        for candidate in candidate_paths:
-            if _teacher_memory_remove_entry_from_file(candidate, pid):
-                deleted_applied_path = str(candidate)
-                break
-
-    record["proposal_id"] = pid
-    record["status"] = "deleted"
-    record["deleted_at"] = datetime.now().isoformat(timespec="seconds")
-    record["deleted_from_status"] = status_before
-    if deleted_applied_path:
-        record["deleted_from_path"] = deleted_applied_path
-    _atomic_write_json(path, record)
-    _teacher_memory_log_event(
-        teacher_id,
-        "proposal_deleted",
-        {
-            "proposal_id": pid,
-            "target": str(record.get("target") or "MEMORY"),
-            "source": str(record.get("source") or "manual"),
-            "deleted_from_status": status_before,
-        },
-    )
-    return {"ok": True, "proposal_id": pid, "status": "deleted"}
+    return _teacher_memory_delete_proposal_impl(teacher_id, proposal_id, deps=_teacher_memory_storage_deps())
 
 
 def _teacher_memory_norm_text(text: str) -> str:
@@ -708,46 +620,7 @@ def _teacher_memory_stable_hash(*parts: str) -> str:
 
 
 def _teacher_memory_remove_entry_from_file(path: Path, proposal_id: str) -> bool:
-    if not path.exists():
-        return False
-    try:
-        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("failed to read memory file for delete path=%s", path, exc_info=True)
-        return False
-
-    marker = f"- entry_id: {proposal_id}"
-    marker_idx = -1
-    for idx, line in enumerate(lines):
-        if str(line or "").strip() == marker:
-            marker_idx = idx
-            break
-    if marker_idx < 0:
-        return False
-
-    start = marker_idx
-    for idx in range(marker_idx, -1, -1):
-        if str(lines[idx] or "").startswith("## "):
-            start = idx
-            break
-    end = marker_idx + 1
-    while end < len(lines):
-        if str(lines[end] or "").startswith("## "):
-            break
-        end += 1
-    while end < len(lines) and not str(lines[end] or "").strip():
-        end += 1
-
-    next_lines = lines[:start] + lines[end:]
-    next_text = "\n".join(next_lines).strip()
-    if next_text:
-        next_text += "\n"
-    try:
-        path.write_text(next_text, encoding="utf-8")
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("failed to write memory file for delete path=%s", path, exc_info=True)
-        return False
-    return True
+    return _teacher_memory_remove_entry_from_file_impl(path, proposal_id)
 
 
 def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
@@ -755,7 +628,7 @@ def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[
 
 
 def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
-    return _teacher_memory_auto_quota_reached_impl(teacher_id, deps=_teacher_memory_record_deps())
+    return _teacher_memory_auto_quota_reached_impl(teacher_id, deps=_teacher_memory_governance_deps())
 
 
 def _teacher_memory_find_duplicate(
@@ -770,7 +643,7 @@ def _teacher_memory_find_duplicate(
         target=target,
         content=content,
         dedupe_key=dedupe_key,
-        deps=_teacher_memory_record_deps(),
+        deps=_teacher_memory_governance_deps(),
     )
 
 

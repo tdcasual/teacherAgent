@@ -105,5 +105,44 @@ class ChatRuntimeServiceTest(unittest.TestCase):
         self.assertIs(limiter_seen[-1], teacher_limiter)
 
 
+    def test_teacher_policy_keeps_teacher_model_config_route(self):
+        gateway = _FakeGateway()
+
+        @contextmanager
+        def fake_limit(_limiter):
+            yield
+
+        deps = ChatRuntimeDeps(
+            gateway=gateway,
+            limit=fake_limit,
+            default_limiter=object(),
+            student_limiter=object(),
+            teacher_limiter=object(),
+            resolve_teacher_id=lambda teacher_id: str(teacher_id or 'teacher_default'),
+            resolve_teacher_model_config=lambda _actor: {
+                'models': {
+                    'conversation': {
+                        'provider': 'openai',
+                        'mode': 'openai-chat',
+                        'model': 'gpt-4.1-mini',
+                    }
+                }
+            },
+            resolve_teacher_provider_target=lambda _teacher_id, _provider, _mode, _model: None,
+            diag_log=lambda *_args, **_kwargs: None,
+        )
+
+        result = call_llm_runtime(
+            [{'role': 'user', 'content': 'hi'}],
+            deps=deps,
+            role_hint='teacher',
+            teacher_id='teacher_a',
+        )
+        self.assertEqual(result.get('choices', [{}])[0].get('message', {}).get('content'), 'ok')
+        self.assertEqual(gateway.calls[-1]['provider'], 'openai')
+        self.assertEqual(gateway.calls[-1]['model'], 'gpt-4.1-mini')
+        self.assertFalse(gateway.calls[-1]['allow_fallback'])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,6 +7,7 @@ import type {
   AnalysisReportSectionProps,
   VideoHomeworkAnalysisSectionProps,
 } from '../../../types/workflow'
+import type { ExecutionTimelineEntry } from '../../../appTypes'
 
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
 import UploadSection from '../workflow/UploadSection'
@@ -39,6 +40,7 @@ export type WorkflowTabProps =
     examDraftLoading: boolean
     examDraftSaving: boolean
     examConfirming: boolean
+    executionTimeline: ExecutionTimelineEntry[]
   }
 
 export default function WorkflowTab(props: WorkflowTabProps) {
@@ -52,6 +54,22 @@ export default function WorkflowTab(props: WorkflowTabProps) {
       <div className="flex justify-between items-center gap-3">
         <strong>作业流程控制</strong>
       </div>
+      {props.executionTimeline.length > 0 ? (
+        <section className="bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
+          <div className="flex justify-between items-center gap-2">
+            <strong>最近一次执行</strong>
+            <span className="text-[12px] text-muted">{props.executionTimeline.length} 个节点</span>
+          </div>
+          <div className="mt-[8px] grid gap-[6px]">
+            {props.executionTimeline.map((item, index) => (
+              <div key={`${item.type}-${item.ts || index}`} className="rounded-[10px] border border-border bg-white px-[10px] py-[8px] text-[12px]">
+                <div className="font-medium text-[#334155]">{item.summary}</div>
+                <div className="text-muted mt-[2px]">{item.type}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <WorkflowSummaryCard
         uploadMode={props.uploadMode}
         setUploadMode={props.setUploadMode}

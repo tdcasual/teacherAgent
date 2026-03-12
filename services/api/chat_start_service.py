@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
 from .analysis_target_resolution_service import extract_report_id_from_text
+from .chat_execution_timeline_service import append_chat_execution_timeline
+from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
 
@@ -130,6 +132,15 @@ def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, An
     return normalized
 
 
+def _persist_execution_timeline(job_id: str, event: Dict[str, Any], deps: ChatStartDeps) -> None:
+    try:
+        job = deps.load_chat_job(job_id)
+    except Exception:
+        job = {}
+    timeline = append_chat_execution_timeline(job.get('execution_timeline'), event)
+    deps.write_chat_job(job_id, {'execution_timeline': timeline}, False)
+
+
 def _load_job_or_stub(job_id: str, *, mode: str, deps: ChatStartDeps) -> Dict[str, Any]:
     try:
         return deps.load_chat_job(job_id)
@@ -164,14 +175,15 @@ def _validate_start_request(req: Any, deps: ChatStartDeps) -> str:
 
 def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _StartContext:
     role_hint = deps.detect_role_hint(req)
+    policy = get_role_runtime_policy(role_hint)
     session_id = req.session_id
-    if role_hint == "student" and req.student_id and not session_id:
+    if policy.role == "student" and req.student_id and not session_id:
         session_id = deps.resolve_student_session_id(
             req.student_id, req.assignment_id, req.assignment_date
         )
-    if role_hint == "teacher" and not session_id:
-        session_id = "main"
-    teacher_id = deps.resolve_teacher_id(req.teacher_id) if role_hint == "teacher" else ""
+    if policy.default_session_id and not session_id:
+        session_id = policy.default_session_id
+    teacher_id = deps.resolve_teacher_id(req.teacher_id) if policy.role == "teacher" else ""
     lane_id = deps.resolve_chat_lane_id(
         role_hint,
         session_id=session_id,
@@ -183,7 +195,7 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "messages": [{"role": m.role, "content": m.content} for m in req.messages],
         "role": req.role,
         "skill_id": req.skill_id,
-        "teacher_id": teacher_id if role_hint == "teacher" else req.teacher_id,
+        "teacher_id": teacher_id if policy.role == "teacher" else req.teacher_id,
         "student_id": req.student_id,
         "assignment_id": req.assignment_id,
         "assignment_date": req.assignment_date,
@@ -191,13 +203,13 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     }
     analysis_target = _normalize_analysis_target_payload(getattr(req, 'analysis_target', None))
     if analysis_target is not None:
-        if role_hint == 'teacher' and teacher_id and not str(analysis_target.get('teacher_id') or '').strip():
+        if policy.role == 'teacher' and teacher_id and not str(analysis_target.get('teacher_id') or '').strip():
             analysis_target['teacher_id'] = teacher_id
         req_payload['analysis_target'] = analysis_target
     attachment_ids = _extract_attachment_ids(req)
     attachment_payload = deps.resolve_chat_attachment_context(
         role=role_hint,
-        teacher_id=teacher_id if role_hint == "teacher" else req.teacher_id,
+        teacher_id=teacher_id if policy.role == "teacher" else req.teacher_id,
         student_id=req.student_id,
         session_id=session_id,
         attachment_ids=attachment_ids,
@@ -391,7 +403,7 @@ def _enqueue_and_finalize_start(
         False,
     )
     try:
-        deps.append_chat_event(
+        queued_event = deps.append_chat_event(
             job_id,
             "job.queued",
             {
@@ -402,6 +414,7 @@ def _enqueue_and_finalize_start(
                 "lane_active": bool(queue_info.get("lane_active")),
             },
         )
+        _persist_execution_timeline(job_id, queued_event, deps)
     except Exception:
         _log.warning("failed to append queued event for chat job %s", job_id, exc_info=True)
     return {

@@ -39,6 +39,7 @@ from .config import (
 )
 from .job_repository import _atomic_write_json
 from .paths import (
+    safe_fs_id,
     teacher_daily_memory_dir,
     teacher_daily_memory_path,
     teacher_session_file,
@@ -52,10 +53,12 @@ from .session_store import (
 from .teacher_context_service import TeacherContextDeps
 from .teacher_memory_apply_service import TeacherMemoryApplyDeps
 from .teacher_memory_auto_service import TeacherMemoryAutoDeps
+from .teacher_memory_governance_service import TeacherMemoryGovernanceDeps
 from .teacher_memory_insights_service import TeacherMemoryInsightsDeps
 from .teacher_memory_propose_service import TeacherMemoryProposeDeps
 from .teacher_memory_record_service import TeacherMemoryRecordDeps
 from .teacher_memory_search_service import TeacherMemorySearchDeps
+from .teacher_memory_storage_service import TeacherMemoryStorageDeps
 from .teacher_memory_store_service import TeacherMemoryStoreDeps
 from .teacher_session_compaction_service import TeacherSessionCompactionDeps
 from .teacher_workspace_service import TeacherWorkspaceDeps
@@ -67,6 +70,8 @@ __all__ = [
     "_teacher_memory_apply_deps",
     "_teacher_memory_propose_deps",
     "_teacher_memory_record_deps",
+    "_teacher_memory_governance_deps",
+    "_teacher_memory_storage_deps",
     "_teacher_memory_store_deps",
     "_teacher_memory_auto_deps",
     "_teacher_context_deps",
@@ -207,6 +212,33 @@ def _teacher_memory_store_deps():
         is_expired_record=lambda rec, now: tmc._teacher_memory_is_expired_record(rec, now=now),
         rank_score=tmc._teacher_memory_rank_score,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+    )
+
+
+def _teacher_memory_governance_deps():
+    tmc = _tmc()
+    return TeacherMemoryGovernanceDeps(
+        recent_proposals=lambda teacher_id, limit: tmc._teacher_memory_recent_proposals(teacher_id, limit=limit),
+        norm_text=tmc._teacher_memory_norm_text,
+        conflicts=tmc._teacher_memory_conflicts,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        proposal_path=tmc._teacher_proposal_path,
+        atomic_write_json=_atomic_write_json,
+        auto_max_proposals_per_day=TEACHER_MEMORY_AUTO_MAX_PROPOSALS_PER_DAY,
+    )
+
+
+def _teacher_memory_storage_deps():
+    tmc = _tmc()
+    return TeacherMemoryStorageDeps(
+        ensure_teacher_workspace=tmc.ensure_teacher_workspace,
+        teacher_workspace_dir=teacher_workspace_dir,
+        safe_fs_id=safe_fs_id,
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        teacher_daily_memory_path=teacher_daily_memory_path,
+        teacher_workspace_file=teacher_workspace_file,
+        log_event=tmc._teacher_memory_log_event,
     )
 
 

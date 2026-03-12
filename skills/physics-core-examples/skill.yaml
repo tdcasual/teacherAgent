@@ -7,12 +7,14 @@ routing:
   intents: [core_examples]
   keywords:
     - 核心例题
+    - 例题
     - 变式题
     - 例题库
     - ce
     - core_example
   keyword_weights:
     核心例题: 7
+    例题: 6
     变式题: 6
     core_example: 6
   min_score: 3

@@ -11,6 +11,7 @@
 5. `infrastructure` 负责外部系统与 IO，不反向引用上层业务编排。
 6. 对老师高频链路，优先补显式 workflow 编排与前置校验，而不是把业务状态推给自由工具循环。
 7. tool loop 是 workflow 的执行器，不是产品主流程的业务真相来源。
+8. `tool_dispatch` 是最终工具授权边界；teacher skill 的 tool allow/deny 必须在这里做执行期校验，不能只依赖上游 prompt/runtime 限制。
 
 
 ## Backend Context Boundaries

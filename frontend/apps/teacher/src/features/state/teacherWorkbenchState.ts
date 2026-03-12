@@ -9,6 +9,7 @@ import type {
   TeacherMemoryProposal,
   UploadDraft,
   UploadJobStatus,
+  ExecutionTimelineEntry,
 } from '../../appTypes'
 
 export type TeacherWorkbenchState = {
@@ -79,6 +80,7 @@ export type TeacherWorkbenchState = {
   examDraftActionStatus: string
   examDraftActionError: string
   examConfirming: boolean
+  executionTimeline: ExecutionTimelineEntry[]
 }
 
 type TeacherWorkbenchAction =
@@ -157,6 +159,7 @@ export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
     examDraftActionStatus: '',
     examDraftActionError: '',
     examConfirming: false,
+    executionTimeline: [],
   }
 }
 

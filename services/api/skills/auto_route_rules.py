@@ -5,6 +5,19 @@ from typing import List, Optional, Tuple
 
 _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
+_NEGATION_CUES = ("不要", "不是", "不做", "不生成", "不布置", "不用", "无需", "别", "不")
+
+
+def _contains_unnegated(text: str, key: str) -> bool:
+    if not key:
+        return False
+    start = text.find(key)
+    while start >= 0:
+        prefix = text[max(0, start - 4):start]
+        if not any(cue in prefix for cue in _NEGATION_CUES):
+            return True
+        start = text.find(key, start + len(key))
+    return False
 
 
 def _score_teacher_skill(
@@ -34,18 +47,18 @@ def _score_teacher_skill(
             ("题量", 2),
             ("渲染作业", 2),
         ):
-            if key in text:
+            if _contains_unnegated(text, key):
                 score += weight
                 hits.append(key)
-        if "作业" in text:
+        if _contains_unnegated(text, "作业"):
             score += 1
             hits.append("作业")
         return score, hits
 
     if skill_id == "physics-lesson-capture":
-        has_lesson = ("课堂" in text) or ("lesson" in text)
+        has_lesson = _contains_unnegated(text, "课堂") or _contains_unnegated(text, "lesson")
         has_capture = any(
-            key in text
+            _contains_unnegated(text, key)
             for key in ("采集", "ocr", "识别", "抽取", "板书", "课件", "课堂材料")
         )
         if has_lesson and has_capture:
@@ -58,7 +71,7 @@ def _score_teacher_skill(
             ("ocr", 2),
             ("课堂材料", 2),
         ):
-            if key in text:
+            if _contains_unnegated(text, key):
                 score += weight
                 hits.append(key)
         return score, hits
@@ -75,15 +88,15 @@ def _score_teacher_skill(
             ("标准解法", 2),
             ("core_example", 2),
         ):
-            if key in text:
+            if _contains_unnegated(text, key):
                 score += weight
                 hits.append(key)
         return score, hits
 
     if skill_id == "physics-student-focus":
-        has_student = ("学生" in text) or ("同学" in text)
+        has_student = _contains_unnegated(text, "学生") or _contains_unnegated(text, "同学")
         has_focus = any(
-            key in text
+            _contains_unnegated(text, key)
             for key in ("画像", "诊断", "最近作业", "薄弱", "个体", "个人", "针对")
         )
         if has_student and has_focus:
@@ -103,7 +116,7 @@ def _score_teacher_skill(
             ("错题讲解", 3),
             ("学习建议", 2),
         ):
-            if key in text:
+            if _contains_unnegated(text, key):
                 score += weight
                 hits.append(key)
         return score, hits
@@ -119,7 +132,7 @@ def _score_teacher_skill(
             ("课堂讨论", 2),
             ("exam", 2),
         ):
-            if key in text:
+            if _contains_unnegated(text, key):
                 score += weight
                 hits.append(key)
         return score, hits
@@ -155,7 +168,7 @@ def score_role_skill(
                 ("讲解", 2),
                 ("错题", 2),
             ):
-                if key in text:
+                if _contains_unnegated(text, key):
                     score += weight
                     hits.append(key)
             return score, hits

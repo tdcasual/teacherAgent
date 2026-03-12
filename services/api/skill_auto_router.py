@@ -17,6 +17,7 @@ _log = logging.getLogger(__name__)
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
 _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
+_NEGATION_CUES = ("不要", "不是", "不做", "不生成", "不布置", "不用", "无需", "别", "不")
 _TIE_BREAK_ORDER = [
     "physics-homework-generator",
     "physics-lesson-capture",
@@ -57,13 +58,27 @@ def _default_from_available(role_hint: Optional[str], available_ids: List[str]) 
     return sorted(available_ids)[0]
 
 
+def _keyword_is_negated(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 4):start]
+    return any(cue in prefix for cue in _NEGATION_CUES)
+
+
+
 def _keyword_hit(text: str, key: str, mode: str) -> bool:
     if not key:
         return False
     if mode == "word_boundary":
         pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])", flags=re.I)
-        return bool(pattern.search(text))
-    return key in text
+        for match in pattern.finditer(text):
+            if not _keyword_is_negated(text, match.start()):
+                return True
+        return False
+    start = text.find(key)
+    while start >= 0:
+        if not _keyword_is_negated(text, start):
+            return True
+        start = text.find(key, start + len(key))
+    return False
 
 
 def _normalized_tokens(values: Any) -> List[str]:
@@ -195,10 +210,11 @@ def _confidence_for_auto(best: int, second: int, floor: float) -> float:
 def _is_explicit_assignment_generation(text: str) -> bool:
     if not text:
         return False
-    if re.search(r"(创建|新建|新增|安排|布置|生成|发)\S{0,6}作业", text):
+    generation_keys = ("生成作业", "布置作业", "安排作业", "创建作业", "新建作业", "新增作业", "发作业")
+    if any(_keyword_hit(text, key, "substring") for key in generation_keys):
         return True
     for key in ("作业id", "作业 id", "每个知识点", "渲染作业"):
-        if key in text:
+        if _keyword_hit(text, key, "substring"):
             return True
     return False
 

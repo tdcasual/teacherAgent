@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 
 def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
@@ -61,6 +61,14 @@ def _default_analysis_review_list(
     return {"items": []}
 
 
+def _default_load_skill_runtime(_role: Optional[str], _skill_id: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
+    return None, None
+
+
+def _default_allowed_tools(_role: Optional[str]) -> Set[str]:
+    return set()
+
+
 @dataclass(frozen=True)
 class ToolDispatchDeps:
     tool_registry: Any
@@ -106,6 +114,8 @@ class ToolDispatchDeps:
     analysis_report_get: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_analysis_report_get
     analysis_report_rerun: Callable[[str, str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_report_rerun
     analysis_review_list: Callable[[str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_review_list
+    load_skill_runtime: Callable[[Optional[str], Optional[str]], Tuple[Optional[Any], Optional[str]]] = _default_load_skill_runtime
+    allowed_tools: Callable[[Optional[str]], Set[str]] = _default_allowed_tools
 
 
 
@@ -121,6 +131,34 @@ def _resolve_survey_report_id(args: Dict[str, Any]) -> str:
 
 def _resolve_analysis_report_id(args: Dict[str, Any]) -> str:
     return str(args.get("report_id") or args.get("target_id") or "").strip()
+
+
+def _resolve_skill_allowed_tools(
+    *,
+    role: Optional[str],
+    skill_id: Optional[str],
+    deps: ToolDispatchDeps,
+) -> Optional[Set[str]]:
+    role_final = str(role or "").strip().lower()
+    skill_id_final = str(skill_id or "").strip()
+    if role_final != "teacher" or not skill_id_final:
+        return None
+    role_allowed = set(deps.allowed_tools(role_final))
+    if not role_allowed:
+        return None
+    try:
+        runtime, _warning = deps.load_skill_runtime(role_final, skill_id_final)
+    except Exception:
+        return role_allowed
+    if runtime is None:
+        return role_allowed
+    apply_tool_policy = getattr(runtime, "apply_tool_policy", None)
+    if not callable(apply_tool_policy):
+        return role_allowed
+    try:
+        return set(apply_tool_policy(role_allowed))
+    except Exception:
+        return role_allowed
 
 
 def _teacher_memory_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
@@ -346,7 +384,6 @@ def tool_dispatch(
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    _ = skill_id
     static_tool = deps.tool_registry.get(name)
     if static_tool is None:
         return {"error": f"unknown tool: {name}"}
@@ -358,6 +395,15 @@ def tool_dispatch(
         issues = [*issues, "arguments.report_id: required (or provide target_id)"]
     if issues:
         return {"error": "invalid_arguments", "tool": name, "issues": issues[:20]}
+
+    allowed_tools = _resolve_skill_allowed_tools(role=role, skill_id=skill_id, deps=deps)
+    if allowed_tools is not None and name not in allowed_tools:
+        return {
+            "error": "tool_not_allowed",
+            "tool": name,
+            "role": str(role or ""),
+            "skill_id": str(skill_id or ""),
+        }
 
     handlers = _build_handlers(role=role, deps=deps, teacher_id=teacher_id)
     handler = handlers.get(name)

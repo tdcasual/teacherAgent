@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .chat_execution_timeline_service import append_chat_execution_timeline
 from .chat_job_state_machine import (
     is_terminal_chat_job_status,
     normalize_chat_job_status,
@@ -331,6 +332,15 @@ def _emit_workflow_resolution_event(
     if not effective:
         return
     event_sink("workflow.resolved", payload)
+
+
+def _persist_execution_timeline(job_id: str, event: Dict[str, Any], deps: ChatJobProcessDeps) -> None:
+    try:
+        job = deps.load_chat_job(job_id)
+    except Exception:
+        job = {}
+    timeline = append_chat_execution_timeline(job.get('execution_timeline'), event)
+    deps.write_chat_job(job_id, {'execution_timeline': timeline})
 
 
 def _teacher_preflight_reply(
@@ -670,7 +680,7 @@ class _ChatJobStatusWriter:
             event_type = f"job.{resolved}"
         if event_type:
             try:
-                self.deps.append_chat_event(
+                status_event = self.deps.append_chat_event(
                     self.job_id,
                     event_type,
                     {
@@ -686,6 +696,7 @@ class _ChatJobStatusWriter:
                         "skill_candidates": payload.get("skill_candidates"),
                     },
                 )
+                _persist_execution_timeline(self.job_id, status_event, self.deps)
             except Exception:  # policy: allowed-broad-except
                 _log.warning(
                     "failed to append status event %s for job %s",
@@ -713,7 +724,8 @@ def _emit_assistant_reply_events(
 ) -> None:
     for chunk in _iter_reply_chunks(reply_text):
         deps.append_chat_event(job_id, "assistant.delta", {"delta": chunk})
-    deps.append_chat_event(job_id, "assistant.done", {"text": str(reply_text or "")})
+    assistant_done_event = deps.append_chat_event(job_id, "assistant.done", {"text": str(reply_text or "")})
+    _persist_execution_timeline(job_id, assistant_done_event, deps)
 
 
 class _BufferedRuntimeEventWriter:
@@ -727,7 +739,9 @@ class _BufferedRuntimeEventWriter:
 
     def _append(self, event_type: str, payload: Dict[str, Any]) -> None:
         try:
-            self.deps.append_chat_event(self.job_id, event_type, payload)
+            runtime_event = self.deps.append_chat_event(self.job_id, event_type, payload)
+            if event_type != "assistant.delta":
+                _persist_execution_timeline(self.job_id, runtime_event, self.deps)
             if event_type == "assistant.done":
                 self.event_state["assistant_done"] = True
             elif event_type == "workflow.resolved":
