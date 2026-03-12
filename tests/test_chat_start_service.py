@@ -137,6 +137,21 @@ class ChatStartServiceTest(unittest.TestCase):
             start_chat_orchestration(req, deps=deps)
         self.assertIn('429', str(ctx.exception))
 
+    def test_teacher_without_session_uses_main_policy_session(self):
+        captured = {}
+
+        def _resolve_chat_lane_id(role_hint, **kwargs):
+            captured['role_hint'] = role_hint
+            captured['session_id'] = kwargs.get('session_id')
+            return 'lane-test'
+
+        deps, _ = _make_deps(resolve_chat_lane_id=_resolve_chat_lane_id)
+        req = _FakeRequest(role='teacher', teacher_id='teacher_1', student_id='')
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result['ok'])
+        self.assertEqual(captured.get('role_hint'), 'teacher')
+        self.assertEqual(captured.get('session_id'), 'main')
+
     def test_request_payload_carries_explicit_analysis_target_contract(self):
         writes: list[tuple[bool, dict[str, object]]] = []
 

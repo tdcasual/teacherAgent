@@ -31,6 +31,13 @@
 - 是否已确认：`status`、`reviewed_at`、`reviewed_by`
 - 是否已应用：`applied_at`、`applied_to`
 
+## Service Boundaries
+
+- `teacher_memory_auto_service.py`：只负责自动提案与 flush 触发。
+- `teacher_memory_governance_service.py`：负责 duplicate / quota / conflict / supersede 规则。
+- `teacher_memory_storage_service.py`：负责 proposal 路径、列表、删除与 applied markdown 清理。
+- `teacher_memory_core.py`：只保留 façade 与 deps 组装，不再承载完整治理实现。
+
 ## Storage Guidance
 
 - 保留教学上长期有价值的偏好、稳定误区、长期目标、有效干预。

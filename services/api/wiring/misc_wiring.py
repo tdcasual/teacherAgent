@@ -195,6 +195,8 @@ def _tool_dispatch_deps(core: Any | None = None):
         analysis_report_get=analysis_report_get,
         analysis_report_rerun=analysis_report_rerun,
         analysis_review_list=analysis_review_list,
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        allowed_tools=_ac.allowed_tools,
     )
 
 

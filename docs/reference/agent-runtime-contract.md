@@ -28,6 +28,7 @@
 - 工具集合先由角色决定，再由 workflow 进一步收紧。
 - 高价值教学链路优先依赖显式前置校验与固定工具预算，不鼓励自由工具循环去“猜流程”。
 - skill 级预算只能收紧全局预算，不能放宽。
+- 对 teacher 链路，skill 级 tool policy 需要在最终 `tool_dispatch` 执行期再次校验，而不只是停留在 prompt / tool schema 暗示层。
 
 ### Step 5: `chat job`
 - 每次请求都被包装成 chat job，并经过 `queued -> processing -> done|failed|cancelled` 状态机。

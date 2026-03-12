@@ -714,8 +714,10 @@ def run_agent_runtime(
 
     last_user_text = _find_last_user_text(messages)
     allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
+    role_policy = get_role_runtime_policy(role_hint)
+    is_teacher_role = role_policy.role == "teacher"
 
-    if role_hint == "teacher":
+    if is_teacher_role:
         followup_reply = maybe_route_analysis_followup(
             deps,
             messages=messages,
@@ -748,7 +750,7 @@ def run_agent_runtime(
             return longform_reply
 
     tools: List[Dict[str, Any]] = []
-    if role_hint == "teacher":
+    if is_teacher_role:
         tools = deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
     reply, tool_budget_exhausted = _run_tool_loop(
         deps=deps,
@@ -766,7 +768,7 @@ def run_agent_runtime(
     if reply is not None:
         return {"reply": reply}
 
-    if role_hint == "teacher" and tools:
+    if is_teacher_role and tools:
         no_tools_reply = _final_teacher_reply_without_tools(
             deps=deps,
             convo=convo,

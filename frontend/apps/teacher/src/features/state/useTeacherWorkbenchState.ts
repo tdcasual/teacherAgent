@@ -14,6 +14,7 @@ import type {
   TeacherMemoryProposal,
   UploadDraft,
   UploadJobStatus,
+  ExecutionTimelineEntry,
 } from '../../appTypes'
 
 type StateSetterValue<T> = T | ((prev: T) => T)
@@ -185,6 +186,12 @@ export function useTeacherWorkbenchState() {
   const setExamDraftActionStatus = useCallback((value: string) => setField('examDraftActionStatus', value), [setField])
   const setExamDraftActionError = useCallback((value: string) => setField('examDraftActionError', value), [setField])
   const setExamConfirming = useCallback((value: boolean) => setField('examConfirming', value), [setField])
+  const setExecutionTimeline = useCallback(
+    (value: ExecutionTimelineEntry[] | ((prev: ExecutionTimelineEntry[]) => ExecutionTimelineEntry[])) => {
+      update((prev) => ({ ...prev, executionTimeline: resolveStateSetter(value, prev.executionTimeline) }))
+    },
+    [update],
+  )
 
   return {
     ...state,
@@ -251,5 +258,6 @@ export function useTeacherWorkbenchState() {
     setExamDraftActionStatus,
     setExamDraftActionError,
     setExamConfirming,
+    setExecutionTimeline,
   }
 }

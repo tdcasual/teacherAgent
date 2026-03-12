@@ -30,6 +30,7 @@ export type ChatJobStatus = {
     score?: number
     hits?: string[]
   }>
+  execution_timeline?: ExecutionTimelineEntry[]
 }
 
 export type ChatStartResult = {
@@ -60,6 +61,13 @@ export type PendingToolRun = {
   status: 'running' | 'ok' | 'failed'
   durationMs?: number
   error?: string
+}
+
+export type ExecutionTimelineEntry = {
+  type: string
+  summary: string
+  ts?: string
+  meta?: Record<string, unknown>
 }
 
 export type TeacherHistorySession = {

@@ -16,6 +16,7 @@ import type {
   Message,
   PendingChatJob,
   PendingToolRun,
+  ExecutionTimelineEntry,
   RenderedMessage,
   Skill,
   SkillResponse,
@@ -53,6 +54,7 @@ export type UseTeacherChatApiParams = {
   setChatQueueHint: React.Dispatch<React.SetStateAction<string>>
   setPendingStreamStage: React.Dispatch<React.SetStateAction<string>>
   setPendingToolRuns: React.Dispatch<React.SetStateAction<PendingToolRun[]>>
+  setExecutionTimeline: React.Dispatch<React.SetStateAction<ExecutionTimelineEntry[]>>
   setComposerWarning: React.Dispatch<React.SetStateAction<string>>
   setInput: React.Dispatch<React.SetStateAction<string>>
   // Session state setters (from useTeacherSessionState — useReducer-based)
@@ -124,6 +126,51 @@ const buildAnalysisTargetContextMessage = (target: AnalysisReportSummary | null 
   if (strategyId) parts.push(`strategy_id=${strategyId}`)
   return parts.join(' ')
 }
+const appendExecutionTimelineEntry = (
+  setExecutionTimeline: React.Dispatch<React.SetStateAction<ExecutionTimelineEntry[]>>,
+  entry: ExecutionTimelineEntry | null,
+) => {
+  if (!entry) return
+  setExecutionTimeline((prev) => [...prev, entry].slice(-12))
+}
+
+const buildExecutionTimelineEntry = (
+  eventType: string,
+  payload: Record<string, unknown>,
+  skillList: Skill[],
+): ExecutionTimelineEntry | null => {
+  if (eventType === 'assistant.delta') return null
+  if (eventType === 'job.queued') {
+    const lanePos = Number(payload.lane_queue_position || 0)
+    return {
+      type: eventType,
+      summary: lanePos > 0 ? `排队中（前方 ${lanePos}）` : '排队中',
+      meta: payload,
+    }
+  }
+  if (eventType === 'job.processing') return { type: eventType, summary: '处理中', meta: payload }
+  if (eventType === 'workflow.resolved') {
+    const skillId = String(payload.requested_skill_id || payload.skill_id_requested || payload.effective_skill_id || payload.skill_id_effective || '').trim()
+    const effective = String(payload.effective_skill_id || payload.skill_id_effective || '').trim()
+    const title = skillList.find((item) => item.id === effective)?.title || effective || skillId || 'workflow'
+    return { type: eventType, summary: `工作流已解析：${title}`, meta: payload }
+  }
+  if (eventType === 'tool.start') {
+    const toolName = String(payload.tool_name || '').trim() || 'tool'
+    return { type: eventType, summary: `调用工具：${toolName}`, meta: payload }
+  }
+  if (eventType === 'tool.finish') {
+    const toolName = String(payload.tool_name || '').trim() || 'tool'
+    const ok = Boolean(payload.ok)
+    return { type: eventType, summary: ok ? `工具完成：${toolName}` : `工具失败：${toolName}`, meta: payload }
+  }
+  if (eventType === 'assistant.done') return { type: eventType, summary: '已生成回复', meta: payload }
+  if (eventType === 'job.done') return { type: eventType, summary: '任务完成', meta: payload }
+  if (eventType === 'job.failed') return { type: eventType, summary: '任务失败', meta: payload }
+  if (eventType === 'job.cancelled') return { type: eventType, summary: '任务已取消', meta: payload }
+  return null
+}
+
 const resolveWorkflowHint = (
   payload: {
     requested_skill_id?: string
@@ -171,6 +218,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     setChatQueueHint,
     setPendingStreamStage,
     setPendingToolRuns,
+    setExecutionTimeline,
     setComposerWarning,
     setInput,
     setHistorySessions,
@@ -651,6 +699,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
         .slice(-40)
         .map((msg) => ({ role: msg.role, content: msg.content }))
       setSending(true)
+      setExecutionTimeline([])
       try {
         const res = await fetch(`${apiBase}/chat/start`, {
           method: 'POST',
@@ -717,7 +766,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
       authToken, selectedAnalysisTarget,
       setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
-      setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setPendingChatJob,
+      setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setExecutionTimeline, setPendingChatJob,
     ],
   )
   // ── Pending chat job stream effect (fallback to polling) ──────────────
@@ -785,6 +834,9 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             throw new Error(text || `状态码 ${res.status}`)
           }
           const data = (await res.json()) as ChatJobStatus
+          if (Array.isArray(data.execution_timeline)) {
+            setExecutionTimeline(data.execution_timeline)
+          }
           if (data.status === 'done') {
             finishSuccess(data.reply || '')
             return 'stop'
@@ -850,6 +902,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       }
       const applyStreamEvent = (eventType: string, payload: Record<string, unknown>, eventId: number) => {
         if (eventId > cursor) cursor = eventId
+        appendExecutionTimelineEntry(setExecutionTimeline, buildExecutionTimelineEntry(eventType, payload, skillList))
         if (eventType === 'job.queued') {
           const lanePos = Number(payload.lane_queue_position || 0)
           const laneSize = Number(payload.lane_queue_size || 0)
@@ -1006,6 +1059,9 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
             throw new Error(text || `状态码 ${statusRes.status}`)
           }
           const statusData = (await statusRes.json()) as ChatJobStatus
+          if (Array.isArray(statusData.execution_timeline)) {
+            setExecutionTimeline(statusData.execution_timeline)
+          }
           if (statusData.status === 'done') {
             clearAssistantRenderTimer()
             finishSuccess(statusData.reply || assistantText || '')

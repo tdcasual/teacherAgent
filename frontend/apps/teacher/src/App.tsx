@@ -107,7 +107,7 @@ export default function App() {
     progressOnlyIncomplete, memoryStatusFilter, studentMemoryStatusFilter, studentMemoryStudentFilter,
     examId, examDate, examClassName, examPaperFiles, examScoreFiles, examAnswerFiles, examUploading, examUploadError,
     examJobId, examJobInfo, examStatusPollNonce, examDraft, examDraftPanelCollapsed, examDraftError, examDraftSaving,
-    examDraftActionError, examConfirming,
+    examDraftActionError, examConfirming, executionTimeline,
     setUploadMode, setUploadFiles,
     setUploadAnswerFiles, setUploading, setUploadStatus, setUploadError, setUploadCardCollapsed, setUploadJobId, setUploadJobInfo,
     setUploadConfirming, setUploadStatusPollNonce, setUploadDraft, setDraftPanelCollapsed, setDraftLoading, setDraftError,
@@ -118,7 +118,7 @@ export default function App() {
     setExamPaperFiles, setExamScoreFiles, setExamAnswerFiles, setExamUploading,
     setExamUploadStatus, setExamUploadError, setExamJobId, setExamJobInfo, setExamStatusPollNonce, setExamDraft,
     setExamDraftPanelCollapsed, setExamDraftLoading, setExamDraftError, setExamDraftSaving, setExamDraftActionStatus,
-    setExamDraftActionError, setExamConfirming,
+    setExamDraftActionError, setExamConfirming, setExecutionTimeline,
   } = workbench
   const {
     historySessions, historyLoading, historyError, historyCursor, historyHasMore, historyQuery, showArchivedSessions,
@@ -277,7 +277,7 @@ export default function App() {
     pendingChatJob, memoryStatusFilter, studentMemoryStatusFilter, studentMemoryStudentFilter, skillsOpen, workbenchTab,
     selectedAnalysisTarget,
     setMessages, setSending, setActiveSessionId, setPendingChatJob, setChatQueueHint,
-    setPendingStreamStage, setPendingToolRuns,
+    setPendingStreamStage, setPendingToolRuns, setExecutionTimeline,
     setComposerWarning, setInput,
     setHistorySessions, setHistoryLoading, setHistoryError, setHistoryCursor, setHistoryHasMore,
     setLocalDraftSessionIds, setSessionLoading, setSessionError, setSessionCursor, setSessionHasMore,
@@ -685,6 +685,7 @@ export default function App() {
     selectAnalysisReport,
     rerunAnalysisReport,
     rerunAnalysisReportsBulk,
+    executionTimeline,
   })
   const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
     '--teacher-topbar-height': `${topbarHeight}px`,

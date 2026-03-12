@@ -8,6 +8,7 @@ routing:
   keywords:
     - 生成作业
     - 布置作业
+    - 分层作业
     - 作业id
     - 作业 id
     - 渲染作业
@@ -16,9 +17,12 @@ routing:
   negative_keywords:
     - 模型路由
     - 路由回滚
+    - 不要生成作业
+    - 不是生成作业
   keyword_weights:
     生成作业: 6
     布置作业: 6
+    分层作业: 6
     作业id: 6
     作业 id: 6
     渲染作业: 4
