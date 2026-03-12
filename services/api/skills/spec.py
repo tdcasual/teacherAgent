@@ -159,6 +159,7 @@ class SkillRoutingSpec:
     negative_keywords: List[str]
     intents: List[str]
     keyword_weights: Dict[str, int]
+    regex_keywords: Dict[str, int]
     min_score: int
     min_margin: int
     confidence_floor: float
@@ -224,6 +225,7 @@ class SkillSpec:
                 "negative_keywords": self.routing.negative_keywords,
                 "intents": self.routing.intents,
                 "keyword_weights": dict(self.routing.keyword_weights),
+                "regex_keywords": dict(self.routing.regex_keywords),
                 "min_score": int(self.routing.min_score),
                 "min_margin": int(self.routing.min_margin),
                 "confidence_floor": float(self.routing.confidence_floor),
@@ -316,6 +318,15 @@ def _parse_routing(raw: Any) -> SkillRoutingSpec:
             continue
         keyword_weights[text] = min(50, max(1, weight))
 
+    regex_keywords_raw = _as_dict(routing_raw.get("regex_keywords") or routing_raw.get("regexKeywords"))
+    regex_keywords: Dict[str, int] = {}
+    for pattern, value in regex_keywords_raw.items():
+        normalized = str(pattern or "").strip()
+        weight = _as_int(value, 0)
+        if not normalized or weight <= 0:
+            continue
+        regex_keywords[normalized] = min(50, max(1, weight))
+
     min_score = max(1, _as_int(routing_raw.get("min_score"), 3))
     min_margin = max(0, _as_int(routing_raw.get("min_margin"), 1))
     confidence_floor = _as_float_opt(routing_raw.get("confidence_floor"))
@@ -330,6 +341,7 @@ def _parse_routing(raw: Any) -> SkillRoutingSpec:
         negative_keywords=negative_keywords,
         intents=intents,
         keyword_weights=keyword_weights,
+        regex_keywords=regex_keywords,
         min_score=min_score,
         min_margin=min_margin,
         confidence_floor=confidence_floor,

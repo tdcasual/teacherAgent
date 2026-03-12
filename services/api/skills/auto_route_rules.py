@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import re
 from typing import List, Optional, Tuple
 
-_CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
-_SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
 _NEGATION_CUES = ("不要", "不是", "不做", "不生成", "不布置", "不用", "无需", "别", "不")
 
 
@@ -40,8 +37,6 @@ def _score_teacher_skill(
         for key, weight in (
             ("生成作业", 4),
             ("布置作业", 4),
-            ("作业id", 4),
-            ("作业 id", 4),
             ("课后作业", 3),
             ("每个知识点", 2),
             ("题量", 2),
@@ -77,9 +72,6 @@ def _score_teacher_skill(
         return score, hits
 
     if skill_id == "physics-core-examples":
-        if _CE_ID_RE.search(text):
-            score += 5
-            hits.append("ce_id")
         for key, weight in (
             ("核心例题", 5),
             ("变式题", 4),
@@ -102,9 +94,6 @@ def _score_teacher_skill(
         if has_student and has_focus:
             score += 7
             hits.append("student_focus_combo")
-        if _SINGLE_STUDENT_RE.search(text):
-            score += 4
-            hits.append("single_student_regex")
         return score, hits
 
     if skill_id == "physics-student-coach":

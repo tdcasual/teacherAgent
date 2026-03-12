@@ -40,8 +40,9 @@ def main() -> int:
         if confidence < 0.5:
             low_confidence_total += 1
         if actual_skill != expected_skill or actual_reason != expected_reason:
+            first_candidate = ((result.get('candidates') or [{}])[0]).get('skill_id')
             mismatches.append(
-                f"- {case.get('name')}: expected {expected_skill}/{expected_reason}, got {actual_skill}/{actual_reason}"
+                f"- {case.get('name')}: expected {expected_skill}/{expected_reason}, got {actual_skill}/{actual_reason}, first_candidate={first_candidate}"
             )
 
     print(f"cases={len(cases)} mismatches={len(mismatches)} fallbacks={fallback_total} low_confidence={low_confidence_total}")

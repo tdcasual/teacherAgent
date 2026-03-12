@@ -210,6 +210,7 @@ def _ensure_minimal_routing(spec: SkillSpec) -> SkillSpec:
         negative_keywords=list(getattr(routing, "negative_keywords", []) or []),
         intents=intents,
         keyword_weights=dict(getattr(routing, "keyword_weights", {}) or {}),
+        regex_keywords=dict(getattr(routing, "regex_keywords", {}) or {}),
         min_score=int(getattr(routing, "min_score", 3) or 3),
         min_margin=int(getattr(routing, "min_margin", 1) or 1),
         confidence_floor=float(getattr(routing, "confidence_floor", 0.28) or 0.28),

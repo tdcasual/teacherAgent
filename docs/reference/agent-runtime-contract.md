@@ -18,6 +18,7 @@
 - 运行时保留内部 `skill_id` 作为 workflow 标识，不把它暴露成“插件市场”。
 - 老师端支持自动 workflow 解析：记录 `requested -> effective -> reason -> confidence -> candidates`。
 - 显式指定 workflow 时优先使用显式选择；未指定时走角色默认或规则匹配。
+- teacher workflow auto-routing 的稳定关键词与 regex 优先来自 skill manifest，而不是散落在运行时代码中的特例。
 
 ### Step 3: `prompt stack`
 - 基础系统提示由角色决定。

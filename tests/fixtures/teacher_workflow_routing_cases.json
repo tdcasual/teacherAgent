@@ -250,6 +250,46 @@
       "expected_reason": "role_default",
       "min_confidence": 0.28,
       "expect_candidates_empty": true
+    },
+    {
+      "name": "negated_homework_falls_back_to_teacher_ops",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "不要生成作业，先做考试分析和讲评提纲。",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "physics-teacher-ops"
+    },
+    {
+      "name": "ce_id_routes_to_core_examples",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "登记核心例题 CE042，并补两道变式题。",
+      "expected_skill_id": "physics-core-examples",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "physics-core-examples"
+    },
+    {
+      "name": "single_student_profile_routes_to_student_focus",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "帮我看某个学生的画像和最近作业表现。",
+      "expected_skill_id": "physics-student-focus",
+      "expected_reason": "auto_rule",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "physics-student-focus"
+    },
+    {
+      "name": "generic_analysis_keeps_default_fallback",
+      "role_hint": "teacher",
+      "requested_skill_id": "",
+      "last_user_text": "我想做一个分析。",
+      "expected_skill_id": "physics-teacher-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "expect_candidates_empty": true
     }
   ]
 }

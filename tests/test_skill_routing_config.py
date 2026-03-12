@@ -37,6 +37,22 @@ class SkillRoutingConfigTest(unittest.TestCase):
             self.assertGreaterEqual(len(intents), 1, f"{skill_id} routing.intents should not be empty")
 
 
+    def test_teacher_workflow_manifests_define_regex_keywords(self):
+        loaded = load_skills(APP_ROOT / "skills")
+
+        core = loaded.skills["physics-core-examples"]
+        self.assertEqual(getattr(core.routing, "regex_keywords", {}), {r"\bCE\d+\b": 5})
+
+        student_focus = loaded.skills["physics-student-focus"]
+        self.assertEqual(
+            getattr(student_focus.routing, "regex_keywords", {}),
+            {r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))": 4},
+        )
+
+        homework = loaded.skills["physics-homework-generator"]
+        self.assertEqual(getattr(homework.routing, "regex_keywords", {}), {r"作业\s*id": 6})
+
+
     def test_teacher_workflow_skills_define_explicit_tool_policies(self):
         loaded = load_skills(APP_ROOT / "skills")
 

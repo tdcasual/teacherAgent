@@ -2,7 +2,8 @@ import unittest
 from pathlib import Path
 
 from services.api.assignment_intent_service import detect_assignment_intent
-from services.api.skill_auto_router import resolve_effective_skill
+from services.api.skill_auto_router import _score_from_skill_config, resolve_effective_skill
+from services.api.skills.spec import parse_skill_spec
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 
@@ -77,6 +78,71 @@ class SkillAutoRouterTest(unittest.TestCase):
             detect_assignment_intent=detect_assignment_intent,
         )
         self.assertEqual(result.get("effective_skill_id"), "physics-student-coach")
+
+
+    def test_manifest_regex_keywords_drive_config_score(self):
+        spec = parse_skill_spec(
+            skill_id="physics-core-examples",
+            source_path="(in-memory)",
+            raw={
+                "id": "physics-core-examples",
+                "schema_version": 2,
+                "title": "核心例题库",
+                "allowed_roles": ["teacher"],
+                "routing": {
+                    "intents": ["core_examples"],
+                    "keywords": ["核心例题"],
+                    "regex_keywords": {r"\bCE\d+\b": 5},
+                    "min_score": 3,
+                    "min_margin": 1,
+                    "confidence_floor": 0.28,
+                    "match_mode": "substring",
+                },
+                "agent": {"prompt_modules": [], "tools": {"allow": []}, "budgets": {}, "model_policy": {}},
+                "ui": {"prompts": [], "examples": []},
+            },
+        )
+        self.assertEqual(getattr(spec.routing, "regex_keywords", {}), {r"\bCE\d+\b": 5})
+        score, hits, min_score, min_margin, confidence_floor = _score_from_skill_config(
+            spec,
+            "登记核心例题 ce042",
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        self.assertGreaterEqual(score, 5)
+        self.assertIn(r"cfg-regex:\bCE\d+\b", hits)
+        self.assertEqual(min_score, 3)
+        self.assertEqual(min_margin, 1)
+        self.assertEqual(confidence_floor, 0.28)
+
+
+    def test_teacher_auto_routes_ce_identifier_to_core_examples(self):
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id="",
+            last_user_text="登记核心例题 CE042，并补两道变式题。",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
+        self.assertEqual(result.get("reason"), "auto_rule")
+        hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
+        self.assertIn(r"cfg-regex:\bCE\d+\b", hits)
+        self.assertNotIn("ce_id", hits)
+
+    def test_teacher_auto_routes_single_student_profile_to_focus(self):
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id="",
+            last_user_text="帮我看某个学生的画像和最近作业表现。",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertEqual(result.get("effective_skill_id"), "physics-student-focus")
+        self.assertEqual(result.get("reason"), "auto_rule")
+        hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
+        self.assertIn(r"cfg-regex:(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))", hits)
+        self.assertNotIn("single_student_regex", hits)
 
 
 if __name__ == "__main__":

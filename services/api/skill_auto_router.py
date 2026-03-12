@@ -117,6 +117,19 @@ def _score_keyword_matches(
     return score, hits
 
 
+def _score_regex_matches(text: str, patterns: Dict[str, int]) -> Tuple[int, List[str]]:
+    score = 0
+    hits: List[str] = []
+    for pattern, weight in dict(patterns or {}).items():
+        try:
+            if re.search(pattern, text, flags=re.I):
+                score += min(50, max(1, int(weight)))
+                hits.append(f"cfg-regex:{pattern}")
+        except re.error:
+            continue
+    return score, hits
+
+
 def _score_intent_matches(intents: List[str], text: str, *, assignment_intent: bool, assignment_generation: bool) -> Tuple[int, List[str]]:
     score = 0
     hits: List[str] = []
@@ -171,6 +184,7 @@ def _score_from_skill_config(
     confidence_floor = float(getattr(routing, "confidence_floor", 0.28) or 0.28)
     confidence_floor = max(0.0, min(0.95, confidence_floor))
     keyword_weights = _build_keyword_weights(getattr(routing, "keyword_weights", {}))
+    regex_keywords = dict(getattr(routing, "regex_keywords", {}) or {})
 
     pos_score, pos_hits = _score_keyword_matches(
         text,
@@ -194,8 +208,9 @@ def _score_from_skill_config(
         assignment_intent=assignment_intent,
         assignment_generation=assignment_generation,
     )
-    score = pos_score + neg_score + intent_score
-    hits = pos_hits + neg_hits + intent_hits
+    regex_score, regex_hits = _score_regex_matches(text, regex_keywords)
+    score = pos_score + neg_score + intent_score + regex_score
+    hits = pos_hits + neg_hits + intent_hits + regex_hits
 
     return score, hits, min_score, min_margin, confidence_floor
 

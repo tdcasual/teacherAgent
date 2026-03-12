@@ -13,8 +13,7 @@ class TeacherWorkflowRoutingRegressionTest(unittest.TestCase):
     def test_teacher_fixture_cases_are_stable(self):
         payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         cases = payload.get("cases") or []
-        self.assertGreaterEqual(len(cases), 20)
-        self.assertLessEqual(len(cases), 30)
+        self.assertGreaterEqual(len(cases), 24)
 
         for case in cases:
             with self.subTest(case=case.get("name")):
