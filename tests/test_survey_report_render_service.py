@@ -3,7 +3,6 @@ from __future__ import annotations
 from services.api.survey_report_render_service import render_survey_report
 
 
-
 def test_render_survey_report_outputs_markdown_and_json_shapes() -> None:
     rendered = render_survey_report(
         report={

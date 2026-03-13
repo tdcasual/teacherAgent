@@ -8,6 +8,13 @@ from .analysis_policy_service import load_analysis_policy
 _PRIORITY_ORDER = {'high': 0, 'medium': 1, 'low': 2}
 
 
+def _count_value(raw: Any) -> int:
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 
 def build_review_feedback_dataset(*, items: Iterable[Dict[str, Any]], policy: Dict[str, Any] | None = None) -> Dict[str, Any]:
     rows = [_normalize_feedback_row(raw) for raw in items]
@@ -206,7 +213,7 @@ def build_feedback_loop_summary(*, recommendations: Iterable[Dict[str, Any]]) ->
 
 def _top_counts(key: str, values: Dict[str, int], *, limit: int = 5) -> List[Dict[str, Any]]:
     rows = [{key: name, 'count': int(count)} for name, count in values.items() if str(name or '').strip()]
-    rows.sort(key=lambda item: (-int(item['count']), str(item[key])))
+    rows.sort(key=lambda item: (-_count_value(item.get('count')), str(item.get(key))))
     return rows[:limit]
 
 

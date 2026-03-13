@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from services.api.survey_bundle_merge_service import merge_survey_evidence_bundles
 from services.api.survey_bundle_models import SurveyAudienceScope, SurveyEvidenceBundle, SurveyMeta
-from services.api.survey_report_parse_service import SurveyReportParseDeps, parse_survey_report_payload
+from services.api.survey_report_parse_service import (
+    SurveyReportParseDeps,
+    parse_survey_report_payload,
+)
 from services.api.upload_text_service import extract_text_from_html
-
 
 
 def _parse_deps() -> SurveyReportParseDeps:

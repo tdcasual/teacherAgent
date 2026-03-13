@@ -6,7 +6,6 @@ from services.api.agent_service import AgentRuntimeDeps, run_agent_runtime
 from services.api.specialist_agents.contracts import SpecialistAgentResult
 
 
-
 def test_run_agent_runtime_uses_internal_survey_handoff_for_deeper_teacher_followup() -> None:
     events = []
     llm_calls = []

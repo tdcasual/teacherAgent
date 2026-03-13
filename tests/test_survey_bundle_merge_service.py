@@ -11,7 +11,6 @@ from services.api.survey_bundle_models import (
 )
 
 
-
 def test_merge_survey_evidence_bundles_combines_fields_provenance_and_confidence() -> None:
     structured_bundle = SurveyEvidenceBundle(
         survey_meta=SurveyMeta(title="课堂反馈问卷", provider="provider", submission_id="sub-1"),

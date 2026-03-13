@@ -7,7 +7,6 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-
 SCRIPT_PATH = Path('scripts/survey_bundle_eval.py')
 FIXTURES_DIR = Path('tests/fixtures/surveys')
 

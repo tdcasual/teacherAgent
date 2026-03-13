@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import fnmatch
 import re
 import sys
 from pathlib import Path
@@ -56,9 +57,25 @@ def _load_allowlist(path: Path) -> Set[str]:
     return items
 
 
+def _collapse_violation(violation: str) -> str:
+    path, _line_no, detail = violation.split(":", 2)
+    return f"{path}:*: {detail.strip()}"
+
+
+def _allowlist_matches(violation: str, pattern: str) -> bool:
+    if violation == pattern:
+        return True
+    return fnmatch.fnmatchcase(violation, pattern)
+
+
 def _write_allowlist(path: Path, violations: Sequence[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = ["# Exception policy allowlist", "# Format: relative/path.py:line: detail", *sorted(violations)]
+    patterns = sorted({_collapse_violation(violation) for violation in violations})
+    body = [
+        "# Exception policy allowlist",
+        "# Format: relative/path.py:*: detail (or an exact relative/path.py:line: detail entry)",
+        *patterns,
+    ]
     path.write_text("\n".join(body) + "\n", encoding="utf-8")
 
 
@@ -80,10 +97,17 @@ def main(argv: Sequence[str]) -> int:
             print(f"[OK] Synced allowlist with {len(current_violations)} entries: {ALLOWLIST_REL_PATH}")
         return 0
 
-    allowlist = _load_allowlist(allowlist_path)
-    current_set = set(current_violations)
-    new_violations = sorted(current_set - allowlist)
-    stale_allowlist = sorted(allowlist - current_set)
+    allowlist = sorted(_load_allowlist(allowlist_path))
+    new_violations = sorted(
+        violation
+        for violation in current_violations
+        if not any(_allowlist_matches(violation, pattern) for pattern in allowlist)
+    )
+    stale_allowlist = sorted(
+        pattern
+        for pattern in allowlist
+        if not any(_allowlist_matches(violation, pattern) for violation in current_violations)
+    )
 
     if new_violations:
         print("[FAIL] Exception policy violations not in allowlist:")
@@ -96,7 +120,7 @@ def main(argv: Sequence[str]) -> int:
         return 1
 
     if not quiet:
-        print(f"[OK] Exception policy check passed for services/api (tracked violations={len(current_set)}).")
+        print(f"[OK] Exception policy check passed for services/api (tracked violations={len(current_violations)}).")
         print(f"[INFO] allowlist: {ALLOWLIST_REL_PATH}")
         if stale_allowlist:
             print(f"[WARN] Allowlist contains {len(stale_allowlist)} stale entries (cleanup recommended).")

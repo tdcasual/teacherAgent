@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from services.api.survey_repository import read_survey_review_queue
-from services.api.survey_review_queue_service import build_survey_review_queue_deps, enqueue_survey_review_item
+from services.api.survey_review_queue_service import (
+    build_survey_review_queue_deps,
+    enqueue_survey_review_item,
+)
 
 
 class _Core:

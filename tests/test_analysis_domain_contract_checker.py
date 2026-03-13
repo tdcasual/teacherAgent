@@ -3,10 +3,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from pathlib import Path
 
 import scripts.check_analysis_domain_contract as checker
-
 
 
 def test_analysis_domain_contract_checker_reports_docs_bindings_and_replay_support() -> None:

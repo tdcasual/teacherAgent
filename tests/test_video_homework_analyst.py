@@ -10,8 +10,10 @@ from services.api.multimodal_submission_models import (
     MultimodalSubmissionBundle,
 )
 from services.api.specialist_agents.contracts import ArtifactRef, HandoffContract
-from services.api.specialist_agents.video_homework_analyst import VideoHomeworkAnalystDeps, run_video_homework_analyst
-
+from services.api.specialist_agents.video_homework_analyst import (
+    VideoHomeworkAnalystDeps,
+    run_video_homework_analyst,
+)
 
 
 def _bundle() -> MultimodalSubmissionBundle:

@@ -7,7 +7,6 @@ from pathlib import Path
 
 from scripts.build_analysis_release_readiness_report import build_analysis_release_readiness_report
 
-
 SCRIPT_PATH = Path('scripts/build_analysis_release_readiness_report.py')
 
 

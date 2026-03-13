@@ -5,7 +5,6 @@ from services.api.strategies.planner import build_handoff_plan
 from services.api.strategies.selector import build_default_strategy_selector
 
 
-
 def test_planner_converts_strategy_decision_to_handoff_contract() -> None:
     selector = build_default_strategy_selector()
     artifact = ArtifactEnvelope(

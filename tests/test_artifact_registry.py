@@ -12,7 +12,6 @@ from services.api.artifacts.runtime import ArtifactAdapterRuntime
 from services.api.wiring.survey_wiring import build_survey_artifact_registry
 
 
-
 def test_registry_registers_and_queries_artifact_adapters() -> None:
     registry = ArtifactAdapterRegistry()
     registry.register(

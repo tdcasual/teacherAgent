@@ -16,6 +16,10 @@ _ALLOWED_EVENT_TYPES = {
 }
 
 
+def _payload_dict(raw: Any) -> Dict[str, Any]:
+    return raw if isinstance(raw, dict) else {}
+
+
 def _summary_for_event(event_type: str, payload: Dict[str, Any]) -> str:
     if event_type == 'job.queued':
         lane_pos = int(payload.get('lane_queue_position', 0) or 0)
@@ -49,7 +53,7 @@ def build_chat_execution_timeline_entry(event: Dict[str, Any]) -> Optional[Dict[
     event_type = str(event.get('type') or '').strip()
     if event_type not in _ALLOWED_EVENT_TYPES:
         return None
-    payload = event.get('payload') if isinstance(event.get('payload'), dict) else {}
+    payload: Dict[str, Any] = _payload_dict(event.get('payload'))
     entry: Dict[str, Any] = {
         'type': event_type,
         'ts': str(event.get('ts') or '').strip(),

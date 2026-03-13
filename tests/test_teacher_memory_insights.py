@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+
 from services.api.job_repository import _atomic_write_json
 from tests.helpers.app_factory import create_test_app
 

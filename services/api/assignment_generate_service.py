@@ -13,7 +13,6 @@ from .assignment_generate_cli_service import (
 )
 
 
-
 class AssignmentGenerateError(Exception):
     def __init__(self, status_code: int, detail: Any):
         super().__init__(str(detail))

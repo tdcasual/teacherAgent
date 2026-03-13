@@ -5,7 +5,6 @@ from pathlib import Path
 from services.api.analysis_metadata_repository import FileBackedAnalysisMetadataRepository
 
 
-
 def test_file_backed_metadata_repository_roundtrip_json_and_jsonl(tmp_path: Path) -> None:
     repo = FileBackedAnalysisMetadataRepository(base_dir=tmp_path)
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from services.api.media_segment_models import MediaExtractionFailure, MediaFrameEvidence, MediaTextSegment
+from services.api.media_segment_models import (
+    MediaExtractionFailure,
+    MediaFrameEvidence,
+    MediaTextSegment,
+)
 from services.api.multimodal_submission_models import (
     MultimodalMediaFile,
     MultimodalScope,
     MultimodalSourceMeta,
     MultimodalSubmissionBundle,
 )
-
 
 
 def test_multimodal_submission_bundle_exports_uniform_artifact_envelope() -> None:

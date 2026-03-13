@@ -8,7 +8,6 @@ from services.api.specialist_agents.contracts import (
 )
 
 
-
 def test_handoff_contract_and_result_roundtrip() -> None:
     handoff = HandoffContract(
         handoff_id="handoff_1",

@@ -5,7 +5,6 @@ import pytest
 from services.api.specialist_agents.metrics_service import SpecialistMetricsService
 
 
-
 def test_specialist_metrics_service_derives_quality_rates_and_release_gates() -> None:
     summary = SpecialistMetricsService(
         max_timeout_rate=0.1,

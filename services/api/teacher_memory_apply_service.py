@@ -3,9 +3,19 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 _log = logging.getLogger(__name__)
+
+
+class Mem0IndexEntryCallable(Protocol):
+    def __call__(
+        self,
+        teacher_id: str,
+        text: str,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -25,7 +35,7 @@ class TeacherMemoryApplyDeps:
     mark_superseded: Callable[[str, List[str], str], None]
     diag_log: Callable[[str, Dict[str, Any]], None]
     mem0_should_index_target: Callable[[str], bool]
-    mem0_index_entry: Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
+    mem0_index_entry: Mem0IndexEntryCallable
 
 
 @dataclass(frozen=True)
@@ -150,7 +160,7 @@ def _maybe_index_mem0(
         mem0_info = deps.mem0_index_entry(
             teacher_id,
             index_text,
-            {
+            metadata={
                 "file": str(out_path),
                 "proposal_id": proposal_id,
                 "target": payload.target,

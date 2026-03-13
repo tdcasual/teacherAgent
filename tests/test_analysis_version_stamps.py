@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from services.api.analysis_report_service import build_analysis_report_deps, get_analysis_report, list_analysis_reports
+from services.api.analysis_report_service import (
+    build_analysis_report_deps,
+    get_analysis_report,
+    list_analysis_reports,
+)
 from services.api.survey_repository import write_survey_report
 
 

@@ -4,8 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.export_analysis_domain_capability_matrix import build_analysis_domain_capability_matrix_markdown
-
+from scripts.export_analysis_domain_capability_matrix import (
+    build_analysis_domain_capability_matrix_markdown,
+)
 
 SCRIPT_PATH = Path('scripts/export_analysis_domain_capability_matrix.py')
 

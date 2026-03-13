@@ -1,5 +1,5 @@
-from fastapi import APIRouter, FastAPI
 import pytest
+from fastapi import APIRouter, FastAPI
 
 from services.api import app_routes
 

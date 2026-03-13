@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -8,8 +7,8 @@ import pytest
 from services.api.job_repository import load_survey_job, write_survey_job
 from services.api.survey_repository import load_survey_raw_payload, write_survey_raw_payload
 from services.api.survey_webhook_service import (
-    SurveyWebhookError,
     SurveyWebhookDeps,
+    SurveyWebhookError,
     compute_survey_signature,
     ingest_survey_webhook,
 )

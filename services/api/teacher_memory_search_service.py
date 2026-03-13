@@ -1,19 +1,31 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol
 
 _log = logging.getLogger(__name__)
+
+
+class Mem0SearchCallable(Protocol):
+    def __call__(
+        self,
+        teacher_id: str,
+        query: str,
+        *,
+        limit: Optional[int] = None,
+        threshold: Optional[float] = None,
+    ) -> Dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
 class TeacherMemorySearchDeps:
     ensure_teacher_workspace: Callable[[str], Any]
-    mem0_search: Callable[[str, str, int], Dict[str, Any]]
+    mem0_search: Mem0SearchCallable
     search_filter_expired: bool
-    load_record: Callable[[str, str], Dict[str, Any]]
+    load_record: Callable[[str, str], Dict[str, Any] | None]
     is_expired_record: Callable[[Dict[str, Any]], bool]
     diag_log: Callable[[str, Dict[str, Any]], None]
     log_event: Callable[[str, str, Dict[str, Any]], None]
@@ -26,6 +38,34 @@ class _Mem0FilterStats:
     dropped_expired: int = 0
     dropped_inactive: int = 0
     dropped_missing: int = 0
+
+
+def _call_mem0_search(
+    mem0_search: Mem0SearchCallable,
+    teacher_id: str,
+    query: str,
+    *,
+    topk: int,
+) -> Dict[str, Any]:
+    supports_limit_keyword = True
+    params: Iterable[inspect.Parameter] = ()
+    try:
+        params = inspect.signature(mem0_search).parameters.values()
+    except (TypeError, ValueError):
+        supports_limit_keyword = True
+    else:
+        supports_limit_keyword = any(
+            param.kind is inspect.Parameter.VAR_KEYWORD
+            or (
+                param.name == "limit"
+                and param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            )
+            for param in params
+        )
+    mem0_search_any: Any = mem0_search
+    if supports_limit_keyword:
+        return mem0_search_any(teacher_id, query, limit=topk)
+    return mem0_search_any(teacher_id, query, topk)
 
 
 def _filter_mem0_matches(
@@ -74,7 +114,7 @@ def _search_mem0(
     deps: TeacherMemorySearchDeps,
 ) -> Dict[str, Any] | None:
     try:
-        mem0_result = deps.mem0_search(teacher_id, query, topk)
+        mem0_result = _call_mem0_search(deps.mem0_search, teacher_id, query, topk=topk)
         if mem0_result.get("ok") and mem0_result.get("matches"):
             raw_matches = list(mem0_result.get("matches") or [])
             matches, stats = _filter_mem0_matches(teacher_id, raw_matches, topk=topk, deps=deps)

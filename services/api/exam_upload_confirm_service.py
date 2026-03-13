@@ -15,6 +15,15 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return value
 
 
+def _to_optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class ExamUploadConfirmError(Exception):
     def __init__(self, status_code: int, detail: Any):
         super().__init__(str(detail))
@@ -188,11 +197,13 @@ def _copy_upload_files(job: Dict[str, Any], job_dir: Path, exam_dir: Path, deps:
 
 def _build_question_max_scores(questions_override: List[Dict[str, Any]]) -> Optional[Dict[str, float]]:
     try:
-        return {
-            str(question.get("question_id")): float(question.get("max_score"))
-            for question in questions_override
-            if question.get("max_score") is not None
-        }
+        max_scores: Dict[str, float] = {}
+        for question in questions_override:
+            max_score = _to_optional_float(question.get("max_score"))
+            if max_score is None:
+                continue
+            max_scores[str(question.get("question_id"))] = max_score
+        return max_scores
     except Exception:
         _log.warning("max_scores build failed from questions_override", exc_info=True)
         return None

@@ -1,6 +1,6 @@
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
 from services.api.queue.queue_backend import rq_enabled
 from tests.helpers.app_factory import create_test_app
 

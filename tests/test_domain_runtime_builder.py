@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from services.api.domains.manifest_models import DomainManifest, DomainRuntimeBinding
-from services.api.domains.manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
+from services.api.domains.manifest_registry import (
+    DomainManifestRegistry,
+    build_default_domain_manifest_registry,
+)
 from services.api.domains.runtime_builder import build_domain_specialist_runtime
 from services.api.specialist_agents.contracts import HandoffContract
 from services.api.specialist_agents.registry import SpecialistAgentSpec

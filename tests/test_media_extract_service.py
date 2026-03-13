@@ -10,7 +10,6 @@ from services.api.multimodal_submission_models import (
 )
 
 
-
 def _submission() -> MultimodalSubmissionBundle:
     return MultimodalSubmissionBundle(
         source_meta=MultimodalSourceMeta(

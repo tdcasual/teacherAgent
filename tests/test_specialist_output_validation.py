@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from services.api.specialist_agents.contracts import HandoffContract, SpecialistAgentResult
-from services.api.specialist_agents.governor import SpecialistAgentGovernor, SpecialistAgentRuntimeError
+from services.api.specialist_agents.governor import (
+    SpecialistAgentGovernor,
+    SpecialistAgentRuntimeError,
+)
 from services.api.specialist_agents.registry import SpecialistAgentSpec
-
 
 
 def _spec(schema_type: str = 'survey.analysis_artifact') -> SpecialistAgentSpec:

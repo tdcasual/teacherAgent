@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
+from .analysis_target_models import AnalysisTargetRef
 from .analysis_target_resolution_service import (
     AnalysisTargetResolutionError,
     build_recent_target_from_messages,
@@ -11,7 +12,6 @@ from .analysis_target_resolution_service import (
 from .strategies.planner import build_handoff_plan
 from .strategies.selector import build_default_strategy_selector
 from .survey_bundle_models import SurveyEvidenceBundle
-
 
 _GENERIC_AMBIGUOUS_REPLY = '当前有多个可分析的问卷报告，请先告诉我 report_id（例如 report_123），我再继续深入复盘。'
 _LOW_CONFIDENCE_REPLY = '当前问卷证据置信度偏低，建议先进入复核队列，确认后我再继续深入复盘。'
@@ -42,7 +42,7 @@ def _resolve_survey_followup_target(
     messages: List[Dict[str, Any]],
     teacher_id: str,
     items: List[Dict[str, Any]],
-):
+) -> AnalysisTargetRef:
     return resolve_analysis_target(
         explicit_target=explicit_target if _is_survey_target(explicit_target) else None,
         explicit_target_id=None if _is_survey_target(explicit_target) else extract_report_id_from_text(last_user_text),

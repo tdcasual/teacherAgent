@@ -14,7 +14,6 @@ from services.api.survey_bundle_models import (
 )
 
 
-
 def _bundle() -> SurveyEvidenceBundle:
     return SurveyEvidenceBundle(
         survey_meta=SurveyMeta(title="课堂反馈问卷", provider="provider", submission_id="sub-1"),

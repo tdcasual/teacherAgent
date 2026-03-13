@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from services.api.job_repository import write_survey_job
 from services.api.survey_report_service import (
     build_survey_report_deps,
     get_survey_report,
@@ -14,7 +15,6 @@ from services.api.survey_repository import (
     write_survey_bundle,
     write_survey_report,
 )
-from services.api.job_repository import write_survey_job
 
 
 class _Core:

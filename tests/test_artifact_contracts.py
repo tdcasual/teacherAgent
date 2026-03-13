@@ -10,7 +10,6 @@ from services.api.survey_bundle_models import (
 )
 
 
-
 def test_artifact_envelope_roundtrip() -> None:
     artifact = ArtifactEnvelope(
         artifact_type='survey_evidence_bundle',

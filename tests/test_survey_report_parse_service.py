@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from services.api.survey_report_parse_service import SurveyReportParseDeps, parse_survey_report_payload
-from services.api.upload_text_service import UploadTextDeps, extract_text_from_file, extract_text_from_html
+from services.api.survey_report_parse_service import (
+    SurveyReportParseDeps,
+    parse_survey_report_payload,
+)
+from services.api.upload_text_service import (
+    UploadTextDeps,
+    extract_text_from_file,
+    extract_text_from_html,
+)
 
 
 class _NoopLimit:

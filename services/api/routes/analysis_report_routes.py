@@ -27,7 +27,6 @@ from ..specialist_agents.metrics_service import SpecialistMetricsService
 from .teacher_route_helpers import scoped_teacher_id
 
 
-
 def _raise_http_exception(exc: Exception) -> None:
     status_code = int(getattr(exc, 'status_code', 500) or 500)
     detail = str(getattr(exc, 'detail', exc) or 'analysis_report_request_failed')

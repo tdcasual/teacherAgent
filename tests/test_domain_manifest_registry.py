@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from scripts.check_analysis_domain_contract import check_analysis_domain_contract
 from services.api.artifacts.registry import ArtifactAdapterSpec, build_platform_artifact_registry
 from services.api.domains.manifest_models import DomainManifest
-from services.api.domains.manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
+from services.api.domains.manifest_registry import (
+    DomainManifestRegistry,
+    build_default_domain_manifest_registry,
+)
 from services.api.specialist_agents.registry import SpecialistAgentSpec
 from services.api.strategies.contracts import StrategySpec
 from services.api.strategies.selector import build_default_strategy_selector
@@ -129,7 +132,10 @@ def test_analysis_domain_contract_checker_reports_default_registry_ready() -> No
     assert payload['domains']['survey']['has_runtime_binding'] is True
     assert payload['domains']['survey']['has_report_binding'] is True
     assert payload['domains']['survey']['strategy_ids'] == ['survey.chat.followup', 'survey.teacher.report']
-    assert payload['domains']['video_homework']['specialist_ids'] == ['video_homework_analyst']
+    assert payload['domains']['video_homework']['specialist_ids'] == [
+        'reviewer_analyst',
+        'video_homework_analyst',
+    ]
 
 
 def test_analysis_domain_contract_checker_cli_json_output() -> None:

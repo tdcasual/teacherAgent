@@ -187,6 +187,11 @@ def _normalize_workflow_resolution_candidates(raw: Any) -> Optional[List[Dict[st
     ]
 
 
+def _request_payload_dict(job: Dict[str, Any]) -> Dict[str, Any]:
+    raw_request = job.get("request")
+    return raw_request if isinstance(raw_request, dict) else {}
+
+
 def _resolve_requested_rewritten(
     requested_skill_id: str,
     effective_skill_id: str,
@@ -286,7 +291,7 @@ def _workflow_outcome_job_updates(job: Dict[str, Any], *, outcome: str, outcome_
 
 
 def _workflow_resolution_metrics_payload(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
-    request_payload = job.get('request') if isinstance(job.get('request'), dict) else {}
+    request_payload = _request_payload_dict(job)
     return {
         'role': str(job.get('role') or request_payload.get('role') or '').strip() or None,
         'requested_skill_id': str(payload.get('requested_skill_id') or '').strip(),
@@ -300,7 +305,7 @@ def _workflow_resolution_metrics_payload(job: Dict[str, Any], payload: Dict[str,
 
 
 def _workflow_outcome_metrics_payload(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
-    request_payload = job.get('request') if isinstance(job.get('request'), dict) else {}
+    request_payload = _request_payload_dict(job)
     return {
         'role': str(job.get('role') or request_payload.get('role') or payload.get('role') or '').strip() or None,
         'requested_skill_id': str(payload.get('skill_id_requested') or job.get('skill_id_requested') or '').strip(),

@@ -34,6 +34,10 @@ _RUNTIME_RECORD_RETENTION_SEC = 7 * 24 * 60 * 60
 _MAX_RUNTIME_RECORDS = 10000
 
 
+def _as_dict(raw: Any) -> Dict[str, Any]:
+    return raw if isinstance(raw, dict) else {}
+
+
 class AnalysisMetricsService:
     def __init__(
         self,
@@ -347,7 +351,7 @@ class AnalysisMetricsService:
         self._update_nested_counter_map(self._by_domain, snapshot.get('by_domain'))
         self._update_nested_counter_map(self._by_strategy, snapshot.get('by_strategy'))
         self._update_nested_counter_map(self._by_agent, snapshot.get('by_agent'))
-        workflow = snapshot.get('workflow_routing') if isinstance(snapshot.get('workflow_routing'), dict) else {}
+        workflow = _as_dict(snapshot.get('workflow_routing'))
         self._update_counter_map(self._workflow_counters, workflow.get('counters'))
         self._update_nested_counter_map(self._workflow_by_effective_skill, workflow.get('by_effective_skill'))
         self._update_nested_counter_map(self._workflow_by_role, workflow.get('by_role'))

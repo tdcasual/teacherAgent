@@ -5,8 +5,8 @@ from pathlib import Path
 import services.api.teacher_memory_deps as deps_mod
 from services.api.teacher_memory_deps import (
     _teacher_context_deps,
-    _teacher_memory_auto_deps,
     _teacher_memory_apply_deps,
+    _teacher_memory_auto_deps,
     _teacher_memory_search_deps,
     _teacher_session_compaction_deps,
 )

@@ -10,9 +10,11 @@ from services.api.class_signal_bundle_models import (
     ClassSignalSourceMeta,
     ClassSignalThemeLike,
 )
-from services.api.specialist_agents.class_signal_analyst import ClassSignalAnalystDeps, run_class_signal_analyst
+from services.api.specialist_agents.class_signal_analyst import (
+    ClassSignalAnalystDeps,
+    run_class_signal_analyst,
+)
 from services.api.specialist_agents.contracts import ArtifactRef, HandoffContract
-
 
 
 def _bundle() -> ClassSignalBundle:

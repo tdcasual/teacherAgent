@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from .teacher_memory_governance_service import (
     TeacherMemoryGovernanceDeps,
+)
+from .teacher_memory_governance_service import (
     teacher_memory_auto_quota_reached as _teacher_memory_auto_quota_reached_impl,
 )
 from .teacher_memory_governance_service import (

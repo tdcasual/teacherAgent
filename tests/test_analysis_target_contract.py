@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from services.api.api_models import ChatRequest
 
-
 _BASE_MESSAGES = [{"role": "user", "content": "请继续分析这个对象"}]
 
 

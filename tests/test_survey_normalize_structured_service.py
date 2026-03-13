@@ -3,7 +3,6 @@ from __future__ import annotations
 from services.api.survey_normalize_structured_service import normalize_structured_survey_payload
 
 
-
 def test_normalize_structured_survey_payload_maps_core_fields() -> None:
     payload = {
         "submission_id": "sub-1",

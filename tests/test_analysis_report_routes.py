@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from services.api.analysis_metrics_service import AnalysisMetricsService
-from services.api.specialist_agents.events import SpecialistRuntimeEvent
 from services.api.routes.analysis_report_routes import build_router
+from services.api.specialist_agents.events import SpecialistRuntimeEvent
 from services.api.survey_repository import (
     append_survey_review_queue_item,
     write_survey_bundle,

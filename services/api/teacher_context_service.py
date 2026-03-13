@@ -1,13 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
-
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 _log = logging.getLogger(__name__)
+
+
+class TeacherMemoryActiveAppliedRecordsCallable(Protocol):
+    def __call__(
+        self,
+        teacher_id: str,
+        *,
+        target: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -15,7 +24,7 @@ class TeacherContextTextDeps:
     teacher_session_file: Callable[[str, str], Any]
     teacher_workspace_file: Callable[[str, str], Any]
     teacher_read_text: Callable[..., str]
-    teacher_memory_active_applied_records: Callable[[str, Optional[str], int], List[Dict[str, Any]]]
+    teacher_memory_active_applied_records: TeacherMemoryActiveAppliedRecordsCallable
     teacher_memory_rank_score: Callable[[Dict[str, Any]], float]
     teacher_memory_context_max_entries: int
     log: Any = _log
@@ -76,7 +85,7 @@ def build_teacher_session_summary_reader(
 
 def build_teacher_memory_context_reader(
     *,
-    teacher_memory_active_applied_records: Callable[[str, Optional[str], int], List[Dict[str, Any]]],
+    teacher_memory_active_applied_records: TeacherMemoryActiveAppliedRecordsCallable,
     teacher_read_text: Callable[..., str],
     teacher_workspace_file: Callable[[str, str], Any],
     teacher_memory_rank_score: Callable[[Dict[str, Any]], float],
@@ -100,7 +109,7 @@ def teacher_memory_context_text(
     teacher_id: str,
     max_chars: int = 4000,
     *,
-    teacher_memory_active_applied_records: Callable[[str, Optional[str], int], List[Dict[str, Any]]],
+    teacher_memory_active_applied_records: TeacherMemoryActiveAppliedRecordsCallable,
     teacher_read_text: Callable[..., str],
     teacher_workspace_file: Callable[[str, str], Any],
     teacher_memory_rank_score: Callable[[Dict[str, Any]], float],

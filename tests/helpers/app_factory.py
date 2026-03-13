@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import os
 import sys
-import importlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping

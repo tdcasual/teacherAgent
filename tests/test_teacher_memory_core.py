@@ -39,8 +39,8 @@ from services.api.teacher_session_compaction_helpers import (  # noqa: E402
     _teacher_compact_allowed,
     _teacher_compact_key,
     _teacher_compact_transcript,
-    write_teacher_session_records,
     reset_compact_state,
+    write_teacher_session_records,
 )
 from services.api.teacher_session_compaction_service import (  # noqa: E402
     TeacherSessionCompactionDeps,

@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from services.api.routes import survey_routes
 
 
-
 def test_survey_webhook_route_calls_application_layer(monkeypatch) -> None:
     class _Core:
         pass

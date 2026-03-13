@@ -49,6 +49,13 @@ _NORMALIZED_HINTS = {
 }
 
 
+def _count_value(raw: Any) -> int:
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def classify_blocking_issues(
     *,
     blocking_issues: Sequence[Dict[str, Any]] | None,
@@ -105,7 +112,7 @@ def summarize_issue_ownership(*, classified_issues: Iterable[Dict[str, Any]] | N
             normalized = str(owner_hint or '').strip()
             if normalized and normalized not in bucket['supporting_owner_hints']:
                 bucket['supporting_owner_hints'].append(normalized)
-    top_owners = sorted(grouped.values(), key=lambda item: (-int(item['count']), str(item['owner'])))
+    top_owners = sorted(grouped.values(), key=lambda item: (-_count_value(item.get('count')), str(item.get('owner'))))
     by_owner = {item['owner']: item for item in top_owners}
     top_actions = [
         {
@@ -118,10 +125,10 @@ def summarize_issue_ownership(*, classified_issues: Iterable[Dict[str, Any]] | N
     ]
     top_actions.sort(
         key=lambda item: (
-            -int(item['count']),
-            -int(((by_owner.get(str(item['owner']) or '') or {}).get('count') or 0)),
-            str(item['owner']),
-            str(item['recommended_action']),
+            -_count_value(item.get('count')),
+            -_count_value((by_owner.get(str(item.get('owner')) or '') or {}).get('count')),
+            str(item.get('owner')),
+            str(item.get('recommended_action')),
         )
     )
     return {

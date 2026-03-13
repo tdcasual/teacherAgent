@@ -3,10 +3,12 @@ from __future__ import annotations
 import pytest
 
 from services.api.specialist_agents.contracts import HandoffContract, SpecialistAgentResult
-from services.api.specialist_agents.governor import SpecialistAgentGovernor, SpecialistAgentRuntimeError
+from services.api.specialist_agents.governor import (
+    SpecialistAgentGovernor,
+    SpecialistAgentRuntimeError,
+)
 from services.api.specialist_agents.registry import SpecialistAgentRegistry, SpecialistAgentSpec
 from services.api.specialist_agents.runtime import SpecialistAgentRuntime
-
 
 
 def _handoff(max_tokens: int = 800) -> HandoffContract:

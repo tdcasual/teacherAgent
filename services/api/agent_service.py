@@ -13,10 +13,16 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .agent_context_resolution_service import (
     build_longform_context_prompt as _build_longform_context_prompt,
+)
+from .agent_context_resolution_service import (
     find_exam_id_for_longform as _find_exam_id_for_longform,
+)
+from .agent_context_resolution_service import (
     find_last_user_text as _find_last_user_text,
 )
-from .agent_runtime_guards import maybe_guard_teacher_subject_total as _maybe_guard_teacher_subject_total
+from .agent_runtime_guards import (
+    maybe_guard_teacher_subject_total as _maybe_guard_teacher_subject_total,
+)
 from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .role_runtime_policy import get_role_runtime_policy

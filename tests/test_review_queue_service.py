@@ -14,7 +14,6 @@ from services.api.review_queue_service import (
 )
 
 
-
 def _deps(tmp_path: Path) -> ReviewQueueDeps:
     return ReviewQueueDeps(
         metadata_repo=FileBackedAnalysisMetadataRepository(base_dir=tmp_path),

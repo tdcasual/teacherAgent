@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from services.api.specialist_agents.contracts import HandoffContract, SpecialistAgentResult
-from services.api.specialist_agents.reviewer_analyst import ReviewerAnalystDeps, run_reviewer_analyst
+from services.api.specialist_agents.reviewer_analyst import (
+    ReviewerAnalystDeps,
+    run_reviewer_analyst,
+)
 
 
 def _analysis_result(*, recommendations: list[str], evidence_ref: str | None = 'segment:asr_1') -> SpecialistAgentResult:

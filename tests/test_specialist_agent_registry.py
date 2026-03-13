@@ -11,7 +11,6 @@ from services.api.specialist_agents.registry import (
 from services.api.specialist_agents.runtime import SpecialistAgentRuntime
 
 
-
 def test_registry_registers_and_queries_specialist_agents() -> None:
     registry = SpecialistAgentRegistry()
     registry.register(

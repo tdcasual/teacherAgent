@@ -12,7 +12,6 @@ from services.api.workers.survey_worker_service import (
 )
 
 
-
 def _deps(tmp_path: Path, processed: list[str], failures: list[dict[str, str]]) -> SurveyWorkerDeps:
     return SurveyWorkerDeps(
         job_queue=deque(),

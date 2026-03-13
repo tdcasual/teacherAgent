@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from . import mem0_adapter
 from .config import (
@@ -234,31 +235,46 @@ def _teacher_memory_stable_hash(*parts: str) -> str:
     return teacher_memory_stable_hash(*parts)
 
 
-def _teacher_memory_log_event_bridge(teacher_id: str, event: str, payload=None) -> None:
+def _teacher_memory_log_event_bridge(
+    teacher_id: str,
+    event: str,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
     teacher_memory_log_event(teacher_id, event, payload=payload, deps=_teacher_memory_store_deps())
 
 
-def _teacher_proposal_path(teacher_id: str, proposal_id: str):
+def _teacher_proposal_path(teacher_id: str, proposal_id: str) -> Any:
     return teacher_proposal_path(teacher_id, proposal_id, deps=_teacher_memory_storage_deps())
 
 
-def _teacher_memory_load_record(teacher_id: str, proposal_id: str):
+def _teacher_memory_load_record(teacher_id: str, proposal_id: str) -> Optional[Dict[str, Any]]:
     return teacher_memory_load_record(teacher_id, proposal_id, deps=_teacher_memory_store_deps())
 
 
-def _teacher_memory_load_events(teacher_id: str, limit: int = 5000):
+def _teacher_memory_load_events(teacher_id: str, limit: int = 5000) -> List[Dict[str, Any]]:
     return teacher_memory_load_events(teacher_id, deps=_teacher_memory_store_deps(), limit=limit)
 
 
-def _teacher_memory_active_applied_records(teacher_id: str, *, target=None, limit: int = 200):
+def _teacher_memory_active_applied_records(
+    teacher_id: str,
+    *,
+    target: Optional[str] = None,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
     return teacher_memory_active_applied_records(teacher_id, deps=_teacher_memory_store_deps(), target=target, limit=limit)
 
 
-def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200):
+def _teacher_memory_recent_proposals(teacher_id: str, limit: int = 200) -> List[Dict[str, Any]]:
     return teacher_memory_recent_proposals(teacher_id, deps=_teacher_memory_record_deps(), limit=limit)
 
 
-def _teacher_memory_find_conflicting_applied(teacher_id: str, *, proposal_id: str, target: str, content: str):
+def _teacher_memory_find_conflicting_applied(
+    teacher_id: str,
+    *,
+    proposal_id: str,
+    target: str,
+    content: str,
+) -> List[str]:
     return teacher_memory_find_conflicting_applied(
         teacher_id,
         proposal_id=proposal_id,
@@ -268,8 +284,9 @@ def _teacher_memory_find_conflicting_applied(teacher_id: str, *, proposal_id: st
     )
 
 
-def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids, by_proposal_id: str) -> None:
+def _teacher_memory_mark_superseded(teacher_id: str, proposal_ids: List[str], by_proposal_id: str) -> None:
     from .teacher_memory_record_service import teacher_memory_mark_superseded
+
     teacher_memory_mark_superseded(teacher_id, proposal_ids, by_proposal_id, deps=_teacher_memory_record_deps())
 
 
@@ -277,7 +294,13 @@ def _teacher_memory_auto_quota_reached(teacher_id: str) -> bool:
     return teacher_memory_auto_quota_reached(teacher_id, deps=_teacher_memory_record_deps())
 
 
-def _teacher_memory_find_duplicate(teacher_id: str, *, target: str, content: str, dedupe_key: str):
+def _teacher_memory_find_duplicate(
+    teacher_id: str,
+    *,
+    target: str,
+    content: str,
+    dedupe_key: str,
+) -> Optional[Dict[str, Any]]:
     return teacher_memory_find_duplicate(
         teacher_id,
         target=target,
@@ -287,11 +310,15 @@ def _teacher_memory_find_duplicate(teacher_id: str, *, target: str, content: str
     )
 
 
-def _teacher_memory_auto_infer_candidate(teacher_id: str, session_id: str, user_text: str):
+def _teacher_memory_auto_infer_candidate(
+    teacher_id: str,
+    session_id: str,
+    user_text: str,
+) -> Optional[Dict[str, Any]]:
     return teacher_memory_auto_infer_candidate(teacher_id, session_id, user_text, deps=_teacher_memory_record_deps())
 
 
-def _teacher_session_index_item(teacher_id: str, session_id: str):
+def _teacher_session_index_item(teacher_id: str, session_id: str) -> Dict[str, Any]:
     return teacher_session_index_item(teacher_id, session_id, deps=_teacher_memory_record_deps())
 
 
@@ -303,14 +330,14 @@ def _teacher_session_compaction_cycle_no(teacher_id: str, session_id: str) -> in
     return teacher_session_compaction_cycle_no(teacher_id, session_id, deps=_teacher_memory_record_deps())
 
 
-def _teacher_workspace_deps():
+def _teacher_workspace_deps() -> TeacherWorkspaceDeps:
     return TeacherWorkspaceDeps(
         teacher_workspace_dir=teacher_workspace_dir,
         teacher_daily_memory_dir=teacher_daily_memory_dir,
     )
 
 
-def _ensure_teacher_workspace(teacher_id: str):
+def _ensure_teacher_workspace(teacher_id: str) -> Any:
     return ensure_teacher_workspace_impl(teacher_id, deps=_teacher_workspace_deps())
 
 
@@ -496,11 +523,7 @@ def _teacher_context_deps():
         teacher_read_text=teacher_read_text_impl,
         teacher_workspace_file=teacher_workspace_file,
         teacher_memory_context_text=build_teacher_memory_context_reader(
-            teacher_memory_active_applied_records=lambda teacher_id, target="MEMORY", limit=20: _teacher_memory_active_applied_records(
-                teacher_id,
-                target=target,
-                limit=limit,
-            ),
+            teacher_memory_active_applied_records=_teacher_memory_active_applied_records,
             teacher_read_text=teacher_read_text_impl,
             teacher_workspace_file=teacher_workspace_file,
             teacher_memory_rank_score=_teacher_memory_rank_score,

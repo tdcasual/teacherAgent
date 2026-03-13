@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .analysis_metrics_service import AnalysisMetricsService
-from .analysis_ops_service import AnalysisOpsService
 from .analysis_metrics_store import AnalysisMetricsStore
+from .analysis_ops_service import AnalysisOpsService
 from .app_routes import register_routes
 from .auth_service import require_principal
 from .container import build_app_container

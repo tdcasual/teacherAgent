@@ -10,7 +10,6 @@ from services.api.survey_bundle_models import (
 )
 
 
-
 def test_survey_evidence_bundle_model_roundtrip() -> None:
     bundle = SurveyEvidenceBundle(
         survey_meta=SurveyMeta(title="课堂反馈", provider="provider", submission_id="sub-1"),

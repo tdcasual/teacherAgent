@@ -9,7 +9,6 @@ import pytest
 
 from scripts.build_analysis_shadow_compare_report import build_analysis_shadow_compare_report
 
-
 SCRIPT_PATH = Path('scripts/build_analysis_shadow_compare_report.py')
 
 

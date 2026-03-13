@@ -5,7 +5,6 @@ from typing import Any, Callable
 from ..specialist_agents.class_signal_analyst import (
     ClassSignalAnalystDeps,
     load_class_signal_analyst_prompt,
-    run_class_signal_analyst,
 )
 from ..specialist_agents.events import SpecialistRuntimeEvent
 from ..specialist_agents.governor import SpecialistAgentGovernor
@@ -14,12 +13,10 @@ from ..specialist_agents.runtime import SpecialistAgentRuntime
 from ..specialist_agents.survey_analyst import (
     SurveyAnalystDeps,
     load_survey_analyst_prompt,
-    run_survey_analyst,
 )
 from ..specialist_agents.video_homework_analyst import (
     VideoHomeworkAnalystDeps,
     load_video_homework_analyst_prompt,
-    run_video_homework_analyst,
 )
 from . import binding_registry
 from .binding_resolver import resolve_manifest_binding

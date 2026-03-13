@@ -6,7 +6,6 @@ from services.api.artifacts.contracts import ArtifactEnvelope
 from services.api.strategies.selector import StrategySelectionError, build_default_strategy_selector
 
 
-
 def _survey_artifact(confidence: float = 0.81) -> ArtifactEnvelope:
     return ArtifactEnvelope(
         artifact_type='survey_evidence_bundle',

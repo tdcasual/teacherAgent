@@ -6,7 +6,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from services.api.routes.survey_routes import build_router
-from services.api.survey_repository import append_survey_review_queue_item, write_survey_bundle, write_survey_report
+from services.api.survey_repository import (
+    append_survey_review_queue_item,
+    write_survey_bundle,
+    write_survey_report,
+)
 
 
 class _Core:
