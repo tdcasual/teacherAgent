@@ -19,6 +19,7 @@ from .agent_context_resolution_service import (
 from .agent_runtime_guards import maybe_guard_teacher_subject_total as _maybe_guard_teacher_subject_total
 from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
+from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
 
@@ -693,81 +694,97 @@ def _final_teacher_reply_without_tools(
     return content or None
 
 
-def run_agent_runtime(
-    messages: List[Dict[str, Any]],
-    role_hint: Optional[str],
+def _build_runtime_conversation(
     *,
     deps: AgentRuntimeDeps,
-    extra_system: Optional[str] = None,
-    skill_id: Optional[str] = None,
-    teacher_id: Optional[str] = None,
-    analysis_target: Optional[Any] = None,
-    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-) -> Dict[str, Any]:
+    role_hint: Optional[str],
+    messages: List[Dict[str, Any]],
+    skill_runtime: Optional[Any],
+    extra_system: Optional[str],
+) -> List[Dict[str, Any]]:
     convo = [{"role": "system", "content": deps.build_system_prompt(role_hint)}]
-    skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
     if skill_runtime is not None and getattr(skill_runtime, "system_prompt", None):
         convo.append({"role": "system", "content": skill_runtime.system_prompt})
     if extra_system:
         convo.append({"role": "system", "content": extra_system})
     convo.extend(messages)
+    return convo
 
-    last_user_text = _find_last_user_text(messages)
-    allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
-    role_policy = get_role_runtime_policy(role_hint)
-    is_teacher_role = role_policy.role == "teacher"
 
-    if is_teacher_role:
-        followup_reply = maybe_route_analysis_followup(
-            deps,
-            messages=messages,
-            last_user_text=last_user_text,
-            teacher_id=teacher_id,
-            analysis_target=analysis_target,
-            event_sink=event_sink,
-        )
-        if followup_reply:
-            return followup_reply
-        guarded_reply = _maybe_guard_teacher_subject_total(
-            deps,
-            messages=messages,
-            last_user_text=last_user_text,
-        )
-        if guarded_reply:
-            return guarded_reply
-        longform_reply = _maybe_generate_teacher_longform_reply(
-            deps=deps,
-            messages=messages,
-            last_user_text=last_user_text,
-            allowed=allowed,
-            convo=convo,
-            role_hint=role_hint,
-            skill_id=skill_id,
-            teacher_id=teacher_id,
-            skill_runtime=skill_runtime,
-        )
-        if longform_reply:
-            return longform_reply
-
-    tools: List[Dict[str, Any]] = []
-    if is_teacher_role:
-        tools = deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
-    reply, tool_budget_exhausted = _run_tool_loop(
+def _maybe_teacher_runtime_shortcut_reply(
+    *,
+    deps: AgentRuntimeDeps,
+    is_teacher_role: bool,
+    messages: List[Dict[str, Any]],
+    last_user_text: str,
+    allowed: Set[str],
+    convo: List[Dict[str, Any]],
+    role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
+    skill_runtime: Optional[Any],
+    analysis_target: Optional[Any],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Optional[Dict[str, Any]]:
+    if not is_teacher_role:
+        return None
+    followup_reply = maybe_route_analysis_followup(
+        deps,
+        messages=messages,
+        last_user_text=last_user_text,
+        teacher_id=teacher_id,
+        analysis_target=analysis_target,
+        event_sink=event_sink,
+    )
+    if followup_reply:
+        return followup_reply
+    guarded_reply = _maybe_guard_teacher_subject_total(
+        deps,
+        messages=messages,
+        last_user_text=last_user_text,
+    )
+    if guarded_reply:
+        return guarded_reply
+    return _maybe_generate_teacher_longform_reply(
         deps=deps,
+        messages=messages,
+        last_user_text=last_user_text,
+        allowed=allowed,
         convo=convo,
-        tools=tools,
         role_hint=role_hint,
         skill_id=skill_id,
         teacher_id=teacher_id,
         skill_runtime=skill_runtime,
-        allowed=allowed,
-        max_tool_rounds=max_tool_rounds,
-        max_tool_calls=max_tool_calls,
-        event_sink=event_sink,
     )
-    if reply is not None:
-        return {"reply": reply}
 
+
+def _runtime_tools_for_role(
+    *,
+    deps: AgentRuntimeDeps,
+    is_teacher_role: bool,
+    allowed: Set[str],
+    skill_runtime: Optional[Any],
+) -> List[Dict[str, Any]]:
+    if not is_teacher_role:
+        return []
+    return deps.teacher_tools_to_openai(allowed, skill_runtime=skill_runtime)
+
+
+def _final_runtime_reply(
+    *,
+    deps: AgentRuntimeDeps,
+    is_teacher_role: bool,
+    tools: List[Dict[str, Any]],
+    convo: List[Dict[str, Any]],
+    role_hint: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
+    skill_runtime: Optional[Any],
+    max_tool_rounds: int,
+    max_tool_calls: int,
+    tool_budget_exhausted: bool,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Dict[str, Any]:
     if is_teacher_role and tools:
         no_tools_reply = _final_teacher_reply_without_tools(
             deps=deps,
@@ -783,8 +800,85 @@ def run_agent_runtime(
         )
         if no_tools_reply:
             return {"reply": no_tools_reply}
-
     return {"reply": "工具调用过多，请明确你的需求或缩小范围。"}
+
+
+def run_agent_runtime(
+    messages: List[Dict[str, Any]],
+    role_hint: Optional[str],
+    *,
+    deps: AgentRuntimeDeps,
+    extra_system: Optional[str] = None,
+    skill_id: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    analysis_target: Optional[Any] = None,
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+) -> Dict[str, Any]:
+    skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
+    convo = _build_runtime_conversation(
+        deps=deps,
+        role_hint=role_hint,
+        messages=messages,
+        skill_runtime=skill_runtime,
+        extra_system=extra_system,
+    )
+    last_user_text = _find_last_user_text(messages)
+    allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
+    role_policy = get_role_runtime_policy(role_hint)
+    is_teacher_role = role_policy.role == "teacher"
+
+    shortcut_reply = _maybe_teacher_runtime_shortcut_reply(
+        deps=deps,
+        is_teacher_role=is_teacher_role,
+        messages=messages,
+        last_user_text=last_user_text,
+        allowed=allowed,
+        convo=convo,
+        role_hint=role_hint,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+        skill_runtime=skill_runtime,
+        analysis_target=analysis_target,
+        event_sink=event_sink,
+    )
+    if shortcut_reply:
+        return shortcut_reply
+
+    tools = _runtime_tools_for_role(
+        deps=deps,
+        is_teacher_role=is_teacher_role,
+        allowed=allowed,
+        skill_runtime=skill_runtime,
+    )
+    reply, tool_budget_exhausted = _run_tool_loop(
+        deps=deps,
+        convo=convo,
+        tools=tools,
+        role_hint=role_hint,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+        skill_runtime=skill_runtime,
+        allowed=allowed,
+        max_tool_rounds=max_tool_rounds,
+        max_tool_calls=max_tool_calls,
+        event_sink=event_sink,
+    )
+    if reply is not None:
+        return {"reply": reply}
+    return _final_runtime_reply(
+        deps=deps,
+        is_teacher_role=is_teacher_role,
+        tools=tools,
+        convo=convo,
+        role_hint=role_hint,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
+        skill_runtime=skill_runtime,
+        max_tool_rounds=max_tool_rounds,
+        max_tool_calls=max_tool_calls,
+        tool_budget_exhausted=tool_budget_exhausted,
+        event_sink=event_sink,
+    )
 
 
 def default_load_skill_runtime(

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-_log = logging.getLogger(__name__)
+from .assignment_generate_cli_service import (
+    append_assignment_generate_flag,
+    append_assignment_generate_options,
+    assignment_generate_script,
+    try_postprocess_assignment_meta,
+)
 
 
 @dataclass(frozen=True)
@@ -18,67 +22,58 @@ class AssignmentGenerateToolDeps:
     diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
 
 
-def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) -> Dict[str, Any]:
-    script = deps.app_root / "skills" / "physics-student-coach" / "scripts" / "select_practice.py"
+def _validate_assignment_requirements(
+    args: Dict[str, Any],
+    deps: AssignmentGenerateToolDeps,
+) -> Optional[Dict[str, Any]]:
+    if args.get("skip_validation"):
+        return None
     assignment_id = str(args.get("assignment_id", ""))
     date_str = deps.parse_date_str(args.get("date"))
     source = str(args.get("source") or "teacher")
     requirements_payload = args.get("requirements")
+    return deps.ensure_requirements_for_assignment(assignment_id, date_str, requirements_payload, source)
 
-    if not args.get("skip_validation"):
-        req_result = deps.ensure_requirements_for_assignment(assignment_id, date_str, requirements_payload, source)
-        if req_result and req_result.get("error"):
-            return req_result
 
-    kp_value = str(args.get("kp", "") or "")
-    cmd = ["python3", str(script), "--assignment-id", assignment_id]
-    if kp_value:
-        cmd += ["--kp", kp_value]
+def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) -> Dict[str, Any]:
+    assignment_id = str(args.get("assignment_id", ""))
+    req_result = _validate_assignment_requirements(args, deps)
+    if req_result and req_result.get("error"):
+        return req_result
 
-    question_ids = args.get("question_ids")
-    if question_ids:
-        cmd += ["--question-ids", str(question_ids)]
-
-    mode = args.get("mode")
-    if mode:
-        cmd += ["--mode", str(mode)]
-
-    date_val = args.get("date")
-    if date_val:
-        cmd += ["--date", str(date_val)]
-
-    class_name = args.get("class_name")
-    if class_name:
-        cmd += ["--class-name", str(class_name)]
-
-    student_ids = args.get("student_ids")
-    if student_ids:
-        cmd += ["--student-ids", str(student_ids)]
-
-    source_val = args.get("source")
-    if source_val:
-        cmd += ["--source", str(source_val)]
-
-    per_kp = args.get("per_kp")
-    if per_kp is not None:
-        cmd += ["--per-kp", str(per_kp)]
-
-    if args.get("core_examples"):
-        cmd += ["--core-examples", str(args.get("core_examples"))]
-
-    if args.get("generate"):
-        cmd += ["--generate"]
+    cmd = [
+        "python3",
+        str(assignment_generate_script(deps.app_root)),
+        "--assignment-id",
+        assignment_id,
+    ]
+    append_assignment_generate_options(
+        cmd,
+        (
+            ("--kp", str(args.get("kp", "") or "")),
+            ("--question-ids", args.get("question_ids")),
+            ("--mode", args.get("mode")),
+            ("--date", args.get("date")),
+            ("--class-name", args.get("class_name")),
+            ("--student-ids", args.get("student_ids")),
+            ("--source", args.get("source")),
+            ("--per-kp", args.get("per_kp")),
+            ("--core-examples", args.get("core_examples")),
+        ),
+    )
+    append_assignment_generate_flag(
+        cmd,
+        flag="--generate",
+        enabled=bool(args.get("generate")),
+    )
 
     out = deps.run_script(cmd)
-
-    try:
-        deps.postprocess_assignment_meta(assignment_id, due_at=args.get("due_at"))
-    except Exception as exc:
-        _log.debug("operation failed", exc_info=True)
-        deps.diag_log(
-            "assignment.meta.postprocess_failed",
-            {"assignment_id": assignment_id, "error": str(exc)[:200]},
-        )
+    try_postprocess_assignment_meta(
+        assignment_id=assignment_id,
+        due_at=args.get("due_at"),
+        postprocess_assignment_meta=deps.postprocess_assignment_meta,
+        diag_log=deps.diag_log,
+    )
 
     return {"ok": True, "output": out, "assignment_id": args.get("assignment_id")}
 

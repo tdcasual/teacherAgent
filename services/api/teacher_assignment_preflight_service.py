@@ -4,7 +4,7 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .subject_score_guard_service import (
     looks_like_subject_score_request,
@@ -261,13 +261,16 @@ def _subject_score_total_mode_preflight(
     )
 
 
-def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDeps) -> Optional[str]:
-    last_user_text = next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
+def _last_user_text(req: Any) -> str:
+    return next((m.content for m in reversed(req.messages) if m.role == "user"), "") or ""
 
-    subject_mode_reply = _subject_score_total_mode_preflight(req, last_user_text, deps)
-    if subject_mode_reply:
-        return subject_mode_reply
 
+def _assignment_analysis_or_skip(
+    req: Any,
+    last_user_text: str,
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> Optional[Dict[str, Any]]:
     if not deps.detect_assignment_intent(last_user_text):
         deps.diag_log("teacher_preflight.skip", {"reason": "no_assignment_intent"})
         return None
@@ -279,13 +282,20 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     if analysis.get("intent") != "assignment":
         deps.diag_log("teacher_preflight.skip", {"reason": "intent_other"})
         return None
+    return analysis
 
-    required_tools = {"assignment.generate", "assignment.requirements.save"}
+
+def _allowed_assignment_tools(
+    req: Any,
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> Tuple[set[str], Any]:
     allowed = set(deps.allowed_tools("teacher"))
     loaded = None
     try:
         from .skills.loader import load_skills
         from .skills.router import resolve_skill
+
         loaded = load_skills(deps.app_root / "skills")
         selection = resolve_skill(loaded, req.skill_id, "teacher")
         spec = selection.skill
@@ -297,40 +307,74 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     except Exception as exc:
         _log.debug("operation failed", exc_info=True)
         deps.diag_log("teacher_preflight.skill_policy_failed", {"error": str(exc)[:200]})
+    return allowed, loaded
 
-    if not required_tools.issubset(allowed):
-        title = "作业生成"
-        try:
-            if loaded:
-                hw = loaded.skills.get("physics-homework-generator")
-                if hw and hw.title:
-                    title = hw.title
-        except Exception:
-            _log.debug("operation failed", exc_info=True)
-            pass
-        deps.diag_log("teacher_preflight.skip", {"reason": "skill_policy_denied"})
-        return f"当前技能未开启作业生成功能。请切换到「{title}」技能后再试。"
 
+def _disabled_assignment_generation_reply(loaded: Any, *, deps: TeacherAssignmentPreflightDeps) -> str:
+    title = "作业生成"
+    try:
+        if loaded:
+            hw = loaded.skills.get("physics-homework-generator")
+            if hw and hw.title:
+                title = hw.title
+    except Exception:
+        _log.debug("operation failed", exc_info=True)
+    deps.diag_log("teacher_preflight.skip", {"reason": "skill_policy_denied"})
+    return f"当前技能未开启作业生成功能。请切换到「{title}」技能后再试。"
+
+
+def _assignment_identity_and_date(
+    req: Any,
+    analysis: Dict[str, Any],
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> Tuple[Any, str]:
     assignment_id = analysis.get("assignment_id") or req.assignment_id
     date_str = deps.parse_date_str(analysis.get("date") or req.assignment_date or deps.today_iso())
+    return assignment_id, date_str
 
-    missing = analysis.get("missing") or []
+
+def _missing_fields(analysis: Dict[str, Any], assignment_id: Any) -> List[str]:
+    missing = list(analysis.get("missing") or [])
     if not assignment_id and "作业ID" not in missing:
         missing = ["作业ID"] + missing
+    return missing
 
-    if missing:
-        deps.diag_log("teacher_preflight.missing", {"missing": missing})
-        prompt = analysis.get("next_prompt") or deps.format_requirements_prompt(errors=missing, include_assignment_id=not assignment_id)
-        prompt_text = str(prompt or "")
-        # 缺项较少时，统一追问缺失项，避免反复回整表模板。
-        if len(missing) <= 3 and (not prompt_text or _looks_like_full_template_prompt(prompt_text)):
-            return _build_incremental_missing_prompt(missing)
-        return prompt
 
+def _missing_reply(
+    analysis: Dict[str, Any],
+    assignment_id: Any,
+    missing: List[str],
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> str:
+    deps.diag_log("teacher_preflight.missing", {"missing": missing})
+    prompt = analysis.get("next_prompt") or deps.format_requirements_prompt(errors=missing, include_assignment_id=not assignment_id)
+    prompt_text = str(prompt or "")
+    if len(missing) <= 3 and (not prompt_text or _looks_like_full_template_prompt(prompt_text)):
+        return _build_incremental_missing_prompt(missing)
+    return str(prompt)
+
+
+def _maybe_save_requirements(
+    analysis: Dict[str, Any],
+    assignment_id: Any,
+    date_str: str,
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> None:
     requirements_payload = analysis.get("requirements") or {}
     if requirements_payload:
         deps.save_assignment_requirements(assignment_id, requirements_payload, date_str, created_by="teacher", validate=False)
 
+
+def _generate_assignment_reply(
+    analysis: Dict[str, Any],
+    assignment_id: Any,
+    date_str: str,
+    *,
+    deps: TeacherAssignmentPreflightDeps,
+) -> str:
     if not analysis.get("ready_to_generate"):
         deps.diag_log("teacher_preflight.not_ready", {"assignment_id": assignment_id})
         return analysis.get("next_prompt") or "已保存作业要求。请补充知识点或上传截图题目后再生成作业。"
@@ -339,7 +383,6 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     question_ids = analysis.get("question_ids") or []
     per_kp = analysis.get("per_kp") or 5
     mode = analysis.get("mode") or "kp"
-
     args = {
         "assignment_id": assignment_id,
         "kp": ",".join(kp_list) if kp_list else "",
@@ -354,7 +397,7 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
     if result.get("error"):
         deps.diag_log("teacher_preflight.generate_error", {"error": result.get("error")})
         return analysis.get("next_prompt") or deps.format_requirements_prompt(errors=[str(result.get("error"))])
-    output = result.get("output", "")
+
     deps.diag_log(
         "teacher_preflight.generated",
         {
@@ -363,6 +406,7 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
             "per_kp": per_kp,
         },
     )
+    output = result.get("output", "")
     return (
         f"作业已生成：{assignment_id}\n"
         f"- 日期：{date_str}\n"
@@ -370,3 +414,28 @@ def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDe
         f"- 每个知识点题量：{per_kp}\n"
         f"{output}"
     )
+
+
+def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDeps) -> Optional[str]:
+    last_user_text = _last_user_text(req)
+
+    subject_mode_reply = _subject_score_total_mode_preflight(req, last_user_text, deps)
+    if subject_mode_reply:
+        return subject_mode_reply
+
+    analysis = _assignment_analysis_or_skip(req, last_user_text, deps=deps)
+    if not analysis:
+        return None
+
+    required_tools = {"assignment.generate", "assignment.requirements.save"}
+    allowed, loaded = _allowed_assignment_tools(req, deps=deps)
+    if not required_tools.issubset(allowed):
+        return _disabled_assignment_generation_reply(loaded, deps=deps)
+
+    assignment_id, date_str = _assignment_identity_and_date(req, analysis, deps=deps)
+    missing = _missing_fields(analysis, assignment_id)
+    if missing:
+        return _missing_reply(analysis, assignment_id, missing, deps=deps)
+
+    _maybe_save_requirements(analysis, assignment_id, date_str, deps=deps)
+    return _generate_assignment_reply(analysis, assignment_id, date_str, deps=deps)

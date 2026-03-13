@@ -294,49 +294,76 @@ def _load_report_or_job(report_id: str, deps: SurveyReportReadDeps) -> Tuple[Opt
 
 
 
-def get_survey_report(report_id: str, *, teacher_id: str, deps: SurveyReportReadDeps) -> Dict[str, Any]:
-    teacher_id_final = _require_teacher_id(teacher_id)
-    report, job = _load_report_or_job(report_id, deps)
-    if report is None and job is None:
-        raise SurveyReportServiceError(404, "survey_report_not_found")
+def _detail_payload(
+    *,
+    summary: Dict[str, Any],
+    analysis_artifact: Dict[str, Any],
+    bundle_meta: Dict[str, Any],
+    effective_report_id: str,
+    teacher_id_final: str,
+    deps: SurveyReportReadDeps,
+    replay_artifact: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    detail = SurveyReportDetail(
+        report=SurveyReportSummary.model_validate(summary),
+        analysis_artifact=analysis_artifact,
+        bundle_meta=bundle_meta,
+        review_required=_review_required(effective_report_id, teacher_id_final, deps),
+    )
+    payload = detail.model_dump()
+    payload['replay_artifact'] = dict(replay_artifact or {})
+    return payload
 
-    effective_teacher_id = str((report or job or {}).get("teacher_id") or "").strip()
-    if effective_teacher_id != teacher_id_final:
-        raise SurveyReportServiceError(404, "survey_report_not_found")
 
-    if report is not None:
-        summary = _summary_from_report(report, deps)
-        effective_report_id = summary["report_id"]
-        job_id = str(report.get("job_id") or effective_report_id or "").strip() or None
-        bundle_meta = dict(report.get("bundle_meta") or {})
-        replay_artifact = _load_bundle_optional(job_id, deps)
-        bundle_meta_from_job = _bundle_meta_for_job(job_id, deps)
-        bundle_meta.setdefault("parse_confidence", bundle_meta_from_job.get("parse_confidence"))
-        bundle_meta.setdefault("missing_fields", bundle_meta_from_job.get("missing_fields") or [])
-        if bundle_meta_from_job.get("provenance") is not None:
-            bundle_meta.setdefault("provenance", bundle_meta_from_job.get("provenance"))
-        if job_id is not None:
-            bundle_meta.setdefault("job_id", job_id)
-        bundle_meta.setdefault("report_id", effective_report_id)
-        if report.get("rerun_requested") is not None:
-            bundle_meta["rerun_requested"] = bool(report.get("rerun_requested"))
-        if report.get("rerun_reason") is not None:
-            bundle_meta["rerun_reason"] = report.get("rerun_reason")
-        if report.get("rerun_requested_at") is not None:
-            bundle_meta["rerun_requested_at"] = report.get("rerun_requested_at")
-        if report.get("rerun_base_lineage") is not None:
-            bundle_meta["rerun_base_lineage"] = dict(report.get("rerun_base_lineage") or {})
-        detail = SurveyReportDetail(
-            report=SurveyReportSummary.model_validate(summary),
-            analysis_artifact=dict(report.get("analysis_artifact") or {}),
-            bundle_meta=bundle_meta,
-            review_required=_review_required(effective_report_id, teacher_id_final, deps),
-        )
-        payload = detail.model_dump()
-        payload['replay_artifact'] = dict(replay_artifact or {})
-        return payload
+def _report_bundle_meta(report: Dict[str, Any], *, effective_report_id: str, deps: SurveyReportReadDeps) -> tuple[Dict[str, Any], Optional[str]]:
+    job_id = str(report.get("job_id") or effective_report_id or "").strip() or None
+    bundle_meta = dict(report.get("bundle_meta") or {})
+    bundle_meta_from_job = _bundle_meta_for_job(job_id, deps)
+    bundle_meta.setdefault("parse_confidence", bundle_meta_from_job.get("parse_confidence"))
+    bundle_meta.setdefault("missing_fields", bundle_meta_from_job.get("missing_fields") or [])
+    if bundle_meta_from_job.get("provenance") is not None:
+        bundle_meta.setdefault("provenance", bundle_meta_from_job.get("provenance"))
+    if job_id is not None:
+        bundle_meta.setdefault("job_id", job_id)
+    bundle_meta.setdefault("report_id", effective_report_id)
+    if report.get("rerun_requested") is not None:
+        bundle_meta["rerun_requested"] = bool(report.get("rerun_requested"))
+    if report.get("rerun_reason") is not None:
+        bundle_meta["rerun_reason"] = report.get("rerun_reason")
+    if report.get("rerun_requested_at") is not None:
+        bundle_meta["rerun_requested_at"] = report.get("rerun_requested_at")
+    if report.get("rerun_base_lineage") is not None:
+        bundle_meta["rerun_base_lineage"] = dict(report.get("rerun_base_lineage") or {})
+    return bundle_meta, job_id
 
-    assert job is not None
+
+def _report_detail_payload(
+    report: Dict[str, Any],
+    *,
+    teacher_id_final: str,
+    deps: SurveyReportReadDeps,
+) -> Dict[str, Any]:
+    summary = _summary_from_report(report, deps)
+    effective_report_id = summary["report_id"]
+    bundle_meta, job_id = _report_bundle_meta(report, effective_report_id=effective_report_id, deps=deps)
+    replay_artifact = _load_bundle_optional(job_id, deps)
+    return _detail_payload(
+        summary=summary,
+        analysis_artifact=dict(report.get("analysis_artifact") or {}),
+        bundle_meta=bundle_meta,
+        effective_report_id=effective_report_id,
+        teacher_id_final=teacher_id_final,
+        deps=deps,
+        replay_artifact=replay_artifact,
+    )
+
+
+def _job_detail_payload(
+    job: Dict[str, Any],
+    *,
+    teacher_id_final: str,
+    deps: SurveyReportReadDeps,
+) -> Dict[str, Any]:
     summary = _summary_from_job(job, deps)
     effective_report_id = summary["report_id"]
     job_id = str(job.get("job_id") or effective_report_id or "").strip() or None
@@ -348,15 +375,32 @@ def get_survey_report(report_id: str, *, teacher_id: str, deps: SurveyReportRead
     bundle_meta["job_status"] = summary["status"]
     if job.get("rerun_base_lineage") is not None:
         bundle_meta["rerun_base_lineage"] = dict(job.get("rerun_base_lineage") or {})
-    detail = SurveyReportDetail(
-        report=SurveyReportSummary.model_validate(summary),
+    return _detail_payload(
+        summary=summary,
         analysis_artifact={},
         bundle_meta=bundle_meta,
-        review_required=_review_required(effective_report_id, teacher_id_final, deps),
+        effective_report_id=effective_report_id,
+        teacher_id_final=teacher_id_final,
+        deps=deps,
+        replay_artifact=replay_artifact,
     )
-    payload = detail.model_dump()
-    payload['replay_artifact'] = dict(replay_artifact or {})
-    return payload
+
+
+def get_survey_report(report_id: str, *, teacher_id: str, deps: SurveyReportReadDeps) -> Dict[str, Any]:
+    teacher_id_final = _require_teacher_id(teacher_id)
+    report, job = _load_report_or_job(report_id, deps)
+    if report is None and job is None:
+        raise SurveyReportServiceError(404, "survey_report_not_found")
+
+    effective_teacher_id = str((report or job or {}).get("teacher_id") or "").strip()
+    if effective_teacher_id != teacher_id_final:
+        raise SurveyReportServiceError(404, "survey_report_not_found")
+
+    if report is not None:
+        return _report_detail_payload(report, teacher_id_final=teacher_id_final, deps=deps)
+
+    assert job is not None
+    return _job_detail_payload(job, teacher_id_final=teacher_id_final, deps=deps)
 
 
 

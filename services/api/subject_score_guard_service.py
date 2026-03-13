@@ -79,48 +79,63 @@ def extract_requested_subject(text: str) -> Optional[str]:
     return next(iter(hits))
 
 
-def _iter_overview_subject_texts(overview: Dict[str, Any]) -> Iterable[str]:
-    if not isinstance(overview, dict):
-        return []
+def _append_non_empty_texts(texts: list[str], values: Iterable[Any]) -> None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            texts.append(value)
 
-    texts = []
+
+def _overview_meta_texts(overview: Dict[str, Any]) -> list[str]:
     meta_raw = overview.get("meta")
     meta: Dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
-    for key in ("subject", "subject_name", "subject_hint", "title", "name"):
-        value = meta.get(key)
-        if isinstance(value, str) and value.strip():
-            texts.append(value)
+    texts: list[str] = []
+    _append_non_empty_texts(texts, (meta.get(key) for key in ("subject", "subject_name", "subject_hint", "title", "name")))
+    return texts
 
-    for key in ("exam_id", "notes"):
-        value = overview.get(key)
-        if isinstance(value, str) and value.strip():
-            texts.append(value)
 
+def _overview_root_texts(overview: Dict[str, Any]) -> list[str]:
+    texts: list[str] = []
+    _append_non_empty_texts(texts, (overview.get(key) for key in ("exam_id", "notes")))
+    return texts
+
+
+def _overview_list_texts(overview: Dict[str, Any]) -> list[str]:
+    texts: list[str] = []
     for key in ("warnings", "paper_files", "answer_files", "score_files"):
         value = overview.get(key)
         if isinstance(value, list):
-            for item in value[:20]:
-                if isinstance(item, str) and item.strip():
-                    texts.append(item)
+            _append_non_empty_texts(texts, value[:20])
+    return texts
 
+
+def _overview_file_texts(overview: Dict[str, Any]) -> list[str]:
     files_raw = overview.get("files")
     files: Dict[str, Any] = files_raw if isinstance(files_raw, dict) else {}
     manifest_path_raw = str(files.get("manifest") or "").strip()
-    if manifest_path_raw:
-        try:
-            manifest_path = Path(manifest_path_raw)
-            exam_dir = manifest_path.parent
-            texts.append(exam_dir.name)
-            for folder_name in ("paper", "answers", "scores"):
-                folder = exam_dir / folder_name
-                if not folder.exists() or not folder.is_dir():
-                    continue
-                for item in list(folder.iterdir())[:20]:
-                    if item.is_file():
-                        texts.append(item.name)
-        except Exception:
-            _log.debug("subject inference dir traversal failed for %s", manifest_path_raw, exc_info=True)
+    if not manifest_path_raw:
+        return []
+    texts: list[str] = []
+    try:
+        manifest_path = Path(manifest_path_raw)
+        exam_dir = manifest_path.parent
+        texts.append(exam_dir.name)
+        for folder_name in ("paper", "answers", "scores"):
+            folder = exam_dir / folder_name
+            if not folder.exists() or not folder.is_dir():
+                continue
+            _append_non_empty_texts(texts, (item.name for item in list(folder.iterdir())[:20] if item.is_file()))
+    except Exception:
+        _log.debug("subject inference dir traversal failed for %s", manifest_path_raw, exc_info=True)
+    return texts
 
+
+def _iter_overview_subject_texts(overview: Dict[str, Any]) -> Iterable[str]:
+    if not isinstance(overview, dict):
+        return []
+    texts = _overview_meta_texts(overview)
+    texts.extend(_overview_root_texts(overview))
+    texts.extend(_overview_list_texts(overview))
+    texts.extend(_overview_file_texts(overview))
     return texts
 
 

@@ -130,6 +130,27 @@ def _normalize_completion_policy(meta: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _attempt_int_value(attempt: Dict[str, Any], key: str) -> int:
+    try:
+        return int(attempt.get(key) or 0)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("numeric conversion failed", exc_info=True)
+        return 0
+
+
+def _attempt_has_positive_float(attempt: Dict[str, Any], key: str) -> bool:
+    try:
+        raw_value = attempt.get(key)
+        return raw_value is not None and float(str(raw_value)) > 0
+    except Exception:  # policy: allowed-broad-except
+        return False
+
+
+def _attempt_items_meet_minimum(attempt: Dict[str, Any], minimum: int) -> bool:
+    items = attempt.get("items")
+    return isinstance(items, list) and len(items) >= minimum
+
+
 def _attempt_meets_min_graded_total(attempt: Dict[str, Any], min_graded_total: int) -> bool:
     if not isinstance(attempt, dict):
         return False
@@ -137,33 +158,16 @@ def _attempt_meets_min_graded_total(attempt: Dict[str, Any], min_graded_total: i
     if minimum <= 0:
         return True
     if "graded_total" in attempt:
-        try:
-            graded_total = int(attempt.get("graded_total") or 0)
-        except Exception:  # policy: allowed-broad-except
-            _log.debug("numeric conversion failed", exc_info=True)
-            graded_total = 0
-        return graded_total >= minimum
+        return _attempt_int_value(attempt, "graded_total") >= minimum
     if attempt.get("valid_submission") is False:
         return False
-    try:
-        score_earned_raw = attempt.get("score_earned")
-        if score_earned_raw is not None and float(str(score_earned_raw)) > 0:
-            return True
-    except Exception:  # policy: allowed-broad-except
-        pass  # policy: allowed-broad-except
-    try:
-        score_raw = attempt.get("score")
-        if score_raw is not None and float(str(score_raw)) > 0:
-            return True
-    except Exception:  # policy: allowed-broad-except
-        pass  # policy: allowed-broad-except
-    try:
-        if int(attempt.get("correct") or 0) > 0:
-            return True
-    except Exception:  # policy: allowed-broad-except
-        pass  # policy: allowed-broad-except
-    items = attempt.get("items")
-    return isinstance(items, list) and len(items) >= minimum
+    if _attempt_has_positive_float(attempt, "score_earned"):
+        return True
+    if _attempt_has_positive_float(attempt, "score"):
+        return True
+    if _attempt_int_value(attempt, "correct") > 0:
+        return True
+    return _attempt_items_meet_minimum(attempt, minimum)
 
 
 def _attempt_ts(value: Any) -> float:

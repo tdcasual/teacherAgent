@@ -95,12 +95,43 @@ def _as_str_list(value: Any) -> List[str]:
     return out
 
 
-def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
-    include_keys = ("includes", "references")
+def _include_paths(fm: Dict[str, Any]) -> List[str]:
     include_paths: List[str] = []
-    for key in include_keys:
+    for key in ("includes", "references"):
         include_paths.extend(_as_str_list(fm.get(key)))
+    return include_paths
 
+
+def _resolve_include_target(folder: Path, base: Path, rel_text: str) -> Optional[Tuple[Path, Path]]:
+    rel_path = Path(rel_text)
+    if rel_path.is_absolute():
+        _log.warning("skip absolute include path: %s", rel_text)
+        return None
+    target = _normalize_path(folder / rel_path)
+    if target == base or base not in target.parents:
+        _log.warning("skip include outside skill dir: %s", rel_text)
+        return None
+    if not target.exists() or not target.is_file():
+        _log.warning("skip missing include path: %s", rel_text)
+        return None
+    return rel_path, target
+
+
+def _read_include_block(rel_path: Path, target: Path, rel_text: str) -> Optional[str]:
+    try:
+        text = target.read_text(encoding="utf-8").strip()
+    except Exception:
+        _log.warning("failed to read include path: %s", rel_text, exc_info=True)
+        return None
+    if not text:
+        return None
+    if len(text) > _SKILL_INCLUDE_MAX_FILE_CHARS:
+        text = text[:_SKILL_INCLUDE_MAX_FILE_CHARS]
+    return f"[Reference: {rel_path.as_posix()}]\n{text}"
+
+
+def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
+    include_paths = _include_paths(fm)
     if not include_paths:
         return ""
 
@@ -112,28 +143,13 @@ def _collect_skill_includes(folder: Path, fm: Dict[str, Any]) -> str:
         rel_text = str(rel).strip()
         if not rel_text:
             continue
-        rel_path = Path(rel_text)
-        if rel_path.is_absolute():
-            _log.warning("skip absolute include path: %s", rel_text)
+        resolved = _resolve_include_target(folder, base, rel_text)
+        if resolved is None:
             continue
-        target = _normalize_path(folder / rel_path)
-        if target == base or base not in target.parents:
-            _log.warning("skip include outside skill dir: %s", rel_text)
+        rel_path, target = resolved
+        block = _read_include_block(rel_path, target, rel_text)
+        if not block:
             continue
-        if not target.exists() or not target.is_file():
-            _log.warning("skip missing include path: %s", rel_text)
-            continue
-        try:
-            text = target.read_text(encoding="utf-8").strip()
-        except Exception:
-            _log.warning("failed to read include path: %s", rel_text, exc_info=True)
-            continue
-        if not text:
-            continue
-        if len(text) > _SKILL_INCLUDE_MAX_FILE_CHARS:
-            text = text[:_SKILL_INCLUDE_MAX_FILE_CHARS]
-
-        block = f"[Reference: {rel_path.as_posix()}]\n{text}"
         remain = _SKILL_INCLUDE_MAX_TOTAL_CHARS - total_chars
         if remain <= 0:
             break
@@ -219,118 +235,134 @@ def _ensure_minimal_routing(spec: SkillSpec) -> SkillSpec:
     return replace(spec, routing=normalized_routing)
 
 
+def _load_yaml_skill_spec(skill_id: str, spec_path: Path) -> Tuple[Optional[SkillSpec], Optional[SkillLoadError]]:
+    try:
+        raw = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        _log.debug("file read failed", exc_info=True)
+        return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"YAML parse failed: {exc}")
+    if not isinstance(raw, dict):
+        return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml must be a mapping")
+    try:
+        spec = parse_skill_spec(skill_id=skill_id, source_path=str(spec_path), raw=raw)
+        return _ensure_minimal_routing(spec), None
+    except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
+        return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"invalid skill spec: {exc}")
+
+
+def _derive_markdown_title(skill_id: str, fm: Dict[str, Any], body: str) -> str:
+    title = str(fm.get("name") or fm.get("title") or "").strip()
+    if title:
+        return title
+    for line in body.splitlines():
+        stripped_line = line.strip()
+        if stripped_line.startswith("#"):
+            heading = stripped_line.lstrip("#").strip()
+            return heading.split("\\n", 1)[0].strip() if "\\n" in heading else heading
+    return skill_id
+
+
+def _derive_markdown_instructions(folder: Path, fm: Dict[str, Any], body: str) -> Tuple[str, str]:
+    desc = str(fm.get("description") or fm.get("desc") or "").strip()
+    explicit_instructions = str(fm.get("instructions") or "").strip()
+    instructions = body if body else (explicit_instructions or desc)
+    include_text = _collect_skill_includes(folder, fm)
+    if include_text:
+        instructions = f"{instructions}\n\n{include_text}" if instructions else include_text
+    return desc, instructions
+
+
+def _derive_markdown_agent_raw(fm: Dict[str, Any]) -> Dict[str, Any]:
+    agent_raw = _as_dict(fm.get("agent"))
+    if agent_raw:
+        return agent_raw
+    top_prompt_modules = _as_str_list(fm.get("prompt_modules") or fm.get("promptModules"))
+    top_context_providers = _as_str_list(fm.get("context_providers") or fm.get("contextProviders"))
+    top_tools = _as_dict(fm.get("tools"))
+    top_budgets = _as_dict(fm.get("budgets"))
+    top_model_policy = _as_dict(fm.get("model_policy") or fm.get("modelPolicy"))
+    if top_prompt_modules:
+        agent_raw["prompt_modules"] = top_prompt_modules
+    if top_context_providers:
+        agent_raw["context_providers"] = top_context_providers
+    if top_tools:
+        agent_raw["tools"] = top_tools
+    if top_budgets:
+        agent_raw["budgets"] = top_budgets
+    if top_model_policy:
+        agent_raw["model_policy"] = top_model_policy
+    return agent_raw
+
+
+def _derive_markdown_ui_raw(fm: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    ui_raw = _as_dict(fm.get("ui"))
+    prompts_list = _as_str_list(fm.get("prompts")) or _as_str_list(ui_raw.get("prompts"))
+    examples_list = _as_str_list(fm.get("examples")) or _as_str_list(ui_raw.get("examples"))
+    return prompts_list, examples_list
+
+
+def _derived_markdown_raw(skill_id: str, folder: Path, fm: Dict[str, Any], body: str) -> Dict[str, Any]:
+    title = _derive_markdown_title(skill_id, fm, body)
+    desc, instructions = _derive_markdown_instructions(folder, fm, body)
+    keywords = _as_str_list(fm.get("keywords"))
+    routing_raw = _as_dict(fm.get("routing")) or ({"keywords": keywords} if keywords else {})
+    allowed_roles_list = _as_str_list(fm.get("allowed_roles") or fm.get("allowed-roles"))
+    prompts_list, examples_list = _derive_markdown_ui_raw(fm)
+    agent_raw = _derive_markdown_agent_raw(fm)
+
+    derived_raw: Dict[str, Any] = {
+        "schema_version": fm.get("schema_version") or fm.get("schemaVersion") or 1,
+        "title": title,
+        "description": desc,
+        "instructions": instructions,
+        "agent": agent_raw
+        if agent_raw
+        else {
+            "prompt_modules": [],
+            "context_providers": [],
+            "tools": {},
+            "budgets": {},
+            "model_policy": {},
+        },
+        "routing": routing_raw,
+    }
+    if allowed_roles_list:
+        derived_raw["allowed_roles"] = allowed_roles_list
+    if prompts_list or examples_list:
+        derived_raw["ui"] = {}
+        if prompts_list:
+            derived_raw["ui"]["prompts"] = prompts_list
+        if examples_list:
+            derived_raw["ui"]["examples"] = examples_list
+    return derived_raw
+
+
+def _load_markdown_skill_spec(skill_id: str, folder: Path, skill_md_path: Path) -> Tuple[Optional[SkillSpec], Optional[SkillLoadError]]:
+    try:
+        content = skill_md_path.read_text(encoding="utf-8").strip()
+    except Exception as exc:
+        _log.debug("file read failed", exc_info=True)
+        return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"SKILL.md read failed: {exc}")
+
+    fm, body = _parse_yaml_frontmatter(content)
+    derived_raw = _derived_markdown_raw(skill_id, folder, fm, body)
+    try:
+        spec = parse_skill_spec(skill_id=skill_id, source_path=str(skill_md_path), raw=derived_raw)
+        return _ensure_minimal_routing(spec), None
+    except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
+        return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"invalid SKILL.md derived spec: {exc}")
+
+
 def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[SkillSpec], Optional[SkillLoadError]]:
     spec_path = folder / "skill.yaml"
     if spec_path.exists():
-        try:
-            raw = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            _log.debug("file read failed", exc_info=True)
-            return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"YAML parse failed: {exc}")
-        if not isinstance(raw, dict):
-            return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml must be a mapping")
-        try:
-            spec = parse_skill_spec(skill_id=skill_id, source_path=str(spec_path), raw=raw)
-            spec = _ensure_minimal_routing(spec)
-            return spec, None
-        except Exception as exc:
-            _log.debug("operation failed", exc_info=True)
-            return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message=f"invalid skill spec: {exc}")
+        return _load_yaml_skill_spec(skill_id, spec_path)
 
     skill_md_path = folder / "SKILL.md"
     if skill_md_path.exists():
-        try:
-            content = skill_md_path.read_text(encoding="utf-8").strip()
-        except Exception as exc:
-            _log.debug("file read failed", exc_info=True)
-            return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"SKILL.md read failed: {exc}")
-
-        fm, body = _parse_yaml_frontmatter(content)
-
-        # Derive title from frontmatter or first heading
-        title = str(fm.get("name") or fm.get("title") or "").strip()
-        if not title:
-            for line in body.splitlines():
-                stripped_line = line.strip()
-                if stripped_line.startswith("#"):
-                    title = stripped_line.lstrip("#").strip()
-                    if "\\n" in title:
-                        title = title.split("\\n", 1)[0].strip()
-                    break
-        title = title or skill_id
-
-        desc = str(fm.get("description") or fm.get("desc") or "").strip()
-        explicit_instructions = str(fm.get("instructions") or "").strip()
-        instructions = body if body else (explicit_instructions or desc)
-        include_text = _collect_skill_includes(folder, fm)
-        if include_text:
-            if instructions:
-                instructions = f"{instructions}\n\n{include_text}"
-            else:
-                instructions = include_text
-
-        keywords = _as_str_list(fm.get("keywords"))
-
-        allowed_roles_raw = fm.get("allowed_roles") or fm.get("allowed-roles")
-        allowed_roles_list: List[str] = _as_str_list(allowed_roles_raw)
-
-        ui_raw = _as_dict(fm.get("ui"))
-        prompts_list: List[str] = _as_str_list(fm.get("prompts")) or _as_str_list(ui_raw.get("prompts"))
-        examples_list: List[str] = _as_str_list(fm.get("examples")) or _as_str_list(ui_raw.get("examples"))
-
-        routing_raw = _as_dict(fm.get("routing"))
-        if not routing_raw and keywords:
-            routing_raw = {"keywords": keywords}
-
-        agent_raw = _as_dict(fm.get("agent"))
-        if not agent_raw:
-            # Allow top-level advanced fields for markdown-only skills.
-            top_prompt_modules = _as_str_list(fm.get("prompt_modules") or fm.get("promptModules"))
-            top_context_providers = _as_str_list(fm.get("context_providers") or fm.get("contextProviders"))
-            top_tools = _as_dict(fm.get("tools"))
-            top_budgets = _as_dict(fm.get("budgets"))
-            top_model_policy = _as_dict(fm.get("model_policy") or fm.get("modelPolicy"))
-            if top_prompt_modules:
-                agent_raw["prompt_modules"] = top_prompt_modules
-            if top_context_providers:
-                agent_raw["context_providers"] = top_context_providers
-            if top_tools:
-                agent_raw["tools"] = top_tools
-            if top_budgets:
-                agent_raw["budgets"] = top_budgets
-            if top_model_policy:
-                agent_raw["model_policy"] = top_model_policy
-
-        derived_raw: Dict[str, Any] = {
-            "schema_version": fm.get("schema_version") or fm.get("schemaVersion") or 1,
-            "title": title,
-            "description": desc,
-            "instructions": instructions,
-            "agent": agent_raw if agent_raw else {
-                "prompt_modules": [],
-                "context_providers": [],
-                "tools": {},
-                "budgets": {},
-                "model_policy": {},
-            },
-            "routing": routing_raw,
-        }
-        if allowed_roles_list:
-            derived_raw["allowed_roles"] = allowed_roles_list
-        if prompts_list or examples_list:
-            derived_raw["ui"] = {}
-            if prompts_list:
-                derived_raw["ui"]["prompts"] = prompts_list
-            if examples_list:
-                derived_raw["ui"]["examples"] = examples_list
-
-        try:
-            spec = parse_skill_spec(skill_id=skill_id, source_path=str(skill_md_path), raw=derived_raw)
-            spec = _ensure_minimal_routing(spec)
-            return spec, None
-        except Exception as exc:
-            _log.debug("operation failed", exc_info=True)
-            return None, SkillLoadError(skill_id=skill_id, path=str(skill_md_path), message=f"invalid SKILL.md derived spec: {exc}")
+        return _load_markdown_skill_spec(skill_id, folder, skill_md_path)
 
     return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml not found")
 

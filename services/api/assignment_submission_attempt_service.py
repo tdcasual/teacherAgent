@@ -49,8 +49,7 @@ def counted_grade_item(item: Dict[str, Any], *, deps: AssignmentSubmissionAttemp
     return conf >= deps.grade_count_conf_threshold
 
 
-def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionAttemptDeps) -> Optional[Dict[str, Any]]:
-    report_path = attempt_dir / "grading_report.json"
+def _load_attempt_report(report_path: Path) -> Optional[Dict[str, Any]]:
     if not report_path.exists():
         return None
     try:
@@ -58,57 +57,81 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
     except Exception:  # policy: allowed-broad-except
         _log.warning("corrupt grading_report.json at %s", report_path, exc_info=True)
         return None
-    if not isinstance(report, dict):
-        return None
+    return report if isinstance(report, dict) else None
 
+
+def _report_items(report: Dict[str, Any]) -> List[Any]:
     items = report.get("items") or []
-    if not isinstance(items, list):
-        items = []
+    return items if isinstance(items, list) else []
 
+
+def _counted_score_summary(
+    items: List[Any],
+    *,
+    deps: AssignmentSubmissionAttemptDeps,
+) -> tuple[float, int]:
     score_earned = 0.0
     counted = 0
-    for it in items:
-        if not isinstance(it, dict):
+    for item in items:
+        if not isinstance(item, dict):
             continue
-        if counted_grade_item(it, deps=deps):
-            counted += 1
-            try:
-                score_earned += float(it.get("score") or 0.0)
-            except Exception:  # policy: allowed-broad-except
-                _log.warning("numeric conversion failed", exc_info=True)
-                pass  # policy: allowed-broad-except
+        if not counted_grade_item(item, deps=deps):
+            continue
+        counted += 1
+        try:
+            score_earned += float(item.get("score") or 0.0)
+        except Exception:  # policy: allowed-broad-except
+            _log.warning("numeric conversion failed", exc_info=True)
+    return score_earned, counted
 
-    try:
-        graded_total = int(report.get("graded_total") or 0)
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("numeric conversion failed", exc_info=True)
-        graded_total = counted
-    try:
-        correct = int(report.get("correct") or 0)
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("numeric conversion failed", exc_info=True)
-        correct = 0
-    try:
-        ungraded = int(report.get("ungraded") or 0)
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("numeric conversion failed", exc_info=True)
-        ungraded = 0
 
-    submitted_at = ""
+def _report_int(report: Dict[str, Any], key: str, default: int) -> int:
     try:
-        m = re.match(r"submission_(\d{8})_(\d{6})", attempt_dir.name)
-        if m:
-            dt = datetime.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M%S")
-            submitted_at = dt.isoformat(timespec="seconds")
+        return int(report.get(key) or 0)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("numeric conversion failed", exc_info=True)
+        return default
+
+
+def _submitted_at_from_attempt_name(attempt_name: str) -> str:
+    try:
+        match = re.match(r"submission_(\d{8})_(\d{6})", attempt_name)
+        if not match:
+            return ""
+        dt = datetime.strptime(match.group(1) + match.group(2), "%Y%m%d%H%M%S")
+        return dt.isoformat(timespec="seconds")
     except Exception:  # policy: allowed-broad-except
         _log.warning("operation failed", exc_info=True)
-        submitted_at = ""
-    if not submitted_at:
-        try:
-            submitted_at = datetime.fromtimestamp(report_path.stat().st_mtime).isoformat(timespec="seconds")
-        except Exception:  # policy: allowed-broad-except
-            _log.warning("file stat failed", exc_info=True)
-            submitted_at = ""
+        return ""
+
+
+def _submitted_at_from_report_mtime(report_path: Path) -> str:
+    try:
+        return datetime.fromtimestamp(report_path.stat().st_mtime).isoformat(timespec="seconds")
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("file stat failed", exc_info=True)
+        return ""
+
+
+def _resolve_submitted_at(attempt_dir: Path, report_path: Path) -> str:
+    submitted_at = _submitted_at_from_attempt_name(attempt_dir.name)
+    if submitted_at:
+        return submitted_at
+    return _submitted_at_from_report_mtime(report_path)
+
+
+def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionAttemptDeps) -> Optional[Dict[str, Any]]:
+    report_path = attempt_dir / "grading_report.json"
+    report = _load_attempt_report(report_path)
+    if report is None:
+        return None
+
+    items = _report_items(report)
+    score_earned, counted = _counted_score_summary(items, deps=deps)
+    graded_total = _report_int(report, "graded_total", counted)
+    correct = _report_int(report, "correct", 0)
+    ungraded = _report_int(report, "ungraded", 0)
+    submitted_at = _resolve_submitted_at(attempt_dir, report_path)
 
     return {
         "attempt_id": attempt_dir.name,

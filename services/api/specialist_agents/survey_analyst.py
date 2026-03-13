@@ -65,70 +65,85 @@ def _safe_float(value: Any) -> Optional[float]:
 
 
 
-def _fallback_artifact(bundle: SurveyEvidenceBundle) -> Dict[str, Any]:
-    key_signals: List[Dict[str, Any]] = []
-    group_differences: List[Dict[str, Any]] = []
-    teaching_recommendations: List[str] = []
-
-    if bundle.question_summaries:
-        question = bundle.question_summaries[0]
-        total = sum(int(value or 0) for value in question.stats.values())
-        top_label = ""
-        top_count = 0
-        for label, count in question.stats.items():
-            count_value = int(count or 0)
-            if count_value > top_count:
-                top_label = str(label)
-                top_count = count_value
-        detail = question.prompt or question.question_id
-        if top_label and total > 0:
-            detail = f"{detail} 中，‘{top_label}’反馈 {top_count}/{total}。"
-        key_signals.append(
+def _question_signal_fallback(bundle: SurveyEvidenceBundle) -> tuple[List[Dict[str, Any]], List[str]]:
+    if not bundle.question_summaries:
+        return [], []
+    question = bundle.question_summaries[0]
+    total = sum(int(value or 0) for value in question.stats.values())
+    top_label = ""
+    top_count = 0
+    for label, count in question.stats.items():
+        count_value = int(count or 0)
+        if count_value > top_count:
+            top_label = str(label)
+            top_count = count_value
+    detail = question.prompt or question.question_id
+    if top_label and total > 0:
+        detail = f"{detail} 中，‘{top_label}’反馈 {top_count}/{total}。"
+    return (
+        [
             {
                 "title": question.prompt or question.question_id,
                 "detail": detail,
                 "evidence_refs": [f"question:{question.question_id}"],
             }
-        )
-        teaching_recommendations.append(
-            f"围绕‘{question.prompt or question.question_id}’增加分步讲解与当堂检测。"
-        )
+        ],
+        [f"围绕‘{question.prompt or question.question_id}’增加分步讲解与当堂检测。"],
+    )
 
-    if bundle.free_text_signals:
-        signal = bundle.free_text_signals[0]
-        key_signals.append(
+
+def _free_text_signal_fallback(bundle: SurveyEvidenceBundle) -> tuple[List[Dict[str, Any]], List[str]]:
+    if not bundle.free_text_signals:
+        return [], []
+    signal = bundle.free_text_signals[0]
+    return (
+        [
             {
                 "title": f"高频反馈：{signal.theme}",
                 "detail": f"共有 {int(signal.evidence_count or 0)} 条反馈提到‘{signal.theme}’。",
                 "evidence_refs": [f"theme:{signal.theme}"],
             }
-        )
-        teaching_recommendations.append(f"针对‘{signal.theme}’补充示例、板书拆解或复盘练习。")
+        ],
+        [f"针对‘{signal.theme}’补充示例、板书拆解或复盘练习。"],
+    )
 
+
+def _group_differences_fallback(bundle: SurveyEvidenceBundle) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
     for group in bundle.group_breakdowns[:3]:
         stats_desc = ""
         if group.stats:
             first_key = next(iter(group.stats.keys()))
             stats_desc = f"，{first_key}={group.stats[first_key]}"
-        group_differences.append(
+        items.append(
             {
                 "group_name": group.group_name,
                 "summary": f"样本 {group.sample_size or '未知'}{stats_desc}。",
             }
         )
+    return items
 
-    if not teaching_recommendations:
-        teaching_recommendations.append("先基于当前问卷结果做一次针对性复盘，并补充下一轮验证题。")
 
+def _fallback_executive_summary(bundle: SurveyEvidenceBundle, key_signals: List[Dict[str, Any]]) -> str:
     summary_parts: List[str] = []
     if bundle.audience_scope.class_name:
         summary_parts.append(f"{bundle.audience_scope.class_name} 的问卷结果已完成初步分析")
     if key_signals:
         summary_parts.append(str(key_signals[0].get("detail") or key_signals[0].get("title") or ""))
-    executive_summary = "；".join([part for part in summary_parts if part]) or "已生成基于问卷证据的初步班级分析。"
+    return "；".join([part for part in summary_parts if part]) or "已生成基于问卷证据的初步班级分析。"
+
+
+def _fallback_artifact(bundle: SurveyEvidenceBundle) -> Dict[str, Any]:
+    key_signals, teaching_recommendations = _question_signal_fallback(bundle)
+    free_text_signals, free_text_recommendations = _free_text_signal_fallback(bundle)
+    key_signals.extend(free_text_signals)
+    teaching_recommendations.extend(free_text_recommendations)
+    group_differences = _group_differences_fallback(bundle)
+    if not teaching_recommendations:
+        teaching_recommendations.append("先基于当前问卷结果做一次针对性复盘，并补充下一轮验证题。")
 
     return {
-        "executive_summary": executive_summary,
+        "executive_summary": _fallback_executive_summary(bundle, key_signals),
         "key_signals": key_signals,
         "group_differences": group_differences,
         "teaching_recommendations": _dedupe_strings(teaching_recommendations),

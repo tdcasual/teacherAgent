@@ -31,33 +31,42 @@ def build_media_extract_deps(core: Any | None = None) -> MediaExtractDeps:
     )
 
 
-
-def extract_multimodal_submission(
-    submission: MultimodalSubmissionBundle | dict[str, Any],
+def _extract_transcript_segments(
+    bundle: MultimodalSubmissionBundle,
     *,
     deps: MediaExtractDeps,
-) -> MultimodalSubmissionBundle:
-    bundle = MultimodalSubmissionBundle.model_validate(submission)
-    failures: list[MediaExtractionFailure] = []
-
-    transcript_segments: list[MediaTextSegment] = []
+) -> tuple[list[MediaTextSegment], list[MediaExtractionFailure]]:
     try:
-        transcript_segments = _normalize_text_segments(deps.transcribe(bundle), default_kind='asr')
+        segments = _normalize_text_segments(deps.transcribe(bundle), default_kind='asr')
+        return segments, []
     except Exception as exc:
-        failures.append(
-            MediaExtractionFailure(stage='transcribe', code='extract_failed', message=str(exc)[:200], retryable=True)
-        )
         deps.diag_log('multimodal.extract.transcribe_failed', {'error': str(exc)[:200]})
+        return [], [
+            MediaExtractionFailure(stage='transcribe', code='extract_failed', message=str(exc)[:200], retryable=True)
+        ]
 
-    keyframe_evidence: list[MediaFrameEvidence] = []
+
+def _extract_keyframe_evidence(
+    bundle: MultimodalSubmissionBundle,
+    *,
+    deps: MediaExtractDeps,
+) -> tuple[list[MediaFrameEvidence], list[MediaExtractionFailure]]:
     try:
-        keyframe_evidence = _normalize_frame_evidence(deps.extract_keyframes(bundle))
+        return _normalize_frame_evidence(deps.extract_keyframes(bundle)), []
     except Exception as exc:
-        failures.append(
-            MediaExtractionFailure(stage='keyframes', code='extract_failed', message=str(exc)[:200], retryable=True)
-        )
         deps.diag_log('multimodal.extract.keyframes_failed', {'error': str(exc)[:200]})
+        return [], [
+            MediaExtractionFailure(stage='keyframes', code='extract_failed', message=str(exc)[:200], retryable=True)
+        ]
 
+
+def _enrich_keyframes(
+    bundle: MultimodalSubmissionBundle,
+    keyframe_evidence: list[MediaFrameEvidence],
+    *,
+    deps: MediaExtractDeps,
+) -> tuple[list[MediaFrameEvidence], list[MediaExtractionFailure]]:
+    failures: list[MediaExtractionFailure] = []
     enriched_frames: list[MediaFrameEvidence] = []
     for frame in keyframe_evidence:
         enriched = frame
@@ -73,6 +82,51 @@ def extract_multimodal_submission(
                 )
                 deps.diag_log('multimodal.extract.frame_ocr_failed', {'frame_id': frame.frame_id, 'error': str(exc)[:200]})
         enriched_frames.append(enriched)
+    return enriched_frames, failures
+
+
+def _resolve_extraction_status(
+    *,
+    failures: list[MediaExtractionFailure],
+    transcript_segments: list[MediaTextSegment],
+    subtitle_segments: list[MediaTextSegment],
+    enriched_frames: list[MediaFrameEvidence],
+) -> str:
+    if not failures:
+        return 'completed'
+    if transcript_segments or subtitle_segments or enriched_frames:
+        return 'partial'
+    return 'failed'
+
+
+def _build_extraction_provenance(
+    provenance: dict[str, Any],
+    *,
+    deps: MediaExtractDeps,
+) -> dict[str, Any]:
+    merged = dict(provenance or {})
+    merged.update(
+        {
+            'extracted_at': deps.now_iso(),
+            'extract_timeout_sec': int(deps.timeout_sec()),
+            'extract_pipeline': 'media_extract_service_v1',
+        }
+    )
+    return merged
+
+
+
+def extract_multimodal_submission(
+    submission: MultimodalSubmissionBundle | dict[str, Any],
+    *,
+    deps: MediaExtractDeps,
+) -> MultimodalSubmissionBundle:
+    bundle = MultimodalSubmissionBundle.model_validate(submission)
+    transcript_segments, failures = _extract_transcript_segments(bundle, deps=deps)
+    keyframe_evidence, keyframe_failures = _extract_keyframe_evidence(bundle, deps=deps)
+    enriched_frames, ocr_failures = _enrich_keyframes(bundle, keyframe_evidence, deps=deps)
+    failures.extend(keyframe_failures)
+    failures.extend(ocr_failures)
 
     missing_fields = _dedupe_strings(list(bundle.missing_fields or []))
     if not transcript_segments:
@@ -82,18 +136,13 @@ def extract_multimodal_submission(
     if enriched_frames and any(not str(frame.ocr_text or '').strip() for frame in enriched_frames):
         missing_fields = _dedupe_strings(missing_fields + ['ocr_text_more_frames'])
 
-    status = 'completed'
-    if failures:
-        status = 'partial' if (transcript_segments or bundle.subtitle_segments or enriched_frames) else 'failed'
-
-    provenance = dict(bundle.provenance or {})
-    provenance.update(
-        {
-            'extracted_at': deps.now_iso(),
-            'extract_timeout_sec': int(deps.timeout_sec()),
-            'extract_pipeline': 'media_extract_service_v1',
-        }
+    status = _resolve_extraction_status(
+        failures=failures,
+        transcript_segments=transcript_segments,
+        subtitle_segments=bundle.subtitle_segments,
+        enriched_frames=enriched_frames,
     )
+    provenance = _build_extraction_provenance(dict(bundle.provenance or {}), deps=deps)
 
     parse_confidence = _compute_parse_confidence(
         base=bundle.parse_confidence,

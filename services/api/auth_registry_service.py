@@ -771,55 +771,12 @@ class AuthRegistryStore:
         if role_norm not in {"student", "teacher"}:
             return {"ok": False, "error": "invalid_role"}
 
-        id_filter = {str(item or "").strip() for item in (ids or []) if str(item or "").strip()}
-
-        items: List[Dict[str, Any]] = []
-        if role_norm == "student":
-            for profile in self._list_student_profiles():
-                sid = str(profile.get("student_id") or "").strip()
-                if not sid:
-                    continue
-                if id_filter and sid not in id_filter:
-                    continue
-                row = self._ensure_student_auth(
-                    student_id=sid,
-                    student_name=str(profile.get("student_name") or "").strip(),
-                    class_name=str(profile.get("class_name") or "").strip(),
-                    regenerate_token=True,
-                )
-                if not row:
-                    continue
-                items.append(
-                    {
-                        "student_id": sid,
-                        "student_name": str(row.get("student_name") or ""),
-                        "class_name": str(row.get("class_name") or ""),
-                        "token": str(row.get("_plain_token") or ""),
-                    }
-                )
-        else:
-            for teacher in self._list_teacher_identities():
-                tid = str(teacher.get("teacher_id") or "").strip()
-                if not tid:
-                    continue
-                if id_filter and tid not in id_filter:
-                    continue
-                row = self._ensure_teacher_auth(
-                    teacher_id=tid,
-                    teacher_name=str(teacher.get("teacher_name") or "").strip() or tid,
-                    email=str(teacher.get("email") or "").strip() or None,
-                    regenerate_token=True,
-                )
-                if not row:
-                    continue
-                items.append(
-                    {
-                        "teacher_id": tid,
-                        "teacher_name": str(row.get("teacher_name") or ""),
-                        "email": str(row.get("email") or ""),
-                        "token": str(row.get("_plain_token") or ""),
-                    }
-                )
+        id_filter = _normalize_export_ids(ids)
+        items = (
+            self._export_student_token_items(id_filter)
+            if role_norm == "student"
+            else self._export_teacher_token_items(id_filter)
+        )
 
         csv_text = self._to_csv(role_norm, items)
         with self._connect() as conn:
@@ -838,6 +795,68 @@ class AuthRegistryStore:
             "count": len(items),
             "items": items,
             "csv": csv_text,
+        }
+
+    def _export_student_token_items(self, id_filter: set[str]) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        for profile in self._list_student_profiles():
+            item = self._build_student_export_token_item(profile, id_filter)
+            if item is not None:
+                items.append(item)
+        return items
+
+    def _build_student_export_token_item(
+        self,
+        profile: Dict[str, Any],
+        id_filter: set[str],
+    ) -> Optional[Dict[str, Any]]:
+        sid = str(profile.get("student_id") or "").strip()
+        if not sid or (id_filter and sid not in id_filter):
+            return None
+        row = self._ensure_student_auth(
+            student_id=sid,
+            student_name=str(profile.get("student_name") or "").strip(),
+            class_name=str(profile.get("class_name") or "").strip(),
+            regenerate_token=True,
+        )
+        if not row:
+            return None
+        return {
+            "student_id": sid,
+            "student_name": str(row.get("student_name") or ""),
+            "class_name": str(row.get("class_name") or ""),
+            "token": str(row.get("_plain_token") or ""),
+        }
+
+    def _export_teacher_token_items(self, id_filter: set[str]) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        for teacher in self._list_teacher_identities():
+            item = self._build_teacher_export_token_item(teacher, id_filter)
+            if item is not None:
+                items.append(item)
+        return items
+
+    def _build_teacher_export_token_item(
+        self,
+        teacher: Dict[str, str],
+        id_filter: set[str],
+    ) -> Optional[Dict[str, Any]]:
+        tid = str(teacher.get("teacher_id") or "").strip()
+        if not tid or (id_filter and tid not in id_filter):
+            return None
+        row = self._ensure_teacher_auth(
+            teacher_id=tid,
+            teacher_name=str(teacher.get("teacher_name") or "").strip() or tid,
+            email=str(teacher.get("email") or "").strip() or None,
+            regenerate_token=True,
+        )
+        if not row:
+            return None
+        return {
+            "teacher_id": tid,
+            "teacher_name": str(row.get("teacher_name") or ""),
+            "email": str(row.get("email") or ""),
+            "token": str(row.get("_plain_token") or ""),
         }
 
     def bootstrap_teachers(self, *, regenerate_token: bool) -> List[Dict[str, Any]]:
@@ -1209,55 +1228,60 @@ class AuthRegistryStore:
         return [out[key] for key in sorted(out.keys())]
 
     def _list_teacher_identities(self) -> List[Dict[str, str]]:
+        out = self._teacher_identities_from_auth()
+        self._merge_workspace_teacher_identities(out)
+        self._ensure_fallback_teacher_identity(out)
+        return [out[key] for key in sorted(out.keys())]
+
+    def _teacher_identities_from_auth(self) -> Dict[str, Dict[str, str]]:
         out: Dict[str, Dict[str, str]] = {}
-
-        # Existing auth rows have highest priority for display name/email
         with self._connect() as conn:
-            for row in conn.execute(
+            rows = conn.execute(
                 "SELECT teacher_id, teacher_name, email FROM teacher_auth ORDER BY teacher_id"
-            ).fetchall():
-                tid = str(row["teacher_id"] or "").strip()
-                if not tid:
-                    continue
-                out[tid] = {
-                    "teacher_id": tid,
-                    "teacher_name": str(row["teacher_name"] or "").strip() or tid,
-                    "email": str(row["email"] or "").strip(),
-                }
+            ).fetchall()
+        for row in rows:
+            tid = str(row["teacher_id"] or "").strip()
+            if tid:
+                out[tid] = _teacher_identity_record(
+                    tid,
+                    str(row["teacher_name"] or "").strip() or tid,
+                    str(row["email"] or "").strip(),
+                )
+        return out
 
+    def _merge_workspace_teacher_identities(self, out: Dict[str, Dict[str, str]]) -> None:
         workspace_root = self.data_dir / "teacher_workspaces"
-        if workspace_root.exists():
-            for path in sorted(workspace_root.iterdir()):
-                if not path.is_dir():
-                    continue
-                tid = str(path.name or "").strip()
-                if not tid:
-                    continue
-                profile = _parse_teacher_profile_markdown(path / "USER.md")
-                name = profile.get("name") or tid
-                email = profile.get("email") or ""
-                existing = out.get(tid)
-                if existing is None:
-                    out[tid] = {
-                        "teacher_id": tid,
-                        "teacher_name": str(name).strip() or tid,
-                        "email": str(email).strip(),
-                    }
-                else:
-                    if (existing.get("teacher_name") or "").strip() in {"", "(unknown)", "unknown"}:
-                        existing["teacher_name"] = str(name).strip() or tid
-                    if not (existing.get("email") or "").strip() and str(email).strip():
-                        existing["email"] = str(email).strip()
+        if not workspace_root.exists():
+            return
+        for path in sorted(workspace_root.iterdir()):
+            self._merge_workspace_teacher_identity(out, path)
 
+    def _merge_workspace_teacher_identity(
+        self,
+        out: Dict[str, Dict[str, str]],
+        path: Path,
+    ) -> None:
+        if not path.is_dir():
+            return
+        tid = str(path.name or "").strip()
+        if not tid:
+            return
+        profile = _parse_teacher_profile_markdown(path / "USER.md")
+        name = str(profile.get("name") or tid).strip() or tid
+        email = str(profile.get("email") or "").strip()
+        existing = out.get(tid)
+        if existing is None:
+            out[tid] = _teacher_identity_record(tid, name, email)
+            return
+        if (existing.get("teacher_name") or "").strip() in {"", "(unknown)", "unknown"}:
+            existing["teacher_name"] = name
+        if not (existing.get("email") or "").strip() and email:
+            existing["email"] = email
+
+    def _ensure_fallback_teacher_identity(self, out: Dict[str, Dict[str, str]]) -> None:
         fallback_tid = resolve_teacher_id(default_teacher_id())
         if fallback_tid and fallback_tid not in out:
-            out[fallback_tid] = {
-                "teacher_id": fallback_tid,
-                "teacher_name": fallback_tid,
-                "email": "",
-            }
-
-        return [out[key] for key in sorted(out.keys())]
+            out[fallback_tid] = _teacher_identity_record(fallback_tid, fallback_tid, "")
 
     def _get_student_identity(self, student_id: str) -> Optional[Dict[str, str]]:
         sid = str(student_id or "").strip()
@@ -1386,6 +1410,18 @@ def _table_for_role(role: str) -> tuple[str, str]:
     if role == "student":
         return "student_auth", "student_id"
     return "teacher_auth", "teacher_id"
+
+
+def _normalize_export_ids(ids: Optional[Sequence[str]]) -> set[str]:
+    return {str(item or "").strip() for item in (ids or []) if str(item or "").strip()}
+
+
+def _teacher_identity_record(teacher_id: str, teacher_name: str, email: str) -> Dict[str, str]:
+    return {
+        "teacher_id": teacher_id,
+        "teacher_name": teacher_name,
+        "email": email,
+    }
 
 
 def _normalize_role(value: Any) -> str:

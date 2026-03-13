@@ -36,6 +36,57 @@ class AssignmentMetaPostprocessDeps:
     now_iso: Callable[[], str]
 
 
+def _load_assignment_meta_for_postprocess(
+    *,
+    assignment_id: str,
+    deps: AssignmentMetaPostprocessDeps,
+) -> tuple[Optional[Path], Dict[str, Any]]:
+    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if folder is None:
+        return None, {}
+    meta_path = folder / "meta.json"
+    if not meta_path.exists():
+        return None, {}
+    meta = deps.load_profile_file(meta_path)
+    if not isinstance(meta, dict):
+        meta = {}
+    return meta_path, meta
+
+
+def _resolve_expected_students_for_postprocess(
+    *,
+    expected_students: Optional[List[str]],
+    meta: Dict[str, Any],
+    deps: AssignmentMetaPostprocessDeps,
+    scope_val: str,
+    class_name: str,
+    student_ids: List[str],
+) -> List[str]:
+    if expected_students is not None:
+        return [str(student).strip() for student in expected_students if str(student).strip()]
+    raw = meta.get("expected_students")
+    if isinstance(raw, list):
+        resolved = [str(student).strip() for student in raw if str(student).strip()]
+    else:
+        resolved = []
+    if resolved:
+        return resolved
+    return deps.compute_expected_students(scope_val, class_name, student_ids)
+
+
+def _default_assignment_completion_policy(
+    discussion_complete_marker: str,
+) -> Dict[str, Any]:
+    return {
+        "requires_discussion": True,
+        "discussion_marker": discussion_complete_marker,
+        "requires_submission": True,
+        "min_graded_total": 1,
+        "best_attempt": "score_earned_then_correct_then_graded_total",
+        "version": 1,
+    }
+
+
 def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path]:
     root = (data_dir / "assignments").resolve()
     aid = str(assignment_id or "").strip()
@@ -264,16 +315,12 @@ def postprocess_assignment_meta(
     completion_policy: Optional[Dict[str, Any]],
     deps: AssignmentMetaPostprocessDeps,
 ) -> None:
-    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
-    if folder is None:
+    meta_path, meta = _load_assignment_meta_for_postprocess(
+        assignment_id=assignment_id,
+        deps=deps,
+    )
+    if meta_path is None:
         return
-    meta_path = folder / "meta.json"
-    if not meta_path.exists():
-        return
-
-    meta = deps.load_profile_file(meta_path)
-    if not isinstance(meta, dict):
-        meta = {}
 
     student_ids = deps.parse_ids_value(meta.get("student_ids") or [])
     class_name = str(meta.get("class_name") or "")
@@ -285,19 +332,14 @@ def postprocess_assignment_meta(
     elif due_norm:
         meta["due_at"] = due_norm
 
-    exp: List[str]
-    if expected_students is not None:
-        exp = [str(s).strip() for s in expected_students if str(s).strip()]
-    else:
-        raw = meta.get("expected_students")
-        if isinstance(raw, list):
-            exp = [str(s).strip() for s in raw if str(s).strip()]
-        else:
-            exp = []
-
-    if not exp and expected_students is None:
-        exp = deps.compute_expected_students(scope_val, class_name, student_ids)
-
+    exp = _resolve_expected_students_for_postprocess(
+        expected_students=expected_students,
+        meta=meta,
+        deps=deps,
+        scope_val=scope_val,
+        class_name=class_name,
+        student_ids=student_ids,
+    )
     if exp:
         meta["expected_students"] = exp
         meta.setdefault("expected_students_generated_at", deps.now_iso())
@@ -305,14 +347,9 @@ def postprocess_assignment_meta(
     meta["scope"] = scope_val
 
     if completion_policy is None:
-        completion_policy = {
-            "requires_discussion": True,
-            "discussion_marker": deps.discussion_complete_marker,
-            "requires_submission": True,
-            "min_graded_total": 1,
-            "best_attempt": "score_earned_then_correct_then_graded_total",
-            "version": 1,
-        }
+        completion_policy = _default_assignment_completion_policy(
+            deps.discussion_complete_marker,
+        )
     meta.setdefault("completion_policy", completion_policy)
 
     deps.atomic_write_json(meta_path, meta)

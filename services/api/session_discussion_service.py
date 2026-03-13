@@ -16,10 +16,7 @@ class SessionDiscussionDeps:
     student_session_file: Callable[[str, str], Path]
 
 
-def session_discussion_pass(student_id: str, assignment_id: str, *, deps: SessionDiscussionDeps) -> Dict[str, Any]:
-    marker = deps.marker
-
-    # Prefer assignment_id as session_id. If missing, fall back to any session indexed to this assignment.
+def _session_ids(student_id: str, assignment_id: str, *, deps: SessionDiscussionDeps) -> List[str]:
     session_ids: List[str] = [assignment_id]
     try:
         for item in deps.load_student_sessions_index(student_id):
@@ -30,56 +27,70 @@ def session_discussion_pass(student_id: str, assignment_id: str, *, deps: Sessio
                 session_ids.append(sid)
     except Exception:
         _log.warning("failed to load session index for student=%s", student_id, exc_info=True)
+    return session_ids
 
-    best: Dict[str, Any] = {
+
+def _default_discussion_result(assignment_id: str) -> Dict[str, Any]:
+    return {
         "status": "not_started",
         "pass": False,
         "session_id": assignment_id,
         "message_count": 0,
     }
-    for sid in session_ids:
+
+
+def _scan_session_file(path: Path, *, session_id: str, marker: str) -> Dict[str, Any]:
+    passed = False
+    message_count = 0
+    last_ts = ""
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                _log.debug("JSON parse failed", exc_info=True)
+                continue
+            if not isinstance(obj, dict):
+                continue
+            message_count += 1
+            ts = str(obj.get("ts") or "")
+            if ts:
+                last_ts = ts
+            if str(obj.get("role") or "") == "assistant":
+                content = str(obj.get("content") or "")
+                if marker and marker in content:
+                    passed = True
+    return {
+        "status": "pass" if passed else "in_progress",
+        "pass": passed,
+        "session_id": session_id,
+        "message_count": message_count,
+        "last_ts": last_ts,
+    }
+
+
+def _is_better_discussion_result(candidate: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    if bool(candidate.get("pass")) and not bool(current.get("pass")):
+        return True
+    return bool(candidate.get("pass")) == bool(current.get("pass")) and int(candidate.get("message_count") or 0) > int(
+        current.get("message_count") or 0
+    )
+
+
+def session_discussion_pass(student_id: str, assignment_id: str, *, deps: SessionDiscussionDeps) -> Dict[str, Any]:
+    best = _default_discussion_result(assignment_id)
+    for sid in _session_ids(student_id, assignment_id, deps=deps):
         path = deps.student_session_file(student_id, sid)
         if not path.exists():
             continue
 
-        passed = False
-        message_count = 0
-        last_ts = ""
         try:
-            with path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except Exception:
-                        _log.debug("JSON parse failed", exc_info=True)
-                        continue
-                    if not isinstance(obj, dict):
-                        continue
-                    message_count += 1
-                    ts = str(obj.get("ts") or "")
-                    if ts:
-                        last_ts = ts
-                    # Only trust assistant output for completion markers to avoid student "self-pass".
-                    if str(obj.get("role") or "") == "assistant":
-                        content = str(obj.get("content") or "")
-                        if marker and marker in content:
-                            passed = True
-
-            cur: Dict[str, Any] = {
-                "status": "pass" if passed else "in_progress",
-                "pass": passed,
-                "session_id": sid,
-                "message_count": message_count,
-                "last_ts": last_ts,
-            }
-            # Choose a "better" session: pass beats in_progress/not_started; otherwise prefer more messages.
-            if bool(cur["pass"]) and not bool(best.get("pass")):
-                best = cur
-            elif bool(cur["pass"]) == bool(best.get("pass")) and int(cur["message_count"]) > int(best.get("message_count") or 0):
-                best = cur
+            candidate = _scan_session_file(path, session_id=sid, marker=deps.marker)
+            if _is_better_discussion_result(candidate, best):
+                best = candidate
         except Exception:
             _log.warning("failed to read session file %s for student=%s", path, student_id, exc_info=True)
             continue

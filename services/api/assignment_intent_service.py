@@ -55,38 +55,60 @@ def parse_grade_and_level(text: str) -> Tuple[str, str]:
     return grade, level
 
 
-def extract_requirements_from_text(text: str) -> Dict[str, Any]:
-    if not text:
-        return {}
+def _extract_requirement_numbered_items(text: str) -> Dict[int, Optional[str]]:
     normalized = normalize_numbered_block(text)
-    items = {}
-    for idx in range(1, 9):
-        items[idx] = extract_numbered_item(normalized, idx)
-    if not any(items.values()):
-        return {}
-    req: Dict[str, Any] = {}
-    subject, topic = parse_subject_topic(items.get(1) or "")
+    return {
+        idx: extract_numbered_item(normalized, idx)
+        for idx in range(1, 9)
+    }
+
+
+def _apply_subject_topic_requirement(req: Dict[str, Any], raw: str) -> None:
+    subject, topic = parse_subject_topic(raw)
     if subject:
         req["subject"] = subject
     if topic:
         req["topic"] = topic
-    grade_level, class_level = parse_grade_and_level(items.get(2) or "")
+
+
+def _apply_grade_level_requirement(req: Dict[str, Any], raw: str) -> None:
+    grade_level, class_level = parse_grade_and_level(raw)
     if grade_level:
         req["grade_level"] = grade_level
     if class_level:
         req["class_level"] = class_level
-    if items.get(3):
-        req["core_concepts"] = parse_list_value(items.get(3))
-    if items.get(4):
-        req["typical_problem"] = items.get(4)
-    if items.get(5):
-        req["misconceptions"] = parse_list_value(items.get(5))
-    if items.get(6):
-        req["duration_minutes"] = parse_duration(items.get(6))
-    if items.get(7):
-        req["preferences"] = parse_list_value(items.get(7))
-    if items.get(8):
-        req["extra_constraints"] = items.get(8)
+
+
+def _apply_numbered_requirement(req: Dict[str, Any], idx: int, value: Optional[str]) -> None:
+    if not value:
+        return
+    if idx == 1:
+        _apply_subject_topic_requirement(req, value)
+    elif idx == 2:
+        _apply_grade_level_requirement(req, value)
+    elif idx == 3:
+        req["core_concepts"] = parse_list_value(value)
+    elif idx == 4:
+        req["typical_problem"] = value
+    elif idx == 5:
+        req["misconceptions"] = parse_list_value(value)
+    elif idx == 6:
+        req["duration_minutes"] = parse_duration(value)
+    elif idx == 7:
+        req["preferences"] = parse_list_value(value)
+    elif idx == 8:
+        req["extra_constraints"] = value
+
+
+def extract_requirements_from_text(text: str) -> Dict[str, Any]:
+    if not text:
+        return {}
+    items = _extract_requirement_numbered_items(text)
+    if not any(items.values()):
+        return {}
+    req: Dict[str, Any] = {}
+    for idx in range(1, 9):
+        _apply_numbered_requirement(req, idx, items.get(idx))
     return req
 
 

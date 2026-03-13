@@ -256,6 +256,48 @@ def load_chat_events(
     return out
 
 
+def _incremental_start_offset(path: Path, hint: int | None) -> int:
+    if hint is None:
+        return 0
+    try:
+        size = path.stat().st_size
+    except Exception:  # policy: allowed-broad-except
+        size = 0
+    if hint < 0 or hint > size:
+        return 0
+    return hint
+
+
+def _parse_chat_event_line(line: str) -> Dict[str, Any] | None:
+    text = str(line or "").strip()
+    if not text:
+        return None
+    try:
+        item = json.loads(text)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("JSON parse failed", exc_info=True)
+        return None
+    return item if isinstance(item, dict) else None
+
+
+def _read_incremental_chat_events(handle: Any, *, after: int, cap: int) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    while True:
+        line = handle.readline()
+        if line == "":
+            break
+        item = _parse_chat_event_line(line)
+        if item is None:
+            continue
+        event_id = _coerce_int(item.get("event_id"), 0)
+        if event_id <= after:
+            continue
+        out.append(item)
+        if len(out) >= cap:
+            break
+    return out
+
+
 def load_chat_events_incremental(
     job_id: str,
     *,
@@ -270,42 +312,11 @@ def load_chat_events_incremental(
         return [], max(0, int(hint or 0))
     after = max(0, _coerce_int(after_event_id, 0))
     cap = max(1, min(_coerce_int(limit, 200), 1000))
-    out: List[Dict[str, Any]] = []
     next_offset = max(0, int(hint or 0))
     try:
         with path.open("r", encoding="utf-8") as handle:
-            use_hint = hint is not None
-            if use_hint:
-                try:
-                    size = path.stat().st_size
-                except Exception:  # policy: allowed-broad-except
-                    size = 0
-                if hint is None or hint < 0 or hint > size:
-                    use_hint = False
-            if use_hint and hint is not None:
-                handle.seek(hint)
-            else:
-                handle.seek(0)
-            while True:
-                line = handle.readline()
-                if line == "":
-                    break
-                text = str(line or "").strip()
-                if not text:
-                    continue
-                try:
-                    item = json.loads(text)
-                except Exception:  # policy: allowed-broad-except
-                    _log.debug("JSON parse failed", exc_info=True)
-                    continue
-                if not isinstance(item, dict):
-                    continue
-                event_id = _coerce_int(item.get("event_id"), 0)
-                if event_id <= after:
-                    continue
-                out.append(item)
-                if len(out) >= cap:
-                    break
+            handle.seek(_incremental_start_offset(path, hint))
+            out = _read_incremental_chat_events(handle, after=after, cap=cap)
             next_offset = max(0, _coerce_int(handle.tell(), 0))
     except Exception:  # policy: allowed-broad-except
         _log.warning("failed to load incremental chat events for job=%s", job_id, exc_info=True)

@@ -43,7 +43,6 @@ def _admin_actor() -> tuple[str, str]:
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     if principal is None:
-        # auth disabled: keep local development flow available
         return "admin_local", "admin"
     return principal.actor_id, principal.role
 
@@ -54,49 +53,71 @@ def _teacher_or_admin_actor() -> tuple[str, str]:
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     if principal is None:
-        # auth disabled: keep local development flow available
         return "teacher_local", "teacher"
     return principal.actor_id, principal.role
 
 
-def register_auth_routes(router: APIRouter, core: Any) -> None:
+def _build_store(core: Any) -> Any:
+    return build_auth_registry_store(data_dir=core.DATA_DIR)
+
+
+def _raise_not_found(result: dict[str, Any]) -> None:
+    if not result.get("ok") and result.get("error") == "not_found":
+        raise HTTPException(status_code=404, detail="not_found")
+
+
+def _student_login_response(login_result: dict[str, Any]) -> dict[str, Any]:
+    if not login_result.get("ok"):
+        return _mask_login_failure(login_result)
+    token_version = int(login_result.get("token_version") or 1)
+    subject_id = str(login_result.get("subject_id") or "").strip()
+    token = mint_access_token(subject_id=subject_id, role="student", token_version=token_version)
+    return {
+        "ok": True,
+        "access_token": token,
+        "expires_in": access_token_ttl_sec(),
+        "role": "student",
+        "subject_id": subject_id,
+        "student": login_result.get("student") or {},
+        "password_set": bool(login_result.get("password_set")),
+    }
+
+
+def _teacher_login_response(login_result: dict[str, Any]) -> dict[str, Any]:
+    if not login_result.get("ok"):
+        return _mask_login_failure(login_result)
+    token_version = int(login_result.get("token_version") or 1)
+    subject_id = str(login_result.get("subject_id") or "").strip()
+    token = mint_access_token(subject_id=subject_id, role="teacher", token_version=token_version)
+    return {
+        "ok": True,
+        "access_token": token,
+        "expires_in": access_token_ttl_sec(),
+        "role": "teacher",
+        "subject_id": subject_id,
+        "teacher": login_result.get("teacher") or {},
+        "password_set": bool(login_result.get("password_set")),
+    }
+
+
+def _register_student_auth_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/student/identify")
     def auth_student_identify(req: StudentIdentifyRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.identify_student(name=req.name, class_name=req.class_name)
+        return _build_store(core).identify_student(name=req.name, class_name=req.class_name)
 
     @router.post("/auth/student/login")
     def auth_student_login(req: StudentLoginRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        login_result = store.login(
+        login_result = _build_store(core).login(
             role="student",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
             credential=req.credential,
         )
-        if not login_result.get("ok"):
-            return _mask_login_failure(login_result)
-        token_version = int(login_result.get("token_version") or 1)
-        subject_id = str(login_result.get("subject_id") or "").strip()
-        token = mint_access_token(
-            subject_id=subject_id,
-            role="student",
-            token_version=token_version,
-        )
-        return {
-            "ok": True,
-            "access_token": token,
-            "expires_in": access_token_ttl_sec(),
-            "role": "student",
-            "subject_id": subject_id,
-            "student": login_result.get("student") or {},
-            "password_set": bool(login_result.get("password_set")),
-        }
+        return _student_login_response(login_result)
 
     @router.post("/auth/student/set-password")
     def auth_student_set_password(req: StudentSetPasswordRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.set_password(
+        return _build_store(core).set_password(
             role="student",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
@@ -106,43 +127,25 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             actor_role="student",
         )
 
+
+def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/teacher/identify")
     def auth_teacher_identify(req: TeacherIdentifyRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.identify_teacher(name=req.name, email=req.email)
+        return _build_store(core).identify_teacher(name=req.name, email=req.email)
 
     @router.post("/auth/teacher/login")
     def auth_teacher_login(req: TeacherLoginRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        login_result = store.login(
+        login_result = _build_store(core).login(
             role="teacher",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
             credential=req.credential,
         )
-        if not login_result.get("ok"):
-            return _mask_login_failure(login_result)
-        token_version = int(login_result.get("token_version") or 1)
-        subject_id = str(login_result.get("subject_id") or "").strip()
-        token = mint_access_token(
-            subject_id=subject_id,
-            role="teacher",
-            token_version=token_version,
-        )
-        return {
-            "ok": True,
-            "access_token": token,
-            "expires_in": access_token_ttl_sec(),
-            "role": "teacher",
-            "subject_id": subject_id,
-            "teacher": login_result.get("teacher") or {},
-            "password_set": bool(login_result.get("password_set")),
-        }
+        return _teacher_login_response(login_result)
 
     @router.post("/auth/teacher/set-password")
     def auth_teacher_set_password(req: TeacherSetPasswordRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.set_password(
+        return _build_store(core).set_password(
             role="teacher",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
@@ -155,8 +158,7 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/teacher/student/reset-passwords")
     def auth_teacher_student_reset_passwords(req: TeacherStudentPasswordResetRequest) -> Any:
         actor_id, actor_role = _teacher_or_admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        result = store.reset_student_passwords(
+        result = _build_store(core).reset_student_passwords(
             scope=req.scope,
             student_id=req.student_id,
             class_name=req.class_name,
@@ -164,14 +166,91 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=actor_id,
             actor_role=actor_role,
         )
-        if not result.get("ok") and result.get("error") == "not_found":
-            raise HTTPException(status_code=404, detail="not_found")
+        _raise_not_found(result)
         return result
 
+
+def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
+    @router.get("/auth/admin/teacher/list")
+    def auth_admin_teacher_list() -> Any:
+        _admin_actor()
+        return _build_store(core).list_teacher_auth_status()
+
+    @router.post("/auth/admin/teacher/set-disabled")
+    def auth_admin_teacher_set_disabled(req: AdminTeacherSetDisabledRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        result = _build_store(core).set_teacher_disabled(
+            target_id=req.target_id,
+            is_disabled=req.is_disabled,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        _raise_not_found(result)
+        return result
+
+    @router.post("/auth/admin/teacher/reset-password")
+    def auth_admin_teacher_reset_password(req: AdminTeacherResetPasswordRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        result = _build_store(core).reset_teacher_password(
+            target_id=req.target_id,
+            new_password=req.new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        _raise_not_found(result)
+        return result
+
+
+def _register_admin_token_routes(router: APIRouter, core: Any) -> None:
+    @router.post("/auth/admin/student/reset-token")
+    def auth_admin_student_reset_token(req: AuthResetTokenRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        result = _build_store(core).reset_token(
+            role="student",
+            target_id=req.target_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        _raise_not_found(result)
+        return result
+
+    @router.post("/auth/admin/teacher/reset-token")
+    def auth_admin_teacher_reset_token(req: AuthResetTokenRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        result = _build_store(core).reset_token(
+            role="teacher",
+            target_id=req.target_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        _raise_not_found(result)
+        return result
+
+    @router.post("/auth/admin/student/export-tokens")
+    def auth_admin_student_export_tokens(req: AuthExportTokensRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        return _build_store(core).export_tokens(
+            role="student",
+            ids=req.ids,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+
+    @router.post("/auth/admin/teacher/export-tokens")
+    def auth_admin_teacher_export_tokens(req: AuthExportTokensRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        return _build_store(core).export_tokens(
+            role="teacher",
+            ids=req.ids,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+
+
+def _register_admin_auth_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/admin/login")
     def auth_admin_login(req: AdminLoginRequest) -> Any:
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        login_result = store.login_admin(username=req.username, password=req.password)
+        login_result = _build_store(core).login_admin(username=req.username, password=req.password)
         if not login_result.get("ok"):
             return _mask_login_failure(login_result)
         subject_id = str(login_result.get("subject_id") or "").strip()
@@ -187,86 +266,11 @@ def register_auth_routes(router: APIRouter, core: Any) -> None:
             "subject_id": subject_id,
         }
 
-    @router.get("/auth/admin/teacher/list")
-    def auth_admin_teacher_list() -> Any:
-        _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.list_teacher_auth_status()
+    _register_admin_teacher_routes(router, core)
+    _register_admin_token_routes(router, core)
 
-    @router.post("/auth/admin/teacher/set-disabled")
-    def auth_admin_teacher_set_disabled(req: AdminTeacherSetDisabledRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        result = store.set_teacher_disabled(
-            target_id=req.target_id,
-            is_disabled=req.is_disabled,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-        if not result.get("ok") and result.get("error") == "not_found":
-            raise HTTPException(status_code=404, detail="not_found")
-        return result
 
-    @router.post("/auth/admin/teacher/reset-password")
-    def auth_admin_teacher_reset_password(req: AdminTeacherResetPasswordRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        result = store.reset_teacher_password(
-            target_id=req.target_id,
-            new_password=req.new_password,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-        if not result.get("ok") and result.get("error") == "not_found":
-            raise HTTPException(status_code=404, detail="not_found")
-        return result
-
-    @router.post("/auth/admin/student/reset-token")
-    def auth_admin_student_reset_token(req: AuthResetTokenRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        result = store.reset_token(
-            role="student",
-            target_id=req.target_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-        if not result.get("ok") and result.get("error") == "not_found":
-            raise HTTPException(status_code=404, detail="not_found")
-        return result
-
-    @router.post("/auth/admin/teacher/reset-token")
-    def auth_admin_teacher_reset_token(req: AuthResetTokenRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        result = store.reset_token(
-            role="teacher",
-            target_id=req.target_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-        if not result.get("ok") and result.get("error") == "not_found":
-            raise HTTPException(status_code=404, detail="not_found")
-        return result
-
-    @router.post("/auth/admin/student/export-tokens")
-    def auth_admin_student_export_tokens(req: AuthExportTokensRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.export_tokens(
-            role="student",
-            ids=req.ids,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
-
-    @router.post("/auth/admin/teacher/export-tokens")
-    def auth_admin_teacher_export_tokens(req: AuthExportTokensRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
-        store = build_auth_registry_store(data_dir=core.DATA_DIR)
-        return store.export_tokens(
-            role="teacher",
-            ids=req.ids,
-            actor_id=actor_id,
-            actor_role=actor_role,
-        )
+def register_auth_routes(router: APIRouter, core: Any) -> None:
+    _register_student_auth_routes(router, core)
+    _register_teacher_auth_routes(router, core)
+    _register_admin_auth_routes(router, core)

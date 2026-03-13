@@ -182,24 +182,18 @@ def _is_probable_student_name(value: str) -> bool:
     return False
 
 
-def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_students: int = 500) -> str:
-    if not rows:
-        return ""
-
-    header_row_idx = None
-    header_cells: Dict[int, Any] = {}
+def _find_student_header_row(rows: List[Tuple[int, Dict[int, Any]]]) -> tuple[Optional[int], Dict[int, Any]]:
     for row_idx, cells in rows[:15]:
         cell_values = [_normalize_preview_cell(value) for value in cells.values()]
         has_name = any("姓名" in value for value in cell_values)
         has_total = any(("总分" in value) or ("总成绩" in value) for value in cell_values)
         has_class = any("班级" in value for value in cell_values)
         if has_name and (has_total or has_class):
-            header_row_idx = row_idx
-            header_cells = cells
-            break
-    if header_row_idx is None:
-        return ""
+            return row_idx, cells
+    return None, {}
 
+
+def _resolve_student_columns(header_cells: Dict[int, Any]) -> tuple[Optional[int], Optional[int], Optional[int]]:
     name_col = None
     class_col = None
     total_col = None
@@ -211,6 +205,22 @@ def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_s
             class_col = col_idx
         if total_col is None and any(token in text for token in ("总分", "总成绩")):
             total_col = col_idx
+    return name_col, class_col, total_col
+
+
+def _format_student_preview_line(index: int, name: str, class_name: str, total_score: str) -> str:
+    return f"{index}\t{name}\t{class_name or '-'}\t{total_score or '-'}"
+
+
+def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_students: int = 500) -> str:
+    if not rows:
+        return ""
+
+    header_row_idx, header_cells = _find_student_header_row(rows)
+    if header_row_idx is None:
+        return ""
+
+    name_col, class_col, total_col = _resolve_student_columns(header_cells)
     if name_col is None:
         return ""
 
@@ -223,7 +233,7 @@ def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_s
             continue
         class_name = _normalize_preview_cell(cells.get(class_col, "")) if class_col is not None else ""
         total_score = _normalize_preview_cell(cells.get(total_col, "")) if total_col is not None else ""
-        lines.append(f"{len(lines) + 1}\t{name}\t{class_name or '-'}\t{total_score or '-'}")
+        lines.append(_format_student_preview_line(len(lines) + 1, name, class_name, total_score))
         if len(lines) >= max_students:
             break
 

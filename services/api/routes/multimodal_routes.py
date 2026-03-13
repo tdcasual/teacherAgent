@@ -30,88 +30,138 @@ def _enforce_submission_teacher_scope(payload: Dict[str, Any]) -> Dict[str, Any]
     return data
 
 
+def _normalized_submission_bundle(payload: Dict[str, Any]) -> MultimodalSubmissionBundle:
+    bundle = MultimodalSubmissionBundle.model_validate(_enforce_submission_teacher_scope(dict(payload or {})))
+    submission_id = str(bundle.source_meta.submission_id or '').strip() or safe_fs_id(
+        f"{bundle.scope.teacher_id}_{bundle.scope.student_id}_{bundle.source_meta.title}",
+        prefix='submission',
+    )
+    return MultimodalSubmissionBundle.model_validate(
+        {
+            **bundle.model_dump(),
+            'source_meta': {
+                **bundle.source_meta.model_dump(),
+                'submission_id': submission_id,
+            },
+            'extraction_status': str(bundle.extraction_status or 'pending').strip() or 'pending',
+        }
+    )
+
+
+def _create_multimodal_submission_response(payload: Dict[str, Any], *, core: Any) -> Dict[str, Any]:
+    _ensure_enabled()
+    try:
+        bundle = _normalized_submission_bundle(payload)
+        submission_id = str(bundle.source_meta.submission_id or '').strip()
+        _enforce_limits(bundle)
+        ensure_multimodal_media_dir(submission_id, core=core)
+        write_multimodal_submission(submission_id, bundle.model_dump(), core=core)
+        return {
+            'ok': True,
+            'submission_id': submission_id,
+            'status': bundle.extraction_status,
+            'limits': {
+                'max_upload_bytes': settings.multimodal_max_upload_bytes(),
+                'max_duration_sec': settings.multimodal_max_duration_sec(),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or 'multimodal_submission_invalid')
+
+
+def _get_multimodal_submission_response(submission_id: str, *, core: Any) -> Dict[str, Any]:
+    _ensure_enabled()
+    try:
+        submission = load_multimodal_submission_view(submission_id, core=core)
+        _enforce_submission_teacher_scope(submission)
+        return {'submission': submission}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
+
+
+def _extract_multimodal_submission_response(
+    submission_id: str,
+    *,
+    core: Any,
+    extract_deps: Any,
+) -> Dict[str, Any]:
+    _ensure_enabled()
+    try:
+        payload = load_multimodal_submission(submission_id, core=core)
+        payload = _enforce_submission_teacher_scope(payload)
+        result = extract_multimodal_submission(payload, deps=extract_deps)
+        write_multimodal_extraction(submission_id, result.model_dump(), core=core)
+        return {'ok': True, 'submission': result.model_dump()}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc) or 'multimodal_extract_failed')
+
+
+def _analyze_multimodal_submission_response(
+    submission_id: str,
+    *,
+    core: Any,
+    orchestrator_deps: Any,
+) -> Any:
+    _ensure_enabled()
+    try:
+        _enforce_submission_teacher_scope(load_multimodal_submission(submission_id, core=core))
+        return process_multimodal_submission(submission_id, deps=orchestrator_deps)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        detail = str(getattr(exc, 'detail', exc) or 'multimodal_analyze_failed')
+        status_code = int(getattr(exc, 'status_code', 500) or 500)
+        raise HTTPException(status_code=status_code, detail=detail)
+
+
+def _register_multimodal_create_route(router: APIRouter, core: Any) -> None:
+    @router.post('/teacher/multimodal/submissions')
+    async def create_multimodal_submission(payload: Dict[str, Any] = Body(default={})) -> Any:
+        return _create_multimodal_submission_response(payload, core=core)
+
+
+def _register_multimodal_get_route(router: APIRouter, core: Any) -> None:
+    @router.get('/teacher/multimodal/submissions/{submission_id}')
+    async def get_multimodal_submission(submission_id: str) -> Any:
+        return _get_multimodal_submission_response(submission_id, core=core)
+
+
+def _register_multimodal_extract_route(router: APIRouter, core: Any, *, extract_deps: Any) -> None:
+    @router.post('/teacher/multimodal/submissions/{submission_id}/extract')
+    async def extract_submission(submission_id: str) -> Any:
+        return _extract_multimodal_submission_response(
+            submission_id,
+            core=core,
+            extract_deps=extract_deps,
+        )
+
+
+def _register_multimodal_analyze_route(router: APIRouter, core: Any, *, orchestrator_deps: Any) -> None:
+    @router.post('/teacher/multimodal/submissions/{submission_id}/analyze')
+    async def analyze_submission(submission_id: str) -> Any:
+        return _analyze_multimodal_submission_response(
+            submission_id,
+            core=core,
+            orchestrator_deps=orchestrator_deps,
+        )
+
+
 def build_router(core: Any) -> APIRouter:
     router = APIRouter()
     extract_deps = build_media_extract_deps(core)
     orchestrator_deps = build_multimodal_orchestrator_deps(core)
-
-    @router.post('/teacher/multimodal/submissions')
-    async def create_multimodal_submission(payload: Dict[str, Any] = Body(default={})) -> Any:
-        _ensure_enabled()
-        try:
-            bundle = MultimodalSubmissionBundle.model_validate(_enforce_submission_teacher_scope(dict(payload or {})))
-            submission_id = str(bundle.source_meta.submission_id or '').strip() or safe_fs_id(
-                f"{bundle.scope.teacher_id}_{bundle.scope.student_id}_{bundle.source_meta.title}",
-                prefix='submission',
-            )
-            bundle = MultimodalSubmissionBundle.model_validate(
-                {
-                    **bundle.model_dump(),
-                    'source_meta': {
-                        **bundle.source_meta.model_dump(),
-                        'submission_id': submission_id,
-                    },
-                    'extraction_status': str(bundle.extraction_status or 'pending').strip() or 'pending',
-                }
-            )
-            _enforce_limits(bundle)
-            ensure_multimodal_media_dir(submission_id, core=core)
-            write_multimodal_submission(submission_id, bundle.model_dump(), core=core)
-            return {
-                'ok': True,
-                'submission_id': submission_id,
-                'status': bundle.extraction_status,
-                'limits': {
-                    'max_upload_bytes': settings.multimodal_max_upload_bytes(),
-                    'max_duration_sec': settings.multimodal_max_duration_sec(),
-                },
-            }
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc) or 'multimodal_submission_invalid')
-
-    @router.get('/teacher/multimodal/submissions/{submission_id}')
-    async def get_multimodal_submission(submission_id: str) -> Any:
-        _ensure_enabled()
-        try:
-            submission = load_multimodal_submission_view(submission_id, core=core)
-            _enforce_submission_teacher_scope(submission)
-            return {'submission': submission}
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
-
-    @router.post('/teacher/multimodal/submissions/{submission_id}/extract')
-    async def extract_submission(submission_id: str) -> Any:
-        _ensure_enabled()
-        try:
-            payload = load_multimodal_submission(submission_id, core=core)
-            payload = _enforce_submission_teacher_scope(payload)
-            result = extract_multimodal_submission(payload, deps=extract_deps)
-            write_multimodal_extraction(submission_id, result.model_dump(), core=core)
-            return {'ok': True, 'submission': result.model_dump()}
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc) or 'multimodal_extract_failed')
-
-    @router.post('/teacher/multimodal/submissions/{submission_id}/analyze')
-    async def analyze_submission(submission_id: str) -> Any:
-        _ensure_enabled()
-        try:
-            _enforce_submission_teacher_scope(load_multimodal_submission(submission_id, core=core))
-            return process_multimodal_submission(submission_id, deps=orchestrator_deps)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail='multimodal_submission_not_found')
-        except HTTPException:
-            raise
-        except Exception as exc:
-            detail = str(getattr(exc, 'detail', exc) or 'multimodal_analyze_failed')
-            status_code = int(getattr(exc, 'status_code', 500) or 500)
-            raise HTTPException(status_code=status_code, detail=detail)
-
+    _register_multimodal_create_route(router, core)
+    _register_multimodal_get_route(router, core)
+    _register_multimodal_extract_route(router, core, extract_deps=extract_deps)
+    _register_multimodal_analyze_route(router, core, orchestrator_deps=orchestrator_deps)
     return router
 
 

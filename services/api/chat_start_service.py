@@ -87,31 +87,60 @@ def _extract_recent_analysis_target_id(messages: Any) -> str:
     return ''
 
 
+_ANALYSIS_TARGET_KEYS = (
+    'target_type',
+    'target_id',
+    'report_id',
+    'source_domain',
+    'domain',
+    'artifact_type',
+    'teacher_id',
+    'strategy_id',
+)
+
+
+def _analysis_target_raw_payload(raw_target: Any) -> Dict[str, Any]:
+    if isinstance(raw_target, dict):
+        return dict(raw_target)
+    model_dump = getattr(raw_target, 'model_dump', None)
+    if callable(model_dump):
+        dumped = model_dump(exclude_none=True)
+        return dict(dumped) if isinstance(dumped, dict) else {}
+    return {
+        key: getattr(raw_target, key, None)
+        for key in _ANALYSIS_TARGET_KEYS
+        if getattr(raw_target, key, None) is not None
+    }
+
+
+def _first_non_empty_value(raw: Dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(raw.get(key) or '').strip()
+        if value:
+            return value
+    return ''
+
+
+def _set_optional_analysis_field(
+    normalized: Dict[str, Any],
+    raw: Dict[str, Any],
+    target_key: str,
+    *source_keys: str,
+) -> None:
+    value = _first_non_empty_value(raw, *source_keys)
+    if value:
+        normalized[target_key] = value
+
+
 def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, Any]]:
     if raw_target is None:
         return None
-    if isinstance(raw_target, dict):
-        raw = dict(raw_target)
-    else:
-        model_dump = getattr(raw_target, 'model_dump', None)
-        if callable(model_dump):
-            dumped = model_dump(exclude_none=True)
-            raw = dict(dumped) if isinstance(dumped, dict) else {}
-        else:
-            raw = {
-                key: getattr(raw_target, key, None)
-                for key in ('target_type', 'target_id', 'report_id', 'source_domain', 'domain', 'artifact_type', 'teacher_id', 'strategy_id')
-                if getattr(raw_target, key, None) is not None
-            }
-    target_id = str(raw.get('target_id') or raw.get('report_id') or '').strip()
+    raw = _analysis_target_raw_payload(raw_target)
+    target_id = _first_non_empty_value(raw, 'target_id', 'report_id')
     if not target_id:
         return None
-    target_type = str(raw.get('target_type') or '').strip() or 'report'
-    source_domain = str(raw.get('source_domain') or raw.get('domain') or '').strip()
-    artifact_type = str(raw.get('artifact_type') or '').strip()
-    strategy_id = str(raw.get('strategy_id') or '').strip()
-    teacher_id = str(raw.get('teacher_id') or '').strip()
-    report_id = str(raw.get('report_id') or '').strip()
+    target_type = _first_non_empty_value(raw, 'target_type') or 'report'
+    report_id = _first_non_empty_value(raw, 'report_id')
     if target_type == 'report' and not report_id:
         report_id = target_id
 
@@ -119,16 +148,12 @@ def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, An
         'target_type': target_type,
         'target_id': target_id,
     }
-    if source_domain:
-        normalized['source_domain'] = source_domain
-    if artifact_type:
-        normalized['artifact_type'] = artifact_type
+    _set_optional_analysis_field(normalized, raw, 'source_domain', 'source_domain', 'domain')
+    _set_optional_analysis_field(normalized, raw, 'artifact_type', 'artifact_type')
     if report_id:
         normalized['report_id'] = report_id
-    if strategy_id:
-        normalized['strategy_id'] = strategy_id
-    if teacher_id:
-        normalized['teacher_id'] = teacher_id
+    _set_optional_analysis_field(normalized, raw, 'strategy_id', 'strategy_id')
+    _set_optional_analysis_field(normalized, raw, 'teacher_id', 'teacher_id')
     return normalized
 
 

@@ -93,6 +93,140 @@ def _normalize_fallback_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [dict(item) for item in raw if isinstance(item, dict)]
 
 
+def _subject_score_files(exam_dir: Path) -> List[Path]:
+    scores_dir = exam_dir / "scores"
+    if not scores_dir.exists() or not scores_dir.is_dir():
+        return []
+    return sorted(item for item in scores_dir.iterdir() if item.is_file() and item.suffix.lower() == ".xlsx")
+
+
+def _class_name_hint(manifest: Dict[str, Any]) -> str:
+    meta = manifest.get("meta") if isinstance(manifest.get("meta"), dict) else {}
+    return str((meta or {}).get("class_name") or "").strip()
+
+
+def _parse_subject_score_file(
+    parser: Callable[[Path, Path, str, str, Optional[str]], Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]],
+    score_path: Path,
+    out_csv: Path,
+    exam_id: str,
+    class_name_hint: str,
+) -> Optional[List[Dict[str, Any]]]:
+    try:
+        parsed_rows, _report = parser(score_path, out_csv, exam_id, class_name_hint, None)
+    except Exception:
+        _log.debug("operation failed", exc_info=True)
+        return None
+    return parsed_rows or None
+
+
+def _subject_row_score(row: Dict[str, Any]) -> Optional[float]:
+    qid = str(row.get("question_id") or "").strip()
+    if not qid.startswith("SUBJECT_"):
+        return None
+    return _safe_float(row.get("score"))
+
+
+def _subject_student_id(row: Dict[str, Any]) -> str:
+    return str(row.get("student_id") or row.get("student_name") or "").strip()
+
+
+def _merge_subject_row(
+    row: Dict[str, Any],
+    *,
+    score: float,
+    student_id: str,
+    dedup: Dict[Tuple[str, str], Dict[str, Any]],
+) -> None:
+    qid = str(row.get("question_id") or "").strip()
+    key = (student_id, qid)
+    prev = dedup.get(key)
+    prev_score = _safe_float(prev.get("score")) if isinstance(prev, dict) else None
+    normalized = dict(row)
+    normalized["score"] = float(score)
+    if prev is None or prev_score is None or float(score) > float(prev_score):
+        dedup[key] = normalized
+
+
+def _merge_subject_question_meta(
+    row: Dict[str, Any],
+    *,
+    score: float,
+    q_meta: Dict[str, Dict[str, Any]],
+) -> None:
+    qid = str(row.get("question_id") or "").strip()
+    question_no = str(row.get("question_no") or "").strip()
+    sub_no = str(row.get("sub_no") or "").strip()
+    q_bucket = q_meta.setdefault(
+        qid,
+        {
+            "question_id": qid,
+            "question_no": question_no,
+            "sub_no": sub_no,
+            "max_score": float(score),
+        },
+    )
+    if not q_bucket.get("question_no") and question_no:
+        q_bucket["question_no"] = question_no
+    if not q_bucket.get("sub_no") and sub_no:
+        q_bucket["sub_no"] = sub_no
+    if float(score) > float(q_bucket.get("max_score") or 0.0):
+        q_bucket["max_score"] = float(score)
+
+
+def _collect_subject_score_data(
+    *,
+    score_files: List[Path],
+    parser: Callable[[Path, Path, str, str, Optional[str]], Tuple[Optional[List[Dict[str, Any]]], Dict[str, Any]]],
+    exam_id: str,
+    class_name_hint: str,
+) -> tuple[Dict[Tuple[str, str], Dict[str, Any]], Dict[str, Dict[str, Any]], List[str]]:
+    dedup: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    q_meta: Dict[str, Dict[str, Any]] = {}
+    source_files: List[str] = []
+
+    with TemporaryDirectory(prefix="exam_subject_fallback_") as tmp_dir_raw:
+        tmp_dir = Path(tmp_dir_raw)
+        for idx, score_path in enumerate(score_files):
+            parsed_rows = _parse_subject_score_file(parser, score_path, tmp_dir / f"scores_{idx}.csv", exam_id, class_name_hint)
+            if not parsed_rows:
+                continue
+            source_files.append(score_path.name)
+            for row in parsed_rows:
+                score = _subject_row_score(row)
+                if score is None:
+                    continue
+                student_id = _subject_student_id(row)
+                if not student_id:
+                    continue
+                _merge_subject_row(row, score=score, student_id=student_id, dedup=dedup)
+                _merge_subject_question_meta(row, score=score, q_meta=q_meta)
+
+    return dedup, q_meta, source_files
+
+
+def _subject_row_sort_key(item: Dict[str, Any]) -> Tuple[str, str, str, str]:
+    return (
+        str(item.get("class_name") or ""),
+        str(item.get("student_name") or ""),
+        str(item.get("student_id") or ""),
+        str(item.get("question_id") or ""),
+    )
+
+
+def _subject_questions(q_meta: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    questions: Dict[str, Dict[str, Any]] = {}
+    for qid, item in q_meta.items():
+        questions[qid] = {
+            "question_id": qid,
+            "question_no": str(item.get("question_no") or "").strip(),
+            "sub_no": str(item.get("sub_no") or "").strip(),
+            "order": "",
+            "max_score": _safe_float(item.get("max_score")),
+        }
+    return questions
+
+
 def _collect_subject_fallback(
     exam_id: str,
     manifest: Dict[str, Any],
@@ -106,91 +240,23 @@ def _collect_subject_fallback(
     if exam_dir is None:
         return None
 
-    scores_dir = exam_dir / "scores"
-    if not scores_dir.exists() or not scores_dir.is_dir():
-        return None
-
-    score_files = sorted([item for item in scores_dir.iterdir() if item.is_file() and item.suffix.lower() == ".xlsx"])
+    score_files = _subject_score_files(exam_dir)
     if not score_files:
         return None
 
-    meta = manifest.get("meta") if isinstance(manifest.get("meta"), dict) else {}
-    class_name_hint = str((meta or {}).get("class_name") or "").strip()
-
-    dedup: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    q_meta: Dict[str, Dict[str, Any]] = {}
-    source_files: List[str] = []
-    with TemporaryDirectory(prefix="exam_subject_fallback_") as tmp_dir_raw:
-        tmp_dir = Path(tmp_dir_raw)
-        for idx, score_path in enumerate(score_files):
-            out_csv = tmp_dir / f"scores_{idx}.csv"
-            try:
-                parsed_rows, _report = parser(score_path, out_csv, exam_id, class_name_hint, None)
-            except Exception:
-                _log.debug("operation failed", exc_info=True)
-                continue
-            if not parsed_rows:
-                continue
-            source_files.append(score_path.name)
-            for row in parsed_rows:
-                qid = str(row.get("question_id") or "").strip()
-                if not qid.startswith("SUBJECT_"):
-                    continue
-                score = _safe_float(row.get("score"))
-                if score is None:
-                    continue
-
-                student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
-                if not student_id:
-                    continue
-
-                key = (student_id, qid)
-                prev = dedup.get(key)
-                prev_score = _safe_float(prev.get("score")) if isinstance(prev, dict) else None
-                normalized = dict(row)
-                normalized["score"] = float(score)
-                if prev is None or prev_score is None or float(score) > float(prev_score):
-                    dedup[key] = normalized
-
-                question_no = str(row.get("question_no") or "").strip()
-                sub_no = str(row.get("sub_no") or "").strip()
-                q_bucket = q_meta.setdefault(
-                    qid,
-                    {
-                        "question_id": qid,
-                        "question_no": question_no,
-                        "sub_no": sub_no,
-                        "max_score": float(score),
-                    },
-                )
-                if not q_bucket.get("question_no") and question_no:
-                    q_bucket["question_no"] = question_no
-                if not q_bucket.get("sub_no") and sub_no:
-                    q_bucket["sub_no"] = sub_no
-                if float(score) > float(q_bucket.get("max_score") or 0.0):
-                    q_bucket["max_score"] = float(score)
+    dedup, q_meta, source_files = _collect_subject_score_data(
+        score_files=score_files,
+        parser=parser,
+        exam_id=exam_id,
+        class_name_hint=_class_name_hint(manifest),
+    )
 
     if not dedup:
         return None
 
     rows = list(dedup.values())
-    rows.sort(
-        key=lambda item: (
-            str(item.get("class_name") or ""),
-            str(item.get("student_name") or ""),
-            str(item.get("student_id") or ""),
-            str(item.get("question_id") or ""),
-        )
-    )
-    questions: Dict[str, Dict[str, Any]] = {}
-    for qid, item in q_meta.items():
-        questions[qid] = {
-            "question_id": qid,
-            "question_no": str(item.get("question_no") or "").strip(),
-            "sub_no": str(item.get("sub_no") or "").strip(),
-            "order": "",
-            "max_score": _safe_float(item.get("max_score")),
-        }
+    rows.sort(key=_subject_row_sort_key)
+    questions = _subject_questions(q_meta)
     return {
         "rows": rows,
         "questions": questions,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
 from llm_gateway import UnifiedLLMRequest
@@ -24,6 +24,216 @@ class ChatRuntimeDeps:
     resolve_teacher_provider_target: Callable[[str, str, str, str], Optional[Dict[str, Any]]]
     diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
     monotonic: Callable[[], float] = time.monotonic
+
+
+@dataclass
+class ChatRuntimeRouteState:
+    selected: bool = False
+    reason: str = "gateway_fallback"
+    target_provider: str = ""
+    target_mode: str = ""
+    target_model: str = ""
+    source: str = "gateway_default"
+    actor: str = ""
+    attempt_errors: List[Dict[str, str]] = field(default_factory=list)
+
+
+def _runtime_limiter(policy: Any, *, deps: ChatRuntimeDeps) -> Any:
+    if policy.limiter_kind == "student":
+        return deps.student_limiter
+    if policy.limiter_kind == "teacher":
+        return deps.teacher_limiter
+    return deps.default_limiter
+
+
+def _gateway_generate(
+    request: UnifiedLLMRequest,
+    *,
+    deps: ChatRuntimeDeps,
+    stream: bool,
+    token_sink: Optional[Callable[[str], None]],
+    provider: Optional[str] = None,
+    mode: Optional[str] = None,
+    model: Optional[str] = None,
+    allow_fallback: bool,
+    target_override: Optional[Dict[str, Any]] = None,
+) -> Any:
+    base_kwargs: Dict[str, Any] = {
+        "provider": provider,
+        "mode": mode,
+        "model": model,
+        "allow_fallback": allow_fallback,
+        "target_override": target_override,
+    }
+    if bool(stream) and callable(token_sink):
+        base_kwargs["token_sink"] = token_sink
+    return deps.gateway.generate(request, **base_kwargs)
+
+
+def _load_teacher_model_config(
+    route_actor: str,
+    *,
+    deps: ChatRuntimeDeps,
+    state: ChatRuntimeRouteState,
+) -> Dict[str, Any]:
+    try:
+        return deps.resolve_teacher_model_config(route_actor) or {}
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.warning("operation failed", exc_info=True)
+        state.attempt_errors.append({"source": "teacher_model_config", "error": str(exc)[:200]})
+        return {}
+
+
+def _conversation_route_target(config_payload: Dict[str, Any]) -> tuple[str, str, str]:
+    models = config_payload.get("models") if isinstance(config_payload, dict) else {}
+    conversation = models.get("conversation") if isinstance(models, dict) else {}
+    provider = str((conversation or {}).get("provider") or "").strip()
+    mode = str((conversation or {}).get("mode") or "").strip()
+    model = str((conversation or {}).get("model") or "").strip()
+    return provider, mode, model
+
+
+def _resolve_teacher_target_override(
+    route_actor: str,
+    *,
+    provider: str,
+    mode: str,
+    model: str,
+    deps: ChatRuntimeDeps,
+    state: ChatRuntimeRouteState,
+) -> Optional[Dict[str, Any]]:
+    try:
+        return deps.resolve_teacher_provider_target(route_actor, provider, mode, model)
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.warning("operation failed", exc_info=True)
+        state.attempt_errors.append(
+            {
+                "source": "teacher_provider_target",
+                "provider": provider,
+                "mode": mode,
+                "model": model,
+                "error": str(exc)[:200],
+            }
+        )
+        return None
+
+
+def _try_teacher_routed_generate(
+    request: UnifiedLLMRequest,
+    *,
+    provider: str,
+    mode: str,
+    model: str,
+    target_override: Optional[Dict[str, Any]],
+    deps: ChatRuntimeDeps,
+    stream: bool,
+    token_sink: Optional[Callable[[str], None]],
+    state: ChatRuntimeRouteState,
+) -> Optional[Any]:
+    try:
+        if isinstance(target_override, dict):
+            return _gateway_generate(
+                request,
+                deps=deps,
+                stream=stream,
+                token_sink=token_sink,
+                allow_fallback=False,
+                target_override=target_override,
+            )
+        return _gateway_generate(
+            request,
+            deps=deps,
+            stream=stream,
+            token_sink=token_sink,
+            provider=provider,
+            mode=mode,
+            model=model,
+            allow_fallback=False,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.warning("operation failed", exc_info=True)
+        state.attempt_errors.append(
+            {
+                "source": "teacher_model_config",
+                "provider": provider,
+                "mode": mode,
+                "model": model,
+                "error": str(exc)[:200],
+            }
+        )
+        return None
+
+
+def _attempt_teacher_route(
+    request: UnifiedLLMRequest,
+    *,
+    teacher_id: Optional[str],
+    deps: ChatRuntimeDeps,
+    stream: bool,
+    token_sink: Optional[Callable[[str], None]],
+) -> tuple[Optional[Any], ChatRuntimeRouteState]:
+    state = ChatRuntimeRouteState(actor=deps.resolve_teacher_id(teacher_id))
+    config_payload = _load_teacher_model_config(state.actor, deps=deps, state=state)
+    provider, mode, model = _conversation_route_target(config_payload)
+    if not (provider and mode and model):
+        return None, state
+    target_override = _resolve_teacher_target_override(
+        state.actor,
+        provider=provider,
+        mode=mode,
+        model=model,
+        deps=deps,
+        state=state,
+    )
+    result = _try_teacher_routed_generate(
+        request,
+        provider=provider,
+        mode=mode,
+        model=model,
+        target_override=target_override,
+        deps=deps,
+        stream=stream,
+        token_sink=token_sink,
+        state=state,
+    )
+    if result is None:
+        return None, state
+    state.selected = True
+    state.reason = "teacher_model_config"
+    state.source = "teacher_model_config"
+    state.target_provider = provider
+    state.target_mode = mode
+    state.target_model = model
+    return result, state
+
+
+def _diag_payload(
+    *,
+    deps: ChatRuntimeDeps,
+    started_at: float,
+    role_hint: Optional[str],
+    skill_id: Optional[str],
+    kind: Optional[str],
+    tools: Optional[List[Dict[str, Any]]],
+    stream: bool,
+    state: ChatRuntimeRouteState,
+) -> Dict[str, Any]:
+    return {
+        "duration_ms": int((deps.monotonic() - started_at) * 1000),
+        "role": role_hint or "unknown",
+        "skill_id": skill_id or "",
+        "kind": kind or "",
+        "tools": bool(tools),
+        "stream": bool(stream),
+        "route_selected": state.selected,
+        "route_reason": state.reason,
+        "route_provider": state.target_provider,
+        "route_mode": state.target_mode,
+        "route_model": state.target_model,
+        "route_source": state.source,
+        "route_actor": state.actor,
+        "route_attempt_errors": state.attempt_errors,
+    }
 
 
 def call_llm_runtime(
@@ -49,122 +259,35 @@ def call_llm_runtime(
     )
     t0 = deps.monotonic()
     policy = get_role_runtime_policy(role_hint)
-    if policy.limiter_kind == "student":
-        limiter = deps.student_limiter
-    elif policy.limiter_kind == "teacher":
-        limiter = deps.teacher_limiter
-    else:
-        limiter = deps.default_limiter
-
-    route_selected = False
-    route_reason = "gateway_fallback"
-    route_target_provider = ""
-    route_target_mode = ""
-    route_target_model = ""
-    route_source = "gateway_default"
-    route_actor = ""
-    route_attempt_errors: List[Dict[str, str]] = []
-
-    def _gateway_generate(
-        request: UnifiedLLMRequest,
-        *,
-        provider: Optional[str] = None,
-        mode: Optional[str] = None,
-        model: Optional[str] = None,
-        allow_fallback: bool,
-        target_override: Optional[Dict[str, Any]] = None,
-    ) -> Any:
-        base_kwargs: Dict[str, Any] = {
-            "provider": provider,
-            "mode": mode,
-            "model": model,
-            "allow_fallback": allow_fallback,
-            "target_override": target_override,
-        }
-        if bool(stream) and callable(token_sink):
-            base_kwargs["token_sink"] = token_sink
-        return deps.gateway.generate(request, **base_kwargs)
-
+    limiter = _runtime_limiter(policy, deps=deps)
+    state = ChatRuntimeRouteState()
     with deps.limit(limiter):
         result = None
         if policy.uses_teacher_model_config:
-            route_actor = deps.resolve_teacher_id(teacher_id)
-            try:
-                config_payload = deps.resolve_teacher_model_config(route_actor) or {}
-            except Exception as exc:  # pragma: no cover - defensive
-                _log.warning("operation failed", exc_info=True)
-                config_payload = {}
-                route_attempt_errors.append({"source": "teacher_model_config", "error": str(exc)[:200]})
-
-            models = config_payload.get("models") if isinstance(config_payload, dict) else {}
-            conversation = models.get("conversation") if isinstance(models, dict) else {}
-            provider = str((conversation or {}).get("provider") or "").strip()
-            mode = str((conversation or {}).get("mode") or "").strip()
-            model = str((conversation or {}).get("model") or "").strip()
-            if provider and mode and model:
-                target_override = None
-                try:
-                    target_override = deps.resolve_teacher_provider_target(route_actor, provider, mode, model)
-                except Exception as exc:  # pragma: no cover - defensive
-                    _log.warning("operation failed", exc_info=True)
-                    route_attempt_errors.append(
-                        {
-                            "source": "teacher_provider_target",
-                            "provider": provider,
-                            "mode": mode,
-                            "model": model,
-                            "error": str(exc)[:200],
-                        }
-                    )
-                try:
-                    if isinstance(target_override, dict):
-                        result = _gateway_generate(req, allow_fallback=False, target_override=target_override)
-                    else:
-                        result = _gateway_generate(
-                            req,
-                            provider=provider,
-                            mode=mode,
-                            model=model,
-                            allow_fallback=False,
-                        )
-                    route_selected = True
-                    route_reason = "teacher_model_config"
-                    route_source = "teacher_model_config"
-                    route_target_provider = provider
-                    route_target_mode = mode
-                    route_target_model = model
-                except Exception as exc:  # pragma: no cover - defensive
-                    _log.warning("operation failed", exc_info=True)
-                    route_attempt_errors.append(
-                        {
-                            "source": "teacher_model_config",
-                            "provider": provider,
-                            "mode": mode,
-                            "model": model,
-                            "error": str(exc)[:200],
-                        }
-                    )
-
+            result, state = _attempt_teacher_route(
+                req,
+                teacher_id=teacher_id,
+                deps=deps,
+                stream=stream,
+                token_sink=token_sink,
+            )
         if result is None:
-            result = _gateway_generate(req, allow_fallback=True)
+            result = _gateway_generate(
+                req,
+                deps=deps,
+                stream=stream,
+                token_sink=token_sink,
+                allow_fallback=True,
+            )
 
-    deps.diag_log(
-        "llm.call.done",
-        {
-            "duration_ms": int((deps.monotonic() - t0) * 1000),
-            "role": role_hint or "unknown",
-            "skill_id": skill_id or "",
-            "kind": kind or "",
-            "tools": bool(tools),
-            "stream": bool(stream),
-            "route_selected": route_selected,
-            "route_reason": route_reason,
-            "route_provider": route_target_provider,
-            "route_mode": route_target_mode,
-            "route_model": route_target_model,
-            "route_source": route_source,
-            "route_actor": route_actor,
-            "route_attempt_errors": route_attempt_errors,
-        },
-    )
+    deps.diag_log("llm.call.done", _diag_payload(
+        deps=deps,
+        started_at=t0,
+        role_hint=role_hint,
+        skill_id=skill_id,
+        kind=kind,
+        tools=tools,
+        stream=stream,
+        state=state,
+    ))
     return result.as_chat_completion()

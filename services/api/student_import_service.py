@@ -50,6 +50,52 @@ def _resolve_profile_path(profiles_dir: Path, student_id: str) -> Optional[Path]
     return target
 
 
+def _resolve_existing_allowed_file(path: Path, *, deps: StudentImportDeps) -> Optional[Path]:
+    try:
+        resolved = path.resolve()
+    except Exception:
+        return None
+    if not _path_allowed(resolved, deps=deps):
+        return None
+    return resolved if resolved.exists() and resolved.is_file() else None
+
+
+def _resolve_direct_file(file_path: str, *, deps: StudentImportDeps) -> Optional[Path]:
+    candidate = Path(file_path)
+    if not candidate.is_absolute():
+        candidate = deps.app_root / candidate
+    return _resolve_existing_allowed_file(candidate, deps=deps)
+
+
+def _resolve_manifest_file_candidate(resp_path: Any, *, deps: StudentImportDeps) -> Optional[Path]:
+    if not resp_path:
+        return None
+    candidate = Path(str(resp_path))
+    if not candidate.is_absolute():
+        candidate = deps.app_root / candidate if str(resp_path).startswith("data/") else deps.data_dir / candidate
+    return _resolve_existing_allowed_file(candidate, deps=deps)
+
+
+def _resolve_from_exam_manifest(exam_id: str, *, deps: StudentImportDeps) -> Optional[Path]:
+    manifest_path = _resolve_exam_manifest_path(deps.data_dir, exam_id)
+    if manifest_path is None or not manifest_path.exists():
+        return None
+    manifest = deps.load_profile_file(manifest_path)
+    files = manifest.get("files", {})
+    resp_path = files.get("responses") or files.get("responses_scored") or files.get("responses_csv")
+    return _resolve_manifest_file_candidate(resp_path, deps=deps)
+
+
+def _latest_staging_responses_file(staging_dir: Path) -> Optional[Path]:
+    if not staging_dir.exists():
+        return None
+    candidates = list(staging_dir.glob("*responses*scored*.csv")) or list(staging_dir.glob("*responses*.csv"))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    return candidates[0]
+
+
 def resolve_responses_file(
     exam_id: Optional[str],
     file_path: Optional[str],
@@ -57,49 +103,96 @@ def resolve_responses_file(
     deps: StudentImportDeps,
 ) -> Optional[Path]:
     if file_path:
-        path = Path(file_path)
-        if not path.is_absolute():
-            path = deps.app_root / path
-        try:
-            path = path.resolve()
-        except Exception:
-            return None
-        if not _path_allowed(path, deps=deps):
-            return None
-        return path if path.exists() and path.is_file() else None
+        return _resolve_direct_file(file_path, deps=deps)
 
     if exam_id:
-        manifest_path = _resolve_exam_manifest_path(deps.data_dir, str(exam_id or ""))
-        if manifest_path is None:
-            return None
-        if manifest_path.exists():
-            manifest = deps.load_profile_file(manifest_path)
-            files = manifest.get("files", {})
-            resp_path = files.get("responses") or files.get("responses_scored") or files.get("responses_csv")
-            if resp_path:
-                candidate = Path(resp_path)
-                if not candidate.is_absolute():
-                    if str(resp_path).startswith("data/"):
-                        candidate = deps.app_root / candidate
-                    else:
-                        candidate = deps.data_dir / candidate
-                try:
-                    candidate = candidate.resolve()
-                except Exception:
-                    return None
-                if not _path_allowed(candidate, deps=deps):
-                    return None
-                return candidate if candidate.exists() and candidate.is_file() else None
+        from_manifest = _resolve_from_exam_manifest(str(exam_id or ""), deps=deps)
+        if from_manifest is not None:
+            return from_manifest
 
-    staging_dir = deps.data_dir / "staging"
-    if staging_dir.exists():
-        candidates = list(staging_dir.glob("*responses*scored*.csv"))
-        if not candidates:
-            candidates = list(staging_dir.glob("*responses*.csv"))
-        if candidates:
-            candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-            return candidates[0]
-    return None
+    return _latest_staging_responses_file(deps.data_dir / "staging")
+
+
+def _student_id_from_row(row: Dict[str, str]) -> str:
+    student_id = (row.get("student_id") or "").strip()
+    student_name = (row.get("student_name") or "").strip()
+    class_name = (row.get("class_name") or "").strip()
+    if student_id:
+        return student_id
+    if class_name and student_name:
+        return f"{class_name}_{student_name}"
+    return student_name
+
+
+def _collect_students(path: Path) -> Dict[str, Dict[str, str]]:
+    students: Dict[str, Dict[str, str]] = {}
+    with path.open(encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            student_id = _student_id_from_row(row)
+            if not student_id or student_id in students:
+                continue
+            students[student_id] = {
+                "student_id": student_id,
+                "student_name": (row.get("student_name") or "").strip(),
+                "class_name": (row.get("class_name") or "").strip(),
+                "exam_id": (row.get("exam_id") or "").strip(),
+            }
+    return students
+
+
+def _merge_student_name(profile: Dict[str, Any], student_name: str) -> None:
+    if not student_name:
+        return
+    if not profile.get("student_name"):
+        profile["student_name"] = student_name
+        return
+    if profile.get("student_name") == student_name:
+        return
+    aliases = set(profile.get("aliases", []))
+    aliases.add(student_name)
+    profile["aliases"] = sorted(aliases)
+
+
+def _append_import_history(
+    profile: Dict[str, Any],
+    *,
+    path: Path,
+    exam_id: str,
+    mode: str,
+    timestamp: str,
+) -> None:
+    history = profile.get("import_history", [])
+    if not isinstance(history, list):
+        history = []
+    history.append(
+        {
+            "timestamp": timestamp,
+            "source": "exam_responses",
+            "file": str(path),
+            "exam_id": exam_id,
+            "mode": mode,
+        }
+    )
+    profile["import_history"] = history[-10:]
+
+
+def _update_student_profile(
+    profile: Dict[str, Any],
+    *,
+    student_id: str,
+    info: Dict[str, str],
+    path: Path,
+    mode: str,
+    timestamp: str,
+) -> None:
+    profile.setdefault("student_id", student_id)
+    profile.setdefault("created_at", timestamp)
+    profile["last_updated"] = timestamp
+    _merge_student_name(profile, info.get("student_name", ""))
+    if info.get("class_name") and not profile.get("class_name"):
+        profile["class_name"] = info["class_name"]
+    _append_import_history(profile, path=path, exam_id=info.get("exam_id", ""), mode=mode, timestamp=timestamp)
 
 
 def import_students_from_responses(
@@ -113,29 +206,7 @@ def import_students_from_responses(
 
     profiles_dir = deps.data_dir / "student_profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
-
-    students: Dict[str, Dict[str, str]] = {}
-    with path.open(encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            student_id = (row.get("student_id") or "").strip()
-            student_name = (row.get("student_name") or "").strip()
-            class_name = (row.get("class_name") or "").strip()
-            exam_id = (row.get("exam_id") or "").strip()
-            if not student_id:
-                if class_name and student_name:
-                    student_id = f"{class_name}_{student_name}"
-                elif student_name:
-                    student_id = student_name
-            if not student_id:
-                continue
-            if student_id not in students:
-                students[student_id] = {
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                    "exam_id": exam_id,
-                }
+    students = _collect_students(path)
 
     created = 0
     updated = 0
@@ -149,41 +220,14 @@ def import_students_from_responses(
             continue
         profile = deps.load_profile_file(profile_path) if profile_path.exists() else {}
         is_new = not bool(profile)
+        timestamp = deps.now_iso()
 
         if is_new:
             created += 1
         else:
             updated += 1
 
-        profile.setdefault("student_id", student_id)
-        profile.setdefault("created_at", deps.now_iso())
-        profile["last_updated"] = deps.now_iso()
-
-        if info.get("student_name"):
-            if not profile.get("student_name"):
-                profile["student_name"] = info["student_name"]
-            elif profile.get("student_name") != info["student_name"]:
-                aliases = set(profile.get("aliases", []))
-                aliases.add(info["student_name"])
-                profile["aliases"] = sorted(aliases)
-
-        if info.get("class_name") and not profile.get("class_name"):
-            profile["class_name"] = info["class_name"]
-
-        history = profile.get("import_history", [])
-        if not isinstance(history, list):
-            history = []
-        history.append(
-            {
-                "timestamp": deps.now_iso(),
-                "source": "exam_responses",
-                "file": str(path),
-                "exam_id": info.get("exam_id") or "",
-                "mode": mode,
-            }
-        )
-        profile["import_history"] = history[-10:]
-
+        _update_student_profile(profile, student_id=student_id, info=info, path=path, mode=mode, timestamp=timestamp)
         profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
         if len(sample) < 10:
             sample.append(student_id)

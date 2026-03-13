@@ -47,6 +47,42 @@ def _read_json(path: Path) -> Dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _default_model_for_mode(
+    providers: Dict[str, Any],
+    *,
+    provider_name: str,
+    mode_name: str,
+) -> str:
+    provider = _as_dict(providers.get(provider_name))
+    modes = _as_dict(provider.get("modes"))
+    mode = _as_dict(modes.get(mode_name))
+    return _as_str(mode.get("default_model"))
+
+
+def _provider_mode_exists(
+    providers: Dict[str, Any],
+    *,
+    provider_name: str,
+    mode_name: str,
+) -> bool:
+    modes = _as_dict(_as_dict(providers.get(provider_name)).get("modes"))
+    return provider_name in providers and mode_name in modes
+
+
+def _first_provider_mode(
+    providers: Dict[str, Any],
+    *,
+    mode_predicate: Optional[Callable[[str], bool]] = None,
+) -> tuple[str, str]:
+    for provider_name in sorted(providers.keys()):
+        modes = _as_dict(_as_dict(providers.get(provider_name)).get("modes"))
+        for mode_name in sorted(modes.keys()):
+            if mode_predicate is not None and not mode_predicate(mode_name):
+                continue
+            return provider_name, mode_name
+    return "", ""
+
+
 def _find_provider_mode(
     registry: Dict[str, Any],
     *,
@@ -56,36 +92,46 @@ def _find_provider_mode(
 ) -> tuple[str, str, str]:
     providers = _as_dict(registry.get("providers"))
     defaults = _as_dict(registry.get("defaults"))
-
-    def _default_model(provider_name: str, mode_name: str) -> str:
-        prov = _as_dict(providers.get(provider_name))
-        modes = _as_dict(prov.get("modes"))
-        mode = _as_dict(modes.get(mode_name))
-        return _as_str(mode.get("default_model"))
-
-    if provider_hint and mode_hint:
-        model = _default_model(provider_hint, mode_hint)
-        if provider_hint in providers and mode_hint in _as_dict(_as_dict(providers.get(provider_hint)).get("modes")):
-            return provider_hint, mode_hint, model
+    if provider_hint and mode_hint and _provider_mode_exists(
+        providers,
+        provider_name=provider_hint,
+        mode_name=mode_hint,
+    ):
+        return provider_hint, mode_hint, _default_model_for_mode(
+            providers,
+            provider_name=provider_hint,
+            mode_name=mode_hint,
+        )
 
     default_provider = _as_str(defaults.get("provider"))
     default_mode = _as_str(defaults.get("mode"))
-    if default_provider and default_mode:
-        prov_modes = _as_dict(_as_dict(providers.get(default_provider)).get("modes"))
-        if default_mode in prov_modes and mode_predicate(default_mode):
-            return default_provider, default_mode, _default_model(default_provider, default_mode)
+    if (
+        default_provider
+        and default_mode
+        and mode_predicate(default_mode)
+        and _provider_mode_exists(providers, provider_name=default_provider, mode_name=default_mode)
+    ):
+        return default_provider, default_mode, _default_model_for_mode(
+            providers,
+            provider_name=default_provider,
+            mode_name=default_mode,
+        )
 
-    for provider_name in sorted(providers.keys()):
-        modes = _as_dict(_as_dict(providers.get(provider_name)).get("modes"))
-        for mode_name in sorted(modes.keys()):
-            if not mode_predicate(mode_name):
-                continue
-            return provider_name, mode_name, _default_model(provider_name, mode_name)
+    provider_name, mode_name = _first_provider_mode(providers, mode_predicate=mode_predicate)
+    if provider_name and mode_name:
+        return provider_name, mode_name, _default_model_for_mode(
+            providers,
+            provider_name=provider_name,
+            mode_name=mode_name,
+        )
 
-    for provider_name in sorted(providers.keys()):
-        modes = _as_dict(_as_dict(providers.get(provider_name)).get("modes"))
-        for mode_name in sorted(modes.keys()):
-            return provider_name, mode_name, _default_model(provider_name, mode_name)
+    provider_name, mode_name = _first_provider_mode(providers)
+    if provider_name and mode_name:
+        return provider_name, mode_name, _default_model_for_mode(
+            providers,
+            provider_name=provider_name,
+            mode_name=mode_name,
+        )
 
     return "", "", ""
 

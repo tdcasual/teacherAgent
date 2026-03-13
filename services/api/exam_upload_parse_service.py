@@ -536,62 +536,140 @@ def _write_scoring_outputs(
         deps.write_exam_answers_csv(answers_csv, answers)
 
     max_scores = deps.compute_max_scores_from_rows(rows)
-    needs_answer_scoring = any(
-        (row.get("score") is None) and str(row.get("raw_answer") or "").strip() for row in rows
+    needs_answer_scoring = _needs_answer_key_scoring(rows)
+    defaulted_max_score_qids = _default_missing_max_scores_for_answer_scoring(
+        rows=rows,
+        answers=answers,
+        max_scores=max_scores,
+        needs_answer_scoring=needs_answer_scoring,
     )
-    qids_need: set[str] = set()
-    defaulted_max_score_qids: List[str] = []
-    if needs_answer_scoring and answers:
-        qids_need = {
-            str(row.get("question_id") or "").strip()
-            for row in rows
-            if (row.get("score") is None) and str(row.get("raw_answer") or "").strip()
-        }
-        for qid in sorted(qids_need):
-            if not qid:
-                continue
-            if qid not in max_scores:
-                max_scores[qid] = 1.0
-                defaulted_max_score_qids.append(qid)
 
     questions_csv = derived_dir / "questions.csv"
     deps.write_exam_questions_csv(questions_csv, questions, max_scores)
 
-    answer_apply_stats: Dict[str, Any] = {}
-    if needs_answer_scoring and answers and answers_csv.exists():
-        try:
-            answer_apply_stats = deps.apply_answer_key_to_responses_csv(
-                responses_unscored_csv,
-                answers_csv,
-                questions_csv,
-                responses_scored_csv,
-            )
-            if answer_apply_stats.get("updated_rows"):
-                deps.diag_log(
-                    "exam_upload.answer_key.applied",
-                    {
-                        "job_id": job_id,
-                        "updated_rows": answer_apply_stats.get("updated_rows"),
-                        "total_rows": answer_apply_stats.get("total_rows"),
-                    },
-                )
-            missing_ans = answer_apply_stats.get("missing_answer_qids") or []
-            missing_max = answer_apply_stats.get("missing_max_score_qids") or []
-            if missing_ans:
-                preview = "，".join(missing_ans[:8])
-                more = f" 等{len(missing_ans)}题" if len(missing_ans) > 8 else ""
-                warnings.append(f"标准答案缺少题号：{preview}{more}（这些题无法自动评分）")
-            if missing_max:
-                preview = "，".join(missing_max[:8])
-                more = f" 等{len(missing_max)}题" if len(missing_max) > 8 else ""
-                warnings.append(f"题目满分缺失：{preview}{more}（这些题无法自动评分）")
-        except Exception as exc:
-            _log.debug("operation failed", exc_info=True)
-            warnings.append(f"未能根据标准答案自动补齐客观题得分：{str(exc)[:120]}")
-            deps.copy2(responses_unscored_csv, responses_scored_csv)
-    else:
-        deps.copy2(responses_unscored_csv, responses_scored_csv)
+    _apply_answer_key_scoring_outputs(
+        job_id=job_id,
+        deps=deps,
+        needs_answer_scoring=needs_answer_scoring,
+        answers=answers,
+        answers_csv=answers_csv,
+        questions_csv=questions_csv,
+        responses_unscored_csv=responses_unscored_csv,
+        responses_scored_csv=responses_scored_csv,
+        warnings=warnings,
+    )
     return responses_unscored_csv, responses_scored_csv, max_scores, defaulted_max_score_qids
+
+
+def _needs_answer_key_scoring(rows: List[Dict[str, Any]]) -> bool:
+    return any(
+        (row.get("score") is None) and str(row.get("raw_answer") or "").strip()
+        for row in rows
+    )
+
+
+def _rows_needing_answer_key_qids(rows: List[Dict[str, Any]]) -> set[str]:
+    return {
+        str(row.get("question_id") or "").strip()
+        for row in rows
+        if (row.get("score") is None) and str(row.get("raw_answer") or "").strip()
+    }
+
+
+def _default_missing_max_scores_for_answer_scoring(
+    *,
+    rows: List[Dict[str, Any]],
+    answers: List[Dict[str, Any]],
+    max_scores: Dict[str, float],
+    needs_answer_scoring: bool,
+) -> List[str]:
+    if not needs_answer_scoring or not answers:
+        return []
+
+    defaulted_qids: List[str] = []
+    for qid in sorted(_rows_needing_answer_key_qids(rows)):
+        if not qid or qid in max_scores:
+            continue
+        max_scores[qid] = 1.0
+        defaulted_qids.append(qid)
+    return defaulted_qids
+
+
+def _append_missing_scoring_warning(
+    *,
+    warnings: List[str],
+    qids: List[str],
+    prefix: str,
+) -> None:
+    if not qids:
+        return
+    preview = "，".join(qids[:8])
+    more = f" 等{len(qids)}题" if len(qids) > 8 else ""
+    warnings.append(f"{prefix}：{preview}{more}（这些题无法自动评分）")
+
+
+def _log_answer_key_apply_stats(
+    *,
+    job_id: str,
+    deps: ExamUploadParseDeps,
+    answer_apply_stats: Dict[str, Any],
+) -> None:
+    if not answer_apply_stats.get("updated_rows"):
+        return
+    deps.diag_log(
+        "exam_upload.answer_key.applied",
+        {
+            "job_id": job_id,
+            "updated_rows": answer_apply_stats.get("updated_rows"),
+            "total_rows": answer_apply_stats.get("total_rows"),
+        },
+    )
+
+
+def _apply_answer_key_scoring_outputs(
+    *,
+    job_id: str,
+    deps: ExamUploadParseDeps,
+    needs_answer_scoring: bool,
+    answers: List[Dict[str, Any]],
+    answers_csv: Path,
+    questions_csv: Path,
+    responses_unscored_csv: Path,
+    responses_scored_csv: Path,
+    warnings: List[str],
+) -> None:
+    if not (needs_answer_scoring and answers and answers_csv.exists()):
+        deps.copy2(responses_unscored_csv, responses_scored_csv)
+        return
+
+    try:
+        answer_apply_stats = deps.apply_answer_key_to_responses_csv(
+            responses_unscored_csv,
+            answers_csv,
+            questions_csv,
+            responses_scored_csv,
+        )
+    except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
+        warnings.append(f"未能根据标准答案自动补齐客观题得分：{str(exc)[:120]}")
+        deps.copy2(responses_unscored_csv, responses_scored_csv)
+        return
+
+    _log_answer_key_apply_stats(
+        job_id=job_id,
+        deps=deps,
+        answer_apply_stats=answer_apply_stats,
+    )
+    _append_missing_scoring_warning(
+        warnings=warnings,
+        qids=list(answer_apply_stats.get("missing_answer_qids") or []),
+        prefix="标准答案缺少题号",
+    )
+    _append_missing_scoring_warning(
+        warnings=warnings,
+        qids=list(answer_apply_stats.get("missing_max_score_qids") or []),
+        prefix="题目满分缺失",
+    )
 
 
 def _collect_response_scoring(

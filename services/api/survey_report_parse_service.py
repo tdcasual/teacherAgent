@@ -185,6 +185,51 @@ def _extract_attachment_text(attachment: Dict[str, Any], *, deps: SurveyReportPa
 
 
 
+def _question_entry(questions: Dict[str, Dict[str, Any]], question_id: str) -> Dict[str, Any]:
+    return questions.setdefault(
+        question_id,
+        {
+            "question_id": question_id,
+            "prompt": None,
+            "response_type": None,
+            "stats": {},
+        },
+    )
+
+
+def _apply_question_stats(entry: Dict[str, Any], stat_text: str, *, skip_labels: set[str]) -> None:
+    stats_found = False
+    for label, count in _STAT_RE.findall(stat_text):
+        if label.lower() in skip_labels or label.upper().startswith("Q"):
+            continue
+        entry.setdefault("stats", {})[str(label)] = int(count)
+        stats_found = True
+    if stats_found:
+        entry["response_type"] = entry.get("response_type") or "single_choice"
+
+
+def _parse_question_header(questions: Dict[str, Dict[str, Any]], question_match: re.Match[str]) -> str:
+    question_id = re.sub(r"\s+", "", question_match.group(1).upper())
+    rest = str(question_match.group(2) or "").strip()
+    prompt = _clean_value(rest.split("|")[0])
+    entry = _question_entry(questions, question_id)
+    if prompt:
+        entry["prompt"] = entry.get("prompt") or prompt
+    _apply_question_stats(entry, rest, skip_labels=set())
+    return question_id
+
+
+def _parse_question_continuation(
+    questions: Dict[str, Dict[str, Any]],
+    current_question_id: Optional[str],
+    line: str,
+) -> None:
+    if not current_question_id:
+        return
+    entry = _question_entry(questions, current_question_id)
+    _apply_question_stats(entry, line, skip_labels={"sample_size", "count", "evidence_count"})
+
+
 def _parse_question_summaries(texts: List[str], clean_text: Callable[[str], str]) -> List[SurveyQuestionSummary]:
     questions: Dict[str, Dict[str, Any]] = {}
     current_question_id: Optional[str] = None
@@ -199,47 +244,10 @@ def _parse_question_summaries(texts: List[str], clean_text: Callable[[str], str]
                 current_question_id = None
 
             if question_match:
-                question_id = re.sub(r"\s+", "", question_match.group(1).upper())
-                rest = str(question_match.group(2) or "").strip()
-                prompt = _clean_value(rest.split("|")[0])
-                entry = questions.setdefault(
-                    question_id,
-                    {
-                        "question_id": question_id,
-                        "prompt": None,
-                        "response_type": None,
-                        "stats": {},
-                    },
-                )
-                if prompt:
-                    entry["prompt"] = entry.get("prompt") or prompt
-                for label, count in _STAT_RE.findall(rest):
-                    if label.upper().startswith("Q"):
-                        continue
-                    entry.setdefault("stats", {})[str(label)] = int(count)
-                if entry.get("stats"):
-                    entry["response_type"] = entry.get("response_type") or "single_choice"
-                current_question_id = question_id
+                current_question_id = _parse_question_header(questions, question_match)
                 continue
 
-            if current_question_id:
-                entry = questions.setdefault(
-                    current_question_id,
-                    {
-                        "question_id": current_question_id,
-                        "prompt": None,
-                        "response_type": None,
-                        "stats": {},
-                    },
-                )
-                stats_found = False
-                for label, count in _STAT_RE.findall(line):
-                    if label.lower() in {"sample_size", "count", "evidence_count"}:
-                        continue
-                    entry.setdefault("stats", {})[str(label)] = int(count)
-                    stats_found = True
-                if stats_found:
-                    entry["response_type"] = entry.get("response_type") or "single_choice"
+            _parse_question_continuation(questions, current_question_id, line)
 
     return [SurveyQuestionSummary(**item) for _, item in sorted(questions.items())]
 
