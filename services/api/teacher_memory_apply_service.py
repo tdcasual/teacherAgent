@@ -28,6 +28,176 @@ class TeacherMemoryApplyDeps:
     mem0_index_entry: Callable[[str, str, Dict[str, Any]], Dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class _ApplyPayload:
+    target: str
+    title: str
+    content: str
+    source: str
+    provenance: Dict[str, Any]
+
+
+def _load_apply_record(path: Any) -> Dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        _log.warning("failed to read proposal file at %s", path, exc_info=True)
+        return {}
+
+
+def _proposal_payload(record: Dict[str, Any]) -> _ApplyPayload:
+    source = str(record.get("source") or "manual").strip().lower() or "manual"
+    provenance = record.get("provenance")
+    if not isinstance(provenance, dict):
+        provenance = {"layer": "memory_proposal", "source": source, "origin": "manual_input"}
+    return _ApplyPayload(
+        target=str(record.get("target") or "MEMORY").upper(),
+        title=str(record.get("title") or "").strip(),
+        content=str(record.get("content") or "").strip(),
+        source=source,
+        provenance=provenance,
+    )
+
+
+def _reject_record(
+    *,
+    teacher_id: str,
+    proposal_id: str,
+    path: Any,
+    record: Dict[str, Any],
+    deps: TeacherMemoryApplyDeps,
+    target: str,
+    source: str,
+    reason: str,
+    error: str | None = None,
+) -> Dict[str, Any]:
+    record["status"] = "rejected"
+    record["rejected_at"] = deps.now_iso()
+    if error:
+        record["reject_reason"] = error
+    deps.atomic_write_json(path, record)
+    deps.log_event(
+        teacher_id,
+        "proposal_rejected",
+        {
+            "proposal_id": proposal_id,
+            "target": target,
+            "source": source,
+            "reason": reason,
+        },
+    )
+    if error:
+        return {"error": error, "proposal_id": proposal_id}
+    return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
+
+
+def _resolve_apply_target_path(
+    teacher_id: str,
+    target: str,
+    deps: TeacherMemoryApplyDeps,
+) -> Any:
+    if target == "DAILY":
+        return deps.teacher_daily_memory_path(teacher_id)
+    if target in {"MEMORY", "USER", "AGENTS", "SOUL", "HEARTBEAT"}:
+        filename = f"{target}.md" if target != "MEMORY" else "MEMORY.md"
+        return deps.teacher_workspace_file(teacher_id, filename)
+    return deps.teacher_workspace_file(teacher_id, "MEMORY.md")
+
+
+def _build_memory_entry(
+    *,
+    proposal_id: str,
+    stamp: str,
+    title: str,
+    content: str,
+    source: str,
+    provenance: Dict[str, Any],
+    supersedes: List[str],
+) -> str:
+    entry_lines = [f"## {title}".strip() if title else "## Memory Update"]
+    entry_lines.append(f"- ts: {stamp}")
+    entry_lines.append(f"- entry_id: {proposal_id}")
+    entry_lines.append(f"- source: {source}")
+    entry_lines.append(
+        f"- provenance: {str(provenance.get('origin') or 'unknown')}:{str(provenance.get('source') or source)}"
+    )
+    if supersedes:
+        entry_lines.append(f"- supersedes: {', '.join(supersedes)}")
+    entry_lines.append("")
+    entry_lines.append(content)
+    return "\n".join(entry_lines).strip() + "\n\n"
+
+
+def _append_memory_entry(out_path: Any, entry: str) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("a", encoding="utf-8") as file_handle:
+        file_handle.write(entry)
+
+
+def _maybe_index_mem0(
+    *,
+    teacher_id: str,
+    proposal_id: str,
+    out_path: Any,
+    payload: _ApplyPayload,
+    stamp: str,
+    deps: TeacherMemoryApplyDeps,
+) -> Optional[Dict[str, Any]]:
+    try:
+        if not deps.mem0_should_index_target(payload.target):
+            return None
+        index_text = f"{payload.title or 'Memory Update'}\n{payload.content}".strip()
+        mem0_info = deps.mem0_index_entry(
+            teacher_id,
+            index_text,
+            {
+                "file": str(out_path),
+                "proposal_id": proposal_id,
+                "target": payload.target,
+                "title": payload.title or "Memory Update",
+                "source": payload.source,
+                "ts": stamp,
+            },
+        )
+        deps.diag_log(
+            "teacher.mem0.index.done",
+            {
+                "teacher_id": teacher_id,
+                "proposal_id": proposal_id,
+                "ok": bool(mem0_info.get("ok") if isinstance(mem0_info, dict) else False),
+            },
+        )
+        return mem0_info
+    except Exception as exc:
+        _log.debug("operation failed", exc_info=True)
+        error = str(exc)[:200]
+        deps.diag_log("teacher.mem0.index.crash", {"teacher_id": teacher_id, "proposal_id": proposal_id, "error": error})
+        return {"ok": False, "error": error}
+
+
+def _mark_record_applied(
+    record: Dict[str, Any],
+    *,
+    out_path: Any,
+    stamp: str,
+    supersedes: List[str],
+    deps: TeacherMemoryApplyDeps,
+) -> int:
+    record["status"] = "applied"
+    record["applied_at"] = stamp
+    record["applied_to"] = str(out_path)
+    ttl_days = deps.record_ttl_days(record)
+    record["ttl_days"] = ttl_days
+    expire_at = deps.record_expire_at(record)
+    if expire_at is not None:
+        record["expires_at"] = expire_at.isoformat(timespec="seconds")
+    else:
+        record.pop("expires_at", None)
+    if supersedes:
+        record["supersedes"] = supersedes
+    return ttl_days
+
+
 def teacher_memory_apply(
     teacher_id: str,
     proposal_id: str,
@@ -38,124 +208,61 @@ def teacher_memory_apply(
     path = deps.proposal_path(teacher_id, proposal_id)
     if not path.exists():
         return {"error": "proposal not found", "proposal_id": proposal_id}
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        _log.warning("failed to read proposal file for teacher=%s proposal=%s", teacher_id, proposal_id, exc_info=True)
-        record = {}
+
+    record = _load_apply_record(path)
     status = str(record.get("status") or "proposed")
     if status in {"applied", "rejected"}:
         return {"ok": True, "proposal_id": proposal_id, "status": status, "detail": "already processed"}
 
+    payload = _proposal_payload(record)
     if not approve:
-        record["status"] = "rejected"
-        record["rejected_at"] = deps.now_iso()
-        deps.atomic_write_json(path, record)
-        deps.log_event(
-            teacher_id,
-            "proposal_rejected",
-            {
-                "proposal_id": proposal_id,
-                "target": str(record.get("target") or "MEMORY"),
-                "source": str(record.get("source") or "manual"),
-                "reason": "manual_reject",
-            },
+        return _reject_record(
+            teacher_id=teacher_id,
+            proposal_id=proposal_id,
+            path=path,
+            record=record,
+            deps=deps,
+            target=payload.target,
+            source=payload.source,
+            reason="manual_reject",
         )
-        return {"ok": True, "proposal_id": proposal_id, "status": "rejected"}
-
-    target = str(record.get("target") or "MEMORY").upper()
-    title = str(record.get("title") or "").strip()
-    content = str(record.get("content") or "").strip()
-    source = str(record.get("source") or "manual").strip().lower() or "manual"
-    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {"layer": "memory_proposal", "source": source, "origin": "manual_input"}
-    if not content:
+    if not payload.content:
         return {"error": "empty content", "proposal_id": proposal_id}
-    if deps.auto_apply_strict and deps.is_sensitive(content):
-        record["status"] = "rejected"
-        record["rejected_at"] = deps.now_iso()
-        record["reject_reason"] = "sensitive_content_blocked"
-        deps.atomic_write_json(path, record)
-        deps.log_event(
-            teacher_id,
-            "proposal_rejected",
-            {
-                "proposal_id": proposal_id,
-                "target": target,
-                "source": source,
-                "reason": "sensitive_content_blocked",
-            },
+    if deps.auto_apply_strict and deps.is_sensitive(payload.content):
+        return _reject_record(
+            teacher_id=teacher_id,
+            proposal_id=proposal_id,
+            path=path,
+            record=record,
+            deps=deps,
+            target=payload.target,
+            source=payload.source,
+            reason="sensitive_content_blocked",
+            error="sensitive_content_blocked",
         )
-        return {"error": "sensitive_content_blocked", "proposal_id": proposal_id}
 
-    if target == "DAILY":
-        out_path = deps.teacher_daily_memory_path(teacher_id)
-    elif target in {"MEMORY", "USER", "AGENTS", "SOUL", "HEARTBEAT"}:
-        out_path = deps.teacher_workspace_file(teacher_id, f"{target}.md" if target != "MEMORY" else "MEMORY.md")
-    else:
-        out_path = deps.teacher_workspace_file(teacher_id, "MEMORY.md")
-
-    supersedes = deps.find_conflicting_applied(teacher_id, proposal_id, target, content)
+    out_path = _resolve_apply_target_path(teacher_id, payload.target, deps)
+    supersedes = deps.find_conflicting_applied(teacher_id, proposal_id, payload.target, payload.content)
     stamp = deps.now_iso()
-    entry_lines = []
-    if title:
-        entry_lines.append(f"## {title}".strip())
-    else:
-        entry_lines.append("## Memory Update")
-    entry_lines.append(f"- ts: {stamp}")
-    entry_lines.append(f"- entry_id: {proposal_id}")
-    entry_lines.append(f"- source: {source}")
-    if provenance:
-        entry_lines.append(f"- provenance: {str(provenance.get('origin') or 'unknown')}:{str(provenance.get('source') or source)}")
-    if supersedes:
-        entry_lines.append(f"- supersedes: {', '.join(supersedes)}")
-    entry_lines.append("")
-    entry_lines.append(content)
-    entry = "\n".join(entry_lines).strip() + "\n\n"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("a", encoding="utf-8") as f:
-        f.write(entry)
-
-    record["status"] = "applied"
-    record["applied_at"] = stamp
-    record["applied_to"] = str(out_path)
-    record["ttl_days"] = deps.record_ttl_days(record)
-    expire_at = deps.record_expire_at(record)
-    if expire_at is not None:
-        record["expires_at"] = expire_at.isoformat(timespec="seconds")
-    else:
-        record.pop("expires_at", None)
-    if supersedes:
-        record["supersedes"] = supersedes
-
-    mem0_info: Optional[Dict[str, Any]] = None
-    try:
-        if deps.mem0_should_index_target(target):
-            index_text = f"{title or 'Memory Update'}\n{content}".strip()
-            mem0_info = deps.mem0_index_entry(
-                teacher_id,
-                index_text,
-                {
-                    "file": str(out_path),
-                    "proposal_id": proposal_id,
-                    "target": target,
-                    "title": title or "Memory Update",
-                    "source": source,
-                    "ts": stamp,
-                },
-            )
-            deps.diag_log(
-                "teacher.mem0.index.done",
-                {
-                    "teacher_id": teacher_id,
-                    "proposal_id": proposal_id,
-                    "ok": bool(mem0_info.get("ok") if isinstance(mem0_info, dict) else False),
-                },
-            )
-    except Exception as exc:
-        _log.debug("operation failed", exc_info=True)
-        mem0_info = {"ok": False, "error": str(exc)[:200]}
-        deps.diag_log("teacher.mem0.index.crash", {"teacher_id": teacher_id, "proposal_id": proposal_id, "error": str(exc)[:200]})
-
+    entry = _build_memory_entry(
+        proposal_id=proposal_id,
+        stamp=stamp,
+        title=payload.title,
+        content=payload.content,
+        source=payload.source,
+        provenance=payload.provenance,
+        supersedes=supersedes,
+    )
+    _append_memory_entry(out_path, entry)
+    ttl_days = _mark_record_applied(record, out_path=out_path, stamp=stamp, supersedes=supersedes, deps=deps)
+    mem0_info = _maybe_index_mem0(
+        teacher_id=teacher_id,
+        proposal_id=proposal_id,
+        out_path=out_path,
+        payload=payload,
+        stamp=stamp,
+        deps=deps,
+    )
     if mem0_info is not None:
         record["mem0"] = mem0_info
 
@@ -167,15 +274,21 @@ def teacher_memory_apply(
         "proposal_applied",
         {
             "proposal_id": proposal_id,
-            "target": target,
-            "source": source,
+            "target": payload.target,
+            "source": payload.source,
             "priority_score": int(record.get("priority_score") or 0),
             "supersedes": len(supersedes),
-            "ttl_days": deps.record_ttl_days(record),
+            "ttl_days": ttl_days,
             "expired": bool(deps.is_expired_record(record)),
         },
     )
-    out: Dict[str, Any] = {"ok": True, "proposal_id": proposal_id, "status": "applied", "applied_to": str(out_path), "provenance": provenance}
+    out: Dict[str, Any] = {
+        "ok": True,
+        "proposal_id": proposal_id,
+        "status": "applied",
+        "applied_to": str(out_path),
+        "provenance": payload.provenance,
+    }
     if mem0_info is not None:
         out["mem0"] = mem0_info
     if supersedes:

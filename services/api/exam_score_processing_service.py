@@ -156,6 +156,109 @@ def _sort_key_question_no(item: Dict[str, Any]) -> Tuple[int, str]:
     return no_int, str(item.get("sub_no") or "")
 
 
+def _student_identity(student: Dict[str, Any]) -> Tuple[str, str, str]:
+    student_name = str(student.get("student_name") or "").strip()
+    class_name = str(student.get("class_name") or "").strip()
+    student_id = str(student.get("student_id") or "").strip() or normalize_student_id_for_exam(class_name, student_name)
+    return student_name, class_name, student_id
+
+
+def _resolve_question_row_parts(raw_label: str) -> Tuple[str, str, str, str]:
+    parsed_label = parse_exam_question_label(raw_label)
+    if parsed_label:
+        q_no, sub_no, raw_norm = parsed_label
+        return build_exam_question_id(q_no, sub_no), str(q_no), str(sub_no or ""), raw_norm
+    qid = raw_label if raw_label.startswith("Q") else f"Q{raw_label}"
+    return qid, "", "", raw_label
+
+
+def _build_question_score_row(
+    exam_id: str,
+    *,
+    student_id: str,
+    student_name: str,
+    class_name: str,
+    raw_label: Any,
+    raw_score: Any,
+    questions_out: Dict[str, Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    raw_label_str = str(raw_label or "").strip()
+    if not raw_label_str:
+        return None
+    score = parse_score_value(raw_score)
+    if score is None:
+        return None
+    qid, question_no, sub_no_str, raw_label_final = _resolve_question_row_parts(raw_label_str)
+    questions_out.setdefault(qid, {"question_id": qid, "question_no": question_no, "sub_no": sub_no_str})
+    return {
+        "exam_id": exam_id,
+        "student_id": student_id,
+        "student_name": student_name,
+        "class_name": class_name,
+        "question_id": qid,
+        "question_no": question_no,
+        "sub_no": sub_no_str,
+        "raw_label": raw_label_final,
+        "raw_value": str(raw_score),
+        "raw_answer": "",
+        "score": score,
+        "is_correct": "",
+    }
+
+
+def _build_question_mode_rows(
+    exam_id: str,
+    student: Dict[str, Any],
+    *,
+    student_id: str,
+    student_name: str,
+    class_name: str,
+    questions_out: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    scores_map = _normalize_scores_map(student.get("scores") or {})
+    if not scores_map:
+        return []
+    rows: List[Dict[str, Any]] = []
+    for raw_label, raw_score in scores_map.items():
+        row = _build_question_score_row(
+            exam_id,
+            student_id=student_id,
+            student_name=student_name,
+            class_name=class_name,
+            raw_label=raw_label,
+            raw_score=raw_score,
+            questions_out=questions_out,
+        )
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _build_student_rows(
+    exam_id: str,
+    student: Dict[str, Any],
+    *,
+    mode: str,
+    questions_out: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    student_name, class_name, student_id = _student_identity(student)
+    if not student_name and not student_id:
+        return []
+    if mode == "total":
+        total_score = parse_score_value(student.get("total_score"))
+        if total_score is None:
+            return []
+        return [_build_total_row(exam_id, student_id, student_name, class_name, total_score)]
+    return _build_question_mode_rows(
+        exam_id,
+        student,
+        student_id=student_id,
+        student_name=student_name,
+        class_name=class_name,
+        questions_out=questions_out,
+    )
+
+
 def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
     mode = _normalize_exam_parse_mode(parsed)
     warnings = _collect_parse_warnings(parsed)
@@ -170,59 +273,7 @@ def build_exam_rows_from_parsed_scores(exam_id: str, parsed: Dict[str, Any]) -> 
     for s in students:
         if not isinstance(s, dict):
             continue
-        student_name = str(s.get("student_name") or "").strip()
-        class_name = str(s.get("class_name") or "").strip()
-        student_id = str(s.get("student_id") or "").strip() or normalize_student_id_for_exam(class_name, student_name)
-        if not student_name:
-            if not student_id:
-                continue
-        if mode == "total":
-            total_score = parse_score_value(s.get("total_score"))
-            if total_score is None:
-                continue
-            rows.append(_build_total_row(exam_id, student_id, student_name, class_name, total_score))
-            continue
-
-        scores_map = _normalize_scores_map(s.get("scores") or {})
-        if not scores_map:
-            continue
-        for raw_label, raw_score in scores_map.items():
-            raw_label_str = str(raw_label or "").strip()
-            if not raw_label_str:
-                continue
-            score = parse_score_value(raw_score)
-            if score is None:
-                continue
-            parsed_label = parse_exam_question_label(raw_label_str)
-            if parsed_label:
-                q_no, sub_no, raw_norm = parsed_label
-                qid = build_exam_question_id(q_no, sub_no)
-                question_no = str(q_no)
-                sub_no_str = str(sub_no or "")
-                raw_label_final = raw_norm
-            else:
-                qid = raw_label_str if raw_label_str.startswith("Q") else f"Q{raw_label_str}"
-                question_no = ""
-                sub_no_str = ""
-                raw_label_final = raw_label_str
-            if qid not in questions_out:
-                questions_out[qid] = {"question_id": qid, "question_no": question_no, "sub_no": sub_no_str}
-            rows.append(
-                {
-                    "exam_id": exam_id,
-                    "student_id": student_id,
-                    "student_name": student_name,
-                    "class_name": class_name,
-                    "question_id": qid,
-                    "question_no": question_no,
-                    "sub_no": sub_no_str,
-                    "raw_label": raw_label_final,
-                    "raw_value": str(raw_score),
-                    "raw_answer": "",
-                    "score": score,
-                    "is_correct": "",
-                }
-            )
+        rows.extend(_build_student_rows(exam_id, s, mode=mode, questions_out=questions_out))
 
     questions_list = list(questions_out.values())
     questions_list.sort(key=_sort_key_question_no)
@@ -332,53 +383,51 @@ def _build_answer_key_item(label: str, ans: str) -> Dict[str, Any]:
     }
 
 
+_ANSWER_KEY_LABEL_PATTERN = r"\d+(?:\([^)]+\)|[-_][A-Za-z0-9]+|[A-Za-z]+)?"
+_ANSWER_KEY_ANSWER_PATTERN = r"[A-Za-z]{1,8}"
+_ANSWER_KEY_LINE_RE = re.compile(
+    rf"^\s*(?P<label>{_ANSWER_KEY_LABEL_PATTERN})\s*[\.\):：\s]\s*(?P<ans>{_ANSWER_KEY_ANSWER_PATTERN})\s*$"
+)
+_ANSWER_KEY_INLINE_RE = re.compile(
+    rf"(?P<label>{_ANSWER_KEY_LABEL_PATTERN})\s*[\.\):：]\s*(?P<ans>{_ANSWER_KEY_ANSWER_PATTERN})"
+)
+
+
+def _collect_answer_key_items(matches: Iterable[re.Match[str]]) -> Dict[str, Dict[str, Any]]:
+    items: Dict[str, Dict[str, Any]] = {}
+    for match in matches:
+        label = str(match.group("label") or "").strip()
+        ans = normalize_objective_answer(match.group("ans"))
+        if not label or not ans:
+            continue
+        item = _build_answer_key_item(label, ans)
+        items[str(item.get("question_id") or "")] = item
+    return items
+
+
+def _answer_key_sort_key(row: Dict[str, Any]) -> Tuple[int, str]:
+    qid = str(row.get("question_id") or "")
+    match = re.match(r"^Q(\d+)", qid)
+    if match:
+        return int(match.group(1)), qid
+    return 9999, qid
+
+
 def parse_exam_answer_key_text(text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     warnings: List[str] = []
     if not text or not text.strip():
         return [], ["答案文本为空"]
 
-    items: Dict[str, Dict[str, Any]] = {}
-    line_re = re.compile(
-        r"^\s*(?P<label>\d+(?:\([^)]+\)|[-_][A-Za-z0-9]+|[A-Za-z]+)?)\s*[\.\):：\s]\s*(?P<ans>[A-Za-z]{1,8})\s*$"
-    )
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        m = line_re.match(line)
-        if not m:
-            continue
-        label = m.group("label").strip()
-        ans = normalize_objective_answer(m.group("ans"))
-        if not ans:
-            continue
-        item = _build_answer_key_item(label, ans)
-        items[str(item.get("question_id") or "")] = item
+    line_matches = (_ANSWER_KEY_LINE_RE.match(raw_line.strip()) for raw_line in text.splitlines() if raw_line.strip())
+    items = _collect_answer_key_items(match for match in line_matches if match is not None)
 
     if not items:
-        inline_re = re.compile(
-            r"(?P<label>\d+(?:\([^)]+\)|[-_][A-Za-z0-9]+|[A-Za-z]+)?)\s*[\.\):：]\s*(?P<ans>[A-Za-z]{1,8})",
-        )
-        for m in inline_re.finditer(text):
-            label = (m.group("label") or "").strip()
-            ans = normalize_objective_answer(m.group("ans"))
-            if not label or not ans:
-                continue
-            item = _build_answer_key_item(label, ans)
-            items[str(item.get("question_id") or "")] = item
+        items = _collect_answer_key_items(_ANSWER_KEY_INLINE_RE.finditer(text))
 
     if not items:
         warnings.append("未能从答案文本中识别出“题号-答案”结构（建议上传更清晰的答案PDF/图片，或使用可复制文本的答案文件）。")
     rows = list(items.values())
-
-    def _k(r: Dict[str, Any]) -> Tuple[int, str]:
-        qid = str(r.get("question_id") or "")
-        m = re.match(r"^Q(\d+)", qid)
-        if m:
-            return int(m.group(1)), qid
-        return 9999, qid
-
-    rows.sort(key=_k)
+    rows.sort(key=_answer_key_sort_key)
     return rows, warnings
 
 

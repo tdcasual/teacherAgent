@@ -35,6 +35,51 @@ def _prune_dead_chat_worker_threads(threads: List[Any]) -> List[Any]:
     threads[:] = alive_threads
     return alive_threads
 
+
+def _chat_rescan_pending_jobs(next_rescan_at: float, *, deps: ChatWorkerDeps) -> float:
+    now = time.monotonic()
+    if now < next_rescan_at:
+        return next_rescan_at
+    try:
+        scan_pending_chat_jobs(deps=deps)
+    except Exception as exc:  # policy: allowed-broad-except
+        _log.warning("operation failed", exc_info=True)
+        deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
+    return now + CHAT_PENDING_RESCAN_INTERVAL_SEC
+
+
+def _claim_next_chat_job(*, deps: ChatWorkerDeps) -> Tuple[str, str]:
+    with deps.chat_job_lock:
+        job_id, lane_id = deps.chat_pick_next_locked()
+        if not job_id:
+            deps.chat_job_event.clear()
+        return job_id, lane_id
+
+
+def _handle_failed_chat_job(job_id: str, exc: Exception, *, deps: ChatWorkerDeps) -> None:
+    _log.warning("operation failed", exc_info=True)
+    detail = str(exc)[:200]
+    payload = {
+        "status": "failed",
+        "error": "chat_job_failed",
+        "error_detail": detail,
+    }
+    deps.diag_log("chat.job.failed", {"job_id": job_id, "error": detail})
+    deps.write_chat_job(job_id, payload)
+    try:
+        deps.append_chat_event(job_id, "job.failed", payload)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("failed to append job.failed event for chat job %s", job_id, exc_info=True)
+
+
+def _finalize_chat_job(job_id: str, lane_id: str, *, deps: ChatWorkerDeps) -> None:
+    with deps.chat_job_lock:
+        deps.chat_mark_done_locked(job_id, lane_id)
+        if deps.chat_has_pending_locked():
+            deps.chat_job_event.set()
+        else:
+            deps.chat_job_event.clear()
+
 @dataclass(frozen=True)
 class ChatWorkerDeps:
     chat_job_dir: Path
@@ -115,62 +160,23 @@ def scan_pending_chat_jobs(*, deps: ChatWorkerDeps) -> int:
 def chat_job_worker_loop(*, deps: ChatWorkerDeps) -> None:
     next_rescan_at = 0.0
     while not deps.stop_event.is_set():
-        now = time.monotonic()
-        if now >= next_rescan_at:
-            try:
-                scan_pending_chat_jobs(deps=deps)
-            except Exception as exc:  # policy: allowed-broad-except
-                _log.warning("operation failed", exc_info=True)
-                deps.diag_log("chat.pending_scan.failed", {"error": str(exc)[:200]})
-            next_rescan_at = now + CHAT_PENDING_RESCAN_INTERVAL_SEC
+        next_rescan_at = _chat_rescan_pending_jobs(next_rescan_at, deps=deps)
 
         event_set = deps.chat_job_event.wait(timeout=0.1)
         if deps.stop_event.is_set():
             break
         if not event_set:
             continue
-        job_id = ""
-        lane_id = ""
-        with deps.chat_job_lock:
-            job_id, lane_id = deps.chat_pick_next_locked()
-            if not job_id:
-                deps.chat_job_event.clear()
+        job_id, lane_id = _claim_next_chat_job(deps=deps)
         if not job_id:
             deps.sleep(0.05)
             continue
         try:
             deps.process_chat_job(job_id)
         except Exception as exc:  # pragma: no cover - covered by integration tests  # policy: allowed-broad-except
-            _log.warning("operation failed", exc_info=True)
-            detail = str(exc)[:200]
-            deps.diag_log("chat.job.failed", {"job_id": job_id, "error": detail})
-            deps.write_chat_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": "chat_job_failed",
-                    "error_detail": detail,
-                },
-            )
-            try:
-                deps.append_chat_event(
-                    job_id,
-                    "job.failed",
-                    {
-                        "status": "failed",
-                        "error": "chat_job_failed",
-                        "error_detail": detail,
-                    },
-                )
-            except Exception:  # policy: allowed-broad-except
-                _log.warning("failed to append job.failed event for chat job %s", job_id, exc_info=True)
+            _handle_failed_chat_job(job_id, exc, deps=deps)
         finally:
-            with deps.chat_job_lock:
-                deps.chat_mark_done_locked(job_id, lane_id)
-                if deps.chat_has_pending_locked():
-                    deps.chat_job_event.set()
-                else:
-                    deps.chat_job_event.clear()
+            _finalize_chat_job(job_id, lane_id, deps=deps)
 
 
 def start_chat_worker(*, deps: ChatWorkerDeps) -> None:

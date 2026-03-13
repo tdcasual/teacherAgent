@@ -107,6 +107,35 @@ def _build_class_compare(
     return "tier", tier_compare
 
 
+def _knowledge_point_mastery(row: Dict[str, Any], *, deps: ExamAnalysisChartsDeps) -> Optional[float]:
+    loss_rate = deps.parse_score_value(row.get("loss_rate"))
+    if loss_rate is not None:
+        return max(0.0, min(1.0, 1.0 - float(loss_rate)))
+    avg_score = deps.parse_score_value(row.get("avg_score"))
+    coverage_score = deps.parse_score_value(row.get("coverage_score"))
+    if (avg_score is not None) and (coverage_score is not None) and coverage_score > 0:
+        return max(0.0, min(1.0, float(avg_score) / float(coverage_score)))
+    mastery = deps.parse_score_value(row.get("mastery"))
+    if mastery is None:
+        return None
+    return max(0.0, min(1.0, float(mastery)))
+
+
+def _knowledge_point_item(row: Dict[str, Any], *, deps: ExamAnalysisChartsDeps) -> Optional[Dict[str, Any]]:
+    label = str(row.get("kp_id") or row.get("name") or row.get("kp") or "").strip()
+    if not label:
+        return None
+    mastery = _knowledge_point_mastery(row, deps=deps)
+    if mastery is None:
+        return None
+    return {
+        "label": label,
+        "mastery": round(mastery, 4),
+        "loss_rate": round(1.0 - mastery, 4),
+        "coverage_count": int(row.get("coverage_count") or 0),
+    }
+
+
 def _build_knowledge_points(exam_id: str, top_n: int, deps: ExamAnalysisChartsDeps) -> List[Dict[str, Any]]:
     analysis_res = deps.exam_analysis_get(exam_id)
     kp_items: List[Dict[str, Any]] = []
@@ -119,31 +148,10 @@ def _build_knowledge_points(exam_id: str, top_n: int, deps: ExamAnalysisChartsDe
     for row in raw_kps:
         if not isinstance(row, dict):
             continue
-        label = str(row.get("kp_id") or row.get("name") or row.get("kp") or "").strip()
-        if not label:
+        item = _knowledge_point_item(row, deps=deps)
+        if item is None:
             continue
-        mastery: Optional[float] = None
-        loss_rate = deps.parse_score_value(row.get("loss_rate"))
-        if loss_rate is not None:
-            mastery = 1.0 - float(loss_rate)
-        if mastery is None:
-            avg_score = deps.parse_score_value(row.get("avg_score"))
-            coverage_score = deps.parse_score_value(row.get("coverage_score"))
-            if (avg_score is not None) and (coverage_score is not None) and coverage_score > 0:
-                mastery = float(avg_score) / float(coverage_score)
-        if mastery is None:
-            mastery = deps.parse_score_value(row.get("mastery"))
-        if mastery is None:
-            continue
-        mastery = max(0.0, min(1.0, float(mastery)))
-        kp_items.append(
-            {
-                "label": label,
-                "mastery": round(mastery, 4),
-                "loss_rate": round(1.0 - mastery, 4),
-                "coverage_count": int(row.get("coverage_count") or 0),
-            }
-        )
+        kp_items.append(item)
     kp_items.sort(key=lambda x: x.get("mastery") or 0)
     return kp_items[: deps.safe_int_arg(top_n, 8, 3, 12)]
 

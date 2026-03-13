@@ -130,71 +130,116 @@ def load_question_kp_map(deps: ExamLongformDeps) -> Dict[str, str]:
     return out
 
 
+def _analysis_payload(analysis_res: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    payload = analysis_res.get("analysis")
+    return payload if isinstance(payload, dict) else None
+
+
+def _parse_optional_float(value: Any) -> Optional[float]:
+    try:
+        return float(value) if value is not None else None
+    except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
+        return None
+
+
+def _extract_max_total(analysis_payload: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not analysis_payload:
+        return None
+    totals = analysis_payload.get("totals")
+    if not isinstance(totals, dict):
+        return None
+    return _parse_optional_float(totals.get("max_total"))
+
+
+def _collect_ids(items: Any, field_name: str) -> set[str]:
+    out: set[str] = set()
+    if not isinstance(items, list):
+        return out
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        value = str(item.get(field_name) or "").strip()
+        if value:
+            out.add(value)
+    return out
+
+
+def _collect_needed_question_ids(analysis_payload: Optional[Dict[str, Any]]) -> set[str]:
+    if not analysis_payload:
+        return set()
+    out = _collect_ids(analysis_payload.get("question_metrics"), "question_id")
+    out.update(_collect_ids(analysis_payload.get("high_loss_questions"), "question_id"))
+    return out
+
+
+def _collect_needed_kp_ids(
+    analysis_payload: Optional[Dict[str, Any]],
+    *,
+    needed_qids: set[str],
+    q_kp_map_all: Dict[str, str],
+) -> set[str]:
+    out = _collect_ids((analysis_payload or {}).get("knowledge_points"), "kp_id")
+    for qid in needed_qids:
+        mapped_kp_id = q_kp_map_all.get(qid)
+        if mapped_kp_id:
+            out.add(mapped_kp_id)
+    return out
+
+
+def _trim_kp_context(
+    *,
+    needed_qids: set[str],
+    needed_kp_ids: set[str],
+    kp_catalog_all: Dict[str, Dict[str, str]],
+    q_kp_map_all: Dict[str, str],
+) -> tuple[Dict[str, Dict[str, str]], Dict[str, str]]:
+    kp_catalog = {kp_id: kp_catalog_all[kp_id] for kp_id in needed_kp_ids if kp_id in kp_catalog_all}
+    q_kp_map = {qid: q_kp_map_all[qid] for qid in needed_qids if qid in q_kp_map_all}
+    return kp_catalog, q_kp_map
+
+
+def _slim_result(result: Dict[str, Any], *, fields: tuple[str, ...], overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if not result.get("ok"):
+        return result
+    slim = {field: result.get(field) for field in fields}
+    if overrides:
+        slim.update(overrides)
+    return slim
+
+
 def build_exam_longform_context(exam_id: str, deps: ExamLongformDeps) -> Dict[str, Any]:
     overview = deps.exam_get(exam_id)
     analysis_res = deps.exam_analysis_get(exam_id)
-    analysis_payload = analysis_res.get("analysis") if isinstance(analysis_res, dict) else None
-
-    max_total = None
-    if isinstance(analysis_payload, dict):
-        totals = analysis_payload.get("totals")
-        if isinstance(totals, dict):
-            max_total = totals.get("max_total")
-            try:
-                max_total = float(max_total) if max_total is not None else None
-            except Exception:
-                _log.debug("numeric conversion failed", exc_info=True)
-                max_total = None
+    analysis_payload = _analysis_payload(analysis_res)
+    max_total = _extract_max_total(analysis_payload)
 
     students_summary = summarize_exam_students(exam_id, max_total=max_total, deps=deps)
     kp_catalog_all = load_kp_catalog(deps)
     q_kp_map_all = load_question_kp_map(deps)
 
-    needed_qids: set[str] = set()
-    needed_kp_ids: set[str] = set()
-    if isinstance(analysis_payload, dict):
-        for item in (analysis_payload.get("question_metrics") or []) + (analysis_payload.get("high_loss_questions") or []):
-            if not isinstance(item, dict):
-                continue
-            qid = str(item.get("question_id") or "").strip()
-            if qid:
-                needed_qids.add(qid)
-        for item in analysis_payload.get("knowledge_points") or []:
-            if not isinstance(item, dict):
-                continue
-            kp_id = str(item.get("kp_id") or "").strip()
-            if kp_id:
-                needed_kp_ids.add(kp_id)
+    needed_qids = _collect_needed_question_ids(analysis_payload)
+    needed_kp_ids = _collect_needed_kp_ids(
+        analysis_payload,
+        needed_qids=needed_qids,
+        q_kp_map_all=q_kp_map_all,
+    )
+    kp_catalog, q_kp_map = _trim_kp_context(
+        needed_qids=needed_qids,
+        needed_kp_ids=needed_kp_ids,
+        kp_catalog_all=kp_catalog_all,
+        q_kp_map_all=q_kp_map_all,
+    )
 
-    for qid in needed_qids:
-        mapped_kp_id = q_kp_map_all.get(qid)
-        if mapped_kp_id:
-            needed_kp_ids.add(mapped_kp_id)
-
-    kp_catalog = {kp_id: kp_catalog_all[kp_id] for kp_id in needed_kp_ids if kp_id in kp_catalog_all}
-    q_kp_map = {qid: q_kp_map_all[qid] for qid in needed_qids if qid in q_kp_map_all}
-
-    overview_slim: Dict[str, Any] = overview if not overview.get("ok") else {}
-    if overview.get("ok"):
-        overview_slim = {
-            "ok": True,
-            "exam_id": overview.get("exam_id"),
-            "generated_at": overview.get("generated_at"),
-            "meta": overview.get("meta"),
-            "counts": overview.get("counts"),
-            "totals_summary": overview.get("totals_summary"),
-            "score_mode": overview.get("score_mode"),
-            "files": overview.get("files"),
-        }
-
-    analysis_slim: Dict[str, Any] = analysis_res if not analysis_res.get("ok") else {}
-    if analysis_res.get("ok"):
-        analysis_slim = {
-            "ok": True,
-            "exam_id": analysis_res.get("exam_id"),
-            "analysis": analysis_payload,
-            "source": analysis_res.get("source"),
-        }
+    overview_slim = _slim_result(
+        overview,
+        fields=("ok", "exam_id", "generated_at", "meta", "counts", "totals_summary", "score_mode", "files"),
+    )
+    analysis_slim = _slim_result(
+        analysis_res,
+        fields=("ok", "exam_id", "source"),
+        overrides={"analysis": analysis_payload},
+    )
 
     return {
         "exam_overview": overview_slim,

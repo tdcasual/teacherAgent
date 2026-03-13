@@ -43,6 +43,94 @@ def ensure_teacher_memory_provenance(rec: Dict[str, Any]) -> Dict[str, Any]:
     return provenance
 
 
+def _safe_mtime(path: Any) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _normalized_proposal_status(status: Optional[str]) -> Optional[str]:
+    return (status or '').strip().lower() or None
+
+
+def _load_proposal_record(path: Any) -> Optional[Dict[str, Any]]:
+    try:
+        rec = json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        _log.warning('failed to read proposal file %s', path, exc_info=True)
+        return None
+    return rec if isinstance(rec, dict) else None
+
+
+def _proposal_visible(rec: Dict[str, Any], *, status_norm: Optional[str]) -> bool:
+    rec_status = str(rec.get('status') or '').strip().lower()
+    if rec_status == 'deleted':
+        return False
+    return not status_norm or rec_status == status_norm
+
+
+def _proposal_record_for_listing(path: Any, *, status_norm: Optional[str]) -> Optional[Dict[str, Any]]:
+    rec = _load_proposal_record(path)
+    if rec is None or not _proposal_visible(rec, status_norm=status_norm):
+        return None
+    if 'proposal_id' not in rec:
+        rec['proposal_id'] = path.stem
+    ensure_teacher_memory_provenance(rec)
+    return rec
+
+
+def _find_entry_marker_idx(lines: List[str], proposal_id: str) -> int:
+    marker = f'- entry_id: {proposal_id}'
+    for idx, line in enumerate(lines):
+        if str(line or '').strip() == marker:
+            return idx
+    return -1
+
+
+def _entry_block_bounds(lines: List[str], marker_idx: int) -> tuple[int, int]:
+    start = marker_idx
+    for idx in range(marker_idx, -1, -1):
+        if str(lines[idx] or '').startswith('## '):
+            start = idx
+            break
+    end = marker_idx + 1
+    while end < len(lines) and not str(lines[end] or '').startswith('## '):
+        end += 1
+    while end < len(lines) and not str(lines[end] or '').strip():
+        end += 1
+    return start, end
+
+
+def _write_memory_lines(path: Any, lines: List[str]) -> bool:
+    next_text = '\n'.join(lines).strip()
+    if next_text:
+        next_text += '\n'
+    try:
+        path.write_text(next_text, encoding='utf-8')
+    except Exception:
+        _log.warning('failed to write memory file for delete path=%s', path, exc_info=True)
+        return False
+    return True
+
+
+def _delete_candidate_paths(teacher_id: str, record: Dict[str, Any], *, deps: TeacherMemoryStorageDeps) -> List[Any]:
+    candidate_paths: List[Any] = []
+    applied_path_raw = str(record.get('applied_to') or '').strip()
+    if applied_path_raw:
+        from pathlib import Path
+        candidate_paths.append(Path(applied_path_raw))
+    target = str(record.get('target') or 'MEMORY').upper()
+    if target == 'DAILY':
+        candidate_paths.append(deps.teacher_daily_memory_path(teacher_id))
+    elif target in {'MEMORY', 'USER', 'AGENTS', 'SOUL', 'HEARTBEAT'}:
+        filename = f"{target}.md" if target != 'MEMORY' else 'MEMORY.md'
+        candidate_paths.append(deps.teacher_workspace_file(teacher_id, filename))
+    else:
+        candidate_paths.append(deps.teacher_workspace_file(teacher_id, 'MEMORY.md'))
+    return candidate_paths
+
+
 
 def teacher_memory_list_proposals(
     teacher_id: str,
@@ -54,35 +142,17 @@ def teacher_memory_list_proposals(
     deps.ensure_teacher_workspace(teacher_id)
     proposals_dir = deps.teacher_workspace_dir(teacher_id) / 'proposals'
     proposals_dir.mkdir(parents=True, exist_ok=True)
-    status_norm = (status or '').strip().lower() or None
+    status_norm = _normalized_proposal_status(status)
     if status_norm and status_norm not in {'proposed', 'applied', 'rejected'}:
         return {'ok': False, 'error': 'invalid_status', 'teacher_id': teacher_id}
-
-    def _safe_mtime(path: Any) -> float:
-        try:
-            return path.stat().st_mtime
-        except OSError:
-            return 0.0
 
     take = max(1, min(int(limit or 20), 200))
     files = sorted(proposals_dir.glob('*.json'), key=_safe_mtime, reverse=True)
     items: List[Dict[str, Any]] = []
     for path in files:
-        try:
-            rec = json.loads(path.read_text(encoding='utf-8'))
-        except Exception:
-            _log.warning('failed to read proposal file %s', path, exc_info=True)
+        rec = _proposal_record_for_listing(path, status_norm=status_norm)
+        if rec is None:
             continue
-        if not isinstance(rec, dict):
-            continue
-        rec_status = str(rec.get('status') or '').strip().lower()
-        if rec_status == 'deleted':
-            continue
-        if status_norm and rec_status != status_norm:
-            continue
-        if 'proposal_id' not in rec:
-            rec['proposal_id'] = path.stem
-        ensure_teacher_memory_provenance(rec)
         items.append(rec)
         if len(items) >= take:
             break
@@ -99,38 +169,12 @@ def teacher_memory_remove_entry_from_file(path: Any, proposal_id: str) -> bool:
         _log.warning('failed to read memory file for delete path=%s', path, exc_info=True)
         return False
 
-    marker = f'- entry_id: {proposal_id}'
-    marker_idx = -1
-    for idx, line in enumerate(lines):
-        if str(line or '').strip() == marker:
-            marker_idx = idx
-            break
+    marker_idx = _find_entry_marker_idx(lines, proposal_id)
     if marker_idx < 0:
         return False
 
-    start = marker_idx
-    for idx in range(marker_idx, -1, -1):
-        if str(lines[idx] or '').startswith('## '):
-            start = idx
-            break
-    end = marker_idx + 1
-    while end < len(lines):
-        if str(lines[end] or '').startswith('## '):
-            break
-        end += 1
-    while end < len(lines) and not str(lines[end] or '').strip():
-        end += 1
-
-    next_lines = lines[:start] + lines[end:]
-    next_text = '\n'.join(next_lines).strip()
-    if next_text:
-        next_text += '\n'
-    try:
-        path.write_text(next_text, encoding='utf-8')
-    except Exception:
-        _log.warning('failed to write memory file for delete path=%s', path, exc_info=True)
-        return False
-    return True
+    start, end = _entry_block_bounds(lines, marker_idx)
+    return _write_memory_lines(path, lines[:start] + lines[end:])
 
 
 
@@ -147,13 +191,7 @@ def teacher_memory_delete_proposal(
     if not path.exists():
         return {'ok': False, 'error': 'proposal not found', 'proposal_id': pid}
 
-    try:
-        record = json.loads(path.read_text(encoding='utf-8'))
-    except Exception:
-        _log.warning('failed to read proposal file for delete teacher=%s proposal=%s', teacher_id, pid, exc_info=True)
-        record = {}
-    if not isinstance(record, dict):
-        record = {}
+    record = _load_proposal_record(path) or {}
 
     status_before = str(record.get('status') or 'proposed').strip().lower() or 'proposed'
     if status_before == 'deleted':
@@ -161,19 +199,7 @@ def teacher_memory_delete_proposal(
 
     deleted_applied_path = ''
     if status_before == 'applied':
-        applied_path_raw = str(record.get('applied_to') or '').strip()
-        candidate_paths: List[Any] = []
-        if applied_path_raw:
-            from pathlib import Path
-            candidate_paths.append(Path(applied_path_raw))
-        target = str(record.get('target') or 'MEMORY').upper()
-        if target == 'DAILY':
-            candidate_paths.append(deps.teacher_daily_memory_path(teacher_id))
-        elif target in {'MEMORY', 'USER', 'AGENTS', 'SOUL', 'HEARTBEAT'}:
-            candidate_paths.append(deps.teacher_workspace_file(teacher_id, f"{target}.md" if target != 'MEMORY' else 'MEMORY.md'))
-        else:
-            candidate_paths.append(deps.teacher_workspace_file(teacher_id, 'MEMORY.md'))
-        for candidate in candidate_paths:
+        for candidate in _delete_candidate_paths(teacher_id, record, deps=deps):
             if teacher_memory_remove_entry_from_file(candidate, pid):
                 deleted_applied_path = str(candidate)
                 break

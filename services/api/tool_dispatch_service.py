@@ -181,6 +181,97 @@ def _teacher_memory_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[st
     }
 
 
+def _teacher_only_handler(
+    *,
+    role: Optional[str],
+    detail: str,
+    fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    def _wrapped(args: Dict[str, Any]) -> Dict[str, Any]:
+        denied = _require_teacher(role, detail)
+        if denied:
+            return denied
+        return fn(args)
+
+    return _wrapped
+
+
+def _resolve_tool_teacher_id(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    teacher_id: Optional[str],
+) -> str:
+    raw_teacher_id = args.get("teacher_id") or teacher_id or ""
+    return deps.resolve_teacher_id(raw_teacher_id)
+
+
+def _chart_exec_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    chart_exec_args = dict(args or {})
+    chart_exec_args["_audit_source"] = "tool_dispatch.chart.exec"
+    chart_exec_args["_audit_role"] = str(role or "").strip().lower()
+    if teacher_id:
+        chart_exec_args["_audit_actor"] = str(teacher_id).strip()
+    return deps.chart_exec(chart_exec_args)
+
+
+def _teacher_workspace_init_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+) -> Dict[str, Any]:
+    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    base = deps.ensure_teacher_workspace(teacher_id_resolved)
+    return {"ok": True, "teacher_id": teacher_id_resolved, "workspace": str(base)}
+
+
+def _teacher_memory_search_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+) -> Dict[str, Any]:
+    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    query = str(args.get("query") or "")
+    limit = int(args.get("limit", 5) or 5)
+    result = deps.teacher_memory_search(teacher_id_resolved, query, limit)
+    result.update({"ok": True, "teacher_id": teacher_id_resolved, "query": query})
+    return result
+
+
+def _teacher_memory_propose_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+) -> Dict[str, Any]:
+    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    target = str(args.get("target") or "MEMORY")
+    title = str(args.get("title") or "")
+    content = str(args.get("content") or "")
+    return deps.teacher_memory_propose(
+        teacher_id_resolved,
+        target=target,
+        title=title,
+        content=content,
+    )
+
+
+def _teacher_memory_apply_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+) -> Dict[str, Any]:
+    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    proposal_id = str(args.get("proposal_id") or "")
+    approve = bool(args.get("approve", True))
+    return deps.teacher_memory_apply(teacher_id_resolved, proposal_id=proposal_id, approve=approve)
+
+
 
 def _build_handlers(
     *,
@@ -188,68 +279,14 @@ def _build_handlers(
     deps: ToolDispatchDeps,
     teacher_id: Optional[str],
 ) -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
-    def teacher_only(
-        detail: str,
-        fn: Callable[[Dict[str, Any]], Dict[str, Any]],
-    ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
-        def _wrapped(args: Dict[str, Any]) -> Dict[str, Any]:
-            denied = _require_teacher(role, detail)
-            if denied:
-                return denied
-            return fn(args)
-
-        return _wrapped
-
-    def _chart_exec(args: Dict[str, Any]) -> Dict[str, Any]:
-        chart_exec_args = dict(args or {})
-        chart_exec_args["_audit_source"] = "tool_dispatch.chart.exec"
-        chart_exec_args["_audit_role"] = str(role or "").strip().lower()
-        if teacher_id:
-            chart_exec_args["_audit_actor"] = str(teacher_id).strip()
-        return deps.chart_exec(chart_exec_args)
-
-    def _teacher_workspace_init(args: Dict[str, Any]) -> Dict[str, Any]:
-        teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
-        base = deps.ensure_teacher_workspace(teacher_id_resolved)
-        return {"ok": True, "teacher_id": teacher_id_resolved, "workspace": str(base)}
-
-    def _teacher_memory_search(args: Dict[str, Any]) -> Dict[str, Any]:
-        teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
-        query = str(args.get("query") or "")
-        limit = int(args.get("limit", 5) or 5)
-        result = deps.teacher_memory_search(teacher_id_resolved, query, limit)
-        result.update({"ok": True, "teacher_id": teacher_id_resolved, "query": query})
-        return result
-
-    def _teacher_memory_propose(args: Dict[str, Any]) -> Dict[str, Any]:
-        teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
-        target = str(args.get("target") or "MEMORY")
-        title = str(args.get("title") or "")
-        content = str(args.get("content") or "")
-        return deps.teacher_memory_propose(
-            teacher_id_resolved,
-            target=target,
-            title=title,
-            content=content,
-        )
-
-    def _teacher_memory_apply(args: Dict[str, Any]) -> Dict[str, Any]:
-        teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
-        proposal_id = str(args.get("proposal_id") or "")
-        approve = bool(args.get("approve", True))
-        return deps.teacher_memory_apply(teacher_id_resolved, proposal_id=proposal_id, approve=approve)
-
-    def _resolve_tool_teacher_id(args: Dict[str, Any]) -> str:
-        raw_teacher_id = args.get("teacher_id") or teacher_id or ""
-        return deps.resolve_teacher_id(raw_teacher_id)
-
     return {
         "exam.list": lambda _args: deps.list_exams(),
         "exam.get": lambda args: deps.exam_get(args.get("exam_id", "")),
         "exam.analysis.get": lambda args: deps.exam_analysis_get(args.get("exam_id", "")),
-        "exam.analysis.charts.generate": teacher_only(
-            "exam.analysis.charts.generate requires teacher role",
-            lambda args: deps.exam_analysis_charts_generate(args),
+        "exam.analysis.charts.generate": _teacher_only_handler(
+            role=role,
+            detail="exam.analysis.charts.generate requires teacher role",
+            fn=lambda args: deps.exam_analysis_charts_generate(args),
         ),
         "exam.students.list": lambda args: deps.exam_students_list(
             args.get("exam_id", ""),
@@ -283,54 +320,67 @@ def _build_handlers(
             question_nos=args.get("question_nos"),
             top_n=args.get("top_n", 5),
         ),
-        "analysis.report.list": teacher_only(
-            "analysis.report.list requires teacher role",
-            lambda args: deps.analysis_report_list(
-                _resolve_tool_teacher_id(args),
+        "analysis.report.list": _teacher_only_handler(
+            role=role,
+            detail="analysis.report.list requires teacher role",
+            fn=lambda args: deps.analysis_report_list(
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
                 str(args.get("domain") or "").strip() or None,
                 str(args.get("status") or "").strip() or None,
                 str(args.get("strategy_id") or "").strip() or None,
                 str(args.get("target_type") or "").strip() or None,
             ),
         ),
-        "analysis.report.get": teacher_only(
-            "analysis.report.get requires teacher role",
-            lambda args: deps.analysis_report_get(
+        "analysis.report.get": _teacher_only_handler(
+            role=role,
+            detail="analysis.report.get requires teacher role",
+            fn=lambda args: deps.analysis_report_get(
                 _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args),
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
                 str(args.get("domain") or "").strip() or None,
             ),
         ),
-        "analysis.report.rerun": teacher_only(
-            "analysis.report.rerun requires teacher role",
-            lambda args: deps.analysis_report_rerun(
+        "analysis.report.rerun": _teacher_only_handler(
+            role=role,
+            detail="analysis.report.rerun requires teacher role",
+            fn=lambda args: deps.analysis_report_rerun(
                 _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args),
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
                 str(args.get("domain") or "").strip() or None,
                 str(args.get("reason") or "").strip() or None,
             ),
         ),
-        "analysis.review.list": teacher_only(
-            "analysis.review.list requires teacher role",
-            lambda args: deps.analysis_review_list(
-                _resolve_tool_teacher_id(args),
+        "analysis.review.list": _teacher_only_handler(
+            role=role,
+            detail="analysis.review.list requires teacher role",
+            fn=lambda args: deps.analysis_review_list(
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
                 str(args.get("domain") or "").strip() or None,
                 str(args.get("status") or "").strip() or None,
             ),
         ),
-        "survey.report.list": teacher_only(
-            "survey.report.list requires teacher role",
-            lambda args: deps.survey_report_list(_resolve_tool_teacher_id(args), str(args.get("status") or "").strip() or None),
+        "survey.report.list": _teacher_only_handler(
+            role=role,
+            detail="survey.report.list requires teacher role",
+            fn=lambda args: deps.survey_report_list(
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
+                str(args.get("status") or "").strip() or None,
+            ),
         ),
-        "survey.report.get": teacher_only(
-            "survey.report.get requires teacher role",
-            lambda args: deps.survey_report_get(_resolve_survey_report_id(args), _resolve_tool_teacher_id(args)),
-        ),
-        "survey.report.rerun": teacher_only(
-            "survey.report.rerun requires teacher role",
-            lambda args: deps.survey_report_rerun(
+        "survey.report.get": _teacher_only_handler(
+            role=role,
+            detail="survey.report.get requires teacher role",
+            fn=lambda args: deps.survey_report_get(
                 _resolve_survey_report_id(args),
-                _resolve_tool_teacher_id(args),
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
+            ),
+        ),
+        "survey.report.rerun": _teacher_only_handler(
+            role=role,
+            detail="survey.report.rerun requires teacher role",
+            fn=lambda args: deps.survey_report_rerun(
+                _resolve_survey_report_id(args),
+                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
                 str(args.get("reason") or "").strip() or None,
             ),
         ),
@@ -343,9 +393,10 @@ def _build_handlers(
         ),
         "student.profile.get": lambda args: deps.student_profile_get(args.get("student_id", "")),
         "student.profile.update": lambda args: deps.student_profile_update(args),
-        "student.import": teacher_only(
-            "student.import requires teacher role",
-            lambda args: deps.student_import(args),
+        "student.import": _teacher_only_handler(
+            role=role,
+            detail="student.import requires teacher role",
+            fn=lambda args: deps.student_import(args),
         ),
         "assignment.generate": lambda args: deps.assignment_generate(args),
         "assignment.render": lambda args: deps.assignment_render(args),
@@ -358,19 +409,21 @@ def _build_handlers(
         "core_example.search": lambda args: deps.core_example_search(args),
         "core_example.register": lambda args: deps.core_example_register(args),
         "core_example.render": lambda args: deps.core_example_render(args),
-        "chart.agent.run": teacher_only(
-            "chart.agent.run requires teacher role",
-            lambda args: deps.chart_agent_run(args),
+        "chart.agent.run": _teacher_only_handler(
+            role=role,
+            detail="chart.agent.run requires teacher role",
+            fn=lambda args: deps.chart_agent_run(args),
         ),
-        "chart.exec": teacher_only(
-            "chart.exec requires teacher role",
-            _chart_exec,
+        "chart.exec": _teacher_only_handler(
+            role=role,
+            detail="chart.exec requires teacher role",
+            fn=lambda args: _chart_exec_handler(args, deps=deps, role=role, teacher_id=teacher_id),
         ),
-        "teacher.workspace.init": _teacher_workspace_init,
+        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(args, deps=deps),
         "teacher.memory.get": lambda args: _teacher_memory_get(args, deps),
-        "teacher.memory.search": _teacher_memory_search,
-        "teacher.memory.propose": _teacher_memory_propose,
-        "teacher.memory.apply": _teacher_memory_apply,
+        "teacher.memory.search": lambda args: _teacher_memory_search_handler(args, deps=deps),
+        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(args, deps=deps),
+        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(args, deps=deps),
     }
 
 

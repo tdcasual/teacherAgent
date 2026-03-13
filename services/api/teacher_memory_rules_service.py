@@ -123,6 +123,66 @@ def teacher_memory_stable_hash(*parts: str) -> str:
     return hashlib.sha1(joined.encode("utf-8", errors="ignore")).hexdigest()[:20]
 
 
+def _source_priority_base(source_norm: str) -> float:
+    if source_norm == "manual":
+        return 70.0
+    if source_norm == "auto_intent":
+        return 62.0
+    if source_norm == "auto_infer":
+        return 54.0
+    if source_norm == "auto_flush":
+        return 36.0
+    return 44.0
+
+
+def _target_priority_bonus(target_norm: str) -> float:
+    if target_norm == "MEMORY":
+        return 12.0
+    if target_norm == "DAILY":
+        return 4.0
+    return 0.0
+
+
+def _text_priority_adjustment(
+    text: str,
+    *,
+    durable_intent_patterns: Sequence[Any],
+    auto_infer_stable_patterns: Sequence[Any],
+    temporary_hint_patterns: Sequence[Any],
+    is_sensitive: Callable[[str], bool],
+    norm_text: Callable[[str], str],
+) -> float:
+    if is_sensitive(text):
+        return -1000.0
+    score = 0.0
+    if any(pattern.search(text) for pattern in durable_intent_patterns):
+        score += 15
+    if any(pattern.search(text) for pattern in auto_infer_stable_patterns):
+        score += 10
+    if any(pattern.search(text) for pattern in temporary_hint_patterns):
+        score -= 18
+    if len(norm_text(text)) < 12:
+        score -= 8
+    if "先" in text and "后" in text:
+        score += 6
+    if "模板" in text or "格式" in text or "结构" in text:
+        score += 6
+    return score
+
+
+def _meta_priority_bonus(meta: Optional[Dict[str, Any]]) -> float:
+    if not isinstance(meta, dict):
+        return 0.0
+    try:
+        similar_hits = int(meta.get("similar_hits") or 0)
+    except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
+        return 0.0
+    if similar_hits <= 0:
+        return 0.0
+    return float(min(16, similar_hits * 4))
+
+
 def teacher_memory_priority_score(
     *,
     target: str,
@@ -139,47 +199,17 @@ def teacher_memory_priority_score(
     text = f"{title or ''}\n{content or ''}".strip()
     source_norm = str(source or "manual").strip().lower()
     target_norm = str(target or "MEMORY").strip().upper()
-    score = 0.0
-
-    if source_norm == "manual":
-        score += 70
-    elif source_norm == "auto_intent":
-        score += 62
-    elif source_norm == "auto_infer":
-        score += 54
-    elif source_norm == "auto_flush":
-        score += 36
-    else:
-        score += 44
-
-    if target_norm == "MEMORY":
-        score += 12
-    elif target_norm == "DAILY":
-        score += 4
-
-    if any(p.search(text) for p in durable_intent_patterns):
-        score += 15
-    if any(p.search(text) for p in auto_infer_stable_patterns):
-        score += 10
-    if any(p.search(text) for p in temporary_hint_patterns):
-        score -= 18
-    if is_sensitive(text):
-        score = 0
-    if len(norm_text(text)) < 12:
-        score -= 8
-    if "先" in text and "后" in text:
-        score += 6
-    if "模板" in text or "格式" in text or "结构" in text:
-        score += 6
-
-    if isinstance(meta, dict):
-        try:
-            similar_hits = int(meta.get("similar_hits") or 0)
-        except Exception:
-            _log.debug("numeric conversion failed", exc_info=True)
-            similar_hits = 0
-        if similar_hits > 0:
-            score += min(16, similar_hits * 4)
+    score = _source_priority_base(source_norm)
+    score += _target_priority_bonus(target_norm)
+    score += _text_priority_adjustment(
+        text,
+        durable_intent_patterns=durable_intent_patterns,
+        auto_infer_stable_patterns=auto_infer_stable_patterns,
+        temporary_hint_patterns=temporary_hint_patterns,
+        is_sensitive=is_sensitive,
+        norm_text=norm_text,
+    )
+    score += _meta_priority_bonus(meta)
 
     return max(0, min(100, int(round(score))))
 

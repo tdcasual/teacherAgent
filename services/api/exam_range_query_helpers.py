@@ -21,6 +21,14 @@ class ExamRangeDeps:
     exam_question_detail: Callable[..., Dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class ExamRangeQuestionContext:
+    questions: Dict[str, Dict[str, Any]]
+    question_no_by_id: Dict[str, int]
+    max_score_by_no: Dict[int, float]
+    known_question_nos: Set[int]
+
+
 def parse_question_no_int(value: Any) -> Optional[int]:
     text = str(value or "").strip()
     if not text:
@@ -72,40 +80,27 @@ def normalize_question_no_list(value: Any, maximum: int = 200) -> List[int]:
     return normalized
 
 
-def exam_range_top_students(
-    exam_id: str,
-    start_question_no: Any,
-    end_question_no: Any,
-    top_n: int = 10,
-    *,
-    deps: ExamRangeDeps,
-) -> Dict[str, Any]:
-    manifest = deps.load_exam_manifest(exam_id)
-    if not manifest:
-        return {"error": "exam_not_found", "exam_id": exam_id}
-
-    responses_path = deps.exam_responses_path(manifest)
-    if not responses_path or not responses_path.exists():
-        return {"error": "responses_missing", "exam_id": exam_id}
-
+def _normalize_question_range(start_question_no: Any, end_question_no: Any) -> Optional[tuple[int, int]]:
     start_q = parse_question_no_int(start_question_no)
     end_q = parse_question_no_int(end_question_no)
     if start_q is None or end_q is None:
-        return {
-            "error": "invalid_question_range",
-            "exam_id": exam_id,
-            "message": "start_question_no 和 end_question_no 必须是正整数。",
-        }
-    if start_q > end_q:
-        start_q, end_q = end_q, start_q
+        return None
+    return (start_q, end_q) if start_q <= end_q else (end_q, start_q)
 
-    sample_n = deps.safe_int_arg(top_n, 10, 1, 100)
 
+def _build_question_context(
+    manifest: Dict[str, Any],
+    *,
+    start_q: int,
+    end_q: int,
+    deps: ExamRangeDeps,
+) -> ExamRangeQuestionContext:
     questions_path = deps.exam_questions_path(manifest)
     questions = deps.read_questions_csv(questions_path) if questions_path else {}
     question_no_by_id: Dict[str, int] = {}
     max_score_by_no: Dict[int, float] = {}
     known_question_nos: Set[int] = set()
+
     for qid, q_meta in questions.items():
         q_no = parse_question_no_int(q_meta.get("question_no"))
         if q_no is None:
@@ -115,10 +110,41 @@ def exam_range_top_students(
         if not (start_q <= q_no <= end_q):
             continue
         q_max = deps.parse_score_value(q_meta.get("max_score"))
-        if q_max is None:
-            continue
-        max_score_by_no[q_no] = max_score_by_no.get(q_no, 0.0) + q_max
+        if q_max is not None:
+            max_score_by_no[q_no] = max_score_by_no.get(q_no, 0.0) + q_max
 
+    return ExamRangeQuestionContext(
+        questions=questions,
+        question_no_by_id=question_no_by_id,
+        max_score_by_no=max_score_by_no,
+        known_question_nos=known_question_nos,
+    )
+
+
+def _resolve_row_question_no(row: Dict[str, Any], question_no_by_id: Dict[str, int]) -> Optional[int]:
+    q_no = parse_question_no_int(row.get("question_no"))
+    if q_no is not None:
+        return q_no
+    qid = str(row.get("question_id") or "").strip()
+    return question_no_by_id.get(qid) if qid else None
+
+
+def _build_student_meta(row: Dict[str, Any], student_id: str) -> Dict[str, str]:
+    return {
+        "student_id": student_id,
+        "student_name": str(row.get("student_name") or "").strip(),
+        "class_name": str(row.get("class_name") or "").strip(),
+    }
+
+
+def _collect_range_scores(
+    responses_path: Any,
+    *,
+    start_q: int,
+    end_q: int,
+    question_no_by_id: Dict[str, int],
+    deps: ExamRangeDeps,
+) -> tuple[Dict[str, float], Dict[str, float], Dict[str, Dict[str, str]], Dict[str, Set[int]], Set[int]]:
     total_scores: Dict[str, float] = {}
     range_scores: Dict[str, float] = {}
     students_meta: Dict[str, Dict[str, str]] = {}
@@ -131,49 +157,44 @@ def exam_range_top_students(
             student_id = str(row.get("student_id") or row.get("student_name") or "").strip()
             if not student_id:
                 continue
-            if student_id not in students_meta:
-                students_meta[student_id] = {
-                    "student_id": student_id,
-                    "student_name": str(row.get("student_name") or "").strip(),
-                    "class_name": str(row.get("class_name") or "").strip(),
-                }
+            students_meta.setdefault(student_id, _build_student_meta(row, student_id))
 
             score = deps.parse_score_value(row.get("score"))
-            if score is not None:
-                total_scores[student_id] = total_scores.get(student_id, 0.0) + score
-            else:
-                total_scores.setdefault(student_id, 0.0)
+            total_scores[student_id] = total_scores.get(student_id, 0.0) + (score or 0.0)
 
-            q_no = parse_question_no_int(row.get("question_no"))
-            if q_no is None:
-                qid = str(row.get("question_id") or "").strip()
-                if qid:
-                    q_no = question_no_by_id.get(qid)
-            if q_no is None or q_no < start_q or q_no > end_q:
+            q_no = _resolve_row_question_no(row, question_no_by_id)
+            if q_no is None or not (start_q <= q_no <= end_q):
                 continue
-
             observed_question_nos.add(q_no)
             range_answered_question_nos.setdefault(student_id, set()).add(q_no)
             if score is not None:
                 range_scores[student_id] = range_scores.get(student_id, 0.0) + score
 
-    if not total_scores:
-        return {"error": "no_scored_responses", "exam_id": exam_id}
+    return total_scores, range_scores, students_meta, range_answered_question_nos, observed_question_nos
 
+
+def _expected_question_nos(
+    *,
+    questions: Dict[str, Dict[str, Any]],
+    known_question_nos: Set[int],
+    observed_question_nos: Set[int],
+    start_q: int,
+    end_q: int,
+) -> List[int]:
     if questions:
-        expected_question_nos = sorted(q for q in known_question_nos if start_q <= q <= end_q)
-    else:
-        expected_question_nos = sorted(observed_question_nos)
-    if not expected_question_nos:
-        return {
-            "error": "question_range_not_found",
-            "exam_id": exam_id,
-            "range": {"start_question_no": start_q, "end_question_no": end_q},
-            "message": "在该考试中未找到指定题号区间。",
-        }
+        return sorted(q for q in known_question_nos if start_q <= q <= end_q)
+    return sorted(observed_question_nos)
 
+
+def _build_student_rows(
+    *,
+    total_scores: Dict[str, float],
+    range_scores: Dict[str, float],
+    students_meta: Dict[str, Dict[str, str]],
+    range_answered_question_nos: Dict[str, Set[int]],
+    expected_count: int,
+) -> List[Dict[str, Any]]:
     student_rows: List[Dict[str, Any]] = []
-    expected_count = len(expected_question_nos)
     for student_id in sorted(total_scores.keys()):
         meta = students_meta.get(student_id) or {}
         answered = len(range_answered_question_nos.get(student_id) or set())
@@ -188,7 +209,10 @@ def exam_range_top_students(
                 "missing_questions": max(0, expected_count - answered),
             }
         )
+    return student_rows
 
+
+def _rank_students(student_rows: List[Dict[str, Any]], sample_n: int) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     sorted_desc = sorted(
         student_rows,
         key=lambda item: (
@@ -205,18 +229,89 @@ def exam_range_top_students(
             str(item.get("student_id") or ""),
         ),
     )
+    top_students = [{**item, "rank": index} for index, item in enumerate(sorted_desc[:sample_n], start=1)]
+    bottom_students = [{**item, "rank": index} for index, item in enumerate(sorted_asc[:sample_n], start=1)]
+    return top_students, bottom_students
 
-    top_students: List[Dict[str, Any]] = []
-    bottom_students: List[Dict[str, Any]] = []
-    for index, item in enumerate(sorted_desc[:sample_n], start=1):
-        top_students.append({**item, "rank": index})
-    for index, item in enumerate(sorted_asc[:sample_n], start=1):
-        bottom_students.append({**item, "rank": index})
 
+def _range_summary(student_rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     score_values = [float(item.get("range_score") or 0.0) for item in student_rows]
-    max_possible_score = 0.0
-    for q_no in expected_question_nos:
-        max_possible_score += float(max_score_by_no.get(q_no) or 0.0)
+    return {
+        "student_count": len(student_rows),
+        "avg_score": round(sum(score_values) / len(score_values), 3) if score_values else 0.0,
+        "median_score": round(_median_float(score_values), 3) if score_values else 0.0,
+        "max_score": round(max(score_values), 3) if score_values else 0.0,
+        "min_score": round(min(score_values), 3) if score_values else 0.0,
+    }
+
+
+def _max_possible_score(expected_question_nos: List[int], max_score_by_no: Dict[int, float]) -> Optional[float]:
+    max_possible_score = sum(float(max_score_by_no.get(q_no) or 0.0) for q_no in expected_question_nos)
+    return round(max_possible_score, 3) if max_possible_score > 0 else None
+
+
+def exam_range_top_students(
+    exam_id: str,
+    start_question_no: Any,
+    end_question_no: Any,
+    top_n: int = 10,
+    *,
+    deps: ExamRangeDeps,
+) -> Dict[str, Any]:
+    manifest = deps.load_exam_manifest(exam_id)
+    if not manifest:
+        return {"error": "exam_not_found", "exam_id": exam_id}
+
+    responses_path = deps.exam_responses_path(manifest)
+    if not responses_path or not responses_path.exists():
+        return {"error": "responses_missing", "exam_id": exam_id}
+
+    normalized_range = _normalize_question_range(start_question_no, end_question_no)
+    if normalized_range is None:
+        return {
+            "error": "invalid_question_range",
+            "exam_id": exam_id,
+            "message": "start_question_no 和 end_question_no 必须是正整数。",
+        }
+    start_q, end_q = normalized_range
+
+    sample_n = deps.safe_int_arg(top_n, 10, 1, 100)
+    question_context = _build_question_context(manifest, start_q=start_q, end_q=end_q, deps=deps)
+    total_scores, range_scores, students_meta, range_answered_question_nos, observed_question_nos = _collect_range_scores(
+        responses_path,
+        start_q=start_q,
+        end_q=end_q,
+        question_no_by_id=question_context.question_no_by_id,
+        deps=deps,
+    )
+
+    if not total_scores:
+        return {"error": "no_scored_responses", "exam_id": exam_id}
+
+    expected_question_nos = _expected_question_nos(
+        questions=question_context.questions,
+        known_question_nos=question_context.known_question_nos,
+        observed_question_nos=observed_question_nos,
+        start_q=start_q,
+        end_q=end_q,
+    )
+    if not expected_question_nos:
+        return {
+            "error": "question_range_not_found",
+            "exam_id": exam_id,
+            "range": {"start_question_no": start_q, "end_question_no": end_q},
+            "message": "在该考试中未找到指定题号区间。",
+        }
+
+    expected_count = len(expected_question_nos)
+    student_rows = _build_student_rows(
+        total_scores=total_scores,
+        range_scores=range_scores,
+        students_meta=students_meta,
+        range_answered_question_nos=range_answered_question_nos,
+        expected_count=expected_count,
+    )
+    top_students, bottom_students = _rank_students(student_rows, sample_n)
 
     return {
         "ok": True,
@@ -226,15 +321,9 @@ def exam_range_top_students(
             "end_question_no": end_q,
             "question_count": len(expected_question_nos),
             "question_nos": expected_question_nos,
-            "max_possible_score": round(max_possible_score, 3) if max_possible_score > 0 else None,
+            "max_possible_score": _max_possible_score(expected_question_nos, question_context.max_score_by_no),
         },
-        "summary": {
-            "student_count": len(student_rows),
-            "avg_score": round(sum(score_values) / len(score_values), 3) if score_values else 0.0,
-            "median_score": round(_median_float(score_values), 3) if score_values else 0.0,
-            "max_score": round(max(score_values), 3) if score_values else 0.0,
-            "min_score": round(min(score_values), 3) if score_values else 0.0,
-        },
+        "summary": _range_summary(student_rows),
         "top_students": top_students,
         "bottom_students": bottom_students,
     }

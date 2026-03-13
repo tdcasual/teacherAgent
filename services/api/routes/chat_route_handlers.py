@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -68,7 +69,170 @@ def _bind_attachment_scope(
     raise HTTPException(status_code=400, detail="role must be teacher or student")
 
 
-def register_chat_routes(router: APIRouter, core: Any) -> None:
+@dataclass
+class _ChatStreamState:
+    cursor: int
+    log_offset: int | None = None
+    signal_version: int = 0
+    terminal_idle_loops: int = 0
+    keepalive_ticks: int = 0
+
+
+def _ensure_chat_stream_access(job_id: str, core: Any) -> None:
+    try:
+        job = core.load_chat_job(job_id)
+        enforce_chat_job_access(job)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="job not found")
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _resolve_stream_cursor(request: Request, last_event_id: int) -> int:
+    cursor = max(0, int(last_event_id or 0))
+    header_last_event_id = str(request.headers.get("last-event-id") or "").strip()
+    if not header_last_event_id:
+        return cursor
+    try:
+        return max(cursor, int(header_last_event_id))
+    except Exception:
+        return cursor
+
+
+def _stream_event_chunks(events: list[dict[str, Any]], state: _ChatStreamState) -> list[str]:
+    chunks: list[str] = []
+    for item in events:
+        event_id = int(item.get("event_id") or 0)
+        if event_id > state.cursor:
+            state.cursor = event_id
+        chunks.append(encode_sse_event(item))
+    return chunks
+
+
+def _advance_keepalive(keepalive_ticks: int) -> tuple[int, str]:
+    keepalive_ticks += 1
+    if keepalive_ticks >= 20:
+        return 0, ": keepalive\n\n"
+    return keepalive_ticks, ""
+
+
+def _terminal_idle_state(
+    core: Any,
+    *,
+    job_id: str,
+    events: list[dict[str, Any]],
+    terminal_idle_loops: int,
+) -> tuple[int, bool]:
+    try:
+        status_job = core.load_chat_job(job_id)
+    except FileNotFoundError:
+        return terminal_idle_loops, True
+    status = str(status_job.get("status") or "").strip().lower()
+    if status in {"done", "failed", "cancelled"} and not events:
+        terminal_idle_loops += 1
+    else:
+        terminal_idle_loops = 0
+    return terminal_idle_loops, terminal_idle_loops >= 3
+
+
+async def _wait_for_stream_signal(
+    deps: Any,
+    *,
+    job_id: str,
+    signal_version: int,
+    idle_wait_sec: float,
+) -> int:
+    if callable(deps.wait_job_event):
+        try:
+            return await asyncio.to_thread(
+                deps.wait_job_event,
+                job_id,
+                signal_version,
+                idle_wait_sec,
+            )
+        except Exception:
+            await asyncio.sleep(0.25)
+            return signal_version
+    await asyncio.sleep(0.25)
+    return signal_version
+
+
+async def _iter_chat_stream_events(
+    request: Request,
+    *,
+    job_id: str,
+    initial_cursor: int,
+    deps: Any,
+    core: Any,
+) -> Any:
+    state = _ChatStreamState(cursor=initial_cursor)
+    idle_wait_sec = 1.0
+    yield "retry: 1000\n\n"
+    while True:
+        if await request.is_disconnected():
+            break
+        events, state.log_offset = load_chat_events_incremental(
+            job_id,
+            deps=deps,
+            after_event_id=state.cursor,
+            offset_hint=state.log_offset,
+            limit=300,
+        )
+        if events:
+            for chunk in _stream_event_chunks(events, state):
+                yield chunk
+            state.terminal_idle_loops = 0
+            state.keepalive_ticks = 0
+        else:
+            state.keepalive_ticks, keepalive = _advance_keepalive(state.keepalive_ticks)
+            if keepalive:
+                yield keepalive
+        state.terminal_idle_loops, should_stop = _terminal_idle_state(
+            core,
+            job_id=job_id,
+            events=events,
+            terminal_idle_loops=state.terminal_idle_loops,
+        )
+        if should_stop:
+            break
+        if events:
+            continue
+        state.signal_version = await _wait_for_stream_signal(
+            deps,
+            job_id=job_id,
+            signal_version=state.signal_version,
+            idle_wait_sec=idle_wait_sec,
+        )
+
+
+def _chat_stream_response(
+    request: Request,
+    *,
+    job_id: str,
+    last_event_id: int,
+    core: Any,
+) -> StreamingResponse:
+    _ensure_chat_stream_access(job_id, core)
+    deps = core.chat_event_stream_deps()
+    cursor = _resolve_stream_cursor(request, last_event_id)
+    return StreamingResponse(
+        _iter_chat_stream_events(
+            request,
+            job_id=job_id,
+            initial_cursor=cursor,
+            deps=deps,
+            core=core,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _register_chat_core_routes(router: APIRouter, core: Any) -> None:
     @router.post("/chat")
     async def chat(req: ChatRequest) -> Any:
         bound = _bind_or_raise(req)
@@ -83,93 +247,25 @@ def register_chat_routes(router: APIRouter, core: Any) -> None:
     async def chat_status(job_id: str) -> Any:
         return await core.chat_status(job_id)
 
+
+def _register_chat_stream_route(router: APIRouter, core: Any) -> None:
     @router.get("/chat/stream")
     async def chat_stream(
         request: Request,
         job_id: str,
         last_event_id: int = Query(default=0),
     ) -> Any:
-        try:
-            job = core.load_chat_job(job_id)
-            enforce_chat_job_access(job)
-        except FileNotFoundError:
-            raise HTTPException(status_code=404, detail="job not found")
-        except AuthError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-        deps = core.chat_event_stream_deps()
-        header_last_event_id = str(request.headers.get("last-event-id") or "").strip()
-        if header_last_event_id:
-            try:
-                last_event_id = max(int(last_event_id or 0), int(header_last_event_id))
-            except Exception:
-                pass
-
-        async def _iter_events() -> Any:
-            cursor = max(0, int(last_event_id or 0))
-            log_offset: int | None = None
-            signal_version = 0
-            terminal_idle_loops = 0
-            keepalive_ticks = 0
-            idle_wait_sec = 1.0
-            yield "retry: 1000\n\n"
-            while True:
-                if await request.is_disconnected():
-                    break
-                events, log_offset = load_chat_events_incremental(
-                    job_id,
-                    deps=deps,
-                    after_event_id=cursor,
-                    offset_hint=log_offset,
-                    limit=300,
-                )
-                if events:
-                    for item in events:
-                        event_id = int(item.get("event_id") or 0)
-                        if event_id > cursor:
-                            cursor = event_id
-                        yield encode_sse_event(item)
-                    terminal_idle_loops = 0
-                    keepalive_ticks = 0
-                else:
-                    keepalive_ticks += 1
-                    if keepalive_ticks >= 20:
-                        keepalive_ticks = 0
-                        yield ": keepalive\n\n"
-                try:
-                    status_job = core.load_chat_job(job_id)
-                except FileNotFoundError:
-                    break
-                status = str(status_job.get("status") or "").strip().lower()
-                if status in {"done", "failed", "cancelled"} and not events:
-                    terminal_idle_loops += 1
-                else:
-                    terminal_idle_loops = 0
-                if terminal_idle_loops >= 3:
-                    break
-                if events:
-                    continue
-                if callable(deps.wait_job_event):
-                    try:
-                        signal_version = await asyncio.to_thread(
-                            deps.wait_job_event,
-                            job_id,
-                            signal_version,
-                            idle_wait_sec,
-                        )
-                    except Exception:
-                        await asyncio.sleep(0.25)
-                else:
-                    await asyncio.sleep(0.25)
-
-        return StreamingResponse(
-            _iter_events(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+        return _chat_stream_response(
+            request,
+            job_id=job_id,
+            last_event_id=last_event_id,
+            core=core,
         )
+
+
+def register_chat_routes(router: APIRouter, core: Any) -> None:
+    _register_chat_core_routes(router, core)
+    _register_chat_stream_route(router, core)
 
 
 def register_chat_attachment_routes(router: APIRouter, core: Any) -> None:

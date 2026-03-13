@@ -142,65 +142,78 @@ def normalize_difficulty(value: Any) -> str:
     return "basic"
 
 
-def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-    errors: List[str] = []
-
-    subject = str(payload.get("subject", "")).strip()
-    if not subject:
-        errors.append("1) 学科 必填")
-
-    topic = str(payload.get("topic", "")).strip()
-    if not topic:
-        errors.append("1) 本节课主题 必填")
-
-    grade_level = str(payload.get("grade_level", "")).strip()
-    if not grade_level:
-        errors.append("2) 学生学段/年级 必填")
-
-    class_level_raw = str(payload.get("class_level", "")).strip()
-    class_level = normalize_class_level(class_level_raw)
-    if not class_level:
-        errors.append("2) 班级整体水平 必须是 偏弱/中等/较强/混合")
-
-    core_concepts = parse_list_value(payload.get("core_concepts"))
-    if len(core_concepts) < 3 or len(core_concepts) > 8:
-        errors.append("3) 核心概念/公式/规律 需要 3-8 个关键词")
-
-    typical_problem = str(payload.get("typical_problem", "")).strip()
-    if not typical_problem:
-        errors.append("4) 课堂典型题型/例题 必填")
-
-    misconceptions = parse_list_value(payload.get("misconceptions"))
-    if len(misconceptions) < 4:
-        errors.append("5) 易错点/易混点 至少 4 条")
-
-    duration = parse_duration(payload.get("duration_minutes") or payload.get("duration"))
-    if duration not in {20, 40, 60}:
-        errors.append("6) 作业时间 仅可选 20/40/60 分钟")
-
+def _extract_requirement_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
     preferences_raw = parse_list_value(payload.get("preferences"))
-    preferences, invalid = normalize_preferences(preferences_raw)
-    if invalid:
-        errors.append(f"7) 作业偏好 无效项: {', '.join(invalid)}")
-    if not preferences:
+    preferences, invalid_preferences = normalize_preferences(preferences_raw)
+    return {
+        "subject": str(payload.get("subject", "")).strip(),
+        "topic": str(payload.get("topic", "")).strip(),
+        "grade_level": str(payload.get("grade_level", "")).strip(),
+        "class_level": normalize_class_level(str(payload.get("class_level", "")).strip()),
+        "core_concepts": parse_list_value(payload.get("core_concepts")),
+        "typical_problem": str(payload.get("typical_problem", "")).strip(),
+        "misconceptions": parse_list_value(payload.get("misconceptions")),
+        "duration_minutes": parse_duration(payload.get("duration_minutes") or payload.get("duration")),
+        "preferences": preferences,
+        "invalid_preferences": invalid_preferences,
+        "extra_constraints": str(payload.get("extra_constraints", "") or "").strip(),
+    }
+
+
+def _validate_required_requirement_fields(fields: Dict[str, Any]) -> List[str]:
+    errors: List[str] = []
+    required_checks = (
+        ("subject", "1) 学科 必填"),
+        ("topic", "1) 本节课主题 必填"),
+        ("grade_level", "2) 学生学段/年级 必填"),
+        ("class_level", "2) 班级整体水平 必须是 偏弱/中等/较强/混合"),
+        ("typical_problem", "4) 课堂典型题型/例题 必填"),
+    )
+    for key, message in required_checks:
+        if not fields[key]:
+            errors.append(message)
+    return errors
+
+
+def _validate_collection_requirement_fields(fields: Dict[str, Any]) -> List[str]:
+    errors: List[str] = []
+    if not (3 <= len(fields["core_concepts"]) <= 8):
+        errors.append("3) 核心概念/公式/规律 需要 3-8 个关键词")
+    if len(fields["misconceptions"]) < 4:
+        errors.append("5) 易错点/易混点 至少 4 条")
+    if fields["duration_minutes"] not in {20, 40, 60}:
+        errors.append("6) 作业时间 仅可选 20/40/60 分钟")
+    if fields["invalid_preferences"]:
+        errors.append(f"7) 作业偏好 无效项: {', '.join(fields['invalid_preferences'])}")
+    if not fields["preferences"]:
         errors.append("7) 作业偏好 至少选择 1 项")
+    return errors
 
-    extra_constraints = str(payload.get("extra_constraints", "") or "").strip()
 
+def _validate_requirement_fields(fields: Dict[str, Any]) -> List[str]:
+    return [
+        *_validate_required_requirement_fields(fields),
+        *_validate_collection_requirement_fields(fields),
+    ]
+
+
+def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    fields = _extract_requirement_fields(payload)
+    errors = _validate_requirement_fields(fields)
     if errors:
         return None, errors
 
     normalized = {
-        "subject": subject,
-        "topic": topic,
-        "grade_level": grade_level,
-        "class_level": class_level,
-        "core_concepts": core_concepts,
-        "typical_problem": typical_problem,
-        "misconceptions": misconceptions,
-        "duration_minutes": duration,
-        "preferences": preferences,
-        "extra_constraints": extra_constraints,
+        "subject": fields["subject"],
+        "topic": fields["topic"],
+        "grade_level": fields["grade_level"],
+        "class_level": fields["class_level"],
+        "core_concepts": fields["core_concepts"],
+        "typical_problem": fields["typical_problem"],
+        "misconceptions": fields["misconceptions"],
+        "duration_minutes": fields["duration_minutes"],
+        "preferences": fields["preferences"],
+        "extra_constraints": fields["extra_constraints"],
     }
     return normalized, []
 

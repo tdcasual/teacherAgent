@@ -547,6 +547,59 @@ def resolve_provider_target(
     return resolve_private_provider_target(actor=actor, provider_id=provider_id, mode=mode, model=model, deps=deps)
 
 
+def _shared_provider_base_url(
+    prov_cfg: Dict[str, Any],
+    mode_cfg: Dict[str, Any],
+    *,
+    deps: TeacherProviderRegistryDeps,
+) -> str:
+    mode_env = _as_str(mode_cfg.get("base_url_env"))
+    if mode_env:
+        value = _as_str(deps.getenv(mode_env, None))
+        if value:
+            return value.rstrip("/")
+    provider_env = _as_str(prov_cfg.get("base_url_env"))
+    if provider_env:
+        value = _as_str(deps.getenv(provider_env, None))
+        if value:
+            return value.rstrip("/")
+    return (_as_str(mode_cfg.get("base_url")) or _as_str(prov_cfg.get("base_url"))).rstrip("/")
+
+
+def _shared_provider_api_key(
+    prov_cfg: Dict[str, Any],
+    *,
+    deps: TeacherProviderRegistryDeps,
+) -> str:
+    api_key = _as_str(deps.getenv("LLM_API_KEY", None))
+    if api_key:
+        return api_key
+    env_names = prov_cfg.get("api_key_envs")
+    if not isinstance(env_names, list):
+        return ""
+    for env_name in env_names:
+        value = _as_str(deps.getenv(_as_str(env_name), None))
+        if value:
+            return value
+    return ""
+
+
+def _shared_provider_headers(prov_cfg: Dict[str, Any], api_key: str) -> Dict[str, str]:
+    auth = _as_dict(prov_cfg.get("auth"))
+    auth_type = _as_str(auth.get("type")) or "bearer"
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+    if auth_type == "bearer":
+        header = _as_str(auth.get("header")) or "Authorization"
+        prefix = auth.get("prefix", "Bearer ")
+        headers[header] = f"{prefix}{api_key}"
+        return headers
+    if auth_type == "x-goog-api-key":
+        headers["x-goog-api-key"] = api_key
+        return headers
+    headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
 def resolve_shared_provider_target(
     *,
     provider_id: str,
@@ -563,45 +616,21 @@ def resolve_shared_provider_target(
     mode_val = _as_str(mode) or "openai-chat"
     modes = _as_dict(prov_cfg.get("modes"))
     mode_cfg = _as_dict(modes.get(mode_val))
-
-    # Resolve base_url: mode env → provider env → mode static → provider static
-    base_url = _as_str(deps.getenv(mode_cfg.get("base_url_env", ""), None)) or _as_str(deps.getenv(prov_cfg.get("base_url_env", ""), None))
-    if not base_url:
-        base_url = _as_str(mode_cfg.get("base_url")) or _as_str(prov_cfg.get("base_url"))
+    base_url = _shared_provider_base_url(prov_cfg, mode_cfg, deps=deps)
     if not base_url:
         return None
 
-    # Resolve api_key: LLM_API_KEY → provider api_key_envs
-    api_key = _as_str(deps.getenv("LLM_API_KEY", None))
-    if not api_key:
-        for env_name in (prov_cfg.get("api_key_envs") or []):
-            val = _as_str(deps.getenv(env_name, None))
-            if val:
-                api_key = val
-                break
+    api_key = _shared_provider_api_key(prov_cfg, deps=deps)
     if not api_key:
         return None
-
-    # Build headers based on auth type
-    auth = _as_dict(prov_cfg.get("auth"))
-    auth_type = _as_str(auth.get("type")) or "bearer"
-    headers: Dict[str, str] = {"Content-Type": "application/json"}
-    if auth_type == "bearer":
-        header = _as_str(auth.get("header")) or "Authorization"
-        prefix = auth.get("prefix", "Bearer ")
-        headers[header] = f"{prefix}{api_key}"
-    elif auth_type == "x-goog-api-key":
-        headers["x-goog-api-key"] = api_key
-    else:
-        headers["Authorization"] = f"Bearer {api_key}"
 
     endpoint = _as_str(mode_cfg.get("endpoint")) or "/chat/completions"
     return {
         "provider": provider_id,
         "mode": mode_val,
-        "base_url": base_url.rstrip("/"),
+        "base_url": base_url,
         "endpoint": endpoint,
-        "headers": headers,
+        "headers": _shared_provider_headers(prov_cfg, api_key),
     }
 
 

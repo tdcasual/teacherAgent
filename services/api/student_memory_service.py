@@ -384,6 +384,118 @@ def _auto_find_duplicate(
     return None
 
 
+def _load_existing_proposals(
+    teacher_id: str,
+    student_id: str,
+    *,
+    deps: StudentMemoryDeps,
+) -> List[Dict[str, Any]]:
+    existing_resp = list_proposals_api(
+        teacher_id,
+        student_id=student_id,
+        status=None,
+        limit=300,
+        deps=deps,
+    )
+    if not bool(existing_resp.get("ok")):
+        return []
+    proposals = existing_resp.get("proposals")
+    if not isinstance(proposals, list):
+        return []
+    return [item for item in proposals if isinstance(item, dict)]
+
+
+def _resolve_auto_proposal_conflict(
+    existing: List[Dict[str, Any]],
+    *,
+    today: str,
+    student_id: str,
+    candidate: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if _auto_daily_quota_reached(existing, today=today):
+        return {"ok": False, "created": False, "reason": "daily_quota_reached"}
+    duplicate = _auto_find_duplicate(
+        existing,
+        student_id=student_id,
+        memory_type=str(candidate.get("memory_type") or ""),
+        content=str(candidate.get("content") or ""),
+    )
+    if not duplicate:
+        return None
+    return {
+        "ok": True,
+        "created": False,
+        "reason": "duplicate",
+        "proposal_id": str(duplicate.get("proposal_id") or ""),
+        "memory_type": str(candidate.get("memory_type") or ""),
+    }
+
+
+def _create_auto_proposal(
+    *,
+    teacher_id: str,
+    student_id: str,
+    candidate: Dict[str, Any],
+    evidence_refs: Optional[List[str]],
+    source: str,
+    provenance: Dict[str, Any],
+    deps: StudentMemoryDeps,
+) -> Dict[str, Any]:
+    return create_proposal_api(
+        teacher_id=teacher_id,
+        student_id=student_id,
+        memory_type=str(candidate.get("memory_type") or ""),
+        content=str(candidate.get("content") or ""),
+        evidence_refs=evidence_refs,
+        source=source,
+        provenance=provenance,
+        deps=deps,
+    )
+
+
+def _auto_create_failed_response(created: Dict[str, Any]) -> Dict[str, Any]:
+    error = str(created.get("error") or "create_failed")
+    return {"ok": False, "created": False, "reason": error, "error": error}
+
+
+def _list_proposal_files(proposals_dir: Path) -> List[Path]:
+    def _safe_mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    return sorted(proposals_dir.glob("*.json"), key=_safe_mtime, reverse=True)
+
+
+def _proposal_matches_filters(
+    rec: Dict[str, Any],
+    *,
+    student_filter: Optional[str],
+    status_norm: Optional[str],
+) -> bool:
+    rec_status = str(rec.get("status") or "").strip().lower()
+    if status_norm and rec_status != status_norm:
+        return False
+    if not status_norm and rec_status == "deleted":
+        return False
+    if student_filter and str(rec.get("student_id") or "").strip() != student_filter:
+        return False
+    return True
+
+
+def _normalize_listed_proposal(rec: Dict[str, Any], *, path: Path) -> Dict[str, Any]:
+    proposal = dict(rec)
+    if "proposal_id" not in proposal:
+        proposal["proposal_id"] = path.stem
+    if not isinstance(proposal.get("provenance"), dict):
+        proposal["provenance"] = _build_student_memory_provenance(
+            proposal.get("source"),
+            evidence_refs=proposal.get("evidence_refs") if isinstance(proposal.get("evidence_refs"), list) else None,
+        )
+    return proposal
+
+
 def student_memory_auto_propose_from_turn_api(
     *,
     teacher_id: Optional[str],
@@ -408,37 +520,11 @@ def student_memory_auto_propose_from_turn_api(
         return {"ok": False, "created": False, "reason": "no_candidate"}
 
     teacher_id_final = deps.resolve_teacher_id(teacher_input)
-    existing_resp = list_proposals_api(
-        teacher_id_final,
-        student_id=sid,
-        status=None,
-        limit=300,
-        deps=deps,
-    )
-    existing: List[Dict[str, Any]] = []
-    existing_raw = existing_resp.get("proposals")
-    if bool(existing_resp.get("ok")) and isinstance(existing_raw, list):
-        for item in existing_raw:
-            if isinstance(item, dict):
-                existing.append(item)
+    existing = _load_existing_proposals(teacher_id_final, sid, deps=deps)
     today = str(deps.now_iso() or "").strip().split("T", 1)[0]
-    if _auto_daily_quota_reached(existing, today=today):
-        return {"ok": False, "created": False, "reason": "daily_quota_reached"}
-
-    duplicate = _auto_find_duplicate(
-        existing,
-        student_id=sid,
-        memory_type=str(candidate.get("memory_type") or ""),
-        content=str(candidate.get("content") or ""),
-    )
-    if duplicate:
-        return {
-            "ok": True,
-            "created": False,
-            "reason": "duplicate",
-            "proposal_id": str(duplicate.get("proposal_id") or ""),
-            "memory_type": str(candidate.get("memory_type") or ""),
-        }
+    conflict = _resolve_auto_proposal_conflict(existing, today=today, student_id=sid, candidate=candidate)
+    if conflict:
+        return conflict
 
     refs: List[str] = []
     sid_ref = str(session_id or "").strip()
@@ -448,23 +534,17 @@ def student_memory_auto_propose_from_turn_api(
     if rid_ref:
         refs.append(f"request:{rid_ref}")
 
-    created = create_proposal_api(
+    created = _create_auto_proposal(
         teacher_id=teacher_id_final,
         student_id=sid,
-        memory_type=str(candidate.get("memory_type") or ""),
-        content=str(candidate.get("content") or ""),
+        candidate=candidate,
         evidence_refs=refs or None,
         source="auto_student_infer",
         provenance=provenance if isinstance(provenance, dict) else {"side_effect_source": str(source or "").strip(), "session_id": sid_ref or ""},
         deps=deps,
     )
     if not created.get("ok"):
-        return {
-            "ok": False,
-            "created": False,
-            "reason": str(created.get("error") or "create_failed"),
-            "error": str(created.get("error") or "create_failed"),
-        }
+        return _auto_create_failed_response(created)
     return {
         "ok": True,
         "created": True,
@@ -511,37 +591,11 @@ def student_memory_auto_propose_from_assignment_evidence_api(
         return {"ok": False, "created": False, "reason": "no_candidate"}
 
     teacher_id_final = deps.resolve_teacher_id(teacher_input)
-    existing_resp = list_proposals_api(
-        teacher_id_final,
-        student_id=sid,
-        status=None,
-        limit=300,
-        deps=deps,
-    )
-    existing: List[Dict[str, Any]] = []
-    existing_raw = existing_resp.get("proposals")
-    if bool(existing_resp.get("ok")) and isinstance(existing_raw, list):
-        for item in existing_raw:
-            if isinstance(item, dict):
-                existing.append(item)
+    existing = _load_existing_proposals(teacher_id_final, sid, deps=deps)
     today = str(deps.now_iso() or "").strip().split("T", 1)[0]
-    if _auto_daily_quota_reached(existing, today=today):
-        return {"ok": False, "created": False, "reason": "daily_quota_reached"}
-
-    duplicate = _auto_find_duplicate(
-        existing,
-        student_id=sid,
-        memory_type=str(candidate.get("memory_type") or ""),
-        content=str(candidate.get("content") or ""),
-    )
-    if duplicate:
-        return {
-            "ok": True,
-            "created": False,
-            "reason": "duplicate",
-            "proposal_id": str(duplicate.get("proposal_id") or ""),
-            "memory_type": str(candidate.get("memory_type") or ""),
-        }
+    conflict = _resolve_auto_proposal_conflict(existing, today=today, student_id=sid, candidate=candidate)
+    if conflict:
+        return conflict
 
     refs: List[str] = [f"assignment:{aid}"]
     schema = str(evidence_payload.get("schema") or "").strip()
@@ -554,23 +608,17 @@ def student_memory_auto_propose_from_assignment_evidence_api(
     if rid_ref:
         refs.append(f"request:{rid_ref}")
 
-    created = create_proposal_api(
+    created = _create_auto_proposal(
         teacher_id=teacher_id_final,
         student_id=sid,
-        memory_type=str(candidate.get("memory_type") or ""),
-        content=str(candidate.get("content") or ""),
+        candidate=candidate,
         evidence_refs=refs,
         source="auto_assignment_evidence",
         provenance=provenance if isinstance(provenance, dict) else {"side_effect_source": str(source or "").strip(), "assignment_id": aid},
         deps=deps,
     )
     if not created.get("ok"):
-        return {
-            "ok": False,
-            "created": False,
-            "reason": str(created.get("error") or "create_failed"),
-            "error": str(created.get("error") or "create_failed"),
-        }
+        return _auto_create_failed_response(created)
     return {
         "ok": True,
         "created": True,
@@ -600,33 +648,14 @@ def list_proposals_api(
     take = max(1, min(int(limit or 20), 200))
     proposals_dir = _proposals_dir(teacher_id_final, deps=deps)
 
-    def _safe_mtime(path: Path) -> float:
-        try:
-            return path.stat().st_mtime
-        except OSError:
-            return 0.0
-
     items: List[Dict[str, Any]] = []
-    for path in sorted(proposals_dir.glob("*.json"), key=_safe_mtime, reverse=True):
+    for path in _list_proposal_files(proposals_dir):
         rec = _load_record(path)
         if not rec:
             continue
-        rec_status = str(rec.get("status") or "").strip().lower()
-        if status_norm:
-            if rec_status != status_norm:
-                continue
-        elif rec_status == "deleted":
+        if not _proposal_matches_filters(rec, student_filter=student_filter, status_norm=status_norm):
             continue
-        if student_filter and str(rec.get("student_id") or "").strip() != student_filter:
-            continue
-        if "proposal_id" not in rec:
-            rec["proposal_id"] = path.stem
-        if not isinstance(rec.get("provenance"), dict):
-            rec["provenance"] = _build_student_memory_provenance(
-                rec.get("source"),
-                evidence_refs=rec.get("evidence_refs") if isinstance(rec.get("evidence_refs"), list) else None,
-            )
-        items.append(rec)
+        items.append(_normalize_listed_proposal(rec, path=path))
         if len(items) >= take:
             break
 

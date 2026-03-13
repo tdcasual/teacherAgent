@@ -94,6 +94,111 @@ def _prepare_uploads(
     return prepared, known_total
 
 
+def _ensure_total_upload_size(known_total: int) -> None:
+    if known_total > MAX_UPLOAD_TOTAL_SIZE_BYTES:
+        raise AssignmentUploadStartError(400, "单次上传总大小不能超过 80MB")
+
+
+async def _save_upload(
+    upload_file: Any,
+    dest: Path,
+    *,
+    deps: AssignmentUploadStartDeps,
+    total_written: int,
+) -> int:
+    written = await deps.save_upload_file(upload_file, dest)
+    size_bytes = int(written if written is not None else dest.stat().st_size)
+    if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
+        dest.unlink(missing_ok=True)
+        raise AssignmentUploadStartError(400, "单个文件大小不能超过 20MB")
+    next_total = total_written + size_bytes
+    if next_total > MAX_UPLOAD_TOTAL_SIZE_BYTES:
+        dest.unlink(missing_ok=True)
+        raise AssignmentUploadStartError(400, "单次上传总大小不能超过 80MB")
+    return next_total
+
+
+async def _save_upload_batch(
+    prepared_inputs: List[tuple[Any, str]],
+    target_dir: Path,
+    *,
+    deps: AssignmentUploadStartDeps,
+    total_written: int,
+    track_pdf: bool = False,
+    delivery_mode: str = "image",
+) -> tuple[List[str], int, str]:
+    saved_files: List[str] = []
+    for upload_file, filename in prepared_inputs:
+        dest = target_dir / filename
+        total_written = await _save_upload(
+            upload_file,
+            dest,
+            deps=deps,
+            total_written=total_written,
+        )
+        saved_files.append(filename)
+        if track_pdf and dest.suffix.lower() == ".pdf":
+            delivery_mode = "pdf"
+    return saved_files, total_written, delivery_mode
+
+
+def _validate_upload_scope(scope_val: str, student_ids_list: List[str], class_name: Any) -> None:
+    if scope_val == "student" and not student_ids_list:
+        raise AssignmentUploadStartError(400, "student scope requires student_ids")
+    if scope_val == "class" and not class_name:
+        raise AssignmentUploadStartError(400, "class scope requires class_name")
+
+
+def _build_upload_record(
+    *,
+    job_id: str,
+    assignment_id: str,
+    teacher_id: str,
+    date_str: str,
+    due_at: Any,
+    scope_val: str,
+    class_name: Any,
+    student_ids_list: List[str],
+    saved_sources: List[str],
+    saved_answers: List[str],
+    delivery_mode: str,
+    language: Any,
+    ocr_mode: Any,
+    deps: AssignmentUploadStartDeps,
+) -> Dict[str, Any]:
+    return {
+        "job_id": job_id,
+        "assignment_id": assignment_id,
+        "teacher_id": teacher_id,
+        "date": date_str,
+        "due_at": deps.normalize_due_at(due_at),
+        "scope": scope_val,
+        "class_name": class_name or "",
+        "student_ids": student_ids_list,
+        "source_files": saved_sources,
+        "answer_files": saved_answers,
+        "delivery_mode": delivery_mode,
+        "language": language or "zh",
+        "ocr_mode": ocr_mode or "FREE_OCR",
+        "status": "queued",
+        "progress": 0,
+        "step": "queued",
+        "created_at": deps.now_iso(),
+    }
+
+
+def _queue_upload_job(
+    job_id: str,
+    assignment_id: str,
+    record: Dict[str, Any],
+    *,
+    deps: AssignmentUploadStartDeps,
+) -> None:
+    deps.write_upload_job(job_id, record, True)
+    deps.enqueue_upload_job(job_id)
+    deps.diag_log("upload.job.created", {"job_id": job_id, "assignment_id": assignment_id})
+
+
 async def start_assignment_upload(
     *,
     assignment_id: str,
@@ -126,76 +231,48 @@ async def start_assignment_upload(
         field_label="answer_files",
         sanitize_filename=deps.sanitize_filename,
     )
-    if (source_known_total + answer_known_total) > MAX_UPLOAD_TOTAL_SIZE_BYTES:
-        raise AssignmentUploadStartError(400, "单次上传总大小不能超过 80MB")
+    _ensure_total_upload_size(source_known_total + answer_known_total)
 
-    saved_sources: List[str] = []
-    delivery_mode = "image"
-    saved_answers: List[str] = []
-    total_written = 0
     principal = get_current_principal()
     teacher_id = str(getattr(principal, "actor_id", "") or "").strip()
     try:
-        for upload_file, filename in source_inputs:
-            dest = source_dir / filename
-            written = await deps.save_upload_file(upload_file, dest)
-            size_bytes = int(written if written is not None else dest.stat().st_size)
-            if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
-                dest.unlink(missing_ok=True)
-                raise AssignmentUploadStartError(400, "单个文件大小不能超过 20MB")
-            total_written += size_bytes
-            if total_written > MAX_UPLOAD_TOTAL_SIZE_BYTES:
-                dest.unlink(missing_ok=True)
-                raise AssignmentUploadStartError(400, "单次上传总大小不能超过 80MB")
-            saved_sources.append(filename)
-            if dest.suffix.lower() == ".pdf":
-                delivery_mode = "pdf"
-
-        for upload_file, filename in answer_inputs:
-            dest = answers_dir / filename
-            written = await deps.save_upload_file(upload_file, dest)
-            size_bytes = int(written if written is not None else dest.stat().st_size)
-            if size_bytes > MAX_UPLOAD_FILE_SIZE_BYTES:
-                dest.unlink(missing_ok=True)
-                raise AssignmentUploadStartError(400, "单个文件大小不能超过 20MB")
-            total_written += size_bytes
-            if total_written > MAX_UPLOAD_TOTAL_SIZE_BYTES:
-                dest.unlink(missing_ok=True)
-                raise AssignmentUploadStartError(400, "单次上传总大小不能超过 80MB")
-            saved_answers.append(filename)
-
+        saved_sources, total_written, delivery_mode = await _save_upload_batch(
+            source_inputs,
+            source_dir,
+            deps=deps,
+            total_written=0,
+            track_pdf=True,
+        )
+        saved_answers, total_written, delivery_mode = await _save_upload_batch(
+            answer_inputs,
+            answers_dir,
+            deps=deps,
+            total_written=total_written,
+            delivery_mode=delivery_mode,
+        )
         if not saved_sources:
             raise AssignmentUploadStartError(400, "No source files uploaded")
 
         student_ids_list = deps.parse_ids_value(student_ids)
         scope_val = deps.resolve_scope(str(scope or ""), student_ids_list, str(class_name or ""))
-        if scope_val == "student" and not student_ids_list:
-            raise AssignmentUploadStartError(400, "student scope requires student_ids")
-        if scope_val == "class" and not class_name:
-            raise AssignmentUploadStartError(400, "class scope requires class_name")
-
-        record = {
-            "job_id": job_id,
-            "assignment_id": assignment_id,
-            "teacher_id": teacher_id,
-            "date": date_str,
-            "due_at": deps.normalize_due_at(due_at),
-            "scope": scope_val,
-            "class_name": class_name or "",
-            "student_ids": student_ids_list,
-            "source_files": saved_sources,
-            "answer_files": saved_answers,
-            "delivery_mode": delivery_mode,
-            "language": language or "zh",
-            "ocr_mode": ocr_mode or "FREE_OCR",
-            "status": "queued",
-            "progress": 0,
-            "step": "queued",
-            "created_at": deps.now_iso(),
-        }
-        deps.write_upload_job(job_id, record, True)
-        deps.enqueue_upload_job(job_id)
-        deps.diag_log("upload.job.created", {"job_id": job_id, "assignment_id": assignment_id})
+        _validate_upload_scope(scope_val, student_ids_list, class_name)
+        record = _build_upload_record(
+            job_id=job_id,
+            assignment_id=assignment_id,
+            teacher_id=teacher_id,
+            date_str=date_str,
+            due_at=due_at,
+            scope_val=scope_val,
+            class_name=class_name,
+            student_ids_list=student_ids_list,
+            saved_sources=saved_sources,
+            saved_answers=saved_answers,
+            delivery_mode=delivery_mode,
+            language=language,
+            ocr_mode=ocr_mode,
+            deps=deps,
+        )
+        _queue_upload_job(job_id, assignment_id, record, deps=deps)
 
         return {
             "ok": True,

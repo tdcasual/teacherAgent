@@ -133,6 +133,74 @@ def _workflow_resolution_mode(reason: str) -> str:
     return "fallback" if normalized else "unknown"
 
 
+def _coerce_workflow_resolution_float(raw: Any) -> Optional[float]:
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("numeric conversion failed", exc_info=True)
+        return None
+
+
+def _coerce_workflow_resolution_int(raw: Any) -> Optional[int]:
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("numeric conversion failed", exc_info=True)
+        return None
+
+
+def _normalize_workflow_resolution_hits(raw: Any) -> Optional[List[str]]:
+    if not isinstance(raw, list):
+        return None
+    hits = [str(hit or "").strip() for hit in raw if str(hit or "").strip()]
+    return hits[:6] if hits else None
+
+
+def _normalize_workflow_resolution_candidate(item: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(item, dict):
+        return None
+    skill_id = str(item.get("skill_id") or "").strip()
+    if not skill_id:
+        return None
+
+    candidate: Dict[str, Any] = {"skill_id": skill_id}
+    score = _coerce_workflow_resolution_int(item.get("score"))
+    if score is not None:
+        candidate["score"] = score
+    hits = _normalize_workflow_resolution_hits(item.get("hits"))
+    if hits:
+        candidate["hits"] = hits
+    return candidate
+
+
+def _normalize_workflow_resolution_candidates(raw: Any) -> Optional[List[Dict[str, Any]]]:
+    if not isinstance(raw, list):
+        return None
+    return [
+        candidate
+        for candidate in (_normalize_workflow_resolution_candidate(item) for item in raw[:3])
+        if candidate is not None
+    ]
+
+
+def _resolve_requested_rewritten(
+    requested_skill_id: str,
+    effective_skill_id: str,
+    requested_rewritten: Any,
+) -> bool:
+    if requested_rewritten is not None:
+        return bool(requested_rewritten)
+    return bool(
+        requested_skill_id
+        and effective_skill_id
+        and requested_skill_id != effective_skill_id
+    )
+
+
 def _normalize_workflow_resolution_payload(
     requested_skill_id: str,
     effective_skill_id: str,
@@ -147,35 +215,12 @@ def _normalize_workflow_resolution_payload(
     if reason:
         normalized["reason"] = reason
 
-    confidence_raw = resolve_payload.get("confidence")
-    if confidence_raw is not None:
-        try:
-            normalized["confidence"] = float(confidence_raw)
-        except Exception:  # policy: allowed-broad-except
-            _log.warning("numeric conversion failed", exc_info=True)
+    confidence = _coerce_workflow_resolution_float(resolve_payload.get("confidence"))
+    if confidence is not None:
+        normalized["confidence"] = confidence
 
-    candidates_raw = resolve_payload.get("candidates")
-    if isinstance(candidates_raw, list):
-        candidates: List[Dict[str, Any]] = []
-        for item in candidates_raw[:3]:
-            if not isinstance(item, dict):
-                continue
-            skill_id = str(item.get("skill_id") or "").strip()
-            if not skill_id:
-                continue
-            candidate: Dict[str, Any] = {"skill_id": skill_id}
-            score_raw = item.get("score")
-            if score_raw is not None:
-                try:
-                    candidate["score"] = int(score_raw)
-                except Exception:  # policy: allowed-broad-except
-                    _log.warning("numeric conversion failed", exc_info=True)
-            hits_raw = item.get("hits")
-            if isinstance(hits_raw, list):
-                hits = [str(hit or "").strip() for hit in hits_raw if str(hit or "").strip()]
-                if hits:
-                    candidate["hits"] = hits[:6]
-            candidates.append(candidate)
+    candidates = _normalize_workflow_resolution_candidates(resolve_payload.get("candidates"))
+    if candidates is not None:
         normalized["candidates"] = candidates
 
     resolution_mode = str(resolve_payload.get("resolution_mode") or "").strip()
@@ -188,14 +233,11 @@ def _normalize_workflow_resolution_payload(
         auto_selected = resolution_mode == "auto"
     normalized["auto_selected"] = bool(auto_selected)
 
-    requested_rewritten = resolve_payload.get("requested_rewritten")
-    if requested_rewritten is None:
-        requested_rewritten = bool(
-            normalized["requested_skill_id"]
-            and normalized["effective_skill_id"]
-            and normalized["requested_skill_id"] != normalized["effective_skill_id"]
-        )
-    normalized["requested_rewritten"] = bool(requested_rewritten)
+    normalized["requested_rewritten"] = _resolve_requested_rewritten(
+        normalized["requested_skill_id"],
+        normalized["effective_skill_id"],
+        resolve_payload.get("requested_rewritten"),
+    )
 
     return normalized
 
@@ -468,6 +510,134 @@ def _cap_extra_system(text: Optional[str], *, max_chars: int) -> Optional[str]:
     return text
 
 
+def _missing_student_attachment_reply(
+    role_hint: Optional[str],
+    attachment_context: str,
+    last_user_text: str,
+) -> Optional[str]:
+    if role_hint != "student" or attachment_context:
+        return None
+    if not _looks_like_attachment_reference(last_user_text):
+        return None
+    return (
+        "我现在没有可读取的附件上下文。请在当前会话重新上传或重新选择文件后再提问。"
+        "学生端支持 PDF、图片 OCR、XLSX、XLS、Markdown 读取。"
+    )
+
+
+def _resolve_teacher_workflow_payload(
+    req: Any,
+    *,
+    deps: ComputeChatReplyDeps,
+    role_hint: Optional[str],
+    effective_skill_id: str,
+    last_user_text: str,
+    attachment_context: str,
+    workflow_resolution: Dict[str, Any],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Dict[str, Any]:
+    if role_hint != "teacher":
+        return {}
+    teacher_workflow = deps.resolve_teacher_workflow(
+        req,
+        effective_skill_id,
+        last_user_text,
+        attachment_context,
+    ) or {}
+    _emit_workflow_resolution_event(event_sink, workflow_resolution)
+    if teacher_workflow:
+        deps.diag_log(
+            "teacher.workflow.orchestrated",
+            {
+                "workflow_id": str(teacher_workflow.get("workflow_id") or ""),
+                "workflow_label": str(teacher_workflow.get("workflow_label") or ""),
+                "skill_id": effective_skill_id,
+            },
+        )
+    return teacher_workflow
+
+
+def _build_chat_extra_system(
+    req: Any,
+    *,
+    deps: ComputeChatReplyDeps,
+    role_hint: Optional[str],
+    last_user_text: str,
+    last_assistant_text: str,
+    session_id: str,
+    teacher_id_override: Optional[str],
+    attachment_context: str,
+    teacher_workflow: Dict[str, Any],
+) -> Tuple[Optional[str], Optional[str]]:
+    extra_system: Optional[str] = None
+    effective_teacher_id: Optional[str] = None
+    if role_hint == "teacher":
+        extra_system, effective_teacher_id = _teacher_extra_system(
+            req,
+            deps=deps,
+            last_user_text=last_user_text,
+            session_id=session_id,
+            teacher_id_override=teacher_id_override,
+            workflow_payload=teacher_workflow,
+        )
+    elif role_hint == "student":
+        extra_system = _student_extra_system(
+            req,
+            deps=deps,
+            last_user_text=last_user_text,
+            last_assistant_text=last_assistant_text,
+        )
+    extra_system = _with_attachment_context(extra_system, attachment_context)
+    return _cap_extra_system(
+        extra_system,
+        max_chars=deps.chat_extra_system_max_chars,
+    ), effective_teacher_id
+
+
+def _build_run_agent_kwargs(
+    req: Any,
+    *,
+    extra_system: Optional[str],
+    effective_teacher_id: Optional[str],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Dict[str, Any]:
+    run_agent_kwargs: Dict[str, Any] = {
+        "extra_system": extra_system,
+        "skill_id": req.skill_id,
+        "teacher_id": effective_teacher_id or req.teacher_id,
+        "event_sink": event_sink,
+    }
+    analysis_target = getattr(req, "analysis_target", None)
+    if analysis_target is not None:
+        run_agent_kwargs["analysis_target"] = analysis_target
+    return run_agent_kwargs
+
+
+def _run_agent_for_chat(
+    *,
+    req: Any,
+    deps: ComputeChatReplyDeps,
+    messages: List[Dict[str, Any]],
+    role_hint: Optional[str],
+    last_user_text: str,
+    extra_system: Optional[str],
+    effective_teacher_id: Optional[str],
+    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
+) -> Tuple[Optional[Dict[str, Any]], Optional[Tuple[str, Optional[str], str]]]:
+    run_agent_kwargs = _build_run_agent_kwargs(
+        req,
+        extra_system=extra_system,
+        effective_teacher_id=effective_teacher_id,
+        event_sink=event_sink,
+    )
+    if role_hint != "student":
+        return deps.run_agent(messages, role_hint, **run_agent_kwargs), None
+    with deps.student_inflight(req.student_id) as allowed:
+        if not allowed:
+            return None, ("正在生成上一条回复，请稍候再试。", role_hint, last_user_text)
+        return deps.run_agent(messages, role_hint, **run_agent_kwargs), None
+
+
 def compute_chat_reply_sync(
     req: Any,
     *,
@@ -481,13 +651,13 @@ def compute_chat_reply_sync(
     requested_skill_id = str(getattr(req, "skill_id", "") or "").strip()
     attachment_context = str(getattr(req, "attachment_context", "") or "").strip()
 
-    if role_hint == "student" and not attachment_context and _looks_like_attachment_reference(last_user_text):
-        return (
-            "我现在没有可读取的附件上下文。请在当前会话重新上传或重新选择文件后再提问。"
-            "学生端支持 PDF、图片 OCR、XLSX、XLS、Markdown 读取。",
-            role_hint,
-            last_user_text,
-        )
+    missing_attachment_reply = _missing_student_attachment_reply(
+        role_hint,
+        attachment_context,
+        last_user_text,
+    )
+    if missing_attachment_reply:
+        return missing_attachment_reply, role_hint, last_user_text
 
     effective_skill_id, workflow_resolution = _resolve_effective_skill_id(
         req,
@@ -497,24 +667,16 @@ def compute_chat_reply_sync(
         last_user_text=last_user_text,
     )
 
-    teacher_workflow: Dict[str, Any] = {}
-    if role_hint == "teacher":
-        teacher_workflow = deps.resolve_teacher_workflow(
-            req,
-            effective_skill_id,
-            last_user_text,
-            attachment_context,
-        ) or {}
-        _emit_workflow_resolution_event(event_sink, workflow_resolution)
-        if teacher_workflow:
-            deps.diag_log(
-                "teacher.workflow.orchestrated",
-                {
-                    "workflow_id": str(teacher_workflow.get("workflow_id") or ""),
-                    "workflow_label": str(teacher_workflow.get("workflow_label") or ""),
-                    "skill_id": effective_skill_id,
-                },
-            )
+    teacher_workflow = _resolve_teacher_workflow_payload(
+        req,
+        deps=deps,
+        role_hint=role_hint,
+        effective_skill_id=effective_skill_id,
+        last_user_text=last_user_text,
+        attachment_context=attachment_context,
+        workflow_resolution=workflow_resolution,
+        event_sink=event_sink,
+    )
 
     if role_hint == "teacher":
         preflight = _teacher_preflight_reply(
@@ -533,56 +695,35 @@ def compute_chat_reply_sync(
     last_assistant_text = (
         next((m.content for m in reversed(req.messages) if m.role == "assistant"), "") or ""
     )
-
-    effective_teacher_id: Optional[str] = None
-    if role_hint == "teacher":
-        extra_system, effective_teacher_id = _teacher_extra_system(
-            req,
-            deps=deps,
-            last_user_text=last_user_text,
-            session_id=session_id,
-            teacher_id_override=teacher_id_override,
-            workflow_payload=teacher_workflow,
-        )
-    elif role_hint == "student":
-        extra_system = _student_extra_system(
-            req,
-            deps=deps,
-            last_user_text=last_user_text,
-            last_assistant_text=last_assistant_text,
-        )
-
-    extra_system = _with_attachment_context(extra_system, attachment_context)
-    extra_system = _cap_extra_system(extra_system, max_chars=deps.chat_extra_system_max_chars)
+    extra_system, effective_teacher_id = _build_chat_extra_system(
+        req,
+        deps=deps,
+        role_hint=role_hint,
+        last_user_text=last_user_text,
+        last_assistant_text=last_assistant_text,
+        session_id=session_id,
+        teacher_id_override=teacher_id_override,
+        attachment_context=attachment_context,
+        teacher_workflow=teacher_workflow,
+    )
 
     messages = deps.trim_messages(
         [{"role": m.role, "content": m.content} for m in req.messages], role_hint=role_hint
     )
+    result, blocked_reply = _run_agent_for_chat(
+        req=req,
+        deps=deps,
+        messages=messages,
+        role_hint=role_hint,
+        last_user_text=last_user_text,
+        extra_system=extra_system,
+        effective_teacher_id=effective_teacher_id,
+        event_sink=event_sink,
+    )
+    if blocked_reply:
+        return blocked_reply
 
-    def _run_agent_with_optional_events() -> Dict[str, Any]:
-        run_agent_kwargs = {
-            'extra_system': extra_system,
-            'skill_id': req.skill_id,
-            'teacher_id': effective_teacher_id or req.teacher_id,
-            'event_sink': event_sink,
-        }
-        analysis_target = getattr(req, 'analysis_target', None)
-        if analysis_target is not None:
-            run_agent_kwargs['analysis_target'] = analysis_target
-        return deps.run_agent(
-            messages,
-            role_hint,
-            **run_agent_kwargs,
-        )
-
-    if role_hint == "student":
-        with deps.student_inflight(req.student_id) as allowed:
-            if not allowed:
-                return "正在生成上一条回复，请稍候再试。", role_hint, last_user_text
-            result = _run_agent_with_optional_events()
-    else:
-        result = _run_agent_with_optional_events()
-
+    assert result is not None
     reply_text = deps.normalize_math_delimiters(result.get("reply", ""))
     result["reply"] = reply_text
     return reply_text, role_hint, last_user_text
@@ -1057,6 +1198,35 @@ def _run_student_post_done_side_effects(
     teacher_id = str(getattr(req, "teacher_id", "") or "").strip()
     assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
     request_id = str(job.get("request_id") or "")
+    _run_student_turn_auto_propose(
+        deps=deps,
+        teacher_id=teacher_id,
+        student_id=student_id,
+        session_id=session_id,
+        last_user_text=last_user_text,
+        reply_text=reply_text,
+        request_id=request_id,
+    )
+    if assignment_id:
+        _run_student_assignment_evidence_auto_propose(
+            deps=deps,
+            teacher_id=teacher_id,
+            student_id=student_id,
+            assignment_id=assignment_id,
+            request_id=request_id,
+        )
+
+
+def _run_student_turn_auto_propose(
+    *,
+    deps: ChatJobProcessDeps,
+    teacher_id: str,
+    student_id: str,
+    session_id: str,
+    last_user_text: str,
+    reply_text: str,
+    request_id: str,
+) -> None:
     try:
         auto = deps.student_memory_auto_propose_from_turn(
             teacher_id=teacher_id or None,
@@ -1090,27 +1260,44 @@ def _run_student_post_done_side_effects(
                 "error": str(exc)[:200],
             },
         )
-    if not assignment_id:
-        return
+
+
+def _extract_student_assignment_evidence(
+    progress: Dict[str, Any],
+    *,
+    student_id: str,
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(progress, dict) or not bool(progress.get("ok")):
+        return None
+    student_items = progress.get("students")
+    if not isinstance(student_items, list):
+        return None
+    student_payload = next(
+        (
+            item
+            for item in student_items
+            if isinstance(item, dict) and str(item.get("student_id") or "").strip() == student_id
+        ),
+        None,
+    )
+    if not isinstance(student_payload, dict):
+        return None
+    evidence = student_payload.get("evidence")
+    return evidence if isinstance(evidence, dict) else None
+
+
+def _run_student_assignment_evidence_auto_propose(
+    *,
+    deps: ChatJobProcessDeps,
+    teacher_id: str,
+    student_id: str,
+    assignment_id: str,
+    request_id: str,
+) -> None:
     try:
         progress = deps.compute_assignment_progress(assignment_id, True)
-        if not isinstance(progress, dict) or not bool(progress.get("ok")):
-            return
-        student_items = progress.get("students")
-        if not isinstance(student_items, list):
-            return
-        student_payload = next(
-            (
-                item
-                for item in student_items
-                if isinstance(item, dict) and str(item.get("student_id") or "").strip() == student_id
-            ),
-            None,
-        )
-        if not isinstance(student_payload, dict):
-            return
-        evidence = student_payload.get("evidence")
-        if not isinstance(evidence, dict):
+        evidence = _extract_student_assignment_evidence(progress, student_id=student_id)
+        if evidence is None:
             return
         auto_evidence = deps.student_memory_auto_propose_from_assignment_evidence(
             teacher_id=teacher_id or None,

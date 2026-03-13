@@ -118,6 +118,81 @@ class ChatLockDeps:
     is_pid_alive: Callable[[int], bool] = _pid_alive
 
 
+def _probe_existing_lockfile(path: Path) -> str:
+    probe_fd: Optional[int] = None
+    try:
+        probe_fd = os.open(str(path), os.O_RDWR)
+        if not _best_effort_flock(probe_fd, fcntl.LOCK_EX | fcntl.LOCK_NB):
+            return "busy"
+    except FileNotFoundError:
+        return "retry"
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to probe existing lock file %s", path, exc_info=True)
+    finally:
+        if probe_fd is not None:
+            _best_effort_flock(probe_fd, fcntl.LOCK_UN)
+            try:
+                os.close(probe_fd)
+            except Exception:  # policy: allowed-broad-except
+                _log.debug("failed to close probe fd for %s", path)
+    return "ok"
+
+
+def _remove_lock_path(path: Path, *, error_message: str) -> bool:
+    try:
+        path.unlink(missing_ok=True)
+        return True
+    except Exception:  # policy: allowed-broad-except
+        _log.debug(error_message, path)
+        return False
+
+
+def _reclaim_existing_lock(path: Path, *, now: float, ttl_sec: int, deps: ChatLockDeps) -> bool:
+    pid = 0
+    try:
+        pid = _read_lock_pid(path)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to check/remove stale lock %s", path)
+    if pid > 0:
+        try:
+            if deps.is_pid_alive(pid):
+                return False
+        except Exception:  # policy: allowed-broad-except
+            _log.debug("failed to check pid liveness for %s", path)
+            return False
+        return _remove_lock_path(path, error_message="failed to remove dead-pid lock %s")
+    try:
+        age = now - float(path.stat().st_mtime)
+        if ttl_sec > 0 and age > float(ttl_sec):
+            return _remove_lock_path(path, error_message="failed to remove stale lock %s")
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to check lock TTL for %s", path)
+    return False
+
+
+def _persist_lockfile(path: Path, fd: int, *, deps: ChatLockDeps) -> bool:
+    owner = uuid.uuid4().hex
+    try:
+        payload = {"pid": deps.get_pid(), "ts": deps.now_iso(), "owner": owner}
+        deps.os_write(fd, json.dumps(payload, ensure_ascii=False).encode("utf-8", errors="ignore"))
+        _best_effort_flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if not _register_held_lock(path, fd, owner):
+            raise RuntimeError("lock_already_held_locally")
+        return True
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to persist lock payload for %s", path, exc_info=True)
+        _best_effort_flock(fd, fcntl.LOCK_UN)
+        try:
+            deps.os_close(fd)
+        except Exception:  # policy: allowed-broad-except
+            _log.debug("failed to close lock fd for %s", path)
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:  # policy: allowed-broad-except
+            _log.debug("failed to cleanup partial lock %s", path)
+        return False
+
+
 def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     if _get_held_lock(path) is not None:
@@ -129,78 +204,20 @@ def try_acquire_lockfile(path: Path, ttl_sec: int, deps: ChatLockDeps) -> bool:
         except FileExistsError:
             if _get_held_lock(path) is not None:
                 return False
-
-            probe_fd: Optional[int] = None
-            try:
-                probe_fd = os.open(str(path), os.O_RDWR)
-                if not _best_effort_flock(probe_fd, fcntl.LOCK_EX | fcntl.LOCK_NB):
-                    return False
-            except FileNotFoundError:
+            probe_status = _probe_existing_lockfile(path)
+            if probe_status == "retry":
                 continue
-            except Exception:  # policy: allowed-broad-except
-                _log.debug("failed to probe existing lock file %s", path, exc_info=True)
-            finally:
-                if probe_fd is not None:
-                    _best_effort_flock(probe_fd, fcntl.LOCK_UN)
-                    try:
-                        os.close(probe_fd)
-                    except Exception:  # policy: allowed-broad-except
-                        _log.debug("failed to close probe fd for %s", path)
-
-            pid = 0
-            try:
-                pid = _read_lock_pid(path)
-            except Exception:  # policy: allowed-broad-except
-                _log.debug("failed to check/remove stale lock %s", path)
-                pass
-            if pid > 0:
-                try:
-                    if deps.is_pid_alive(pid):
-                        return False
-                except Exception:  # policy: allowed-broad-except
-                    _log.debug("failed to check pid liveness for %s", path)
-                    return False
-                try:
-                    path.unlink(missing_ok=True)
-                    continue
-                except Exception:  # policy: allowed-broad-except
-                    _log.debug("failed to remove dead-pid lock %s", path)
-                    return False
-            try:
-                age = now - float(path.stat().st_mtime)
-                if ttl_sec > 0 and age > float(ttl_sec):
-                    path.unlink(missing_ok=True)
-                    continue
-            except Exception:  # policy: allowed-broad-except
-                _log.debug("failed to check lock TTL for %s", path)
-                pass
+            if probe_status == "busy":
+                return False
+            if _reclaim_existing_lock(path, now=now, ttl_sec=ttl_sec, deps=deps):
+                continue
             return False
         except Exception:  # policy: allowed-broad-except
             _log.warning("unexpected error acquiring lock %s", path, exc_info=True)
             return False
-        owner = uuid.uuid4().hex
-        try:
-            payload = {"pid": deps.get_pid(), "ts": deps.now_iso(), "owner": owner}
-            deps.os_write(fd, json.dumps(payload, ensure_ascii=False).encode("utf-8", errors="ignore"))
-            # Keep descriptor open for the lock lifetime; best-effort flock adds
-            # cross-process contention signal without changing lockfile contract.
-            _best_effort_flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if not _register_held_lock(path, fd, owner):
-                raise RuntimeError("lock_already_held_locally")
+        if _persist_lockfile(path, fd, deps=deps):
             return True
-        except Exception:  # policy: allowed-broad-except
-            _log.debug("failed to persist lock payload for %s", path, exc_info=True)
-            _best_effort_flock(fd, fcntl.LOCK_UN)
-            try:
-                deps.os_close(fd)
-            except Exception:  # policy: allowed-broad-except
-                _log.debug("failed to close lock fd for %s", path)
-                pass
-            try:
-                path.unlink(missing_ok=True)
-            except Exception:  # policy: allowed-broad-except
-                _log.debug("failed to cleanup partial lock %s", path)
-            return False
+        return False
     return False
 
 
