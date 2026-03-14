@@ -2,16 +2,23 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-bg: #f7f7f8;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f3f4f6;
-  --color-surface-hover: #eceff3;
-  --color-ink: #202123;
-  --color-muted: #6b7280;
-  --color-accent: #10a37f;
-  --color-accent-soft: #e8f7f2;
-  --color-border: #e5e7eb;
-  --color-border-strong: #d1d5db;
+  --color-app-bg: #eef2f6;
+  --color-rail: #e3e9f0;
+  --color-panel: #fbfcfe;
+  --color-bg: #eef2f6;
+  --color-surface: #fbfcfe;
+  --color-surface-soft: #f2f5f8;
+  --color-surface-hover: #e8edf3;
+  --color-ink: #1d2733;
+  --color-muted: #627181;
+  --color-accent: #2f6b8a;
+  --color-accent-soft: #dcecf4;
+  --color-border: #d8e0e8;
+  --color-border-strong: #b8c6d3;
+  --color-warning: #b86a2d;
+  --color-warning-soft: #f7eadf;
+  --color-success: #1b7560;
+  --color-success-soft: #dff1eb;
   --color-danger-soft: #fdecec;
   --color-danger: #9f1239;
 
@@ -35,7 +42,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background: var(--color-bg);
+  background: var(--color-app-bg);
 }
 
 @media (min-width: 901px) {

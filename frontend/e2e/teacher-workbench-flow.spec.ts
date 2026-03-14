@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import type { MatrixCase, MatrixCaseRunner } from './helpers/e2eMatrixCases'
 import { registerMatrixCases } from './helpers/e2eMatrixCases'
 import {
@@ -420,7 +420,7 @@ const examWorkflowCases: MatrixCase[] = [
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   C001: async ({ page }) => {
     await openTeacherApp(page)
-    const search = page.getByPlaceholder('搜索技能')
+    const search = page.getByPlaceholder('搜索教学能力')
 
     await search.fill('作业')
     await expect(page.locator('.skill-card')).toHaveCount(1)
@@ -440,7 +440,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
     const homeworkSkillCard = page.locator('.skill-card').filter({ has: page.getByText('作业生成') }).first()
 
-    await homeworkSkillCard.getByLabel('收藏技能').click()
+    await homeworkSkillCard.getByLabel('收藏能力').click()
     await page.getByLabel('只看收藏').check()
     await expect(page.locator('.skill-card')).toHaveCount(1)
     await expect(page.locator('.skill-card').first()).toContainText('作业生成')
@@ -452,7 +452,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   C003: async ({ page }) => {
     await openTeacherApp(page, { clearLocalStorage: false })
     const homeworkSkillCard = page.locator('.skill-card').filter({ has: page.getByText('作业生成') }).first()
-    await homeworkSkillCard.getByLabel('收藏技能').click()
+    await homeworkSkillCard.getByLabel('收藏能力').click()
     await expect
       .poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('teacherSkillFavorites') || '[]')))
       .toContain('physics-homework-generator')
@@ -492,7 +492,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       .first()
 
     await homeworkSkillCard.getByRole('button', { name: '设为当前' }).click()
-    await page.getByRole('button', { name: '使用自动路由' }).click()
+    await page.getByRole('button', { name: '切回自动推荐' }).click()
 
     await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('自动路由请求')
     await page.getByRole('button', { name: '发送' }).click()
@@ -623,7 +623,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   C010: async ({ page }) => {
     await openTeacherApp(page)
     const workflowTab = page.getByRole('button', { name: '工作流', exact: true }).first()
-    const skillTab = page.getByRole('button', { name: '技能', exact: true }).first()
+    const skillTab = page.getByRole('button', { name: '能力', exact: true }).first()
 
     await workflowTab.click()
     await expect(workflowTab).toHaveClass(/active/)
@@ -1799,6 +1799,30 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     expect(String(savePayload?.score_schema?.subject?.selected_candidate_id || '')).toBe('pair:4:5')
   },
 }
+
+test('workflow tab surfaces timeline summary and next step ahead of upload controls', async ({ page }) => {
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.goto('/')
+
+  const timelineHeading = page.getByText('最近一次执行')
+  const nextStepHeading = page.getByText('下一步')
+  const uploadSection = workflowUploadSection(page)
+
+  await expect(timelineHeading).toBeVisible()
+  await expect(nextStepHeading).toBeVisible()
+  await expect(uploadSection).toBeVisible()
+
+  const timelineBox = await timelineHeading.boundingBox()
+  const uploadBox = await uploadSection.boundingBox()
+
+  expect(timelineBox?.y ?? 0).toBeLessThan(uploadBox?.y ?? 0)
+})
 
 registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases, implementations)
 registerMatrixCases('Teacher Assignment Workflow', assignmentWorkflowCases, implementations)

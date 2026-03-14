@@ -2,6 +2,7 @@ import SkillsTab from './tabs/SkillsTab'
 import WorkflowTab from './tabs/WorkflowTab'
 import MemoryTab from './tabs/MemoryTab'
 import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel'
+import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from './workflowIndicators'
 
 type TeacherWorkbenchProps = {
   viewModel: TeacherWorkbenchViewModel
@@ -26,12 +27,55 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     progressLoading,
     uploading,
     examUploading,
+    activeWorkflowIndicator,
+    uploadMode,
+    uploadJobInfo,
+    uploadAssignmentId,
+    examJobInfo,
+    examId,
+    progressData,
+    progressAssignmentId,
+    formatUploadJobSummary,
+    formatExamJobSummary,
+    formatProgressSummary,
+    scrollToWorkflowSection,
   } = viewModel
+
+  const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
+  const guidance = buildTeacherWorkflowGuidance({
+    mode: uploadMode === 'exam' ? 'exam' : 'assignment',
+    tone: activeWorkflowIndicator.tone,
+    activeStepKey: activeStep?.key,
+    hasExecutionTimeline: false,
+    hasProgressData: Boolean(progressData),
+  })
+  const workflowSummary = uploadMode === 'assignment'
+    ? (uploadJobInfo || uploadAssignmentId
+      ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId)
+      : progressData
+        ? formatProgressSummary(progressData, progressAssignmentId || uploadAssignmentId)
+        : '从上传区开始今天的作业流程。')
+    : (examJobInfo || examId
+      ? formatExamJobSummary(examJobInfo, examId)
+      : '从上传区开始今天的考试流程。')
+  const workflowTabActive = workbenchTab === 'workflow'
+
+  const handlePrimaryAction = () => {
+    setWorkbenchTab('workflow')
+    scrollToWorkflowSection(guidance.primaryActionTargetId)
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => scrollToWorkflowSection(guidance.primaryActionTargetId))
+      return
+    }
+  }
 
   return (
     <aside className={`skills-panel border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
-      <div className="skills-header flex justify-between items-center mb-[10px]">
-        <h3 className="m-0">工作台</h3>
+      <div className="skills-header flex justify-between items-start gap-3 mb-[10px]">
+        <div className="grid gap-1">
+          <h3 className="m-0">工作台</h3>
+          <p className="m-0 text-[12px] text-muted">先完成当前步骤，再处理补充信息。</p>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             className="ghost"
@@ -62,6 +106,57 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </button>
         </div>
       </div>
+      <section className="rounded-[16px] border border-border bg-white px-3 py-3 shadow-sm grid gap-2">
+        {workflowTabActive ? (
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">工作流已展开</span>
+              <span className="text-[14px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                activeWorkflowIndicator.tone === 'active'
+                  ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
+                  : activeWorkflowIndicator.tone === 'success'
+                    ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
+                    : activeWorkflowIndicator.tone === 'error'
+                      ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
+                      : 'border-border bg-surface-soft text-muted'
+              }`}>
+                {activeStep?.label || '等待开始'}
+              </span>
+            </div>
+            <div className="text-[12px] leading-[1.45] text-muted">{guidance.nextStepLabel} · 下方继续处理。</div>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <div className="min-w-0 flex-1 grid gap-1">
+              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前状态</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[15px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                  activeWorkflowIndicator.tone === 'active'
+                    ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
+                    : activeWorkflowIndicator.tone === 'success'
+                      ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
+                      : activeWorkflowIndicator.tone === 'error'
+                        ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
+                        : 'border-border bg-surface-soft text-muted'
+                }`}>
+                  {activeStep?.label || '等待开始'}
+                </span>
+              </div>
+              <div className="text-[14px] font-semibold text-[#334155]">{guidance.nextStepLabel}</div>
+              <div className="text-[12px] leading-[1.45] text-muted">{workflowSummary}</div>
+            </div>
+            <button
+              type="button"
+              className="inline-flex w-full items-center justify-center rounded-xl border-none bg-accent px-[14px] py-[10px] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+              onClick={handlePrimaryAction}
+            >
+              {guidance.primaryActionLabel}
+            </button>
+          </div>
+        )}
+      </section>
       <div className="workbench-switch inline-flex border border-border rounded-[12px] overflow-hidden bg-white self-start flex-none">
         <button type="button" className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
           能力

@@ -17,6 +17,7 @@ import {
   writeTeacherAuthSession,
 } from '../auth/teacherAuth'
 import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
+import TeacherAdminPanel from './TeacherAdminPanel'
 
 type TeacherTopbarProps = {
   topbarRef: MutableRefObject<HTMLElement | null>
@@ -119,7 +120,7 @@ export default function TeacherTopbar({
   const authPanelRef = useRef<HTMLDivElement | null>(null)
   const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
-  const [authOpen, setAuthOpen] = useState(() => !compactMobile && !readTeacherAccessToken())
+  const [authOpen, setAuthOpen] = useState(false)
   const [authed, setAuthed] = useState(() => Boolean(readTeacherAccessToken()))
   const [authSubjectLabel, setAuthSubjectLabel] = useState(() => {
     const subject = readTeacherAuthSubject()
@@ -165,9 +166,6 @@ export default function TeacherTopbar({
       setAuthed(hasToken)
       const subject = readTeacherAuthSubject()
       setAuthSubjectLabel(subject?.teacher_name || subject?.teacher_id || '')
-      if (!hasToken && !compactMobile) {
-        setAuthOpen(true)
-      }
     }
     sync()
     window.addEventListener('storage', sync)
@@ -484,7 +482,7 @@ export default function TeacherTopbar({
       setStudentResetError('复制失败，请手动复制列表内容。')
     }
   }
-  const authActionLabel = authed ? '认证信息' : '教师认证'
+  const authActionLabel = '管理'
 
   return (
     <header
@@ -538,9 +536,6 @@ export default function TeacherTopbar({
           </button>
         ) : (
           <>
-            <button className="ghost" type="button" onClick={onOpenModelSettingsPanel}>
-              模型设置
-            </button>
             <button className="ghost" type="button" onClick={onToggleSkillsWorkbench}>
               {skillsOpen ? '收起工作台' : '打开工作台'}
             </button>
@@ -584,10 +579,7 @@ export default function TeacherTopbar({
                 setQuickActionsOpen(false)
               }}
             >
-              {authActionLabel}
-            </button>
-            <button className="ghost justify-start" type="button" onClick={() => { onOpenModelSettingsPanel(); setQuickActionsOpen(false) }}>
-              模型设置
+              打开管理
             </button>
             <button className="ghost justify-start" type="button" onClick={() => { onToggleSkillsWorkbench(); setQuickActionsOpen(false) }}>
               {skillsOpen ? '收起工作台' : '打开工作台'}
@@ -599,13 +591,13 @@ export default function TeacherTopbar({
         ) : null}
 
         {authOpen ? (
-          <div
-            ref={authPanelRef}
-            className="absolute right-0 top-[calc(100%+8px)] w-[min(360px,calc(100vw-16px))] max-w-[calc(100vw-16px)] max-h-[min(80vh,720px)] overflow-y-auto rounded-xl border border-border bg-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] p-3 z-40 grid gap-2.5"
-            role="dialog"
-            aria-label="教师认证面板"
+          <TeacherAdminPanel
+            panelRef={authPanelRef}
+            authed={authed}
+            authSubjectLabel={authSubjectLabel}
+            onOpenModelSettingsPanel={onOpenModelSettingsPanel}
+            onClose={closeAuthPanel}
           >
-            <div className="text-sm font-semibold">教师认证</div>
             <form className="grid gap-2" onSubmit={handleAuthSubmit}>
               <div className="grid gap-1">
                 <label className="text-xs text-muted">姓名</label>
@@ -811,7 +803,7 @@ export default function TeacherTopbar({
                 退出认证
               </button>
             ) : null}
-          </div>
+          </TeacherAdminPanel>
         ) : null}
       </div>
     </header>

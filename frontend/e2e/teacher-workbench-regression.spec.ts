@@ -16,7 +16,7 @@ test('skills favorites filter keeps insertion target and sends cleaned payload',
     .first()
   await expect(homeworkSkillCard).toBeVisible()
 
-  await homeworkSkillCard.getByRole('button', { name: '收藏技能' }).click()
+  await homeworkSkillCard.getByRole('button', { name: '收藏能力' }).click()
   await page.getByLabel('只看收藏').check()
   await expect(page.locator('.skill-card')).toHaveCount(1)
 
@@ -205,10 +205,10 @@ test('workbench template path can toggle back to auto routing and omit skill_id'
   await expect(homeworkSkillCard).toBeVisible()
 
   await homeworkSkillCard.getByRole('button', { name: '使用模板' }).first().click()
-  await expect(page.getByText('技能: $physics-homework-generator')).toBeVisible()
+  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
 
-  await page.getByRole('button', { name: '使用自动路由' }).click()
-  await expect(page.getByText('技能: 自动路由')).toBeVisible()
+  await page.getByRole('button', { name: '切回自动推荐' }).click()
+  await expect(page.getByText('当前路由: 自动编排')).toBeVisible()
 
   await composer.fill('工作台自动路由请求')
   await page.getByRole('button', { name: '发送' }).click()

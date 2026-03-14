@@ -65,12 +65,12 @@ export default function ChatMessages({
               <div
                 className={
                   msg.role === 'assistant'
-                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] py-[2px] px-0'
+                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[rgba(47,107,138,0.14)] bg-[color:var(--color-panel)] px-[14px] py-[12px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]'
                     : 'max-w-[var(--chat-bubble-max-width)] px-[14px] py-[10px] rounded-[12px] bg-[#eef1f4] border border-[#e1e6eb] shadow-sm'
                 }
               >
                 <div className="text-[11px] text-muted mb-1">
-                  {msg.role === 'user' ? '我' : '助手'} · {msg.time}
+                  {msg.role === 'user' ? '我的指令' : '执行结果'} · {msg.time}
                 </div>
                 <div className="text leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
               </div>

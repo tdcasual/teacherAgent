@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
 import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
 import TeacherTopbar from './features/layout/TeacherTopbar'
+import TeacherTaskStrip from './features/layout/TeacherTaskStrip'
 import { useChatScroll } from './features/chat/useChatScroll'
 import { readTeacherLocalViewState, type SessionViewStatePayload } from './features/chat/viewState'
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
@@ -16,7 +17,7 @@ import { useAssignmentUploadStatusPolling } from './features/workbench/useAssign
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
 import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeacherWorkbenchPanelControls'
 import { formatDraftSummary, formatExamDraftSummary, formatExamJobStatus, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
-import { buildExamWorkflowIndicator } from './features/workbench/workflowIndicators'
+import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { readFeatureFlag, readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
@@ -61,6 +62,7 @@ const workbenchMaxWidthForViewport = (viewportWidth: number) => {
   const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
   return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
 }
+
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const workbenchPanelRef = useRef<PanelImperativeHandle | null>(null)
@@ -418,6 +420,64 @@ export default function App() {
     })
   }, [examConfirming, examDraft, examDraftActionError, examDraftError, examJobId, examJobInfo?.status, examUploadError, examUploading])
   const activeWorkflowIndicator = uploadMode === 'assignment' ? assignmentWorkflowIndicator : examWorkflowIndicator
+  const teacherTaskStrip = useMemo(() => {
+    const mode = uploadMode === 'exam' ? 'exam' : 'assignment'
+    const summary = mode === 'assignment'
+      ? (uploadJobInfo || uploadAssignmentId
+        ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId)
+        : progressData
+          ? formatProgressSummary(progressData, progressAssignmentId || uploadAssignmentId)
+          : '未开始解析 · 等待上传今天的作业资料')
+      : (examJobInfo || examId
+        ? formatExamJobSummary(examJobInfo, examId)
+        : '未开始解析 · 等待上传今天的考试资料')
+    const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
+    const guidance = buildTeacherWorkflowGuidance({
+      mode,
+      tone: activeWorkflowIndicator.tone,
+      activeStepKey: activeStep?.key,
+      hasExecutionTimeline: executionTimeline.length > 0,
+      hasProgressData: Boolean(progressData),
+    })
+    const handlePrimaryAction = () => {
+      setWorkbenchTab('workflow')
+      if (!skillsOpen) setSkillsOpen(true)
+      if (teacherUseMobileShellV2) setMobileTab('workbench')
+      scrollToWorkflowSection(guidance.primaryActionTargetId)
+      if (typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => scrollToWorkflowSection(guidance.primaryActionTargetId))
+        return
+      }
+    }
+
+    return (
+      <TeacherTaskStrip
+        mode={mode}
+        statusLabel={activeWorkflowIndicator.label}
+        tone={activeWorkflowIndicator.tone}
+        summary={summary}
+        nextStepLabel={guidance.nextStepLabel}
+        primaryActionLabel={guidance.primaryActionLabel}
+        onPrimaryAction={handlePrimaryAction}
+      />
+    )
+  }, [
+    activeWorkflowIndicator,
+    examId,
+    examJobInfo,
+    executionTimeline.length,
+    progressAssignmentId,
+    progressData,
+    scrollToWorkflowSection,
+    skillsOpen,
+    teacherUseMobileShellV2,
+    uploadAssignmentId,
+    uploadJobInfo,
+    uploadMode,
+    setWorkbenchTab,
+    setSkillsOpen,
+    setMobileTab,
+  ])
   const examWorkflowAutoState = useMemo(() => {
     const stepState = (key: string) => examWorkflowIndicator.steps.find((s) => s.key === key)?.state || 'todo'
     const uploadStep = stepState('upload')
@@ -774,6 +834,7 @@ export default function App() {
               minSize={isMobileLayout ? 0 : 360}
             >
               <TeacherChatMainContent
+                taskStrip={teacherTaskStrip}
                 renderedMessages={renderedMessages}
                 sending={sending}
                 hasPendingChatJob={Boolean(pendingChatJob?.job_id)}

@@ -133,7 +133,7 @@ test('invalid teacherSkillPinned localStorage falls back to auto routing payload
     },
   })
 
-  await expect(page.getByText('技能: 自动路由')).toBeVisible()
+  await expect(page.getByText('当前路由: 自动编排')).toBeVisible()
   await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('污染状态回退')
   await page.getByRole('button', { name: '发送' }).click()
 

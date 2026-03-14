@@ -31,6 +31,22 @@ const baseProps = (): ChatMessagesProps => ({
 })
 
 describe('ChatMessages process panel', () => {
+  it('renders assistant replies as result blocks and user messages as commands', () => {
+    render(
+      <ChatMessages
+        {...baseProps()}
+        renderedMessages={[
+          { id: 'm1', role: 'user', html: '<p>生成一份作业</p>', time: '10:00' },
+          { id: 'm2', role: 'assistant', html: '<p>已生成作业草稿</p>', time: '10:01' },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('我的指令 · 10:00')).toBeTruthy()
+    expect(screen.getByText('执行结果 · 10:01')).toBeTruthy()
+    expect(screen.getByText('已生成作业草稿')).toBeTruthy()
+  })
+
   it('shows process stage and tool status details', () => {
     render(
       <ChatMessages

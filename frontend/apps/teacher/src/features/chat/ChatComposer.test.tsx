@@ -34,9 +34,9 @@ describe('ChatComposer copy', () => {
       />,
     )
 
-    expect(screen.getByText('能力: 自动推荐')).toBeTruthy()
-    expect(screen.getByPlaceholderText('输入教学需求或问题，使用 $ 查看能力。回车发送，Shift+Enter 换行')).toBeTruthy()
-    expect(screen.getByText('$ 能力 | 回车发送')).toBeTruthy()
+    expect(screen.getByText('当前路由: 自动编排')).toBeTruthy()
+    expect(screen.getByPlaceholderText('输入教学指令、审阅要求或追问，使用 $ 查看能力。回车发送，Shift+Enter 换行')).toBeTruthy()
+    expect(screen.getByText('工作流指令 | 回车发送')).toBeTruthy()
   })
 
   it('shows pinned capability label when a workflow is explicitly chosen', () => {
@@ -63,6 +63,6 @@ describe('ChatComposer copy', () => {
       />,
     )
 
-    expect(screen.getByText('能力: $physics-homework-generator')).toBeTruthy()
+    expect(screen.getByText('当前路由: $physics-homework-generator')).toBeTruthy()
   })
 })

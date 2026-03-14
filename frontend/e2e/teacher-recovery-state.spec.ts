@@ -193,7 +193,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    await expect(page.getByText('技能: 自动路由')).toBeVisible()
+    await expect(page.getByText('当前路由: 自动编排')).toBeVisible()
     await page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER).fill('回退自动路由')
     await page.getByRole('button', { name: '发送' }).click()
 
@@ -223,7 +223,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       },
     })
 
-    await expect(page.getByPlaceholder('搜索技能')).toBeVisible()
+    await expect(page.getByPlaceholder('搜索教学能力')).toBeVisible()
     await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherWorkbenchTab'))).toBe('skills')
   },
 

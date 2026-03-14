@@ -1021,7 +1021,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       setPendingToolRuns([])
       if (pollCleanup) pollCleanup()
     }
-  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setSending, setComposerWarning, skillList])
+  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setExecutionTimeline, setSending, setComposerWarning, skillList])
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {
     if (!authToken) return

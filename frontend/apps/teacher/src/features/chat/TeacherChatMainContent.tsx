@@ -1,4 +1,4 @@
-import { useEffect, useRef, type FormEvent, type KeyboardEvent, type MutableRefObject } from 'react'
+import { useEffect, useRef, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from 'react'
 import ChatComposer from './ChatComposer'
 import ChatMessages from './ChatMessages'
 import MentionPanel from './MentionPanel'
@@ -21,6 +21,7 @@ type RenderedMessage = {
 }
 
 type TeacherChatMainContentProps = {
+  taskStrip?: ReactNode
   renderedMessages: RenderedMessage[]
   sending: boolean
   hasPendingChatJob: boolean
@@ -53,6 +54,7 @@ type TeacherChatMainContentProps = {
 }
 
 export default function TeacherChatMainContent({
+  taskStrip,
   renderedMessages,
   sending,
   hasPendingChatJob,
@@ -97,6 +99,8 @@ export default function TeacherChatMainContent({
       className="chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 bg-surface overflow-hidden"
     >
       <>
+        {taskStrip}
+
         <ChatMessages
           renderedMessages={renderedMessages}
           sending={sending}

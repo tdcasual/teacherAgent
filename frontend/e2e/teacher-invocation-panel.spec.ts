@@ -30,7 +30,7 @@ test('keyboard mention for skill pins selected skill and sends cleaned prompt', 
   await composer.press('ArrowDown')
   await composer.press('Enter')
   await expect(composer).toHaveValue('$physics-homework-generator ')
-  await expect(page.getByText('技能: $physics-homework-generator')).toBeVisible()
+  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
 
   await composer.type('生成 6 题分层练习')
   await page.getByRole('button', { name: '发送' }).click()
@@ -47,7 +47,7 @@ test('unknown $skill shows warning and falls back to auto route', async ({ page 
   await composer.fill('$ghost-skill 讲解动能定理')
   await page.getByRole('button', { name: '发送' }).click()
 
-  await expect(page.getByText('未识别的技能：$ghost-skill，已使用自动路由')).toBeVisible()
+  await expect(page.getByText('未识别的能力：$ghost-skill，已使用自动路由')).toBeVisible()
   await expect.poll(() => chatStartCalls.length).toBe(1)
   const payload = chatStartCalls[0] as Record<string, unknown>
   expect(Object.prototype.hasOwnProperty.call(payload, 'skill_id')).toBe(false)

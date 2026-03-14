@@ -45,13 +45,35 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
 
-  it('shows auth action inside compact more menu', () => {
+  it('keeps desktop topbar to context actions and a single admin entry', () => {
+    const props = buildProps()
+    render(<TeacherTopbar {...props} />)
+
+    expect(screen.getByRole('button', { name: '展开会话' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '打开工作台' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '管理' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '模型设置' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
+  })
+
+  it('shows admin entry inside compact more menu', () => {
     const props = buildProps()
     render(<TeacherTopbar {...props} compactMobile />)
 
     fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
     expect(screen.getByRole('menu', { name: '移动端更多操作' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '教师认证' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '打开管理' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
+  })
+
+  it('opens admin panel from desktop management button', () => {
+    const props = buildProps()
+    render(<TeacherTopbar {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '管理' }))
+
+    expect(screen.getByRole('dialog', { name: '教师管理面板' })).toBeTruthy()
   })
 })
