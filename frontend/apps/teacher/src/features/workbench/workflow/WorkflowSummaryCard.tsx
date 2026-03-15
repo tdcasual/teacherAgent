@@ -48,7 +48,7 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
                   考试
                 </button>
               </div>
-              <span className={`workflow-chip inline-flex items-center px-2 py-0.5 rounded-lg text-[12px] font-semibold border ${
+              <span data-testid="workflow-summary-status-chip" className={`workflow-chip inline-flex items-center px-2 py-0.5 rounded-lg text-[12px] font-semibold border ${
                 activeWorkflowIndicator.tone === 'active'
                   ? 'active text-[#0f766e] border-[#bfe7dc] bg-[#eaf9f4]'
                   : activeWorkflowIndicator.tone === 'success'

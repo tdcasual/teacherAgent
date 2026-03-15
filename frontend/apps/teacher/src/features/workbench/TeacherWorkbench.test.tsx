@@ -75,7 +75,9 @@ describe('TeacherWorkbench header', () => {
 
     render(<TeacherWorkbench viewModel={viewModel} />)
 
-    expect(screen.getByText('当前状态')).toBeTruthy()
+    expect(screen.getByText('教学编辑台')).toBeTruthy()
+    expect(screen.getByText('把主动作留在顶部任务条，这里只保留流程摘要与入口。')).toBeTruthy()
+    expect(screen.getByText('流程摘要')).toBeTruthy()
     expect(screen.getByText('待审核')).toBeTruthy()
     expect(screen.getByText('下一步：继续审核草稿并确认创建作业')).toBeTruthy()
     expect(screen.getByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeTruthy()

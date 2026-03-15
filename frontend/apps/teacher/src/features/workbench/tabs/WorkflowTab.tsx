@@ -63,8 +63,8 @@ export default function WorkflowTab(props: WorkflowTabProps) {
   return (
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
       <div className="grid gap-1">
-        <strong>{isAssignmentMode ? '作业流程控制' : '考试流程控制'}</strong>
-        <div className="text-[12px] text-muted">优先处理当前动作，再查看补充信息。</div>
+        <strong>工作流编辑</strong>
+        <div className="text-[12px] text-muted">先完成必做动作，再展开补充参考。</div>
       </div>
       <WorkflowSummaryCard
         uploadMode={props.uploadMode}
@@ -92,7 +92,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
               必做
             </span>
           </div>
-          <strong>当前动作</strong>
+          <strong>必做动作</strong>
           <div className="text-[12px] text-muted">按主线步骤往下处理，避免在次要信息里来回切换。</div>
           <div className="text-[13px] font-semibold text-[#334155]">{guidance.nextStepLabel}</div>
         </div>
@@ -211,7 +211,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           />
         )}
       </section>
-      <section className="grid gap-3 rounded-[16px] border border-border bg-[#f8fafc] p-[12px] shadow-sm">
+      <section className="grid gap-3 rounded-[16px] border border-dashed border-border bg-[color:var(--color-surface-soft)] p-[12px] shadow-sm">
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">补充视图</span>
@@ -219,7 +219,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
               按需查看
             </span>
           </div>
-          <strong>补充信息</strong>
+          <strong>补充参考</strong>
           <div className="text-[12px] text-muted">
             {isAssignmentMode
               ? '完成情况、执行记录与分析结果放在这里，主线处理完成后再看。'
