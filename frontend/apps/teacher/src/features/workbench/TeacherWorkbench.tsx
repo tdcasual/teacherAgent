@@ -73,8 +73,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     <aside className={`skills-panel border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
       <div className="skills-header flex justify-between items-start gap-3 mb-[10px]">
         <div className="grid gap-1">
-          <h3 className="m-0">工作台</h3>
-          <p className="m-0 text-[12px] text-muted">先完成当前步骤，再处理补充信息。</p>
+          <h3 className="m-0">教学编辑台</h3>
+          <p className="m-0 text-[12px] text-muted">把主动作留在顶部任务条，这里只保留流程摘要与入口。</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -106,13 +106,13 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </button>
         </div>
       </div>
-      <section className="rounded-[16px] border border-border bg-white px-3 py-3 shadow-sm grid gap-2">
+      <section className="rounded-[16px] border border-border bg-[color:var(--color-surface-soft)] px-3 py-3 shadow-sm grid gap-2">
         {workflowTabActive ? (
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">工作流已展开</span>
               <span className="text-[14px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+              <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
                 activeWorkflowIndicator.tone === 'active'
                   ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
                   : activeWorkflowIndicator.tone === 'success'
@@ -129,10 +129,10 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         ) : (
           <div className="grid gap-3">
             <div className="min-w-0 flex-1 grid gap-1">
-              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前状态</div>
+              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">流程摘要</div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
-                <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
                   activeWorkflowIndicator.tone === 'active'
                     ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
                     : activeWorkflowIndicator.tone === 'success'

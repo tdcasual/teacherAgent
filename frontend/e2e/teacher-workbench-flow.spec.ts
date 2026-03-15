@@ -1531,7 +1531,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.goto('/')
 
-    await expect(page.getByText('当前流程状态').locator('..').getByText('解析中')).toBeVisible()
+    await expect(workflowStatusChip(page)).toHaveText('解析中')
     await expect(page.locator('#workflow-exam-draft-section')).toHaveCount(0)
   },
 
@@ -1800,7 +1800,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
   },
 }
 
-test('workflow tab surfaces timeline summary and next step ahead of upload controls', async ({ page }) => {
+test('workflow tab keeps must-do upload actions ahead of supplementary timeline', async ({ page }) => {
   await setupTeacherState(page, {
     stateOverrides: {
       teacherWorkbenchTab: 'workflow',
@@ -1811,17 +1811,19 @@ test('workflow tab surfaces timeline summary and next step ahead of upload contr
   await page.goto('/')
 
   const timelineHeading = page.getByText('最近一次执行')
-  const nextStepHeading = page.getByText('下一步')
+  const nextStepHeading = page.getByText('必做动作', { exact: true })
   const uploadSection = workflowUploadSection(page)
 
   await expect(timelineHeading).toBeVisible()
   await expect(nextStepHeading).toBeVisible()
   await expect(uploadSection).toBeVisible()
 
+  const nextStepBox = await nextStepHeading.boundingBox()
   const timelineBox = await timelineHeading.boundingBox()
   const uploadBox = await uploadSection.boundingBox()
 
-  expect(timelineBox?.y ?? 0).toBeLessThan(uploadBox?.y ?? 0)
+  expect(nextStepBox?.y ?? 0).toBeLessThan(uploadBox?.y ?? 0)
+  expect(uploadBox?.y ?? 0).toBeLessThan(timelineBox?.y ?? 0)
 })
 
 registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases, implementations)

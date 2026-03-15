@@ -12,7 +12,7 @@ export const workflowUploadModeButton = (page: Page, mode: '作业' | '考试'):
   workflowUploadSection(page).getByRole('button', { name: mode, exact: true }).first()
 
 export const workflowStatusChip = (page: Page): Locator =>
-  page.getByText('当前流程状态', { exact: true }).locator('xpath=following-sibling::span[1]')
+  page.getByTestId('workflow-summary-status-chip').first()
 
 export const assignmentDraftSection = (page: Page): Locator =>
   page.locator('#workflow-assignment-draft-section')
