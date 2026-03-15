@@ -4,12 +4,11 @@ import { nowTime, timeFromIso } from '../../../shared/time'
 import { stripTransientPendingBubbles } from '../features/chat/pendingOverlay'
 import { selectArchiveDialogMeta, selectGroupedSessions, selectVisibleSessions } from '../features/chat/studentUiSelectors'
 import { clearStudentAccessToken } from '../features/auth/studentAuth'
-import type { Message, PendingChatJob, StudentHistorySessionResponse, StudentHistorySessionsResponse } from '../appTypes'
+import type { Message, PendingChatJob, RecentCompletedReply, StudentHistorySessionResponse, StudentHistorySessionsResponse } from '../appTypes'
 import {
   STUDENT_NEW_SESSION_MESSAGE,
   toErrorMessage,
   todayDate,
-  type RecentCompletedReply,
   recentCompletionKeyOf,
   RECENT_COMPLETION_TTL_MS,
   type StudentAction,

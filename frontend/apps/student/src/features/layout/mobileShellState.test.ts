@@ -9,15 +9,15 @@ import {
 
 describe('student mobile shell state mapping', () => {
   it('maps tab to panel state', () => {
-    expect(studentMobilePanelsFromTab('chat')).toEqual({ sidebarOpen: false, verifyOpen: false })
-    expect(studentMobilePanelsFromTab('sessions')).toEqual({ sidebarOpen: true, verifyOpen: false })
-    expect(studentMobilePanelsFromTab('learning')).toEqual({ sidebarOpen: true, verifyOpen: true })
+    expect(studentMobilePanelsFromTab('chat')).toEqual({ sidebarOpen: false, verifyOpen: false, homeOpen: false })
+    expect(studentMobilePanelsFromTab('sessions')).toEqual({ sidebarOpen: true, verifyOpen: false, homeOpen: false })
+    expect(studentMobilePanelsFromTab('learning')).toEqual({ sidebarOpen: false, verifyOpen: false, homeOpen: true })
   })
 
   it('maps panel state to tab', () => {
-    expect(studentMobileTabFromPanels({ sidebarOpen: false, verifyOpen: false })).toBe('chat')
-    expect(studentMobileTabFromPanels({ sidebarOpen: true, verifyOpen: false })).toBe('sessions')
-    expect(studentMobileTabFromPanels({ sidebarOpen: true, verifyOpen: true })).toBe('learning')
+    expect(studentMobileTabFromPanels({ sidebarOpen: false, verifyOpen: false, homeOpen: false })).toBe('chat')
+    expect(studentMobileTabFromPanels({ sidebarOpen: true, verifyOpen: false, homeOpen: false })).toBe('sessions')
+    expect(studentMobileTabFromPanels({ sidebarOpen: false, verifyOpen: false, homeOpen: true })).toBe('learning')
   })
 
   it('round-trips each supported tab', () => {

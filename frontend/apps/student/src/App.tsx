@@ -10,6 +10,8 @@ import { useChatPolling } from './hooks/useChatPolling'
 import { useAssignment } from './hooks/useAssignment'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
+import StudentTodayHome from './features/home/StudentTodayHome'
+import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import {
@@ -38,7 +40,8 @@ export default function App() {
   const appRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
-  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('chat')
+  const [homeOpen, setHomeOpen] = useState(true)
+  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning')
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
   const { saveScrollHeight, restoreScrollPosition } = useScrollPositionLock(messagesRef)
   const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
@@ -228,6 +231,26 @@ export default function App() {
     sending: state.sending,
   }), [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent])
 
+  const todayHomeViewModel = useMemo(() => buildStudentTodayHomeViewModel({
+    verifiedStudent: state.verifiedStudent,
+    assignmentLoading: state.assignmentLoading,
+    assignmentError: state.assignmentError,
+    todayAssignment: state.todayAssignment,
+    activeSessionId: state.activeSessionId,
+    messages: state.messages,
+    pendingChatJob: state.pendingChatJob,
+    recentCompletedReplies: state.recentCompletedReplies,
+  }), [
+    state.activeSessionId,
+    state.assignmentError,
+    state.assignmentLoading,
+    state.messages,
+    state.pendingChatJob,
+    state.recentCompletedReplies,
+    state.todayAssignment,
+    state.verifiedStudent,
+  ])
+
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter') return
     if (event.shiftKey) return
@@ -244,15 +267,22 @@ export default function App() {
     const nextTab = studentMobileTabFromPanels({
       sidebarOpen: state.sidebarOpen,
       verifyOpen: state.verifyOpen,
+      homeOpen,
     })
     if (mobileTab !== nextTab) setMobileTab(nextTab)
-  }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, mobileTab])
+  }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, homeOpen, mobileTab])
+
+  useEffect(() => {
+    if (state.verifiedStudent?.student_id) return
+    setHomeOpen(true)
+  }, [state.verifiedStudent?.student_id])
 
   const handleMobileTabChange = useCallback((tabId: string) => {
     if (!isStudentMobileTab(tabId)) return
     setMobileTab(tabId)
     if (!studentUseMobileShellV2) return
     const nextPanels = studentMobilePanelsFromTab(tabId)
+    setHomeOpen(nextPanels.homeOpen)
     if (state.sidebarOpen !== nextPanels.sidebarOpen) {
       dispatch({ type: 'SET', field: 'sidebarOpen', value: nextPanels.sidebarOpen })
     }
@@ -260,6 +290,49 @@ export default function App() {
       dispatch({ type: 'SET', field: 'verifyOpen', value: nextPanels.verifyOpen })
     }
   }, [studentUseMobileShellV2, state.sidebarOpen, state.verifyOpen, dispatch])
+
+  const openTodayHome = useCallback(() => {
+    setHomeOpen(true)
+    if (studentUseMobileShellV2) setMobileTab('learning')
+  }, [studentUseMobileShellV2])
+
+  const openExecutionState = useCallback(() => {
+    setHomeOpen(false)
+    if (studentUseMobileShellV2) setMobileTab('chat')
+  }, [studentUseMobileShellV2])
+
+  const handlePrimaryHomeAction = useCallback(() => {
+    if (!state.verifiedStudent) {
+      dispatch({ type: 'SET', field: 'verifyOpen', value: true })
+      return
+    }
+    if (todayHomeViewModel.status === 'pending_generation') {
+      dispatch({ type: 'SET', field: 'assignmentRefreshNonce', value: state.assignmentRefreshNonce + 1 })
+      return
+    }
+    if (todayHomeViewModel.status === 'generating') return
+    openExecutionState()
+  }, [dispatch, openExecutionState, state.assignmentRefreshNonce, state.verifiedStudent, todayHomeViewModel.status])
+
+  const handleOpenHistory = useCallback(() => {
+    setHomeOpen(false)
+    dispatch({ type: 'SET', field: 'sidebarOpen', value: true })
+    if (studentUseMobileShellV2) setMobileTab('sessions')
+  }, [dispatch, studentUseMobileShellV2])
+
+  const handleOpenFreeChat = useCallback(() => {
+    openExecutionState()
+  }, [openExecutionState])
+
+  const handleStartNewStudentSession = useCallback(() => {
+    openExecutionState()
+    sessionManager.startNewStudentSession()
+  }, [openExecutionState, sessionManager])
+
+  const heroDateLabel = useMemo(() => {
+    const now = new Date()
+    return now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
+  }, [])
 
   // ── Render ──
   return (
@@ -271,9 +344,11 @@ export default function App() {
       <StudentTopbar
         verifiedStudent={state.verifiedStudent}
         sidebarOpen={state.sidebarOpen}
+        homeActive={homeOpen}
         compactMobile={studentUseMobileShellV2}
         dispatch={dispatch}
-        startNewStudentSession={sessionManager.startNewStudentSession}
+        openTodayHome={openTodayHome}
+        startNewStudentSession={handleStartNewStudentSession}
       />
       <StudentLayout
         sidebarOpen={state.sidebarOpen}
@@ -293,7 +368,10 @@ export default function App() {
             groupedSessions={sessionManager.groupedSessions}
             deletedSessionIds={state.deletedSessionIds}
             activeSessionId={state.activeSessionId}
-            onSelectSession={sessionManager.selectStudentSession}
+            onSelectSession={(sessionId) => {
+              setHomeOpen(false)
+              void sessionManager.selectStudentSession(sessionId)
+            }}
             getSessionTitle={sessionManager.getSessionTitle}
             openSessionMenuId={state.openSessionMenuId}
             toggleSessionMenu={toggleSessionMenu}
@@ -320,7 +398,7 @@ export default function App() {
             assignmentLoading={state.assignmentLoading}
             assignmentError={state.assignmentError}
             resetVerification={sessionManager.resetVerification}
-            startNewStudentSession={sessionManager.startNewStudentSession}
+            startNewStudentSession={handleStartNewStudentSession}
             renameDialogSessionId={state.renameDialogSessionId}
             archiveDialogSessionId={state.archiveDialogSessionId}
             archiveDialogActionLabel={sessionManager.archiveDialogActionLabel}
@@ -332,27 +410,40 @@ export default function App() {
           />
         }
         chat={
-          <ChatPanel
-            renderedMessages={renderedMessages}
-            sending={state.sending}
-            pendingChatJobId={state.pendingChatJob?.job_id || ''}
-            verifiedStudent={state.verifiedStudent}
-            messagesRef={messagesRef}
-            endRef={endRef}
-            isNearBottom={isNearBottom}
-            scrollToBottom={scrollToBottom}
-            inputRef={inputRef}
-            input={state.input}
-            setInput={setInput}
-            handleInputKeyDown={handleInputKeyDown}
-            handleSend={handleSend}
-            composerHint={composerHint}
-            attachments={attachments}
-            uploadingAttachments={uploadingAttachments}
-            hasSendableAttachments={hasSendableAttachments}
-            onPickFiles={addFiles}
-            onRemoveAttachment={removeAttachment}
-          />
+          homeOpen ? (
+            <StudentTodayHome
+              studentName={state.verifiedStudent?.student_name || ''}
+              dateLabel={heroDateLabel}
+              heroTitle="今日任务"
+              heroSummary="今天先完成主任务，再查看历史记录或补充提问。"
+              viewModel={todayHomeViewModel}
+              onPrimaryAction={handlePrimaryHomeAction}
+              onOpenHistory={handleOpenHistory}
+              onOpenFreeChat={handleOpenFreeChat}
+            />
+          ) : (
+            <ChatPanel
+              renderedMessages={renderedMessages}
+              sending={state.sending}
+              pendingChatJobId={state.pendingChatJob?.job_id || ''}
+              verifiedStudent={state.verifiedStudent}
+              messagesRef={messagesRef}
+              endRef={endRef}
+              isNearBottom={isNearBottom}
+              scrollToBottom={scrollToBottom}
+              inputRef={inputRef}
+              input={state.input}
+              setInput={setInput}
+              handleInputKeyDown={handleInputKeyDown}
+              handleSend={handleSend}
+              composerHint={composerHint}
+              attachments={attachments}
+              uploadingAttachments={uploadingAttachments}
+              hasSendableAttachments={hasSendableAttachments}
+              onPickFiles={addFiles}
+              onRemoveAttachment={removeAttachment}
+            />
+          )
         }
       />
       {studentUseMobileShellV2 ? (

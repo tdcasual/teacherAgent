@@ -1,5 +1,20 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { openStudentApp, setupStudentState } from './helpers/studentHarness'
+
+const enterStudentExecutionState = async (page: Page) => {
+  if (await page.getByRole('button', { name: '发送' }).count()) {
+    if (await page.getByRole('button', { name: '发送' }).first().isVisible().catch(() => false)) return
+  }
+  const freeChatButton = page.getByRole('button', { name: '自由提问' })
+  if (await freeChatButton.count()) {
+    try {
+      await freeChatButton.click()
+    } catch {
+      await freeChatButton.click({ force: true })
+    }
+  }
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+}
 
 test('mobile session menu supports keyboard navigation and escape focus return', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -107,6 +122,8 @@ test('mobile shell v2 keeps tab state stable without render loop errors', async 
 
   const activeLabel = page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')
   await expect(activeLabel).toBeVisible()
+  await expect(activeLabel).toHaveText('学习')
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
   await page.waitForTimeout(500)
 
   const samples: string[] = []
@@ -222,6 +239,7 @@ test('sidebar toggle exposes aria contract and verification inputs are label-ass
 test('restoring pending job keeps only one pending status bubble', async ({ page }) => {
   await setupStudentState(page, {
     stateOverrides: {
+      studentSidebarOpen: 'false',
       verifiedStudent: JSON.stringify({
         student_id: 'S001',
         student_name: '测试学生',
@@ -372,6 +390,7 @@ test('restoring pending job keeps only one pending status bubble', async ({ page
     page.evaluate(() => Boolean(localStorage.getItem('studentPendingChatJob:S001')))
 
   await page.goto('/')
+  await enterStudentExecutionState(page)
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
   await expect(page.locator('.message.assistant .text').filter({ hasText: '正在回复中' }).first()).toBeVisible()
 
@@ -521,6 +540,7 @@ test('switching sessions while pending loads target session history', async ({ p
   })
 
   await page.goto('/')
+  await enterStudentExecutionState(page)
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
 
   await page.locator('textarea').fill('待处理问题')
@@ -711,6 +731,7 @@ test('switching away and back to pending session reloads correct history without
   })
 
   await page.goto('/')
+  await enterStudentExecutionState(page)
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
 
   const userText = '待处理问题-切走再切回'
@@ -877,6 +898,7 @@ test('sending one pending request keeps only one user bubble', async ({ page }) 
   })
 
   await page.goto('/')
+  await enterStudentExecutionState(page)
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
 
   const userText = '待处理问题-去重'
@@ -1040,6 +1062,7 @@ test('malformed local view-state should recover remote active session', async ({
   })
 
   await page.goto('/')
+  await enterStudentExecutionState(page)
 
   await expect.poll(() => historyCalls.filter((sid) => sid === 'legacy_session').length).toBeGreaterThan(0)
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'legacy-history' }).first()).toBeVisible()
@@ -1080,6 +1103,7 @@ test('switching history sessions keeps chat shell anchored and composer at botto
       },
     },
   })
+  await enterStudentExecutionState(page)
 
   const readLayout = async () =>
     page.evaluate(() => {

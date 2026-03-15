@@ -7,7 +7,7 @@ import { stripTransientPendingBubbles } from '../features/chat/pendingOverlay'
 import { parsePendingChatJobFromStorage, PENDING_CHAT_MAX_AGE_MS } from '../features/chat/pendingChatJob'
 import { runStudentChatStream } from '../features/chat/chatStreamClient'
 import { clearStudentAccessToken } from '../features/auth/studentAuth'
-import type { ChatJobStatus, PendingChatJob, VerifiedStudent } from '../appTypes'
+import type { ChatJobStatus, PendingChatJob, RecentCompletedReply, VerifiedStudent } from '../appTypes'
 import {
   normalizeRecentCompletedReplies,
   parseRecentCompletedReplies,
@@ -15,7 +15,6 @@ import {
   RECENT_COMPLETION_KEY_PREFIX,
   recentCompletionKeyOf,
   toErrorMessage,
-  type RecentCompletedReply,
   type StudentAction,
   type StudentState,
 } from './useStudentState'

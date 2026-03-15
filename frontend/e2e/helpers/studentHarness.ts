@@ -10,8 +10,17 @@ type StudentHistoryMessage = {
 
 type StudentHistoryBySession = Record<string, StudentHistoryMessage[]>
 
+type TodayAssignmentMock = {
+  assignment_id: string
+  date?: string
+  question_count?: number
+  meta?: { target_kp?: string[] }
+  delivery?: { mode?: string; files?: Array<{ name: string; url: string }> }
+} | null
+
 type SetupApiMocksOptions = {
   historyBySession?: StudentHistoryBySession
+  todayAssignment?: TodayAssignmentMock
 }
 
 type OpenStudentAppOptions = {
@@ -67,6 +76,7 @@ export const setupBasicStudentApiMocks = async (
     main: [{ ts: new Date().toISOString(), role: 'assistant', content: '欢迎使用学生端' }],
     s2: [{ ts: new Date().toISOString(), role: 'assistant', content: '会话二内容' }],
   }
+  const todayAssignment = options.todayAssignment ?? null
   let viewStatePayload = {
     title_map: {},
     hidden_ids: [],
@@ -84,7 +94,7 @@ export const setupBasicStudentApiMocks = async (
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ok: true, assignment: null }),
+        body: JSON.stringify({ ok: true, assignment: todayAssignment }),
       })
       return
     }
@@ -200,5 +210,5 @@ export const openStudentApp = async (
   })
   await setupBasicStudentApiMocks(page, options.apiMocks)
   await page.goto('/')
-  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
 }

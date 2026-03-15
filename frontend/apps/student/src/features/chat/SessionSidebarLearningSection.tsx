@@ -44,9 +44,9 @@ export default function SessionSidebarLearningSection(props: Props) {
   const verifyPanelId = 'student-verify-panel'
 
   return (
-    <section className="border-t border-border pt-2.5 grid gap-2">
+    <section className="border-t border-border pt-3 grid gap-2.5">
       <div className="flex justify-between items-center gap-2">
-        <strong>学习信息</strong>
+        <strong>学习概览</strong>
         <button
           type="button"
           className="ghost"
@@ -112,11 +112,11 @@ export default function SessionSidebarLearningSection(props: Props) {
         </div>
       )}
       {verifiedStudent && (
-        <div className="grid gap-1.5">
-          <div className="text-xs text-muted">今日作业（{todayAssignment?.date || todayDateStr}）</div>
+        <div className="grid gap-1.5 rounded-[16px] border border-border bg-[color:var(--color-surface)] px-3 py-3">
+          <div className="text-xs text-muted">今日任务（{todayAssignment?.date || todayDateStr}）</div>
           {assignmentLoading && <div className="text-xs text-muted">加载中…</div>}
           {assignmentError && <div className="text-xs text-muted">{assignmentError}</div>}
-          {!assignmentLoading && !todayAssignment && !assignmentError && <div className="text-xs text-muted">今日暂无作业。</div>}
+          {!assignmentLoading && !todayAssignment && !assignmentError && <div className="text-xs text-muted">今日任务准备中，可返回首页继续生成。</div>}
           {todayAssignment && (
             <>
               <div className="text-xs text-muted">
@@ -128,13 +128,13 @@ export default function SessionSidebarLearningSection(props: Props) {
               {todayAssignment.delivery?.files?.length ? (
                 <div className="grid gap-1.5">
                   {todayAssignment.delivery.files.map((file) => (
-                    <a key={file.url} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-[#ecfaf5] text-[#0f766e] no-underline text-[13px] border border-[#cff0e6]" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
+                    <a key={file.url} className="inline-flex items-center gap-1.5 rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-note)] px-2.5 py-1.5 text-[13px] text-ink no-underline" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
                       下载：{file.name}
                     </a>
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-muted">在聊天中输入"开始今天作业"进入讨论。</div>
+                <div className="text-xs text-muted">返回首页后，从“开始今日任务”进入练习。</div>
               )}
             </>
           )}

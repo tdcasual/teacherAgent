@@ -8,17 +8,11 @@ import type {
   AssignmentDetail,
   Message,
   PendingChatJob,
+  RecentCompletedReply,
   StudentHistorySession,
   VerifiedStudent,
 } from '../appTypes'
 import { parsePendingChatJobFromStorage } from '../features/chat/pendingChatJob'
-
-export type RecentCompletedReply = {
-  session_id: string
-  user_text: string
-  reply_text: string
-  completed_at: number
-}
 
 export const PENDING_CHAT_KEY_PREFIX = 'studentPendingChatJob:'
 export const RECENT_COMPLETION_KEY_PREFIX = 'studentRecentCompletion:'
@@ -127,6 +121,7 @@ export type StudentState = {
   todayAssignment: AssignmentDetail | null
   assignmentLoading: boolean
   assignmentError: string
+  assignmentRefreshNonce: number
   sidebarOpen: boolean
   openSessionMenuId: string
   renameDialogSessionId: string | null
@@ -224,6 +219,7 @@ function buildInitialState(): StudentState {
     todayAssignment: null,
     assignmentLoading: false,
     assignmentError: '',
+    assignmentRefreshNonce: 0,
     sidebarOpen: safeLocalStorageGetItem('studentSidebarOpen') !== 'false',
     openSessionMenuId: '',
     renameDialogSessionId: null,

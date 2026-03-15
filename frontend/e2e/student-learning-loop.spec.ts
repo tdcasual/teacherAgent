@@ -116,10 +116,39 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-test('student shell renders chat and workbench regions', async ({ page }) => {
+test('student shell defaults to today-first home and enters chat on primary action', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('studentSidebarOpen', 'false')
+  })
+
+  await page.route('http://localhost:8000/assignment/today**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        assignment: {
+          assignment_id: 'A-TODAY-001',
+          date: '2026-03-14',
+          question_count: 6,
+          meta: { target_kp: ['力学'] },
+          delivery: {
+            mode: 'files',
+            files: [{ name: '练习题.pdf', url: '/files/assignment.pdf' }],
+          },
+        },
+      }),
+    })
+  })
+
   await page.goto('/')
-  await expect(page.getByTestId('student-chat-panel')).toBeVisible()
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
+  await expect(page.getByRole('button', { name: '开始今日任务' })).toBeVisible()
   await expect(page.getByRole('complementary').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '开始今日任务' }).click()
+  await expect(page.getByTestId('student-chat-panel')).toBeVisible()
+  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
 })
 
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {
