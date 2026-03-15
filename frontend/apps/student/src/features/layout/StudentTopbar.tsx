@@ -7,16 +7,20 @@ import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
 type Props = {
   verifiedStudent: VerifiedStudent | null
   sidebarOpen: boolean
+  homeActive: boolean
   compactMobile?: boolean
   dispatch: Dispatch<StudentAction>
+  openTodayHome: () => void
   startNewStudentSession: () => void
 }
 
 export default function StudentTopbar({
   verifiedStudent,
   sidebarOpen,
+  homeActive,
   compactMobile = false,
   dispatch,
+  openTodayHome,
   startNewStudentSession,
 }: Props) {
   const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -38,7 +42,7 @@ export default function StudentTopbar({
 
   const titleText = compactMobile ? '物理学习助手' : '物理学习助手 · 学生端'
   const sidebarLabel = compactMobile ? (sidebarOpen ? '会话开' : '会话') : (sidebarOpen ? '收起会话' : '展开会话')
-  const newSessionLabel = compactMobile ? '新建' : '新会话'
+  const todayHomeLabel = '今日任务'
 
   return (
     <header className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
@@ -63,8 +67,8 @@ export default function StudentTopbar({
         >
           {sidebarLabel}
         </button>
-        <button className="ghost" onClick={startNewStudentSession}>
-          {newSessionLabel}
+        <button className={`ghost ${homeActive ? 'font-semibold' : ''}`.trim()} type="button" onClick={openTodayHome}>
+          {todayHomeLabel}
         </button>
         {compactMobile ? (
           <button
@@ -101,6 +105,9 @@ export default function StudentTopbar({
           ) : (
             <div className="text-[12px] text-muted px-1 py-0.5">未验证学生身份</div>
           )}
+          <button className="ghost justify-start" type="button" onClick={() => { startNewStudentSession(); closeQuickActions() }}>
+            新建会话
+          </button>
         </div>
       ) : null}
     </header>

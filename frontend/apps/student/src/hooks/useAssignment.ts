@@ -7,7 +7,7 @@ type UseAssignmentParams = {
 }
 
 export function useAssignment({ state, dispatch }: UseAssignmentParams) {
-  const { apiBase, verifiedStudent } = state
+  const { apiBase, verifiedStudent, assignmentRefreshNonce } = state
 
   useEffect(() => {
     const sid = verifiedStudent?.student_id?.trim() || ''
@@ -53,5 +53,5 @@ export function useAssignment({ state, dispatch }: UseAssignmentParams) {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [verifiedStudent, apiBase, dispatch])
+  }, [verifiedStudent, apiBase, assignmentRefreshNonce, dispatch])
 }

@@ -65,4 +65,19 @@ describe('mobile shared style guardrails', () => {
     expect(compactHeaderBlock).toContain('min-height: var(--mobile-topbar-compact-height);');
     expect(compactGhostBlock).toContain('min-height: var(--mobile-topbar-compact-btn-height);');
   });
+
+  it('defines student today-home semantic tokens and shared mobile surface tokens', () => {
+    const studentCssPath = path.resolve(process.cwd(), 'apps/student/src/tailwind.css');
+    const mobileCssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
+    const studentCss = readFileSync(studentCssPath, 'utf8');
+    const mobileCss = readFileSync(mobileCssPath, 'utf8');
+
+    expect(studentCss).toContain('--color-app-bg:');
+    expect(studentCss).toContain('--color-task-strip:');
+    expect(studentCss).toContain('--color-note:');
+    expect(studentCss).toContain('--color-progress:');
+    expect(mobileCss).toContain('--mobile-tabbar-active-bg:');
+    expect(mobileCss).toContain('--mobile-tabbar-active-fg:');
+    expect(mobileCss).toContain('--mobile-sheet-surface:');
+  });
 });

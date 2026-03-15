@@ -26,6 +26,13 @@ export type ChatJobStatus = {
   updated_at?: string
 }
 
+export type RecentCompletedReply = {
+  session_id: string
+  user_text: string
+  reply_text: string
+  completed_at: number
+}
+
 export type ChatStartResult = {
   ok: boolean
   job_id: string
@@ -91,6 +98,36 @@ export type VerifiedStudent = {
   student_id: string
   student_name: string
   class_name?: string
+}
+
+export type StudentTodayHomeStatus =
+  | 'pending_generation'
+  | 'generating'
+  | 'ready'
+  | 'in_progress'
+  | 'submitted'
+
+export type StudentTodayHomeMaterial = {
+  label: string
+  url?: string
+}
+
+export type StudentTodayHomeStep = {
+  label: string
+  tone: 'neutral' | 'active' | 'success'
+}
+
+export type StudentTodayHomeViewModel = {
+  status: StudentTodayHomeStatus
+  title: string
+  summary: string
+  primaryActionLabel: string
+  primaryActionDisabled: boolean
+  statusLabel: string
+  estimatedMinutes: number | null
+  dueLabel: string
+  materials: StudentTodayHomeMaterial[]
+  progressSteps: StudentTodayHomeStep[]
 }
 
 export type StudentVerifyCandidate = {

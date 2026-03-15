@@ -2,18 +2,24 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-bg: #f7f7f8;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f3f4f6;
-  --color-surface-hover: #eceff3;
-  --color-ink: #202123;
-  --color-muted: #6b7280;
-  --color-accent: #10a37f;
-  --color-accent-soft: #e8f7f2;
-  --color-border: #e5e7eb;
-  --color-border-strong: #d1d5db;
-  --color-danger-soft: #fdecec;
-  --color-danger: #9f1239;
+  --color-app-bg: oklch(0.97 0.012 95);
+  --color-bg: oklch(0.97 0.012 95);
+  --color-surface: oklch(0.992 0.006 95);
+  --color-surface-soft: oklch(0.967 0.009 95);
+  --color-surface-hover: oklch(0.944 0.012 95);
+  --color-task-strip: oklch(0.955 0.03 145);
+  --color-note: oklch(0.963 0.014 92);
+  --color-progress: oklch(0.95 0.02 150);
+  --color-ink: oklch(0.25 0.02 250);
+  --color-muted: oklch(0.51 0.018 250);
+  --color-accent: oklch(0.57 0.11 165);
+  --color-accent-soft: oklch(0.94 0.03 165);
+  --color-success: oklch(0.56 0.1 155);
+  --color-success-soft: oklch(0.94 0.03 155);
+  --color-border: oklch(0.9 0.01 95);
+  --color-border-strong: oklch(0.84 0.015 95);
+  --color-danger-soft: oklch(0.95 0.03 20);
+  --color-danger: oklch(0.52 0.19 20);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -28,7 +34,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
-  background: var(--color-bg);
+  background: var(--color-app-bg);
 }
 
 @media (min-width: 901px) {
@@ -214,7 +220,7 @@ body {
   grid-template-columns: 300px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--color-app-bg);
 }
 .student-layout > * {
   min-width: 0;
@@ -228,7 +234,7 @@ body {
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--color-border);
-  background: #fbfbfc;
+  background: var(--color-note);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -306,7 +312,7 @@ body {
     z-index: 20;
     border-right: 1px solid var(--color-border);
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-    background: #fff;
+    background: var(--color-surface);
     padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
   }
   .session-sidebar.open {
