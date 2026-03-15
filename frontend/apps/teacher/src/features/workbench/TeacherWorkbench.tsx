@@ -29,15 +29,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     examUploading,
     activeWorkflowIndicator,
     uploadMode,
-    uploadJobInfo,
-    uploadAssignmentId,
-    examJobInfo,
-    examId,
     progressData,
-    progressAssignmentId,
-    formatUploadJobSummary,
-    formatExamJobSummary,
-    formatProgressSummary,
     scrollToWorkflowSection,
   } = viewModel
 
@@ -49,15 +41,6 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
   })
-  const workflowSummary = uploadMode === 'assignment'
-    ? (uploadJobInfo || uploadAssignmentId
-      ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId)
-      : progressData
-        ? formatProgressSummary(progressData, progressAssignmentId || uploadAssignmentId)
-        : '从上传区开始今天的作业流程。')
-    : (examJobInfo || examId
-      ? formatExamJobSummary(examJobInfo, examId)
-      : '从上传区开始今天的考试流程。')
   const workflowTabActive = workbenchTab === 'workflow'
   const focusLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
 
@@ -71,7 +54,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
   }
 
   return (
-    <aside className={`skills-panel border-l border-border bg-[#fbfbfc] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
+    <aside className={`skills-panel border-l border-[color:color-mix(in_oklab,var(--color-border)_86%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,white)] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
       <div className="skills-header flex justify-between items-start gap-3 mb-[10px]">
         <div className="grid gap-1">
           <h3 className="m-0">教学编辑台</h3>
@@ -107,11 +90,14 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </button>
         </div>
       </div>
-      <section className="rounded-[16px] border border-border bg-[color:var(--color-surface-soft)] px-3 py-3 shadow-sm grid gap-2">
+      <section
+        className="rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_96%,white)_0%,color-mix(in_oklab,var(--color-surface-soft)_88%,white)_100%)] px-3.5 py-3 shadow-[0_10px_22px_rgba(15,23,42,0.05)] grid gap-3"
+        data-testid="teacher-workbench-summary-card"
+        data-workbench-tone="summary"
+      >
         {workflowTabActive ? (
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">工作流已展开</span>
               <span className="text-[14px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
               <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
                 activeWorkflowIndicator.tone === 'active'
@@ -125,13 +111,18 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 {activeStep?.label || '等待开始'}
               </span>
             </div>
-            <div className="text-[12px] leading-[1.45] text-muted">当前焦点：{focusLabel}</div>
-            <div className="text-[12px] leading-[1.45] text-muted">主动作已经留在顶部任务条，下方继续处理执行细节。</div>
+            <div
+              className="grid gap-1 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] px-3 py-2"
+              data-testid="teacher-workbench-focus-block"
+              data-workbench-tier="supporting"
+            >
+              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
+              <div className="text-[13px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">{focusLabel}</div>
+            </div>
           </div>
         ) : (
           <div className="grid gap-3">
-            <div className="min-w-0 flex-1 grid gap-1">
-              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">流程摘要</div>
+            <div className="min-w-0 flex-1 grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[15px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
                 <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
@@ -146,13 +137,18 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                   {activeStep?.label || '等待开始'}
                 </span>
               </div>
-              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
-              <div className="text-[14px] font-semibold text-[#334155]">{focusLabel}</div>
-              <div className="text-[12px] leading-[1.45] text-muted">{workflowSummary}</div>
+              <div
+                className="grid gap-1 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] px-3 py-2"
+                data-testid="teacher-workbench-focus-block"
+                data-workbench-tier="supporting"
+              >
+                <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
+                <div className="text-[14px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">{focusLabel}</div>
+              </div>
             </div>
             <button
               type="button"
-              className="inline-flex w-full items-center justify-center rounded-xl border-none bg-accent px-[14px] py-[10px] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+              className="teacher-rail-cta inline-flex w-full items-center justify-center rounded-[14px] border-none px-[14px] py-[11px] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
               onClick={handlePrimaryAction}
             >
               {guidance.primaryActionLabel}
@@ -160,14 +156,14 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </div>
         )}
       </section>
-      <div className="workbench-switch inline-flex border border-border rounded-[12px] overflow-hidden bg-white self-start flex-none">
-        <button type="button" className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
+      <div className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,white)] self-start flex-none">
+        <button type="button" className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
           能力
         </button>
-        <button type="button" className={`border-0 border-l border-border bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
+        <button type="button" className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
           自动记忆
         </button>
-        <button type="button" className={`border-0 border-l border-border bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-accent-soft !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
+        <button type="button" className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
           工作流
         </button>
       </div>

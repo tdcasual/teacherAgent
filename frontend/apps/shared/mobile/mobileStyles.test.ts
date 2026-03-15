@@ -80,4 +80,21 @@ describe('mobile shared style guardrails', () => {
     expect(mobileCss).toContain('--mobile-tabbar-active-fg:');
     expect(mobileCss).toContain('--mobile-sheet-surface:');
   });
+
+  it('keeps student and teacher themes on the same restrained paper-and-ink palette', () => {
+    const studentCssPath = path.resolve(process.cwd(), 'apps/student/src/tailwind.css');
+    const teacherCssPath = path.resolve(process.cwd(), 'apps/teacher/src/tailwind.css');
+    const studentCss = readFileSync(studentCssPath, 'utf8');
+    const teacherCss = readFileSync(teacherCssPath, 'utf8');
+
+    expect(studentCss).toContain('--color-app-bg: oklch(0.974 0.004 252);');
+    expect(studentCss).toContain('--color-task-strip: oklch(0.978 0.01 248);');
+    expect(studentCss).toContain('--color-accent: oklch(0.43 0.062 252);');
+    expect(studentCss).toContain('--color-accent-soft: oklch(0.946 0.012 252);');
+
+    expect(teacherCss).toContain('--color-app-bg: oklch(0.97 0.005 252);');
+    expect(teacherCss).toContain('--color-rail: oklch(0.954 0.007 252);');
+    expect(teacherCss).toContain('--color-accent: oklch(0.43 0.062 252);');
+    expect(teacherCss).toContain('--color-success: oklch(0.45 0.05 228);');
+  });
 });

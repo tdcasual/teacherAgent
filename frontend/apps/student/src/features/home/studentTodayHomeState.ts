@@ -32,36 +32,36 @@ const toMaterials = (assignment: AssignmentDetail | null): StudentTodayHomeMater
 const buildProgressSteps = (status: StudentTodayHomeViewModel['status']): StudentTodayHomeStep[] => {
   if (status === 'pending_generation') {
     return [
-      { label: '准备任务', tone: 'active' },
-      { label: '开始练习', tone: 'neutral' },
-      { label: '提交结果', tone: 'neutral' },
+      { label: '准备中', tone: 'active' },
+      { label: '待开始', tone: 'neutral' },
+      { label: '待提交', tone: 'neutral' },
     ]
   }
   if (status === 'generating') {
     return [
-      { label: '准备任务', tone: 'active' },
-      { label: '开始练习', tone: 'neutral' },
-      { label: '提交结果', tone: 'neutral' },
+      { label: '准备中', tone: 'active' },
+      { label: '待开始', tone: 'neutral' },
+      { label: '待提交', tone: 'neutral' },
     ]
   }
   if (status === 'ready') {
     return [
-      { label: '任务已就绪', tone: 'success' },
-      { label: '开始练习', tone: 'active' },
-      { label: '提交结果', tone: 'neutral' },
+      { label: '已准备', tone: 'success' },
+      { label: '待开始', tone: 'active' },
+      { label: '待提交', tone: 'neutral' },
     ]
   }
   if (status === 'submitted') {
     return [
-      { label: '任务已就绪', tone: 'success' },
-      { label: '完成练习', tone: 'success' },
+      { label: '已准备', tone: 'success' },
+      { label: '已完成', tone: 'success' },
       { label: '已提交', tone: 'success' },
     ]
   }
   return [
-    { label: '任务已就绪', tone: 'success' },
-    { label: '继续练习', tone: 'active' },
-    { label: '等待提交', tone: 'neutral' },
+    { label: '已准备', tone: 'success' },
+    { label: '进行中', tone: 'active' },
+    { label: '待提交', tone: 'neutral' },
   ]
 }
 
@@ -97,7 +97,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
     messages,
     pendingChatJob,
     recentCompletedReplies,
-    onOpenExecutionLabel = '继续完成',
+    onOpenExecutionLabel = '继续任务',
   } = input
 
   const materials = toMaterials(todayAssignment)
@@ -141,7 +141,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       status: 'submitted',
       title: '今天的任务已提交',
       summary: '你已完成本次任务提交，现在可以查看结果或等待老师反馈。',
-      primaryActionLabel: '查看本次提交',
+      primaryActionLabel: '查看提交',
       primaryActionDisabled: false,
       statusLabel: '已提交',
       estimatedMinutes: estimatedMinutesValue,
@@ -155,8 +155,8 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
     return {
       status: 'pending_generation',
       title: '今日任务尚未生成',
-      summary: '系统会根据今天安排准备练习内容，你可以立即生成今日任务。',
-      primaryActionLabel: '生成今日任务',
+      summary: '系统会根据今天安排准备练习内容，你可以立即生成任务。',
+      primaryActionLabel: '生成任务',
       primaryActionDisabled: false,
       statusLabel: '待生成',
       estimatedMinutes: null,
@@ -185,7 +185,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
     status: 'ready',
     title: String(todayAssignment.assignment_id || '今日任务'),
     summary: '今天的练习已经准备好，先开始主任务，再处理补充内容。',
-    primaryActionLabel: '开始今日任务',
+    primaryActionLabel: '进入任务',
     primaryActionDisabled: false,
     statusLabel: '未开始',
     estimatedMinutes: estimatedMinutesValue,

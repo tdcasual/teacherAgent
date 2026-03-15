@@ -65,7 +65,7 @@ export default function ChatMessages({
               <div
                 className={
                   msg.role === 'assistant'
-                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[rgba(47,107,138,0.14)] bg-[color:var(--color-panel)] px-[14px] py-[12px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]'
+                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_18%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_94%,white)] px-[14px] py-[12px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]'
                     : 'max-w-[var(--chat-bubble-max-width)] px-[14px] py-[10px] rounded-[12px] bg-[#eef1f4] border border-[#e1e6eb] shadow-sm'
                 }
               >
@@ -78,7 +78,7 @@ export default function ChatMessages({
           ))}
           {sending && !hasPendingChatJob && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] bg-[#f4f7fb] border border-dashed border-[#cfd8e3] rounded-[14px] py-2 px-3">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[14px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_30%,white)] py-2 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
                 <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">正在思考…</div>
               </div>
@@ -86,7 +86,7 @@ export default function ChatMessages({
           )}
           {hasPendingChatJob && (pendingStreamStage || pendingToolRuns.length > 0) && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] bg-[#f8fafc] border border-[#d7e3ef] rounded-[12px] px-3 py-2 grid gap-2">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[12px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-3 py-2 grid gap-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="grid gap-[2px]">
                     <div className="text-[11px] text-muted">执行过程 · {pendingStreamStage || '处理中'}</div>
@@ -97,7 +97,7 @@ export default function ChatMessages({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="text-[11px] px-2 py-[2px] rounded border border-[#c9d7e5] bg-white text-[#475569]"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,white)] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,white)]"
                       disabled={failedCount === 0 && !showOnlyFailed}
                       onClick={() => setShowOnlyFailed((prev) => !prev)}
                     >
@@ -105,7 +105,7 @@ export default function ChatMessages({
                     </button>
                     <button
                       type="button"
-                      className="text-[11px] px-2 py-[2px] rounded border border-[#c9d7e5] bg-white text-[#475569]"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,white)] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,white)]"
                       onClick={() => setProcessCollapsed((prev) => !prev)}
                     >
                       {processCollapsed ? '展开' : '收起'}
@@ -122,7 +122,7 @@ export default function ChatMessages({
                           item.status === 'running'
                             ? 'bg-[#fff7e6] border-[#fcd9a5] text-[#92400e]'
                             : item.status === 'ok'
-                              ? 'bg-[#ecfdf5] border-[#bbf7d0] text-[#065f46]'
+                              ? 'bg-success-soft border-[color:color-mix(in_oklab,var(--color-success)_22%,white)] text-success'
                               : 'bg-[#fef2f2] border-[#fecaca] text-[#991b1b]'
                         return (
                           <div key={item.key} className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}>

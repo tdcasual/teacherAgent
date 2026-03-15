@@ -50,7 +50,7 @@ const buildInput = (overrides: Partial<HomeInput> = {}): HomeInput => ({
   messages: [],
   pendingChatJob: null,
   recentCompletedReplies: [],
-  onOpenExecutionLabel: '继续完成',
+  onOpenExecutionLabel: '继续任务',
   ...overrides,
 })
 
@@ -90,14 +90,15 @@ describe('buildStudentTodayHomeViewModel', () => {
 
     expect(viewModel.status).toBe('pending_generation')
     expect(viewModel.title).toBe('今日任务尚未生成')
-    expect(viewModel.primaryActionLabel).toBe('生成今日任务')
+    expect(viewModel.primaryActionLabel).toBe('生成任务')
   })
 
   it('returns ready when the assignment exists but the student has not started', () => {
     const viewModel = buildStudentTodayHomeViewModel(buildInput())
 
     expect(viewModel.status).toBe('ready')
-    expect(viewModel.primaryActionLabel).toBe('开始今日任务')
+    expect(viewModel.primaryActionLabel).toBe('进入任务')
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '待开始', '待提交'])
     expect(viewModel.materials).toHaveLength(2)
   })
 
@@ -111,7 +112,8 @@ describe('buildStudentTodayHomeViewModel', () => {
 
     expect(viewModel.status).toBe('in_progress')
     expect(viewModel.title).toBe('继续今日任务')
-    expect(viewModel.primaryActionLabel).toBe('继续完成')
+    expect(viewModel.primaryActionLabel).toBe('继续任务')
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '进行中', '待提交'])
   })
 
   it('returns in_progress when the active session already contains user work', () => {
@@ -126,7 +128,7 @@ describe('buildStudentTodayHomeViewModel', () => {
     )
 
     expect(viewModel.status).toBe('in_progress')
-    expect(viewModel.primaryActionLabel).toBe('继续完成')
+    expect(viewModel.primaryActionLabel).toBe('继续任务')
   })
 
   it('returns submitted when a recent completed reply exists for today', () => {
@@ -139,6 +141,7 @@ describe('buildStudentTodayHomeViewModel', () => {
 
     expect(viewModel.status).toBe('submitted')
     expect(viewModel.title).toBe('今天的任务已提交')
-    expect(viewModel.primaryActionLabel).toBe('查看本次提交')
+    expect(viewModel.primaryActionLabel).toBe('查看提交')
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '已完成', '已提交'])
   })
 })

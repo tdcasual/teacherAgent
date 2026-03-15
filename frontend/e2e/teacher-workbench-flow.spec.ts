@@ -1836,7 +1836,8 @@ test('teacher surface keeps a single full next-step instruction across task stri
 
   await page.goto('/')
 
-  await expect(page.getByText(/下一步：/)).toHaveCount(1)
+  await expect(page.getByText(/下一步：/)).toHaveCount(0)
+  await expect(page.getByText('今日重心')).toHaveCount(0)
 })
 
 registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases, implementations)

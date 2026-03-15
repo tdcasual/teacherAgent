@@ -52,7 +52,7 @@ export default function ChatComposer({
             {attachments.map((item) => (
               <span key={item.localId} className="inline-flex items-center gap-2 border border-border rounded-lg px-2 py-1 text-[11px] bg-[#f8fafc] max-w-full">
                 <span className="max-w-[180px] truncate" title={item.fileName}>{item.fileName}</span>
-                <span className={`${item.status === 'ready' ? 'text-[#0f766e]' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
+                <span className={`${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
                   {item.status === 'ready' ? '已就绪' : item.status === 'uploading' ? '上传中' : '失败'}
                 </span>
                 <button type="button" className="border-0 bg-transparent text-muted cursor-pointer px-0" onClick={() => { void onRemoveAttachment(item.localId) }} title={item.error || '移除附件'}>×</button>

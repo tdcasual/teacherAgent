@@ -61,7 +61,7 @@ export default function ChatComposer({
             {attachments.map((item) => (
               <span key={item.localId} className="inline-flex items-center gap-2 border border-border rounded-lg px-2 py-1 text-[12px] bg-[#f8fafc] max-w-full">
                 <span className="max-w-[220px] truncate" title={item.fileName}>{item.fileName}</span>
-                <span className={`text-[11px] ${item.status === 'ready' ? 'text-[#0f766e]' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
+                <span className={`text-[11px] ${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
                   {item.status === 'ready' ? '已就绪' : item.status === 'uploading' ? '上传中' : '失败'}
                 </span>
                 <button

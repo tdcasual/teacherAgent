@@ -168,11 +168,16 @@ test('mobile learning tab keeps today home visible until sessions tab is selecte
   await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
   await expect(page.getByTestId('student-today-home')).toBeVisible()
   await expect(page.getByText('历史会话')).toBeHidden()
+  await expect(page.getByRole('button', { name: '会话' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '今日任务', exact: true })).toHaveCount(0)
 
   await page.getByRole('tab', { name: '会话' }).click()
 
   await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('会话')
   await expect(page.getByText('历史会话')).toBeVisible()
+  await expect(page.getByTestId('student-today-home')).toBeHidden()
+  await expect(page.getByTestId('student-chat-panel')).toBeHidden()
+  await expect(page.getByRole('button', { name: '发送' })).toHaveCount(0)
 })
 
 test('mobile rename dialog overlays tabbar hit target', async ({ page }) => {

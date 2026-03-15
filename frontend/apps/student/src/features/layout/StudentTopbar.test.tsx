@@ -39,21 +39,12 @@ describe('StudentTopbar compact mobile mode', () => {
 
     expect(screen.getByText('物理学习助手')).toBeTruthy();
     expect(screen.queryByText('物理学习助手 · 学生端')).toBeNull();
-    expect(screen.getByRole('button', { name: '会话' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '今日任务' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '会话' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '今日任务' })).toBeNull();
     expect(screen.queryByRole('button', { name: '新建' })).toBeNull();
     expect(screen.getByRole('button', { name: '更多' })).toBeTruthy();
     expect(header.className).toContain('mobile-topbar-compact');
     expect(screen.queryByText('身份：学生')).toBeNull();
-  });
-
-  it('opens today homepage from the task-priority action', () => {
-    const props = buildProps();
-    render(<StudentTopbar {...props} compactMobile homeActive={false} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '今日任务' }));
-
-    expect(props.openTodayHome).toHaveBeenCalledTimes(1);
   });
 
   it('shows compact quick actions menu', () => {

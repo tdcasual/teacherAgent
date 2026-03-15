@@ -13,7 +13,7 @@ const buildViewModel = (overrides: Partial<StudentTodayHomeViewModel> = {}): Stu
   status: 'ready',
   title: '牛顿第二定律练习',
   summary: '今天先完成本次物理练习，再查看补充讲义。',
-  primaryActionLabel: '开始今日任务',
+  primaryActionLabel: '进入任务',
   primaryActionDisabled: false,
   statusLabel: '未开始',
   estimatedMinutes: 24,
@@ -23,9 +23,9 @@ const buildViewModel = (overrides: Partial<StudentTodayHomeViewModel> = {}): Stu
     { label: '讲义.pdf', url: '/files/note.pdf' },
   ],
   progressSteps: [
-    { label: '任务已就绪', tone: 'success' },
-    { label: '开始练习', tone: 'active' },
-    { label: '提交结果', tone: 'neutral' },
+    { label: '已准备', tone: 'success' },
+    { label: '待开始', tone: 'active' },
+    { label: '待提交', tone: 'neutral' },
   ],
   ...overrides,
 })
@@ -34,10 +34,7 @@ describe('StudentTodayHome', () => {
   it('renders the home sections around a single primary task card', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="今天先完成本次物理练习"
         viewModel={buildViewModel()}
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
@@ -45,21 +42,20 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    expect(screen.getByText('今日任务')).toBeTruthy()
+    expect(screen.getByText('3月14日 周六')).toBeTruthy()
     expect(screen.getByText('牛顿第二定律练习')).toBeTruthy()
     expect(screen.getByText('练习题.pdf')).toBeTruthy()
-    expect(screen.getByText('任务已就绪')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '开始今日任务' })).toBeTruthy()
+    expect(screen.getByText('已准备')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '进入任务' })).toBeTruthy()
     expect(screen.getByTestId('student-today-primary-action')).toBeTruthy()
+    expect(screen.queryByText('今日任务')).toBeNull()
+    expect(screen.queryByText('历史与补充')).toBeNull()
   })
 
   it('keeps the primary stage distinct from supplementary content', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="今天先完成本次物理练习"
         viewModel={buildViewModel()}
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
@@ -69,33 +65,44 @@ describe('StudentTodayHome', () => {
 
     const primaryStage = screen.getByTestId('student-today-primary-stage')
     const secondaryStage = screen.getByTestId('student-today-secondary-stage')
+    const materialsStage = screen.getByTestId('student-home-materials-stage')
+    const progressStage = screen.getByTestId('student-home-progress-stage')
+    const historyStage = screen.getByTestId('student-home-history-stage')
 
     expect(primaryStage.textContent).toContain('牛顿第二定律练习')
-    expect(primaryStage.textContent).toContain('开始今日任务')
+    expect(primaryStage.textContent).toContain('进入任务')
+    expect(primaryStage.textContent).not.toContain('今日任务')
+    expect(primaryStage.textContent).not.toContain('开始练习')
+    expect(primaryStage.textContent).not.toContain('今日主线')
+    expect(primaryStage.textContent).not.toContain('TODAY FIRST')
+    expect(primaryStage.textContent).not.toContain('先从这里开始')
     expect(secondaryStage.textContent).toContain('练习题.pdf')
-    expect(secondaryStage.textContent).toContain('任务已就绪')
-    expect(secondaryStage.textContent).toContain('查看历史任务')
+    expect(secondaryStage.textContent).toContain('已准备')
+    expect(secondaryStage.textContent).toContain('历史任务')
+    expect(secondaryStage.textContent).not.toContain('辅助区')
+    expect(secondaryStage.textContent).not.toContain('历史与补充')
+    expect(materialsStage.getAttribute('data-home-tier')).toBe('supporting')
+    expect(progressStage.getAttribute('data-home-tier')).toBe('supporting')
+    expect(historyStage.getAttribute('data-home-tier')).toBe('supporting')
+    expect(historyStage.getAttribute('data-home-style')).toBe('inline-links')
   })
 
   it('shows generate copy for pending_generation', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="系统会为你准备今天的练习内容"
         viewModel={buildViewModel({
           status: 'pending_generation',
           title: '今日任务尚未生成',
           summary: '系统会根据今天安排准备练习内容。',
-          primaryActionLabel: '生成今日任务',
+          primaryActionLabel: '生成任务',
           estimatedMinutes: null,
           dueLabel: '生成后开始',
           materials: [],
           progressSteps: [
-            { label: '准备任务', tone: 'active' },
-            { label: '开始练习', tone: 'neutral' },
-            { label: '提交结果', tone: 'neutral' },
+            { label: '准备中', tone: 'active' },
+            { label: '待开始', tone: 'neutral' },
+            { label: '待提交', tone: 'neutral' },
           ],
         })}
         onPrimaryAction={() => undefined}
@@ -104,17 +111,14 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: '生成今日任务' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '生成今日任务' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: '生成任务' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '生成任务' })).toHaveLength(1)
   })
 
   it('shows generating feedback without an active primary action', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="系统正在准备今天的任务"
         viewModel={buildViewModel({
           status: 'generating',
           title: '正在准备今天的任务',
@@ -135,14 +139,11 @@ describe('StudentTodayHome', () => {
   it('shows continue copy for in-progress work', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="继续完成今天的练习"
         viewModel={buildViewModel({
           status: 'in_progress',
           title: '继续今日任务',
-          primaryActionLabel: '继续完成',
+          primaryActionLabel: '继续任务',
         })}
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
@@ -150,20 +151,17 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: '继续完成' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '继续任务' })).toBeTruthy()
   })
 
   it('shows submitted copy and still keeps one primary action', () => {
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="你已经完成今天的任务"
         viewModel={buildViewModel({
           status: 'submitted',
           title: '今天的任务已提交',
-          primaryActionLabel: '查看本次提交',
+          primaryActionLabel: '查看提交',
           statusLabel: '已提交',
         })}
         onPrimaryAction={() => undefined}
@@ -172,7 +170,7 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: '查看本次提交' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '查看提交' })).toBeTruthy()
     expect(screen.getAllByTestId('student-today-primary-action')).toHaveLength(1)
   })
 
@@ -183,10 +181,7 @@ describe('StudentTodayHome', () => {
 
     render(
       <StudentTodayHome
-        studentName="测试学生"
         dateLabel="3月14日 周六"
-        heroTitle="今日任务"
-        heroSummary="今天先完成本次物理练习"
         viewModel={buildViewModel()}
         onPrimaryAction={onPrimaryAction}
         onOpenHistory={onOpenHistory}
@@ -194,8 +189,8 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '开始今日任务' }))
-    fireEvent.click(screen.getByRole('button', { name: '查看历史任务' }))
+    fireEvent.click(screen.getByRole('button', { name: '进入任务' }))
+    fireEvent.click(screen.getByRole('button', { name: '历史任务' }))
     fireEvent.click(screen.getByRole('button', { name: '自由提问' }))
 
     expect(onPrimaryAction).toHaveBeenCalledTimes(1)

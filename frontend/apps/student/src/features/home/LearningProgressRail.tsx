@@ -12,11 +12,19 @@ const toneClassMap: Record<StudentTodayHomeStep['tone'], string> = {
 
 export default function LearningProgressRail({ steps }: LearningProgressRailProps) {
   return (
-    <section className="grid gap-3" aria-labelledby="student-home-progress-title">
-      <h2 id="student-home-progress-title" className="m-0 text-[15px] font-semibold text-ink">学习进度</h2>
-      <ol className="m-0 grid gap-2 p-0 list-none">
+    <section
+      className="grid gap-2.5 rounded-[20px] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_78%,white)] p-3.5"
+      aria-labelledby="student-home-progress-title"
+      data-testid="student-home-progress-stage"
+      data-home-tier="supporting"
+    >
+      <h2 id="student-home-progress-title" className="m-0 text-[14px] font-semibold text-ink">学习进度</h2>
+      <ol className="m-0 flex flex-wrap gap-2 p-0 list-none">
         {steps.map((step, index) => (
-          <li key={`${step.label}-${index}`} className={`inline-flex items-center rounded-[16px] border px-3 py-2 text-[13px] shadow-none ${toneClassMap[step.tone]}`}>
+          <li
+            key={`${step.label}-${index}`}
+            className={`inline-flex min-h-[36px] items-center rounded-[999px] border px-3 py-2 text-[13px] shadow-none ${toneClassMap[step.tone]}`}
+          >
             {step.label}
           </li>
         ))}

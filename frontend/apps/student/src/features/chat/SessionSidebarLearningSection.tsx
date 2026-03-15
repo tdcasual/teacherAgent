@@ -134,7 +134,7 @@ export default function SessionSidebarLearningSection(props: Props) {
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-muted">返回首页后，从“开始今日任务”进入练习。</div>
+                <div className="text-xs text-muted">返回学习页后，点“进入任务”继续。</div>
               )}
             </>
           )}

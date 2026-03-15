@@ -676,7 +676,7 @@ export default function TeacherTopbar({
                 </div>
                 <button
                   type="submit"
-                  className="border-none rounded-[10px] px-3 py-[9px] bg-[#0f766e] text-white cursor-pointer"
+                  className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
                   disabled={settingPassword}
                 >
                   {settingPassword ? '设置中…' : '设置密码'}

@@ -2,25 +2,25 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-app-bg: #eef2f6;
-  --color-rail: #e3e9f0;
-  --color-panel: #fbfcfe;
-  --color-bg: #eef2f6;
-  --color-surface: #fbfcfe;
-  --color-surface-soft: #f2f5f8;
-  --color-surface-hover: #e8edf3;
-  --color-ink: #1d2733;
-  --color-muted: #627181;
-  --color-accent: #2f6b8a;
-  --color-accent-soft: #dcecf4;
-  --color-border: #d8e0e8;
-  --color-border-strong: #b8c6d3;
-  --color-warning: #b86a2d;
-  --color-warning-soft: #f7eadf;
-  --color-success: #1b7560;
-  --color-success-soft: #dff1eb;
-  --color-danger-soft: #fdecec;
-  --color-danger: #9f1239;
+  --color-app-bg: oklch(0.97 0.005 252);
+  --color-rail: oklch(0.954 0.007 252);
+  --color-panel: oklch(0.991 0.003 252);
+  --color-bg: oklch(0.97 0.005 252);
+  --color-surface: oklch(0.991 0.003 252);
+  --color-surface-soft: oklch(0.977 0.006 252);
+  --color-surface-hover: oklch(0.953 0.01 252);
+  --color-ink: oklch(0.24 0.018 248);
+  --color-muted: oklch(0.52 0.014 248);
+  --color-accent: oklch(0.43 0.062 252);
+  --color-accent-soft: oklch(0.946 0.012 252);
+  --color-border: oklch(0.902 0.006 252);
+  --color-border-strong: oklch(0.846 0.01 252);
+  --color-warning: oklch(0.62 0.11 55);
+  --color-warning-soft: oklch(0.95 0.02 55);
+  --color-success: oklch(0.45 0.05 228);
+  --color-success-soft: oklch(0.948 0.012 228);
+  --color-danger-soft: oklch(0.95 0.02 22);
+  --color-danger: oklch(0.52 0.14 22);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -71,7 +71,7 @@ body {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
-  background: #fff;
+  background: var(--color-surface);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -94,7 +94,7 @@ body {
   select
 ):focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, white);
 }
 
 /* ── Shared component classes ── */
@@ -104,7 +104,7 @@ body {
     align-items: center;
     justify-content: center;
     border: 1px solid var(--color-border);
-    background: #fff;
+    background: var(--color-surface);
     padding: 6px 11px;
     min-height: 32px;
     border-radius: 8px;
@@ -112,7 +112,7 @@ body {
     text-align: center;
     white-space: nowrap;
     cursor: pointer;
-    color: #3f4551;
+    color: color-mix(in oklab, var(--color-ink) 78%, white);
     font-size: 12px;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
@@ -126,7 +126,7 @@ body {
     border: 1px solid var(--color-border);
     border-radius: 12px;
     overflow: hidden;
-    background: #fff;
+    background: var(--color-surface);
   }
   .view-switch button {
     border: none;
@@ -150,8 +150,8 @@ body {
     border-radius: 12px;
     font-size: 12px;
     background: var(--color-accent-soft);
-    color: #0f766e;
-    border: 1px solid #c7ebe1;
+    color: var(--color-accent);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, white);
   }
 
   .toggle {
@@ -170,7 +170,7 @@ body {
     font-size: 12px;
     white-space: pre-wrap;
   }
-  .status.ok { background: #e8f7f2; color: #0f766e; }
+  .status.ok { background: var(--color-success-soft); color: var(--color-success); }
   .status.err { background: var(--color-danger-soft); color: var(--color-danger); }
 
   .muted { color: var(--color-muted); font-size: 12px; }
@@ -181,11 +181,41 @@ body {
     border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 10px 14px;
-    background: #fff;
+    background: var(--color-surface);
     color: var(--color-ink);
     cursor: pointer;
   }
   .secondary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .teacher-rail-cta {
+    background: color-mix(in oklab, var(--color-accent) 90%, white);
+    box-shadow: 0 10px 20px oklch(0.43 0.062 252 / 0.14);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .teacher-rail-cta:hover {
+    background: color-mix(in oklab, var(--color-accent) 94%, white);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 24px oklch(0.43 0.062 252 / 0.18);
+  }
+  .teacher-drawer-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid color-mix(in oklab, var(--color-border) 78%, white);
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--color-surface) 90%, white);
+    color: color-mix(in oklab, var(--color-ink) 84%, white);
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+  .teacher-drawer-link:hover {
+    background: color-mix(in oklab, var(--color-surface-soft) 94%, white);
+    border-color: color-mix(in oklab, var(--color-border-strong) 76%, white);
+    transform: translateY(-1px);
+  }
 }
 
 /* ── Rule card ── */
@@ -193,13 +223,16 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   padding: 0;
-  background: #fff;
+  background: var(--color-surface);
   overflow: hidden;
-  border-left: 3px solid #cde5de;
+  border-left: 3px solid color-mix(in oklab, var(--color-accent-soft) 80%, white);
   box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.rule-card.rule-disabled { border-left-color: #d6dbe2; opacity: 0.7; }
+.rule-card.rule-disabled {
+  border-left-color: color-mix(in oklab, var(--color-border) 84%, white);
+  opacity: 0.7;
+}
 .rule-card details { border-top: 1px solid var(--color-border); }
 .rule-card details summary {
   padding: 6px 10px;
@@ -214,14 +247,14 @@ body {
 .provider-row {
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--color-surface);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
   box-shadow: var(--shadow-md);
 }
 .provider-row:hover { box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); }
 .provider-row[open] {
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.1);
-  border-color: #cde5de;
+  border-color: color-mix(in oklab, var(--color-accent) 18%, white);
 }
 
 /* ── Markdown rich text ── */
@@ -238,12 +271,12 @@ body {
 }
 .markdown code {
   font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: #f3ece1;
+  background: color-mix(in oklab, var(--color-accent-soft) 34%, white);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .markdown pre {
-  background: #f3ece1;
+  background: color-mix(in oklab, var(--color-accent-soft) 38%, white);
   padding: 8px;
   border-radius: 10px;
   overflow-x: auto;

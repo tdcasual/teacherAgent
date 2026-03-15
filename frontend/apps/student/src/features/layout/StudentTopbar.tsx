@@ -58,18 +58,22 @@ export default function StudentTopbar({
           ) : null}
           <div className={`mobile-topbar-title font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}>{titleText}</div>
         </div>
-        <button
-          className="ghost"
-          type="button"
-          aria-expanded={sidebarOpen}
-          aria-controls="student-session-sidebar"
-          onClick={() => dispatch({ type: 'SET', field: 'sidebarOpen', value: !sidebarOpen })}
-        >
-          {sidebarLabel}
-        </button>
-        <button className={`ghost ${homeActive ? 'font-semibold' : ''}`.trim()} type="button" onClick={openTodayHome}>
-          {todayHomeLabel}
-        </button>
+        {!compactMobile ? (
+          <>
+            <button
+              className="ghost"
+              type="button"
+              aria-expanded={sidebarOpen}
+              aria-controls="student-session-sidebar"
+              onClick={() => dispatch({ type: 'SET', field: 'sidebarOpen', value: !sidebarOpen })}
+            >
+              {sidebarLabel}
+            </button>
+            <button className={`ghost ${homeActive ? 'font-semibold' : ''}`.trim()} type="button" onClick={openTodayHome}>
+              {todayHomeLabel}
+            </button>
+          </>
+        ) : null}
         {compactMobile ? (
           <button
             ref={quickActionsButtonRef}

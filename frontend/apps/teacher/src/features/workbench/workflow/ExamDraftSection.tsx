@@ -40,7 +40,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
     return (
       <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
         <h3>考试解析结果（审核/修改）</h3>
-        <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-[#e8f7f2] text-[#0f766e]">草稿加载中…</div>
+        <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
       </section>
     )
   }
@@ -127,7 +127,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
           </div>
 
           {examDraftActionError && <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">{examDraftActionError}</div>}
-          {examDraftActionStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">{examDraftActionStatus}</pre>}
+          {examDraftActionStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">{examDraftActionStatus}</pre>}
 
           {examNeedsConfirm ? (
             <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">
@@ -149,7 +149,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
             </button>
             <button
               type="button"
-              className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-[#2f6d6b] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleConfirmExamUpload}
               disabled={examConfirming || examDraftSaving || examNeedsConfirm || !examJobInfo || examJobInfo.status !== 'done'}
               title={
@@ -232,7 +232,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
                   )}
                 </div>
                 {examRecommendedCandidate ? (
-                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">
+                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">
                     推荐映射：{examRecommendedCandidate.candidateId}（命中 {examRecommendedCandidate.rowsParsed}/
                     {examRecommendedCandidate.rowsConsidered}，无效 {examRecommendedCandidate.rowsInvalid}）
                   </div>
@@ -297,7 +297,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
                             }`}
                           >
                             <strong>{cid}</strong>
-                            <span className={cid === examRecommendedCandidateId ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-[#e8f7f2] text-[#0f766e]' : 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4]'}>
+                            <span className={cid === examRecommendedCandidateId ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-success-soft text-success' : 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4]'}>
                               {cid === examRecommendedCandidateId ? '推荐' : '候选'}
                             </span>
                             <span className="text-muted text-[12px]">
@@ -358,9 +358,9 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
                   </div>
                 ) : null}
                 {examSelectedCandidateId ? (
-                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">当前已选映射：{examSelectedCandidateId}</div>
+                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">当前已选映射：{examSelectedCandidateId}</div>
                 ) : examSuggestedCandidateId ? (
-                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">当前建议映射：{examSuggestedCandidateId}（未确认）</div>
+                  <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">当前建议映射：{examSuggestedCandidateId}（未确认）</div>
                 ) : null}
                 <div className="text-muted text-[12px]" style={{ marginTop: 8 }}>
                   选择后点击\u201c保存草稿\u201d，系统会按所选映射重跑解析；重跑完成后可创建考试。
@@ -394,7 +394,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
                             return (
                               <div key={`${examEffectiveCandidateId}-sample-${rowIdx}`} className="border border-border rounded-[10px] py-2 px-[10px] flex gap-2 flex-wrap items-center bg-[#fbfaf7]">
                                 <strong>{label || `样本 ${rowIdx + 1}`}</strong>
-                                <span className={row?.status === 'parsed' ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-[#e8f7f2] text-[#0f766e]' : 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-danger-soft text-danger'}>{statusLabel}</span>
+                                <span className={row?.status === 'parsed' ? 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-success-soft text-success' : 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold leading-[1.4] bg-danger-soft text-danger'}>{statusLabel}</span>
                                 <span className="text-muted text-[12px]">原始值：{String(row?.raw_value || '（空）')}{scoreLabel}</span>
                               </div>
                             )
@@ -463,7 +463,7 @@ export default function ExamDraftSection(props: ExamDraftSectionLocalProps) {
               {examDraft.answer_text_excerpt ? (
                 <details style={{ marginTop: 8 }}>
                   <summary className="text-muted text-[12px]">查看识别到的答案文本（可用作填充参考）</summary>
-                  <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]" style={{ whiteSpace: 'pre-wrap' }}>
+                  <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success" style={{ whiteSpace: 'pre-wrap' }}>
                     {String(examDraft.answer_text_excerpt)}
                   </pre>
                   <div className="mt-2 flex gap-[10px] justify-end flex-wrap">

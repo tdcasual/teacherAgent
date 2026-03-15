@@ -2,24 +2,24 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-app-bg: oklch(0.97 0.012 95);
-  --color-bg: oklch(0.97 0.012 95);
-  --color-surface: oklch(0.992 0.006 95);
-  --color-surface-soft: oklch(0.967 0.009 95);
-  --color-surface-hover: oklch(0.944 0.012 95);
-  --color-task-strip: oklch(0.955 0.03 145);
-  --color-note: oklch(0.963 0.014 92);
-  --color-progress: oklch(0.95 0.02 150);
-  --color-ink: oklch(0.25 0.02 250);
-  --color-muted: oklch(0.51 0.018 250);
-  --color-accent: oklch(0.57 0.11 165);
-  --color-accent-soft: oklch(0.94 0.03 165);
-  --color-success: oklch(0.56 0.1 155);
-  --color-success-soft: oklch(0.94 0.03 155);
-  --color-border: oklch(0.9 0.01 95);
-  --color-border-strong: oklch(0.84 0.015 95);
-  --color-danger-soft: oklch(0.95 0.03 20);
-  --color-danger: oklch(0.52 0.19 20);
+  --color-app-bg: oklch(0.974 0.004 252);
+  --color-bg: oklch(0.974 0.004 252);
+  --color-surface: oklch(0.992 0.003 252);
+  --color-surface-soft: oklch(0.978 0.006 252);
+  --color-surface-hover: oklch(0.956 0.01 252);
+  --color-task-strip: oklch(0.978 0.01 248);
+  --color-note: oklch(0.976 0.008 248);
+  --color-progress: oklch(0.956 0.012 244);
+  --color-ink: oklch(0.24 0.018 248);
+  --color-muted: oklch(0.52 0.014 248);
+  --color-accent: oklch(0.43 0.062 252);
+  --color-accent-soft: oklch(0.946 0.012 252);
+  --color-success: oklch(0.45 0.05 228);
+  --color-success-soft: oklch(0.948 0.012 228);
+  --color-border: oklch(0.906 0.006 252);
+  --color-border-strong: oklch(0.842 0.01 252);
+  --color-danger-soft: oklch(0.95 0.02 22);
+  --color-danger: oklch(0.52 0.14 22);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -63,7 +63,7 @@ body {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-border);
-  background: #fff;
+  background: var(--color-surface);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -86,7 +86,7 @@ body {
   select
 ):focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.12);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, white);
 }
 
 /* ── Shared component classes ── */
@@ -96,7 +96,7 @@ body {
     align-items: center;
     justify-content: center;
     border: 1px solid var(--color-border);
-    background: #fff;
+    background: var(--color-surface);
     padding: 6px 11px;
     min-height: 32px;
     border-radius: 8px;
@@ -104,7 +104,7 @@ body {
     text-align: center;
     white-space: nowrap;
     cursor: pointer;
-    color: #3f4551;
+    color: color-mix(in oklab, var(--color-ink) 78%, white);
     font-size: 12px;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
@@ -115,8 +115,36 @@ body {
   .ghost:disabled {
     opacity: 0.56;
     cursor: not-allowed;
-    background: #f8fafc;
+    background: var(--color-surface-soft);
     border-color: var(--color-border);
+  }
+
+  .student-supporting-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border: 1px solid color-mix(in oklab, var(--color-border) 78%, white);
+    background: color-mix(in oklab, var(--color-surface) 84%, white);
+    padding: 7px 12px;
+    border-radius: 999px;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+    color: color-mix(in oklab, var(--color-ink) 82%, var(--color-muted));
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+  .student-supporting-link:hover {
+    background: color-mix(in oklab, var(--color-note) 45%, white);
+    border-color: color-mix(in oklab, var(--color-border-strong) 72%, white);
+    transform: translateY(-1px);
+  }
+  .student-supporting-link:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-accent) 28%, white);
+    outline-offset: 2px;
   }
 
   .role-badge {
@@ -124,8 +152,8 @@ body {
     border-radius: 12px;
     font-size: 12px;
     background: var(--color-accent-soft);
-    color: #0f766e;
-    border: 1px solid #c7ebe1;
+    color: var(--color-accent);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, white);
   }
 
   .status {
@@ -135,7 +163,7 @@ body {
     font-size: 12px;
     white-space: pre-wrap;
   }
-  .status.ok { background: #e8f7f2; color: #0f766e; }
+  .status.ok { background: var(--color-success-soft); color: var(--color-success); }
   .status.err { background: var(--color-danger-soft); color: var(--color-danger); }
 
   .muted { color: var(--color-muted); font-size: 12px; }
@@ -155,12 +183,12 @@ body {
 }
 .markdown code {
   font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: #f3ece1;
+  background: color-mix(in oklab, var(--color-note) 64%, white);
   padding: 2px 6px;
   border-radius: 6px;
 }
 .markdown pre {
-  background: #f3ece1;
+  background: color-mix(in oklab, var(--color-note) 70%, white);
   padding: 8px;
   border-radius: 10px;
   overflow-x: auto;
@@ -196,7 +224,7 @@ body {
   padding: 6px 10px;
   text-align: left;
 }
-.markdown tr:nth-child(even) { background: #f9fafb; }
+.markdown tr:nth-child(even) { background: var(--color-surface-soft); }
 .markdown img {
   max-width: 100%;
   height: auto;
@@ -204,7 +232,7 @@ body {
 }
 
 .katex-error {
-  background: #f3ece1;
+  background: color-mix(in oklab, var(--color-note) 64%, white);
   font-family: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   padding: 2px 6px;
@@ -273,6 +301,40 @@ body {
   html, body, #root {
     overflow: hidden;
     height: 100dvh;
+  }
+
+  .student-mobile-shell-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .student-mobile-stage {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--color-surface);
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .student-mobile-pane {
+    display: grid;
+    gap: 10px;
+    min-height: 100%;
+    align-content: start;
+  }
+
+  .student-mobile-learning-stage {
+    background: var(--color-app-bg);
+  }
+
+  .student-mobile-sessions-stage {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--color-surface);
   }
 
   .student-layout,

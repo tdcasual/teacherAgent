@@ -206,7 +206,14 @@ export default function SessionSidebar({
                 const triggerId = `${menuDomIdBase}-trigger`
                 const updatedLabel = formatSessionUpdatedLabel(item.updated_at)
                 return (
-                  <div key={sid} className={`session-item border border-border bg-white px-2.5 py-2 rounded-[12px] relative transition-all duration-150 ease-in-out hover:border-[#cfd4dc] hover:bg-[#fcfcfd] ${isActive ? 'active border-[#86d6c4] bg-[#f4fbf8]' : ''}`}>
+                  <div
+                    key={sid}
+                    className={`session-item border border-border bg-white px-2.5 py-2 rounded-[12px] relative transition-all duration-150 ease-in-out hover:border-[color:color-mix(in_oklab,var(--color-border-strong)_68%,white)] hover:bg-[color:color-mix(in_oklab,var(--color-surface-soft)_82%,white)] ${
+                      isActive
+                        ? 'active border-[color:color-mix(in_oklab,var(--color-accent)_24%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_44%,white)]'
+                        : ''
+                    }`}
+                  >
                     <button type="button" className="session-select w-full border-none bg-transparent pr-7 pl-0 py-0 text-left cursor-pointer block" onClick={() => onSelectSession(sid)}>
                       <div className="grid gap-[2px]">
                         <div className="session-id text-[13px] font-semibold text-ink leading-[1.35] whitespace-nowrap overflow-hidden text-ellipsis">{getSessionTitle(sid)}</div>

@@ -143,7 +143,7 @@ export default function AnalysisReportSection(props: AnalysisReportSectionProps)
       ) : null}
 
       {props.analysisReportsLoading ? (
-        <div className="p-[10px_12px] rounded-xl text-[12px] bg-[#e8f7f2] text-[#0f766e]">分析报告加载中…</div>
+        <div className="p-[10px_12px] rounded-xl text-[12px] bg-success-soft text-success">分析报告加载中…</div>
       ) : null}
       {props.analysisReportsError ? (
         <div className="p-[10px_12px] rounded-xl text-[12px] bg-danger-soft text-danger whitespace-pre-wrap">

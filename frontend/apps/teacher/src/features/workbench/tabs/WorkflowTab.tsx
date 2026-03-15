@@ -58,6 +58,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
       <div className="grid gap-1">
         <strong>工作流编辑</strong>
+        <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">主线先做，补充后看。</div>
         <div className="text-[12px] text-muted">先完成必做动作，再展开补充参考。</div>
       </div>
       <WorkflowSummaryCard
@@ -78,7 +79,11 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         progressLoading={props.progressLoading}
         fetchAssignmentProgress={props.fetchAssignmentProgress}
       />
-      <section className="grid gap-3 rounded-[16px] border border-border bg-white p-[12px] shadow-sm">
+      <section
+        className="grid gap-3 rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,white_100%)] p-[12px] shadow-[0_12px_24px_rgba(15,23,42,0.05)]"
+        data-testid="teacher-workflow-primary-stage"
+        data-workflow-tier="primary"
+      >
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">主线流程</span>
@@ -132,7 +137,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         {uploadMode === 'exam' && examDraftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>考试解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-[#e8f7f2] text-[#0f766e]">草稿加载中…</div>
+            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
           </section>
         )}
         {uploadMode === 'exam' && examDraftError && (
@@ -166,7 +171,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         {uploadMode === 'assignment' && draftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-[#e8f7f2] text-[#0f766e]">草稿加载中…</div>
+            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
           </section>
         )}
         {uploadMode === 'assignment' && draftError && (
@@ -205,7 +210,11 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           />
         )}
       </section>
-      <section className="grid gap-3 rounded-[16px] border border-dashed border-border bg-[color:var(--color-surface-soft)] p-[12px] shadow-sm">
+      <section
+        className="grid gap-3 rounded-[18px] border border-dashed border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_92%,white)] p-[12px] shadow-none"
+        data-testid="teacher-workflow-secondary-stage"
+        data-workflow-tier="supporting"
+      >
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-semibold tracking-[0.12em] text-muted">补充视图</span>

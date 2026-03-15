@@ -77,12 +77,14 @@ describe('TeacherWorkbench header', () => {
 
     expect(screen.getByText('教学编辑台')).toBeTruthy()
     expect(screen.getByText('把主动作留在顶部任务条，这里只保留流程摘要与入口。')).toBeTruthy()
-    expect(screen.getByText('流程摘要')).toBeTruthy()
+    expect(screen.queryByText('摘要入口')).toBeNull()
     expect(screen.getByText('待审核')).toBeTruthy()
     expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull()
     expect(screen.getByText('当前焦点')).toBeTruthy()
     expect(screen.getAllByText('审核草稿')).toHaveLength(2)
-    expect(screen.getByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeTruthy()
+    expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull()
+    expect(screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone')).toBe('summary')
+    expect(screen.getByTestId('teacher-workbench-focus-block').getAttribute('data-workbench-tier')).toBe('supporting')
     expect(screen.getByRole('button', { name: '刷新' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '收起' })).toBeTruthy()
 
@@ -113,9 +115,13 @@ describe('TeacherWorkbench header', () => {
 
     render(<TeacherWorkbench viewModel={viewModel} />)
 
-    expect(screen.getByText('工作流已展开')).toBeTruthy()
+    expect(screen.getByText('待审核')).toBeTruthy()
+    expect(screen.getByTestId('teacher-workflow-status-chip').textContent).toBe('审核草稿')
+    expect(screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone')).toBe('summary')
     expect(screen.queryByText('下一步：继续审核草稿并确认创建作业 · 下方继续处理。')).toBeNull()
-    expect(screen.getByText('当前焦点：审核草稿')).toBeTruthy()
+    expect(screen.queryByText('摘要入口')).toBeNull()
+    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('当前焦点')
+    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('审核草稿')
     expect(screen.queryByRole('button', { name: '查看草稿' })).toBeNull()
   })
 })

@@ -59,12 +59,12 @@ export default function AssignmentDraftSection(props: Props) {
                             缺失项：{formatMissingRequirements(uploadDraft.requirements_missing)}（补全后才能创建）
                           </div>
                         ) : (
-                          <div className="text-[#2f6d6b] font-semibold">作业要求已补全，可创建。</div>
+                          <div className="text-success font-semibold">作业要求已补全，可创建。</div>
                         )}
                       </div>
 
                       {draftActionError && <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">{draftActionError}</div>}
-                      {draftActionStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">{draftActionStatus}</pre>}
+                      {draftActionStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">{draftActionStatus}</pre>}
 
                       <div className="mt-[10px] flex gap-[10px] justify-end flex-wrap">
                         <button
@@ -80,7 +80,7 @@ export default function AssignmentDraftSection(props: Props) {
                         </button>
                         <button
                           type="button"
-                          className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-[#2f6d6b] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           onClick={handleConfirmUpload}
                           disabled={
                             uploadConfirming ||

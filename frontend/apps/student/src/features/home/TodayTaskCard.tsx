@@ -5,38 +5,37 @@ type TodayTaskCardProps = {
   onPrimaryAction: () => void
 }
 
+const statusToneClassMap: Record<StudentTodayHomeViewModel['status'], string> = {
+  pending_generation: 'border-border bg-surface-soft text-muted',
+  generating: 'border-border bg-surface-soft text-muted',
+  ready: 'border-border bg-surface-soft text-muted',
+  in_progress: 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
+  submitted: 'border-[color:color-mix(in_oklab,var(--color-success)_35%,white)] bg-[color:color-mix(in_oklab,var(--color-success)_14%,white)] text-[color:var(--color-success)]',
+}
+
 export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskCardProps) {
   return (
-    <section className="grid gap-5 rounded-[30px] border border-[color:color-mix(in_oklab,var(--color-accent)_12%,var(--color-border))] bg-[color:var(--color-task-strip)] p-6 shadow-[0_12px_30px_rgba(148,163,184,0.14)]">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] px-3 py-1 text-[11px] font-semibold tracking-[0.12em] text-[color:var(--color-accent)]">
-          主任务
-        </span>
-        <span className="inline-flex items-center rounded-full border border-border bg-surface-soft px-3 py-1 text-[12px] font-medium text-muted">
-          {viewModel.statusLabel}
-        </span>
-        {viewModel.estimatedMinutes ? (
-          <span className="text-[12px] text-muted">预计 {viewModel.estimatedMinutes} 分钟</span>
-        ) : null}
-        <span className="text-[12px] text-muted">{viewModel.dueLabel}</span>
+    <section className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4">
+      <div className="min-w-0 grid gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-medium ${statusToneClassMap[viewModel.status]}`}>
+            {viewModel.statusLabel}
+          </span>
+        </div>
+        <h1 className="m-0 text-[clamp(20px,6vw,30px)] leading-[1.06] font-semibold tracking-[-0.02em] text-ink">
+          {viewModel.title}
+        </h1>
       </div>
-      <div className="grid gap-2">
-        <h2 className="m-0 text-[clamp(26px,3.8vw,34px)] leading-[1.08] font-semibold text-ink">{viewModel.title}</h2>
-        <p className="m-0 max-w-[34rem] text-[14px] leading-[1.6] text-muted">{viewModel.summary}</p>
-      </div>
-      <div className="grid gap-2 md:grid-cols-[auto_1fr] md:items-end">
+      <div className="md:justify-self-end">
         <button
           type="button"
           data-testid="student-today-primary-action"
-          className="inline-flex min-h-[48px] items-center justify-center rounded-[999px] border-none bg-accent px-5 py-3 text-[14px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[16px] border-none bg-accent px-5 py-3 text-[14px] font-medium text-white shadow-[0_10px_18px_rgba(66,81,120,0.16)] disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[132px] md:w-auto"
           onClick={onPrimaryAction}
           disabled={viewModel.primaryActionDisabled}
         >
           {viewModel.primaryActionLabel}
         </button>
-        <div className="text-[12px] leading-[1.5] text-muted md:text-right">
-          保持今天只做一件主任务，材料和历史入口放到下面再看。
-        </div>
       </div>
     </section>
   )

@@ -76,6 +76,7 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
 
     expect(screen.getByRole('dialog', { name: '教师管理面板' })).toBeTruthy()
+    expect(screen.getByText('工具抽屉')).toBeTruthy()
   })
 
   it('groups management actions into identity, password, and student reset sections', () => {

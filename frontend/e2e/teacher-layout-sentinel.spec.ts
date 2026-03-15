@@ -79,6 +79,7 @@ test('teacher desktop keeps chat stage dominant and groups admin actions clearly
 
   await expect(chatShell).toBeVisible()
   await expect(workbench).toBeVisible()
+  await expect(page.getByTestId('teacher-workbench-summary-card')).toHaveAttribute('data-workbench-tone', 'summary')
 
   const chatBox = await chatShell.boundingBox()
   const workbenchBox = await workbench.boundingBox()
@@ -88,6 +89,7 @@ test('teacher desktop keeps chat stage dominant and groups admin actions clearly
   await page.getByRole('button', { name: '管理' }).click()
 
   await expect(page.getByRole('dialog', { name: '教师管理面板' })).toBeVisible()
+  await expect(page.getByText('工具抽屉')).toBeVisible()
   await expect(page.getByText('身份验证', { exact: true })).toBeVisible()
   await expect(page.getByText('密码设置', { exact: true })).toBeVisible()
   await expect(page.getByText('学生密码管理', { exact: true })).toBeVisible()

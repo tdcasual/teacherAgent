@@ -121,7 +121,7 @@ export default function UploadSection(props: Props) {
     	                      </button>
     	                    </form>
     	                    {uploadError && <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">{uploadError}</div>}
-    	                    {uploadStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">{uploadStatus}</pre>}
+    	                    {uploadStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">{uploadStatus}</pre>}
     	                  </>
     	                ) : (
     	                  <>
@@ -177,7 +177,7 @@ export default function UploadSection(props: Props) {
     	                      </button>
     	                    </form>
     	                    {examUploadError && <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">{examUploadError}</div>}
-    	                    {examUploadStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-[#e8f7f2] text-[#0f766e]">{examUploadStatus}</pre>}
+    	                    {examUploadStatus && <pre className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-success-soft text-success">{examUploadStatus}</pre>}
     	                  </>
     	                )}
     	              </>

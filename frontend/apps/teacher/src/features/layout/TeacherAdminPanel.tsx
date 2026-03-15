@@ -20,12 +20,15 @@ export default function TeacherAdminPanel({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-[calc(100%+8px)] z-40 grid w-[min(360px,calc(100vw-16px))] max-h-[min(80vh,720px)] max-w-[calc(100vw-16px)] gap-2.5 overflow-y-auto rounded-xl border border-border bg-white p-3 shadow-[0_12px_28px_rgba(15,23,42,0.14)]"
+      className="absolute right-0 top-[calc(100%+8px)] z-40 grid w-[min(344px,calc(100vw-16px))] max-h-[min(80vh,720px)] max-w-[calc(100vw-16px)] gap-2.5 overflow-y-auto rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,color-mix(in_oklab,var(--color-surface-soft)_84%,white)_100%)] p-3 shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
       role="dialog"
       aria-label="教师管理面板"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
+          <div className="inline-flex w-fit items-center rounded-full border border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] px-2.5 py-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
+            工具抽屉
+          </div>
           <div className="text-sm font-semibold">教师管理</div>
           <div className="text-xs text-muted">
             {authed ? `已认证：${authSubjectLabel || '教师'}` : '当前未认证，请先完成教师认证。'}
@@ -36,9 +39,9 @@ export default function TeacherAdminPanel({
         </button>
       </div>
 
-      <div className="grid gap-2 rounded-[10px] border border-border bg-surface-soft p-2.5">
-        <div className="text-xs text-muted">模型与教务相关入口统一收纳到这里，减少顶栏拥挤。</div>
-        <button type="button" className="ghost justify-start" onClick={onOpenModelSettingsPanel}>
+      <div className="grid gap-2 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_88%,white)] p-3">
+        <div className="text-xs text-muted">把模型、认证和学生密码操作集中收纳到这里，避免管理区在视觉上压过主聊天舞台。</div>
+        <button type="button" className="teacher-drawer-link justify-start" onClick={onOpenModelSettingsPanel}>
           模型设置
         </button>
       </div>

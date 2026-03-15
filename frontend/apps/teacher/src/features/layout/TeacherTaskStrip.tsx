@@ -22,24 +22,18 @@ export default function TeacherTaskStrip({
   mode,
   statusLabel,
   tone,
-  summary,
   nextStepLabel,
   primaryActionLabel,
   onPrimaryAction,
   primaryActionDisabled = false,
 }: TeacherTaskStripProps) {
-  const modeLabel = mode === 'assignment' ? '今日作业流程' : '今日考试流程'
+  const modeLabel = mode === 'assignment' ? '今日作业' : '今日考试'
+  const displayNextStep = nextStepLabel.replace(/^下一步[:：]\s*/, '')
 
   return (
     <section className="rounded-[24px] border border-border bg-[color:var(--color-panel)] px-5 py-4 shadow-sm">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-        <div className="min-w-0 grid gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold tracking-[0.18em] text-muted">
-              今日重心
-            </span>
-            <span className="h-[1px] min-w-[44px] flex-1 bg-[color:var(--color-border)]" aria-hidden="true" />
-          </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="min-w-0 grid gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded-full bg-[color:var(--color-surface-soft)] px-2.5 py-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
               {modeLabel}
@@ -48,14 +42,8 @@ export default function TeacherTaskStrip({
               {statusLabel}
             </span>
           </div>
-          <div className="grid gap-1">
-            <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">下一步</div>
-            <div className="text-[18px] leading-[1.3] font-semibold text-ink">
-              {nextStepLabel}
-            </div>
-          </div>
-          <div className="text-[12px] leading-[1.55] text-muted">
-            {summary}
+          <div className="text-[clamp(22px,2vw,30px)] leading-[1.18] font-semibold text-ink">
+            {displayNextStep}
           </div>
         </div>
         <div className="flex w-full flex-col items-stretch gap-2 lg:w-auto lg:min-w-[148px]">
@@ -67,9 +55,6 @@ export default function TeacherTaskStrip({
           >
             {primaryActionLabel}
           </button>
-          <div className="text-[11px] leading-[1.45] text-muted lg:text-right">
-            进入工作台继续处理
-          </div>
         </div>
       </div>
     </section>

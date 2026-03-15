@@ -13,9 +13,9 @@
   --layer-mobile-tabbar: 110;
   --layer-app-dialog: 140;
   --layer-settings-modal: 150;
-  --mobile-sheet-surface: var(--color-surface, #fff);
-  --mobile-tabbar-active-bg: var(--color-accent-soft, #e8f7f2);
-  --mobile-tabbar-active-fg: var(--color-accent, #0f766e);
+  --mobile-sheet-surface: var(--color-surface, oklch(0.992 0.003 252));
+  --mobile-tabbar-active-bg: var(--color-accent-soft, oklch(0.946 0.012 252));
+  --mobile-tabbar-active-fg: var(--color-accent, oklch(0.43 0.062 252));
 }
 
 @media (max-width: 390px) {
@@ -109,7 +109,7 @@
 }
 
 .mobile-sheet-close:focus-visible {
-  outline: 2px solid #10a37f;
+  outline: 2px solid var(--mobile-tabbar-active-fg);
   outline-offset: 2px;
 }
 
