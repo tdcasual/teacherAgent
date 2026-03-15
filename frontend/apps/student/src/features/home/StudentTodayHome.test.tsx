@@ -53,6 +53,30 @@ describe('StudentTodayHome', () => {
     expect(screen.getByTestId('student-today-primary-action')).toBeTruthy()
   })
 
+  it('keeps the primary stage distinct from supplementary content', () => {
+    render(
+      <StudentTodayHome
+        studentName="测试学生"
+        dateLabel="3月14日 周六"
+        heroTitle="今日任务"
+        heroSummary="今天先完成本次物理练习"
+        viewModel={buildViewModel()}
+        onPrimaryAction={() => undefined}
+        onOpenHistory={() => undefined}
+        onOpenFreeChat={() => undefined}
+      />,
+    )
+
+    const primaryStage = screen.getByTestId('student-today-primary-stage')
+    const secondaryStage = screen.getByTestId('student-today-secondary-stage')
+
+    expect(primaryStage.textContent).toContain('牛顿第二定律练习')
+    expect(primaryStage.textContent).toContain('开始今日任务')
+    expect(secondaryStage.textContent).toContain('练习题.pdf')
+    expect(secondaryStage.textContent).toContain('任务已就绪')
+    expect(secondaryStage.textContent).toContain('查看历史任务')
+  })
+
   it('shows generate copy for pending_generation', () => {
     render(
       <StudentTodayHome

@@ -179,6 +179,8 @@ describe('WorkflowTab', () => {
     expect(screen.getByText('先完成必做动作，再展开补充参考。')).toBeTruthy()
     expect(screen.getByText('必做动作')).toBeTruthy()
     expect(screen.getByText('必做')).toBeTruthy()
+    expect(screen.getByText('按下面的主线动作继续处理。')).toBeTruthy()
+    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull()
     expect(screen.getByText('workflow-upload-section')).toBeTruthy()
     expect(screen.getByText('workflow-assignment-draft-section')).toBeTruthy()
     expect(screen.getByText('补充参考')).toBeTruthy()

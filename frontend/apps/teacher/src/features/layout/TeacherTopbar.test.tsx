@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TeacherTopbar from './TeacherTopbar'
+import * as teacherAuth from '../auth/teacherAuth'
 
 afterEach(() => {
   cleanup()
@@ -75,5 +76,25 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
 
     expect(screen.getByRole('dialog', { name: '教师管理面板' })).toBeTruthy()
+  })
+
+  it('groups management actions into identity, password, and student reset sections', () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('teacher-token')
+    vi.spyOn(teacherAuth, 'readTeacherAuthSubject').mockReturnValue({
+      teacher_id: 'T001',
+      teacher_name: '张老师',
+      email: 'teacher@example.com',
+    })
+
+    const props = buildProps()
+    render(<TeacherTopbar {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '管理' }))
+
+    expect(screen.getByText('身份验证', { exact: true })).toBeTruthy()
+    expect(screen.getByText('使用姓名与凭证确认当前教师身份。')).toBeTruthy()
+    expect(screen.getByText('密码设置', { exact: true })).toBeTruthy()
+    expect(screen.getByText('为当前教师账号设置或更新密码。')).toBeTruthy()
+    expect(screen.getByText('学生密码管理', { exact: true })).toBeTruthy()
   })
 })

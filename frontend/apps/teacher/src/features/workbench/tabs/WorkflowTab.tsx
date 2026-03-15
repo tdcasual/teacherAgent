@@ -17,7 +17,7 @@ import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
 import AnalysisReportSection from '../workflow/AnalysisReportSection'
 import VideoHomeworkAnalysisSection from '../workflow/VideoHomeworkAnalysisSection'
 import WorkflowTimeline from '../workflow/WorkflowTimeline'
-import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from '../workflowIndicators'
+import { findActiveWorkflowStep } from '../workflowIndicators'
 
 export type WorkflowTabProps =
   WorkflowSummaryCardProps &
@@ -52,13 +52,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
   } = props
   const isAssignmentMode = uploadMode === 'assignment'
   const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator)
-  const guidance = buildTeacherWorkflowGuidance({
-    mode: isAssignmentMode ? 'assignment' : 'exam',
-    tone: props.activeWorkflowIndicator.tone,
-    activeStepKey: activeStep?.key,
-    hasExecutionTimeline: props.executionTimeline.length > 0,
-    hasProgressData: Boolean(props.progressData),
-  })
+  const focusLabel = activeStep?.label || (isAssignmentMode ? '上传文件' : '上传考试材料')
 
   return (
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
@@ -93,8 +87,8 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             </span>
           </div>
           <strong>必做动作</strong>
-          <div className="text-[12px] text-muted">按主线步骤往下处理，避免在次要信息里来回切换。</div>
-          <div className="text-[13px] font-semibold text-[#334155]">{guidance.nextStepLabel}</div>
+          <div className="text-[12px] text-muted">按下面的主线动作继续处理。</div>
+          <div className="text-[12px] text-muted">当前焦点：{focusLabel}</div>
         </div>
         <UploadSection
           uploadMode={props.uploadMode}

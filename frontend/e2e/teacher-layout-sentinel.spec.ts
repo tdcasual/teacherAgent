@@ -64,3 +64,31 @@ test('teacher: switching sessions keeps chat shell anchored', async ({ page }) =
   await expect(page.locator('.message .text').filter({ hasText: 'MAIN-LONG-0' }).first()).toBeVisible()
   await expectAnchored(page, baseline!)
 })
+
+test('teacher desktop keeps chat stage dominant and groups admin actions clearly', async ({ page }) => {
+  await page.setViewportSize({ width: 1292, height: 1169 })
+  await openTeacherApp(page, {
+    stateOverrides: {
+      teacherSessionSidebarOpen: 'false',
+      teacherSkillsOpen: 'true',
+    },
+  })
+
+  const chatShell = page.locator('.chat-shell').first()
+  const workbench = page.locator('.skills-panel.open').first()
+
+  await expect(chatShell).toBeVisible()
+  await expect(workbench).toBeVisible()
+
+  const chatBox = await chatShell.boundingBox()
+  const workbenchBox = await workbench.boundingBox()
+
+  expect((chatBox?.width ?? 0)).toBeGreaterThan(workbenchBox?.width ?? 0)
+
+  await page.getByRole('button', { name: '管理' }).click()
+
+  await expect(page.getByRole('dialog', { name: '教师管理面板' })).toBeVisible()
+  await expect(page.getByText('身份验证', { exact: true })).toBeVisible()
+  await expect(page.getByText('密码设置', { exact: true })).toBeVisible()
+  await expect(page.getByText('学生密码管理', { exact: true })).toBeVisible()
+})

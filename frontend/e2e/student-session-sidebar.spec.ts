@@ -16,6 +16,12 @@ const enterStudentExecutionState = async (page: Page) => {
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
 }
 
+const openStudentSessionsTab = async (page: Page) => {
+  await page.getByRole('tab', { name: '会话' }).click()
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('会话')
+  await expect(page.getByText('历史会话')).toBeVisible()
+}
+
 test('mobile session menu supports keyboard navigation and escape focus return', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openStudentApp(page, {
@@ -35,12 +41,10 @@ test('mobile session menu supports keyboard navigation and escape focus return',
     },
   })
 
-  let trigger = page.locator('.session-menu-trigger').first()
-  if ((await trigger.count()) === 0) {
-    await page.getByRole('button', { name: '新会话' }).click()
-    trigger = page.locator('.session-menu-trigger').first()
-    await expect(trigger).toBeVisible()
-  }
+  await openStudentSessionsTab(page)
+
+  const trigger = page.locator('.session-menu-trigger').first()
+  await expect(trigger).toBeVisible()
   await trigger.focus()
   await expect(trigger).toBeFocused()
 
@@ -84,7 +88,10 @@ test('mobile session menu closes on pointerdown outside', async ({ page }) => {
     },
   })
 
+  await openStudentSessionsTab(page)
+
   const trigger = page.locator('.session-menu-trigger').first()
+  await expect(trigger).toBeVisible()
   await trigger.click()
   const menu = page.locator('.session-menu').first()
   await expect(menu).toBeVisible()
@@ -137,6 +144,37 @@ test('mobile shell v2 keeps tab state stable without render loop errors', async 
   expect(runtimeErrors).toHaveLength(0)
 })
 
+test('mobile learning tab keeps today home visible until sessions tab is selected', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openStudentApp(page, {
+    stateOverrides: {
+      studentMobileShellV2: '1',
+      studentSidebarOpen: 'true',
+    },
+    apiMocks: {
+      historyBySession: {
+        main: [{ ts: new Date().toISOString(), role: 'assistant', content: 'main' }],
+        s2: [{ ts: new Date().toISOString(), role: 'assistant', content: 's2' }],
+      },
+      todayAssignment: {
+        assignment_id: 'A-TODAY-001',
+        date: '2026-03-14',
+        question_count: 6,
+        meta: { target_kp: ['力学'] },
+      },
+    },
+  })
+
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
+  await expect(page.getByText('历史会话')).toBeHidden()
+
+  await page.getByRole('tab', { name: '会话' }).click()
+
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('会话')
+  await expect(page.getByText('历史会话')).toBeVisible()
+})
+
 test('mobile rename dialog overlays tabbar hit target', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await openStudentApp(page, {
@@ -156,6 +194,8 @@ test('mobile rename dialog overlays tabbar hit target', async ({ page }) => {
       },
     },
   })
+
+  await openStudentSessionsTab(page)
 
   await page.locator('.session-menu-trigger').first().click()
   await page.getByRole('menuitem', { name: '重命名', exact: true }).click()
@@ -192,11 +232,10 @@ test('rename dialog escape restores focus to session menu trigger', async ({ pag
     },
   })
 
-  let trigger = page.locator('.session-menu-trigger').first()
-  if ((await trigger.count()) === 0) {
-    await page.getByRole('button', { name: '新会话' }).click()
-    trigger = page.locator('.session-menu-trigger').first()
-  }
+  await openStudentSessionsTab(page)
+
+  const trigger = page.locator('.session-menu-trigger').first()
+  await expect(trigger).toBeVisible()
   await trigger.click()
   await page.getByRole('menuitem', { name: '重命名', exact: true }).click()
 
@@ -548,21 +587,20 @@ test('switching sessions while pending loads target session history', async ({ p
   await expect(page.locator('.message.user .text').filter({ hasText: '待处理问题' }).first()).toBeVisible()
   await expect.poll(() => startSessionId).toBe('main')
 
+  await openStudentSessionsTab(page)
+
   const sessionS2 = page.locator('.session-item .session-select').filter({ hasText: 's2' }).first()
   await expect(sessionS2).toBeVisible()
   await sessionS2.focus()
   await page.keyboard.press('Enter')
 
   await expect.poll(() => historySessionBySession.s2 || 0).toBeGreaterThan(0)
-
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('聊天')
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-s2' }).first()).toBeVisible()
 
   await expect
     .poll(async () => {
       const chatDiag = await page.evaluate(() => {
-        const activeIds = Array.from(document.querySelectorAll('.session-item.active .session-id')).map((el) =>
-          String((el as HTMLElement).innerText || '').trim(),
-        )
         const userTexts = Array.from(document.querySelectorAll('.message.user .text')).map((el) =>
           String((el as HTMLElement).innerText || '').trim(),
         )
@@ -570,7 +608,6 @@ test('switching sessions while pending loads target session history', async ({ p
           String((el as HTMLElement).innerText || '').trim(),
         )
         return {
-          activeIds,
           hasHistoryS2: assistantTexts.some((text) => text.includes('history-s2')),
           hasHistoryMain: assistantTexts.some((text) => text.includes('history-main')),
           hasPendingRecover: assistantTexts.some((text) => text.includes('正在恢复上一条回复')),
@@ -580,12 +617,14 @@ test('switching sessions while pending loads target session history', async ({ p
       return chatDiag
     })
     .toEqual({
-      activeIds: ['s2'],
       hasHistoryS2: true,
       hasHistoryMain: false,
       hasPendingRecover: false,
       hasPendingUserText: false,
     })
+
+  await openStudentSessionsTab(page)
+  await expect(page.locator('.session-item.active .session-id').first()).toHaveText('s2')
 })
 
 test('switching away and back to pending session reloads correct history without cross-session mix', async ({ page }) => {
@@ -1066,6 +1105,8 @@ test('malformed local view-state should recover remote active session', async ({
 
   await expect.poll(() => historyCalls.filter((sid) => sid === 'legacy_session').length).toBeGreaterThan(0)
   await expect(page.locator('.message.assistant .text').filter({ hasText: 'legacy-history' }).first()).toBeVisible()
+
+  await openStudentSessionsTab(page)
 
   const activeSessionId = await page.evaluate(() => {
     const active = document.querySelector('.session-item.active .session-id')

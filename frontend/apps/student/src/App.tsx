@@ -293,13 +293,21 @@ export default function App() {
 
   const openTodayHome = useCallback(() => {
     setHomeOpen(true)
-    if (studentUseMobileShellV2) setMobileTab('learning')
-  }, [studentUseMobileShellV2])
+    if (!studentUseMobileShellV2) return
+    setMobileTab('learning')
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const openExecutionState = useCallback(() => {
     setHomeOpen(false)
-    if (studentUseMobileShellV2) setMobileTab('chat')
-  }, [studentUseMobileShellV2])
+    if (!studentUseMobileShellV2) return
+    setMobileTab('chat')
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handlePrimaryHomeAction = useCallback(() => {
     if (!state.verifiedStudent) {
@@ -329,6 +337,13 @@ export default function App() {
     sessionManager.startNewStudentSession()
   }, [openExecutionState, sessionManager])
 
+  useEffect(() => {
+    if (!studentUseMobileShellV2) return
+    if (!homeOpen) return
+    if (!state.sidebarOpen) return
+    dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+  }, [dispatch, homeOpen, state.sidebarOpen, studentUseMobileShellV2])
+
   const heroDateLabel = useMemo(() => {
     const now = new Date()
     return now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })
@@ -356,6 +371,7 @@ export default function App() {
           <SessionSidebar
             apiBase={state.apiBase}
             sidebarOpen={state.sidebarOpen}
+            showHistorySection={!studentUseMobileShellV2 || mobileTab === 'sessions'}
             dispatch={dispatch}
             verifiedStudent={state.verifiedStudent}
             historyLoading={state.historyLoading}
@@ -370,6 +386,7 @@ export default function App() {
             activeSessionId={state.activeSessionId}
             onSelectSession={(sessionId) => {
               setHomeOpen(false)
+              if (studentUseMobileShellV2) setMobileTab('sessions')
               void sessionManager.selectStudentSession(sessionId)
             }}
             getSessionTitle={sessionManager.getSessionTitle}

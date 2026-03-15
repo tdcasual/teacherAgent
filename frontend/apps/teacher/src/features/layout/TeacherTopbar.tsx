@@ -598,188 +598,202 @@ export default function TeacherTopbar({
             onOpenModelSettingsPanel={onOpenModelSettingsPanel}
             onClose={closeAuthPanel}
           >
-            <form className="grid gap-2" onSubmit={handleAuthSubmit}>
+            <section className="grid gap-2 rounded-[12px] border border-border bg-white p-3">
               <div className="grid gap-1">
-                <label className="text-xs text-muted">姓名</label>
-                <input
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                  placeholder="例如：张老师"
-                  autoComplete="name"
-                />
+                <div className="text-sm font-semibold">身份验证</div>
+                <div className="text-xs text-muted">使用姓名与凭证确认当前教师身份。</div>
               </div>
-              <div className="grid gap-1">
-                <label className="text-xs text-muted">邮箱（同名时必填）</label>
-                <input
-                  value={emailInput}
-                  onChange={(event) => setEmailInput(event.target.value)}
-                  placeholder="name@example.com"
-                  autoComplete="email"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className={`ghost ${credentialType === 'token' ? 'font-semibold' : ''}`}
-                  onClick={() => setCredentialType('token')}
-                >
-                  token
-                </button>
-                <button
-                  type="button"
-                  className={`ghost ${credentialType === 'password' ? 'font-semibold' : ''}`}
-                  onClick={() => setCredentialType('password')}
-                >
-                  密码
-                </button>
-              </div>
-              <div className="grid gap-1">
-                <label className="text-xs text-muted">{credentialType === 'token' ? 'token' : '密码'}</label>
-                <input
-                  type={credentialType === 'token' ? 'text' : 'password'}
-                  value={credentialInput}
-                  onChange={(event) => setCredentialInput(event.target.value)}
-                  placeholder={credentialType === 'token' ? '输入分发 token' : '输入已设置密码'}
-                  autoComplete={credentialType === 'token' ? 'off' : 'current-password'}
-                />
-              </div>
-              <button
-                type="submit"
-                className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
-                disabled={submitting}
-              >
-                {submitting ? '认证中…' : '确认认证'}
-              </button>
-            </form>
-            <form className="grid gap-2 border border-border rounded-[10px] p-2.5 bg-surface-soft" onSubmit={handleSetPassword}>
-              <div className="text-xs text-muted">使用当前 token 或密码设置新密码（设置后 token 仍可登录）</div>
-              <div className="grid gap-1">
-                <label className="text-xs text-muted">新密码</label>
-                <input
-                  type="password"
-                  value={newPasswordInput}
-                  onChange={(event) => setNewPasswordInput(event.target.value)}
-                  placeholder="至少 8 位，含字母和数字"
-                  autoComplete="new-password"
-                />
-              </div>
-              <button
-                type="submit"
-                className="border-none rounded-[10px] px-3 py-[9px] bg-[#0f766e] text-white cursor-pointer"
-                disabled={settingPassword}
-              >
-                {settingPassword ? '设置中…' : '设置密码'}
-              </button>
-            </form>
-
-            {authed ? (
-              <form className="grid gap-2 border border-border rounded-[10px] p-2.5 bg-[#f8fafc]" onSubmit={handleStudentPasswordReset}>
-                <div className="text-sm font-semibold">学生密码管理</div>
-                <div className="text-xs text-muted">支持按单个学生、班级或全部学生重置密码，并回显新密码。</div>
-                <div className="flex items-center gap-2 flex-wrap">
+              <form className="grid gap-2" onSubmit={handleAuthSubmit}>
+                <div className="grid gap-1">
+                  <label className="text-xs text-muted">姓名</label>
+                  <input
+                    value={nameInput}
+                    onChange={(event) => setNameInput(event.target.value)}
+                    placeholder="例如：张老师"
+                    autoComplete="name"
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <label className="text-xs text-muted">邮箱（同名时必填）</label>
+                  <input
+                    value={emailInput}
+                    onChange={(event) => setEmailInput(event.target.value)}
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className={`ghost ${studentResetScope === 'student' ? 'font-semibold' : ''}`}
-                    onClick={() => setStudentResetScope('student')}
+                    className={`ghost ${credentialType === 'token' ? 'font-semibold' : ''}`}
+                    onClick={() => setCredentialType('token')}
                   >
-                    单个学生
+                    token
                   </button>
                   <button
                     type="button"
-                    className={`ghost ${studentResetScope === 'class' ? 'font-semibold' : ''}`}
-                    onClick={() => setStudentResetScope('class')}
+                    className={`ghost ${credentialType === 'password' ? 'font-semibold' : ''}`}
+                    onClick={() => setCredentialType('password')}
                   >
-                    按班级
-                  </button>
-                  <button
-                    type="button"
-                    className={`ghost ${studentResetScope === 'all' ? 'font-semibold' : ''}`}
-                    onClick={() => setStudentResetScope('all')}
-                  >
-                    全部学生
+                    密码
                   </button>
                 </div>
-                {studentResetScope === 'student' ? (
-                  <>
-                    <div className="grid gap-1">
-                      <label className="text-xs text-muted">学生姓名</label>
-                      <input
-                        value={studentNameInput}
-                        onChange={(event) => setStudentNameInput(event.target.value)}
-                        placeholder="例如：刘昊然"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div className="grid gap-1">
-                      <label className="text-xs text-muted">学生班级</label>
-                      <input
-                        value={studentClassInput}
-                        onChange={(event) => setStudentClassInput(event.target.value)}
-                        placeholder="例如：高二2403班"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </>
-                ) : null}
-                {studentResetScope === 'class' ? (
-                  <div className="grid gap-1">
-                    <label className="text-xs text-muted">目标班级</label>
-                    <input
-                      value={targetClassNameInput}
-                      onChange={(event) => setTargetClassNameInput(event.target.value)}
-                      placeholder="例如：高二2403班"
-                      autoComplete="off"
-                    />
-                  </div>
-                ) : null}
-                {studentResetScope === 'all' ? (
-                  <label className="text-xs text-muted flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={confirmResetAll}
-                      onChange={(event) => setConfirmResetAll(event.target.checked)}
-                    />
-                    我确认重置全部学生密码
-                  </label>
-                ) : null}
                 <div className="grid gap-1">
-                  <label className="text-xs text-muted">指定密码（可选）</label>
+                  <label className="text-xs text-muted">{credentialType === 'token' ? 'token' : '密码'}</label>
+                  <input
+                    type={credentialType === 'token' ? 'text' : 'password'}
+                    value={credentialInput}
+                    onChange={(event) => setCredentialInput(event.target.value)}
+                    placeholder={credentialType === 'token' ? '输入分发 token' : '输入已设置密码'}
+                    autoComplete={credentialType === 'token' ? 'off' : 'current-password'}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+                  disabled={submitting}
+                >
+                  {submitting ? '认证中…' : '确认认证'}
+                </button>
+              </form>
+            </section>
+            <section className="grid gap-2 rounded-[12px] border border-border bg-surface-soft p-3">
+              <div className="grid gap-1">
+                <div className="text-sm font-semibold">密码设置</div>
+                <div className="text-xs text-muted">为当前教师账号设置或更新密码。</div>
+              </div>
+              <form className="grid gap-2" onSubmit={handleSetPassword}>
+                <div className="text-xs text-muted">使用当前 token 或密码设置新密码（设置后 token 仍可登录）</div>
+                <div className="grid gap-1">
+                  <label className="text-xs text-muted">新密码</label>
                   <input
                     type="password"
-                    value={studentResetPasswordInput}
-                    onChange={(event) => setStudentResetPasswordInput(event.target.value)}
-                    placeholder="留空则系统生成默认密码"
+                    value={newPasswordInput}
+                    onChange={(event) => setNewPasswordInput(event.target.value)}
+                    placeholder="至少 8 位，含字母和数字"
                     autoComplete="new-password"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="border-none rounded-[10px] px-3 py-[9px] bg-[#2563eb] text-white cursor-pointer"
-                  disabled={studentResetSubmitting}
+                  className="border-none rounded-[10px] px-3 py-[9px] bg-[#0f766e] text-white cursor-pointer"
+                  disabled={settingPassword}
                 >
-                  {studentResetSubmitting ? '重置中…' : '重置学生密码'}
+                  {settingPassword ? '设置中…' : '设置密码'}
                 </button>
-                {studentResetItems.length ? (
-                  <div className="grid gap-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-muted">结果列表（{studentResetItems.length}）</div>
-                      <button type="button" className="ghost" onClick={() => void handleCopyStudentPasswords()}>
-                        复制结果
-                      </button>
-                    </div>
-                    <div className="max-h-[180px] overflow-auto rounded-lg border border-border bg-white p-2 text-[12px] leading-5">
-                      {studentResetItems.slice(0, 80).map((item, index) => (
-                        <div key={`${toText(item.student_id)}-${index}`} className="font-mono break-all">
-                          {toText(item.student_id)},{toText(item.student_name)},{toText(item.class_name)},{toText(item.temp_password)}
-                        </div>
-                      ))}
-                    </div>
-                    {studentResetItems.length > 80 ? (
-                      <div className="text-xs text-muted">仅展示前 80 条，复制可获取完整结果。</div>
-                    ) : null}
-                  </div>
-                ) : null}
               </form>
+            </section>
+
+            {authed ? (
+              <section className="grid gap-2 border border-border rounded-[12px] p-3 bg-[#f8fafc]">
+                <div className="text-sm font-semibold">学生密码管理</div>
+                <div className="text-xs text-muted">支持按单个学生、班级或全部学生重置密码，并回显新密码。</div>
+                <form className="grid gap-2" onSubmit={handleStudentPasswordReset}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      className={`ghost ${studentResetScope === 'student' ? 'font-semibold' : ''}`}
+                      onClick={() => setStudentResetScope('student')}
+                    >
+                      单个学生
+                    </button>
+                    <button
+                      type="button"
+                      className={`ghost ${studentResetScope === 'class' ? 'font-semibold' : ''}`}
+                      onClick={() => setStudentResetScope('class')}
+                    >
+                      按班级
+                    </button>
+                    <button
+                      type="button"
+                      className={`ghost ${studentResetScope === 'all' ? 'font-semibold' : ''}`}
+                      onClick={() => setStudentResetScope('all')}
+                    >
+                      全部学生
+                    </button>
+                  </div>
+                  {studentResetScope === 'student' ? (
+                    <>
+                      <div className="grid gap-1">
+                        <label className="text-xs text-muted">学生姓名</label>
+                        <input
+                          value={studentNameInput}
+                          onChange={(event) => setStudentNameInput(event.target.value)}
+                          placeholder="例如：刘昊然"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <label className="text-xs text-muted">学生班级</label>
+                        <input
+                          value={studentClassInput}
+                          onChange={(event) => setStudentClassInput(event.target.value)}
+                          placeholder="例如：高二2403班"
+                          autoComplete="off"
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                  {studentResetScope === 'class' ? (
+                    <div className="grid gap-1">
+                      <label className="text-xs text-muted">目标班级</label>
+                      <input
+                        value={targetClassNameInput}
+                        onChange={(event) => setTargetClassNameInput(event.target.value)}
+                        placeholder="例如：高二2403班"
+                        autoComplete="off"
+                      />
+                    </div>
+                  ) : null}
+                  {studentResetScope === 'all' ? (
+                    <label className="text-xs text-muted flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={confirmResetAll}
+                        onChange={(event) => setConfirmResetAll(event.target.checked)}
+                      />
+                      我确认重置全部学生密码
+                    </label>
+                  ) : null}
+                  <div className="grid gap-1">
+                    <label className="text-xs text-muted">指定密码（可选）</label>
+                    <input
+                      type="password"
+                      value={studentResetPasswordInput}
+                      onChange={(event) => setStudentResetPasswordInput(event.target.value)}
+                      placeholder="留空则系统生成默认密码"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="border-none rounded-[10px] px-3 py-[9px] bg-[#2563eb] text-white cursor-pointer"
+                    disabled={studentResetSubmitting}
+                  >
+                    {studentResetSubmitting ? '重置中…' : '重置学生密码'}
+                  </button>
+                  {studentResetItems.length ? (
+                    <div className="grid gap-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-muted">结果列表（{studentResetItems.length}）</div>
+                        <button type="button" className="ghost" onClick={() => void handleCopyStudentPasswords()}>
+                          复制结果
+                        </button>
+                      </div>
+                      <div className="max-h-[180px] overflow-auto rounded-lg border border-border bg-white p-2 text-[12px] leading-5">
+                        {studentResetItems.slice(0, 80).map((item, index) => (
+                          <div key={`${toText(item.student_id)}-${index}`} className="font-mono break-all">
+                            {toText(item.student_id)},{toText(item.student_name)},{toText(item.class_name)},{toText(item.temp_password)}
+                          </div>
+                        ))}
+                      </div>
+                      {studentResetItems.length > 80 ? (
+                        <div className="text-xs text-muted">仅展示前 80 条，复制可获取完整结果。</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </form>
+              </section>
             ) : null}
 
             {needEmail ? <div className="text-xs text-muted">检测到同名教师，请补充邮箱后重试。</div> : null}

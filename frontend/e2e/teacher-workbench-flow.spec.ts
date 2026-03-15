@@ -1826,6 +1826,19 @@ test('workflow tab keeps must-do upload actions ahead of supplementary timeline'
   expect(uploadBox?.y ?? 0).toBeLessThan(timelineBox?.y ?? 0)
 })
 
+test('teacher surface keeps a single full next-step instruction across task strip and workflow shells', async ({ page }) => {
+  await setupTeacherState(page, {
+    stateOverrides: {
+      teacherWorkbenchTab: 'workflow',
+    },
+  })
+  await setupBasicTeacherApiMocks(page)
+
+  await page.goto('/')
+
+  await expect(page.getByText(/下一步：/)).toHaveCount(1)
+})
+
 registerMatrixCases('Teacher Skill Workbench', skillWorkbenchCases, implementations)
 registerMatrixCases('Teacher Assignment Workflow', assignmentWorkflowCases, implementations)
 registerMatrixCases('Teacher Exam Workflow', examWorkflowCases, implementations)

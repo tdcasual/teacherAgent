@@ -59,6 +59,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
       ? formatExamJobSummary(examJobInfo, examId)
       : '从上传区开始今天的考试流程。')
   const workflowTabActive = workbenchTab === 'workflow'
+  const focusLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
 
   const handlePrimaryAction = () => {
     setWorkbenchTab('workflow')
@@ -120,11 +121,12 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                     : activeWorkflowIndicator.tone === 'error'
                       ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
                       : 'border-border bg-surface-soft text-muted'
-              }`}>
+                }`}>
                 {activeStep?.label || '等待开始'}
               </span>
             </div>
-            <div className="text-[12px] leading-[1.45] text-muted">{guidance.nextStepLabel} · 下方继续处理。</div>
+            <div className="text-[12px] leading-[1.45] text-muted">当前焦点：{focusLabel}</div>
+            <div className="text-[12px] leading-[1.45] text-muted">主动作已经留在顶部任务条，下方继续处理执行细节。</div>
           </div>
         ) : (
           <div className="grid gap-3">
@@ -144,7 +146,8 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                   {activeStep?.label || '等待开始'}
                 </span>
               </div>
-              <div className="text-[14px] font-semibold text-[#334155]">{guidance.nextStepLabel}</div>
+              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
+              <div className="text-[14px] font-semibold text-[#334155]">{focusLabel}</div>
               <div className="text-[12px] leading-[1.45] text-muted">{workflowSummary}</div>
             </div>
             <button

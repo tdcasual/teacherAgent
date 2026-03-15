@@ -117,8 +117,10 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('student shell defaults to today-first home and enters chat on primary action', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.addInitScript(() => {
-    localStorage.setItem('studentSidebarOpen', 'false')
+    localStorage.setItem('studentSidebarOpen', 'true')
+    localStorage.setItem('studentMobileShellV2', '1')
   })
 
   await page.route('http://localhost:8000/assignment/today**', async (route) => {
@@ -142,11 +144,13 @@ test('student shell defaults to today-first home and enters chat on primary acti
   })
 
   await page.goto('/')
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
   await expect(page.getByTestId('student-today-home')).toBeVisible()
   await expect(page.getByRole('button', { name: '开始今日任务' })).toBeVisible()
-  await expect(page.getByRole('complementary').first()).toBeVisible()
+  await expect(page.getByText('历史会话')).toBeHidden()
 
   await page.getByRole('button', { name: '开始今日任务' }).click()
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('聊天')
   await expect(page.getByTestId('student-chat-panel')).toBeVisible()
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
 })

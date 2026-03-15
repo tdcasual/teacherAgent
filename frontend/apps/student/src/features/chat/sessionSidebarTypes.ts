@@ -5,6 +5,7 @@ import type { StudentAction } from '../../hooks/useStudentState'
 export type SessionSidebarProps = {
   apiBase: string
   sidebarOpen: boolean
+  showHistorySection?: boolean
   dispatch: Dispatch<StudentAction>
   verifiedStudent: VerifiedStudent | null
   historyLoading: boolean

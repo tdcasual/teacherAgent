@@ -32,6 +32,7 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
   const workflowSummary = uploadMode === 'assignment'
     ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId.trim())
     : formatExamJobSummary(examJobInfo, examId.trim())
+  const actionTargetLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
 
   return (
     <div className="grid gap-3">
@@ -58,7 +59,13 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
                       : 'text-[#5b6473] border-border bg-[#f7f8fa]'
               }`}>{activeWorkflowIndicator.label}</span>
             </div>
-            <div className="text-[14px] font-semibold text-[#334155]">{guidance.nextStepLabel}</div>
+            <div className="grid gap-1">
+              <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">动作目标</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[14px] font-semibold text-[#334155]">{guidance.primaryActionLabel}</div>
+                <span className="text-[12px] text-muted">当前焦点：{actionTargetLabel}</span>
+              </div>
+            </div>
             <div className="text-[12px] leading-[1.45] text-[#3f4551]">{workflowSummary}</div>
           </div>
           <button
