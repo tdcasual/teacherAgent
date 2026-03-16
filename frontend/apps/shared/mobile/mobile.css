@@ -13,9 +13,9 @@
   --layer-mobile-tabbar: 110;
   --layer-app-dialog: 140;
   --layer-settings-modal: 150;
-  --mobile-sheet-surface: var(--color-surface, oklch(0.992 0.003 252));
-  --mobile-tabbar-active-bg: var(--color-accent-soft, oklch(0.946 0.012 252));
-  --mobile-tabbar-active-fg: var(--color-accent, oklch(0.43 0.062 252));
+  --mobile-sheet-surface: var(--color-surface, #FFFFFF);
+  --mobile-tabbar-active-bg: var(--color-accent-soft, #DEEBFF);
+  --mobile-tabbar-active-fg: var(--color-accent, #0052CC);
 }
 
 @media (max-width: 390px) {
@@ -74,7 +74,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--mobile-sheet-surface);
   border-radius: 16px 16px 0 0;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border, #DFE1E6);
   box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.2);
   overflow: hidden;
   transform: translateY(24px);
@@ -88,7 +88,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border, #DFE1E6);
 }
 
 .mobile-sheet-title {
@@ -98,7 +98,7 @@
 }
 
 .mobile-sheet-close {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--color-border, #DFE1E6);
   background: var(--mobile-sheet-surface);
   border-radius: 999px;
   min-width: 44px;
@@ -120,7 +120,7 @@
 }
 
 .mobile-sheet-footer {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border, #DFE1E6);
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   background: var(--mobile-sheet-surface);
 }
@@ -129,7 +129,7 @@
   position: sticky;
   bottom: 0;
   z-index: var(--layer-mobile-tabbar);
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border, #DFE1E6);
   background: var(--mobile-sheet-surface);
   padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
   animation: mobile-tabbar-in 240ms ease-out both;
@@ -151,10 +151,10 @@
 .mobile-tabbar-button {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid color-mix(in oklab, var(--color-border, #e5e7eb) 88%, white);
   border-radius: 10px;
-  background: var(--mobile-sheet-surface);
-  color: #475569;
+  background: color-mix(in oklab, var(--mobile-sheet-surface) 88%, var(--color-surface-soft, white));
+  color: color-mix(in oklab, var(--color-ink) 74%, white);
   display: flex;
   flex-direction: column;
   align-items: center;

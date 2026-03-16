@@ -20,7 +20,7 @@ export default function TeacherAdminPanel({
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-[calc(100%+8px)] z-40 grid w-[min(344px,calc(100vw-16px))] max-h-[min(80vh,720px)] max-w-[calc(100vw-16px)] gap-2.5 overflow-y-auto rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,color-mix(in_oklab,var(--color-surface-soft)_84%,white)_100%)] p-3 shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
+      className="absolute right-0 top-[calc(100%+8px)] z-40 grid w-[min(344px,calc(100vw-16px))] max-h-[min(80vh,720px)] max-w-[calc(100vw-16px)] gap-3 overflow-y-auto rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,color-mix(in_oklab,var(--color-surface-soft)_84%,white)_100%)] p-3 shadow-[0_12px_28px_rgba(15,23,42,0.12)]"
       role="dialog"
       aria-label="教师管理面板"
     >
@@ -39,8 +39,8 @@ export default function TeacherAdminPanel({
         </button>
       </div>
 
-      <div className="grid gap-2 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_88%,white)] p-3">
-        <div className="text-xs text-muted">把模型、认证和学生密码操作集中收纳到这里，避免管理区在视觉上压过主聊天舞台。</div>
+      <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:color-mix(in_oklab,var(--color-panel)_88%,white)] px-3 py-2.5">
+        <div className="text-xs text-muted">模型、认证和密码操作集中在这里。</div>
         <button type="button" className="teacher-drawer-link justify-start" onClick={onOpenModelSettingsPanel}>
           模型设置
         </button>

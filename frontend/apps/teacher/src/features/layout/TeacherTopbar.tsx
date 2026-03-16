@@ -598,10 +598,10 @@ export default function TeacherTopbar({
             onOpenModelSettingsPanel={onOpenModelSettingsPanel}
             onClose={closeAuthPanel}
           >
-            <section className="grid gap-2 rounded-[12px] border border-border bg-white p-3">
+            <section className="grid gap-2.5">
               <div className="grid gap-1">
                 <div className="text-sm font-semibold">身份验证</div>
-                <div className="text-xs text-muted">使用姓名与凭证确认当前教师身份。</div>
+                <div className="text-xs text-muted">用姓名和凭证确认教师身份。</div>
               </div>
               <form className="grid gap-2" onSubmit={handleAuthSubmit}>
                 <div className="grid gap-1">
@@ -657,13 +657,13 @@ export default function TeacherTopbar({
                 </button>
               </form>
             </section>
-            <section className="grid gap-2 rounded-[12px] border border-border bg-surface-soft p-3">
+            <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
               <div className="grid gap-1">
                 <div className="text-sm font-semibold">密码设置</div>
-                <div className="text-xs text-muted">为当前教师账号设置或更新密码。</div>
+                <div className="text-xs text-muted">设置或更新当前账号密码。</div>
               </div>
               <form className="grid gap-2" onSubmit={handleSetPassword}>
-                <div className="text-xs text-muted">使用当前 token 或密码设置新密码（设置后 token 仍可登录）</div>
+                <div className="text-xs text-muted">使用当前凭证验证后设置新密码。</div>
                 <div className="grid gap-1">
                   <label className="text-xs text-muted">新密码</label>
                   <input
@@ -685,9 +685,11 @@ export default function TeacherTopbar({
             </section>
 
             {authed ? (
-              <section className="grid gap-2 border border-border rounded-[12px] p-3 bg-[#f8fafc]">
-                <div className="text-sm font-semibold">学生密码管理</div>
-                <div className="text-xs text-muted">支持按单个学生、班级或全部学生重置密码，并回显新密码。</div>
+              <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+                <div className="grid gap-1">
+                  <div className="text-sm font-semibold">学生密码管理</div>
+                  <div className="text-xs text-muted">按学生、班级或全部学生重置密码。</div>
+                </div>
                 <form className="grid gap-2" onSubmit={handleStudentPasswordReset}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
@@ -767,7 +769,7 @@ export default function TeacherTopbar({
                   </div>
                   <button
                     type="submit"
-                    className="border-none rounded-[10px] px-3 py-[9px] bg-[#2563eb] text-white cursor-pointer"
+                    className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
                     disabled={studentResetSubmitting}
                   >
                     {studentResetSubmitting ? '重置中…' : '重置学生密码'}

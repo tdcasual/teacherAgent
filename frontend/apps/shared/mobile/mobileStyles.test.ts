@@ -42,10 +42,17 @@ describe('mobile shared style guardrails', () => {
     const cssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
     const css = readFileSync(cssPath, 'utf8');
     const iconBlock = extractRuleBlock(css, '.mobile-tabbar-icon');
+    const buttonBlock = extractRuleBlock(css, '.mobile-tabbar-button');
 
     expect(iconBlock).toContain('width: 16px;');
     expect(iconBlock).toContain('height: 16px;');
     expect(iconBlock).toContain('justify-content: center;');
+    expect(buttonBlock).toContain(
+      'color: color-mix(in oklab, var(--color-ink) 74%, white);',
+    );
+    expect(buttonBlock).toContain(
+      'background: color-mix(in oklab, var(--mobile-sheet-surface) 88%, var(--color-surface-soft, white));',
+    );
   });
 
   it('defines shared compact topbar density tokens and rules', () => {
@@ -87,14 +94,14 @@ describe('mobile shared style guardrails', () => {
     const studentCss = readFileSync(studentCssPath, 'utf8');
     const teacherCss = readFileSync(teacherCssPath, 'utf8');
 
-    expect(studentCss).toContain('--color-app-bg: oklch(0.974 0.004 252);');
-    expect(studentCss).toContain('--color-task-strip: oklch(0.978 0.01 248);');
-    expect(studentCss).toContain('--color-accent: oklch(0.43 0.062 252);');
-    expect(studentCss).toContain('--color-accent-soft: oklch(0.946 0.012 252);');
+    expect(studentCss).toContain('--color-app-bg: #FAFBFC;');
+    expect(studentCss).toContain('--color-task-strip: #F7F9FF;');
+    expect(studentCss).toContain('--color-accent: #0052CC;');
+    expect(studentCss).toContain('--color-accent-soft: #DEEBFF;');
 
-    expect(teacherCss).toContain('--color-app-bg: oklch(0.97 0.005 252);');
-    expect(teacherCss).toContain('--color-rail: oklch(0.954 0.007 252);');
-    expect(teacherCss).toContain('--color-accent: oklch(0.43 0.062 252);');
-    expect(teacherCss).toContain('--color-success: oklch(0.45 0.05 228);');
+    expect(teacherCss).toContain('--color-app-bg: #FAFBFC;');
+    expect(teacherCss).toContain('--color-rail: #F4F5F7;');
+    expect(teacherCss).toContain('--color-accent: #0052CC;');
+    expect(teacherCss).toContain('--color-success: #206A83;');
   });
 });

@@ -77,20 +77,18 @@ export default function SkillsTab(props: SkillsTabProps) {
         </div>
       </div>
 
-      <div className="mb-[10px] rounded-[12px] border border-[color:color-mix(in_oklab,var(--color-border)_78%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_88%,white)] px-[10px] py-[8px] text-[12px] text-muted">
-        当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。
-      </div>
+      <div className="mb-[10px] text-[12px] text-muted">当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。</div>
 
       {skillsLoading ? <div className="text-[12px] text-muted mb-[8px]">正在加载能力...</div> : null}
       {skillsError ? <div className="text-[12px] text-[#8a1f1f] mb-[8px]">{skillsError}</div> : null}
 
-      <div className="skills-body grid gap-[12px] overflow-y-auto flex-1 min-h-0 pr-[4px]" style={{ overscrollBehavior: 'contain' }}>
+      <div className="skills-body grid gap-0 overflow-y-auto flex-1 min-h-0 pr-[2px]" style={{ overscrollBehavior: 'contain' }}>
         {filteredSkills.map((skill) => (
           <div
             key={skill.id}
-            className={`skill-card border rounded-[16px] p-[12px] ${skillPinned && skill.id === activeSkillId
-              ? 'border-[color:color-mix(in_oklab,var(--color-accent)_70%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-accent-soft)_68%,white)_0%,white_100%)] shadow-[0_10px_20px_rgba(66,81,120,0.12)]'
-              : 'border-[color:color-mix(in_oklab,var(--color-border)_78%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_94%,white)] shadow-none'}`}
+            className={`skill-card grid gap-3 px-3 py-3 ${skillPinned && skill.id === activeSkillId
+              ? 'rounded-[18px] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_48%,white)] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-accent)_22%,white)]'
+              : 'border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] last:border-b-0'}`}
           >
             <div className="flex justify-between items-baseline gap-[8px] mb-[6px]">
               <div>
@@ -109,9 +107,9 @@ export default function SkillsTab(props: SkillsTabProps) {
               </button>
             </div>
 
-            <p className="m-0 mb-[10px] text-muted text-[13px]">{skill.desc}</p>
+            <p className="m-0 text-muted text-[13px]">{skill.desc}</p>
 
-            <div className="flex gap-[8px] flex-wrap mb-[8px]">
+            <div className="flex gap-[8px] flex-wrap">
               <button
                 type="button"
                 className="teacher-drawer-link"
@@ -150,7 +148,7 @@ export default function SkillsTab(props: SkillsTabProps) {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-[8px] mt-[6px]">
+            <div className="flex flex-wrap gap-[8px]">
               {skill.examples.map((example) => (
                 <button
                   key={example}

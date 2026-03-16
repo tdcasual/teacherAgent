@@ -75,8 +75,9 @@ describe('TeacherWorkbench header', () => {
 
     render(<TeacherWorkbench viewModel={viewModel} />)
 
+    expect(screen.getByTestId('teacher-workbench-shell').getAttribute('data-workbench-flow')).toBe('continuous')
     expect(screen.getByText('教学编辑台')).toBeTruthy()
-    expect(screen.getByText('把主动作留在顶部任务条，这里只保留流程摘要与入口。')).toBeTruthy()
+    expect(screen.getByText('这里收纳主线摘要与辅助入口。')).toBeTruthy()
     expect(screen.queryByText('摘要入口')).toBeNull()
     expect(screen.getByText('待审核')).toBeTruthy()
     expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull()

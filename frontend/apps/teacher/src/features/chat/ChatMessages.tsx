@@ -54,19 +54,19 @@ export default function ChatMessages({
   return (
     <>
       <div
-        className="messages flex-1 min-h-0 overflow-auto bg-surface pt-[10px] pb-[6px]"
+        className="messages flex-1 min-h-0 overflow-auto bg-transparent pt-3 pb-[8px]"
         style={{ overscrollBehavior: 'contain' }}
         ref={messagesRef}
         onScroll={onMessagesScroll}
       >
-        <div className="w-full max-w-[var(--chat-content-max-width)] px-5 pb-[14px] grid gap-[14px]">
+        <div className="w-full max-w-[var(--chat-content-max-width)] px-6 pb-[16px] grid gap-[14px]">
           {renderedMessages.map((msg) => (
             <div key={msg.id} className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : ''}`}>
               <div
                 className={
                   msg.role === 'assistant'
-                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_18%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_94%,white)] px-[14px] py-[12px] shadow-[0_10px_24px_rgba(15,23,42,0.06)]'
-                    : 'max-w-[var(--chat-bubble-max-width)] px-[14px] py-[10px] rounded-[12px] bg-[#eef1f4] border border-[#e1e6eb] shadow-sm'
+                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-[14px] py-[12px] shadow-[0_8px_18px_rgba(15,23,42,0.05)]'
+                    : 'max-w-[var(--chat-bubble-max-width)] rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_84%,white)] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_90%,white)] px-[14px] py-[10px] shadow-none'
                 }
               >
                 <div className="text-[11px] text-muted mb-1">
@@ -78,7 +78,7 @@ export default function ChatMessages({
           ))}
           {sending && !hasPendingChatJob && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[14px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_30%,white)] py-2 px-3">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_34%,white)] py-2.5 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
                 <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">正在思考…</div>
               </div>
@@ -86,11 +86,11 @@ export default function ChatMessages({
           )}
           {hasPendingChatJob && (pendingStreamStage || pendingToolRuns.length > 0) && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[12px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-3 py-2 grid gap-2">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-3 py-2.5 grid gap-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="grid gap-[2px]">
                     <div className="text-[11px] text-muted">执行过程 · {pendingStreamStage || '处理中'}</div>
-                    <div className="text-[11px] text-[#64748b]">
+                    <div className="text-[11px] text-muted">
                       进行中 {runningCount} · 成功 {okCount} · 失败 {failedCount}
                     </div>
                   </div>
@@ -120,10 +120,10 @@ export default function ChatMessages({
                       visibleToolRuns.map((item) => {
                         const lineClass =
                           item.status === 'running'
-                            ? 'bg-[#fff7e6] border-[#fcd9a5] text-[#92400e]'
+                            ? 'bg-warning-soft border-[color:color-mix(in_oklab,var(--color-warning)_24%,white)] text-warning'
                             : item.status === 'ok'
                               ? 'bg-success-soft border-[color:color-mix(in_oklab,var(--color-success)_22%,white)] text-success'
-                              : 'bg-[#fef2f2] border-[#fecaca] text-[#991b1b]'
+                              : 'bg-danger-soft border-[color:color-mix(in_oklab,var(--color-danger)_18%,white)] text-danger'
                         return (
                           <div key={item.key} className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}>
                             <div className="font-medium">{item.name}</div>
@@ -146,7 +146,7 @@ export default function ChatMessages({
       {showScrollToBottom && (
         <button
           type="button"
-          className="self-center border border-border-strong bg-white text-[#334155] rounded-lg px-3 py-[6px] text-[12px] cursor-pointer shadow-sm"
+          className="self-center rounded-lg border border-border-strong bg-white px-3 py-[6px] text-[12px] text-ink cursor-pointer shadow-sm"
           onClick={onScrollToBottom}
         >
           回到底部

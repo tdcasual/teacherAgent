@@ -46,10 +46,13 @@ export default function ChatComposer({
   const canSend = Boolean(input.trim()) || hasSendableAttachments
 
   return (
-    <form className="relative z-[2] px-4 pt-[10px] pb-[14px] border-t border-border bg-gradient-to-t from-surface from-70% to-transparent" onSubmit={onSubmit}>
-      <div className="w-full max-w-[var(--chat-content-max-width)] border border-border bg-white rounded-[16px] px-3 py-[10px] shadow-[0_12px_28px_rgba(15,23,42,0.08)] grid gap-[10px]">
+    <form
+      className="relative z-[2] px-4 pt-[10px] pb-[14px] border-t border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[linear-gradient(180deg,transparent_0%,color-mix(in_oklab,var(--color-surface)_96%,white)_18%,color-mix(in_oklab,var(--color-surface)_100%,white)_100%)]"
+      onSubmit={onSubmit}
+    >
+      <div className="w-full max-w-[var(--chat-content-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,white)] px-3 py-[10px] shadow-[0_8px_18px_rgba(15,23,42,0.05)] grid gap-[10px]">
         <div className="flex flex-wrap gap-2">
-          <span className="inline-flex items-center border border-border rounded-lg px-2 py-[2px] text-[11px] text-[#4b5563] bg-[#f8fafc]">
+          <span className="inline-flex items-center rounded-lg border border-border px-2 py-[2px] text-[11px] text-muted bg-surface-soft">
             {skillPinned ? `当前路由: $${activeSkillId || 'physics-teacher-ops'}` : '当前路由: 自动编排'}
           </span>
           <span className="inline-flex items-center rounded-lg bg-[color:var(--color-accent-soft)] px-2 py-[2px] text-[11px] text-[color:var(--color-accent)]">
@@ -59,9 +62,9 @@ export default function ChatComposer({
         {attachments.length ? (
           <div className="flex flex-wrap gap-2">
             {attachments.map((item) => (
-              <span key={item.localId} className="inline-flex items-center gap-2 border border-border rounded-lg px-2 py-1 text-[12px] bg-[#f8fafc] max-w-full">
+              <span key={item.localId} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-surface-soft px-2 py-1 text-[12px]">
                 <span className="max-w-[220px] truncate" title={item.fileName}>{item.fileName}</span>
-                <span className={`text-[11px] ${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
+                <span className={`text-[11px] ${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-muted' : 'text-danger'}`}>
                   {item.status === 'ready' ? '已就绪' : item.status === 'uploading' ? '上传中' : '失败'}
                 </span>
                 <button
@@ -92,7 +95,7 @@ export default function ChatComposer({
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              className="border border-border rounded-[10px] px-2.5 py-1.5 text-[13px] bg-[#f8fafc] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className="cursor-pointer rounded-[10px] border border-border bg-surface-soft px-2.5 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={pendingChatJob}
               onClick={() => fileInputRef.current?.click()}
             >

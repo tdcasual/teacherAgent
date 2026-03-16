@@ -23,7 +23,7 @@ export default function StudentTodayHome({
     <main className="flex-1 min-h-0 overflow-y-auto bg-[color:var(--color-app-bg)] px-4 py-5 md:px-6 md:py-6" data-testid="student-today-home">
       <div className="mx-auto grid max-w-[920px] gap-4 md:gap-5">
         <section
-          className="grid gap-3 rounded-[24px] border border-[color:color-mix(in_oklab,var(--color-accent)_10%,var(--color-border))] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_96%,white)_0%,color-mix(in_oklab,var(--color-task-strip)_48%,white)_100%)] px-4 py-4 shadow-[0_10px_24px_rgba(148,163,184,0.08)] md:px-5 md:py-4"
+          className="grid gap-3 rounded-[24px] border border-[color:color-mix(in_oklab,var(--color-accent)_8%,var(--color-border))] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,color-mix(in_oklab,var(--color-task-strip)_62%,white)_100%)] px-4 py-4 shadow-[0_10px_24px_rgba(9,30,66,0.08)] md:px-5 md:py-4"
           data-testid="student-today-primary-stage"
           data-home-style="compact"
         >

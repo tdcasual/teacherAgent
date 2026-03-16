@@ -93,9 +93,10 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
 
     expect(screen.getByText('身份验证', { exact: true })).toBeTruthy()
-    expect(screen.getByText('使用姓名与凭证确认当前教师身份。')).toBeTruthy()
+    expect(screen.getByText('用姓名和凭证确认教师身份。')).toBeTruthy()
     expect(screen.getByText('密码设置', { exact: true })).toBeTruthy()
-    expect(screen.getByText('为当前教师账号设置或更新密码。')).toBeTruthy()
+    expect(screen.getByText('设置或更新当前账号密码。')).toBeTruthy()
     expect(screen.getByText('学生密码管理', { exact: true })).toBeTruthy()
+    expect(screen.getByText('按学生、班级或全部学生重置密码。')).toBeTruthy()
   })
 })

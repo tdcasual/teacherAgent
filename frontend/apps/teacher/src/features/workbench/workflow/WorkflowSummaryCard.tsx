@@ -26,8 +26,8 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
   const actionTargetLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
 
   return (
-    <div className="grid gap-3">
-      <section className="workflow-summary-card border border-border rounded-[16px] bg-white p-[12px] grid gap-3">
+    <div className="grid gap-2.5">
+      <section className="workflow-summary-card grid gap-3 rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] p-[12px] shadow-none">
         <div className="grid gap-3">
           <div className="grid gap-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -45,11 +45,11 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
                   : activeWorkflowIndicator.tone === 'success'
                     ? 'success text-success border-[color:color-mix(in_oklab,var(--color-success)_24%,white)] bg-success-soft'
                     : activeWorkflowIndicator.tone === 'error'
-                      ? 'error text-[#991b1b] border-[#fecaca] bg-[#fef2f2]'
-                      : 'text-[#5b6473] border-border bg-[#f7f8fa]'
+                      ? 'error text-danger border-[color:color-mix(in_oklab,var(--color-danger)_18%,white)] bg-danger-soft'
+                  : 'text-muted border-border bg-surface-soft'
               }`}>{activeWorkflowIndicator.label}</span>
             </div>
-            <div className="text-[18px] leading-[1.25] font-semibold text-[#334155]">{actionTargetLabel}</div>
+            <div className="text-[17px] leading-[1.25] font-semibold text-ink">{actionTargetLabel}</div>
           </div>
           <button
             type="button"
@@ -59,31 +59,31 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
             {guidance.primaryActionLabel}
           </button>
         </div>
-        <div className="grid gap-2">
+        <div className="flex flex-wrap gap-2">
           {activeWorkflowIndicator.steps.map((step: WorkflowStepItem) => (
-            <div key={step.key} className={`inline-flex items-center gap-1.5 py-2 px-2.5 rounded-[10px] border text-[12px] ${
+            <div key={step.key} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] ${
               step.state === 'done'
                 ? 'text-success border-[color:color-mix(in_oklab,var(--color-success)_24%,white)] bg-success-soft'
                 : step.state === 'active'
                   ? 'text-accent border-[color:color-mix(in_oklab,var(--color-accent)_24%,white)] bg-accent-soft'
                   : step.state === 'error'
-                    ? 'text-[#991b1b] border-[#fecaca] bg-[#fef2f2]'
-                    : 'text-[#7b8392] border-[#e8ebf0] bg-[#f9fafb]'
-            }`}>
+                    ? 'text-danger border-[color:color-mix(in_oklab,var(--color-danger)_18%,white)] bg-danger-soft'
+                    : 'text-muted border-[color:color-mix(in_oklab,var(--color-border)_88%,white)] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_72%,white)]'
+              }`}>
               <span className={`w-2 h-2 rounded-full shrink-0 ${
                 step.state === 'done'
                   ? 'bg-success'
                   : step.state === 'active'
                     ? 'bg-accent'
                   : step.state === 'error'
-                    ? 'bg-[#dc2626]'
-                    : 'bg-[#cfd6e0]'
-              } ${step.state === 'active' ? 'shadow-[0_0_0_3px_rgba(66,81,120,0.16)]' : ''}`} />
+                    ? 'bg-danger'
+                    : 'bg-border-strong'
+              } ${step.state === 'active' ? 'shadow-[0_0_0_3px_rgba(0,82,204,0.14)]' : ''}`} />
               <span>{step.label}</span>
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
           <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-upload-section')}>
             查看上传区
           </button>
@@ -93,9 +93,9 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
         </div>
       </section>
       {uploadMode === 'assignment' ? (
-        <section className="border border-border rounded-[14px] bg-white p-[10px] grid gap-2">
+        <section className="grid gap-2 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_78%,white)] px-[12px] py-[10px] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_70%,white)]">
           <div className="text-muted text-[12px]">完成情况速览</div>
-          <div className="text-[12px] leading-[1.45] text-[#3f4551]">{formatProgressSummary(progressData, progressAssignmentId)}</div>
+          <div className="text-[12px] leading-[1.45] text-[color:color-mix(in_oklab,var(--color-ink)_82%,white)]">{formatProgressSummary(progressData, progressAssignmentId)}</div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="ghost" onClick={() => scrollToWorkflowSection('workflow-progress-section')}>
               查看完成情况

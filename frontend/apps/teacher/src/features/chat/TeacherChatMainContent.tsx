@@ -96,11 +96,15 @@ export default function TeacherChatMainContent({
   return (
     <main
       ref={shellRef}
-      className="chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-[10px] p-4 bg-surface overflow-hidden"
+      className="chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-3 p-4 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-app-bg)_98%,white)_0%,color-mix(in_oklab,var(--color-rail)_78%,white)_100%)]"
     >
-      <>
-        {taskStrip}
+      {taskStrip}
 
+      <section
+        data-testid="teacher-chat-stage"
+        data-chat-stage-tone="focused"
+        className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-panel)_97%,white)_0%,color-mix(in_oklab,var(--color-surface)_98%,white)_18%,color-mix(in_oklab,var(--color-surface-soft)_84%,white)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.88)]"
+      >
         <ChatMessages
           renderedMessages={renderedMessages}
           sending={sending}
@@ -136,7 +140,7 @@ export default function TeacherChatMainContent({
         />
 
         <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={onInsertMention} />
-      </>
+      </section>
     </main>
   )
 }

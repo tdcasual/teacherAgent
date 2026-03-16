@@ -2,27 +2,27 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-app-bg: oklch(0.974 0.004 252);
-  --color-bg: oklch(0.974 0.004 252);
-  --color-surface: oklch(0.992 0.003 252);
-  --color-surface-soft: oklch(0.978 0.006 252);
-  --color-surface-hover: oklch(0.956 0.01 252);
-  --color-task-strip: oklch(0.978 0.01 248);
-  --color-note: oklch(0.976 0.008 248);
-  --color-progress: oklch(0.956 0.012 244);
-  --color-ink: oklch(0.24 0.018 248);
-  --color-muted: oklch(0.52 0.014 248);
-  --color-accent: oklch(0.43 0.062 252);
-  --color-accent-soft: oklch(0.946 0.012 252);
-  --color-success: oklch(0.45 0.05 228);
-  --color-success-soft: oklch(0.948 0.012 228);
-  --color-border: oklch(0.906 0.006 252);
-  --color-border-strong: oklch(0.842 0.01 252);
-  --color-danger-soft: oklch(0.95 0.02 22);
-  --color-danger: oklch(0.52 0.14 22);
+  --color-app-bg: #FAFBFC;
+  --color-bg: #FAFBFC;
+  --color-surface: #FFFFFF;
+  --color-surface-soft: #F4F5F7;
+  --color-surface-hover: #EBECF0;
+  --color-task-strip: #F7F9FF;
+  --color-note: #F7F8FA;
+  --color-progress: #F1F5FF;
+  --color-ink: #172B4D;
+  --color-muted: #6B778C;
+  --color-accent: #0052CC;
+  --color-accent-soft: #DEEBFF;
+  --color-success: #206A83;
+  --color-success-soft: #E9F2F5;
+  --color-border: #DFE1E6;
+  --color-border-strong: #C1C7D0;
+  --color-danger-soft: #FFF0EE;
+  --color-danger: #C9372C;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
+  --shadow-md: 0 6px 18px rgba(9, 30, 66, 0.12);
 
   --font-sans: "Noto Sans SC", "PingFang SC", "Helvetica Neue", Arial,
     sans-serif;

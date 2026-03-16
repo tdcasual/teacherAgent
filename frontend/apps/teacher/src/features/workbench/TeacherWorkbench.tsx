@@ -54,11 +54,15 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
   }
 
   return (
-    <aside className={`skills-panel border-l border-[color:color-mix(in_oklab,var(--color-border)_86%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,white)] p-[10px] shadow-none flex-auto w-full flex-col gap-[10px] min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}>
+    <aside
+      data-testid="teacher-workbench-shell"
+      data-workbench-flow="continuous"
+      className={`skills-panel border-l border-[color:color-mix(in_oklab,var(--color-border)_86%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-rail)_90%,white)_0%,color-mix(in_oklab,var(--color-surface)_96%,white)_100%)] p-3 shadow-none flex-auto w-full flex-col gap-3 min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}
+    >
       <div className="skills-header flex justify-between items-start gap-3 mb-[10px]">
         <div className="grid gap-1">
           <h3 className="m-0">教学编辑台</h3>
-          <p className="m-0 text-[12px] text-muted">把主动作留在顶部任务条，这里只保留流程摘要与入口。</p>
+          <p className="m-0 text-[12px] text-muted">这里收纳主线摘要与辅助入口。</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -91,7 +95,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         </div>
       </div>
       <section
-        className="rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_96%,white)_0%,color-mix(in_oklab,var(--color-surface-soft)_88%,white)_100%)] px-3.5 py-3 shadow-[0_10px_22px_rgba(15,23,42,0.05)] grid gap-3"
+        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,white)] px-3.5 py-3.5 shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_72%,white)]"
         data-testid="teacher-workbench-summary-card"
         data-workbench-tone="summary"
       >
@@ -112,7 +116,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
               </span>
             </div>
             <div
-              className="grid gap-1 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] px-3 py-2"
+              className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,white)] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,white)]"
               data-testid="teacher-workbench-focus-block"
               data-workbench-tier="supporting"
             >
@@ -138,7 +142,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 </span>
               </div>
               <div
-                className="grid gap-1 rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] px-3 py-2"
+                className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,white)] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,white)]"
                 data-testid="teacher-workbench-focus-block"
                 data-workbench-tier="supporting"
               >
@@ -167,51 +171,53 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           工作流
         </button>
       </div>
-      {workbenchTab === 'skills' ? (
-        <SkillsTab
-          apiBase={viewModel.apiBase}
-          filteredSkills={viewModel.filteredSkills}
-          favorites={viewModel.favorites}
-          activeSkillId={viewModel.activeSkillId}
-          skillPinned={viewModel.skillPinned}
-          skillQuery={viewModel.skillQuery}
-          showFavoritesOnly={viewModel.showFavoritesOnly}
-          skillsLoading={viewModel.skillsLoading}
-          skillsError={viewModel.skillsError}
-          fetchSkills={viewModel.fetchSkills}
-          chooseSkill={viewModel.chooseSkill}
-          toggleFavorite={viewModel.toggleFavorite}
-          insertPrompt={viewModel.insertPrompt}
-          insertInvocationTokenAtCursor={viewModel.insertInvocationTokenAtCursor}
-          stopKeyPropagation={viewModel.stopKeyPropagation}
-          setSkillQuery={viewModel.setSkillQuery}
-          setShowFavoritesOnly={viewModel.setShowFavoritesOnly}
-          setSkillPinned={viewModel.setSkillPinned}
-          setComposerWarning={viewModel.setComposerWarning}
-        />
-      ) : workbenchTab === 'workflow' ? (
-        <WorkflowTab {...viewModel} />
-      ) : (
-        <MemoryTab
-          memoryStatusFilter={viewModel.memoryStatusFilter}
-          setMemoryStatusFilter={viewModel.setMemoryStatusFilter}
-          memoryInsights={viewModel.memoryInsights}
-          proposalError={viewModel.proposalError}
-          proposalLoading={viewModel.proposalLoading}
-          proposals={viewModel.proposals}
-          onDeleteProposal={viewModel.onDeleteProposal}
-          studentMemoryStatusFilter={viewModel.studentMemoryStatusFilter}
-          setStudentMemoryStatusFilter={viewModel.setStudentMemoryStatusFilter}
-          studentMemoryStudentFilter={viewModel.studentMemoryStudentFilter}
-          setStudentMemoryStudentFilter={viewModel.setStudentMemoryStudentFilter}
-          studentMemoryInsights={viewModel.studentMemoryInsights}
-          studentProposalError={viewModel.studentProposalError}
-          studentProposalLoading={viewModel.studentProposalLoading}
-          studentProposals={viewModel.studentProposals}
-          onReviewStudentProposal={viewModel.onReviewStudentProposal}
-          onDeleteStudentProposal={viewModel.onDeleteStudentProposal}
-        />
-      )}
+      <div className="min-h-0 flex-1 overflow-hidden border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+        {workbenchTab === 'skills' ? (
+          <SkillsTab
+            apiBase={viewModel.apiBase}
+            filteredSkills={viewModel.filteredSkills}
+            favorites={viewModel.favorites}
+            activeSkillId={viewModel.activeSkillId}
+            skillPinned={viewModel.skillPinned}
+            skillQuery={viewModel.skillQuery}
+            showFavoritesOnly={viewModel.showFavoritesOnly}
+            skillsLoading={viewModel.skillsLoading}
+            skillsError={viewModel.skillsError}
+            fetchSkills={viewModel.fetchSkills}
+            chooseSkill={viewModel.chooseSkill}
+            toggleFavorite={viewModel.toggleFavorite}
+            insertPrompt={viewModel.insertPrompt}
+            insertInvocationTokenAtCursor={viewModel.insertInvocationTokenAtCursor}
+            stopKeyPropagation={viewModel.stopKeyPropagation}
+            setSkillQuery={viewModel.setSkillQuery}
+            setShowFavoritesOnly={viewModel.setShowFavoritesOnly}
+            setSkillPinned={viewModel.setSkillPinned}
+            setComposerWarning={viewModel.setComposerWarning}
+          />
+        ) : workbenchTab === 'workflow' ? (
+          <WorkflowTab {...viewModel} />
+        ) : (
+          <MemoryTab
+            memoryStatusFilter={viewModel.memoryStatusFilter}
+            setMemoryStatusFilter={viewModel.setMemoryStatusFilter}
+            memoryInsights={viewModel.memoryInsights}
+            proposalError={viewModel.proposalError}
+            proposalLoading={viewModel.proposalLoading}
+            proposals={viewModel.proposals}
+            onDeleteProposal={viewModel.onDeleteProposal}
+            studentMemoryStatusFilter={viewModel.studentMemoryStatusFilter}
+            setStudentMemoryStatusFilter={viewModel.setStudentMemoryStatusFilter}
+            studentMemoryStudentFilter={viewModel.studentMemoryStudentFilter}
+            setStudentMemoryStudentFilter={viewModel.setStudentMemoryStudentFilter}
+            studentMemoryInsights={viewModel.studentMemoryInsights}
+            studentProposalError={viewModel.studentProposalError}
+            studentProposalLoading={viewModel.studentProposalLoading}
+            studentProposals={viewModel.studentProposals}
+            onReviewStudentProposal={viewModel.onReviewStudentProposal}
+            onDeleteStudentProposal={viewModel.onDeleteStudentProposal}
+          />
+        )}
+      </div>
     </aside>
   )
 }

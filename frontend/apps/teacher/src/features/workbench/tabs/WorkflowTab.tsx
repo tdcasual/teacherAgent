@@ -56,7 +56,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
 
   return (
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
-      <div className="grid gap-1">
+      <div className="grid gap-1 pb-1 border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,white)]">
         <strong>工作流编辑</strong>
         <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">主线先做，补充后看。</div>
         <div className="text-[12px] text-muted">先完成必做动作，再展开补充参考。</div>
@@ -80,7 +80,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         fetchAssignmentProgress={props.fetchAssignmentProgress}
       />
       <section
-        className="grid gap-3 rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_82%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-surface)_98%,white)_0%,white_100%)] p-[12px] shadow-[0_12px_24px_rgba(15,23,42,0.05)]"
+        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,white)] p-[12px] shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_74%,white)]"
         data-testid="teacher-workflow-primary-stage"
         data-workflow-tier="primary"
       >
@@ -211,7 +211,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         )}
       </section>
       <section
-        className="grid gap-3 rounded-[18px] border border-dashed border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_92%,white)] p-[12px] shadow-none"
+        className="grid gap-3 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3"
         data-testid="teacher-workflow-secondary-stage"
         data-workflow-tier="supporting"
       >
