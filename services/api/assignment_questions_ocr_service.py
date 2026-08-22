@@ -5,6 +5,35 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from fastapi import HTTPException
+
+from .upload_limits import UploadLimitError, save_limited_uploads
+
+_OCR_ALLOWED_SUFFIXES = {
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".md",
+    ".markdown",
+    ".txt",
+    ".tex",
+}
+_OCR_MIME_BY_SUFFIX = {
+    ".pdf": {"application/pdf"},
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".bmp": {"image/bmp", "image/x-ms-bmp"},
+    ".webp": {"image/webp"},
+    ".md": {"text/markdown", "text/plain"},
+    ".markdown": {"text/markdown", "text/plain"},
+    ".txt": {"text/plain"},
+    ".tex": {"application/x-tex", "text/x-tex", "text/plain"},
+}
+
 
 def _default_sanitize_filename(name: str) -> str:
     return Path(str(name or "").strip()).name
@@ -46,14 +75,17 @@ async def assignment_questions_ocr(
         raise ValueError("invalid assignment_id path")
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    file_paths: List[str] = []
-    for upload_file in files:
-        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
-        if not filename:
-            continue
-        dest = batch_dir / filename
-        dest.write_bytes(await upload_file.read())
-        file_paths.append(str(dest))
+    try:
+        saved_paths = await save_limited_uploads(
+            files,
+            batch_dir,
+            suffixes=_OCR_ALLOWED_SUFFIXES,
+            mimes=_OCR_MIME_BY_SUFFIX,
+            sanitize_filename=deps.sanitize_filename,
+        )
+    except UploadLimitError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    file_paths: List[str] = [str(path) for path in saved_paths]
 
     script = deps.app_root / "skills" / "physics-student-coach" / "scripts" / "ingest_assignment_questions.py"
     args = [

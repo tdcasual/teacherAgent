@@ -1,20 +1,29 @@
+import io
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi import HTTPException
 
 from services.api.student_submit_service import StudentSubmitDeps, submit
+from services.api.upload_limits import MAX_FILE_BYTES, MAX_FILES
 
 
 @dataclass
 class _Upload:
     filename: str
     content: bytes
+    content_type: str = "application/pdf"
+    file: io.BytesIO = field(init=False)
 
-    async def read(self) -> bytes:
-        return self.content
+    def __post_init__(self) -> None:
+        self.file = io.BytesIO(self.content)
+
+    async def read(self, size: int = -1) -> bytes:
+        if size is None or size < 0:
+            raise AssertionError("full read() is forbidden")
+        return self.file.read(size)
 
 
 class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -192,6 +201,111 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(auto_kwargs.get("student_id"), "S1")
             self.assertEqual(auto_kwargs.get("assignment_id"), "HW_1")
             self.assertIsInstance(auto_kwargs.get("evidence"), dict)
+
+    def _deps(self, root: Path, captured: dict | None = None) -> StudentSubmitDeps:
+        def _run_script(args):
+            if captured is not None:
+                captured["args"] = list(args)
+            return "ok"
+
+        return StudentSubmitDeps(
+            uploads_dir=root / "uploads",
+            app_root=root / "repo",
+            student_submissions_dir=root / "submissions",
+            run_script=_run_script,
+            compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+                "ok": False,
+                "created": False,
+            },
+            resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+            diag_log=lambda _event, _payload: None,
+        )
+
+    async def test_submit_rejects_21st_file(self):
+        with TemporaryDirectory() as td:
+            deps = self._deps(Path(td))
+            files = [_Upload(filename=f"a{i}.pdf", content=b"1") for i in range(MAX_FILES + 1)]
+            with self.assertRaises(HTTPException) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=files,
+                    assignment_id=None,
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    async def test_submit_rejects_file_over_20mb(self):
+        with TemporaryDirectory() as td:
+            deps = self._deps(Path(td))
+
+            class _File:
+                def tell(self) -> int:
+                    return getattr(self, "_pos", 0)
+
+                def seek(self, offset: int, whence: int = 0) -> int:
+                    if whence == 2:
+                        self._pos = MAX_FILE_BYTES + 1
+                    else:
+                        self._pos = int(offset)
+                    return self._pos
+
+                def read(self, n: int = -1) -> bytes:
+                    return b""
+
+            class _Sized:
+                filename = "big.pdf"
+                content_type = "application/pdf"
+                file = _File()
+
+                async def read(self, size: int = -1) -> bytes:
+                    if size is None or size < 0:
+                        raise AssertionError("full read() is forbidden")
+                    return self.file.read(size)
+
+            with self.assertRaises(HTTPException) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Sized()],
+                    assignment_id=None,
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    async def test_submit_rejects_mime_mismatch(self):
+        with TemporaryDirectory() as td:
+            deps = self._deps(Path(td))
+            with self.assertRaises(HTTPException) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="homework.pdf", content=b"%PDF", content_type="image/jpeg")],
+                    assignment_id=None,
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+
+    async def test_submit_collision_renames_without_overwrite(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root)
+            deps.uploads_dir.mkdir(parents=True, exist_ok=True)
+            original = deps.uploads_dir / "a1.pdf"
+            original.write_bytes(b"original")
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"new")],
+                assignment_id=None,
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(original.read_bytes(), b"original")
+            renamed = deps.uploads_dir / "a1_1.pdf"
+            self.assertTrue(renamed.exists())
+            self.assertEqual(renamed.read_bytes(), b"new")
 
 
 if __name__ == "__main__":

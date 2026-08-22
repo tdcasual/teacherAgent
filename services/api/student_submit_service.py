@@ -7,6 +7,20 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 
+from .upload_limits import UploadLimitError, save_limited_uploads
+
+_STUDENT_ALLOWED_SUFFIXES = {".pdf", ".png", ".jpeg", ".jpg", ".webp", ".txt", ".md", ".csv"}
+_STUDENT_MIME_BY_SUFFIX = {
+    ".pdf": {"application/pdf"},
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".webp": {"image/webp"},
+    ".txt": {"text/plain"},
+    ".md": {"text/markdown", "text/plain"},
+    ".csv": {"text/csv", "text/plain", "application/csv"},
+}
+
 
 def _default_sanitize_filename(name: str) -> str:
     return Path(str(name or "").strip()).name
@@ -71,14 +85,17 @@ async def submit(
     safe_student_id = _require_safe_id(student_id, "student_id")
     safe_assignment_id: Optional[str] = None
 
-    file_paths: List[str] = []
-    for upload_file in files:
-        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
-        if not filename:
-            continue
-        dest = deps.uploads_dir / filename
-        dest.write_bytes(await upload_file.read())
-        file_paths.append(str(dest))
+    try:
+        saved_paths = await save_limited_uploads(
+            files,
+            deps.uploads_dir,
+            suffixes=_STUDENT_ALLOWED_SUFFIXES,
+            mimes=_STUDENT_MIME_BY_SUFFIX,
+            sanitize_filename=deps.sanitize_filename,
+        )
+    except UploadLimitError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    file_paths: List[str] = [str(path) for path in saved_paths]
 
     script = deps.app_root / "scripts" / "grade_submission.py"
     args = [

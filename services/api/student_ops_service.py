@@ -4,6 +4,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from fastapi import HTTPException
+
+from .upload_limits import UploadLimitError, save_limited_uploads
+
+_STUDENT_ALLOWED_SUFFIXES = {".pdf", ".png", ".jpeg", ".jpg", ".webp", ".txt", ".md", ".csv"}
+_STUDENT_MIME_BY_SUFFIX = {
+    ".pdf": {"application/pdf"},
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".webp": {"image/webp"},
+    ".txt": {"text/plain"},
+    ".md": {"text/markdown", "text/plain"},
+    ".csv": {"text/csv", "text/plain", "application/csv"},
+}
+
 
 @dataclass(frozen=True)
 class StudentOpsDeps:
@@ -19,15 +35,17 @@ class StudentOpsDeps:
 
 async def upload_files(files: List[Any], *, deps: StudentOpsDeps) -> Dict[str, Any]:
     deps.uploads_dir.mkdir(parents=True, exist_ok=True)
-    saved: List[str] = []
-    for f in files:
-        fname = deps.sanitize_filename(getattr(f, "filename", ""))
-        if not fname:
-            continue
-        dest = deps.uploads_dir / fname
-        await deps.save_upload_file(f, dest)
-        saved.append(str(dest))
-    return {"saved": saved}
+    try:
+        saved_paths = await save_limited_uploads(
+            files,
+            deps.uploads_dir,
+            suffixes=_STUDENT_ALLOWED_SUFFIXES,
+            mimes=_STUDENT_MIME_BY_SUFFIX,
+            sanitize_filename=deps.sanitize_filename,
+        )
+    except UploadLimitError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return {"saved": [str(path) for path in saved_paths]}
 
 
 def update_profile(

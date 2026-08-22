@@ -110,6 +110,27 @@ class ExamUploadStartServiceTest(unittest.IsolatedAsyncioTestCase):
                 )
             self.assertIn("不支持的文件类型", str(cm.exception))
 
+    async def test_start_exam_upload_still_accepts_xlsx_scores(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            queued = []
+            deps = self._deps(root, writes, queued)
+            result = await start_exam_upload(
+                exam_id="EX1",
+                date="2026-02-08",
+                class_name="",
+                paper_files=[_FakeUpload("paper.pdf", b"paper")],
+                score_files=[_FakeUpload("scores.xlsx", b"score")],
+                answer_files=None,
+                ocr_mode="FREE_OCR",
+                language="zh",
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            record = writes[-1][1]
+            self.assertEqual(record.get("score_files"), ["scores.xlsx"])
+
 
 if __name__ == "__main__":
     unittest.main()
