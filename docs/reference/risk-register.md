@@ -2,7 +2,7 @@
 
 - 适用角色：管理员、平台负责人
 - 最后验证日期：2026-08-22
-- 主要来源：`docs/plans/2026-08-22-audit-remediation-design.md`（2026-02-13 审计已并入）
+- 主要来源：`docs/plans/2026-02-13-code-audit-findings.md`；条目按 2026-08-22 全量审计重开与增补
 
 ## 进行中 / 重开
 
@@ -43,7 +43,7 @@
 - 状态：修复 PR 进行中
 - Owner：Runtime
 - 下次复审日期：2026-11-22
-- 退出条件：单实例 noeviction；lane 与 RQ 同实例
+- 退出条件：单实例 noeviction；lane 与 RQ 同实例；不迁 LRU
 - 补偿控制：chat idempotency 走文件系统而非 Redis；H 变更 2 人评审。
 
 ### RISK-WORKER-HEALTH-001
@@ -117,7 +117,7 @@
 当前无已关闭条目。2026-03-03 纸面关闭的 RISK-CHART-TRUSTED-001 已于 2026-08-22 重开。
 
 ## 持续关注项
-1. 上传链路资源上限（数量/大小/MIME）必须持续防回退。
+1. 上传限额尚未覆盖 `/upload` 与 `/student/submit`（见 RISK-UPLOAD-UNBOUNDED-001）；补齐后必须防回退。
 2. 锁与并发处理策略需防止重复执行与幽灵任务。
 3. 凭据与权限变更必须同步到审计与回归测试。
 
@@ -125,4 +125,3 @@
 - `docs/how-to/auth-and-account-troubleshooting.md`
 - `docs/reference/permissions-and-security.md`
 - `docs/plans/2026-02-13-code-audit-findings.md`
-- `docs/plans/2026-08-22-audit-remediation-design.md`
