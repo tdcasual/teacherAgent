@@ -37,16 +37,23 @@ class TestClientKey(unittest.TestCase):
         rl_mod._trusted_proxy_ips = set(self._orig_trusted)
 
     def test_uses_x_forwarded_for_first_ip_when_trusted(self):
+        # Fail-closed: TRUST without a nonempty allowlist must ignore XFF.
         rl_mod._trust_x_forwarded_for = True
         rl_mod._trusted_proxy_ips = set()
-        req = _make_request(forwarded_for="1.2.3.4, 5.6.7.8")
-        self.assertEqual(rl_mod._client_key(req), "1.2.3.4")
+        req = _make_request(client_host="10.0.0.1", forwarded_for="1.2.3.4, 5.6.7.8")
+        self.assertEqual(rl_mod._client_key(req), "10.0.0.1")
 
     def test_strips_whitespace_from_forwarded(self):
         rl_mod._trust_x_forwarded_for = True
-        rl_mod._trusted_proxy_ips = set()
-        req = _make_request(forwarded_for="  9.8.7.6 , 1.1.1.1")
+        rl_mod._trusted_proxy_ips = {"10.0.0.1"}
+        req = _make_request(client_host="10.0.0.1", forwarded_for="  9.8.7.6 , 1.1.1.1")
         self.assertEqual(rl_mod._client_key(req), "9.8.7.6")
+
+    def test_uses_x_forwarded_for_first_ip_when_proxy_allowlisted(self):
+        rl_mod._trust_x_forwarded_for = True
+        rl_mod._trusted_proxy_ips = {"10.0.0.1"}
+        req = _make_request(client_host="10.0.0.1", forwarded_for="1.2.3.4, 5.6.7.8")
+        self.assertEqual(rl_mod._client_key(req), "1.2.3.4")
 
     def test_does_not_trust_forwarded_for_by_default(self):
         rl_mod._trust_x_forwarded_for = False
@@ -92,6 +99,7 @@ class TestRateLimitMiddleware(unittest.TestCase):
     def setUp(self):
         # Reset buckets for isolation.
         self._original_rpm = rl_mod._rpm
+        self._original_login_rpm = rl_mod._login_rpm
         self._original_buckets = rl_mod._buckets
         self._original_last_seen = rl_mod._bucket_last_seen
         self._original_max_buckets = rl_mod._max_buckets
@@ -107,6 +115,7 @@ class TestRateLimitMiddleware(unittest.TestCase):
     def tearDown(self):
         self._patcher.stop()
         rl_mod._rpm = self._original_rpm
+        rl_mod._login_rpm = self._original_login_rpm
         rl_mod._buckets = self._original_buckets
         rl_mod._bucket_last_seen = self._original_last_seen
         rl_mod._max_buckets = self._original_max_buckets
@@ -276,6 +285,62 @@ class TestRateLimitMiddleware(unittest.TestCase):
         self.assertIn("b", rl_mod._buckets)
         self.assertIn("c", rl_mod._buckets)
 
+    # -- login path isolation --
+
+    def test_login_path_uses_login_rpm(self):
+        rl_mod._rpm = 100
+        rl_mod._login_rpm = 2
+        req = _make_request(path="/auth/student/login", client_host="10.0.0.7")
+        call_next = AsyncMock(return_value=_ok_response())
+        now = time.monotonic()
+        bucket = rl_mod._buckets["login:10.0.0.7"]
+        bucket.append(now)
+        bucket.append(now)
+
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 429)
+        call_next.assert_not_awaited()
+
+    def test_login_bucket_isolated_from_general(self):
+        rl_mod._rpm = 1
+        rl_mod._login_rpm = 2
+        call_next = AsyncMock(return_value=_ok_response())
+        general = _make_request(path="/api/test", client_host="10.0.0.7")
+        login = _make_request(path="/auth/teacher/login", client_host="10.0.0.7")
+
+        resp = _run(rl_mod.rate_limit_middleware(general, call_next))
+        self.assertEqual(resp.status_code, 200)
+        resp = _run(rl_mod.rate_limit_middleware(general, call_next))
+        self.assertEqual(resp.status_code, 429)
+
+        call_next.reset_mock()
+        resp = _run(rl_mod.rate_limit_middleware(login, call_next))
+        self.assertEqual(resp.status_code, 200)
+        call_next.assert_awaited_once()
+
+    def test_admin_login_uses_login_rpm(self):
+        rl_mod._rpm = 100
+        rl_mod._login_rpm = 1
+        req = _make_request(path="/auth/admin/login", client_host="10.0.0.8")
+        call_next = AsyncMock(return_value=_ok_response())
+
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 200)
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 429)
+
+    def test_login_limited_when_general_rpm_disabled(self):
+        rl_mod._rpm = 0
+        rl_mod._login_rpm = 1
+        req = _make_request(path="/auth/student/login", client_host="10.0.0.9")
+        call_next = AsyncMock(return_value=_ok_response())
+
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 200)
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 429)
+
 
 if __name__ == "__main__":
     unittest.main()
+

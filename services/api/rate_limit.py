@@ -2,9 +2,14 @@
 
 Environment variables:
     RATE_LIMIT_RPM – max requests per minute per client IP (default: 120, 0 = disabled)
+    RATE_LIMIT_LOGIN_RPM – max login requests per minute per client IP (default: 10, 0 = disabled)
     RATE_LIMIT_MAX_BUCKETS – max distinct client buckets retained in memory (default: 4096)
     RATE_LIMIT_TRUST_X_FORWARDED_FOR – whether to trust X-Forwarded-For (default: false)
-    RATE_LIMIT_TRUSTED_PROXY_IPS – comma-separated proxy IP allowlist when trusting XFF
+    RATE_LIMIT_TRUSTED_PROXY_IPS – comma-separated proxy IP allowlist when trusting XFF.
+        Empty allowlist is fail-closed: XFF is ignored even if TRUST is set.
+
+This limiter is in-process. Two uvicorn workers (compose default API_WORKERS=2)
+therefore allow about 2× the configured RPM; N workers ≈ N× RPM.
 """
 from __future__ import annotations
 
@@ -17,8 +22,14 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 _SKIP_PATHS = {"/health", "/health/"}
+_LOGIN_PATHS = {
+    "/auth/student/login",
+    "/auth/teacher/login",
+    "/auth/admin/login",
+}
 
 _rpm = int(os.getenv("RATE_LIMIT_RPM", "120") or "0")
+_login_rpm = int(os.getenv("RATE_LIMIT_LOGIN_RPM", "10") or "0")
 _window_sec = 60.0
 _buckets: dict[str, deque[float]] = defaultdict(deque)
 _bucket_last_seen: dict[str, float] = {}
@@ -37,10 +48,9 @@ _trusted_proxy_ips = {
 
 
 def _should_trust_forwarded_for(request: Request) -> bool:
-    if not _trust_x_forwarded_for:
+    # Fail-closed: TRUST alone is not enough; allowlist must be nonempty and match.
+    if not _trust_x_forwarded_for or not _trusted_proxy_ips:
         return False
-    if not _trusted_proxy_ips:
-        return True
     client = request.client
     host = client.host if client else ""
     return host in _trusted_proxy_ips
@@ -52,6 +62,17 @@ def _client_key(request: Request) -> str:
         return forwarded.split(",")[0].strip()
     client = request.client
     return client.host if client else "unknown"
+
+
+def _is_login_path(path: str) -> bool:
+    return path.rstrip("/") in _LOGIN_PATHS
+
+
+def _limit_and_key(request: Request) -> tuple[int, str]:
+    client = _client_key(request)
+    if _is_login_path(request.url.path) and _login_rpm > 0:
+        return _login_rpm, f"login:{client}"
+    return _rpm, client
 
 
 def _drop_bucket(key: str) -> None:
@@ -83,13 +104,16 @@ def _enforce_bucket_cap() -> None:
 
 
 async def rate_limit_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-    if _rpm <= 0 or request.url.path in _SKIP_PATHS or os.getenv("PYTEST_CURRENT_TEST"):
+    if request.url.path in _SKIP_PATHS or os.getenv("PYTEST_CURRENT_TEST"):
+        return await call_next(request)
+
+    limit, key = _limit_and_key(request)
+    if limit <= 0:
         return await call_next(request)
 
     now = time.monotonic()
     _sweep_stale_buckets(now)
     _enforce_bucket_cap()
-    key = _client_key(request)
     bucket = _buckets[key]
 
     # Evict entries outside the window
@@ -100,7 +124,7 @@ async def rate_limit_middleware(request: Request, call_next: Callable[[Request],
         _drop_bucket(key)
         bucket = _buckets[key]
 
-    if len(bucket) >= _rpm:
+    if len(bucket) >= limit:
         _bucket_last_seen[key] = now
         retry_after = int(bucket[0] + _window_sec - now) + 1
         return JSONResponse(
