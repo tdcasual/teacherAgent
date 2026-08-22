@@ -19,6 +19,7 @@ import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeache
 import { formatDraftSummary, formatExamDraftSummary, formatExamJobStatus, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
 import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
+import { resolveRuntimeApiBase } from '../../shared/apiBase'
 import { readFeatureFlag, readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
@@ -46,7 +47,6 @@ import { readTeacherAuthSubject } from './features/auth/teacherAuth'
 import { isTeacherMobileTab, teacherMobilePanelsFromTab } from './features/layout/mobileShellState'
 import type { Message, PendingChatJob, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
 import 'katex/dist/katex.min.css'
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const DESKTOP_BREAKPOINT = 900
 const WORKBENCH_DEFAULT_WIDTH = 320
 const WORKBENCH_MIN_WIDTH = 280
@@ -131,7 +131,7 @@ export default function App() {
     setArchiveDialogSessionId, setSessionLoading, setSessionError, setSessionCursor, setSessionHasMore, setActiveSessionId,
     setViewStateUpdatedAt,
   } = session
-  const [apiBase, setApiBase] = useState(() => safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL)
+  const [apiBase, setApiBase] = useState(() => resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher')))
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: makeId(),

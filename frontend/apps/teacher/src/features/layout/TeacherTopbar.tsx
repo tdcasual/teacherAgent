@@ -8,6 +8,7 @@ import {
   type MutableRefObject,
 } from 'react'
 
+import { resolveRuntimeApiBase } from '../../../../shared/apiBase'
 import { safeLocalStorageGetItem } from '../../utils/storage'
 import {
   TEACHER_AUTH_EVENT,
@@ -80,8 +81,6 @@ type TeacherStudentPasswordResetResponse = {
   count?: number
   items?: StudentPasswordResetItem[]
 }
-
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const toText = (value: unknown): string => String(value ?? '').trim()
 
@@ -198,7 +197,7 @@ export default function TeacherTopbar({
 
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    const apiBase = safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
     const name = nameInput.trim()
     const email = emailInput.trim()
     const credential = credentialInput.trim()
@@ -287,7 +286,7 @@ export default function TeacherTopbar({
 
   const handleSetPassword = async (event: FormEvent) => {
     event.preventDefault()
-    const apiBase = safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
     const name = nameInput.trim()
     const email = emailInput.trim()
     const credential = credentialInput.trim()
@@ -368,7 +367,7 @@ export default function TeacherTopbar({
 
   const handleStudentPasswordReset = async (event: FormEvent) => {
     event.preventDefault()
-    const apiBase = safeLocalStorageGetItem('apiBaseTeacher') || DEFAULT_API_URL
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
     const accessToken = readTeacherAccessToken()
     if (!accessToken) {
       setStudentResetError('请先完成教师认证。')

@@ -8,9 +8,22 @@ type State = {
   error: Error | null
 }
 
-const safeClearLocalStorage = () => {
+const AUTH_TOKEN_KEY = 'studentAuthAccessToken'
+const CLEARABLE_PREFIXES = ['studentPendingChatJob:', 'studentSessionViewState:']
+
+const safeClearLocalCache = () => {
   try {
-    window.localStorage.clear()
+    const storage = window.localStorage
+    const keys: string[] = []
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i)
+      if (key) keys.push(key)
+    }
+    for (const key of keys) {
+      if (key === AUTH_TOKEN_KEY || CLEARABLE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+        storage.removeItem(key)
+      }
+    }
   } catch {
     // ignore
   }
@@ -43,7 +56,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <button
             type="button"
             onClick={() => {
-              safeClearLocalStorage()
+              safeClearLocalCache()
               window.location.reload()
             }}
           >
