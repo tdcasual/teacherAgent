@@ -552,5 +552,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: false
+          build-args: |
+            VITE_API_URL=http://localhost:8000
           cache-from: type=gha
           cache-to: type=gha,mode=max

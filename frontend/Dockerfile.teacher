@@ -3,12 +3,12 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY frontend/ ./
-ARG VITE_API_URL
+ARG VITE_API_URL=http://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
-RUN test -n "$VITE_API_URL"
 RUN npm run build:teacher
 RUN API_ORIGIN="$(node -e "process.stdout.write(new URL(process.env.VITE_API_URL).origin)")" \
-    && sed -i "s|__API_ORIGIN__|${API_ORIGIN}|g" nginx.conf
+    && sed -i "s|__API_ORIGIN__|${API_ORIGIN}|g" nginx.conf \
+    && ! grep -F '__API_ORIGIN__' nginx.conf
 
 FROM nginx:alpine
 COPY --from=build /app/nginx.conf /etc/nginx/conf.d/default.conf

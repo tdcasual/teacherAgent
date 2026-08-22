@@ -36,8 +36,10 @@ jobs:
             dockerfile: services/mcp/Dockerfile
           - name: frontend-student
             dockerfile: frontend/Dockerfile.student
+            build_args: VITE_API_URL=http://localhost:8000
           - name: frontend-teacher
             dockerfile: frontend/Dockerfile.teacher
+            build_args: VITE_API_URL=http://localhost:8000
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -79,6 +81,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.image.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
