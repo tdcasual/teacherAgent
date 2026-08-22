@@ -143,6 +143,44 @@ class MCPServerTest(unittest.TestCase):
             res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
             self.assertEqual(res.status_code, 401)
 
+    def test_mcp_empty_api_key_rejects_rpc(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="")
+            client = TestClient(mcp_mod.app)
+            res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            self.assertEqual(res.status_code, 503)
+            self.assertEqual(res.json()["detail"], "mcp_auth_not_configured")
+            health = client.get("/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["status"], "ok")
+
+    def test_mcp_missing_header_is_401(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            client = TestClient(mcp_mod.app)
+            res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Unauthorized")
+
+    def test_mcp_wrong_key_401(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            client = TestClient(mcp_mod.app)
+            wrong = client.post(
+                "/mcp",
+                headers={"X-API-Key": "nope"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            )
+            self.assertEqual(wrong.status_code, 401)
+            self.assertEqual(wrong.json()["detail"], "Unauthorized")
+            ok = client.post(
+                "/mcp",
+                headers={"X-API-Key": "secret"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertIn("result", ok.json())
+
 
 if __name__ == "__main__":
     unittest.main()

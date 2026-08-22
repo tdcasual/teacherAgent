@@ -51,11 +51,12 @@ services:
       context: .
       dockerfile: services/mcp/Dockerfile
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     env_file: .env
     environment:
       - DATA_DIR=/app/data
-      - MCP_API_KEY=${MCP_API_KEY:-}
+      - UPLOADS_DIR=/app/uploads
+      - MCP_API_KEY=${MCP_API_KEY:?MCP_API_KEY is required}
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant

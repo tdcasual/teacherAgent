@@ -5,10 +5,13 @@ This document describes the MCP server interface exposed by this project.
 ## Endpoint
 - **URL**: `/mcp`
 - **Protocol**: JSON-RPC 2.0
-- **Auth**: `X-API-Key: <MCP_API_KEY>` (if configured)
+- **Auth**: required. Send `X-API-Key: <MCP_API_KEY>`.
+- Empty or missing `MCP_API_KEY` configuration makes `POST /mcp` return `503` with `mcp_auth_not_configured`.
+- Missing or wrong `X-API-Key` returns `401`.
 
 ## Health Check
 - `GET /health` → `{ "status": "ok" }`
+- Unauthenticated **only** because compose publishes MCP on loopback (`127.0.0.1:9000`).
 
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
@@ -286,6 +289,6 @@ Invoke a tool.
 ---
 
 ## Notes
-- All file paths passed to MCP should exist inside the container volume.
+- All file paths passed to MCP must resolve under `DATA_DIR` or `UPLOADS_DIR` (symlink escape is rejected).
 - MCP only writes derived fields; no raw scores are stored.
-- For production, restrict MCP with a strong `MCP_API_KEY`.
+- Auth is required on `/mcp`. Set a strong `MCP_API_KEY`; an empty key fails closed (`503`) and compose will not start without one.

@@ -20,7 +20,7 @@
 - Owner：平台
 - 下次复审日期：2026-11-22
 - 退出条件：空密钥 503；loopback；脚本白名单
-- 补偿控制：校内单校部署不默认公网暴露；H 变更 2 人评审；`/health` 不返回密钥。
+- 补偿控制：空密钥 `POST /mcp` 返回 503；compose 要求 `MCP_API_KEY` 且绑定 `127.0.0.1:9000`；脚本与用户路径白名单；`/health` 保持匿名仅因 loopback；H 变更 2 人评审。
 
 ### RISK-ADMIN-BOOTSTRAP-001
 - 风险描述：`data/auth/admin_bootstrap.txt` 已提交明文 admin 密码；`.gitignore` 未覆盖该文件。
