@@ -26,6 +26,9 @@ services:
       - AUTH_TOKEN_SECRET_FILE=${AUTH_TOKEN_SECRET_FILE:-/app/config/auth_token_secret}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - APP_ENV=${APP_ENV:-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3001,http://localhost:3002}
+      - MASTER_KEY=${MASTER_KEY:?MASTER_KEY is required}
     volumes:
       - ./data:/app/data
       - ./config:/app/config

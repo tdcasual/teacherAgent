@@ -27,8 +27,13 @@ _log = logging.getLogger(__name__)
 
 
 def _cors_origins() -> tuple[list[str], bool]:
-    origins = os.getenv("CORS_ORIGINS", "*")
-    origins_list = [o.strip() for o in origins.split(",")] if origins else ["*"]
+    raw = os.getenv("CORS_ORIGINS")
+    origins_list = [o.strip() for o in (raw or "").split(",") if o.strip()]
+    if not origins_list:
+        env = (os.getenv("APP_ENV") or os.getenv("ENV") or "development").strip().lower()
+        if env in {"prod", "production"}:
+            raise RuntimeError("CORS_ORIGINS is required in production")
+        origins_list = ["http://localhost:3001", "http://localhost:3002"]
     allow_credentials = "*" not in origins_list
     if not allow_credentials:
         _log.warning(
