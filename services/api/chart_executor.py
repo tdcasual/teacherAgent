@@ -81,12 +81,25 @@ def _trusted_risk_alerts(
     return alerts
 
 
+def _env_truthy(name: str) -> bool:
+    return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_TRUSTED_FORBIDDEN_SOURCES = frozenset({"tool_loop", "chat", "llm"})
+
+
 def _trusted_policy_denial(*, role: str, source: str) -> Optional[str]:
+    if not _env_truthy("CHART_EXEC_TRUSTED_ENABLED"):
+        return "trusted_not_enabled"
     allowed_sources = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES"))
     allowed_roles = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES"))
-    if allowed_sources and source not in allowed_sources:
+    if not allowed_sources or not allowed_roles:
+        return "trusted_allowlist_empty"
+    src = str(source or "").strip().lower()
+    role_norm = str(role or "").strip().lower()
+    if src not in allowed_sources or src in _TRUSTED_FORBIDDEN_SOURCES:
         return "trusted_source_not_allowed"
-    if allowed_roles and role not in allowed_roles:
+    if role_norm not in allowed_roles:
         return "trusted_role_not_allowed"
     return None
 
@@ -979,10 +992,9 @@ def _write_chart_exec_script(
 ) -> None:
     fs_guard = ""
     if execution_profile == "sandboxed":
-        data_dir = str(uploads_dir.parent / "data")
         fs_guard = build_filesystem_guard_source(
             str(output_dir),
-            [str(output_dir), str(uploads_dir), data_dir],
+            [str(output_dir), str(uploads_dir)],
         )
     script_source = _build_runner_source(
         python_code,

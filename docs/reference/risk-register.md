@@ -7,12 +7,12 @@
 ## 进行中 / 重开
 
 ### RISK-CHART-TRUSTED-001
-- 风险描述：`chart.exec` 的 LLM schema 仍暴露 `execution_profile=trusted`，空 allowlist 放行 trusted；2026-03-03 纸面关闭说明已失效。
+- 风险描述：`chart.exec` 的 LLM schema 曾暴露 `execution_profile=trusted`，空 allowlist 放行 trusted；2026-03-03 纸面关闭说明已失效。
 - 状态：修复 PR 进行中
 - Owner：后端平台负责人
 - 下次复审日期：2026-11-22
-- 退出条件：trusted 默认不可达；空 allowlist deny；schema 无 execution_profile
-- 补偿控制：默认档位仍为 `sandboxed`；审计日志记录执行上下文；H 变更 2 人评审。
+- 退出条件：LLM 不可选 trusted；空 allowlist deny；exam template 保留；trusted 需 ENABLED + 非空 source/role allowlist 且 source 非 tool_loop/chat/llm
+- 补偿控制：LLM schema 删除 `execution_profile`（`additionalProperties: false` 拒绝模型传入）；tool_loop/chat/llm/`tool_dispatch.chart.exec` 强制 sandboxed 并扫描；空 allowlist 或未设 `CHART_EXEC_TRUSTED_ENABLED` 拒绝 trusted；exam 内部仍走 `template` 并扫描；H 变更 2 人评审。
 
 ### RISK-MCP-UNAUTH-001
 - 风险描述：MCP 空密钥无认证，且 `0.0.0.0:9000` 可公网暴露；工具含写操作与任意脚本执行。

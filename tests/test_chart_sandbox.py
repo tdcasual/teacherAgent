@@ -170,13 +170,15 @@ class ScanCodePatternsTest(unittest.TestCase):
         result = scan_code_patterns("import ctypes", "sandboxed")
         self.assertIsNotNone(result)
 
-    def test_trusted_profile_skips_scan(self):
+    def test_trusted_profile_is_scanned(self):
         result = scan_code_patterns("os.system('rm -rf /')", "trusted")
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertIn("os.system", result["violations"])
 
-    def test_template_profile_skips_scan(self):
+    def test_template_profile_is_scanned(self):
         result = scan_code_patterns("import subprocess", "template")
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertIn("subprocess", result["violations"])
 
     def test_multiple_violations(self):
         code = "import subprocess\nos.system('x')\neval('y')"
@@ -212,9 +214,9 @@ class BuildFilesystemGuardSourceTest(unittest.TestCase):
         self.assertIn("/my/output", source)
 
     def test_guard_contains_allowed_roots(self):
-        source = build_filesystem_guard_source("/out", ["/out", "/data", "/uploads"])
-        self.assertIn("/data", source)
+        source = build_filesystem_guard_source("/out", ["/out", "/uploads"])
         self.assertIn("/uploads", source)
+        self.assertNotIn("/data", source)
 
     def test_guard_blocks_prefix_bypass_for_reads(self):
         with tempfile.TemporaryDirectory() as td:

@@ -156,6 +156,9 @@ class ExamAnalysisChartsServiceTest(unittest.TestCase):
             self.assertEqual(len(calls), 2)
             self.assertEqual(out.get("chart_types_requested"), ["score_distribution", "class_compare"])
             self.assertIn("/charts/", str(out.get("markdown") or ""))
+            for args in calls:
+                self.assertEqual(args.get("execution_profile"), "template")
+                self.assertEqual(args.get("_audit_source"), "exam.analysis.charts.generate")
 
 
 if __name__ == "__main__":
