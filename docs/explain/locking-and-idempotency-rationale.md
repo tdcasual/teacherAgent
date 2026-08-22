@@ -26,7 +26,7 @@
 - chat 幂等走文件系统（`request_map_dir` + `O_EXCL`），不是 Redis。
 
 ## Redis 作业与 lane key
-RQ 与 `ChatRedisLaneStore` 共用同一 Redis 实例。该实例使用 `noeviction`：内存满时写入失败（enqueue / lane 操作 5xx），而不是 LRU 静默丢 job 或 lane key。不要把 lane 迁到 LRU 实例。运维盯 `INFO memory` 的 `used_memory` / `used_memory_rss` 以及 API enqueue 5xx；256mb 不够则加大 `maxmemory`，不加回 LRU。
+RQ 与 `ChatRedisLaneStore` 共用同一 Redis 实例。该实例使用 `noeviction`：内存满时写入失败，而不是 LRU 静默丢 job 或 lane key。不要把 lane 迁到 LRU 实例。运维盯 Redis `OOM` 与 `INFO memory` 的 `used_memory` / `used_memory_rss`、API/worker 日志、chat job `error=enqueue_failed`（HTTP 仍 200、`status=failed`），以及 upload/exam enqueue 的 5xx。不要只告警 API 5xx，否则会漏掉 chat-lane OOM。256mb 不够则加大 `maxmemory`，不加回 LRU。
 
 ## 相关文档
 - `docs/reference/risk-register.md`
