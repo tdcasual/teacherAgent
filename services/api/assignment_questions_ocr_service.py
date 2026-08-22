@@ -28,8 +28,8 @@ _OCR_MIME_BY_SUFFIX = {
     ".jpeg": {"image/jpeg"},
     ".bmp": {"image/bmp", "image/x-ms-bmp"},
     ".webp": {"image/webp"},
-    ".md": {"text/markdown", "text/plain"},
-    ".markdown": {"text/markdown", "text/plain"},
+    ".md": {"text/markdown", "text/plain", "text/x-markdown"},
+    ".markdown": {"text/markdown", "text/plain", "text/x-markdown"},
     ".txt": {"text/plain"},
     ".tex": {"application/x-tex", "text/x-tex", "text/plain"},
 }

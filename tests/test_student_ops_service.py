@@ -31,7 +31,9 @@ class _Upload:
         self.filename = name
         self.file = io.BytesIO(data)
         suffix = Path(name).suffix.lower()
-        self.content_type = content_type or _STUDENT_MIME.get(suffix, "application/octet-stream")
+        self.content_type = (
+            _STUDENT_MIME.get(suffix, "application/octet-stream") if content_type is None else content_type
+        )
 
     async def read(self, size: int = -1) -> bytes:
         if size is None or size < 0:
@@ -46,7 +48,6 @@ class StudentOpsServiceTest(unittest.TestCase):
             uploads_dir=Path("/tmp"),
             app_root=Path("/tmp/app"),
             sanitize_filename=lambda s: s,
-            save_upload_file=lambda _f, _p: None,  # type: ignore[arg-type]
             run_script=lambda _args: "",
             student_candidates_by_name=lambda _name: [{"student_id": "S1", "class_name": "高二2401班"}, {"student_id": "S2", "class_name": "高二2402班"}],
             normalize=lambda s: "".join(str(s).split()).lower(),
@@ -65,7 +66,6 @@ class StudentOpsServiceTest(unittest.TestCase):
             uploads_dir=Path("/tmp"),
             app_root=Path("/tmp/app"),
             sanitize_filename=lambda s: s,
-            save_upload_file=lambda _f, _p: None,  # type: ignore[arg-type]
             run_script=lambda args: captured.setdefault("args", list(args)) or "ok",
             student_candidates_by_name=lambda _name: [],
             normalize=lambda s: str(s),
@@ -88,15 +88,10 @@ class StudentOpsServiceTest(unittest.TestCase):
     def test_upload_files_saves_sanitized_names(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            async def _save(upload, dest):  # type: ignore[no-untyped-def]
-                dest.write_bytes(upload.file.read())
-                return len(dest.read_bytes())
-
             deps = StudentOpsDeps(
                 uploads_dir=root,
                 app_root=Path(td),
                 sanitize_filename=lambda s: "" if s.startswith(".") else s,
-                save_upload_file=_save,
                 run_script=lambda _args: "",
                 student_candidates_by_name=lambda _name: [],
                 normalize=lambda s: str(s),
@@ -115,15 +110,10 @@ class StudentOpsServiceTest(unittest.TestCase):
 
 class StudentOpsUploadLimitsTest(unittest.IsolatedAsyncioTestCase):
     def _deps(self, root: Path) -> StudentOpsDeps:
-        async def _save(upload, dest):  # type: ignore[no-untyped-def]
-            dest.write_bytes(upload.file.read())
-            return dest.stat().st_size
-
         return StudentOpsDeps(
             uploads_dir=root,
             app_root=root,
             sanitize_filename=lambda s: "" if str(s).startswith(".") else Path(str(s)).name,
-            save_upload_file=_save,
             run_script=lambda _args: "",
             student_candidates_by_name=lambda _name: [],
             normalize=lambda s: str(s),
@@ -196,6 +186,15 @@ class StudentOpsUploadLimitsTest(unittest.IsolatedAsyncioTestCase):
             self.assertNotEqual(saved[0], existing)
             self.assertEqual(existing.read_bytes(), b"original")
             self.assertEqual(saved[0].read_bytes(), b"new")
+
+    async def test_upload_allows_empty_mime_for_allowed_suffix(self):
+        with TemporaryDirectory() as td:
+            deps = self._deps(Path(td))
+            out = await upload_files(
+                [_Upload("notes.md", b"# hi", content_type="")],
+                deps=deps,
+            )
+            self.assertEqual(len(out.get("saved") or []), 1)
 
 
 if __name__ == "__main__":

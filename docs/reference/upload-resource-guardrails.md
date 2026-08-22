@@ -21,12 +21,12 @@
 
 ## 按流后缀与 MIME
 
-扩展名 + MIME 必须同时匹配。MIME 与后缀不一致 → **400**。不得用学生流的窄集合覆盖考试/作业流。
+扩展名 + MIME 必须同时匹配。**冲突**的 MIME 与后缀 → **400**。空 `Content-Type` 或 `application/octet-stream` 视为未标注，回退到后缀白名单。不得用学生流的窄集合覆盖考试/作业流。学生 `/upload` 与 `/student/submit` 共用同一套后缀/MIME 常量（`student_ops_service.STUDENT_*`）。
 
 ### 学生 `POST /upload` 与 `POST /student/submit`
 
 - 后缀：`.pdf` `.png` `.jpeg` `.jpg` `.webp` `.txt` `.md` `.csv`
-- 对应 MIME（如 `.pdf`→`application/pdf`，`.png`→`image/png`）
+- 对应 MIME（如 `.pdf`→`application/pdf`，`.png`→`image/png`；`.csv` 另含 `application/vnd.ms-excel`；`.md` 含 `text/x-markdown`）
 
 ### 考试试卷 / 作业源文件 / 作业 OCR
 
@@ -42,8 +42,8 @@
 2. 限制单文件大小（20MB）。
 3. 限制单请求总上传体积（80MB）。
 4. 扩展名 + MIME 双白名单校验；MIME 与后缀不一致拒绝。
-5. 流式写入过程中实时校验，超限立即中断。禁止 `dest.write_bytes(await upload_file.read())`。
-6. 同名碰撞改名，不得覆盖已有文件。
+5. 流式写入过程中实时校验，超限立即中断。禁止 `dest.write_bytes(await upload_file.read())`。有 `.file` 时在线程池中拷贝，避免堵事件循环。
+6. 同名碰撞改名；以 `O_EXCL`/`"xb"` 创建并在 `FileExistsError` 时重试，不跟随悬空 symlink。
 7. 请求失败时清理本次临时文件，避免垃圾落盘。
 
 ## 客户端协同规则

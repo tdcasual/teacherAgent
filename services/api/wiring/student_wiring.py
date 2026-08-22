@@ -83,7 +83,6 @@ def _student_ops_deps(core=None):
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
         sanitize_filename=_ac.sanitize_filename,
-        save_upload_file=_ac.save_upload_file,
         run_script=_ac.run_script,
         student_candidates_by_name=_ac.student_candidates_by_name,
         normalize=_ac.normalize,

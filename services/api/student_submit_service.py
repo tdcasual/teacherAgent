@@ -7,19 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 
+from .student_ops_service import STUDENT_ALLOWED_SUFFIXES, STUDENT_MIME_BY_SUFFIX
 from .upload_limits import UploadLimitError, save_limited_uploads
-
-_STUDENT_ALLOWED_SUFFIXES = {".pdf", ".png", ".jpeg", ".jpg", ".webp", ".txt", ".md", ".csv"}
-_STUDENT_MIME_BY_SUFFIX = {
-    ".pdf": {"application/pdf"},
-    ".png": {"image/png"},
-    ".jpg": {"image/jpeg"},
-    ".jpeg": {"image/jpeg"},
-    ".webp": {"image/webp"},
-    ".txt": {"text/plain"},
-    ".md": {"text/markdown", "text/plain"},
-    ".csv": {"text/csv", "text/plain", "application/csv"},
-}
 
 
 def _default_sanitize_filename(name: str) -> str:
@@ -89,8 +78,8 @@ async def submit(
         saved_paths = await save_limited_uploads(
             files,
             deps.uploads_dir,
-            suffixes=_STUDENT_ALLOWED_SUFFIXES,
-            mimes=_STUDENT_MIME_BY_SUFFIX,
+            suffixes=STUDENT_ALLOWED_SUFFIXES,
+            mimes=STUDENT_MIME_BY_SUFFIX,
             sanitize_filename=deps.sanitize_filename,
         )
     except UploadLimitError as exc:

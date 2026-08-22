@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException
 
 from .upload_limits import UploadLimitError, save_limited_uploads
 
-_STUDENT_ALLOWED_SUFFIXES = {".pdf", ".png", ".jpeg", ".jpg", ".webp", ".txt", ".md", ".csv"}
-_STUDENT_MIME_BY_SUFFIX = {
+STUDENT_ALLOWED_SUFFIXES = {".pdf", ".png", ".jpeg", ".jpg", ".webp", ".txt", ".md", ".csv"}
+STUDENT_MIME_BY_SUFFIX = {
     ".pdf": {"application/pdf"},
     ".png": {"image/png"},
     ".jpg": {"image/jpeg"},
     ".jpeg": {"image/jpeg"},
     ".webp": {"image/webp"},
     ".txt": {"text/plain"},
-    ".md": {"text/markdown", "text/plain"},
-    ".csv": {"text/csv", "text/plain", "application/csv"},
+    ".md": {"text/markdown", "text/plain", "text/x-markdown"},
+    ".csv": {"text/csv", "text/plain", "application/csv", "application/vnd.ms-excel"},
 }
 
 
@@ -26,7 +26,6 @@ class StudentOpsDeps:
     uploads_dir: Path
     app_root: Path
     sanitize_filename: Callable[[str], str]
-    save_upload_file: Callable[[Any, Path], Awaitable[int]]
     run_script: Callable[[List[str]], str]
     student_candidates_by_name: Callable[[str], List[Dict[str, Any]]]
     normalize: Callable[[str], str]
@@ -39,8 +38,8 @@ async def upload_files(files: List[Any], *, deps: StudentOpsDeps) -> Dict[str, A
         saved_paths = await save_limited_uploads(
             files,
             deps.uploads_dir,
-            suffixes=_STUDENT_ALLOWED_SUFFIXES,
-            mimes=_STUDENT_MIME_BY_SUFFIX,
+            suffixes=STUDENT_ALLOWED_SUFFIXES,
+            mimes=STUDENT_MIME_BY_SUFFIX,
             sanitize_filename=deps.sanitize_filename,
         )
     except UploadLimitError as exc:

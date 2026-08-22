@@ -8,6 +8,9 @@ import pytest
 
 from services.api.assignment_upload_start_service import _ASSIGNMENT_ALLOWED_SUFFIXES
 from services.api.exam_upload_start_service import _ALLOWED_PAPER_SUFFIXES, _ALLOWED_SCORE_SUFFIXES
+from services.api.student_ops_service import STUDENT_ALLOWED_SUFFIXES, STUDENT_MIME_BY_SUFFIX
+from services.api.student_submit_service import STUDENT_ALLOWED_SUFFIXES as SUBMIT_SUFFIXES
+from services.api.student_submit_service import STUDENT_MIME_BY_SUFFIX as SUBMIT_MIMES
 from services.api.upload_limits import (
     MAX_FILE_BYTES,
     MAX_FILES,
@@ -121,6 +124,33 @@ def test_enforce_upload_limits_rejects_mime_mismatch() -> None:
     assert ctx.value.status_code == 400
 
 
+def test_student_endpoints_share_one_allowlist() -> None:
+    assert SUBMIT_SUFFIXES is STUDENT_ALLOWED_SUFFIXES
+    assert SUBMIT_MIMES is STUDENT_MIME_BY_SUFFIX
+
+
+def test_empty_and_octet_stream_mime_fall_back_to_suffix() -> None:
+    empty = _Upload("notes.md", b"# hi", "")
+    octet = _Upload("notes.md", b"# hi", "application/octet-stream")
+    for upload in (empty, octet):
+        prepared = enforce_upload_limits(
+            [upload],
+            suffixes=STUDENT_ALLOWED_SUFFIXES,
+            mimes=STUDENT_MIME_BY_SUFFIX,
+        )
+        assert len(prepared) == 1
+
+
+def test_csv_accepts_excel_mime() -> None:
+    upload = _Upload("scores.csv", b"a,b", "application/vnd.ms-excel")
+    prepared = enforce_upload_limits(
+        [upload],
+        suffixes=STUDENT_ALLOWED_SUFFIXES,
+        mimes=STUDENT_MIME_BY_SUFFIX,
+    )
+    assert len(prepared) == 1
+
+
 def test_unique_dest_path_does_not_overwrite_original(tmp_path: Path) -> None:
     original = tmp_path / "a.pdf"
     original.write_bytes(b"original")
@@ -132,18 +162,24 @@ def test_unique_dest_path_does_not_overwrite_original(tmp_path: Path) -> None:
     assert dest.read_bytes() == b"new"
 
 
+def test_unique_dest_path_skips_symlink(tmp_path: Path) -> None:
+    dest = tmp_path / "a.pdf"
+    dest.symlink_to(tmp_path / "missing.pdf")
+    assert unique_dest_path(dest).name == "a_1.pdf"
+
+
 def test_save_upload_streaming_writes_chunks_and_counts(tmp_path: Path) -> None:
     dest = tmp_path / "paper.pdf"
     upload = _Upload("paper.pdf", b"abcdef", "application/pdf")
     counters = {"total": 0}
 
-    async def _run() -> int:
+    async def _run() -> tuple[Path, int]:
         return await save_upload_streaming(upload, dest, counters=counters, chunk_size=2)
 
-    written = asyncio.run(_run())
+    used, written = asyncio.run(_run())
     assert written == 6
     assert counters["total"] == 6
-    assert dest.read_bytes() == b"abcdef"
+    assert used.read_bytes() == b"abcdef"
 
 
 def test_save_upload_streaming_rejects_over_max_file_bytes(tmp_path: Path) -> None:
@@ -151,13 +187,70 @@ def test_save_upload_streaming_rejects_over_max_file_bytes(tmp_path: Path) -> No
     upload = _SizedUpload("paper.pdf", MAX_FILE_BYTES + 1, "application/pdf")
     counters = {"total": 0}
 
-    async def _run() -> int:
+    async def _run() -> tuple[Path, int]:
         return await save_upload_streaming(upload, dest, counters=counters, chunk_size=1024 * 1024)
 
     with pytest.raises(UploadLimitError) as ctx:
         asyncio.run(_run())
     assert ctx.value.status_code == 400
     assert not dest.exists()
+
+
+def test_save_upload_streaming_unlinks_partial_when_size_unknown(tmp_path: Path) -> None:
+    dest = tmp_path / "paper.pdf"
+
+    class _Unseekable:
+        filename = "paper.pdf"
+        content_type = "application/pdf"
+
+        def __init__(self) -> None:
+            self._remaining = MAX_FILE_BYTES + 1
+            self.file = self
+
+        def seek(self, *_args: object, **_kwargs: object) -> int:
+            raise OSError("not seekable")
+
+        def tell(self) -> int:
+            raise OSError("not seekable")
+
+        def read(self, n: int = -1) -> bytes:
+            if n is None or n < 0:
+                raise AssertionError("full read() is forbidden")
+            take = min(int(n), self._remaining)
+            self._remaining -= take
+            return b"x" * take if take else b""
+
+    counters = {"total": 0}
+
+    async def _run() -> tuple[Path, int]:
+        return await save_upload_streaming(
+            _Unseekable(),
+            dest,
+            counters=counters,
+            chunk_size=MAX_FILE_BYTES,
+        )
+
+    with pytest.raises(UploadLimitError) as ctx:
+        asyncio.run(_run())
+    assert ctx.value.status_code == 400
+    assert not dest.exists()
+    assert list(tmp_path.glob("paper*.pdf")) == []
+
+
+def test_save_upload_streaming_does_not_follow_dangling_symlink(tmp_path: Path) -> None:
+    dest = tmp_path / "a.pdf"
+    dest.symlink_to(tmp_path / "missing.pdf")
+    upload = _Upload("a.pdf", b"new", "application/pdf")
+    counters = {"total": 0}
+
+    async def _run() -> tuple[Path, int]:
+        return await save_upload_streaming(upload, dest, counters=counters)
+
+    used, written = asyncio.run(_run())
+    assert written == 3
+    assert used.name == "a_1.pdf"
+    assert dest.is_symlink()
+    assert used.read_bytes() == b"new"
 
 
 def test_submit_and_ocr_do_not_full_read_into_memory() -> None:
