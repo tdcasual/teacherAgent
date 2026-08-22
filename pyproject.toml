@@ -46,9 +46,6 @@ pretty = true
 
 [tool.coverage.run]
 source = ["services/api"]
-omit = [
-  "services/api/workers/rq_worker.py",
-]
 
 [tool.coverage.report]
 show_missing = true

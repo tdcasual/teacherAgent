@@ -6,13 +6,17 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from rq import Queue
+from rq import Queue, Retry
 
 from services.api.chat_redis_lane_store import ChatRedisLaneStore
 from services.api.redis_clients import get_redis_client
 from services.api.workers.rq_tenant_runtime import load_tenant_module
 
 _log = logging.getLogger(__name__)
+
+RETRY = Retry(max=3, interval=[10, 30, 90])
+JOB_TIMEOUT = 600
+RESULT_TTL = 86400
 
 
 
@@ -41,6 +45,18 @@ def _get_queue() -> Queue:
     return Queue(_queue_name(), connection=redis)
 
 
+def _enqueue_job(func: Any, *args: Any, **kwargs: Any) -> Any:
+    queue = _get_queue()
+    return queue.enqueue(
+        func,
+        *args,
+        **kwargs,
+        retry=RETRY,
+        job_timeout=JOB_TIMEOUT,
+        result_ttl=RESULT_TTL,
+    )
+
+
 def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
     tenant_key = str(tenant_id or getattr(mod, "TENANT_ID", "") or "").strip() or "default"
     return ChatRedisLaneStore(
@@ -52,23 +68,19 @@ def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
 
 
 def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_upload_job, job_id, tenant_id=tenant_id)
+    _enqueue_job(run_upload_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_exam_job, job_id, tenant_id=tenant_id)
+    _enqueue_job(run_exam_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_survey_job, job_id, tenant_id=tenant_id)
+    _enqueue_job(run_survey_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_profile_update, payload=payload, tenant_id=tenant_id)
+    _enqueue_job(run_profile_update, payload=payload, tenant_id=tenant_id)
 
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
@@ -85,8 +97,7 @@ def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: O
     store = _lane_store(mod, tenant_id)
     info, dispatch = store.enqueue(job_id, lane_final)
     if dispatch:
-        queue = _get_queue()
-        queue.enqueue(run_chat_job, job_id, lane_final, tenant_id=tenant_id)
+        _enqueue_job(run_chat_job, job_id, lane_final, tenant_id=tenant_id)
     return {"lane_id": lane_final, **info}
 
 
@@ -170,9 +181,48 @@ def run_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = No
     mod.student_profile_update(payload)
 
 
+def _decode_redis_value(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value)
+
+
+def _try_reacquire_lane_claim(store: Any, job_id: str, lane_id: str) -> bool:
+    """Return True if this job holds or re-acquired the lane active claim."""
+    reacquire = getattr(store, "try_reacquire", None)
+    if callable(reacquire):
+        return bool(reacquire(job_id, lane_id))
+    redis = getattr(store, "redis", None)
+    active_key_fn = getattr(store, "_active_key", None)
+    if redis is None or not callable(active_key_fn):
+        return True
+    key = active_key_fn(lane_id)
+    try:
+        current = redis.get(key)
+    except Exception:
+        _log.warning("lane claim lookup failed for job %s lane %s", job_id, lane_id, exc_info=True)
+        return False
+    if current is not None:
+        return _decode_redis_value(current) == str(job_id)
+    ttl = int(getattr(store, "claim_ttl_sec", 0) or 0)
+    try:
+        if ttl > 0:
+            ok = redis.set(key, job_id, ex=ttl, nx=True)
+        else:
+            ok = redis.set(key, job_id, nx=True)
+    except Exception:
+        _log.warning("lane claim re-acquire failed for job %s lane %s", job_id, lane_id, exc_info=True)
+        return False
+    return bool(ok)
+
+
 def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     store = _lane_store(mod, tenant_id)
+    # RQ Retry re-runs after finish() may have released the lane; skip if we cannot claim it.
+    if not _try_reacquire_lane_claim(store, job_id, lane_id):
+        _log.info("skip chat job %s: lane %s claim not re-acquired", job_id, lane_id)
+        return
     try:
         try:
             mod.process_chat_job(job_id)
@@ -215,5 +265,4 @@ def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) 
     finally:
         next_job_id = store.finish(job_id, lane_id)
         if next_job_id:
-            queue = _get_queue()
-            queue.enqueue(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)
+            _enqueue_job(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)

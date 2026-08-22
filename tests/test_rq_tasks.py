@@ -9,6 +9,22 @@ import pytest
 from services.api.workers import rq_tasks
 
 
+def _retry_kwargs() -> Dict[str, Any]:
+    return {
+        "retry": rq_tasks.RETRY,
+        "job_timeout": rq_tasks.JOB_TIMEOUT,
+        "result_ttl": rq_tasks.RESULT_TTL,
+    }
+
+
+def _assert_retry_and_timeout(kwargs: Dict[str, Any]) -> None:
+    assert kwargs["retry"] is rq_tasks.RETRY
+    assert kwargs["retry"].max == 3
+    assert list(kwargs["retry"].intervals) == [10, 30, 90]
+    assert kwargs["job_timeout"] == rq_tasks.JOB_TIMEOUT
+    assert kwargs["result_ttl"] == rq_tasks.RESULT_TTL
+
+
 class _FakeQueue:
     def __init__(self) -> None:
         self.calls: List[Dict[str, Any]] = []
@@ -133,15 +149,15 @@ def test_enqueue_basic_jobs_use_queue(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert queue.calls[0]["func"] is rq_tasks.run_upload_job
     assert queue.calls[0]["args"] == ("up-1",)
-    assert queue.calls[0]["kwargs"] == {"tenant_id": "t1"}
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "t1", **_retry_kwargs()}
 
     assert queue.calls[1]["func"] is rq_tasks.run_exam_job
     assert queue.calls[1]["args"] == ("exam-1",)
-    assert queue.calls[1]["kwargs"] == {"tenant_id": "t2"}
+    assert queue.calls[1]["kwargs"] == {"tenant_id": "t2", **_retry_kwargs()}
 
     assert queue.calls[2]["func"] is rq_tasks.run_profile_update
     assert queue.calls[2]["args"] == ()
-    assert queue.calls[2]["kwargs"] == {"payload": {"uid": "u-1"}, "tenant_id": "t3"}
+    assert queue.calls[2]["kwargs"] == {"payload": {"uid": "u-1"}, "tenant_id": "t3", **_retry_kwargs()}
 
 
 def test_enqueue_chat_job_resolves_lane_and_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,7 +178,7 @@ def test_enqueue_chat_job_resolves_lane_and_dispatches(monkeypatch: pytest.Monke
     assert len(queue.calls) == 1
     assert queue.calls[0]["func"] is rq_tasks.run_chat_job
     assert queue.calls[0]["args"] == ("chat-1", "L-1")
-    assert queue.calls[0]["kwargs"] == {"tenant_id": "tenant-a"}
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "tenant-a", **_retry_kwargs()}
 
 
 def test_enqueue_chat_job_fallback_lane_and_no_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,6 +315,7 @@ def test_run_chat_job_requeues_next_job(monkeypatch: pytest.MonkeyPatch) -> None
     assert len(queue.calls) == 1
     assert queue.calls[0]["func"] is rq_tasks.run_chat_job
     assert queue.calls[0]["args"] == ("chat-next", "lane-1")
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "t", **_retry_kwargs()}
 
 
 def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -359,3 +376,132 @@ def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch
     ]
     assert finish_calls == ["chat-2:lane-2"]
     assert queue.calls == []
+
+
+def test_enqueue_upload_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = _FakeQueue()
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
+
+    rq_tasks.enqueue_upload_job("up-1", tenant_id="t1")
+    rq_tasks.enqueue_exam_job("exam-1", tenant_id="t2")
+    rq_tasks.enqueue_survey_job("survey-1", tenant_id="t3")
+    rq_tasks.enqueue_profile_update({"uid": "u-1"}, tenant_id="t4")
+
+    assert [call["func"] for call in queue.calls] == [
+        rq_tasks.run_upload_job,
+        rq_tasks.run_exam_job,
+        rq_tasks.run_survey_job,
+        rq_tasks.run_profile_update,
+    ]
+    for call in queue.calls:
+        _assert_retry_and_timeout(call["kwargs"])
+
+
+def test_enqueue_chat_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = _FakeQueue()
+    store = SimpleNamespace(enqueue=lambda job_id, lane_id: ({"lane_queue_position": 0}, True))
+    mod = SimpleNamespace()
+    monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
+    monkeypatch.setattr(rq_tasks, "_lane_store", lambda _mod, tenant_id: store)
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
+
+    rq_tasks.enqueue_chat_job("chat-1", lane_id="L-1", tenant_id="t")
+
+    assert queue.calls[0]["func"] is rq_tasks.run_chat_job
+    _assert_retry_and_timeout(queue.calls[0]["kwargs"])
+
+
+def test_run_chat_job_skips_when_lane_claim_not_reacquired(monkeypatch: pytest.MonkeyPatch) -> None:
+    processed: List[str] = []
+    finish_calls: List[str] = []
+
+    class _Store:
+        def try_reacquire(self, job_id: str, lane_id: str) -> bool:
+            assert job_id == "chat-skip"
+            assert lane_id == "lane-1"
+            return False
+
+        def finish(self, job_id: str, lane_id: str) -> str | None:
+            finish_calls.append(f"{job_id}:{lane_id}")
+            return None
+
+    mod = SimpleNamespace(process_chat_job=lambda job_id: processed.append(job_id))
+    monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
+    monkeypatch.setattr(rq_tasks, "_lane_store", lambda _mod, tenant_id: _Store())
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: _FakeQueue())
+
+    rq_tasks.run_chat_job("chat-skip", "lane-1", tenant_id="t")
+
+    assert processed == []
+    assert finish_calls == []
+
+
+def test_try_reacquire_lane_claim_holds_existing_and_sets_empty() -> None:
+    class _Redis:
+        def __init__(self) -> None:
+            self.values: Dict[str, Any] = {"lane-a": "job-1"}
+            self.set_calls: List[Dict[str, Any]] = []
+
+        def get(self, key: str) -> Any:
+            return self.values.get(key)
+
+        def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
+            self.set_calls.append({"key": key, "value": value, "ex": ex, "nx": nx})
+            if nx and key in self.values:
+                return False
+            self.values[key] = value
+            return True
+
+    redis = _Redis()
+    store = SimpleNamespace(redis=redis, _active_key=lambda lane_id: lane_id, claim_ttl_sec=30)
+
+    assert rq_tasks._try_reacquire_lane_claim(store, "job-1", "lane-a") is True
+    assert redis.set_calls == []
+
+    assert rq_tasks._try_reacquire_lane_claim(store, "job-other", "lane-a") is False
+
+    assert rq_tasks._try_reacquire_lane_claim(store, "job-2", "lane-b") is True
+    assert redis.set_calls == [{"key": "lane-b", "value": "job-2", "ex": 30, "nx": True}]
+
+
+def test_try_reacquire_lane_claim_decodes_bytes_and_handles_get_error() -> None:
+    class _Redis:
+        def get(self, key: str) -> Any:
+            if key == "boom":
+                raise RuntimeError("redis down")
+            return b"job-1"
+
+        def set(self, *args: Any, **kwargs: Any) -> bool:
+            raise AssertionError("set should not run")
+
+    store = SimpleNamespace(redis=_Redis(), _active_key=lambda lane_id: lane_id, claim_ttl_sec=0)
+    assert rq_tasks._try_reacquire_lane_claim(store, "job-1", "held") is True
+    assert rq_tasks._try_reacquire_lane_claim(store, "job-1", "boom") is False
+
+
+def test_try_reacquire_lane_claim_zero_ttl_and_set_error() -> None:
+    class _Redis:
+        def __init__(self, *, fail_set: bool = False) -> None:
+            self.fail_set = fail_set
+            self.set_calls: List[Dict[str, Any]] = []
+
+        def get(self, _key: str) -> Any:
+            return None
+
+        def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
+            if self.fail_set:
+                raise RuntimeError("set failed")
+            self.set_calls.append({"key": key, "value": value, "ex": ex, "nx": nx})
+            return True
+
+    ok_redis = _Redis()
+    ok_store = SimpleNamespace(redis=ok_redis, _active_key=lambda lane_id: lane_id, claim_ttl_sec=0)
+    assert rq_tasks._try_reacquire_lane_claim(ok_store, "job-z", "lane-z") is True
+    assert ok_redis.set_calls == [{"key": "lane-z", "value": "job-z", "ex": None, "nx": True}]
+
+    fail_store = SimpleNamespace(
+        redis=_Redis(fail_set=True),
+        _active_key=lambda lane_id: lane_id,
+        claim_ttl_sec=5,
+    )
+    assert rq_tasks._try_reacquire_lane_claim(fail_store, "job-z", "lane-z") is False
