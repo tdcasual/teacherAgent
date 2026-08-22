@@ -45,6 +45,8 @@ def _validate_login_inputs(role_norm: str, sid: str, cred_type: str, cred: str) 
         return {"ok": False, "error": "missing_candidate_id"}
     if cred_type not in {"token", "password"}:
         return {"ok": False, "error": "invalid_credential_type"}
+    if role_norm == "student" and cred_type == "token":
+        return {"ok": False, "error": "invalid_credential_type"}
     if not cred:
         return {"ok": False, "error": "missing_credential"}
     return None

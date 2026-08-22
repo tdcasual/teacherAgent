@@ -1,7 +1,7 @@
 # 认证与令牌模型（稳定参考）
 
 - 适用角色：管理员、老师、开发者
-- 最后验证日期：2026-02-25
+- 最后验证日期：2026-08-22
 - 主要来源：`docs/plans/2026-02-13-auth-token-password-design.md`（稳定结论提炼）
 
 ## 核心模型
@@ -43,6 +43,7 @@
 
 ## 错误语义（常见）
 - `invalid_credential`：凭据错误。
+- `invalid_credential_type`：学生使用 token 登录（学生仅支持密码）。
 - `password_not_set`：未设置密码但使用密码登录。
 - `disabled`：账号被禁用。
 - `locked`：失败次数触发临时锁定。
