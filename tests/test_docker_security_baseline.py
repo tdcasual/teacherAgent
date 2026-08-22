@@ -9,6 +9,14 @@ def test_compose_defaults_require_auth_and_stronger_redis_boundary() -> None:
     assert "127.0.0.1:${REDIS_PORT:-6379}:6379" in text
 
 
+def test_compose_redis_uses_noeviction() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    redis_block = _service_block(text, "redis")
+    assert "--maxmemory-policy noeviction" in redis_block
+    assert "allkeys-lru" not in redis_block
+    assert "allkeys-lru" not in text
+
+
 def test_compose_api_mounts_config_for_auth_secret_persistence() -> None:
     text = Path("docker-compose.yml").read_text(encoding="utf-8")
     api_block = _service_block(text, "api")

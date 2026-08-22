@@ -1,7 +1,7 @@
 # 锁与幂等处理策略说明
 
 - 适用角色：开发者、平台负责人
-- 最后验证日期：2026-02-15
+- 最后验证日期：2026-08-22
 - 主要来源：`docs/plans/2026-02-13-code-audit-findings.md`
 
 ## 问题背景
@@ -23,6 +23,10 @@
 - 关键写路径加幂等键或状态机守卫。
 - 重复执行时保证输出一致且无额外副作用。
 - 异常恢复路径先做 owner 校验再回收资源。
+- chat 幂等走文件系统（`request_map_dir` + `O_EXCL`），不是 Redis。
+
+## Redis 作业与 lane key
+RQ 与 `ChatRedisLaneStore` 共用同一 Redis 实例。该实例使用 `noeviction`：内存满时写入失败（enqueue / lane 操作 5xx），而不是 LRU 静默丢 job 或 lane key。不要把 lane 迁到 LRU 实例。运维盯 `INFO memory` 的 `used_memory` / `used_memory_rss` 以及 API enqueue 5xx；256mb 不够则加大 `maxmemory`，不加回 LRU。
 
 ## 相关文档
 - `docs/reference/risk-register.md`
