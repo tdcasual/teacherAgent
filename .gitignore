@@ -59,6 +59,8 @@ data/auth/*.sqlite3-shm
 data/auth/*.sqlite3-wal
 data/auth/*.sqlite3-journal
 data/auth/*.sqlite3.lock
+data/auth/admin_bootstrap.txt
+data/auth/*bootstrap*
 
 # Runtime persona assignment state
 data/persona_assignments/

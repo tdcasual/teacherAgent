@@ -23,12 +23,12 @@
 - 补偿控制：空密钥 `POST /mcp` 返回 503；compose 要求 `MCP_API_KEY` 且绑定 `127.0.0.1:9000`；脚本与用户路径白名单；`/health` 保持匿名仅因 loopback；H 变更 2 人评审。
 
 ### RISK-ADMIN-BOOTSTRAP-001
-- 风险描述：`data/auth/admin_bootstrap.txt` 已提交明文 admin 密码；`.gitignore` 未覆盖该文件。
-- 状态：修复 PR 进行中
+- 风险描述：历史提交将 `data/auth/admin_bootstrap.txt` 明文 admin 密码纳入 git；克隆/fork 仍持有该 blob，直至运营完成口令与密钥轮换。
+- 状态：补偿控制已落地，待运营轮换
 - Owner：平台
 - 下次复审日期：2026-11-22
-- 退出条件：git 无明文；gitignore；口令已轮换
-- 补偿控制：该口令视为已泄露，生产必须轮换 admin 密码与 `AUTH_TOKEN_SECRET`；不 rewrite `main` 历史。
+- 退出条件：生产已轮换 admin 密码与 `AUTH_TOKEN_SECRET`（及 `AUTH_TOKEN_SECRET_FILE` 内容）；旧 Bearer 全部失效
+- 补偿控制：`.gitignore` 覆盖 `data/auth/admin_bootstrap.txt` 与 `data/auth/*bootstrap*`；该文件已从 git 索引取消跟踪；不 rewrite `main` 历史。退出仍要求运营完成轮换。
 
 ### RISK-UPLOAD-UNBOUNDED-001
 - 风险描述：`/upload` 与 `/student/submit` 无数量/大小/MIME 上限；仅部分 exam/assignment 流有限额。
