@@ -62,6 +62,27 @@ class ChatRedisLaneStore:
             """
         )
 
+        self._reacquire_script = self.redis.register_script(
+            """
+            local active_key = KEYS[1]
+            local queued_key = KEYS[2]
+            local job_id = ARGV[1]
+            local ttl = tonumber(ARGV[2]) or 0
+
+            local active = redis.call('GET', active_key)
+            if active and active ~= job_id then
+                return 0
+            end
+            if ttl > 0 then
+                redis.call('SET', active_key, job_id, 'EX', ttl)
+            else
+                redis.call('SET', active_key, job_id)
+            end
+            redis.call('SADD', queued_key, job_id)
+            return 1
+            """
+        )
+
         self._finish_script = self.redis.register_script(
             """
             local queue_key = KEYS[1]
@@ -137,6 +158,13 @@ class ChatRedisLaneStore:
         )
         pos, queued, active, dispatch = (int(result[0]), int(result[1]), int(result[2]), int(result[3]))
         return {"lane_queue_position": pos, "lane_queue_size": queued, "lane_active": bool(active)}, bool(dispatch)
+
+    def try_reacquire(self, job_id: str, lane_id: str) -> bool:
+        result = self._reacquire_script(
+            keys=[self._active_key(lane_id), self._queued_key()],
+            args=[job_id, str(self.claim_ttl_sec)],
+        )
+        return bool(int(result or 0))
 
     def finish(self, job_id: str, lane_id: str) -> Optional[str]:
         queue_key = self._queue_key(lane_id)

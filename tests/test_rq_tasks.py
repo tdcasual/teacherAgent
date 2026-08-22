@@ -415,11 +415,23 @@ def test_run_chat_job_skips_when_lane_claim_not_reacquired(monkeypatch: pytest.M
     processed: List[str] = []
     finish_calls: List[str] = []
 
+    class _Redis:
+        def get(self, key: str) -> str:
+            assert key == "active:lane-1"
+            return "other-job"
+
+        def expire(self, *args: Any, **kwargs: Any) -> bool:
+            raise AssertionError("expire should not run")
+
+        def set(self, *args: Any, **kwargs: Any) -> bool:
+            raise AssertionError("set should not run")
+
     class _Store:
-        def try_reacquire(self, job_id: str, lane_id: str) -> bool:
-            assert job_id == "chat-skip"
-            assert lane_id == "lane-1"
-            return False
+        redis = _Redis()
+        claim_ttl_sec = 600
+
+        def _active_key(self, lane_id: str) -> str:
+            return f"active:{lane_id}"
 
         def finish(self, job_id: str, lane_id: str) -> str | None:
             finish_calls.append(f"{job_id}:{lane_id}")
@@ -436,14 +448,56 @@ def test_run_chat_job_skips_when_lane_claim_not_reacquired(monkeypatch: pytest.M
     assert finish_calls == []
 
 
+def test_run_chat_job_proceeds_when_existing_claim_refreshes_ttl(monkeypatch: pytest.MonkeyPatch) -> None:
+    processed: List[str] = []
+    expire_calls: List[tuple[str, int]] = []
+
+    class _Redis:
+        def get(self, key: str) -> str:
+            assert key == "active:lane-1"
+            return "chat-1"
+
+        def expire(self, key: str, ttl: int) -> bool:
+            expire_calls.append((key, ttl))
+            return True
+
+        def set(self, *args: Any, **kwargs: Any) -> bool:
+            raise AssertionError("set should not run when claim is held")
+
+    class _Store:
+        redis = _Redis()
+        claim_ttl_sec = 600
+
+        def _active_key(self, lane_id: str) -> str:
+            return f"active:{lane_id}"
+
+        def finish(self, job_id: str, lane_id: str) -> str | None:
+            return None
+
+    mod = SimpleNamespace(process_chat_job=lambda job_id: processed.append(job_id))
+    monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
+    monkeypatch.setattr(rq_tasks, "_lane_store", lambda _mod, tenant_id: _Store())
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: _FakeQueue())
+
+    rq_tasks.run_chat_job("chat-1", "lane-1", tenant_id="t")
+
+    assert processed == ["chat-1"]
+    assert expire_calls == [("active:lane-1", 600)]
+
+
 def test_try_reacquire_lane_claim_holds_existing_and_sets_empty() -> None:
     class _Redis:
         def __init__(self) -> None:
             self.values: Dict[str, Any] = {"lane-a": "job-1"}
             self.set_calls: List[Dict[str, Any]] = []
+            self.expire_calls: List[Dict[str, Any]] = []
 
         def get(self, key: str) -> Any:
             return self.values.get(key)
+
+        def expire(self, key: str, ttl: int) -> bool:
+            self.expire_calls.append({"key": key, "ttl": ttl})
+            return True
 
         def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
             self.set_calls.append({"key": key, "value": value, "ex": ex, "nx": nx})
@@ -457,6 +511,7 @@ def test_try_reacquire_lane_claim_holds_existing_and_sets_empty() -> None:
 
     assert rq_tasks._try_reacquire_lane_claim(store, "job-1", "lane-a") is True
     assert redis.set_calls == []
+    assert redis.expire_calls == [{"key": "lane-a", "ttl": 30}]
 
     assert rq_tasks._try_reacquire_lane_claim(store, "job-other", "lane-a") is False
 

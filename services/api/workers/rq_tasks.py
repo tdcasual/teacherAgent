@@ -191,20 +191,33 @@ def _try_reacquire_lane_claim(store: Any, job_id: str, lane_id: str) -> bool:
     """Return True if this job holds or re-acquired the lane active claim."""
     reacquire = getattr(store, "try_reacquire", None)
     if callable(reacquire):
-        return bool(reacquire(job_id, lane_id))
+        try:
+            return bool(reacquire(job_id, lane_id))
+        except Exception:
+            _log.warning("lane claim re-acquire failed for job %s lane %s", job_id, lane_id, exc_info=True)
+            return False
     redis = getattr(store, "redis", None)
     active_key_fn = getattr(store, "_active_key", None)
     if redis is None or not callable(active_key_fn):
         return True
     key = active_key_fn(lane_id)
+    ttl = int(getattr(store, "claim_ttl_sec", 0) or 0)
     try:
         current = redis.get(key)
     except Exception:
         _log.warning("lane claim lookup failed for job %s lane %s", job_id, lane_id, exc_info=True)
         return False
     if current is not None:
-        return _decode_redis_value(current) == str(job_id)
-    ttl = int(getattr(store, "claim_ttl_sec", 0) or 0)
+        if _decode_redis_value(current) != str(job_id):
+            return False
+        if ttl <= 0:
+            return True
+        try:
+            redis.expire(key, ttl)
+        except Exception:
+            _log.warning("lane claim TTL refresh failed for job %s lane %s", job_id, lane_id, exc_info=True)
+            return False
+        return True
     try:
         if ttl > 0:
             ok = redis.set(key, job_id, ex=ttl, nx=True)

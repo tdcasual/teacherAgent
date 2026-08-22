@@ -57,7 +57,7 @@ class TestInit:
 
     def test_scripts_registered(self):
         _, fake_redis = _make_store()
-        assert fake_redis.register_script.call_count == 2
+        assert fake_redis.register_script.call_count == 3
 
 
 # ── 2. Key generation ───────────────────────────────────────────────────
@@ -137,7 +137,34 @@ class TestEnqueue:
         assert info["lane_queue_size"] == 3
 
 
-# ── 6. finish ────────────────────────────────────────────────────────────
+# ── 6. try_reacquire ─────────────────────────────────────────────────────
+
+class TestTryReacquire:
+    def test_returns_true_and_passes_ttl(self):
+        store, _ = _make_store()
+        store._reacquire_script.return_value = 1
+        assert store.try_reacquire("j1", "L1") is True
+        store._reacquire_script.assert_called_once_with(
+            keys=["chat:t1:lane:L1:active", "chat:t1:queued"],
+            args=["j1", "60"],
+        )
+
+    def test_returns_false_when_other_job_holds_lane(self):
+        store, _ = _make_store()
+        store._reacquire_script.return_value = 0
+        assert store.try_reacquire("j1", "L1") is False
+
+    def test_lua_refreshes_ttl_when_holder_matches(self):
+        _, fake_redis = _make_store()
+        scripts = [call.args[0] for call in fake_redis.register_script.call_args_list]
+        reacquire_src = scripts[1]
+        assert "GET" in reacquire_src
+        assert "EX" in reacquire_src
+        assert "SET" in reacquire_src
+        assert "return 0" in reacquire_src
+
+
+# ── 7. finish ────────────────────────────────────────────────────────────
 
 class TestFinish:
     def test_returns_next_job(self):

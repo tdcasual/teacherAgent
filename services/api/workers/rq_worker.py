@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import os
-import threading
-import time
 from pathlib import Path
+from typing import Any, Optional
 
 from rq import Worker
 
@@ -40,25 +39,23 @@ def _refresh_heartbeat(path: str) -> None:
         _write_heartbeat(path)
 
 
-def _heartbeat_loop(path: str, interval_sec: float) -> None:
-    while True:
-        time.sleep(interval_sec)
+class FileHeartbeatWorker(Worker):
+    """Touch the healthcheck file from the parent work loop instead of a pre-fork thread."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("job_monitoring_interval", _HEARTBEAT_INTERVAL_SEC)
+        super().__init__(*args, **kwargs)
+
+    @property
+    def dequeue_timeout(self) -> int:
+        return min(_HEARTBEAT_INTERVAL_SEC, max(1, int(self.worker_ttl) - 15))
+
+    def heartbeat(self, timeout: Optional[int] = None, pipeline: Any = None) -> None:
         try:
-            _refresh_heartbeat(path)
+            _refresh_heartbeat(_heartbeat_path())
         except OSError:
             pass
-
-
-def _start_heartbeat(path: str, interval_sec: float = _HEARTBEAT_INTERVAL_SEC) -> threading.Thread:
-    _write_heartbeat(path)
-    thread = threading.Thread(
-        target=_heartbeat_loop,
-        args=(path, interval_sec),
-        name="rq-heartbeat",
-        daemon=True,
-    )
-    thread.start()
-    return thread
+        super().heartbeat(timeout=timeout, pipeline=pipeline)
 
 
 def main() -> None:
@@ -66,7 +63,7 @@ def main() -> None:
     queue_name = str(os.getenv("RQ_QUEUE_NAME", "default") or "default")
     tenant_id = str(os.getenv("TENANT_ID", "") or "").strip() or None
 
-    _start_heartbeat(_heartbeat_path())
+    _write_heartbeat(_heartbeat_path())
 
     if _truthy(os.getenv("RQ_SCAN_PENDING_ON_START", "")):
         scan_pending_upload_jobs(tenant_id=tenant_id)
@@ -74,8 +71,8 @@ def main() -> None:
         scan_pending_chat_jobs(tenant_id=tenant_id)
 
     redis = get_redis_client(os.getenv("REDIS_URL", ""), decode_responses=False)
-    worker = Worker([queue_name], connection=redis)
-    worker.work()
+    worker = FileHeartbeatWorker([queue_name], connection=redis)
+    worker.work(with_scheduler=True)
 
 
 if __name__ == "__main__":

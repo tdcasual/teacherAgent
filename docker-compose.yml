@@ -79,6 +79,7 @@ services:
       - JOB_QUEUE_BACKEND=rq
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-1}
+      - RQ_HEARTBEAT_PATH=/tmp/rq_worker_heartbeat
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant

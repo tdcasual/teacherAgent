@@ -22,6 +22,7 @@ def _service_block(compose_text: str, service_name: str) -> str:
 def test_compose_worker_healthcheck_is_heartbeat() -> None:
     text = Path("docker-compose.yml").read_text(encoding="utf-8")
     worker = _service_block(text, "worker")
+    assert "RQ_HEARTBEAT_PATH=/tmp/rq_worker_heartbeat" in worker
     assert "stat -c %Y /tmp/rq_worker_heartbeat" in worker
     assert "-lt 30" in worker
     assert "pgrep -f 'rq worker'" not in worker
@@ -77,31 +78,20 @@ def test_rq_worker_main_scans_when_env_truthy(tmp_path: Path, monkeypatch: pytes
             self.connection = connection
             created.append(self)
 
-        def work(self) -> None:
+        def work(self, *args: Any, **kwargs: Any) -> None:
+            self.work_args = args
+            self.work_kwargs = kwargs
             self.worked = True
 
-    started: List[Any] = []
-
-    class _Thread:
-        def __init__(self, target: Any, args: tuple[Any, ...] = (), name: str | None = None, daemon: bool | None = None) -> None:
-            self.target = target
-            self.args = args
-            self.name = name
-            self.daemon = daemon
-
-        def start(self) -> None:
-            started.append(self)
-
-    monkeypatch.setattr(rq_worker, "Worker", _Worker)
-    monkeypatch.setattr(rq_worker.threading, "Thread", _Thread)
+    monkeypatch.setattr(rq_worker, "FileHeartbeatWorker", _Worker)
 
     rq_worker.main()
 
     assert scanned == [("upload", "tenant-a"), ("exam", "tenant-a"), ("chat", "tenant-a")]
     assert heartbeat.is_file()
-    assert started and started[0].daemon is True
     assert created[0].queues == ["jobs"]
     assert created[0].worked is True
+    assert created[0].work_kwargs.get("with_scheduler") is True
     assert os.getenv("JOB_QUEUE_BACKEND") == "rq"
 
 
@@ -124,18 +114,10 @@ def test_rq_worker_main_skips_scan_when_env_falsy(tmp_path: Path, monkeypatch: p
             self.queues = queues
             self.connection = connection
 
-        def work(self) -> None:
-            return None
+        def work(self, *args: Any, **kwargs: Any) -> None:
+            self.work_kwargs = kwargs
 
-    class _Thread:
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            pass
-
-        def start(self) -> None:
-            return None
-
-    monkeypatch.setattr(rq_worker, "Worker", _Worker)
-    monkeypatch.setattr(rq_worker.threading, "Thread", _Thread)
+    monkeypatch.setattr(rq_worker, "FileHeartbeatWorker", _Worker)
 
     rq_worker.main()
 
@@ -143,21 +125,30 @@ def test_rq_worker_main_skips_scan_when_env_falsy(tmp_path: Path, monkeypatch: p
     assert heartbeat.is_file()
 
 
-def test_heartbeat_loop_refreshes_mtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_file_heartbeat_worker_heartbeat_touches_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "hb"
-    path.write_text("x", encoding="utf-8")
-    os.utime(path, (0, 0))
-    calls = {"n": 0}
+    monkeypatch.setenv("RQ_HEARTBEAT_PATH", str(path))
+    parent_calls: List[tuple[Any, Any]] = []
 
-    def _sleep(_seconds: float) -> None:
-        calls["n"] += 1
-        if calls["n"] >= 2:
-            raise KeyboardInterrupt()
+    def _parent_heartbeat(self: Any, timeout: Any = None, pipeline: Any = None) -> str:
+        parent_calls.append((timeout, pipeline))
+        return "ok"
 
-    monkeypatch.setattr(rq_worker.time, "sleep", _sleep)
-    with pytest.raises(KeyboardInterrupt):
-        rq_worker._heartbeat_loop(str(path), 10)
-    assert path.stat().st_mtime > 0
+    monkeypatch.setattr(rq_worker.Worker, "heartbeat", _parent_heartbeat)
+    worker = rq_worker.FileHeartbeatWorker.__new__(rq_worker.FileHeartbeatWorker)
+    rq_worker.FileHeartbeatWorker.heartbeat(worker, timeout=12, pipeline="pipe")
+    assert path.is_file()
+    assert parent_calls == [(12, "pipe")]
+
+
+def test_file_heartbeat_worker_dequeue_timeout_caps_interval() -> None:
+    worker = rq_worker.FileHeartbeatWorker.__new__(rq_worker.FileHeartbeatWorker)
+    worker.worker_ttl = 420
+    assert worker.dequeue_timeout == 10
+    worker.worker_ttl = 20
+    assert worker.dequeue_timeout == 5
+    worker.worker_ttl = 10
+    assert worker.dequeue_timeout == 1
 
 
 def test_refresh_heartbeat_recreates_missing_file(tmp_path: Path) -> None:
