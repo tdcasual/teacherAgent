@@ -35,7 +35,6 @@ _USER_PATH_ARG_KEYS = frozenset(
         "figure_file",
         "discussion_file",
         "variant_file",
-        "lesson_figure",
         "assignment_questions",
     }
 )
@@ -792,6 +791,8 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                     value = str(args.get(key))
                     if key in _USER_PATH_ARG_KEYS:
                         value = _require_contained_path(value, key)
+                    elif key in {"from_lesson", "lesson_figure"}:
+                        value = _require_safe_id(value, key)
                     cmd += [f"--{key.replace('_','-')}", value]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)

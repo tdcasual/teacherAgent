@@ -161,3 +161,65 @@ def test_contained_paths_under_data_or_uploads_are_accepted(monkeypatch):
         assert render.status_code == 200
         assert "result" in render.json()
         assert str(out.resolve()) in (captured.get("args") or [])
+
+
+def test_core_example_register_lesson_figure_is_basename_not_path(monkeypatch):
+    with TemporaryDirectory() as td:
+        mcp_mod = load_mcp(Path(td))
+        captured: dict[str, object] = {}
+
+        class _Proc:
+            returncode = 0
+            stdout = "ok"
+            stderr = ""
+
+        def _fake_run(args, **kwargs):  # type: ignore[no-untyped-def]
+            captured["args"] = list(args)
+            return _Proc()
+
+        monkeypatch.setattr(mcp_mod.subprocess, "run", _fake_run)
+        client = TestClient(mcp_mod.app)
+        ok = _rpc(
+            client,
+            "core_example.register",
+            {
+                "example_id": "CE001",
+                "kp_id": "KP-M01",
+                "core_model": "model",
+                "from_lesson": "L1",
+                "lesson_figure": "fig1.png",
+            },
+        )
+        assert ok.status_code == 200
+        assert "result" in ok.json()
+        args = captured.get("args") or []
+        assert "--lesson-figure" in args
+        assert "fig1.png" in args
+        assert "--from-lesson" in args
+        assert "L1" in args
+
+        bad_fig = _rpc(
+            client,
+            "core_example.register",
+            {
+                "example_id": "CE001",
+                "kp_id": "KP-M01",
+                "core_model": "model",
+                "lesson_figure": "../etc/passwd",
+            },
+        )
+        assert bad_fig.status_code == 200
+        assert "error" in bad_fig.json()
+
+        bad_lesson = _rpc(
+            client,
+            "core_example.register",
+            {
+                "example_id": "CE001",
+                "kp_id": "KP-M01",
+                "core_model": "model",
+                "from_lesson": "../../../etc",
+            },
+        )
+        assert bad_lesson.status_code == 200
+        assert "error" in bad_lesson.json()
