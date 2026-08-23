@@ -209,21 +209,13 @@ def _extract_bearer_authorization(headers: Mapping[str, Any]) -> str:
     return authz[7:].strip()
 
 
-def _validate_principal_token_version(principal: AuthPrincipal) -> None:
-    claims = principal.claims if isinstance(principal.claims, dict) else {}
-    if principal.role not in {"teacher", "student"} or claims.get("tv") is None:
-        return
-    raw_token_version = claims.get("tv")
-    try:
-        token_version = int(str(raw_token_version))
-    except Exception:
-        raise AuthError(401, "invalid_token_claims")
+def _lookup_token_version_ok(*, role: str, subject_id: str, token_version: int) -> bool:
     try:
         from .auth_registry_service import validate_subject_token_version
 
-        ok = validate_subject_token_version(
-            role=principal.role,
-            subject_id=principal.actor_id,
+        return validate_subject_token_version(
+            role=role,
+            subject_id=subject_id,
             token_version=token_version,
         )
     except AuthError:
@@ -231,7 +223,36 @@ def _validate_principal_token_version(principal: AuthPrincipal) -> None:
     except Exception:
         _log.warning("auth token version validation failed", exc_info=True)
         raise AuthError(401, "invalid_token_claims")
-    if not ok:
+
+
+def _registered_admin_missing_tv(actor_id: str) -> bool:
+    try:
+        from .auth_registry_service import admin_account_exists
+
+        return admin_account_exists(actor_id)
+    except Exception:
+        _log.warning("auth token version validation failed", exc_info=True)
+        raise AuthError(401, "invalid_token_claims")
+
+
+def _validate_principal_token_version(principal: AuthPrincipal) -> None:
+    claims = principal.claims if isinstance(principal.claims, dict) else {}
+    if principal.role not in {"teacher", "student", "admin"}:
+        return
+    raw_token_version = claims.get("tv")
+    if raw_token_version is None:
+        if principal.role == "admin" and _registered_admin_missing_tv(principal.actor_id):
+            raise AuthError(401, "token_revoked")
+        return
+    try:
+        token_version = int(str(raw_token_version))
+    except Exception:
+        raise AuthError(401, "invalid_token_claims")
+    if not _lookup_token_version_ok(
+        role=principal.role,
+        subject_id=principal.actor_id,
+        token_version=token_version,
+    ):
         raise AuthError(401, "token_revoked")
 
 

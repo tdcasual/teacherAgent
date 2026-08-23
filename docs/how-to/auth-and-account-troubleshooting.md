@@ -14,6 +14,7 @@
 
 3. 提示 `token_revoked`
 - 旧 token 已失效（通常因重置 token/密码导致 `token_version` 变化）。
+- 管理员改密或禁用后，旧 admin access token 同样失效；无 `tv` 的旧 admin token 需重新登录。
 - 重新登录获取新 access token。
 
 4. 生产环境认证异常

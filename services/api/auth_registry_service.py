@@ -104,6 +104,7 @@ class AuthRegistryStore:
                     password_hash TEXT NOT NULL,
                     password_algo TEXT NOT NULL,
                     password_set_at TEXT NOT NULL,
+                    token_version INTEGER NOT NULL DEFAULT 1,
                     failed_count INTEGER NOT NULL DEFAULT 0,
                     locked_until TEXT,
                     is_disabled INTEGER NOT NULL DEFAULT 0,
@@ -135,6 +136,16 @@ class AuthRegistryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_admin_username_norm ON admin_auth(username_norm)"
             )
+            self._migrate_admin_auth_schema(conn)
+
+    def _migrate_admin_auth_schema(self, conn: sqlite3.Connection) -> None:
+        try:
+            conn.execute(
+                "ALTER TABLE admin_auth ADD COLUMN token_version INTEGER NOT NULL DEFAULT 1"
+            )
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
 
     def identify_student(self, *, name: str, class_name: Optional[str]) -> Dict[str, Any]:
         q_name = str(name or "").strip()
@@ -315,8 +326,8 @@ class AuthRegistryStore:
             conn.execute(
                 (
                     "INSERT INTO admin_auth(admin_username, username_norm, password_hash, "
-                    "password_algo, password_set_at, failed_count, locked_until, is_disabled, "
-                    "updated_at) VALUES (?, ?, ?, ?, ?, 0, NULL, 0, ?)"
+                    "password_algo, password_set_at, token_version, failed_count, locked_until, "
+                    "is_disabled, updated_at) VALUES (?, ?, ?, ?, ?, 1, 0, NULL, 0, ?)"
                 ),
                 (
                     username,
@@ -448,6 +459,7 @@ class AuthRegistryStore:
                 return {"ok": False, "error": "invalid_credential"}
 
             admin_username = str(row["admin_username"] or "")
+            token_version = int(row["token_version"] or 1)
             conn.execute(
                 (
                     "UPDATE admin_auth SET failed_count = 0, locked_until = NULL, updated_at = ? "
@@ -467,6 +479,129 @@ class AuthRegistryStore:
             "ok": True,
             "role": "admin",
             "subject_id": admin_username,
+            "token_version": token_version,
+        }
+
+    def change_admin_password(
+        self,
+        *,
+        username: str,
+        current_password: str,
+        new_password: str,
+        actor_id: str,
+        actor_role: str,
+    ) -> Dict[str, Any]:
+        password_error = validate_password_strength(new_password)
+        if password_error:
+            return {
+                "ok": False,
+                "error": password_error,
+                "message": "密码至少 8 位，且需同时包含字母与数字。",
+            }
+        user_input = str(username or "").strip()
+        pwd_current = str(current_password or "")
+        if not user_input:
+            return {"ok": False, "error": "missing_username"}
+        if not pwd_current:
+            return {"ok": False, "error": "missing_password"}
+
+        now = _utc_now()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM admin_auth WHERE username_norm = ?",
+                (normalize(user_input),),
+            ).fetchone()
+            if row is None:
+                return {"ok": False, "error": "not_found"}
+            if int(row["is_disabled"] or 0) == 1:
+                return {"ok": False, "error": "disabled"}
+            pwd_hash = str(row["password_hash"] or "")
+            if not pwd_hash or not _verify_password(pwd_current, pwd_hash):
+                return {"ok": False, "error": "invalid_credential"}
+            admin_username = str(row["admin_username"] or "")
+            conn.execute(
+                (
+                    "UPDATE admin_auth SET password_hash = ?, password_algo = ?, password_set_at = ?, "
+                    "token_version = token_version + 1, failed_count = 0, locked_until = NULL, "
+                    "updated_at = ? WHERE admin_username = ?"
+                ),
+                (
+                    _hash_password(new_password),
+                    "pbkdf2_sha256",
+                    _iso(now),
+                    _iso(now),
+                    admin_username,
+                ),
+            )
+            self._append_audit(
+                conn,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="change_password",
+                target_id=admin_username,
+                target_role="admin",
+                detail={},
+            )
+            updated = conn.execute(
+                "SELECT token_version FROM admin_auth WHERE admin_username = ?",
+                (admin_username,),
+            ).fetchone()
+        return {
+            "ok": True,
+            "role": "admin",
+            "subject_id": admin_username,
+            "token_version": int(updated["token_version"] or 1) if updated is not None else 1,
+        }
+
+    def set_admin_disabled(
+        self,
+        *,
+        username: str,
+        is_disabled: bool,
+        actor_id: str,
+        actor_role: str,
+    ) -> Dict[str, Any]:
+        user_input = str(username or "").strip()
+        if not user_input:
+            return {"ok": False, "error": "missing_username"}
+        disabled_val = 1 if bool(is_disabled) else 0
+        now = _utc_now()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT admin_username FROM admin_auth WHERE username_norm = ?",
+                (normalize(user_input),),
+            ).fetchone()
+            if row is None:
+                return {"ok": False, "error": "not_found"}
+            admin_username = str(row["admin_username"] or "")
+            conn.execute(
+                (
+                    "UPDATE admin_auth SET is_disabled = ?, token_version = token_version + 1, "
+                    "failed_count = 0, locked_until = NULL, updated_at = ? WHERE admin_username = ?"
+                ),
+                (disabled_val, _iso(now), admin_username),
+            )
+            self._append_audit(
+                conn,
+                actor_id=actor_id,
+                actor_role=actor_role,
+                action="set_disabled",
+                target_id=admin_username,
+                target_role="admin",
+                detail={"is_disabled": bool(disabled_val)},
+            )
+            updated = conn.execute(
+                "SELECT is_disabled, token_version FROM admin_auth WHERE admin_username = ?",
+                (admin_username,),
+            ).fetchone()
+        if updated is None:
+            return {"ok": False, "error": "not_found"}
+        return {
+            "ok": True,
+            "role": "admin",
+            "subject_id": admin_username,
+            "is_disabled": bool(int(updated["is_disabled"] or 0)),
+            "token_version": int(updated["token_version"] or 1),
         }
 
     def list_teacher_auth_status(self) -> Dict[str, Any]:
@@ -877,7 +1012,7 @@ class AuthRegistryStore:
 
     def token_version_matches(self, *, role: str, subject_id: str, token_version: int) -> bool:
         role_norm = _normalize_role(role)
-        if role_norm not in {"student", "teacher"}:
+        if role_norm not in {"student", "teacher", "admin"}:
             return True
         sid = str(subject_id or "").strip()
         if not sid:
@@ -1393,6 +1528,19 @@ def validate_subject_token_version(*, role: str, subject_id: str, token_version:
     )
 
 
+def admin_account_exists(subject_id: str) -> bool:
+    sid = str(subject_id or "").strip()
+    if not sid:
+        return False
+    store = build_auth_registry_store()
+    with store._connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM admin_auth WHERE admin_username = ?",
+            (sid,),
+        ).fetchone()
+    return row is not None
+
+
 def validate_password_strength(password: str) -> Optional[str]:
     text = str(password or "")
     if len(text) < _min_password_len():
@@ -1409,6 +1557,8 @@ def validate_password_strength(password: str) -> Optional[str]:
 def _table_for_role(role: str) -> tuple[str, str]:
     if role == "student":
         return "student_auth", "student_id"
+    if role == "admin":
+        return "admin_auth", "admin_username"
     return "teacher_auth", "teacher_id"
 
 
@@ -1665,4 +1815,5 @@ __all__ = [
     "build_auth_registry_store",
     "validate_password_strength",
     "validate_subject_token_version",
+    "admin_account_exists",
 ]

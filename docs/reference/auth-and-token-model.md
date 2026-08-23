@@ -39,6 +39,7 @@
 
 ## 失效与轮换
 - 账号凭据重置后，`token_version` 递增。
+- 管理员登录签发的 Bearer token 含 `tv`；改密或禁用会递增 `token_version`。
 - 历史 Bearer token 在版本校验时失效（典型错误：`token_revoked`）。
 
 ## 错误语义（常见）

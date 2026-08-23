@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from ..api_models import (
+    AdminChangePasswordRequest,
     AdminLoginRequest,
     AdminTeacherResetPasswordRequest,
     AdminTeacherSetDisabledRequest,
@@ -254,8 +255,11 @@ def _register_admin_auth_routes(router: APIRouter, core: Any) -> None:
         if not login_result.get("ok"):
             return _mask_login_failure(login_result)
         subject_id = str(login_result.get("subject_id") or "").strip()
+        token_version = int(login_result.get("token_version") or 1)
         try:
-            token = mint_access_token(subject_id=subject_id, role="admin")
+            token = mint_access_token(
+                subject_id=subject_id, role="admin", token_version=token_version
+            )
         except AuthError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
         return {
@@ -265,6 +269,19 @@ def _register_admin_auth_routes(router: APIRouter, core: Any) -> None:
             "role": "admin",
             "subject_id": subject_id,
         }
+
+    @router.post("/auth/admin/change-password")
+    def auth_admin_change_password(req: AdminChangePasswordRequest) -> Any:
+        actor_id, actor_role = _admin_actor()
+        result = _build_store(core).change_admin_password(
+            username=actor_id,
+            current_password=req.current_password,
+            new_password=req.new_password,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        _raise_not_found(result)
+        return result
 
     _register_admin_teacher_routes(router, core)
     _register_admin_token_routes(router, core)

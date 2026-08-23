@@ -146,6 +146,11 @@ class AdminLoginRequest(BaseModel):
     password: str
 
 
+class AdminChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class AuthResetTokenRequest(BaseModel):
     target_id: str
 
