@@ -22,7 +22,7 @@ cp .env.production.min.example .env
 docker compose up -d
 ```
 
-`MCP_API_KEY=change_me` 只是占位符。compose 要求非空 `MCP_API_KEY`：留空会导致 `docker compose up` 失败，部署前必须换成真实密钥。MCP 仅绑定 `127.0.0.1:9000`。
+`MCP_API_KEY=change_me` 与 `REDIS_PASSWORD=change_me` 只是占位符。`cp .env.production.min.example .env` 之后必须设置非空 `MCP_API_KEY` 和 `REDIS_PASSWORD`，否则 `docker compose up` 会因 fail-closed 校验失败。部署前换成真实密钥。MCP 仅绑定 `127.0.0.1:9000`。
 
 启动后访问：
 - 老师端：`http://localhost:3002`
