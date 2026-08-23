@@ -27,7 +27,12 @@ SECRET = "test-secret-key-for-unit-tests"
 
 # Force auth on for most tests
 _AUTH_ON = {"AUTH_REQUIRED": "1", "AUTH_TOKEN_SECRET": SECRET}
-_AUTH_OFF = {"AUTH_REQUIRED": "0"}
+_AUTH_OFF = {"AUTH_REQUIRED": "0", "APP_ENV": "development"}
+_AUTH_OFF_WITH_SECRET = {
+    "AUTH_REQUIRED": "0",
+    "APP_ENV": "development",
+    "AUTH_TOKEN_SECRET": SECRET,
+}
 
 
 def _set_principal(role="teacher", actor_id="T001", tenant_id="tenant-1"):
@@ -118,7 +123,7 @@ class TestAuthRequired(unittest.TestCase):
     def test_enabled(self):
         self.assertTrue(auth_required())
 
-    @patch.dict(os.environ, {"AUTH_REQUIRED": "0"}, clear=False)
+    @patch.dict(os.environ, {"AUTH_REQUIRED": "0", "APP_ENV": "development"}, clear=False)
     def test_disabled(self):
         self.assertFalse(auth_required())
 
@@ -137,6 +142,22 @@ class TestAuthRequired(unittest.TestCase):
         env["APP_ENV"] = "production"
         with patch.dict(os.environ, env, clear=True):
             self.assertTrue(auth_required())
+
+    def test_production_ignores_auth_required_0(self):
+        env = os.environ.copy()
+        env["AUTH_REQUIRED"] = "0"
+        env["AUTH_TOKEN_SECRET"] = SECRET
+        env["APP_ENV"] = "production"
+        env.pop("PYTEST_CURRENT_TEST", None)
+        with patch.dict(os.environ, env, clear=True):
+            self.assertTrue(auth_required())
+            set_current_principal(None)
+            with self.assertRaises(AuthError) as ctx:
+                require_principal()
+            self.assertEqual(ctx.exception.status_code, 401)
+            with self.assertRaises(AuthError) as missing:
+                resolve_principal_from_headers({}, path="/teacher/history/sessions", method="GET")
+            self.assertEqual(missing.exception.status_code, 401)
 
 
 class TestResolvePrincipalFromHeaders(unittest.TestCase):
@@ -189,6 +210,30 @@ class TestResolvePrincipalFromHeaders(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 401)
         self.assertIn("scheme", ctx.exception.detail)
 
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_anonymous_returns_none(self):
+        result = resolve_principal_from_headers({}, path="/teacher/history/sessions", method="GET")
+        self.assertIsNone(result)
+
+    @patch.dict(os.environ, _AUTH_OFF_WITH_SECRET, clear=False)
+    def test_auth_off_still_binds_presented_token(self):
+        p = resolve_principal_from_headers(self._bearer(), path="/teacher/history/sessions", method="GET")
+        self.assertIsNotNone(p)
+        self.assertEqual(p.actor_id, "T001")
+        self.assertEqual(p.role, "teacher")
+
+    def test_pytest_unset_does_not_bind_token(self):
+        env = os.environ.copy()
+        env.pop("AUTH_REQUIRED", None)
+        env["PYTEST_CURRENT_TEST"] = "yes"
+        env["AUTH_TOKEN_SECRET"] = SECRET
+        env["APP_ENV"] = "development"
+        with patch.dict(os.environ, env, clear=True):
+            result = resolve_principal_from_headers(
+                self._bearer(), path="/teacher/history/sessions", method="GET"
+            )
+        self.assertIsNone(result)
+
 
 class TestRequirePrincipal(unittest.TestCase):
     """require_principal with role enforcement."""
@@ -216,6 +261,18 @@ class TestRequirePrincipal(unittest.TestCase):
         p = require_principal(roles=["teacher", "admin"])
         self.assertEqual(p.actor_id, "T001")
 
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_anonymous_ok(self):
+        set_current_principal(None)
+        self.assertIsNone(require_principal(roles=["teacher", "admin"]))
+
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_wrong_role_still_forbidden(self):
+        _set_principal(role="student", actor_id="S001")
+        with self.assertRaises(AuthError) as ctx:
+            require_principal(roles=["teacher", "admin"])
+        self.assertEqual(ctx.exception.status_code, 403)
+
 
 class TestPrincipalCanAccessTenant(unittest.TestCase):
     """Tenant access checks."""
@@ -242,6 +299,12 @@ class TestPrincipalCanAccessTenant(unittest.TestCase):
     @patch.dict(os.environ, _AUTH_OFF, clear=False)
     def test_auth_off_always_true(self):
         self.assertTrue(principal_can_access_tenant(None, "t-100"))
+
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_with_principal_still_checks_tenant(self):
+        p = AuthPrincipal(actor_id="T1", role="teacher", tenant_id="t-100")
+        self.assertTrue(principal_can_access_tenant(p, "t-100"))
+        self.assertFalse(principal_can_access_tenant(p, "t-999"))
 
 
 class TestResolveTeacherScope(unittest.TestCase):
@@ -274,6 +337,14 @@ class TestResolveTeacherScope(unittest.TestCase):
         result = resolve_teacher_scope("T999")
         self.assertEqual(result, "T999")
 
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_required_off_with_token_still_enforces_scope(self):
+        _set_principal(role="teacher", actor_id="T001")
+        with self.assertRaises(AuthError) as ctx:
+            resolve_teacher_scope("T999")
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "forbidden_teacher_scope")
+
 
 class TestResolveStudentScope(unittest.TestCase):
     """Student scope enforcement."""
@@ -299,6 +370,19 @@ class TestResolveStudentScope(unittest.TestCase):
         _set_principal(role="student", actor_id="S001")
         result = resolve_student_scope(None)
         self.assertEqual(result, "S001")
+
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_passthrough(self):
+        result = resolve_student_scope("S999")
+        self.assertEqual(result, "S999")
+
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_with_token_still_enforces_scope(self):
+        _set_principal(role="student", actor_id="S001")
+        with self.assertRaises(AuthError) as ctx:
+            resolve_student_scope("S999")
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "forbidden_student_scope")
 
 
 class TestEnforceChatJobAccess(unittest.TestCase):
@@ -345,6 +429,13 @@ class TestEnforceChatJobAccess(unittest.TestCase):
     def test_auth_off_skips(self):
         set_current_principal(None)
         enforce_chat_job_access({"teacher_id": "T999"})  # should not raise
+
+    @patch.dict(os.environ, _AUTH_OFF, clear=False)
+    def test_auth_off_with_principal_still_enforces(self):
+        _set_principal(role="teacher", actor_id="T001")
+        with self.assertRaises(AuthError) as ctx:
+            enforce_chat_job_access({"teacher_id": "T999", "role": "teacher"})
+        self.assertEqual(ctx.exception.status_code, 403)
 
 
 class TestBindChatRequestToPrincipal(unittest.TestCase):
