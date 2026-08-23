@@ -566,21 +566,24 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             client = TestClient(app_mod.app)
             admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
 
-            export_res = client.post(
-                "/auth/admin/student/export-tokens",
+            reset_res = client.post(
+                "/auth/teacher/student/reset-passwords",
                 headers=admin_headers,
-                json={"ids": ["student_a"]},
+                json={
+                    "scope": "student",
+                    "student_id": "student_a",
+                    "new_password": "A1b2c3d4",
+                },
             )
-            self.assertEqual(export_res.status_code, 200)
-            token = str((export_res.json().get("items") or [{}])[0].get("token") or "")
-            self.assertTrue(token)
+            self.assertEqual(reset_res.status_code, 200)
+            self.assertEqual(reset_res.json().get("ok"), True)
 
             bad_login = client.post(
                 "/auth/student/login",
                 json={
                     "candidate_id": "student_a",
-                    "credential_type": "token",
-                    "credential": "invalid-token",
+                    "credential_type": "password",
+                    "credential": "wrong-password",
                 },
             )
             self.assertEqual(bad_login.status_code, 200)
@@ -590,8 +593,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 "/auth/student/login",
                 json={
                     "candidate_id": "student_a",
-                    "credential_type": "token",
-                    "credential": token,
+                    "credential_type": "password",
+                    "credential": "A1b2c3d4",
                 },
             )
             self.assertEqual(good_login.status_code, 200)
