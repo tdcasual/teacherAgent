@@ -71,6 +71,9 @@ def _auth_exempt_path(path: str) -> bool:
         return True
     if value.startswith("/admin/"):
         return True
+    # Unmounted /docs must 404; bearer middleware would otherwise 401 first.
+    if value in {"/docs", "/redoc", "/openapi.json"} or value.startswith("/docs/"):
+        return True
     return False
 
 

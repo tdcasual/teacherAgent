@@ -12,7 +12,7 @@ from .analysis_metrics_service import AnalysisMetricsService
 from .analysis_metrics_store import AnalysisMetricsStore
 from .analysis_ops_service import AnalysisOpsService
 from .app_routes import register_routes
-from .auth_service import require_principal
+from .auth_service import auth_required, require_principal
 from .container import build_app_container
 from .core_context_middleware import build_set_core_context_middleware
 from .core_runtime import build_core_runtime
@@ -26,11 +26,20 @@ from .wiring import CURRENT_CORE, set_default_core
 _log = logging.getLogger(__name__)
 
 
+def _is_production() -> bool:
+    env = (os.getenv("APP_ENV") or os.getenv("ENV") or "development").strip().lower()
+    return env in {"prod", "production"}
+
+
+def _docs_enabled() -> bool:
+    # Schema dumps every route; unmount in production or whenever auth is on.
+    return (not _is_production()) and (not auth_required())
+
+
 def _cors_origins() -> tuple[list[str], bool]:
     raw = os.getenv("CORS_ORIGINS")
     origins_list = [o.strip() for o in (raw or "").split(",") if o.strip()]
-    env = (os.getenv("APP_ENV") or os.getenv("ENV") or "development").strip().lower()
-    production = env in {"prod", "production"}
+    production = _is_production()
     if not origins_list:
         if production:
             raise RuntimeError("CORS_ORIGINS is required in production")
@@ -101,7 +110,15 @@ def create_app(settings: AppSettings) -> FastAPI:
             ),
         )
     set_default_core(core)
-    app_obj = FastAPI(title="Physics Agent API", version="0.2.0", lifespan=app_lifespan)
+    docs_enabled = _docs_enabled()
+    app_obj = FastAPI(
+        title="Physics Agent API",
+        version="0.2.0",
+        lifespan=app_lifespan,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
+    )
     app_obj.state.settings = settings
     app_obj.state.core = core
     app_obj.state.container = build_app_container(core=core)

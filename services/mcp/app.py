@@ -49,7 +49,22 @@ else:
         _log.debug("numeric conversion failed", exc_info=True)
         SCRIPT_TIMEOUT_SEC = 600.0
 
-app = FastAPI(title="Physics MCP Server", version="0.2.0")
+def _docs_enabled() -> bool:
+    # Sidecar schema is still scrapeable on loopback; unmount with API docs policy.
+    env = (os.getenv("APP_ENV") or os.getenv("ENV") or "development").strip().lower()
+    if env in {"prod", "production"}:
+        return False
+    return str(os.getenv("AUTH_REQUIRED") or "").strip().lower() not in {"1", "true", "yes", "on"}
+
+
+_docs = _docs_enabled()
+app = FastAPI(
+    title="Physics MCP Server",
+    version="0.2.0",
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
+)
 
 _SAFE_ID_RE = re.compile(r"^[^\x00/\\\\]+$")
 
