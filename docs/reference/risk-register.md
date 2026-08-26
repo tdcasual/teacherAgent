@@ -6,14 +6,6 @@
 
 ## 进行中风险
 
-### RISK-CHART-TRUSTED-001
-- 风险描述：`chart.exec` 的 LLM 工具 schema 仍暴露 `trusted`；空 allowlist 仍放行 trusted；sandbox 可读 `data/`。
-- 状态：进行中（已从已关闭重开）
-- 关闭说明：修复 PR 进行中。
-- Owner：后端平台
-- 下次复审日期：2026-11-26
-- 退出条件：LLM 不可选 trusted；空 allowlist deny；schema 无 `execution_profile`；FS roots 不含 `data/`。
-
 ### RISK-MCP-UNAUTH-001
 - 风险描述：MCP 空密钥时 `/mcp` 匿名放行，compose 将 `9000:9000` 发布到全接口，脚本路径缺少白名单。
 - 状态：进行中
@@ -89,7 +81,13 @@
 
 ## 已关闭风险
 
-（暂无。`RISK-CHART-TRUSTED-001` 于 2026-08-26 复审重开。）
+### RISK-CHART-TRUSTED-001
+- 风险描述：`chart.exec` 的 LLM 工具 schema 曾暴露 `trusted`；空 allowlist 曾放行 trusted；sandbox 曾可读 `data/`。
+- 状态：已关闭
+- 关闭说明：LLM 不可选 trusted；空 allowlist deny；exam `template` 保留；trusted 需 `CHART_EXEC_TRUSTED_ENABLED=1` + 非空 source/role allowlist 且 source 非 tool_loop/chat/llm；schema 无 `execution_profile`；FS roots 不含 `data/`；sandboxed cwd=`output_dir`。
+- Owner：后端平台
+- 下次复审日期：2026-11-26
+- 退出条件：LLM 不可选 trusted；空 allowlist deny；schema 无 `execution_profile`；FS roots 不含 `data/`。
 
 ## 已接受风险
 ### AR-L1

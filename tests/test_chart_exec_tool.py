@@ -75,6 +75,25 @@ class ChartExecToolTest(unittest.TestCase):
             self.assertEqual(called.get("args", {}).get("python_code"), "print('hi')")
             self.assertTrue(str(called.get("uploads_dir", "")).endswith("uploads"))
 
+    def test_chart_exec_dispatch_rejects_execution_profile_extra_field(self):
+        with TemporaryDirectory() as td:
+            app_mod = load_app(Path(td))
+            called = {"n": 0}
+
+            def fake_execute(args, app_root, uploads_dir):  # type: ignore[no-untyped-def]
+                called["n"] += 1
+                return {"ok": True}
+
+            app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
+            res = app_mod.get_core().tool_dispatch(
+                "chart.exec",
+                {"python_code": "print('hi')", "execution_profile": "trusted"},
+                role="teacher",
+            )
+            self.assertEqual(res.get("error"), "invalid_arguments")
+            self.assertTrue(any("execution_profile" in item for item in res.get("issues") or []))
+            self.assertEqual(called["n"], 0)
+
     def test_chart_image_endpoint_serves_saved_file(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
@@ -116,10 +135,15 @@ class ChartExecToolTest(unittest.TestCase):
 
         tool = DEFAULT_TOOL_REGISTRY.require("chart.exec").to_openai()
         params = tool["function"]["parameters"]["properties"]
-        self.assertIn("execution_profile", params)
-        execution_profile = params["execution_profile"]
-        self.assertEqual(execution_profile.get("default"), "sandboxed")
-        self.assertIn("sandboxed", execution_profile.get("enum", []))
+        self.assertNotIn("execution_profile", params)
+        schema = tool["function"]["parameters"]
+        self.assertIs(schema.get("additionalProperties"), False)
+
+        issues = DEFAULT_TOOL_REGISTRY.validate_arguments(
+            "chart.exec",
+            {"python_code": "print(1)", "execution_profile": "trusted"},
+        )
+        self.assertTrue(any("execution_profile" in item and "unexpected" in item for item in issues))
 
     def test_chart_endpoints_require_auth_when_enabled(self):
         with TemporaryDirectory() as td:

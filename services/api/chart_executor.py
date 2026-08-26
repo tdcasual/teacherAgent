@@ -32,6 +32,7 @@ _MAX_PIP_TIMEOUT_SEC = 1200
 _CHART_ENV_META_FILE = ".env_meta.json"
 _CHART_ENV_GC_STATE_FILE = ".gc_state.json"
 _CHART_ENV_LEASE_PREFIX = ".lease_"
+_TRUSTED_FORBIDDEN_SOURCES = frozenset({"tool_loop", "chat", "llm"})
 _TRUSTED_ALERT_PATTERNS = [
     (re.compile(r"\bsubprocess\b"), "subprocess"),
     (re.compile(r"\bos\.system\s*\("), "os.system"),
@@ -81,12 +82,23 @@ def _trusted_risk_alerts(
     return alerts
 
 
+def _env_truthy(name: str) -> bool:
+    return str(os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _trusted_policy_denial(*, role: str, source: str) -> Optional[str]:
+    # Empty allowlist is deny. Previously empty meant allow.
+    if not _env_truthy("CHART_EXEC_TRUSTED_ENABLED"):
+        return "trusted_not_enabled"
     allowed_sources = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES"))
     allowed_roles = _parse_csv_lower_set(os.getenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES"))
-    if allowed_sources and source not in allowed_sources:
+    if not allowed_sources or not allowed_roles:
+        return "trusted_allowlist_empty"
+    src = str(source or "").strip().lower()
+    role_norm = str(role or "").strip().lower()
+    if src not in allowed_sources or src in _TRUSTED_FORBIDDEN_SOURCES:
         return "trusted_source_not_allowed"
-    if allowed_roles and role not in allowed_roles:
+    if role_norm not in allowed_roles:
         return "trusted_role_not_allowed"
     return None
 
@@ -979,10 +991,9 @@ def _write_chart_exec_script(
 ) -> None:
     fs_guard = ""
     if execution_profile == "sandboxed":
-        data_dir = str(uploads_dir.parent / "data")
         fs_guard = build_filesystem_guard_source(
             str(output_dir),
-            [str(output_dir), str(uploads_dir), data_dir],
+            [str(output_dir), str(uploads_dir)],
         )
     script_source = _build_runner_source(
         python_code,
@@ -1118,7 +1129,7 @@ def _run_chart_subprocess_once(
     *,
     python_exec: str,
     script_path: Path,
-    app_root: Path,
+    cwd_dir: Path,
     timeout_sec: int,
     sandbox_env: Dict[str, str],
     sandbox_preexec: Any,
@@ -1130,7 +1141,7 @@ def _run_chart_subprocess_once(
     try:
         proc = subprocess.run(
             [python_exec, str(script_path)],
-            cwd=str(app_root),
+            cwd=str(cwd_dir),
             capture_output=True,
             text=True,
             timeout=timeout_sec,
@@ -1195,7 +1206,7 @@ def _run_chart_exec_with_retries(
     *,
     python_exec: str,
     script_path: Path,
-    app_root: Path,
+    cwd_dir: Path,
     timeout_sec: int,
     exec_retries: int,
     execution_profile: str,
@@ -1217,7 +1228,7 @@ def _run_chart_exec_with_retries(
         attempt_result = _run_chart_subprocess_once(
             python_exec=python_exec,
             script_path=script_path,
-            app_root=app_root,
+            cwd_dir=cwd_dir,
             timeout_sec=timeout_sec,
             sandbox_env=sandbox_env,
             sandbox_preexec=sandbox_preexec,
@@ -1368,7 +1379,7 @@ def _execute_chart_exec_inner(
         run_state = _run_chart_exec_with_retries(
             python_exec=python_exec,
             script_path=script_path,
-            app_root=app_root,
+            cwd_dir=output_dir,
             timeout_sec=timeout_sec,
             exec_retries=exec_retries,
             execution_profile=execution_profile,

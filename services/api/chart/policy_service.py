@@ -3,6 +3,25 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, List, Optional
 
+# LLM/tool_loop cannot pick a profile; schema omits the field and extra keys are rejected.
+_LLM_FORCED_SANDBOX_SOURCES = frozenset(
+    {
+        "tool_loop",
+        "chat",
+        "llm",
+        "tool_dispatch.chart.exec",
+    }
+)
+
+
+def _normalize_execution_profile(raw_profile: Any, source: str) -> str:
+    profile = str(raw_profile or "sandboxed").strip()
+    if profile not in ("template", "trusted", "sandboxed"):
+        profile = "sandboxed"
+    if str(source or "").strip().lower() in _LLM_FORCED_SANDBOX_SOURCES:
+        return "sandboxed"
+    return profile
+
 
 def prepare_chart_exec_policy(
     exec_args: Dict[str, Any],
@@ -17,11 +36,11 @@ def prepare_chart_exec_policy(
     scan_code_patterns: Callable[[str, str], Optional[Dict[str, Any]]],
     logger: logging.Logger,
 ) -> Dict[str, Any]:
-    execution_profile = str(exec_args.get("execution_profile") or "sandboxed").strip()
-    if execution_profile not in ("template", "trusted", "sandboxed"):
-        execution_profile = "sandboxed"
-
     audit_context = chart_exec_audit_context(exec_args)
+    execution_profile = _normalize_execution_profile(
+        exec_args.get("execution_profile"),
+        audit_context.get("source") or "",
+    )
     auto_install = normalize_bool(exec_args.get("auto_install"), False)
     requested_packages = normalize_packages(exec_args.get("packages"))
     trusted_alerts: List[str] = []
@@ -76,9 +95,7 @@ def prepare_chart_exec_policy(
         },
     )
 
-    scan_result = None
-    if execution_profile == "sandboxed":
-        scan_result = scan_code_patterns(python_code, execution_profile)
+    scan_result = scan_code_patterns(python_code, execution_profile)
 
     return {
         "execution_profile": execution_profile,

@@ -97,7 +97,7 @@ def make_preexec_fn(
 
 
 # ---------------------------------------------------------------------------
-# Code pattern scanning (sandboxed profile only)
+# Code pattern scanning (all execution profiles)
 # ---------------------------------------------------------------------------
 
 _DANGEROUS_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
@@ -124,9 +124,6 @@ def scan_code_patterns(
     code: str, profile: str = "sandboxed"
 ) -> Optional[Dict[str, Any]]:
     """Scan code for dangerous patterns. Returns error dict or None if clean."""
-    if profile != "sandboxed":
-        return None
-
     violations: List[str] = []
     for pattern, label in _DANGEROUS_PATTERNS:
         if pattern.search(code):
@@ -136,8 +133,9 @@ def scan_code_patterns(
         return None
 
     _log.warning(
-        "chart sandbox code scan blocked %d pattern(s): %s",
+        "chart sandbox code scan blocked %d pattern(s) profile=%s: %s",
         len(violations),
+        profile,
         ", ".join(violations),
     )
     return {

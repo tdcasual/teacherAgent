@@ -125,14 +125,16 @@ def test_execute_chart_exec_trusted_policy_blocks_disallowed_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ENABLED", "1")
     monkeypatch.setenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", "exam.analysis.charts.generate")
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES", "admin")
 
     out = ce.execute_chart_exec(
         {
             "python_code": "print(1)",
             "execution_profile": "trusted",
-            "_audit_source": "tool_dispatch.chart.exec",
-            "_audit_role": "teacher",
+            "_audit_source": "operator_cli",
+            "_audit_role": "admin",
         },
         tmp_path,
         tmp_path / "uploads",
@@ -146,8 +148,10 @@ def test_execute_chart_exec_passes_trusted_risk_alerts_to_inner(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", raising=False)
-    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES", raising=False)
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ENABLED", "1")
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", "operator_cli")
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES", "admin")
+    monkeypatch.setattr(chart_sandbox, "scan_code_patterns", lambda code, profile: None)
     sem = _FakeSemaphore(acquire_result=True)
     monkeypatch.setattr(global_limits, "GLOBAL_CHART_EXEC_SEMAPHORE", sem)
 
@@ -155,6 +159,7 @@ def test_execute_chart_exec_passes_trusted_risk_alerts_to_inner(
 
     def _fake_inner(args: Dict[str, Any], app_root: Path, uploads_dir: Path, python_code: str, execution_profile: str) -> Dict[str, Any]:
         captured["args"] = dict(args)
+        captured["execution_profile"] = execution_profile
         return {"ok": True, "run_id": "chr_test"}
 
     monkeypatch.setattr(ce, "_execute_chart_exec_inner", _fake_inner)
@@ -165,19 +170,43 @@ def test_execute_chart_exec_passes_trusted_risk_alerts_to_inner(
             "execution_profile": "trusted",
             "auto_install": True,
             "packages": ["numpy"],
-            "_audit_source": "tool_dispatch.chart.exec",
-            "_audit_role": "teacher",
+            "_audit_source": "operator_cli",
+            "_audit_role": "admin",
         },
         tmp_path,
         tmp_path / "uploads",
     )
 
     assert out["ok"] is True
+    assert captured["execution_profile"] == "trusted"
     alerts = (captured.get("args") or {}).get("_trusted_risk_alerts") or []
     assert isinstance(alerts, list)
     assert "subprocess" in alerts
     assert "auto_install_with_packages" in alerts
     assert sem.release_calls == 1
+
+
+def test_execute_chart_exec_empty_allowlist_denies_trusted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CHART_EXEC_TRUSTED_ENABLED", "1")
+    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_SOURCES", raising=False)
+    monkeypatch.delenv("CHART_EXEC_TRUSTED_ALLOWED_ROLES", raising=False)
+
+    out = ce.execute_chart_exec(
+        {
+            "python_code": "print(1)",
+            "execution_profile": "trusted",
+            "_audit_source": "operator_cli",
+            "_audit_role": "admin",
+        },
+        tmp_path,
+        tmp_path / "uploads",
+    )
+
+    assert out["error"] == "chart_exec_trusted_forbidden"
+    assert out["detail"] == "trusted_allowlist_empty"
 
 
 def test_execute_chart_exec_inner_venv_init_failed_writes_meta(
@@ -332,7 +361,10 @@ def test_execute_chart_exec_inner_meta_contains_audit_context(
     run_id = _set_fixed_uuid(monkeypatch, "a" * 32)
     _patch_inner_sandbox(monkeypatch)
 
+    run_kwargs: Dict[str, Any] = {}
+
     def _run(*args: Any, **kwargs: Any) -> Any:
+        run_kwargs.update(kwargs)
         image = uploads_dir / "charts" / run_id / "main.png"
         image.parent.mkdir(parents=True, exist_ok=True)
         image.write_bytes(b"\x89PNG\r\n")
@@ -359,6 +391,8 @@ def test_execute_chart_exec_inner_meta_contains_audit_context(
     assert out["ok"] is True
     meta = json.loads((uploads_dir / "chart_runs" / run_id / "meta.json").read_text(encoding="utf-8"))
     assert meta["execution_profile"] == "trusted"
+    assert run_kwargs.get("cwd") == str(uploads_dir / "charts" / run_id)
+    assert run_kwargs.get("cwd") != str(app_root)
     assert (meta.get("audit") or {}).get("source") == "tool_dispatch.chart.exec"
     assert (meta.get("audit") or {}).get("role") == "teacher"
     assert (meta.get("audit") or {}).get("trusted_risk_alerts") == ["subprocess"]
@@ -385,7 +419,10 @@ def test_execute_chart_exec_inner_sandbox_injects_fs_guard(
     monkeypatch.setattr(chart_sandbox, "build_sanitized_env", lambda profile: {"PROFILE": profile})
     monkeypatch.setattr(chart_sandbox, "make_preexec_fn", lambda profile, timeout_sec: None)
 
+    run_kwargs: Dict[str, Any] = {}
+
     def _run(*args: Any, **kwargs: Any) -> Any:
+        run_kwargs.update(kwargs)
         image = uploads_dir / "charts" / run_id / "main.png"
         image.parent.mkdir(parents=True, exist_ok=True)
         image.write_bytes(b"\x89PNG\r\n")
@@ -402,11 +439,18 @@ def test_execute_chart_exec_inner_sandbox_injects_fs_guard(
     )
 
     script_text = (uploads_dir / "chart_runs" / run_id / "run.py").read_text(encoding="utf-8")
+    expected_cwd = str(uploads_dir / "charts" / run_id)
     assert out["ok"] is True
     assert script_text.startswith("# GUARD\n")
     assert guard_calls["output_dir"].endswith(f"charts/{run_id}")
     assert str(uploads_dir) in guard_calls["allowed_roots"]
-    assert str(uploads_dir.parent / "data") in guard_calls["allowed_roots"]
+    assert str(uploads_dir.parent / "data") not in guard_calls["allowed_roots"]
+    assert guard_calls["allowed_roots"] == [
+        str(uploads_dir / "charts" / run_id),
+        str(uploads_dir),
+    ]
+    assert run_kwargs.get("cwd") == expected_cwd
+    assert run_kwargs.get("cwd") != str(app_root)
 
 
 def test_execute_chart_exec_inner_error_branches_and_cleanup(
