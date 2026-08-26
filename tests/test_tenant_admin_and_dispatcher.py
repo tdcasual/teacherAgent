@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -127,3 +128,40 @@ def test_tenant_unload_stops_chat_workers():
 
             time.sleep(0.025)
         assert all(not t.is_alive() for t in threads)
+
+
+def test_tenant_registry_init_failure_fails_closed():
+    # TenantRegistry must be fully imported before patch: tenant_app_factory
+    # imports create_app, and a first-import patch races that cycle.
+    import services.api.app as app_mod
+    import services.api.tenant_registry as tenant_registry_mod
+
+    with TemporaryDirectory() as td:
+        tmp = Path(td)
+        result = None
+        raised = None
+        with patch.object(
+            tenant_registry_mod,
+            "TenantRegistry",
+            side_effect=RuntimeError("tenant registry init failed"),
+        ):
+            try:
+                result = create_test_app(
+                    tmp,
+                    env_overrides={
+                        "TENANT_ADMIN_KEY": "k",
+                        "TENANT_DB_PATH": str(tmp / "tenants.sqlite3"),
+                        "DIAG_LOG": "0",
+                    },
+                    use_runtime_entrypoint=True,
+                )
+            except RuntimeError as exc:
+                raised = exc
+
+        assert raised is not None, (
+            "entrypoint must fail closed when TenantRegistry raises; "
+            f"got {type(getattr(result, 'app', result)).__name__}"
+        )
+        assert result is None
+        assert result is not getattr(app_mod, "app", None)
+        assert "tenant registry init failed" in str(raised)

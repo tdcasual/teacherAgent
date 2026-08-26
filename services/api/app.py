@@ -187,11 +187,8 @@ def _build_runtime_entrypoint() -> Any:
             registry=tenant_registry,
         )
     except Exception:
-        _log.error(
-            "Multi-tenant initialization failed; falling back to single-tenant mode",
-            exc_info=True,
-        )
-        return default_app
+        _log.error("Multi-tenant initialization failed", exc_info=True)
+        raise
 
 
 app = _build_runtime_entrypoint()
