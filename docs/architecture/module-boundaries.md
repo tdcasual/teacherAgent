@@ -18,7 +18,7 @@
 
 ### Chat Context
 - 入口：`services/api/routes/chat_routes.py`
-- 应用编排：`services/api/chat_status_service.py`、`services/api/chat_job_processing_service.py`
+- 应用编排：`services/api/chat_status_service.py`、`services/api/chat_job_processing_service.py`、`services/api/chat_job_processing/`
 - 状态规则：`services/api/chat_job_state_machine.py`
 - workflow 解析：`services/api/skill_auto_router.py`
 - 路由真相优先放在 skill manifest；`services/api/skill_auto_router.py` 负责组合评分与降级，`services/api/skills/auto_route_rules.py` 只保留难以配置化的兜底启发式。

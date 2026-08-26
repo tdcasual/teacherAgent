@@ -36,7 +36,8 @@ def test_chat_job_processing_workflow_payload_hotspot_removed() -> None:
     source = Path(target).read_text(encoding="utf-8")
     assert "def _normalize_workflow_resolution_payload(" in source
     assert "def compute_chat_reply_sync(" in source
-    assert "def _run_student_post_done_side_effects(" in source
+    history_source = Path("services/api/chat_job_processing/history.py").read_text(encoding="utf-8")
+    assert "def _run_student_post_done_side_effects(" in history_source
     issues = _issues(target)
     assert not issues, f"C901 issues still present: {issues}"
 
@@ -49,8 +50,16 @@ def test_normalize_workflow_resolution_payload_keeps_expected_shape() -> None:
             "reason": "auto_rule.teacher",
             "confidence": "0.64",
             "candidates": [
-                {"skill_id": "physics-teacher-ops", "score": "12", "hits": ["考试", "分析", "", None]},
-                {"skill_id": "physics-homework-generator", "score": "oops", "hits": list("123456789")},
+                {
+                    "skill_id": "physics-teacher-ops",
+                    "score": "12",
+                    "hits": ["考试", "分析", "", None],
+                },
+                {
+                    "skill_id": "physics-homework-generator",
+                    "score": "oops",
+                    "hits": list("123456789"),
+                },
                 {"skill_id": "", "score": 3},
                 "invalid",
             ],
