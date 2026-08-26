@@ -17,6 +17,12 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from .auth.bootstrap_service import (
+    handle_bootstrap_admin,
+    handle_bootstrap_teachers,
+    write_admin_bootstrap_file,
+)
+from .auth.identify_service import handle_identify_student, handle_identify_teacher
 from .auth.login_service import handle_login
 from .auth.password_reset_service import (
     handle_reset_student_passwords,
@@ -56,8 +62,7 @@ class AuthRegistryStore:
                 conn.execute("PRAGMA journal_mode=WAL;")
             except Exception:  # policy: allowed-broad-except
                 _log.warning("WAL journal mode not available for %s", self.db_path, exc_info=True)
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS student_auth (
                     student_id TEXT PRIMARY KEY,
                     student_name TEXT NOT NULL,
@@ -76,10 +81,8 @@ class AuthRegistryStore:
                     is_disabled INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 )
-                """
-            )
-            conn.execute(
-                """
+                """)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS teacher_auth (
                     teacher_id TEXT PRIMARY KEY,
                     teacher_name TEXT NOT NULL,
@@ -98,10 +101,8 @@ class AuthRegistryStore:
                     is_disabled INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 )
-                """
-            )
-            conn.execute(
-                """
+                """)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS admin_auth (
                     admin_username TEXT PRIMARY KEY,
                     username_norm TEXT NOT NULL UNIQUE,
@@ -114,10 +115,8 @@ class AuthRegistryStore:
                     token_version INTEGER NOT NULL DEFAULT 1,
                     updated_at TEXT NOT NULL
                 )
-                """
-            )
-            conn.execute(
-                """
+                """)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS auth_audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     actor_id TEXT,
@@ -128,8 +127,7 @@ class AuthRegistryStore:
                     detail_json TEXT,
                     created_at TEXT
                 )
-                """
-            )
+                """)
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_student_name_class ON student_auth(name_norm, class_norm)"
             )
@@ -141,8 +139,7 @@ class AuthRegistryStore:
                 "CREATE INDEX IF NOT EXISTS idx_admin_username_norm ON admin_auth(username_norm)"
             )
             self._migrate_admin_token_version(conn)
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS auth_candidate_map (
                     candidate_id TEXT PRIMARY KEY,
                     role TEXT NOT NULL,
@@ -150,8 +147,7 @@ class AuthRegistryStore:
                     expires_at TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )
-                """
-            )
+                """)
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_auth_candidate_map_expiry ON auth_candidate_map(expires_at)"
             )
@@ -204,81 +200,10 @@ class AuthRegistryStore:
         return str(row["subject_id"] or "").strip() or raw
 
     def identify_student(self, *, name: str, class_name: Optional[str]) -> Dict[str, Any]:
-        q_name = str(name or "").strip()
-        q_class = str(class_name or "").strip()
-        if not q_name:
-            return {"ok": False, "error": "missing_name", "message": "请先输入姓名。"}
-
-        profiles = self._match_student_profiles(name=q_name, class_name=q_class)
-        if not profiles:
-            return {
-                "ok": False,
-                "error": "not_found",
-                "message": "未找到该学生，请检查姓名或班级。",
-            }
-
-        candidates = self._student_identify_candidates(profiles)
-        if not candidates:
-            return {
-                "ok": False,
-                "error": "not_found",
-                "message": "未找到该学生，请检查姓名或班级。",
-            }
-        if len(candidates) > 1:
-            return {
-                "ok": False,
-                "error": "multiple",
-                "message": "同名学生，请补充班级。",
-                "candidates": candidates[:10],
-            }
-        return {"ok": True, **candidates[0]}
+        return handle_identify_student(self, name=name, class_name=class_name)
 
     def identify_teacher(self, *, name: str, email: Optional[str]) -> Dict[str, Any]:
-        self.bootstrap_teachers(regenerate_token=False)
-
-        q_name = str(name or "").strip()
-        q_email = str(email or "").strip()
-        if not q_name:
-            return {"ok": False, "error": "missing_name", "message": "请先输入教师姓名。"}
-
-        name_norm = normalize(q_name)
-        email_norm = normalize(q_email)
-        with self._connect() as conn:
-            rows = list(
-                conn.execute(
-                    (
-                        "SELECT teacher_id, teacher_name, email, name_norm, email_norm, password_hash "
-                        "FROM teacher_auth WHERE name_norm = ? ORDER BY teacher_id"
-                    ),
-                    (name_norm,),
-                ).fetchall()
-            )
-
-        if email_norm:
-            rows = [row for row in rows if normalize(str(row["email"] or "")) == email_norm]
-
-        if not rows:
-            msg = "未找到该教师，请检查姓名或邮箱。" if q_email else "未找到该教师，请检查姓名。"
-            return {"ok": False, "error": "not_found", "message": msg}
-
-        if len(rows) > 1 and not email_norm:
-            return {
-                "ok": False,
-                "error": "multiple",
-                "message": "同名教师，请补充邮箱进行确认。",
-                "need_email_disambiguation": True,
-                "candidates": self._teacher_disambiguation_candidates(rows),
-            }
-
-        if len(rows) > 1:
-            return {
-                "ok": False,
-                "error": "multiple",
-                "message": "姓名+邮箱仍无法唯一定位，请联系管理员处理重复数据。",
-                "need_email_disambiguation": True,
-            }
-
-        return {"ok": True, **self._public_teacher_identify_item(rows[0])}
+        return handle_identify_teacher(self, name=name, email=email)
 
     def login(
         self,
@@ -309,54 +234,15 @@ class AuthRegistryStore:
         )
 
     def bootstrap_admin(self) -> Dict[str, Any]:
-        username = _admin_username()
-        password = str(os.getenv("ADMIN_PASSWORD", "") or "")
-        now = _utc_now()
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT admin_username FROM admin_auth WHERE username_norm = ?",
-                (normalize(username),),
-            ).fetchone()
-            if row is not None:
-                return {
-                    "ok": True,
-                    "created": False,
-                    "username": str(row["admin_username"] or ""),
-                    "generated_password": False,
-                    "bootstrap_file": "",
-                }
-
-            generated = False
-            if not password:
-                password = _generate_bootstrap_password()
-                generated = True
-            conn.execute(
-                (
-                    "INSERT INTO admin_auth(admin_username, username_norm, password_hash, "
-                    "password_algo, password_set_at, failed_count, locked_until, is_disabled, "
-                    "token_version, updated_at) VALUES (?, ?, ?, ?, ?, 0, NULL, 0, 1, ?)"
-                ),
-                (
-                    username,
-                    normalize(username),
-                    _hash_password(password),
-                    "pbkdf2_sha256",
-                    _iso(now),
-                    _iso(now),
-                ),
-            )
-
-        bootstrap_file = ""
-        if generated:
-            bootstrap_file = self._write_admin_bootstrap_file(username=username, password=password)
-
-        return {
-            "ok": True,
-            "created": True,
-            "username": username,
-            "generated_password": generated,
-            "bootstrap_file": bootstrap_file,
-        }
+        return handle_bootstrap_admin(
+            self,
+            admin_username=_admin_username,
+            generate_bootstrap_password=_generate_bootstrap_password,
+            hash_password=_hash_password,
+            utc_now=_utc_now,
+            iso=_iso,
+            normalize=normalize,
+        )
 
     def login_admin(self, *, username: str, password: str) -> Dict[str, Any]:
         bootstrap_result = self.bootstrap_admin()
@@ -729,21 +615,13 @@ class AuthRegistryStore:
         )
 
     def _write_admin_bootstrap_file(self, *, username: str, password: str) -> str:
-        auth_dir = self.data_dir / "auth"
-        auth_dir.mkdir(parents=True, exist_ok=True)
-        path = auth_dir / "admin_bootstrap.txt"
-        content = (
-            "# Generated by auth bootstrap. Rotate password after first login.\n"
-            f"username={str(username or '').strip()}\n"
-            f"password={str(password or '').strip()}\n"
-            f"generated_at={_iso(_utc_now())}\n"
+        return write_admin_bootstrap_file(
+            self,
+            username=username,
+            password=password,
+            utc_now=_utc_now,
+            iso=_iso,
         )
-        path.write_text(content, encoding="utf-8")
-        try:
-            os.chmod(path, 0o600)
-        except Exception:  # policy: allowed-broad-except
-            _log.warning("failed to chmod admin bootstrap file: %s", path, exc_info=True)
-        return str(path)
 
     def set_password(
         self,
@@ -979,20 +857,7 @@ class AuthRegistryStore:
         }
 
     def bootstrap_teachers(self, *, regenerate_token: bool) -> List[Dict[str, Any]]:
-        rows: List[Dict[str, Any]] = []
-        for teacher in self._list_teacher_identities():
-            tid = str(teacher.get("teacher_id") or "").strip()
-            if not tid:
-                continue
-            row = self._ensure_teacher_auth(
-                teacher_id=tid,
-                teacher_name=str(teacher.get("teacher_name") or "").strip() or tid,
-                email=str(teacher.get("email") or "").strip() or None,
-                regenerate_token=regenerate_token,
-            )
-            if row:
-                rows.append(row)
-        return rows
+        return handle_bootstrap_teachers(self, regenerate_token=regenerate_token)
 
     def token_version_matches(self, *, role: str, subject_id: str, token_version: int) -> bool:
         role_norm = _normalize_role(role)
@@ -1285,69 +1150,6 @@ class AuthRegistryStore:
             if token_plain:
                 out["_plain_token"] = token_plain
             return out
-
-    def _match_student_profiles(self, *, name: str, class_name: str) -> List[Dict[str, str]]:
-        name_norm = normalize(name)
-        class_norm = normalize(class_name)
-        profiles = [
-            item
-            for item in self._list_student_profiles()
-            if normalize(item.get("student_name", "")) == name_norm
-        ]
-        if class_norm:
-            profiles = [
-                item for item in profiles if normalize(item.get("class_name", "")) == class_norm
-            ]
-        return profiles
-
-    def _public_student_identify_item(self, ensured: Dict[str, Any]) -> Dict[str, Any]:
-        return {
-            "candidate_id": self.issue_opaque_candidate_id(
-                role="student",
-                subject_id=str(ensured.get("student_id") or ""),
-            ),
-            "student": {
-                "student_name": str(ensured.get("student_name") or ""),
-                "class_name": str(ensured.get("class_name") or ""),
-            },
-            "password_set": bool(ensured.get("password_hash")),
-        }
-
-    def _student_identify_candidates(
-        self, profiles: Sequence[Dict[str, str]]
-    ) -> List[Dict[str, Any]]:
-        candidates: List[Dict[str, Any]] = []
-        for profile in profiles:
-            ensured = self._ensure_student_auth(
-                student_id=str(profile.get("student_id") or "").strip(),
-                student_name=str(profile.get("student_name") or "").strip(),
-                class_name=str(profile.get("class_name") or "").strip(),
-                regenerate_token=False,
-            )
-            if not ensured:
-                continue
-            candidates.append(self._public_student_identify_item(ensured))
-        return candidates
-
-    def _public_teacher_identify_item(self, row: Any) -> Dict[str, Any]:
-        return {
-            "candidate_id": self.issue_opaque_candidate_id(
-                role="teacher",
-                subject_id=str(row["teacher_id"] or ""),
-            ),
-            "teacher": {
-                "teacher_name": str(row["teacher_name"] or ""),
-                "email": str(row["email"] or ""),
-            },
-            "password_set": bool(str(row["password_hash"] or "").strip()),
-        }
-
-    def _teacher_disambiguation_candidates(self, rows: Sequence[Any]) -> List[Dict[str, Any]]:
-        out: List[Dict[str, Any]] = []
-        for row in rows[:10]:
-            item = self._public_teacher_identify_item(row)
-            out.append({"candidate_id": item["candidate_id"], "teacher": item["teacher"]})
-        return out
 
     def _list_student_profiles(self) -> List[Dict[str, str]]:
         root = self.data_dir / "student_profiles"

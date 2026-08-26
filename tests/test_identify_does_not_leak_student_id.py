@@ -13,14 +13,14 @@ from tests.helpers.app_factory import create_test_app
 
 def _auth_headers(actor_id: str, role: str, *, secret: str) -> dict[str, str]:
     now = int(time.time())
-    token = mint_test_token(
-        {
-            "sub": actor_id,
-            "role": role,
-            "exp": now + 3600,
-        },
-        secret=secret,
-    )
+    claims = {
+        "sub": actor_id,
+        "role": role,
+        "exp": now + 3600,
+    }
+    if role == "admin":
+        claims["tv"] = 1
+    token = mint_test_token(claims, secret=secret)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -100,7 +100,7 @@ def test_identify_does_not_leak_student_id(tmp_path: Path):
 
     app_mod = _load_app(tmp_path, secret=secret)
     client = TestClient(app_mod.app)
-    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
 
     ambiguous = client.post("/auth/student/identify", json={"name": "刘昊然"})
     assert ambiguous.status_code == 200
@@ -174,7 +174,7 @@ def test_identify_teacher_does_not_leak_teacher_id(tmp_path: Path):
 
     app_mod = _load_app(tmp_path, secret=secret)
     client = TestClient(app_mod.app)
-    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
 
     export_res = client.post(
         "/auth/admin/teacher/export-tokens",
