@@ -53,6 +53,14 @@ def test_compose_backup_and_qdrant_have_runtime_safety_baseline() -> None:
     assert "mem_limit:" in qdrant
     assert "cpus:" in qdrant
     assert "healthcheck:" in qdrant
+    assert 'profiles: ["qdrant"]' in qdrant
+    assert "127.0.0.1:6333:6333" in qdrant
+    assert '"6333:6333"' not in qdrant
+    image_match = re.search(r"image:\s*(\S+)", qdrant)
+    assert image_match is not None, "qdrant service should pin an image"
+    image_ref = image_match.group(1)
+    assert ":" in image_ref, f"qdrant image must include an explicit tag, got {image_ref}"
+    assert not image_ref.endswith(":latest"), f"qdrant image must not use :latest, got {image_ref}"
 
 
 def test_compose_mcp_binds_loopback_and_requires_key() -> None:
