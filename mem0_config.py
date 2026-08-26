@@ -43,7 +43,7 @@ def get_config() -> dict:
     embed_model = os.getenv("SILICONFLOW_EMBED_MODEL", "Qwen/Qwen3-Embedding-8B")
     embed_dims = int(os.getenv("SILICONFLOW_EMBED_DIMS", "4096"))
 
-    qdrant_path = os.getenv("QDRANT_PATH", "/Users/lvxiaoer/Documents/New project/.qdrant")
+    qdrant_path = os.getenv("QDRANT_PATH", str(PROJECT_ROOT / ".qdrant"))
     qdrant_host = os.getenv("QDRANT_HOST")
     qdrant_port = os.getenv("QDRANT_PORT")
     collection = os.getenv("MEM0_COLLECTION", "physics_mem")

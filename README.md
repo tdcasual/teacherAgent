@@ -91,4 +91,4 @@ npm install
 npm run dev:teacher
 ```
 
-说明：非 Docker 方式本地启动后端时，请使用 Python `3.13`，以与 `/Users/lvxiaoer/Documents/codeWork/teacherAgent/pyproject.toml` 和 CI 保持一致。
+说明：非 Docker 方式本地启动后端时，请使用 Python `3.13`，以与 `pyproject.toml` 和 CI 保持一致。

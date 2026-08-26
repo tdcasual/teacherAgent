@@ -4,11 +4,13 @@
 
 ## 报告安全漏洞
 
-请不要在公开 issue 中披露可利用细节。  
-推荐通过以下方式私下报告：
+请不要在公开 issue 中披露可利用细节。
 
-1. GitHub Security Advisory（若仓库已启用）。
-2. 维护者私有沟通渠道（邮件或私信）。
+请通过 GitHub Security Advisory 私下报告：打开仓库的 **Security → Advisories → New advisory**，或访问
+
+https://github.com/tdcasual/teacherAgent/security/advisories/new
+
+并创建 private advisory。不要使用公开 issue。若无法打开 Advisory 页面，请开一个不含利用细节的 issue，请求维护者开启 private advisory。
 
 报告建议包含：
 
