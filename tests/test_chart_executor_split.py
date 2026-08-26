@@ -10,6 +10,34 @@ def test_chart_executor_imports_policy_and_runner_services() -> None:
     source = Path("services/api/chart_executor.py").read_text(encoding="utf-8")
     assert "from .chart.policy_service import prepare_chart_exec_policy" in source
     assert "from .chart.runner_service import execute_with_global_semaphore" in source
+    assert "from .chart.env_service import" in source
+    assert "from .chart.normalize import" in source
+
+
+def test_chart_executor_is_thin_facade() -> None:
+    source = Path("services/api/chart_executor.py").read_text(encoding="utf-8")
+    lines = source.count("\n") + 1
+    assert lines <= 280, f"chart_executor.py is still {lines} lines; move remaining bulk into services/api/chart/"
+    assert "def execute_chart_exec(" in source
+    assert "def resolve_chart_image_path(" in source
+    assert "def resolve_chart_run_meta_path(" in source
+    assert "def _trusted_policy_denial(" in source
+    assert "def _execute_chart_exec_inner(" not in source
+    assert "def _prune_chart_envs(" not in source
+    assert "def _ensure_venv(" not in source
+    assert "def _build_runner_source(" not in source
+
+
+def test_runner_and_env_modules_own_execution_bulk() -> None:
+    runner = Path("services/api/chart/runner_service.py").read_text(encoding="utf-8")
+    env = Path("services/api/chart/env_service.py").read_text(encoding="utf-8")
+    normalize = Path("services/api/chart/normalize.py").read_text(encoding="utf-8")
+    assert "def _execute_chart_exec_inner(" in runner
+    assert "def _build_runner_source(" in runner
+    assert "def _prune_chart_envs(" in env
+    assert "def _ensure_venv(" in env
+    assert "def _normalize_packages(" in normalize
+    assert "def _safe_run_id(" in normalize
 
 
 def test_execute_chart_exec_delegates_to_runner_service(monkeypatch: Any, tmp_path: Path) -> None:
