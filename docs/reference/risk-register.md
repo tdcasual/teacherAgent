@@ -56,12 +56,15 @@
 - 退出条件：有 principal 必须授权；production 忽略 `AUTH_REQUIRED=0`。
 
 ### RISK-MASTERKEY-CRYPTO-001
-- 风险描述：代码内存在默认 master key；加密算法为自制流密码，AES-GCM 迁移另 PR。
+- 风险描述：加密算法为自制流密码（非 AEAD）；AES-GCM 迁移另 PR。代码内默认 master key 已删除。
 - 状态：进行中（接受算法债）
-- 关闭说明：修复 PR 进行中。
+- 关闭说明：硬编码开发默认 master key 已删除；dev 无 key 时 warning 并拒绝写入。算法债仍接受。
 - Owner：平台
 - 下次复审日期：2026-11-26
 - 退出条件：无代码内默认 key；AES-GCM 迁移另 PR。
+- 验证证据：
+  1. `services/api/teacher_provider_registry_service.py` 无硬编码开发默认 master key。
+  2. 生产缺 `MASTER_KEY` 仍失败；dev 无 key 拒绝写入 provider api_key。
 
 ### RISK-SLO-WINDOW-001
 - 风险描述：SLO 文档声称 30 天窗口，实现为进程内短窗口样本，文档与实现不一致。

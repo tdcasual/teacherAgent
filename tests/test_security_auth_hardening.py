@@ -196,6 +196,16 @@ def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:
         ok = client.get("/admin/tenants", headers={"X-Admin-Key": "k"})
         assert ok.status_code == 200
         assert ok.json().get("ok") is True
+def test_hardcoded_master_key_dev_default_absent_from_source() -> None:
+    needle = "dev-master-key-" + "unsafe-change-me"
+    paths = [
+        Path("services/api/teacher_provider_registry_service.py"),
+        Path(".env.example"),
+        Path(".env.production.min.example"),
+        Path("docker-compose.yml"),
+    ]
+    hits = [str(path) for path in paths if needle in path.read_text(encoding="utf-8")]
+    assert hits == []
 
 
 class _ProbeHandler(BaseHTTPRequestHandler):

@@ -70,13 +70,27 @@ def _master_key(getenv: Callable[[str, Optional[str]], Optional[str]]) -> str:
         return key
     if _is_prod(getenv):
         raise RuntimeError("MASTER_KEY is required in production")
-    return _as_str(getenv("MASTER_KEY_DEV_DEFAULT", "dev-master-key-unsafe-change-me"))
+    # Explicit env only — never fall back to a shared in-code default.
+    return _as_str(getenv("MASTER_KEY_DEV_DEFAULT", None))
+
+
+def _require_master_key_for_secret_write(
+    getenv: Callable[[str, Optional[str]], Optional[str]],
+) -> str:
+    key = _master_key(getenv)
+    if key:
+        return key
+    _log.warning("MASTER_KEY is not set; refusing provider secret write")
+    return ""
 
 
 def validate_master_key_policy(*, getenv: Callable[[str, Optional[str]], Optional[str]]) -> Dict[str, Any]:
     key = _as_str(getenv("MASTER_KEY", None))
     if _is_prod(getenv) and not key:
         raise RuntimeError("MASTER_KEY is required in production")
+    usable = key or _as_str(getenv("MASTER_KEY_DEV_DEFAULT", None))
+    if not usable:
+        _log.warning("MASTER_KEY is not set; provider secret writes will be refused")
     return {"ok": True, "is_production": _is_prod(getenv), "has_master_key": bool(key)}
 
 
@@ -388,6 +402,9 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
         return {"ok": False, "error": "invalid_base_url"}
     if not api_key:
         return {"ok": False, "error": "api_key_required"}
+    key = _require_master_key_for_secret_write(deps.getenv)
+    if not key:
+        return {"ok": False, "error": "master_key_required"}
     # Allow overriding shared providers — private entry takes precedence in merged registry
 
     path = ensure_teacher_provider_registry(actor, deps=deps)
@@ -395,7 +412,6 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
         providers = _load_private(actor, deps=deps)
         if any(_normalize_provider_id(x.get("id")) == provider_id for x in providers):
             return {"ok": False, "error": "provider_id_exists"}
-        key = _master_key(deps.getenv)
         record = {
             "id": provider_id,
             "display_name": display_name,
@@ -448,7 +464,9 @@ def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProvi
             current["enabled"] = _as_bool(args.get("enabled"), True)
         api_key = _as_str(args.get("api_key"))
         if api_key:
-            key = _master_key(deps.getenv)
+            key = _require_master_key_for_secret_write(deps.getenv)
+            if not key:
+                return {"ok": False, "error": "master_key_required"}
             current["api_key_encrypted"] = encrypt_secret(api_key, key)
             current["api_key_masked"] = _mask(api_key)
         current["updated_at"] = deps.now_iso()
@@ -512,6 +530,8 @@ def resolve_private_provider_target(
     if mode_val != "openai-chat":
         return None
     key = _master_key(deps.getenv)
+    if not key:
+        return None
     encrypted = _as_str(provider.get("api_key_encrypted"))
     if not encrypted:
         return None

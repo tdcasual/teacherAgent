@@ -52,9 +52,39 @@ class TeacherProviderRegistryServiceTest(unittest.TestCase):
     def test_master_key_policy_production_requires_key(self):
         with self.assertRaises(RuntimeError):
             validate_master_key_policy(getenv=lambda name, default=None: {"ENV": "production"}.get(name, default))
+        with self.assertRaises(RuntimeError):
+            validate_master_key_policy(
+                getenv=lambda name, default=None: {"APP_ENV": "production"}.get(name, default)
+            )
 
-        ok = validate_master_key_policy(getenv=lambda name, default=None: {"ENV": "development"}.get(name, default))
+        with self.assertLogs("services.api.teacher_provider_registry_service", level="WARNING"):
+            ok = validate_master_key_policy(
+                getenv=lambda name, default=None: {"ENV": "development"}.get(name, default)
+            )
         self.assertTrue(ok.get("ok"))
+        self.assertFalse(ok.get("has_master_key"))
+
+    def test_dev_without_master_key_refuses_secret_write(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root, {"ENV": "development"})
+            with self.assertLogs("services.api.teacher_provider_registry_service", level="WARNING") as logs:
+                created = teacher_provider_registry_create(
+                    {
+                        "teacher_id": "t01",
+                        "provider_id": "tprv_proxy_a",
+                        "display_name": "Proxy A",
+                        "base_url": "https://proxy.example.com/v1",
+                        "api_key": "sk-test-12345678",
+                        "default_model": "gpt-4.1-mini",
+                    },
+                    deps=deps,
+                )
+            self.assertFalse(created.get("ok"))
+            self.assertEqual(created.get("error"), "master_key_required")
+            self.assertTrue(any("MASTER_KEY" in message for message in logs.output))
+            registry = root / "teacher_workspaces" / "t01" / "provider_registry.json"
+            self.assertFalse(registry.exists())
 
     def test_private_provider_crud_and_merge(self):
         with TemporaryDirectory() as td:
