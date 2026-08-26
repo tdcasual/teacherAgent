@@ -13,10 +13,10 @@ from .analysis_metrics_store import AnalysisMetricsStore
 from .analysis_ops_service import AnalysisOpsService
 from .app_routes import register_routes
 from .auth_service import auth_required, require_principal
-from .container import build_app_container
+from .container import build_app_container, resolve_observability
 from .core_context_middleware import build_set_core_context_middleware
 from .core_runtime import build_core_runtime
-from .observability import OBSERVABILITY
+from .observability import ObservabilityStore
 from .rate_limit import rate_limit_middleware
 from .request_context import RequestIdFilter
 from .runtime.lifecycle import app_lifespan
@@ -61,14 +61,23 @@ def _attach_request_id_filter_once() -> None:
     root.addFilter(RequestIdFilter())
 
 
-def _ops_metrics_payload(core: Any) -> dict[str, Any]:
-    metrics = dict(OBSERVABILITY.snapshot())
-    analysis_metrics = getattr(core, 'analysis_metrics_service', None)
-    analysis_snapshot = getattr(analysis_metrics, 'snapshot', None)
+def _core_from_app(app_obj: FastAPI) -> Any:
+    container = getattr(getattr(app_obj, "state", None), "container", None)
+    core = getattr(container, "core", None) if container is not None else None
+    if core is not None:
+        return core
+    return getattr(getattr(app_obj, "state", None), "core", None)
+
+
+def _ops_metrics_payload(app_obj: FastAPI) -> dict[str, Any]:
+    metrics = dict(resolve_observability(app_obj).snapshot())
+    core = _core_from_app(app_obj)
+    analysis_metrics = getattr(core, "analysis_metrics_service", None)
+    analysis_snapshot = getattr(analysis_metrics, "snapshot", None)
     if callable(analysis_snapshot):
-        metrics['analysis_runtime'] = analysis_snapshot()
+        metrics["analysis_runtime"] = analysis_snapshot()
     else:
-        metrics['analysis_runtime'] = AnalysisMetricsService().snapshot()
+        metrics["analysis_runtime"] = AnalysisMetricsService().snapshot()
     return metrics
 
 
@@ -76,12 +85,12 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
     @app_obj.get("/ops/metrics")
     async def ops_metrics():
         require_principal(roles=("service", "admin"))
-        return {"ok": True, "metrics": _ops_metrics_payload(app_obj.state.core)}
+        return {"ok": True, "metrics": _ops_metrics_payload(app_obj)}
 
     @app_obj.get("/ops/slo")
     async def ops_slo():
         require_principal(roles=("service", "admin"))
-        snap = OBSERVABILITY.snapshot()
+        snap = resolve_observability(app_obj).snapshot()
         return {
             "ok": True,
             "slo": snap.get("slo") or {},
@@ -121,7 +130,11 @@ def create_app(settings: AppSettings) -> FastAPI:
     )
     app_obj.state.settings = settings
     app_obj.state.core = core
-    app_obj.state.container = build_app_container(core=core)
+    app_obj.state.container = build_app_container(
+        core=core,
+        llm_gateway=getattr(core, "LLM_GATEWAY", None),
+        observability=ObservabilityStore(),
+    )
 
     origins_list, allow_credentials = _cors_origins()
     app_obj.add_middleware(

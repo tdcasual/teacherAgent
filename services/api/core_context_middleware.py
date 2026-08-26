@@ -14,7 +14,7 @@ from .auth_service import (
     resolve_principal_from_headers,
     set_current_principal,
 )
-from .observability import OBSERVABILITY
+from .container import resolve_observability
 from .request_context import REQUEST_ID, new_request_id
 from .wiring import CURRENT_CORE
 
@@ -65,7 +65,8 @@ def build_set_core_context_middleware(
         principal_token = None
         status_code = 500
         route_template = _resolve_route_template(request)
-        OBSERVABILITY.inc_inflight()
+        observability = resolve_observability(request.app)
+        observability.inc_inflight()
         try:
             principal_token = _resolve_principal_token(request)
             response = await call_next(request)
@@ -82,13 +83,13 @@ def build_set_core_context_middleware(
             return JSONResponse(status_code=500, content={"detail": "internal_error"})
         finally:
             elapsed = time.perf_counter() - start
-            OBSERVABILITY.record(
+            observability.record(
                 method=request.method,
                 route=route_template,
                 status_code=status_code,
                 latency_sec=elapsed,
             )
-            OBSERVABILITY.dec_inflight()
+            observability.dec_inflight()
             if principal_token is not None:
                 reset_current_principal(principal_token)
             CURRENT_CORE.reset(core_token)
