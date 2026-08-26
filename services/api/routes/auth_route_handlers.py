@@ -254,8 +254,11 @@ def _register_admin_auth_routes(router: APIRouter, core: Any) -> None:
         if not login_result.get("ok"):
             return _mask_login_failure(login_result)
         subject_id = str(login_result.get("subject_id") or "").strip()
+        token_version = int(login_result.get("token_version") or 1)
         try:
-            token = mint_access_token(subject_id=subject_id, role="admin")
+            token = mint_access_token(
+                subject_id=subject_id, role="admin", token_version=token_version
+            )
         except AuthError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
         return {

@@ -211,13 +211,18 @@ def _extract_bearer_authorization(headers: Mapping[str, Any]) -> str:
 
 def _validate_principal_token_version(principal: AuthPrincipal) -> None:
     claims = principal.claims if isinstance(principal.claims, dict) else {}
-    if principal.role not in {"teacher", "student"} or claims.get("tv") is None:
+    if principal.role not in {"teacher", "student", "admin"}:
         return
     raw_token_version = claims.get("tv")
-    try:
-        token_version = int(str(raw_token_version))
-    except Exception:
-        raise AuthError(401, "invalid_token_claims")
+    if raw_token_version is None:
+        if principal.role != "admin":
+            return
+        token_version = 0
+    else:
+        try:
+            token_version = int(str(raw_token_version))
+        except Exception:
+            raise AuthError(401, "invalid_token_claims")
     try:
         from .auth_registry_service import validate_subject_token_version
 
