@@ -2,57 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from ..specialist_agents.class_signal_analyst import (
-    ClassSignalAnalystDeps,
-    load_class_signal_analyst_prompt,
-)
 from ..specialist_agents.events import SpecialistRuntimeEvent
 from ..specialist_agents.governor import SpecialistAgentGovernor
 from ..specialist_agents.registry import SpecialistAgentRegistry
 from ..specialist_agents.runtime import SpecialistAgentRuntime
-from ..specialist_agents.survey_analyst import (
-    SurveyAnalystDeps,
-    load_survey_analyst_prompt,
-)
-from ..specialist_agents.video_homework_analyst import (
-    VideoHomeworkAnalystDeps,
-    load_video_homework_analyst_prompt,
-)
 from . import binding_registry
 from .binding_resolver import resolve_manifest_binding
 from .manifest_registry import DomainManifestRegistry, build_default_domain_manifest_registry
 
 Runner = Callable[..., Any]
-DepsFactory = Callable[[Any], Any]
-
-
-def build_survey_analyst_deps(core: Any) -> SurveyAnalystDeps:
-    return SurveyAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_survey_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
-
-
-
-def build_class_signal_analyst_deps(core: Any) -> ClassSignalAnalystDeps:
-    return ClassSignalAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_class_signal_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
-
-
-
-def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
-    return VideoHomeworkAnalystDeps(
-        call_llm=getattr(core, 'call_llm', lambda *_args, **_kwargs: {}),
-        prompt_loader=load_video_homework_analyst_prompt,
-        diag_log=getattr(core, 'diag_log', lambda *_args, **_kwargs: None),
-    )
-
-
-
 
 
 def build_domain_specialist_registry(
@@ -99,7 +57,6 @@ def build_domain_specialist_registry(
     return registry
 
 
-
 def build_domain_specialist_runtime(
     *,
     domain_id: str,
@@ -131,7 +88,6 @@ def build_domain_specialist_runtime(
         registry,
         governor=SpecialistAgentGovernor(event_sink=_event_sink),
     )
-
 
 
 def _build_runner(

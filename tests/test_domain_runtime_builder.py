@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import ast
+import inspect
+from pathlib import Path
+
 import pytest
 
+from services.api.domains import binding_registry, runtime_builder
 from services.api.domains.manifest_models import DomainManifest, DomainRuntimeBinding
 from services.api.domains.manifest_registry import (
     DomainManifestRegistry,
@@ -10,6 +15,15 @@ from services.api.domains.manifest_registry import (
 from services.api.domains.runtime_builder import build_domain_specialist_runtime
 from services.api.specialist_agents.contracts import HandoffContract
 from services.api.specialist_agents.registry import SpecialistAgentSpec
+
+_RUNTIME_BUILDER_PATH = (
+    Path(__file__).resolve().parent.parent / 'services' / 'api' / 'domains' / 'runtime_builder.py'
+)
+_DOMAIN_DEPS_FACTORIES = (
+    'build_survey_analyst_deps',
+    'build_class_signal_analyst_deps',
+    'build_video_homework_analyst_deps',
+)
 
 
 @pytest.mark.parametrize(
@@ -233,3 +247,48 @@ def test_runtime_builder_uses_shared_binding_registry_for_named_bindings(monkeyp
 
     assert result.agent_id == 'shared_analyst'
     assert result.output['executive_summary'] == '生成可复用结论:shared lookup'
+
+
+def test_runtime_builder_does_not_define_domain_deps_factories() -> None:
+    source = _RUNTIME_BUILDER_PATH.read_text(encoding='utf-8')
+    tree = ast.parse(source)
+    defined = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    leaked = [name for name in _DOMAIN_DEPS_FACTORIES if name in defined]
+    assert leaked == [], (
+        'runtime_builder must not own domain constructor names; '
+        f'move {leaked} into binding_registry'
+    )
+    for name in _DOMAIN_DEPS_FACTORIES:
+        assert not hasattr(runtime_builder, name)
+
+
+def test_binding_registry_is_sole_owner_of_domain_deps_factories() -> None:
+    lookup = binding_registry.runtime_deps_factory_lookup()
+    assert set(lookup) == set(_DOMAIN_DEPS_FACTORIES)
+    for name in _DOMAIN_DEPS_FACTORIES:
+        factory = getattr(binding_registry, name)
+        assert inspect.getmodule(factory) is binding_registry
+        assert lookup[name] is factory
+
+
+def test_binding_registry_runner_keys_match_manifest_specialists() -> None:
+    manifests = build_default_domain_manifest_registry().list()
+    specialist_ids = {str(spec.agent_id) for manifest in manifests for spec in manifest.specialists}
+    deps_factory_names = {
+        str(manifest.runtime_binding.specialist_deps_factory)
+        for manifest in manifests
+        if manifest.runtime_binding is not None
+    }
+    report_factory_names = {
+        str(manifest.report_binding.provider_factory)
+        for manifest in manifests
+        if manifest.report_binding is not None
+    }
+
+    assert set(binding_registry.runtime_runner_lookup()) == specialist_ids
+    assert set(binding_registry.runtime_deps_factory_lookup()) == deps_factory_names
+    assert set(binding_registry.report_provider_factory_lookup()) == report_factory_names

@@ -65,6 +65,48 @@ def _has_replay_compare_support() -> bool:
 
 
 
+def _named_binding(value: Any) -> str:
+    if callable(value):
+        return ''
+    return str(value or '').strip()
+
+
+def _binding_registry_alignment(manifests: List[Any]) -> Dict[str, Any]:
+    specialist_ids: set[str] = set()
+    deps_factory_names: set[str] = set()
+    report_factory_names: set[str] = set()
+    for manifest in manifests:
+        for spec in manifest.specialists:
+            agent_id = str(spec.agent_id or '').strip()
+            if agent_id:
+                specialist_ids.add(agent_id)
+        deps_name = _named_binding(getattr(manifest.runtime_binding, 'specialist_deps_factory', None))
+        if deps_name:
+            deps_factory_names.add(deps_name)
+        report_name = _named_binding(getattr(manifest.report_binding, 'provider_factory', None))
+        if report_name:
+            report_factory_names.add(report_name)
+    runner_keys = sorted(runtime_runner_lookup())
+    deps_factory_keys = sorted(runtime_deps_factory_lookup())
+    report_factory_keys = sorted(report_provider_factory_lookup())
+    expected_specialists = sorted(specialist_ids)
+    expected_deps = sorted(deps_factory_names)
+    expected_reports = sorted(report_factory_names)
+    return {
+        'ok': (
+            runner_keys == expected_specialists
+            and deps_factory_keys == expected_deps
+            and report_factory_keys == expected_reports
+        ),
+        'runner_keys': runner_keys,
+        'specialist_ids': expected_specialists,
+        'deps_factory_keys': deps_factory_keys,
+        'manifest_deps_factories': expected_deps,
+        'report_factory_keys': report_factory_keys,
+        'manifest_report_factories': expected_reports,
+    }
+
+
 def _domain_summary(manifest) -> Dict[str, Any]:
     runtime_binding = manifest.runtime_binding
     report_binding = manifest.report_binding
@@ -126,7 +168,9 @@ def _domain_summary(manifest) -> Dict[str, Any]:
 
 def check_analysis_domain_contract() -> Dict[str, Any]:
     registry = manifest_registry.build_default_domain_manifest_registry()
-    domains = {manifest.domain_id: _domain_summary(manifest) for manifest in registry.list()}
+    manifests = registry.list()
+    domains = {manifest.domain_id: _domain_summary(manifest) for manifest in manifests}
+    binding_alignment = _binding_registry_alignment(manifests)
     failures: List[Dict[str, Any]] = []
     for domain_id, summary in domains.items():
         if bool(summary.get('ok')):
@@ -143,11 +187,19 @@ def check_analysis_domain_contract() -> Dict[str, Any]:
                 'has_replay_compare_support': summary['has_replay_compare_support'],
             }
         )
+    if not bool(binding_alignment.get('ok')):
+        failures.append(
+            {
+                'domain_id': '*',
+                'binding_alignment': binding_alignment,
+            }
+        )
     return {
         'ok': len(failures) == 0,
         'domain_count': len(domains),
         'domains': domains,
         'failures': failures,
+        'binding_alignment': binding_alignment,
     }
 
 

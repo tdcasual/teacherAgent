@@ -9,23 +9,11 @@ from ..domains.manifest_registry import (
     build_default_domain_manifest_registry,
 )
 from ..domains.runtime_builder import (
-    build_class_signal_analyst_deps as _build_class_signal_analyst_deps,
-)
-from ..domains.runtime_builder import (
     build_domain_specialist_registry,
     build_domain_specialist_runtime,
 )
-from ..domains.runtime_builder import (
-    build_survey_analyst_deps as _build_survey_analyst_deps,
-)
-from ..domains.runtime_builder import (
-    build_video_homework_analyst_deps as _build_video_homework_analyst_deps,
-)
-from ..specialist_agents.class_signal_analyst import ClassSignalAnalystDeps
 from ..specialist_agents.registry import SpecialistAgentRegistry
 from ..specialist_agents.runtime import SpecialistAgentRuntime
-from ..specialist_agents.survey_analyst import SurveyAnalystDeps
-from ..specialist_agents.video_homework_analyst import VideoHomeworkAnalystDeps
 from ..survey.deps import SurveyApplicationDeps, build_survey_application_deps
 from ..survey_report_service import (
     build_survey_report_deps,
@@ -48,18 +36,6 @@ from . import get_app_core as _app_core
 
 def build_survey_deps(core: Any) -> SurveyApplicationDeps:
     return build_survey_application_deps(core)
-
-
-def build_survey_analyst_deps(core: Any) -> SurveyAnalystDeps:
-    return _build_survey_analyst_deps(core)
-
-
-def build_class_signal_analyst_deps(core: Any) -> ClassSignalAnalystDeps:
-    return _build_class_signal_analyst_deps(core)
-
-
-def build_video_homework_analyst_deps(core: Any) -> VideoHomeworkAnalystDeps:
-    return _build_video_homework_analyst_deps(core)
 
 
 def _domain_manifests() -> DomainManifestRegistry:

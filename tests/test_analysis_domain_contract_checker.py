@@ -12,6 +12,11 @@ def test_analysis_domain_contract_checker_reports_docs_bindings_and_replay_suppo
 
     assert payload['ok'] is True
     assert payload['domain_count'] >= 3
+    alignment = payload['binding_alignment']
+    assert alignment['ok'] is True
+    assert alignment['runner_keys'] == alignment['specialist_ids']
+    assert alignment['deps_factory_keys'] == alignment['manifest_deps_factories']
+    assert alignment['report_factory_keys'] == alignment['manifest_report_factories']
     for summary in payload['domains'].values():
         assert summary['has_runtime_binding'] is True
         assert summary['has_report_binding'] is True
