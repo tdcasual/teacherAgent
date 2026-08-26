@@ -2,7 +2,7 @@
 
 - 适用角色：管理员、平台负责人
 - 最后验证日期：2026-08-26
-- 主要来源：`docs/plans/2026-02-13-code-audit-findings.md`
+- 主要来源：`docs/plans/2026-02-13-code-audit-findings.md`；接受项按 2026-08-26 审计增补
 
 ## 进行中风险
 
@@ -90,6 +90,23 @@
 
 （暂无。`RISK-CHART-TRUSTED-001` 于 2026-08-26 复审重开。）
 
+## 已接受风险
+### AR-L1
+- 风险描述：`docs/plans/` 含审计修复方案在内的历史计划稿存量大，本轮不删除、不全部归档。
+- 状态：已接受
+- Owner：文档
+- 下次复审日期：2026-11-26
+- 退出条件：migration-map 覆盖仍被运行时引用的稿；其余可归档目录。
+- 补偿控制：W5-P11 已更新 `docs/reference/plan-migration-map.md` 与 `docs/INDEX.md`，声明 `docs/plans/` 非运行时契约；`docs/plans/2026-08-26-audit-remediation-design.md` 为审计修复权威。
+
+### AR-L3
+- 风险描述：prettier 只扫描 `frontend/apps/shared`，teacher/student 未纳入。
+- 状态：已接受
+- Owner：前端
+- 下次复审日期：2026-11-26
+- 退出条件：prettier 纳入 `apps/teacher` + `apps/student` 且一次 format PR。
+- 补偿控制：CI `frontend-quality` 对 teacher/student 跑 eslint / typecheck / build；`format:check` 至少覆盖 shared。
+
 ## 持续关注项
 1. 上传链路资源上限（数量/大小/MIME）必须持续防回退。
 2. 锁与并发处理策略需防止重复执行与幽灵任务。
@@ -98,4 +115,6 @@
 ## 相关文档
 - `docs/how-to/auth-and-account-troubleshooting.md`
 - `docs/reference/permissions-and-security.md`
+- `docs/reference/plan-migration-map.md`
 - `docs/plans/2026-02-13-code-audit-findings.md`
+- `docs/plans/2026-08-26-audit-remediation-design.md`

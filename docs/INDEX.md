@@ -56,6 +56,8 @@
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 
 ## 设计与演进
+- **当前权威修复方案（2026-08-26 审计）**：`docs/plans/2026-08-26-audit-remediation-design.md`
+- `docs/plans/` 是历史设计与实施稿，**不是**运行时契约。稳定结论以 `docs/reference/`、`docs/explain/`、`docs/operations/` 为准；提炼状态见 `docs/reference/plan-migration-map.md`。
 - 历史设计与实现文档：`docs/plans/`
 - 问卷多 Agent 设计：`docs/plans/2026-03-06-survey-multi-agent-design.md`
 - 问卷多 Agent 实施计划：`docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md`
