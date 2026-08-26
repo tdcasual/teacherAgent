@@ -76,3 +76,26 @@ def test_mutating_tool_without_confirm_does_not_execute(tmp_path: Path, monkeypa
     )
     assert confirmed.get("ok") is True
     assert executed == ["student.profile.update"]
+
+
+def test_student_cannot_execute_mutating_tool_without_ticket() -> None:
+    executed: list[str] = []
+    out = tool_dispatch(
+        "student.profile.update",
+        {"student_id": "S1"},
+        role="student",
+        deps=_deps(executed=executed),
+        confirmed=True,
+    )
+    assert out.get("error") in {"permission denied", "forbidden"}
+    assert executed == []
+    generate = tool_dispatch(
+        "assignment.generate",
+        {"assignment_id": "A1"},
+        role="student",
+        deps=_deps(executed=executed),
+    )
+    assert generate.get("error") in {"permission denied", "forbidden", "confirmation_required"}
+    if generate.get("error") == "confirmation_required":
+        assert generate.get("confirm_id")
+    assert executed == []

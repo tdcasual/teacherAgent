@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
-from .tool_confirm_service import maybe_confirmation_required
+from .tool_confirm_service import maybe_confirmation_required, tool_is_mutating
 
 
 def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
@@ -430,6 +430,40 @@ def _build_handlers(
 
 
 
+def _deny_mutating_for_non_teacher(
+    *,
+    static_tool: Any,
+    name: str,
+    args: Dict[str, Any],
+    role: Optional[str],
+    confirmed: bool,
+    actor_id: Optional[str],
+    job_id: Optional[str],
+    lane_id: Optional[str],
+    tool_call_id: Optional[str],
+    skill_id: Optional[str],
+    teacher_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not tool_is_mutating(static_tool, name):
+        return None
+    role_norm = str(role or "").strip().lower()
+    if role_norm not in {"teacher", "admin"}:
+        return {"error": "permission denied", "detail": f"{name} requires teacher role"}
+    return maybe_confirmation_required(
+        tool=static_tool,
+        name=name,
+        args=args,
+        confirmed=bool(confirmed),
+        actor_id=str(actor_id or teacher_id or ""),
+        job_id=str(job_id or ""),
+        lane_id=str(lane_id or ""),
+        tool_call_id=str(tool_call_id or ""),
+        role=str(role or ""),
+        skill_id=str(skill_id or ""),
+        teacher_id=str(teacher_id or ""),
+    )
+
+
 def tool_dispatch(
     name: str,
     args: Dict[str, Any],
@@ -469,21 +503,19 @@ def tool_dispatch(
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"unknown tool: {name}"}
-    if str(role or "") == "student":
-        return handler(args)
-    blocked = maybe_confirmation_required(
-        tool=static_tool,
+    mutating_denied = _deny_mutating_for_non_teacher(
+        static_tool=static_tool,
         name=name,
         args=args,
-        confirmed=bool(confirmed),
-        actor_id=str(actor_id or teacher_id or ""),
-        job_id=str(job_id or ""),
-        lane_id=str(lane_id or ""),
-        tool_call_id=str(tool_call_id or ""),
-        role=str(role or ""),
-        skill_id=str(skill_id or ""),
-        teacher_id=str(teacher_id or ""),
+        role=role,
+        confirmed=confirmed,
+        actor_id=actor_id,
+        job_id=job_id,
+        lane_id=lane_id,
+        tool_call_id=tool_call_id,
+        skill_id=skill_id,
+        teacher_id=teacher_id,
     )
-    if blocked is not None:
-        return blocked
+    if mutating_denied is not None:
+        return mutating_denied
     return handler(args)
