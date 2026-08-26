@@ -53,6 +53,12 @@ bash scripts/backup/run_backup.sh --snapshot-type incremental --target s3 --dry-
 bash scripts/backup/verify_restore.sh --target s3
 ```
 
+### 恢复干跑（CI / 无云凭据，不触网）
+```bash
+bash scripts/backup/verify_restore.sh dry-run
+bash scripts/backup/verify_restore.sh --target s3 --dry-run
+```
+
 ### 升级前快照
 ```bash
 bash scripts/backup/pre_upgrade_snapshot.sh --target s3
@@ -63,7 +69,19 @@ bash scripts/backup/pre_upgrade_snapshot.sh --target s3
 - 最新状态：`output/backups/state/latest_<target>.json`
 - 恢复校验报告：`output/backups/restore-verify/<id>/verify_report.json`
 
-## 5. 说明
+## 5. Compose（默认关闭）
+生产 `docker compose up` **不会**启动 backup。主 compose 已并入 `backup_scheduler` / `backup_daily_full` / `backup_verify_weekly`，均 `profiles: ["backup"]`，只挂载 `scripts/backup`、`data`、`uploads`、`output`，禁止整仓 `./:/workspace`。
+
+staging 显式打开：
+```bash
+docker compose --profile backup up -d
+```
+
+`docker-compose.backup.draft.yml` 已删除（曾整仓挂载，回归风险）。不要把它加回来。
+
+S3/OSS 密钥配好后由运维显式 `--profile backup`；不要把生产 backup 改成默认 on。
+
+## 6. 说明
 - 当前为脚本骨架版本，优先用于联通验证与流程固化。
 - 生命周期（热30/冷180）需在 S3/OSS 控制台配置对应规则。
 - 生产启用前建议先在 staging 完成至少 1 次全链路恢复演练。

@@ -41,6 +41,14 @@ jobs:
         run: |
           bash scripts/quality/check_backend_dep_audit.sh
 
+      - name: Backup restore dry-run
+        run: |
+          bash -n scripts/backup/common.sh \
+            scripts/backup/run_backup.sh \
+            scripts/backup/verify_restore.sh \
+            scripts/backup/pre_upgrade_snapshot.sh
+          bash scripts/backup/verify_restore.sh dry-run
+
       - name: Ruff (backend quality gate)
         run: |
           python -m ruff check \

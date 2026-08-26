@@ -150,6 +150,7 @@ services:
       timeout: 5s
       retries: 3
 
+  # Optional backup jobs. Production stays default-off; staging: docker compose --profile backup up
   backup_scheduler:
     build:
       context: .

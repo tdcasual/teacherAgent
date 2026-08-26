@@ -18,11 +18,16 @@ SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_PATH}")" >/dev/null 2>&1 && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 TARGET="${BACKUP_TARGET_DEFAULT:-s3}"
+DRY_RUN="0"
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/backup/verify_restore.sh --target s3|oss
+  bash scripts/backup/verify_restore.sh --target s3|oss [--dry-run]
+  bash scripts/backup/verify_restore.sh dry-run
+
+dry-run / --dry-run:
+  Offline restore plan. No cloud credentials, no network download.
 EOF
 }
 
@@ -31,6 +36,10 @@ while [[ $# -gt 0 ]]; do
     --target)
       TARGET="${2:-}"
       shift 2
+      ;;
+    --dry-run|dry-run)
+      DRY_RUN="1"
+      shift
       ;;
     -h|--help)
       usage
@@ -43,7 +52,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 TARGET="$(normalize_target "${TARGET}")"
-ensure_provider_env "${TARGET}"
+if [[ "${DRY_RUN}" != "1" ]]; then
+  ensure_provider_env "${TARGET}"
+fi
 
 STATE_JSON="$(load_latest_state "${TARGET}")"
 
@@ -60,6 +71,33 @@ data = json.loads(${STATE_JSON@Q}) if ${STATE_JSON@Q}.strip() else {}
 print(((data.get('archive') or {}).get('sha256') or '').strip())
 PY
 )"
+
+if [[ "${DRY_RUN}" == "1" ]]; then
+  require_cmd tar
+  require_cmd python3
+  VERIFY_ID="rv_dryrun_${TARGET}_$(now_compact)"
+  VERIFY_DIR="${PROJECT_ROOT}/output/backups/restore-verify/${VERIFY_ID}"
+  mkdir -p "${VERIFY_DIR}"
+  python3 - <<PY >"${VERIFY_DIR}/verify_report.json"
+import json
+from datetime import datetime, timezone
+
+report = {
+    "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "target": ${TARGET@Q},
+    "archive_key": ${ARCHIVE_KEY@Q},
+    "archive_sha256": ${ARCHIVE_SHA@Q},
+    "dry_run": True,
+    "network": False,
+    "ok": True,
+}
+print(json.dumps(report, ensure_ascii=False, indent=2))
+PY
+  log "restore dry-run success: target=${TARGET}"
+  log "report=${VERIFY_DIR}/verify_report.json"
+  cat "${VERIFY_DIR}/verify_report.json"
+  exit 0
+fi
 
 [[ -n "${ARCHIVE_KEY}" ]] || die "no latest backup state found for target=${TARGET}"
 [[ -n "${ARCHIVE_SHA}" ]] || die "latest backup missing sha256"
