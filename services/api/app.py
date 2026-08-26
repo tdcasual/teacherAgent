@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
 from .analysis_metrics_service import AnalysisMetricsService
 from .analysis_metrics_store import AnalysisMetricsStore
@@ -86,6 +87,14 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
     async def ops_metrics():
         require_principal(roles=("service", "admin"))
         return {"ok": True, "metrics": _ops_metrics_payload(app_obj)}
+
+    @app_obj.get("/ops/metrics.prom")
+    async def ops_metrics_prom():
+        require_principal(roles=("service", "admin"))
+        return PlainTextResponse(
+            content=OBSERVABILITY.prometheus_text(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     @app_obj.get("/ops/slo")
     async def ops_slo():

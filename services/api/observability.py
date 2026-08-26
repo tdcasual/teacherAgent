@@ -5,7 +5,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, List
+from typing import Any, Deque, Dict, Iterable, List, Mapping, Tuple
 
 _LATENCY_BUCKETS = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0]
 _MAX_RECENT_SAMPLES = 5000
@@ -29,6 +29,50 @@ def _bucket_key(value: float) -> str:
         if value <= bucket:
             return f"le_{bucket:.2f}s"
     return "gt_5.00s"
+
+
+def _prom_escape(value: str) -> str:
+    return str(value).replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+def _prom_number(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, int):
+        return str(value)
+    rendered = format(float(value), ".6f").rstrip("0").rstrip(".")
+    return rendered if rendered else "0"
+
+
+def _prom_line(name: str, value: Any, labels: Mapping[str, str] | None = None) -> str:
+    if labels:
+        inner = ",".join(f'{key}="{_prom_escape(val)}"' for key, val in labels.items())
+        return f"{name}{{{inner}}} {_prom_number(value)}"
+    return f"{name} {_prom_number(value)}"
+
+
+def _prom_family(help_text: str, type_name: str, name: str, samples: Iterable[str]) -> List[str]:
+    lines = [f"# HELP {name} {help_text}", f"# TYPE {name} {type_name}"]
+    lines.extend(samples)
+    return lines
+
+
+def _prom_labeled_counts(name: str, values: Mapping[str, int], label: str) -> List[str]:
+    return [
+        _prom_line(name, int(count), {label: key})
+        for key, count in sorted(values.items())
+    ]
+
+
+def _prom_histogram_buckets(latency_buckets: Mapping[str, int]) -> Tuple[List[str], int]:
+    lines: List[str] = []
+    cumulative = 0
+    for bucket in _LATENCY_BUCKETS:
+        cumulative += int(latency_buckets.get(f"le_{bucket:.2f}s", 0) or 0)
+        lines.append(_prom_line("http_request_duration_seconds_bucket", cumulative, {"le": str(bucket)}))
+    cumulative += int(latency_buckets.get("gt_5.00s", 0) or 0)
+    lines.append(_prom_line("http_request_duration_seconds_bucket", cumulative, {"le": "+Inf"}))
+    return lines, cumulative
 
 
 @dataclass(frozen=True)
@@ -121,6 +165,116 @@ class ObservabilityStore:
                 "error_rate_ok": error_rate <= slo_error_rate_target,
             },
         }
+
+    def prometheus_text(self) -> str:
+        snap = self.snapshot()
+        latency = snap.get("http_latency_sec") or {}
+        slo = snap.get("slo") or {}
+        histogram = latency.get("histogram") or {}
+        bucket_lines, bucket_count = _prom_histogram_buckets(histogram)
+        lines: List[str] = []
+        lines.extend(
+            _prom_family(
+                "Total HTTP requests observed by this process (not aggregated across workers).",
+                "counter",
+                "http_requests_total",
+                [_prom_line("http_requests_total", snap.get("http_requests_total", 0))],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "Total HTTP 5xx responses observed by this process.",
+                "counter",
+                "http_5xx_total",
+                [_prom_line("http_5xx_total", snap.get("http_5xx_total", 0))],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "5xx / requests since this process started.",
+                "gauge",
+                "http_error_rate",
+                [_prom_line("http_error_rate", snap.get("http_error_rate", 0.0))],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "In-flight HTTP requests in this process.",
+                "gauge",
+                "http_inflight_requests",
+                [_prom_line("http_inflight_requests", snap.get("inflight_requests", 0))],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "Seconds since this process started recording HTTP samples.",
+                "gauge",
+                "process_uptime_seconds",
+                [_prom_line("process_uptime_seconds", snap.get("uptime_sec", 0.0))],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                f"Request latency quantiles over the in-process recent window (max {_MAX_RECENT_SAMPLES} samples).",
+                "summary",
+                "http_latency_seconds",
+                [
+                    _prom_line("http_latency_seconds", latency.get("p50", 0.0), {"quantile": "0.5"}),
+                    _prom_line("http_latency_seconds", latency.get("p95", 0.0), {"quantile": "0.95"}),
+                    _prom_line("http_latency_seconds", latency.get("p99", 0.0), {"quantile": "0.99"}),
+                    _prom_line("http_latency_seconds_count", latency.get("sample_count", 0)),
+                ],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "HTTP request duration buckets for this process (cumulative).",
+                "histogram",
+                "http_request_duration_seconds",
+                bucket_lines + [_prom_line("http_request_duration_seconds_count", bucket_count)],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "HTTP requests by method+route in this process.",
+                "counter",
+                "http_requests_by_route_total",
+                _prom_labeled_counts(
+                    "http_requests_by_route_total",
+                    snap.get("requests_by_route") or {},
+                    "route",
+                ),
+            )
+        )
+        lines.extend(
+            _prom_family(
+                "HTTP 5xx responses by method+route in this process.",
+                "counter",
+                "http_5xx_by_route_total",
+                _prom_labeled_counts(
+                    "http_5xx_by_route_total",
+                    snap.get("errors_by_route") or {},
+                    "route",
+                ),
+            )
+        )
+        lines.extend(
+            _prom_family(
+                f"1 if in-window p95 latency is <= {slo.get('latency_p95_target_sec', 1.0)}s.",
+                "gauge",
+                "slo_latency_p95_ok",
+                [_prom_line("slo_latency_p95_ok", 1 if slo.get("latency_p95_ok") else 0)],
+            )
+        )
+        lines.extend(
+            _prom_family(
+                f"1 if process-lifetime 5xx rate is <= {slo.get('error_rate_target', 0.01)}.",
+                "gauge",
+                "slo_error_rate_ok",
+                [_prom_line("slo_error_rate_ok", 1 if slo.get("error_rate_ok") else 0)],
+            )
+        )
+        return "\n".join(lines) + "\n"
 
 
 OBSERVABILITY = ObservabilityStore()

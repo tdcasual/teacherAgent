@@ -1,16 +1,17 @@
 {
   "title": "Backend SLO Overview",
+  "description": "In-process SLO snapshot (max 5000 samples per worker). Not a 30-day Grafana/Prometheus platform.",
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "30s",
-  "tags": ["slo", "api", "operations"],
+  "tags": ["slo", "api", "operations", "process-window"],
   "panels": [
     {
       "id": 1,
       "title": "HTTP Requests Total",
       "type": "stat",
-      "description": "Total API requests since process start",
+      "description": "Total API requests since this process started (not aggregated across workers)",
       "targets": [
         {
           "expr": "metrics.http_requests_total",
@@ -22,7 +23,7 @@
       "id": 2,
       "title": "HTTP Error Rate",
       "type": "stat",
-      "description": "5xx error ratio",
+      "description": "5xx error ratio since this process started",
       "targets": [
         {
           "expr": "metrics.http_error_rate",
@@ -46,7 +47,7 @@
       "id": 3,
       "title": "HTTP Latency P95 (sec)",
       "type": "stat",
-      "description": "Request p95 latency",
+      "description": "Request p95 over the in-process recent window (max 5000 samples)",
       "targets": [
         {
           "expr": "metrics.http_latency_sec.p95",
@@ -70,7 +71,7 @@
       "id": 4,
       "title": "SLO Status",
       "type": "table",
-      "description": "Latency and error SLO compliance flags",
+      "description": "Latency and error SLO flags for this process window (not 30-day)",
       "targets": [
         {
           "expr": "metrics.slo",

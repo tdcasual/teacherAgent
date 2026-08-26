@@ -1,6 +1,6 @@
 # SLO And Observability Baseline
 
-Last updated: 2026-02-12
+Last updated: 2026-08-26
 
 ## Scope
 
@@ -11,23 +11,54 @@ auditable evidence for:
 - runtime metrics endpoint contract
 - dashboard configuration artifact
 
+This is **not** a Grafana or Prometheus platform. The API process exposes JSON
+and Prometheus text snapshots of its own in-memory store. There is no
+central scrape, no 30-day time series, and no deployed alertmanager.
+
+## Measurement Window
+
+Implementation: `ObservabilityStore` in `services/api/observability.py`.
+
+| Series | Window |
+| --- | --- |
+| `http_requests_total`, `http_5xx_total`, `http_error_rate` | This process lifetime |
+| `http_latency_sec.p50/p95/p99` | Last `_MAX_RECENT_SAMPLES` (5000) request samples in this process |
+| SLO flags (`slo.latency_p95_ok`, `slo.error_rate_ok`) | Same as the SLI they wrap |
+
+Honest limits:
+
+- Restarting a worker resets its counters and latency window.
+- Default compose uses `--workers ${API_WORKERS:-2}`. Workers do **not**
+  aggregate. Each process has its own 5000-sample window.
+- These SLIs are **not** 30-day calendar SLOs. A 30-day target would need an
+  external time-series store that this repository does not run.
+
 ## SLO Definitions
 
-All SLOs are measured on API requests excluding local development-only traffic.
+All SLOs are measured on API requests recorded by the current worker,
+excluding local development-only traffic only insofar as that traffic is not
+sent to the process.
 
 1. `SLO-API-Availability`
-   - Objective: HTTP success rate >= `99.0%` over rolling 30 days.
+   - Objective: HTTP success rate >= `99.0%` over **this process lifetime**
+     (`http_error_rate <= 0.01`).
    - SLI: `1 - http_error_rate` where error means `status_code >= 500`.
 2. `SLO-API-Latency-P95`
-   - Objective: `p95 <= 1.0s` over rolling 30 days.
+   - Objective: `p95 <= 1.0s` over the **in-process recent window** (max 5000
+     samples).
    - SLI: `http_latency_sec.p95` from `/ops/metrics`.
 3. `SLO-API-Incident-Detection`
-   - Objective: 5xx error rate breach is detectable within 5 minutes.
+   - Objective: a 5xx rate breach is visible on the next operator read or
+     authenticated scrape of `/ops/metrics` or `/ops/metrics.prom`.
    - SLI source: `http_5xx_total` and `http_error_rate`.
+   - There is no 5-minute pager. Detection latency is "whenever something
+     next reads this process".
 
 ## Runtime Metrics Contract
 
-The API exposes two governance endpoints:
+The API exposes three governance endpoints. All three use
+`require_principal(roles=("service", "admin"))`. Scrapers must send a
+service (or admin) Bearer token. There is no anonymous scrape.
 
 - `GET /ops/metrics`
   - Returns `{"ok": true, "metrics": ...}`.
@@ -40,6 +71,10 @@ The API exposes two governance endpoints:
     - `errors_by_route`
     - `slo.latency_p95_ok`
     - `slo.error_rate_ok`
+- `GET /ops/metrics.prom`
+  - Prometheus 0.0.4 text exposition of the same in-process HTTP snapshot.
+  - Content-Type: `text/plain; version=0.0.4; charset=utf-8`.
+  - Each uvicorn worker serves its own series; scrapes do not merge workers.
 - `GET /ops/slo`
   - Returns current SLO status projection for availability and latency.
   - Includes quick-triage runtime fields:
@@ -51,12 +86,14 @@ The API exposes two governance endpoints:
 
 ## Dashboard Evidence
 
-Dashboard config is versioned at:
+A **local JSON snapshot layout** of the same in-process gauges is versioned at:
 
 - `ops/dashboards/backend-slo-overview.json`
 
-This artifact is intended to be imported into Grafana (JSON model) and includes
-panels for request volume, error rate, latency p95, and SLO status.
+Panels cover request volume, error rate, latency p95, and SLO status for the
+**process window**. This file is not a live Grafana dashboard and does not
+create 30-day series. Importing it into Grafana is optional and still reads
+the in-process window.
 
 对于统一 analysis runtime，还应补充 specialist 维度指标。当前 `/ops/metrics.metrics.analysis_runtime` 与 `GET /teacher/analysis/metrics` 暴露统一 snapshot：
 
@@ -77,16 +114,18 @@ panels for request volume, error rate, latency p95, and SLO status.
 
 ## Operational Runbook Hooks
 
-Alert thresholds (initial):
+Suggested operator checks against the process snapshot (not a deployed
+alertmanager, not a 5-minute/10-minute PromQL rule):
 
-- Warning: `http_error_rate > 0.005` for 5 minutes.
-- Critical: `http_error_rate > 0.01` for 5 minutes.
-- Warning: `http_latency_sec.p95 > 1.0` for 10 minutes.
+- Warning: `http_error_rate > 0.005`
+- Critical: `http_error_rate > 0.01`
+- Warning: `http_latency_sec.p95 > 1.0`
 
 Review cadence:
 
-- Weekly: inspect SLO burn and route-level hot spots.
-- Monthly: revise SLO targets if product requirements change.
+- Weekly: inspect SLO flags and route-level hot spots on `/ops/metrics`.
+- Monthly: revise process-window targets if product requirements change.
+  Do not treat these as 30-day SLOs until an external store exists.
 
 ## 发布前门禁
 
