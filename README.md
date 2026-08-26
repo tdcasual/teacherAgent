@@ -19,10 +19,11 @@
 ## 5 分钟快速开始
 ```bash
 cp .env.production.min.example .env
+# 填必填密钥：把 REDIS_PASSWORD / MCP_API_KEY / AUTH_TOKEN_SECRET 的 change_me 换成真实值
 docker compose up -d
 ```
 
-compose 现在要求 `MCP_API_KEY`；`REDIS_PASSWORD` 仍然必填，见下一份 env PR（W1-P4）。
+复制 example **不会**直接启动。`change_me` 不是密钥。compose 对空的 `REDIS_PASSWORD` 与 `MCP_API_KEY` 使用 `${VAR:?}`，缺值会立刻失败；`AUTH_TOKEN_SECRET` 同样必须换成部署密钥后再 `docker compose up`。三项都空着时栈起不来。MCP 仅绑定 `127.0.0.1:9000`。
 
 启动后访问：
 - 老师端：`http://localhost:3002`
