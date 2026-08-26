@@ -79,6 +79,20 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByText('工具抽屉')).toBeTruthy()
   })
 
+  it('keeps identity form values after closing and reopening admin panel', () => {
+    const props = buildProps()
+    render(<TeacherTopbar {...props} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '管理' }))
+    fireEvent.change(screen.getByPlaceholderText('例如：张老师'), { target: { value: '李老师' } })
+    fireEvent.click(screen.getByRole('button', { name: '收起' }))
+
+    expect(screen.queryByRole('dialog', { name: '教师管理面板' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '管理' }))
+    expect((screen.getByPlaceholderText('例如：张老师') as HTMLInputElement).value).toBe('李老师')
+  })
+
   it('groups management actions into identity, password, and student reset sections', () => {
     vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('teacher-token')
     vi.spyOn(teacherAuth, 'readTeacherAuthSubject').mockReturnValue({
