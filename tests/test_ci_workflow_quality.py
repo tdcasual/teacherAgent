@@ -39,6 +39,14 @@ def test_frontend_ci_has_types_install_integrity_step() -> None:
     assert "npm run check:types-install" in text
 
 
+def test_frontend_quality_runs_unit_tests() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    start = text.index("\n  frontend-quality:")
+    end = text.index("\n  smoke-e2e:")
+    job = text[start:end]
+    assert "npm run test:unit" in job
+
+
 def test_frontend_jobs_emit_dependency_install_metrics_summary() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 

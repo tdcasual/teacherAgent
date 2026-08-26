@@ -280,6 +280,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Run frontend unit tests
+        run: npm run test:unit
+
       - name: Build teacher frontend
         run: npm run build:teacher
 
