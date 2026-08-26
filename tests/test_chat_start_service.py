@@ -1,9 +1,17 @@
 """Tests for chat_start_service — enqueue failure, dedup, error paths."""
 from __future__ import annotations
 
+import json
 import threading
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from services.api.chat_job_repository import (
+    ChatJobRepositoryDeps,
+    load_chat_job,
+    write_chat_job,
+)
 from services.api.chat_start_service import ChatStartDeps, start_chat_orchestration
 
 
@@ -27,6 +35,24 @@ class _FakeMsg:
     def __init__(self, role, content):
         self.role = role
         self.content = content
+
+
+def _atomic_write_json(path: Path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _repo_write_deps(tmp_dir: str):
+    repo_deps = ChatJobRepositoryDeps(
+        chat_job_dir=Path(tmp_dir),
+        atomic_write_json=_atomic_write_json,
+        now_iso=lambda: "2026-02-11T00:00:00Z",
+    )
+
+    def repo_write(jid, data, overwrite):
+        return write_chat_job(jid, data, repo_deps, overwrite=overwrite)
+
+    return repo_deps, repo_write
 
 
 def _make_deps(**overrides):
@@ -96,6 +122,39 @@ class ChatStartServiceTest(unittest.TestCase):
         result = start_chat_orchestration(req, deps=deps)
         self.assertEqual(result['status'], 'failed')
         self.assertEqual(written.get('error'), 'enqueue_failed')
+
+    def test_enqueue_failure_marks_job_failed_via_state_machine(self):
+        """Enqueue failure still lands on failed through write_chat_job/SM."""
+        with TemporaryDirectory() as td:
+            repo_deps, repo_write = _repo_write_deps(td)
+
+            def bad_enqueue(_jid, _lid):
+                raise ConnectionError("Redis down")
+
+            deps, _ = _make_deps(write_chat_job=repo_write, enqueue_chat_job=bad_enqueue)
+            result = start_chat_orchestration(_FakeRequest(), deps=deps)
+            self.assertEqual(result["status"], "failed")
+            job = load_chat_job(result["job_id"], repo_deps)
+            self.assertEqual(job["status"], "failed")
+            self.assertEqual(job["error"], "enqueue_failed")
+
+    def test_history_prewrite_failure_marks_job_failed_via_state_machine(self):
+        """Start persist failure still lands on failed through write_chat_job/SM."""
+        with TemporaryDirectory() as td:
+            repo_deps, repo_write = _repo_write_deps(td)
+
+            def boom(*_a, **_kw):
+                raise OSError("disk full")
+
+            deps, _ = _make_deps(
+                write_chat_job=repo_write,
+                append_student_session_message=boom,
+            )
+            result = start_chat_orchestration(_FakeRequest(), deps=deps)
+            self.assertEqual(result["status"], "failed")
+            job = load_chat_job(result["job_id"], repo_deps)
+            self.assertEqual(job["status"], "failed")
+            self.assertEqual(job["error"], "history_prewrite_failed")
 
     def test_missing_request_id_raises_400(self):
         deps, _ = _make_deps()
