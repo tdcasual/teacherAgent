@@ -9,7 +9,7 @@
 | `services/api/app.py` `services/api/container.py` | Platform/API | Runtime | 生命周期、依赖注入、启动/关闭流程 |
 | `services/api/runtime/*` `services/api/workers/*` | Runtime | Platform/API | 线程模型、队列消费、关停行为 |
 | `services/api/routes/chat_routes.py` `services/api/chat_*` | Chat Domain | Runtime | chat 状态迁移、job 流程 |
-| `services/api/routes/exam_routes.py` `services/api/exam/*` | Exam Domain | Platform/API | exam 用例编排、接口契约 |
+| `services/api/routes/exam_routes.py` `services/api/exam/*` `services/api/exam_upload_parse/*` | Exam Domain | Platform/API | exam 用例编排、接口契约 |
 | `services/api/routes/assignment_routes.py` `services/api/assignment/*` | Assignment Domain | Platform/API | assignment 编排、可见性策略 |
 | `frontend/apps/student/src/App.tsx` `frontend/apps/student/src/features/session/*` | Student Frontend | Platform/API | 会话壳层结构、跨模块状态 |
 | `frontend/apps/student/src/features/chat/*` | Student Frontend | Chat Domain | 聊天渲染、发送/恢复交互 |

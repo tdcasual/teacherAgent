@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .exam_upload_parse.score_file import parse_score_rows_for_file as _parse_score_rows_for_file
+
 _log = logging.getLogger(__name__)
 
 
@@ -308,98 +310,6 @@ def _resolve_selected_candidate(job: Dict[str, Any]) -> Tuple[str, Optional[str]
     return class_name_hint, selected_candidate_id
 
 
-def _parse_rows_from_table_preview(
-    *,
-    exam_id: str,
-    fname: str,
-    table_preview: str,
-    deps: ExamUploadParseDeps,
-) -> Tuple[List[Dict[str, Any]], List[str]]:
-    if not table_preview.strip():
-        return [], []
-    parsed_scores = deps.llm_parse_exam_scores(table_preview)
-    if parsed_scores.get("error"):
-        return [], [f"成绩文件 {fname} LLM解析失败：{parsed_scores.get('error')}"]
-    file_rows, _, file_warnings = deps.build_exam_rows_from_parsed_scores(exam_id, parsed_scores)
-    return file_rows, list(file_warnings or [])
-
-
-def _parse_score_rows_for_file(
-    *,
-    exam_id: str,
-    idx: int,
-    fname: str,
-    score_path: Path,
-    derived_dir: Path,
-    class_name_hint: str,
-    selected_candidate_id: Optional[str],
-    language: str,
-    ocr_mode: str,
-    deps: ExamUploadParseDeps,
-) -> Tuple[List[Dict[str, Any]], List[str], Optional[Dict[str, Any]]]:
-    file_rows: List[Dict[str, Any]] = []
-    warnings: List[str] = []
-    schema_source: Optional[Dict[str, Any]] = None
-    try:
-        suffix = score_path.suffix.lower()
-        if suffix == ".xlsx":
-            tmp_csv = derived_dir / f"responses_part_{idx}.csv"
-            parsed_rows, parsed_score_schema = deps.parse_xlsx_with_script(
-                score_path,
-                tmp_csv,
-                exam_id,
-                class_name_hint,
-                selected_candidate_id,
-            )
-            file_rows = parsed_rows or []
-            if isinstance(parsed_score_schema, dict) and parsed_score_schema:
-                schema_source = {
-                    "file": str(fname),
-                    "path": str(score_path),
-                    **parsed_score_schema,
-                }
-            if not file_rows:
-                preview_rows, preview_warnings = _parse_rows_from_table_preview(
-                    exam_id=exam_id,
-                    fname=fname,
-                    table_preview=deps.xlsx_to_table_preview(score_path),
-                    deps=deps,
-                )
-                file_rows = preview_rows
-                warnings.extend(preview_warnings)
-        elif suffix == ".xls":
-            preview_rows, preview_warnings = _parse_rows_from_table_preview(
-                exam_id=exam_id,
-                fname=fname,
-                table_preview=deps.xls_to_table_preview(score_path),
-                deps=deps,
-            )
-            file_rows = preview_rows
-            warnings.extend(preview_warnings)
-        else:
-            score_text_parts: List[str] = []
-            if suffix == ".pdf":
-                score_text_parts.append(
-                    deps.extract_text_from_pdf(score_path, language=language, ocr_mode=ocr_mode)
-                )
-            else:
-                score_text_parts.append(
-                    deps.extract_text_from_image(score_path, language=language, ocr_mode=ocr_mode)
-                )
-            preview_rows, preview_warnings = _parse_rows_from_table_preview(
-                exam_id=exam_id,
-                fname=fname,
-                table_preview="\n\n".join([text for text in score_text_parts if text]),
-                deps=deps,
-            )
-            file_rows = preview_rows
-            warnings.extend(preview_warnings)
-    except Exception as exc:
-        _log.debug("operation failed", exc_info=True)
-        warnings.append(f"成绩文件 {fname} 解析异常：{str(exc)[:120]}")
-    return file_rows, warnings, schema_source
-
-
 def _collect_score_rows(
     *,
     exam_id: str,
@@ -563,8 +473,7 @@ def _write_scoring_outputs(
 
 def _needs_answer_key_scoring(rows: List[Dict[str, Any]]) -> bool:
     return any(
-        (row.get("score") is None) and str(row.get("raw_answer") or "").strip()
-        for row in rows
+        (row.get("score") is None) and str(row.get("raw_answer") or "").strip() for row in rows
     )
 
 

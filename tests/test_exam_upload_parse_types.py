@@ -7,14 +7,17 @@ from pathlib import Path
 
 def test_exam_upload_parse_service_mypy_clean() -> None:
     repo_root = Path(__file__).resolve().parent.parent
-    target = repo_root / "services" / "api" / "exam_upload_parse_service.py"
+    targets = [
+        repo_root / "services" / "api" / "exam_upload_parse_service.py",
+        repo_root / "services" / "api" / "exam_upload_parse",
+    ]
     proc = subprocess.run(
         [
             sys.executable,
             "-m",
             "mypy",
             "--follow-imports=skip",
-            str(target),
+            *[str(target) for target in targets],
         ],
         cwd=str(repo_root),
         capture_output=True,
