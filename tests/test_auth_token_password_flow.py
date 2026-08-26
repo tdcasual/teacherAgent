@@ -117,28 +117,16 @@ def test_student_token_password_login_and_token_rotation(tmp_path: Path):
     )
     assert login_res.status_code == 200
     login_payload = login_res.json()
-    assert login_payload.get("ok") is True
-    access_token = str(login_payload.get("access_token") or "")
-    assert access_token
+    assert login_payload.get("ok") is False
+    assert login_payload.get("error") == "invalid_credential_type"
 
-    protected_before_rotate = client.get(
-        "/student/history/sessions",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"student_id": "S001"},
+    reset_res = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=admin_headers,
+        json={"scope": "student", "student_id": "S001", "new_password": "A1b2c3d4"},
     )
-    assert protected_before_rotate.status_code == 200
-
-    set_password_res = client.post(
-        "/auth/student/set-password",
-        json={
-            "candidate_id": "S001",
-            "credential_type": "token",
-            "credential": token,
-            "new_password": "A1b2c3d4",
-        },
-    )
-    assert set_password_res.status_code == 200
-    assert set_password_res.json().get("ok") is True
+    assert reset_res.status_code == 200
+    assert reset_res.json().get("ok") is True
 
     pwd_login_res = client.post(
         "/auth/student/login",
@@ -153,6 +141,13 @@ def test_student_token_password_login_and_token_rotation(tmp_path: Path):
     assert pwd_payload.get("ok") is True
     old_access_token = str(pwd_payload.get("access_token") or "")
     assert old_access_token
+
+    protected_before_rotate = client.get(
+        "/student/history/sessions",
+        headers={"Authorization": f"Bearer {old_access_token}"},
+        params={"student_id": "S001"},
+    )
+    assert protected_before_rotate.status_code == 200
 
     rotate_res = client.post(
         "/auth/admin/student/reset-token",

@@ -34,7 +34,7 @@
 
 ## 学生认证流程
 1. `name + class_name` identify。
-2. 仅支持 `password` 登录。
+2. 仅支持 `password` 登录；`credential_type=token` 返回 `invalid_credential_type`。
 3. 密码由老师端发放或重置，学生端不再提供 token 登录入口。
 
 ## 教师认证流程
@@ -64,6 +64,7 @@
 
 ## 错误语义（常见）
 - `invalid_credential`：凭据错误。
+- `invalid_credential_type`：凭据类型不被该角色支持（学生仅 `password`；教师可用 `token`/`password`）。
 - `password_not_set`：未设置密码但使用密码登录。
 - `disabled`：账号被禁用。
 - `locked`：失败次数触发临时锁定。

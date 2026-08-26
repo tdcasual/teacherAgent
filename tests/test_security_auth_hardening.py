@@ -653,12 +653,36 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             token = str((export_res.json().get("items") or [{}])[0].get("token") or "")
             self.assertTrue(token)
 
-            bad_login = client.post(
+            token_login = client.post(
                 "/auth/student/login",
                 json={
                     "candidate_id": "student_a",
                     "credential_type": "token",
-                    "credential": "invalid-token",
+                    "credential": token,
+                },
+            )
+            self.assertEqual(token_login.status_code, 200)
+            self.assertEqual(token_login.json().get("ok"), False)
+            self.assertEqual(token_login.json().get("error"), "invalid_credential_type")
+
+            reset_res = client.post(
+                "/auth/teacher/student/reset-passwords",
+                headers=admin_headers,
+                json={
+                    "scope": "student",
+                    "student_id": "student_a",
+                    "new_password": "A1b2c3d4",
+                },
+            )
+            self.assertEqual(reset_res.status_code, 200)
+            self.assertEqual(reset_res.json().get("ok"), True)
+
+            bad_login = client.post(
+                "/auth/student/login",
+                json={
+                    "candidate_id": "student_a",
+                    "credential_type": "password",
+                    "credential": "wrong-password",
                 },
             )
             self.assertEqual(bad_login.status_code, 200)
@@ -668,8 +692,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 "/auth/student/login",
                 json={
                     "candidate_id": "student_a",
-                    "credential_type": "token",
-                    "credential": token,
+                    "credential_type": "password",
+                    "credential": "A1b2c3d4",
                 },
             )
             self.assertEqual(good_login.status_code, 200)

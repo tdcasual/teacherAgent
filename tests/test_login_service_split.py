@@ -47,7 +47,7 @@ class _Conn:
         self._row = row
 
     def execute(self, query: str, params: tuple[Any, ...]) -> _QueryResult:
-        if "SELECT * FROM student_auth" in query:
+        if "SELECT * FROM" in query:
             return _QueryResult(self._row)
         return _QueryResult(None)
 
@@ -86,7 +86,39 @@ def test_login_service_hotspot_removed() -> None:
     assert not issues, f"C901 issues still present: {issues}"
 
 
-def test_handle_login_returns_student_payload_for_valid_token() -> None:
+def _handle_login(
+    store: _Store,
+    *,
+    role: str,
+    candidate_id: str,
+    credential_type: str,
+    credential: str,
+    table: str,
+    id_field: str,
+    verify_password: Any = lambda _password, _hash: False,
+) -> dict[str, Any]:
+    return handle_login(
+        store,
+        role=role,
+        candidate_id=candidate_id,
+        credential_type=credential_type,
+        credential=credential,
+        normalize_role=lambda value: str(value or "").strip().lower(),
+        table_for_role=lambda _role: (table, id_field),
+        max_subject_id_len=lambda: 64,
+        max_credential_len=lambda: 128,
+        utc_now=lambda: datetime(2026, 2, 16, 12, 0, 0),
+        parse_ts=lambda _value: None,
+        consume_dummy_password_verify=lambda _value: None,
+        consume_dummy_token_verify=lambda _value: None,
+        constant_time_eq=lambda left, right: left == right,
+        hash_token=lambda value: f"hashed:{value}",
+        verify_password=verify_password,
+        iso=lambda value: value.isoformat(),
+    )
+
+
+def test_handle_login_rejects_student_token() -> None:
     store = _Store(
         {
             "is_disabled": 0,
@@ -99,28 +131,44 @@ def test_handle_login_returns_student_payload_for_valid_token() -> None:
         }
     )
 
-    result = handle_login(
+    result = _handle_login(
         store,
         role="student",
         candidate_id="S001",
         credential_type="token",
         credential="token-123",
-        normalize_role=lambda value: str(value or "").strip().lower(),
-        table_for_role=lambda _role: ("student_auth", "student_id"),
-        max_subject_id_len=lambda: 64,
-        max_credential_len=lambda: 128,
-        utc_now=lambda: datetime(2026, 2, 16, 12, 0, 0),
-        parse_ts=lambda _value: None,
-        consume_dummy_password_verify=lambda _value: None,
-        consume_dummy_token_verify=lambda _value: None,
-        constant_time_eq=lambda left, right: left == right,
-        hash_token=lambda value: f"hashed:{value}",
-        verify_password=lambda _password, _hash: False,
-        iso=lambda value: value.isoformat(),
+        table="student_auth",
+        id_field="student_id",
+    )
+
+    assert result == {"ok": False, "error": "invalid_credential_type"}
+
+
+def test_handle_login_returns_teacher_payload_for_valid_token() -> None:
+    store = _Store(
+        {
+            "is_disabled": 0,
+            "locked_until": "",
+            "token_hash": "hashed:token-123",
+            "password_hash": "pwd-hash",
+            "token_version": 4,
+            "teacher_name": "张老师",
+            "email": "alpha@example.com",
+        }
+    )
+
+    result = _handle_login(
+        store,
+        role="teacher",
+        candidate_id="teacher_alpha",
+        credential_type="token",
+        credential="token-123",
+        table="teacher_auth",
+        id_field="teacher_id",
     )
 
     assert result["ok"] is True
-    assert result["role"] == "student"
-    assert result["subject_id"] == "S001"
-    assert result["student"]["student_name"] == "刘昊然"
+    assert result["role"] == "teacher"
+    assert result["subject_id"] == "teacher_alpha"
+    assert result["teacher"]["teacher_name"] == "张老师"
     assert result["token_version"] == 4
