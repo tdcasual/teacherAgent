@@ -18,6 +18,14 @@ def test_compose_redis_uses_noeviction() -> None:
     assert "allkeys-lru" not in text
 
 
+def test_compose_api_fail_closed_app_env_cors_and_master_key() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    api_block = _service_block(text, "api")
+    assert "APP_ENV=${APP_ENV:-production}" in api_block
+    assert "CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3001,http://localhost:3002}" in api_block
+    assert "${MASTER_KEY:?MASTER_KEY is required}" in api_block
+
+
 def test_compose_api_mounts_config_for_auth_secret_persistence() -> None:
     text = Path("docker-compose.yml").read_text(encoding="utf-8")
     api_block = _service_block(text, "api")

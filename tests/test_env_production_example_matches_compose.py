@@ -1,19 +1,19 @@
 import re
 from pathlib import Path
 
-# W1-P5 owns APP_ENV / CORS_ORIGINS / MASTER_KEY. Skip MASTER_KEY until that PR.
-_DEFERRED_COMPOSE_KEYS = frozenset({"MASTER_KEY"})
-_W1_P5_KEYS = frozenset({"APP_ENV", "CORS_ORIGINS", "MASTER_KEY"})
 _COMPOSE_REQUIRED = re.compile(r"\$\{([A-Z][A-Z0-9_]+):\?")
 _ENV_KEY = re.compile(r"^([A-Z][A-Z0-9_]+)=", re.M)
 _ENV_ASSIGNMENT = re.compile(r"^([A-Z][A-Z0-9_]+)=(.*)$", re.M)
 _EXAMPLE_PATHS = (".env.production.min.example", ".env.example")
-_REQUIRED_SECRETS = ("REDIS_PASSWORD", "MCP_API_KEY", "AUTH_TOKEN_SECRET")
+_REQUIRED_SECRETS = ("REDIS_PASSWORD", "MCP_API_KEY", "AUTH_TOKEN_SECRET", "MASTER_KEY")
 _REMAINING_PLACEHOLDERS = {
     "REDIS_PASSWORD": "change_me",
     "AUTH_TOKEN_SECRET": "change_me",
     "AUTH_REQUIRED": "1",
     "RQ_SCAN_PENDING_ON_START": "1",
+    "MASTER_KEY": "change_me",
+    "APP_ENV": "production",
+    "CORS_ORIGINS": "http://localhost:3001,http://localhost:3002",
 }
 
 
@@ -29,7 +29,7 @@ def _example_assignments(path: str) -> dict[str, str]:
 
 def _compose_fail_closed_keys() -> set[str]:
     text = Path("docker-compose.yml").read_text(encoding="utf-8")
-    return set(_COMPOSE_REQUIRED.findall(text)) - _DEFERRED_COMPOSE_KEYS
+    return set(_COMPOSE_REQUIRED.findall(text))
 
 
 def _readme_five_minute_section() -> str:
@@ -42,7 +42,7 @@ def test_production_env_examples_contain_compose_fail_closed_keys() -> None:
     required = _compose_fail_closed_keys()
     assert "MCP_API_KEY" in required
     assert "REDIS_PASSWORD" in required
-    assert "MASTER_KEY" not in required
+    assert "MASTER_KEY" in required
     for path in _EXAMPLE_PATHS:
         missing = required - _example_keys(path)
         assert not missing, f"{path} missing compose fail-closed keys: {sorted(missing)}"
@@ -55,10 +55,10 @@ def test_production_env_examples_have_remaining_required_placeholders() -> None:
             assert assignments.get(key) == expected, f"{path} {key} must be {expected!r}"
 
 
-def test_production_min_example_defers_app_env_cors_master_key() -> None:
+def test_production_min_example_includes_app_env_cors_master_key() -> None:
     keys = _example_keys(".env.production.min.example")
-    leaked = sorted(keys & _W1_P5_KEYS)
-    assert not leaked, f".env.production.min.example must leave W1-P5 keys for later: {leaked}"
+    missing = {"APP_ENV", "CORS_ORIGINS", "MASTER_KEY"} - keys
+    assert not missing, f".env.production.min.example missing W1-P5 keys: {sorted(missing)}"
 
 
 def test_production_redis_url_includes_password_placeholder_when_compose_requires_it() -> None:
