@@ -16,6 +16,7 @@ COPY --from=build /app/dist-teacher /usr/share/nginx/html
 RUN API_ORIGIN="$(cat /tmp/api_origin)" \
     && test -n "$API_ORIGIN" \
     && sed -i "s|__API_ORIGIN__|${API_ORIGIN}|g" /etc/nginx/conf.d/default.conf \
+    && chmod 644 /etc/nginx/conf.d/default.conf \
     && rm -f /tmp/api_origin \
     && if grep -qF "__API_ORIGIN__" /etc/nginx/conf.d/default.conf; then echo "failed to bake API origin" >&2; exit 1; fi
 RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx \
