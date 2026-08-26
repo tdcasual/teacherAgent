@@ -43,13 +43,15 @@ def _truthy(value: Any) -> bool:
 def auth_required() -> bool:
     raw = os.getenv("AUTH_REQUIRED")
     if raw is None:
-        # Auto-detect: production defaults to required; test mode keeps auth off.
+        # Pytest auto-off is a test-only third mode, not AUTH_REQUIRED=0.
         if bool(os.getenv("PYTEST_CURRENT_TEST")):
             return False
         if _is_production():
             return True
         # If AUTH_TOKEN_SECRET is not set, auth cannot work — disable it for dev mode.
         return bool(_secret())
+    if _is_production():
+        return True
     return _truthy(raw)
 
 
@@ -93,10 +95,15 @@ def _is_production(getenv: Callable[[str, Optional[str]], Optional[str]] = os.ge
     return env in {"prod", "production"}
 
 
+def _auth_secret_policy_enabled(getenv: Callable[[str, Optional[str]], Optional[str]]) -> bool:
+    # Production ignores AUTH_REQUIRED=0 so a missing secret still fail-closes.
+    if _is_production(getenv):
+        return True
+    return _truthy(getenv("AUTH_REQUIRED", None))
+
+
 def validate_auth_secret_policy(*, getenv: Callable[[str, Optional[str]], Optional[str]] = os.getenv) -> None:
-    auth_required_raw = getenv("AUTH_REQUIRED", None)
-    auth_enabled = _truthy(auth_required_raw) if auth_required_raw is not None else _is_production(getenv)
-    if not auth_enabled:
+    if not _auth_secret_policy_enabled(getenv):
         return
     if str(getenv("AUTH_TOKEN_SECRET", None) or "").strip():
         return
@@ -264,6 +271,29 @@ def mint_access_token(
     return mint_test_token(claims, secret=secret)
 
 
+def _presented_authorization(headers: Mapping[str, Any]) -> str:
+    return str(headers.get("authorization") or headers.get("Authorization") or "").strip()
+
+
+def _principal_from_authorization_headers(headers: Mapping[str, Any]) -> AuthPrincipal:
+    secret = _secret()
+    if not secret:
+        raise AuthError(500, "auth_token_secret_missing")
+    token = _extract_bearer_authorization(headers)
+    principal = _decode_bearer_token(token, secret=secret)
+    _validate_principal_token_version(principal)
+    return principal
+
+
+def _optional_principal_from_headers(headers: Mapping[str, Any]) -> Optional[AuthPrincipal]:
+    # AUTH_REQUIRED unset (pytest auto-off) must not bind tokens.
+    if os.getenv("AUTH_REQUIRED") is None:
+        return None
+    if not _presented_authorization(headers) or not _secret():
+        return None
+    return _principal_from_authorization_headers(headers)
+
+
 def resolve_principal_from_headers(
     headers: Mapping[str, Any],
     *,
@@ -271,20 +301,12 @@ def resolve_principal_from_headers(
     method: str = "",
     allow_exempt: bool = True,
 ) -> Optional[AuthPrincipal]:
-    if not auth_required():
-        return None
-
     if _is_exempt_auth_request(path=path, method=method, allow_exempt=allow_exempt):
         return None
-
-    secret = _secret()
-    if not secret:
-        raise AuthError(500, "auth_token_secret_missing")
-
-    token = _extract_bearer_authorization(headers)
-    principal = _decode_bearer_token(token, secret=secret)
-    _validate_principal_token_version(principal)
-    return principal
+    if auth_required():
+        return _principal_from_authorization_headers(headers)
+    # AUTH_REQUIRED=0 still binds a presented token so scope checks can run.
+    return _optional_principal_from_headers(headers)
 
 
 def resolve_principal_from_scope(scope: Dict[str, Any], *, allow_exempt: bool = True) -> Optional[AuthPrincipal]:
@@ -319,9 +341,9 @@ def get_current_principal() -> Optional[AuthPrincipal]:
 
 def require_principal(*, roles: Optional[Sequence[str]] = None) -> Optional[AuthPrincipal]:
     principal = get_current_principal()
-    if not auth_required():
-        return principal
     if principal is None:
+        if not auth_required():
+            return None
         raise AuthError(401, "missing_authorization")
     if roles:
         allowed: Set[str] = {str(role or "").strip().lower() for role in roles}
@@ -331,10 +353,8 @@ def require_principal(*, roles: Optional[Sequence[str]] = None) -> Optional[Auth
 
 
 def principal_can_access_tenant(principal: Optional[AuthPrincipal], tenant_id: str) -> bool:
-    if not auth_required():
-        return True
     if principal is None:
-        return False
+        return not auth_required()
     if principal.role == "admin":
         return True
     claimed = str(principal.tenant_id or "").strip()
@@ -345,9 +365,6 @@ def principal_can_access_tenant(principal: Optional[AuthPrincipal], tenant_id: s
 
 def resolve_teacher_scope(teacher_id: Optional[str], *, required_for_admin: bool = False) -> Optional[str]:
     raw = str(teacher_id or "").strip() or None
-    if not auth_required():
-        return raw
-
     principal = require_principal(roles=("teacher", "admin"))
     if principal is None:
         return raw
@@ -365,9 +382,6 @@ def resolve_teacher_scope(teacher_id: Optional[str], *, required_for_admin: bool
 
 def resolve_student_scope(student_id: Optional[str], *, required_for_admin: bool = False) -> Optional[str]:
     raw = str(student_id or "").strip() or None
-    if not auth_required():
-        return raw
-
     principal = require_principal(roles=("student", "admin"))
     if principal is None:
         return raw
@@ -384,9 +398,6 @@ def resolve_student_scope(student_id: Optional[str], *, required_for_admin: bool
 
 
 def enforce_chat_job_access(job: Mapping[str, Any]) -> None:
-    if not auth_required():
-        return
-
     principal = require_principal(roles=("teacher", "student", "admin"))
     if principal is None or principal.role == "admin":
         return
@@ -421,9 +432,6 @@ def enforce_upload_job_access(
     owner_field: str = "teacher_id",
     detail: str = "forbidden_upload_job",
 ) -> None:
-    if not auth_required():
-        return
-
     principal = require_principal(roles=("teacher", "admin"))
     if principal is None or principal.role == "admin":
         return

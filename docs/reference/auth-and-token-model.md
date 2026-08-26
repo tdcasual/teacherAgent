@@ -1,8 +1,8 @@
 # 认证与令牌模型（稳定参考）
 
 - 适用角色：管理员、老师、开发者
-- 最后验证日期：2026-02-25
-- 主要来源：`docs/plans/2026-02-13-auth-token-password-design.md`（稳定结论提炼）
+- 最后验证日期：2026-08-26
+- 主要来源：`docs/plans/2026-02-13-auth-token-password-design.md`（稳定结论提炼）；`AUTH_REQUIRED` 真值表见审计修复 F18/F50
 
 ## 核心模型
 1. 学生与教师账号定位（identify）与认证分离。
@@ -10,6 +10,27 @@
 3. token 与密码仅存 hash，不存明文。
 4. 老师可按学生/班级/全量重置学生密码并查看新默认密码。
 5. 管理员可重置 token/密码并查看审计记录。
+
+## `AUTH_REQUIRED` 语义
+`AUTH_REQUIRED=0` 只允许**匿名**访问非豁免路由（本地 DX），**不**关闭授权。只要请求带了可解析的 Bearer principal，一律执行角色与作用域检查。
+
+| `AUTH_REQUIRED` | 环境 | pytest | principal | 结果 |
+| --- | --- | --- | --- | --- |
+| `1` | 任意 | 任意 | 无 | 非豁免路径 **401**；角色不匹配 **403** |
+| `0` | 非 production | 任意 | 无 | 非豁免路径允许匿名（例如 `/teacher/*` 不因缺 token 一律 401） |
+| `0` | 非 production | 任意 | 有，越权 | **403**（不得短路） |
+| `0` | production（`APP_ENV`/`ENV` 为 `prod` 或 `production`） | 未设 | — | 视为 `AUTH_REQUIRED=1` |
+| 未设 | 非 production | 未设 | — | 保持 `bool(AUTH_TOKEN_SECRET)` |
+| 未设 | production | 未设 | — | 开启认证 |
+| 未设 | production | `PYTEST_CURRENT_TEST` | — | 测试自动关（不得被「production 视 0 为 1」打断） |
+
+生产忽略显式 `AUTH_REQUIRED=0` 时，缺失 `AUTH_TOKEN_SECRET` 仍 fail-closed。
+
+## 租户管理 `/admin/`（不是公网匿名）
+- `_auth_exempt_path` 对 `path.startswith("/admin/")` 豁免 **Bearer**，因为 `MultiTenantDispatcher` 的 tenant admin 使用 `X-Admin-Key`，不是 access token。
+- 该豁免 **不等于** 公网匿名：`/admin/tenants` 等业务接口无 `X-Admin-Key` 时返回 401/403，而不是 200 业务数据。Bearer 不能代替 `X-Admin-Key`。
+- `OPTIONS` 预检走 `_is_exempt_auth_request`，不写入 `_auth_exempt_path`。
+- default_app（非 dispatcher）不得新增 `/admin/` 业务路由；若出现，必须有独立 key 检查。
 
 ## 学生认证流程
 1. `name + class_name` identify。

@@ -63,6 +63,88 @@ def test_auth_required_unset_without_secret_raises_startup_error(monkeypatch) ->
         validate_auth_secret_policy()
 
 
+def _load_app_auth_mode(tmp_dir: Path, *, auth_required: str, secret: str, app_env: str):
+    env_overrides = {
+        "MASTER_KEY_DEV_DEFAULT": "dev-key",
+        "AUTH_REQUIRED": auth_required,
+        "AUTH_TOKEN_SECRET": secret,
+        "APP_ENV": app_env,
+    }
+    if app_env in {"prod", "production"}:
+        env_overrides["MASTER_KEY"] = "prod-master-key"
+    return create_test_app(
+        tmp_dir,
+        env_overrides=env_overrides,
+        use_runtime_entrypoint=True,
+        reload_module=True,
+    )
+
+
+def test_auth_required_off_anonymous_teacher_ok(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    app_mod = _load_app_auth_mode(
+        tmp_path, auth_required="0", secret="auth-off-secret", app_env="development"
+    )
+    with TestClient(app_mod.app) as client:
+        res = client.get("/teacher/history/sessions", params={"teacher_id": "teacher_anon"})
+    assert res.status_code == 200
+
+
+def test_auth_required_off_with_token_still_enforces_scope(tmp_path: Path, monkeypatch) -> None:
+    secret = "auth-off-secret"
+    monkeypatch.setenv("APP_ENV", "development")
+    app_mod = _load_app_auth_mode(
+        tmp_path, auth_required="0", secret=secret, app_env="development"
+    )
+    attacker = _auth_headers("teacher_a", "teacher", secret=secret)
+    with TestClient(app_mod.app) as client:
+        res = client.get(
+            "/teacher/history/sessions",
+            headers=attacker,
+            params={"teacher_id": "teacher_b"},
+        )
+    assert res.status_code == 403
+    assert res.json().get("detail") == "forbidden_teacher_scope"
+
+
+def test_production_ignores_auth_required_0(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    app_mod = _load_app_auth_mode(
+        tmp_path, auth_required="0", secret="prod-auth-secret", app_env="production"
+    )
+    with TestClient(app_mod.app) as client:
+        res = client.get("/teacher/history/sessions", params={"teacher_id": "teacher_anon"})
+    assert res.status_code == 401
+
+
+def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:
+    secret = "admin-key-secret"
+    monkeypatch.setenv("TENANT_ADMIN_KEY", "k")
+    monkeypatch.setenv("TENANT_DB_PATH", str(tmp_path / "tenants.sqlite3"))
+    monkeypatch.setenv("APP_ENV", "development")
+    app_mod = create_test_app(
+        tmp_path,
+        env_overrides={
+            "MASTER_KEY_DEV_DEFAULT": "dev-key",
+            "AUTH_REQUIRED": "1",
+            "AUTH_TOKEN_SECRET": secret,
+            "APP_ENV": "development",
+            "TENANT_ADMIN_KEY": "k",
+            "TENANT_DB_PATH": str(tmp_path / "tenants.sqlite3"),
+        },
+        use_runtime_entrypoint=True,
+        reload_module=True,
+    )
+    with TestClient(app_mod.app) as client:
+        missing = client.get("/admin/tenants")
+        assert missing.status_code in {401, 403}
+        bearer_only = client.get("/admin/tenants", headers=_auth_headers("admin_a", "admin", secret=secret))
+        assert bearer_only.status_code in {401, 403}
+        ok = client.get("/admin/tenants", headers={"X-Admin-Key": "k"})
+        assert ok.status_code == 200
+        assert ok.json().get("ok") is True
+
+
 class _ProbeHandler(BaseHTTPRequestHandler):
     hits = []
 
@@ -92,6 +174,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
         "AUTH_SUBJECT_ID_MAX_LEN",
         "TENANT_ADMIN_KEY",
         "TENANT_DB_PATH",
+        "APP_ENV",
+        "MASTER_KEY",
     ]
 
     def setUp(self):
