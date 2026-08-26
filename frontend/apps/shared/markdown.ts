@@ -186,7 +186,7 @@ const normalizeMathDelimiters = (content: string) => {
 };
 
 export const renderMarkdown = (content: string) => {
-  // Load KaTeX CSS with the renderer instead of the app chrome.
+  // Vite must see this specifier here so KaTeX CSS is attributed to the renderer, not chrome.
   void import('katex/dist/katex.min.css');
   const normalized = normalizeMathDelimiters(content || '');
   const result = processor.processSync(normalized);
