@@ -26,6 +26,11 @@ from .agent_runtime_guards import (
 from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .role_runtime_policy import get_role_runtime_policy
+from .tool_confirm_service import (
+    bind_tool_confirm_context,
+    is_confirmation_required_result,
+    reset_tool_confirm_context,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -301,6 +306,28 @@ def _parse_structured_tool_args(call: Dict[str, Any]) -> Dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def _pause_from_tool_result(result: Dict[str, Any], *, call_id: str, convo: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        "pause": "confirmation_required",
+        "confirm_id": str(result.get("confirm_id") or ""),
+        "tool": str(result.get("tool") or ""),
+        "preview": str(result.get("preview") or ""),
+        "exp": result.get("exp"),
+        "tool_call_id": call_id,
+        "convo": list(convo),
+    }
+
+
+def _append_paused_sibling_results(
+    convo: List[Dict[str, Any]],
+    *,
+    calls: List[Dict[str, Any]],
+) -> None:
+    for call in calls:
+        result = {"error": "paused_for_sibling_confirm", "tool": call["function"]["name"]}
+        _append_tool_result_message(convo, call_id=str(call.get("id") or ""), result=result)
+
+
 def _process_structured_tool_call(
     *,
     deps: AgentRuntimeDeps,
@@ -311,7 +338,7 @@ def _process_structured_tool_call(
     skill_id: Optional[str],
     teacher_id: Optional[str],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
-) -> bool:
+) -> Tuple[bool, Optional[Dict[str, Any]]]:
     name = call["function"]["name"]
     call_id = str(call.get("id") or "")
     t0 = time.monotonic()
@@ -328,17 +355,23 @@ def _process_structured_tool_call(
             result=denied_result,
             force_error="permission denied",
         )
-        return False
+        return False, None
 
     args_dict = _parse_structured_tool_args(call)
-    result = _dispatch_tool_safely(
-        deps,
-        name,
-        args_dict,
-        role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-    )
+    token = bind_tool_confirm_context(tool_call_id=call_id, teacher_id=teacher_id or "", role=role_hint or "", skill_id=skill_id or "")
+    try:
+        result = _dispatch_tool_safely(
+            deps,
+            name,
+            args_dict,
+            role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+        )
+    finally:
+        reset_tool_confirm_context(token)
+    if is_confirmation_required_result(result):
+        return True, _pause_from_tool_result(result if isinstance(result, dict) else {}, call_id=call_id, convo=convo)
     if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
         allowed.discard(name)
     _append_tool_result_message(convo, call_id=call["id"], result=result)
@@ -349,7 +382,7 @@ def _process_structured_tool_call(
         started_at=t0,
         result=result if isinstance(result, dict) else {},
     )
-    return True
+    return True, None
 
 
 def _append_tool_budget_exhausted(
@@ -375,13 +408,18 @@ def _handle_structured_tool_calls(
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
-) -> Tuple[int, bool]:
+) -> Tuple[int, bool, Optional[Dict[str, Any]]]:
     remaining = max_tool_calls - tool_calls_total
     if remaining <= 0:
-        return tool_calls_total, True
+        return tool_calls_total, True, None
     convo.append({"role": "assistant", "content": content or "", "tool_calls": tool_calls})
-    for call in tool_calls[:remaining]:
-        counted = _process_structured_tool_call(
+    pause: Optional[Dict[str, Any]] = None
+    runnable = list(tool_calls[:remaining])
+    for index, call in enumerate(runnable):
+        if pause is not None:
+            _append_paused_sibling_results(convo, calls=runnable[index:])
+            break
+        counted, pause = _process_structured_tool_call(
             deps=deps,
             convo=convo,
             call=call,
@@ -393,10 +431,15 @@ def _handle_structured_tool_calls(
         )
         if counted:
             tool_calls_total += 1
+    if pause is not None:
+        if len(tool_calls) > remaining:
+            _append_tool_budget_exhausted(convo, over_budget_calls=tool_calls[remaining:])
+        pause["convo"] = list(convo)
+        return tool_calls_total, False, pause
     if len(tool_calls) > remaining:
         _append_tool_budget_exhausted(convo, over_budget_calls=tool_calls[remaining:])
-        return tool_calls_total, True
-    return tool_calls_total, False
+        return tool_calls_total, True, None
+    return tool_calls_total, False, None
 
 
 def _handle_json_tool_request(
@@ -412,9 +455,9 @@ def _handle_json_tool_request(
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
-) -> Tuple[int, bool]:
+) -> Tuple[int, bool, Optional[Dict[str, Any]]]:
     if tool_calls_total >= max_tool_calls:
-        return tool_calls_total, True
+        return tool_calls_total, True, None
     name = tool_request.get("tool")
     if name not in allowed:
         convo.append({"role": "assistant", "content": content or ""})
@@ -424,7 +467,7 @@ def _handle_json_tool_request(
                 "content": f"工具 {name} 无权限调用。请给出最终答复。",
             }
         )
-        return tool_calls_total, False
+        return tool_calls_total, False, None
     args_dict = tool_request.get("arguments") or {}
     t0 = time.monotonic()
     if callable(event_sink):
@@ -435,14 +478,22 @@ def _handle_json_tool_request(
                 "tool_call_id": "",
             },
         )
-    result = _dispatch_tool_safely(
-        deps,
-        name,
-        args_dict,
-        role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-    )
+    token = bind_tool_confirm_context(tool_call_id="", teacher_id=teacher_id or "", role=role_hint or "", skill_id=skill_id or "")
+    try:
+        result = _dispatch_tool_safely(
+            deps,
+            name,
+            args_dict,
+            role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+        )
+    finally:
+        reset_tool_confirm_context(token)
+    if is_confirmation_required_result(result):
+        convo.append({"role": "assistant", "content": content or ""})
+        pause = _pause_from_tool_result(result if isinstance(result, dict) else {}, call_id="", convo=convo)
+        return tool_calls_total + 1, False, pause
     if isinstance(result, dict) and bool(result.get("_dynamic_tool_degraded")):
         allowed.discard(str(name))
     convo.append({"role": "assistant", "content": content or ""})
@@ -468,8 +519,8 @@ def _handle_json_tool_request(
                 "duration_ms": int((time.monotonic() - t0) * 1000),
                 "error": str(result.get("error") or "") if isinstance(result, dict) else "",
             },
-    )
-    return tool_calls_total + 1, False
+        )
+    return tool_calls_total + 1, False, None
 
 
 def _make_round_token_sink(
@@ -525,7 +576,7 @@ def _handle_tool_round_outcome(
     content = _coerce_llm_message_content(message.get("content"))
     tool_calls = message.get("tool_calls")
     if tool_calls:
-        tool_calls_total, tool_budget_exhausted = _handle_structured_tool_calls(
+        tool_calls_total, tool_budget_exhausted, pause = _handle_structured_tool_calls(
             deps=deps,
             convo=convo,
             tool_calls=tool_calls,
@@ -542,11 +593,12 @@ def _handle_tool_round_outcome(
             "reply": None,
             "tool_calls_total": tool_calls_total,
             "tool_budget_exhausted": tool_budget_exhausted,
+            "pause": pause,
         }
 
     tool_request = parse_tool_json(content or "")
     if tool_request:
-        tool_calls_total, tool_budget_exhausted = _handle_json_tool_request(
+        tool_calls_total, tool_budget_exhausted, pause = _handle_json_tool_request(
             deps=deps,
             convo=convo,
             tool_request=tool_request,
@@ -563,6 +615,7 @@ def _handle_tool_round_outcome(
             "reply": None,
             "tool_calls_total": tool_calls_total,
             "tool_budget_exhausted": tool_budget_exhausted,
+            "pause": pause,
         }
 
     reply_text = _emit_round_done_and_get_reply(
@@ -590,7 +643,7 @@ def _run_tool_loop(
     max_tool_rounds: int,
     max_tool_calls: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
-) -> Tuple[Optional[str], bool]:
+) -> Tuple[Optional[str], bool, Optional[Dict[str, Any]]]:
     tool_calls_total = 0
     tool_budget_exhausted = False
     for round_index in range(max_tool_rounds):
@@ -631,12 +684,15 @@ def _run_tool_loop(
         )
         tool_calls_total = int(outcome.get("tool_calls_total") or tool_calls_total)
         tool_budget_exhausted = bool(outcome.get("tool_budget_exhausted"))
+        pause = outcome.get("pause") if isinstance(outcome.get("pause"), dict) else None
+        if pause:
+            return None, tool_budget_exhausted, pause
         reply = outcome.get("reply")
         if isinstance(reply, str):
-            return reply, tool_budget_exhausted
+            return reply, tool_budget_exhausted, None
         if tool_budget_exhausted:
             break
-    return None, tool_budget_exhausted
+    return None, tool_budget_exhausted, None
 
 
 def _final_teacher_reply_without_tools(
@@ -819,36 +875,42 @@ def run_agent_runtime(
     teacher_id: Optional[str] = None,
     analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    job_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+    initial_convo: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
-    convo = _build_runtime_conversation(
-        deps=deps,
-        role_hint=role_hint,
-        messages=messages,
-        skill_runtime=skill_runtime,
-        extra_system=extra_system,
-    )
     last_user_text = _find_last_user_text(messages)
     allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
     role_policy = get_role_runtime_policy(role_hint)
     is_teacher_role = role_policy.role == "teacher"
-
-    shortcut_reply = _maybe_teacher_runtime_shortcut_reply(
-        deps=deps,
-        is_teacher_role=is_teacher_role,
-        messages=messages,
-        last_user_text=last_user_text,
-        allowed=allowed,
-        convo=convo,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-        analysis_target=analysis_target,
-        event_sink=event_sink,
-    )
-    if shortcut_reply:
-        return shortcut_reply
+    if initial_convo is not None:
+        convo = list(initial_convo)
+    else:
+        convo = _build_runtime_conversation(
+            deps=deps,
+            role_hint=role_hint,
+            messages=messages,
+            skill_runtime=skill_runtime,
+            extra_system=extra_system,
+        )
+        shortcut_reply = _maybe_teacher_runtime_shortcut_reply(
+            deps=deps,
+            is_teacher_role=is_teacher_role,
+            messages=messages,
+            last_user_text=last_user_text,
+            allowed=allowed,
+            convo=convo,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            skill_runtime=skill_runtime,
+            analysis_target=analysis_target,
+            event_sink=event_sink,
+        )
+        if shortcut_reply:
+            return shortcut_reply
 
     tools = _runtime_tools_for_role(
         deps=deps,
@@ -856,19 +918,32 @@ def run_agent_runtime(
         allowed=allowed,
         skill_runtime=skill_runtime,
     )
-    reply, tool_budget_exhausted = _run_tool_loop(
-        deps=deps,
-        convo=convo,
-        tools=tools,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-        allowed=allowed,
-        max_tool_rounds=max_tool_rounds,
-        max_tool_calls=max_tool_calls,
-        event_sink=event_sink,
+    token = bind_tool_confirm_context(
+        actor_id=actor_id or teacher_id or "",
+        job_id=job_id or "",
+        lane_id=lane_id or "",
+        role=role_hint or "",
+        skill_id=skill_id or "",
+        teacher_id=teacher_id or "",
     )
+    try:
+        reply, tool_budget_exhausted, pause = _run_tool_loop(
+            deps=deps,
+            convo=convo,
+            tools=tools,
+            role_hint=role_hint,
+            skill_id=skill_id,
+            teacher_id=teacher_id,
+            skill_runtime=skill_runtime,
+            allowed=allowed,
+            max_tool_rounds=max_tool_rounds,
+            max_tool_calls=max_tool_calls,
+            event_sink=event_sink,
+        )
+    finally:
+        reset_tool_confirm_context(token)
+    if pause:
+        return pause
     if reply is not None:
         return {"reply": reply}
     return _final_runtime_reply(

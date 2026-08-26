@@ -360,11 +360,16 @@ def _chat_job_process_deps(core: Any | None = None):
         load_chat_job=_ac.load_chat_job,
         write_chat_job=lambda job_id, updates: _ac.write_chat_job(job_id, updates),
         chat_request_model=ChatRequest,
-        compute_chat_reply_sync=lambda req, session_id, teacher_id_override, event_sink=None: _ac.compute_chat_reply_sync(
+        compute_chat_reply_sync=lambda req, session_id, teacher_id_override, event_sink=None, extra_out=None, job_id=None, lane_id=None, actor_id=None, initial_convo=None: _ac.compute_chat_reply_sync(
             req,
             session_id=session_id,
             teacher_id_override=teacher_id_override,
             event_sink=event_sink,
+            extra_out=extra_out,
+            job_id=job_id,
+            lane_id=lane_id,
+            actor_id=actor_id,
+            initial_convo=initial_convo,
         ),
         monotonic=time.monotonic,
         build_interaction_note=_ac.build_interaction_note,

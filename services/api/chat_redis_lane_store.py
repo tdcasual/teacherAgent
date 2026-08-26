@@ -92,6 +92,50 @@ class ChatRedisLaneStore:
             return ''
             """
         )
+        self._refresh_claim_script = self.redis.register_script(
+            """
+            local active_key = KEYS[1]
+            local job_id = ARGV[1]
+            local ttl = tonumber(ARGV[2]) or 300
+            local active = redis.call('GET', active_key)
+            if active == job_id then
+                if ttl < 300 then
+                    ttl = 300
+                end
+                redis.call('EXPIRE', active_key, ttl)
+                return 1
+            end
+            return 0
+            """
+        )
+        self._reacquire_script = self.redis.register_script(
+            """
+            local active_key = KEYS[1]
+            local job_id = ARGV[1]
+            local ttl = tonumber(ARGV[2]) or 300
+            if ttl < 300 then
+                ttl = 300
+            end
+            local ok = redis.call('SET', active_key, job_id, 'EX', ttl, 'NX')
+            if ok then
+                return 1
+            end
+            return 0
+            """
+        )
+        self._park_script = self.redis.register_script(
+            """
+            local queue_key = KEYS[1]
+            local queued_key = KEYS[2]
+            local job_id = ARGV[1]
+            local pos = redis.call('LPOS', queue_key, job_id)
+            if not pos then
+                redis.call('RPUSH', queue_key, job_id)
+            end
+            redis.call('SADD', queued_key, job_id)
+            return 1
+            """
+        )
 
     def _queue_key(self, lane_id: str) -> str:
         return f"{self.prefix}:lane:{lane_id}:queue"
@@ -149,6 +193,41 @@ class ChatRedisLaneStore:
         if not result:
             return None
         return str(result)
+
+    def _claim_ttl(self, ttl_sec: Optional[int] = None) -> int:
+        base = int(self.claim_ttl_sec if ttl_sec is None else ttl_sec)
+        return max(base, 300)
+
+    def refresh_claim(self, job_id: str, lane_id: str, *, ttl_sec: Optional[int] = None) -> bool:
+        result = self._refresh_claim_script(
+            keys=[self._active_key(lane_id)],
+            args=[job_id, str(self._claim_ttl(ttl_sec))],
+        )
+        return bool(int(result or 0))
+
+    def reacquire_active(self, job_id: str, lane_id: str) -> bool:
+        result = self._reacquire_script(
+            keys=[self._active_key(lane_id)],
+            args=[job_id, str(self._claim_ttl())],
+        )
+        return bool(int(result or 0))
+
+    def park_behind_active(self, job_id: str, lane_id: str) -> None:
+        self._park_script(
+            keys=[self._queue_key(lane_id), self._queued_key()],
+            args=[job_id],
+        )
+
+    def get_active(self, lane_id: str) -> Optional[str]:
+        try:
+            raw = self.redis.get(self._active_key(lane_id))
+        except Exception:
+            _log.warning("Redis GET failed for active key lane=%s", lane_id, exc_info=True)
+            return None
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        return text or None
 
     def register_recent(self, lane_id: str, fingerprint: str, job_id: str) -> None:
         if self.debounce_ms <= 0:

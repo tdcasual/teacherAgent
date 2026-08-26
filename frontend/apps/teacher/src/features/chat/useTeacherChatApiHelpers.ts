@@ -73,6 +73,10 @@ export const buildExecutionTimelineEntry = (
     const toolName = String(payload.tool_name || '').trim() || 'tool'
     return { type: eventType, summary: `调用工具：${toolName}`, meta: payload }
   }
+  if (eventType === 'tool.confirm_required') {
+    const toolName = String(payload.tool || '').trim() || 'tool'
+    return { type: eventType, summary: `等待确认：${toolName}`, meta: payload }
+  }
   if (eventType === 'tool.finish') {
     const toolName = String(payload.tool_name || '').trim() || 'tool'
     const ok = Boolean(payload.ok)

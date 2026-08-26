@@ -15,6 +15,7 @@ import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWor
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { resolveRuntimeApiBase } from '../../shared/apiBase'
 import { readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
+import { TeacherToolConfirmDialog } from './features/chat/TeacherToolConfirmDialog'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -255,7 +256,7 @@ export default function App() {
     refreshTeacherSessions, loadTeacherSessionMessages,
     refreshMemoryProposals, refreshMemoryInsights, deleteMemoryProposal,
     refreshStudentMemoryProposals, refreshStudentMemoryInsights, reviewStudentMemoryProposal, deleteStudentMemoryProposal,
-    submitMessage, fetchSkills, renderedMessages,
+    submitMessage, fetchSkills, renderedMessages, toolConfirm, confirmToolWrite, cancelToolConfirm,
     activeSessionRef, sessionRequestRef,
     historyCursorRef, historyHasMoreRef, localDraftSessionIdsRef,
     pendingChatJobRef, markdownCacheRef,
@@ -654,6 +655,7 @@ export default function App() {
     executionTimeline,
   })
   return (
+    <>
     <TeacherAppLayout
       appRef={appRef}
       topbarRef={topbarRef}
@@ -758,5 +760,7 @@ export default function App() {
       onCancelArchiveDialog={cancelArchiveDialog}
       onConfirmArchiveDialog={confirmArchiveDialog}
     />
+    <TeacherToolConfirmDialog toolConfirm={toolConfirm} onConfirm={confirmToolWrite} onCancel={cancelToolConfirm} />
+    </>
   )
 }

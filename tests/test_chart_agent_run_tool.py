@@ -54,6 +54,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
                 "chart.agent.run",
                 {"task": "画一个简单折线图", "input_data": {"a": 1}, "packages": ["numpy"], "auto_install": True},
                 role="teacher",
+                confirmed=True,
             )
             self.assertTrue(res.get("ok"))
             self.assertEqual(res.get("attempt_used"), 1)
@@ -109,6 +110,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
                 "chart.agent.run",
                 {"task": "画图", "max_retries": 3},
                 role="teacher",
+                confirmed=True,
             )
             self.assertTrue(res.get("ok"))
             self.assertEqual(res.get("attempt_used"), 2)
@@ -126,6 +128,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
                     "packages": ["numpy"],
                 },
                 role="teacher",
+                confirmed=True,
             )
             self.assertFalse(res.get("ok"))
             self.assertEqual(res.get("error"), "opencode_forbidden")
@@ -143,6 +146,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
                 "chart.agent.run",
                 {"task": "画图", "engine": "opencode"},
                 role="teacher",
+                confirmed=True,
             )
             self.assertFalse(res.get("ok"))
             self.assertEqual(res.get("error"), "opencode_forbidden")
@@ -188,6 +192,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
                 "chart.agent.run",
                 {"task": "画图", "engine": "auto"},
                 role="teacher",
+                confirmed=True,
             )
             self.assertTrue(res.get("ok"))
             self.assertEqual(res.get("engine_requested"), "auto")

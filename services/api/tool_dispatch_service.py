@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
+from .tool_confirm_service import maybe_confirmation_required
+
 
 def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
     return {"items": []}
@@ -436,6 +438,11 @@ def tool_dispatch(
     *,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    confirmed: bool = False,
+    actor_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     static_tool = deps.tool_registry.get(name)
     if static_tool is None:
@@ -462,4 +469,21 @@ def tool_dispatch(
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"unknown tool: {name}"}
+    if str(role or "") == "student":
+        return handler(args)
+    blocked = maybe_confirmation_required(
+        tool=static_tool,
+        name=name,
+        args=args,
+        confirmed=bool(confirmed),
+        actor_id=str(actor_id or teacher_id or ""),
+        job_id=str(job_id or ""),
+        lane_id=str(lane_id or ""),
+        tool_call_id=str(tool_call_id or ""),
+        role=str(role or ""),
+        skill_id=str(skill_id or ""),
+        teacher_id=str(teacher_id or ""),
+    )
+    if blocked is not None:
+        return blocked
     return handler(args)

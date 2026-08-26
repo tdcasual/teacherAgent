@@ -193,9 +193,48 @@ def run_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = No
     mod.student_profile_update(payload)
 
 
+def _chat_job_confirm_pending_active(mod: Any, job_id: str) -> bool:
+    load = getattr(mod, "load_chat_job", None)
+    if not callable(load):
+        return False
+    try:
+        job = load(job_id)
+    except Exception:  # policy: allowed-broad-except
+        _log.debug("failed to load chat job %s for confirm pending", job_id, exc_info=True)
+        return False
+    if not isinstance(job, dict):
+        return False
+    from services.api.tool_confirm_service import confirm_pending_is_live
+
+    return confirm_pending_is_live(job.get("confirm_pending"))
+
+
+def resume_chat_job_after_confirm(
+    job_id: str,
+    lane_id: str,
+    *,
+    tenant_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    mod = load_tenant_module(tenant_id)
+    store = _lane_store(mod, tenant_id)
+    active = store.get_active(lane_id)
+    if active == job_id:
+        _enqueue_chat_rq_job(run_chat_job, job_id, lane_id, tenant_id=tenant_id)
+        return {"ok": True, "mode": "active"}
+    if not active:
+        if store.reacquire_active(job_id, lane_id):
+            _enqueue_chat_rq_job(run_chat_job, job_id, lane_id, tenant_id=tenant_id)
+            return {"ok": True, "mode": "reacquire"}
+        store.park_behind_active(job_id, lane_id)
+        return {"ok": True, "mode": "park"}
+    store.park_behind_active(job_id, lane_id)
+    return {"ok": True, "mode": "park"}
+
+
 def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     store = _lane_store(mod, tenant_id)
+    finish_lane = True
     try:
         try:
             mod.process_chat_job(job_id)
@@ -235,7 +274,11 @@ def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) 
                         exc_info=True,
                     )
             raise
+        if _chat_job_confirm_pending_active(mod, job_id):
+            store.refresh_claim(job_id, lane_id)
+            finish_lane = False
     finally:
-        next_job_id = store.finish(job_id, lane_id)
-        if next_job_id:
-            _enqueue_chat_rq_job(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)
+        if finish_lane:
+            next_job_id = store.finish(job_id, lane_id)
+            if next_job_id:
+                _enqueue_chat_rq_job(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)

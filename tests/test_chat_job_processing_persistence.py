@@ -77,7 +77,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             chat_request_model=lambda **payload: _Req(**payload),
             compute_chat_reply_sync=(
                 compute_chat_reply_sync
-                or (lambda _req, session_id=None, teacher_id_override=None, event_sink=None: ("回复内容", "teacher", "列出考试"))
+                or (lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: ("回复内容", "teacher", "列出考试"))
             ),
             monotonic=monotonic or (lambda: 0.0),
             build_interaction_note=lambda _u, _a, assignment_id=None: "",
@@ -128,7 +128,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             appended.append((str(event_type), dict(payload or {})))
             return {}
 
-        def _compute(_req, session_id=None, teacher_id_override=None, event_sink=None):
+        def _compute(_req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs):
             del session_id, teacher_id_override
             if callable(event_sink):
                 event_sink("assistant.delta", {"delta": "你"})
@@ -183,7 +183,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: ("回复内容", "student", "讲一下牛顿第二定律"),
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: ("回复内容", "student", "讲一下牛顿第二定律"),
             monotonic=lambda: 0.0,
             build_interaction_note=lambda _u, _a, assignment_id=None: "",
             profile_update_async=False,
@@ -255,7 +255,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: (
                 "收到，后续我先给结论。",
                 "student",
                 "以后请先给结论",
@@ -333,7 +333,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: (
                 "收到，后续我先给结论。",
                 "student",
                 "以后请先给结论",
@@ -404,7 +404,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: (
                 "收到。",
                 "student",
                 "以后请先给结论",
@@ -484,7 +484,7 @@ class ChatJobProcessingPersistenceTest(unittest.TestCase):
             load_chat_job=lambda _job_id: dict(state),
             write_chat_job=_write_chat_job,
             chat_request_model=lambda **payload: _Req(**payload),
-            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None: (
+            compute_chat_reply_sync=lambda _req, session_id=None, teacher_id_override=None, event_sink=None, **_kwargs: (
                 "继续完成作业吧。",
                 "student",
                 "继续今天作业",

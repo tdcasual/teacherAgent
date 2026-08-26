@@ -11,6 +11,7 @@ class ToolDef:
     name: str
     description: str
     parameters: JsonSchema
+    mutating: bool = False
 
     def to_openai(self) -> Dict[str, Any]:
         return {
@@ -309,6 +310,7 @@ def build_default_registry() -> ToolRegistry:
                 "reason": {"type": "string"},
             }
         ),
+        mutating=True,
     )
     tools["analysis.review.list"] = ToolDef(
         name="analysis.review.list",
@@ -355,6 +357,7 @@ def build_default_registry() -> ToolRegistry:
                 "reason": {"type": "string"},
             }
         ),
+        mutating=True,
     )
 
     # Assignments & lessons
@@ -365,6 +368,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["assignment.generate"] = ToolDef(
         name="assignment.generate",
+        mutating=True,
         description="Generate assignment questions from KP / explicit ids / core examples",
         parameters=_schema_object(
             {
@@ -386,6 +390,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["assignment.requirements.save"] = ToolDef(
         name="assignment.requirements.save",
+        mutating=True,
         description="Save assignment requirements (8-item teacher checklist)",
         parameters=_schema_object(
             {"assignment_id": {"type": "string"}, "date": {"type": "string"}, "requirements": {"type": "object"}},
@@ -394,6 +399,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["assignment.render"] = ToolDef(
         name="assignment.render",
+        mutating=True,
         description="Render assignment PDF",
         parameters=_schema_object(
             {
@@ -411,6 +417,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["lesson.capture"] = ToolDef(
         name="lesson.capture",
+        mutating=True,
         description="Capture lesson materials (OCR + examples)",
         parameters=_schema_object(
             {
@@ -442,6 +449,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["student.profile.update"] = ToolDef(
         name="student.profile.update",
+        mutating=True,
         description="Update derived fields in student profile",
         parameters=_schema_object(
             {
@@ -457,6 +465,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["student.import"] = ToolDef(
         name="student.import",
+        mutating=True,
         description="Import students from exam responses into student_profiles",
         parameters=_schema_object(
             {
@@ -476,6 +485,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["core_example.register"] = ToolDef(
         name="core_example.register",
+        mutating=True,
         description="Register a core example into data/core_examples",
         parameters=_schema_object(
             {
@@ -507,6 +517,7 @@ def build_default_registry() -> ToolRegistry:
     # Charts / code execution (teacher-only in API role gate)
     tools["chart.exec"] = ToolDef(
         name="chart.exec",
+        mutating=True,
         description=(
             "Execute Python code and return generated artifacts. "
             "Helpers available in code: save_chart(name), save_text(name, content), "
@@ -531,6 +542,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["chart.agent.run"] = ToolDef(
         name="chart.agent.run",
+        mutating=True,
         description="Generate chart code with LLM, auto-install dependencies, execute, and auto-repair on failures",
         parameters=_schema_object(
             {
@@ -599,6 +611,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["teacher.memory.apply"] = ToolDef(
         name="teacher.memory.apply",
+        mutating=True,
         description="Apply or reject a proposed memory update",
         parameters=_schema_object(
             {"teacher_id": {"type": "string"}, "proposal_id": {"type": "string"}, "approve": {"type": "boolean", "default": True}},

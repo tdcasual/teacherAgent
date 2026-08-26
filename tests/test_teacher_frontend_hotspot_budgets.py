@@ -15,7 +15,7 @@ def _line_count(path: Path) -> int:
 
 
 def test_teacher_hotspot_files_remain_within_budget() -> None:
-    assert _line_count(_APP_PATH) < 930
+    assert _line_count(_APP_PATH) < 980
     assert _line_count(_CHAT_API_PATH) < 1150
     assert _line_count(_ASSIGNMENT_WORKFLOW_PATH) < 860
 

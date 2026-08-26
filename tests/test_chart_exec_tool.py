@@ -53,7 +53,7 @@ class ChartExecToolTest(unittest.TestCase):
                 return {"ok": True}
 
             app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
+            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher", confirmed=True)
             self.assertTrue(res.get("ok"))
             self.assertEqual((captured.get("args") or {}).get("python_code"), "print('hi')")
             self.assertTrue(str(captured.get("uploads_dir", "")).endswith("uploads"))
@@ -70,7 +70,7 @@ class ChartExecToolTest(unittest.TestCase):
                 return {"ok": True, "run_id": "chr_test", "image_url": "/charts/chr_test/main.png"}
 
             app_mod.get_core().execute_chart_exec = fake_execute  # type: ignore[attr-defined]
-            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher")
+            res = app_mod.get_core().tool_dispatch("chart.exec", {"python_code": "print('hi')"}, role="teacher", confirmed=True)
             self.assertTrue(res.get("ok"))
             self.assertEqual(called.get("args", {}).get("python_code"), "print('hi')")
             self.assertTrue(str(called.get("uploads_dir", "")).endswith("uploads"))

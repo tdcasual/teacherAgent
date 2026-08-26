@@ -72,6 +72,11 @@ class TeacherMemoryProposalReviewRequest(BaseModel):
     approve: bool = True
 
 
+class TeacherToolConfirmRequest(BaseModel):
+    confirm_id: str
+    confirmed: bool = True
+
+
 class StudentMemoryProposalCreateRequest(BaseModel):
     teacher_id: Optional[str] = None
     student_id: str

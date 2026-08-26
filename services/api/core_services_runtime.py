@@ -275,6 +275,11 @@ def tool_dispatch(
     *,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    confirmed: bool = False,
+    actor_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    tool_call_id: Optional[str] = None,
     core: Any | None = None,
 ) -> Dict[str, Any]:
     return _tool_dispatch_impl(
@@ -284,6 +289,11 @@ def tool_dispatch(
         deps=_tool_dispatch_deps(core),
         skill_id=skill_id,
         teacher_id=teacher_id,
+        confirmed=confirmed,
+        actor_id=actor_id,
+        job_id=job_id,
+        lane_id=lane_id,
+        tool_call_id=tool_call_id,
     )
 
 
@@ -369,6 +379,10 @@ def run_agent(
     teacher_id: Optional[str] = None,
     analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    job_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+    initial_convo: Optional[List[Dict[str, Any]]] = None,
     core: Any | None = None,
 ) -> Dict[str, Any]:
     return _run_agent_runtime_impl(
@@ -380,6 +394,10 @@ def run_agent(
         teacher_id=teacher_id,
         analysis_target=analysis_target,
         event_sink=event_sink,
+        job_id=job_id,
+        lane_id=lane_id,
+        actor_id=actor_id,
+        initial_convo=initial_convo,
     )
 
 
@@ -388,6 +406,11 @@ def compute_chat_reply_sync(
     session_id: str = "main",
     teacher_id_override: Optional[str] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    extra_out: Optional[Dict[str, Any]] = None,
+    job_id: Optional[str] = None,
+    lane_id: Optional[str] = None,
+    actor_id: Optional[str] = None,
+    initial_convo: Optional[List[Dict[str, Any]]] = None,
     core: Any | None = None,
 ) -> Tuple[str, Optional[str], str]:
     return _compute_chat_reply_sync_impl(
@@ -396,6 +419,11 @@ def compute_chat_reply_sync(
         session_id=session_id,
         teacher_id_override=teacher_id_override,
         event_sink=event_sink,
+        extra_out=extra_out,
+        job_id=job_id,
+        lane_id=lane_id,
+        actor_id=actor_id,
+        initial_convo=initial_convo,
     )
 
 

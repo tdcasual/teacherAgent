@@ -23,6 +23,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
                 "lesson.capture",
                 {"lesson_id": "L1", "topic": "T", "sources": ["/etc/passwd"]},
                 role="teacher",
+                confirmed=True,
             )
             self.assertIn("error", res)
             self.assertEqual(res["error"], "source_not_found_or_outside_app_root")
@@ -45,6 +46,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
                 "core_example.register",
                 {"example_id": "CE001", "kp_id": "KP-M01", "core_model": "M", "stem_file": "/etc/passwd"},
                 role="teacher",
+                confirmed=True,
             )
             self.assertIn("error", res)
             self.assertEqual(res["error"], "stem_file_not_found_or_outside_app_root")
@@ -73,7 +75,7 @@ class ToolDispatchSecurityTest(unittest.TestCase):
     def test_chart_agent_run_rejects_opencode_engine_for_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            result = app_mod.get_core().tool_dispatch("chart.agent.run", {"task": "plot", "engine": "opencode"}, role="teacher")
+            result = app_mod.get_core().tool_dispatch("chart.agent.run", {"task": "plot", "engine": "opencode"}, role="teacher", confirmed=True)
             self.assertIn("error", result)
             self.assertEqual(result["error"], "opencode_forbidden")
             self.assertEqual(result.get("status_code"), 400)

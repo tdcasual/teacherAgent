@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { postTeacherToolConfirm, type TeacherToolConfirm } from './TeacherToolConfirmDialog'
 import { absolutizeChartImageUrls, renderMarkdown, renderStreamingPlainText } from './markdown'
 import { stripTransientPendingBubbles, withPendingChatOverlay } from './pendingOverlay'
 import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
@@ -163,6 +164,7 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
   const pendingChatJobRef = useRef<PendingChatJob | null>(pendingChatJob)
   const markdownCacheRef = useRef(new Map<string, { content: string; html: string; apiBase: string; authToken: string }>())
   const [authToken, setAuthToken] = useState(() => readTeacherAccessToken())
+  const [toolConfirm, setToolConfirm] = useState<TeacherToolConfirm | null>(null)
   // ── Ref sync effects ──────────────────────────────────────────────────
   useEffect(() => { activeSessionRef.current = activeSessionId }, [activeSessionId])
   useEffect(() => { pendingChatJobRef.current = pendingChatJob }, [pendingChatJob])
@@ -831,6 +833,19 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
           if (workflowHint) setComposerWarning(workflowHint)
           return
         }
+        if (eventType === 'tool.confirm_required') {
+          const confirmId = String(payload.confirm_id || '').trim()
+          if (confirmId) {
+            setToolConfirm({
+              confirm_id: confirmId,
+              tool: String(payload.tool || '').trim() || 'tool',
+              preview: String(payload.preview || '').trim(),
+            })
+            setPendingStreamStage('等待确认写操作…')
+          }
+          renderStreamingPlaceholder()
+          return
+        }
         if (eventType === 'tool.start') {
           toolCounter += 1
           const toolName = String(payload.tool_name || '').trim() || 'tool'
@@ -1079,6 +1094,19 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     }, 30000)
     return () => window.clearInterval(timer)
   }, [skillsOpen, workbenchTab, authToken, fetchSkills])
+  const postToolConfirm = useCallback(async (confirmed: boolean) => {
+    const pending = toolConfirm
+    if (!pending?.confirm_id) return
+    setToolConfirm(null)
+    try {
+      await postTeacherToolConfirm(apiBase, pending.confirm_id, confirmed)
+      if (!confirmed) setPendingStreamStage('已取消写操作，继续生成…')
+    } catch (err: unknown) {
+      setComposerWarning(toErrorMessage(err, '确认失败'))
+    }
+  }, [apiBase, setComposerWarning, setPendingStreamStage, toolConfirm])
+  const confirmToolWrite = useCallback(() => { void postToolConfirm(true) }, [postToolConfirm])
+  const cancelToolConfirm = useCallback(() => { void postToolConfirm(false) }, [postToolConfirm])
   // ── Return ────────────────────────────────────────────────────────────
   return {
     refreshTeacherSessions,
@@ -1106,5 +1134,8 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     localDraftSessionIdsRef,
     pendingChatJobRef,
     markdownCacheRef,
+    toolConfirm,
+    confirmToolWrite,
+    cancelToolConfirm,
   }
 }

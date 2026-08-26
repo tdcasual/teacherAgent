@@ -57,7 +57,7 @@ class TestInit:
 
     def test_scripts_registered(self):
         _, fake_redis = _make_store()
-        assert fake_redis.register_script.call_count == 2
+        assert fake_redis.register_script.call_count == 5
 
 
 # ── 2. Key generation ───────────────────────────────────────────────────
@@ -120,6 +120,12 @@ class TestFindPosition:
 # ── 5. enqueue ──────────────────────────────────────────────────────────
 
 class TestEnqueue:
+    def test_script_keeps_queued_member_from_dispatching(self):
+        store, fake_redis = _make_store()
+        source = fake_redis.register_script.call_args_list[0].args[0]
+        assert "SISMEMBER" in source
+        assert "dispatch" not in source.lower() or "return {pos, qlen, active, 0}" in source
+
     def test_dispatch_true(self):
         store, _ = _make_store()
         store._enqueue_script.return_value = [0, 0, 1, 1]
@@ -224,3 +230,44 @@ class TestRecentJob:
 
 def test_alias():
     assert mod.RedisLaneStore is mod.ChatRedisLaneStore
+
+
+class TestConfirmLaneOps:
+    def test_refresh_claim_expires_self_and_rejects_other(self):
+        store, _fake_redis = _make_store(claim_ttl_sec=600)
+        store._refresh_claim_script = MagicMock(return_value=1)
+        assert store.refresh_claim("j1", "L1") is True
+        args = store._refresh_claim_script.call_args.kwargs["args"]
+        assert int(args[1]) >= 300
+        store._refresh_claim_script.return_value = 0
+        assert store.refresh_claim("j1", "L1") is False
+
+    def test_refresh_claim_forces_ttl_at_least_300(self):
+        store, _ = _make_store(claim_ttl_sec=10)
+        store._refresh_claim_script = MagicMock(return_value=1)
+        store.refresh_claim("j1", "L1", ttl_sec=12)
+        args = store._refresh_claim_script.call_args.kwargs["args"]
+        assert args[1] == "300"
+
+    def test_reacquire_active_only_when_empty(self):
+        store, _ = _make_store()
+        store._reacquire_script = MagicMock(return_value=1)
+        assert store.reacquire_active("j1", "L1") is True
+        store._reacquire_script.return_value = 0
+        assert store.reacquire_active("j1", "L1") is False
+
+    def test_park_behind_active_does_not_touch_active(self):
+        store, fake_redis = _make_store()
+        store._park_script = MagicMock(return_value=1)
+        store.park_behind_active("j1", "L1")
+        keys = store._park_script.call_args.kwargs["keys"]
+        assert keys == [store._queue_key("L1"), store._queued_key()]
+        fake_redis.delete.assert_not_called()
+
+    def test_get_active_returns_job_or_none(self):
+        store, fake_redis = _make_store()
+        fake_redis.get.return_value = "j1"
+        assert store.get_active("L1") == "j1"
+        fake_redis.get.return_value = None
+        assert store.get_active("L1") is None
+

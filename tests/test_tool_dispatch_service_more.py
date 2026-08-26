@@ -119,9 +119,9 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
     assert tool_dispatch("lesson.list", {}, role="teacher", deps=deps)["tool"] == "lesson.list"
     assert tool_dispatch("student.search", {"query": "abc", "limit": 3}, role="teacher", deps=deps)["tool"] == "student.search"
     assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"
-    assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.update"
-    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", deps=deps)["tool"] == "assignment.generate"
-    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps)["tool"] == "assignment.render"
+    assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "student.profile.update"
+    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.generate"
+    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 
     assert calls["exam.students.list"] == ("e3", 7)
@@ -132,7 +132,7 @@ def test_tool_dispatch_student_import_role_guard_and_success():
     deps, _ = _deps({"student.import"})
 
     denied = tool_dispatch("student.import", {"rows": []}, role="student", deps=deps)
-    allowed = tool_dispatch("student.import", {"rows": [1]}, role="teacher", deps=deps)
+    allowed = tool_dispatch("student.import", {"rows": [1]}, role="teacher", deps=deps, confirmed=True)
 
     assert denied["error"] == "permission denied"
     assert allowed["tool"] == "student.import"
@@ -146,6 +146,7 @@ def test_tool_dispatch_assignment_requirements_save_uses_parser():
         {"assignment_id": "a1", "requirements": {"x": 1}, "date": "2026-02-12"},
         role="teacher",
         deps=deps,
+        confirmed=True,
     )
 
     assert out["tool"] == "assignment.requirements.save"
@@ -201,6 +202,7 @@ def test_tool_dispatch_teacher_memory_search_propose_and_apply():
         {"teacher_id": "t1", "proposal_id": "p1", "approve": False},
         role="teacher",
         deps=deps,
+        confirmed=True,
     )
 
     assert searched["ok"] is True
@@ -242,8 +244,8 @@ def test_tool_dispatch_covers_remaining_exam_lesson_and_core_example_branches():
         role="teacher",
         deps=deps,
     )
-    captured = tool_dispatch("lesson.capture", {"topic": "x"}, role="teacher", deps=deps)
-    registered = tool_dispatch("core_example.register", {"id": "c1"}, role="teacher", deps=deps)
+    captured = tool_dispatch("lesson.capture", {"topic": "x"}, role="teacher", deps=deps, confirmed=True)
+    registered = tool_dispatch("core_example.register", {"id": "c1"}, role="teacher", deps=deps, confirmed=True)
     rendered = tool_dispatch("core_example.render", {"id": "c1"}, role="teacher", deps=deps)
 
     assert denied["error"] == "permission denied"
@@ -263,9 +265,9 @@ def test_tool_dispatch_chart_tools_require_teacher_role():
     deps, _ = _deps({"chart.agent.run", "chart.exec"})
 
     denied_agent = tool_dispatch("chart.agent.run", {"x": 1}, role="student", deps=deps)
-    allowed_agent = tool_dispatch("chart.agent.run", {"x": 1}, role="teacher", deps=deps)
+    allowed_agent = tool_dispatch("chart.agent.run", {"x": 1}, role="teacher", deps=deps, confirmed=True)
     denied_exec = tool_dispatch("chart.exec", {"x": 1}, role="student", deps=deps)
-    allowed_exec = tool_dispatch("chart.exec", {"x": 1}, role="teacher", deps=deps)
+    allowed_exec = tool_dispatch("chart.exec", {"x": 1}, role="teacher", deps=deps, confirmed=True)
     assert denied_agent["error"] == "permission denied"
     assert allowed_agent["tool"] == "chart.agent.run"
     assert denied_exec["error"] == "permission denied"
@@ -281,6 +283,7 @@ def test_tool_dispatch_chart_exec_attaches_audit_context():
         role="teacher",
         deps=deps,
         teacher_id="teacher_a",
+        confirmed=True,
     )
 
     assert out["tool"] == "chart.exec"
@@ -319,6 +322,7 @@ def test_tool_dispatch_survey_report_tools_accept_target_id_alias():
         {"target_id": "report_9", "teacher_id": "t1", "reason": "need-refresh"},
         role="teacher",
         deps=deps,
+        confirmed=True,
     )
 
     assert got["payload"] == ("report_9", "t1-resolved")
@@ -379,6 +383,7 @@ def test_tool_dispatch_analysis_report_tools_cover_unified_report_plane():
         {'teacher_id': 't1', 'domain': 'survey', 'target_id': 'report_1', 'reason': 'refresh'},
         role='teacher',
         deps=deps,
+        confirmed=True,
     )
     review = tool_dispatch(
         'analysis.review.list',

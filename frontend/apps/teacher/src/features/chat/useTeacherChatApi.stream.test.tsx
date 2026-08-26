@@ -228,6 +228,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
       streamLogs: logsRef.current,
       historySessions,
       composerWarning,
+      toolConfirm: api.toolConfirm,
     }
   })
 
@@ -932,5 +933,55 @@ describe('useTeacherChatApi stream mapping', () => {
 
     expect(result.current.messages.some((item) => item.role === 'assistant' && item.content === 'A')).toBe(true)
     expect(result.current.messages.some((item) => item.role === 'assistant' && item.content === 'AB')).toBe(false)
+  })
+
+  it('opens tool confirm from SSE and posts /teacher/tools/confirm', async () => {
+    const localStorageMock = installLocalStorageMock()
+    localStorageMock.setItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, 'token')
+    localStorageMock.setItem('teacherAuthSubject', JSON.stringify({ teacher_id: 'teacher-1', teacher_name: 'Teacher 1' }))
+    const streamBody = [
+      toSseEvent(1, 'job.processing', {}),
+      toSseEvent(2, 'tool.confirm_required', {
+        confirm_id: 'abc123',
+        tool: 'student.profile.update',
+        preview: '{"student_id":"S1"}',
+      }),
+    ].join('')
+    const confirmBodies: unknown[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = toUrl(input)
+      if (url.endsWith('/chat/start')) {
+        return jsonResponse({ ok: true, job_id: 'job-confirm', status: 'queued', lane_id: 'lane-1' })
+      }
+      if (url.includes('/chat/stream')) return sseResponse(streamBody)
+      if (url.includes('/chat/status')) return jsonResponse({ job_id: 'job-confirm', status: 'processing' })
+      if (url.endsWith('/teacher/tools/confirm')) {
+        confirmBodies.push(JSON.parse(String(init?.body || '{}')))
+        return jsonResponse({ ok: true })
+      }
+      if (url.includes('/teacher/history/sessions')) {
+        return jsonResponse({ ok: true, teacher_id: 'teacher-1', sessions: [], next_cursor: null })
+      }
+      if (url.includes('/teacher/history/session')) {
+        return jsonResponse({ ok: true, teacher_id: 'teacher-1', session_id: 'main', messages: [], next_cursor: 0 })
+      }
+      if (url.endsWith('/skills')) return jsonResponse({ skills: [] })
+      return jsonResponse({ ok: true })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { result } = renderTeacherChatHarness()
+    await act(async () => {
+      expect(await result.current.api.submitMessage('更新画像')).toBe(true)
+    })
+    await waitFor(() => {
+      expect(result.current.api.toolConfirm?.confirm_id).toBe('abc123')
+    })
+    expect(result.current.pendingChatJob?.job_id).toBe('job-confirm')
+    await act(async () => {
+      result.current.api.confirmToolWrite()
+    })
+    await waitFor(() => {
+      expect(confirmBodies).toEqual([{ confirm_id: 'abc123', confirmed: true }])
+    })
   })
 })
