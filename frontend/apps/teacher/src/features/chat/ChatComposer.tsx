@@ -69,9 +69,10 @@ export default function ChatComposer({
                 </span>
                 <button
                   type="button"
-                  className="border-0 bg-transparent text-muted cursor-pointer px-0"
+                  className="composer-btn border-0 bg-transparent text-muted cursor-pointer px-0"
                   onClick={() => { void onRemoveAttachment(item.localId) }}
                   title={item.error || '移除附件'}
+                  aria-label="移除附件"
                 >
                   ×
                 </button>
@@ -81,7 +82,8 @@ export default function ChatComposer({
         ) : null}
         <textarea
           ref={inputRef}
-          className="border-none bg-transparent px-[2px] py-0 shadow-none resize-none min-h-[56px] max-h-[220px] overflow-auto leading-[1.4] max-[900px]:leading-[1.32] focus:border-none focus:shadow-none focus:outline-none focus:ring-0"
+          aria-label="教学指令"
+          className="border-none bg-transparent px-[2px] py-0 shadow-none resize-none min-h-[56px] max-h-[220px] overflow-auto leading-[1.4] max-[900px]:leading-[1.32] focus:border-none focus:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
           value={input}
           onChange={(e) => onInputChange(e.target.value, e.target.selectionStart || e.target.value.length)}
           onClick={(e) => onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)}
@@ -95,9 +97,10 @@ export default function ChatComposer({
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              className="cursor-pointer rounded-[10px] border border-border bg-surface-soft px-2.5 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
+              className="composer-btn cursor-pointer rounded-[10px] border border-border bg-surface-soft px-2.5 py-1.5 text-[13px] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={pendingChatJob}
               onClick={() => fileInputRef.current?.click()}
+              aria-label="添加附件"
             >
               +
             </button>
@@ -117,7 +120,7 @@ export default function ChatComposer({
           </div>
           <button
             type="submit"
-            className="border-none rounded-[12px] px-4 py-[10px] text-[14px] cursor-pointer bg-accent text-white disabled:opacity-60 disabled:cursor-not-allowed"
+            className="composer-btn border-none rounded-[12px] px-4 py-[10px] text-[14px] cursor-pointer bg-accent text-white disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={sending || pendingChatJob || !canSend || uploadingAttachments}
           >
             发送

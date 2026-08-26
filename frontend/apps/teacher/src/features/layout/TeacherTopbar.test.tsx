@@ -113,4 +113,19 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByText('学生密码管理', { exact: true })).toBeTruthy()
     expect(screen.getByText('按学生、班级或全部学生重置密码。')).toBeTruthy()
   })
+
+  it('associates admin form labels with their fields', () => {
+    const props = buildProps()
+    render(<TeacherTopbar {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: '管理' }))
+
+    const nameInput = screen.getByPlaceholderText('例如：张老师')
+    const emailInput = screen.getByPlaceholderText('name@example.com')
+    const credentialInput = screen.getByPlaceholderText('输入分发 token')
+    const passwordInput = screen.getByPlaceholderText('至少 8 位，含字母和数字')
+    expect(screen.getByText('姓名').getAttribute('for')).toBe(nameInput.id)
+    expect(screen.getByText('邮箱（同名时必填）').getAttribute('for')).toBe(emailInput.id)
+    expect(screen.getByText('token', { selector: 'label' }).getAttribute('for')).toBe(credentialInput.id)
+    expect(screen.getByText('新密码').getAttribute('for')).toBe(passwordInput.id)
+  })
 })

@@ -38,6 +38,44 @@ describe('mobile shared style guardrails', () => {
     expect(studentGhostBlock).toContain('justify-content: center;');
   });
 
+  it('gives ghost controls a visible accent focus ring and 44px coarse/mobile target', () => {
+    const teacherCssPath = path.resolve(process.cwd(), 'apps/teacher/src/tailwind.css');
+    const studentCssPath = path.resolve(process.cwd(), 'apps/student/src/tailwind.css');
+    const dialogCssPath = path.resolve(process.cwd(), 'apps/shared/dialog.css');
+    const mobileCssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
+    const teacherCss = readFileSync(teacherCssPath, 'utf8');
+    const studentCss = readFileSync(studentCssPath, 'utf8');
+    const dialogCss = readFileSync(dialogCssPath, 'utf8');
+    const mobileCss = readFileSync(mobileCssPath, 'utf8');
+    const teacherFocusBlock = extractRuleBlock(teacherCss, '.ghost:focus-visible');
+    const studentFocusBlock = extractRuleBlock(studentCss, '.ghost:focus-visible');
+    const dialogFocusBlock = extractRuleBlock(dialogCss, '.app-dialog-btn:focus-visible');
+
+    expect(teacherFocusBlock).toContain('outline: 2px solid var(--color-accent);');
+    expect(teacherFocusBlock).toContain('outline-offset: 2px;');
+    expect(studentFocusBlock).toContain('outline: 2px solid var(--color-accent);');
+    expect(studentFocusBlock).toContain('outline-offset: 2px;');
+    expect(dialogFocusBlock).toContain('outline: 2px solid var(--color-accent, #0052cc);');
+
+    expect(teacherCss).toMatch(
+      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?\.ghost[\s\S]*?min-height:\s*44px/,
+    );
+    expect(studentCss).toMatch(
+      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?\.ghost[\s\S]*?min-height:\s*44px/,
+    );
+    expect(dialogCss).toMatch(
+      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?min-height:\s*44px/,
+    );
+    expect(mobileCss).toContain('--mobile-topbar-compact-btn-height: 44px;');
+    expect(mobileCss).toContain('min-width: 44px;');
+    expect(
+      extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-trigger"),
+    ).toContain('min-height: 44px;');
+    expect(
+      extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-item"),
+    ).toContain('min-height: 44px;');
+  });
+
   it('keeps tab icons at a stable touch-friendly visual size', () => {
     const cssPath = path.resolve(process.cwd(), 'apps/shared/mobile/mobile.css');
     const css = readFileSync(cssPath, 'utf8');
@@ -47,9 +85,7 @@ describe('mobile shared style guardrails', () => {
     expect(iconBlock).toContain('width: 16px;');
     expect(iconBlock).toContain('height: 16px;');
     expect(iconBlock).toContain('justify-content: center;');
-    expect(buttonBlock).toContain(
-      'color: color-mix(in oklab, var(--color-ink) 74%, white);',
-    );
+    expect(buttonBlock).toContain('color: color-mix(in oklab, var(--color-ink) 74%, white);');
     expect(buttonBlock).toContain(
       'background: color-mix(in oklab, var(--mobile-sheet-surface) 88%, var(--color-surface-soft, white));',
     );

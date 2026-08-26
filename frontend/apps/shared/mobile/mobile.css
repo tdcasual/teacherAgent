@@ -5,7 +5,7 @@
   --mobile-shell-composer-lh: 1.32;
   --mobile-shell-message-gap: 12px;
   --mobile-topbar-compact-height: 52px;
-  --mobile-topbar-compact-btn-height: 30px;
+  --mobile-topbar-compact-btn-height: 44px;
   --mobile-topbar-compact-hpad: 10px;
   --mobile-topbar-compact-gap: 8px;
   --mobile-tabbar-offset: calc(58px + env(safe-area-inset-bottom));
@@ -302,12 +302,12 @@
   }
 
   .app[data-mobile-shell-v2='1'] .session-menu-trigger {
-    min-width: 36px;
-    min-height: 36px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .app[data-mobile-shell-v2='1'] .session-menu-item {
-    min-height: 36px;
+    min-height: 44px;
   }
 }
 

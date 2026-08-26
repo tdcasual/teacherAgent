@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { installAuthFetchInterceptor } from '../../../../shared/authFetch'
 
 type PurposeKey = 'conversation' | 'embedding' | 'ocr' | 'image_generation'
@@ -147,6 +147,7 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('')
   const [newProviderApiKey, setNewProviderApiKey] = useState('')
   const [newProviderDefaultModel, setNewProviderDefaultModel] = useState('')
+  const formId = useId()
 
   const catalogMap = useMemo(() => {
     const map = new Map<string, CatalogProvider>()
@@ -324,9 +325,10 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
     <div className="grid gap-4">
       <section className="rounded-xl border border-border bg-white p-4 grid gap-3">
         <div className="text-sm font-semibold">连接设置</div>
-        <label className="grid gap-1.5">
+        <label className="grid gap-1.5" htmlFor={`${formId}-api-base`}>
           <span className="text-xs text-muted">API Base</span>
           <input
+            id={`${formId}-api-base`}
             value={apiBase}
             onChange={(event) => {
               if (apiBaseLocked) return
@@ -362,9 +364,10 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
                 <div className="text-[13px] font-semibold">{purpose.label}</div>
                 <div className="text-[12px] text-muted">{purpose.description}</div>
                 <div className="grid gap-2 md:grid-cols-3">
-                  <label className="grid gap-1">
+                  <label className="grid gap-1" htmlFor={`${formId}-${purpose.key}-provider`}>
                     <span className="text-xs text-muted">Provider</span>
                     <select
+                      id={`${formId}-${purpose.key}-provider`}
                       value={current.provider}
                       onChange={(event) => handleProviderChange(purpose.key, event.target.value)}
                     >
@@ -376,9 +379,9 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1">
+                  <label className="grid gap-1" htmlFor={`${formId}-${purpose.key}-mode`}>
                     <span className="text-xs text-muted">Mode</span>
-                    <select value={current.mode} onChange={(event) => handleModeChange(purpose.key, event.target.value)}>
+                    <select id={`${formId}-${purpose.key}-mode`} value={current.mode} onChange={(event) => handleModeChange(purpose.key, event.target.value)}>
                       <option value="">请选择</option>
                       {modes.map((mode) => (
                         <option key={`${current.provider}:${mode.mode}`} value={mode.mode}>
@@ -387,9 +390,10 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1">
+                  <label className="grid gap-1" htmlFor={`${formId}-${purpose.key}-model`}>
                     <span className="text-xs text-muted">Model</span>
                     <input
+                      id={`${formId}-${purpose.key}-model`}
                       value={current.model}
                       onChange={(event) => updatePurposeModel(purpose.key, { model: event.target.value })}
                       placeholder="例如 gpt-4.1-mini"
@@ -405,26 +409,27 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
       <section className="rounded-xl border border-border bg-white p-4 grid gap-3">
         <div className="text-sm font-semibold">模型商管理</div>
         <div className="grid gap-2 md:grid-cols-2">
-          <label className="grid gap-1">
+          <label className="grid gap-1" htmlFor={`${formId}-provider-id`}>
             <span className="text-xs text-muted">Provider ID（可选）</span>
-            <input value={newProviderId} onChange={(event) => setNewProviderId(event.target.value)} placeholder="例如 tprv_openrouter_01" />
+            <input id={`${formId}-provider-id`} value={newProviderId} onChange={(event) => setNewProviderId(event.target.value)} placeholder="例如 tprv_openrouter_01" />
           </label>
-          <label className="grid gap-1">
+          <label className="grid gap-1" htmlFor={`${formId}-provider-name`}>
             <span className="text-xs text-muted">显示名称</span>
-            <input value={newProviderName} onChange={(event) => setNewProviderName(event.target.value)} placeholder="例如 OpenRouter" />
+            <input id={`${formId}-provider-name`} value={newProviderName} onChange={(event) => setNewProviderName(event.target.value)} placeholder="例如 OpenRouter" />
           </label>
-          <label className="grid gap-1">
+          <label className="grid gap-1" htmlFor={`${formId}-provider-base-url`}>
             <span className="text-xs text-muted">Base URL</span>
-            <input value={newProviderBaseUrl} onChange={(event) => setNewProviderBaseUrl(event.target.value)} placeholder="https://openrouter.ai/api/v1" />
+            <input id={`${formId}-provider-base-url`} value={newProviderBaseUrl} onChange={(event) => setNewProviderBaseUrl(event.target.value)} placeholder="https://openrouter.ai/api/v1" />
           </label>
-          <label className="grid gap-1">
+          <label className="grid gap-1" htmlFor={`${formId}-provider-default-model`}>
             <span className="text-xs text-muted">默认模型（可选）</span>
-            <input value={newProviderDefaultModel} onChange={(event) => setNewProviderDefaultModel(event.target.value)} placeholder="例如 openai/gpt-4.1-mini" />
+            <input id={`${formId}-provider-default-model`} value={newProviderDefaultModel} onChange={(event) => setNewProviderDefaultModel(event.target.value)} placeholder="例如 openai/gpt-4.1-mini" />
           </label>
         </div>
-        <label className="grid gap-1">
+        <label className="grid gap-1" htmlFor={`${formId}-provider-api-key`}>
           <span className="text-xs text-muted">API Key</span>
           <input
+            id={`${formId}-provider-api-key`}
             value={newProviderApiKey}
             onChange={(event) => setNewProviderApiKey(event.target.value)}
             placeholder="sk-..."

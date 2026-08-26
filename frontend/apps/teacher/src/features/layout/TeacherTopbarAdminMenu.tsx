@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type MutableRefObject } from 'react'
+import { useId, useState, type FormEvent, type MutableRefObject } from 'react'
 
 import { resolveRuntimeApiBase } from '../../../../shared/apiBase'
 import { safeLocalStorageGetItem } from '../../utils/storage'
@@ -121,6 +121,16 @@ export default function TeacherTopbarAdminMenu({
   const [studentResetError, setStudentResetError] = useState('')
   const [studentResetInfo, setStudentResetInfo] = useState('')
   const [studentResetItems, setStudentResetItems] = useState<StudentPasswordResetItem[]>([])
+  const formId = useId()
+  const nameInputId = `${formId}-name`
+  const emailInputId = `${formId}-email`
+  const credentialInputId = `${formId}-credential`
+  const newPasswordInputId = `${formId}-new-password`
+  const studentNameInputId = `${formId}-student-name`
+  const studentClassInputId = `${formId}-student-class`
+  const targetClassInputId = `${formId}-target-class`
+  const studentResetPasswordInputId = `${formId}-student-reset-password`
+  const confirmResetAllId = `${formId}-confirm-reset-all`
 
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -427,8 +437,9 @@ export default function TeacherTopbarAdminMenu({
         </div>
         <form className="grid gap-2" onSubmit={handleAuthSubmit}>
           <div className="grid gap-1">
-            <label className="text-xs text-muted">姓名</label>
+            <label className="text-xs text-muted" htmlFor={nameInputId}>姓名</label>
             <input
+              id={nameInputId}
               value={nameInput}
               onChange={(event) => setNameInput(event.target.value)}
               placeholder="例如：张老师"
@@ -436,8 +447,9 @@ export default function TeacherTopbarAdminMenu({
             />
           </div>
           <div className="grid gap-1">
-            <label className="text-xs text-muted">邮箱（同名时必填）</label>
+            <label className="text-xs text-muted" htmlFor={emailInputId}>邮箱（同名时必填）</label>
             <input
+              id={emailInputId}
               value={emailInput}
               onChange={(event) => setEmailInput(event.target.value)}
               placeholder="name@example.com"
@@ -461,8 +473,9 @@ export default function TeacherTopbarAdminMenu({
             </button>
           </div>
           <div className="grid gap-1">
-            <label className="text-xs text-muted">{credentialType === 'token' ? 'token' : '密码'}</label>
+            <label className="text-xs text-muted" htmlFor={credentialInputId}>{credentialType === 'token' ? 'token' : '密码'}</label>
             <input
+              id={credentialInputId}
               type={credentialType === 'token' ? 'text' : 'password'}
               value={credentialInput}
               onChange={(event) => setCredentialInput(event.target.value)}
@@ -487,8 +500,9 @@ export default function TeacherTopbarAdminMenu({
         <form className="grid gap-2" onSubmit={handleSetPassword}>
           <div className="text-xs text-muted">使用当前凭证验证后设置新密码。</div>
           <div className="grid gap-1">
-            <label className="text-xs text-muted">新密码</label>
+            <label className="text-xs text-muted" htmlFor={newPasswordInputId}>新密码</label>
             <input
+              id={newPasswordInputId}
               type="password"
               value={newPasswordInput}
               onChange={(event) => setNewPasswordInput(event.target.value)}
@@ -539,8 +553,9 @@ export default function TeacherTopbarAdminMenu({
             {studentResetScope === 'student' ? (
               <>
                 <div className="grid gap-1">
-                  <label className="text-xs text-muted">学生姓名</label>
+                  <label className="text-xs text-muted" htmlFor={studentNameInputId}>学生姓名</label>
                   <input
+                    id={studentNameInputId}
                     value={studentNameInput}
                     onChange={(event) => setStudentNameInput(event.target.value)}
                     placeholder="例如：刘昊然"
@@ -548,8 +563,9 @@ export default function TeacherTopbarAdminMenu({
                   />
                 </div>
                 <div className="grid gap-1">
-                  <label className="text-xs text-muted">学生班级</label>
+                  <label className="text-xs text-muted" htmlFor={studentClassInputId}>学生班级</label>
                   <input
+                    id={studentClassInputId}
                     value={studentClassInput}
                     onChange={(event) => setStudentClassInput(event.target.value)}
                     placeholder="例如：高二2403班"
@@ -560,8 +576,9 @@ export default function TeacherTopbarAdminMenu({
             ) : null}
             {studentResetScope === 'class' ? (
               <div className="grid gap-1">
-                <label className="text-xs text-muted">目标班级</label>
+                <label className="text-xs text-muted" htmlFor={targetClassInputId}>目标班级</label>
                 <input
+                  id={targetClassInputId}
                   value={targetClassNameInput}
                   onChange={(event) => setTargetClassNameInput(event.target.value)}
                   placeholder="例如：高二2403班"
@@ -570,8 +587,9 @@ export default function TeacherTopbarAdminMenu({
               </div>
             ) : null}
             {studentResetScope === 'all' ? (
-              <label className="text-xs text-muted flex items-center gap-2">
+              <label className="text-xs text-muted flex items-center gap-2" htmlFor={confirmResetAllId}>
                 <input
+                  id={confirmResetAllId}
                   type="checkbox"
                   checked={confirmResetAll}
                   onChange={(event) => setConfirmResetAll(event.target.checked)}
@@ -580,8 +598,9 @@ export default function TeacherTopbarAdminMenu({
               </label>
             ) : null}
             <div className="grid gap-1">
-              <label className="text-xs text-muted">指定密码（可选）</label>
+              <label className="text-xs text-muted" htmlFor={studentResetPasswordInputId}>指定密码（可选）</label>
               <input
+                id={studentResetPasswordInputId}
                 type="password"
                 value={studentResetPasswordInput}
                 onChange={(event) => setStudentResetPasswordInput(event.target.value)}

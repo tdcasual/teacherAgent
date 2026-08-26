@@ -36,6 +36,9 @@ describe('ChatComposer copy', () => {
 
     expect(screen.getByText('当前路由: 自动编排')).toBeTruthy()
     expect(screen.getByPlaceholderText('输入教学指令、审阅要求或追问，使用 $ 查看能力。回车发送，Shift+Enter 换行')).toBeTruthy()
+    expect(screen.getByLabelText('教学指令')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '添加附件' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '发送' }).className).toContain('composer-btn')
     expect(screen.getByText('工作流指令 | 回车发送')).toBeTruthy()
   })
 

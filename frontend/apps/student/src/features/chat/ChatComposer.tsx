@@ -55,7 +55,7 @@ export default function ChatComposer({
                 <span className={`${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}>
                   {item.status === 'ready' ? '已就绪' : item.status === 'uploading' ? '上传中' : '失败'}
                 </span>
-                <button type="button" className="border-0 bg-transparent text-muted cursor-pointer px-0" onClick={() => { void onRemoveAttachment(item.localId) }} title={item.error || '移除附件'}>×</button>
+                <button type="button" className="composer-btn border-0 bg-transparent text-muted cursor-pointer px-0" onClick={() => { void onRemoveAttachment(item.localId) }} title={item.error || '移除附件'} aria-label="移除附件">×</button>
               </span>
             ))}
           </div>
@@ -68,15 +68,17 @@ export default function ChatComposer({
           placeholder={verifiedStudent ? '输入问题，例如：牛顿第三定律是什么' : '请先填写姓名完成验证'}
           rows={1}
           disabled={composerDisabled}
-          className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.42] max-[900px]:leading-[1.3] focus:!border-none focus:!shadow-none disabled:cursor-not-allowed"
+          aria-label="提问内容"
+          className="!border-none !bg-transparent !p-[4px_2px] !shadow-none resize-none min-h-[56px] max-h-[220px] leading-[1.42] max-[900px]:leading-[1.3] focus:!border-none focus:!shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)] disabled:cursor-not-allowed"
         />
         <div className="flex items-center justify-between gap-2.5 mt-1">
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              className="border border-border rounded-full px-2.5 py-1 text-[13px] cursor-pointer bg-[#f8fafc] disabled:opacity-60 disabled:cursor-not-allowed"
+              className="composer-btn border border-border rounded-full px-2.5 py-1 text-[13px] cursor-pointer bg-[#f8fafc] disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={composerDisabled}
               onClick={() => fileInputRef.current?.click()}
+              aria-label="添加附件"
             >
               +
             </button>
@@ -94,7 +96,7 @@ export default function ChatComposer({
             />
             <span className="composer-hint text-xs text-muted truncate" role="status" aria-live="polite">{composerHint}</span>
           </div>
-          <button type="submit" className="border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-white transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed" disabled={sending || composerDisabled || !canSend || uploadingAttachments}>
+          <button type="submit" className="composer-btn border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-white transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed" disabled={sending || composerDisabled || !canSend || uploadingAttachments}>
             发送
           </button>
         </div>

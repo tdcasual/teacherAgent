@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { trapFocusOnTab } from './focusTrap';
 
 type DialogFrameProps = {
   open: boolean;
@@ -34,16 +35,19 @@ function DialogFrame({
     }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      onCancel();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+        return;
+      }
+      trapFocusOnTab(event, dialogRef.current);
     };
 
-    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
     return () => {
       window.clearTimeout(focusTimer);
-      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
       previouslyFocusedRef.current?.focus?.();
     };
   }, [initialFocusRef, onCancel, open]);
@@ -151,6 +155,7 @@ export function PromptDialog({
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(defaultValue);
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -172,9 +177,10 @@ export function PromptDialog({
       initialFocusRef={inputRef}
     >
       <form className="app-dialog-form" onSubmit={onSubmit}>
-        <label>
+        <label htmlFor={inputId}>
           <span>{label}</span>
           <input
+            id={inputId}
             ref={inputRef}
             value={value}
             placeholder={placeholder}

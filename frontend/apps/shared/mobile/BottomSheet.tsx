@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { trapFocusOnTab } from '../focusTrap';
 
 type BottomSheetProps = {
   open: boolean;
@@ -30,41 +31,12 @@ export function BottomSheet({
     document.body.style.overflow = 'hidden';
     window.setTimeout(() => closeButtonRef.current?.focus(), 0);
 
-    const getFocusableElements = () => {
-      const panel = panelRef.current;
-      if (!panel) return [] as HTMLElement[];
-      return Array.from(
-        panel.querySelectorAll<HTMLElement>(
-          'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hasAttribute('disabled'));
-    };
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose();
         return;
       }
-      if (event.key !== 'Tab') return;
-      const focusable = getFocusableElements();
-      if (!focusable.length) {
-        event.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const activeElement = document.activeElement as HTMLElement | null;
-      if (event.shiftKey) {
-        if (activeElement === first || !activeElement) {
-          event.preventDefault();
-          last.focus();
-        }
-        return;
-      }
-      if (activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      trapFocusOnTab(event, panelRef.current);
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
