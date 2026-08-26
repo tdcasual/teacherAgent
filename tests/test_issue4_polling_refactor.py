@@ -6,6 +6,7 @@ EXAM = ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "workbench"
 POLLER = ROOT / "frontend" / "apps" / "shared" / "visibilityBackoffPolling.ts"
 STUDENT_CHAT = ROOT / "frontend" / "apps" / "student" / "src" / "hooks" / "useChatPolling.ts"
 TEACHER_CHAT = ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "chat" / "useTeacherChatApi.ts"
+TEACHER_CHAT_STATUS = ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "chat" / "useTeacherChatStatus.ts"
 
 
 def _read(path: pathlib.Path) -> str:
@@ -45,7 +46,7 @@ def test_shared_poller_supports_timeout_abort_context():
 
 def test_chat_polling_hooks_use_shared_abort_signal():
     student = _read(STUDENT_CHAT)
-    teacher = _read(TEACHER_CHAT)
+    teacher = _read(TEACHER_CHAT) + _read(TEACHER_CHAT_STATUS)
     for text in (student, teacher):
         assert "signal" in text
         assert "pollTimeoutMs" in text

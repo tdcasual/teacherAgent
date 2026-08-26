@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { postTeacherToolConfirm, type TeacherToolConfirm } from './TeacherToolConfirmDialog'
 import { absolutizeChartImageUrls, renderMarkdown, renderStreamingPlainText } from './markdown'
-import { stripTransientPendingBubbles, withPendingChatOverlay } from './pendingOverlay'
+import { withPendingChatOverlay } from './pendingOverlay'
 import { buildSkill, fallbackSkills, TEACHER_GREETING } from './catalog'
-import { parseInvocationInput } from './invocation'
-import { decideSkillRouting } from './requestRouting'
-import { CHAT_STREAM_EVENT_VERSION, parseChatStreamEnvelope } from './streamEventProtocol'
-import {
-  appendExecutionTimelineEntry,
-  buildAnalysisTargetContextMessage,
-  buildAnalysisTargetContract,
-  buildExecutionTimelineEntry,
-  resolveWorkflowHint,
-} from './useTeacherChatApiHelpers'
-import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
 import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
-import { TEACHER_AUTH_EVENT, readTeacherAccessToken, readTeacherAuthSubject } from '../auth/teacherAuth'
+import { TEACHER_AUTH_EVENT, readTeacherAccessToken } from '../auth/teacherAuth'
 import { makeId } from '../../utils/id'
 import { nowTime, timeFromIso } from '../../utils/time'
+import { useTeacherChatSend } from './useTeacherChatSend'
+import { useTeacherChatStream } from './useTeacherChatStream'
 import type {
-  ChatJobStatus,
-  ChatStartResult,
+  ExecutionTimelineEntry,
   Message,
   PendingChatJob,
   PendingToolRun,
-  ExecutionTimelineEntry,
   RenderedMessage,
   Skill,
   SkillResponse,
@@ -545,498 +534,49 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
       setSkillsLoading(false)
     }
   }, [apiBase, authToken, setSkillsLoading, setSkillsError, setSkillList])
-  // ── submitMessage ─────────────────────────────────────────────────────
-  const submitMessage = useCallback(
-    async (inputText: string, options?: { attachments?: Array<{ attachment_id: string }> }) => {
-      if (!authToken) {
-        setComposerWarning('请先在顶部完成教师认证。')
-        return false
-      }
-      if (pendingChatJob?.job_id) return false
-      const attachmentRefs = Array.isArray(options?.attachments)
-        ? options?.attachments.filter((item) => String(item?.attachment_id || '').trim())
-        : []
-      const trimmed = inputText.trim()
-      if (!trimmed && attachmentRefs.length === 0) return false
-      const parsedInvocation = parseInvocationInput(trimmed, {
-        knownSkillIds: skillList.map((item) => item.id),
-        activeSkillId: activeSkillId || 'physics-teacher-ops',
-      })
-      let cleanedText = parsedInvocation.cleanedInput.trim()
-      if (!cleanedText && attachmentRefs.length > 0) {
-        cleanedText = '请阅读我上传的附件并回答。'
-      }
-      if (!cleanedText) {
-        setComposerWarning('请在召唤后补充问题内容。')
-        return false
-      }
-      const routingDecision = decideSkillRouting({
-        parsedInvocation,
-        activeSkillId,
-        skillPinned,
-      })
-      if (routingDecision.normalizedWarnings.length) {
-        setComposerWarning(routingDecision.normalizedWarnings.join('；'))
-      } else {
-        setComposerWarning('')
-      }
-      if (routingDecision.shouldPinEffectiveSkill && parsedInvocation.effectiveSkillId) {
-        chooseSkill(parsedInvocation.effectiveSkillId, true)
-      }
-      const sessionId = activeSessionId || 'main'
-      if (!activeSessionId) setActiveSessionId(sessionId)
-      const requestId = `tchat_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
-      const teacherId = String(readTeacherAuthSubject()?.teacher_id || '').trim()
-      setWheelScrollZone('chat')
-      enableAutoScroll()
-      setMessages((prev) => {
-        const next = stripTransientPendingBubbles(prev)
-        return [
-          ...next,
-          { id: makeId(), role: 'user' as const, content: cleanedText, time: nowTime() },
-          { id: placeholderId, role: 'assistant' as const, content: '正在生成…', time: nowTime() },
-        ]
-      })
-      setInput('')
-      const analysisTarget = buildAnalysisTargetContract(selectedAnalysisTarget)
-      const analysisTargetContext = buildAnalysisTargetContextMessage(selectedAnalysisTarget)
-      const contextSeed = analysisTargetContext
-        ? [...messages, { id: 'analysis_target', role: 'assistant' as const, content: analysisTargetContext, time: '' }]
-        : [...messages]
-      const contextMessages = [...contextSeed, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
-        .slice(-40)
-        .map((msg) => ({ role: msg.role, content: msg.content }))
-      setSending(true)
-      setExecutionTimeline([])
-      try {
-        const res = await fetch(`${apiBase}/chat/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            request_id: requestId,
-            session_id: sessionId,
-            messages: contextMessages,
-            role: 'teacher',
-            teacher_id: teacherId || undefined,
-            skill_id: routingDecision.skillIdForRequest,
-            attachments: attachmentRefs.length ? attachmentRefs : undefined,
-            analysis_target: analysisTarget || undefined,
-          }),
-        })
-        if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
-        }
-        const data = (await res.json()) as ChatStartResult
-        if (!data?.job_id) throw new Error('任务编号缺失')
-        const runtimeWarnings = Array.isArray(data.warnings)
-          ? data.warnings.map((item) => String(item || '').trim()).filter(Boolean)
-          : []
-        if (runtimeWarnings.length) {
-          setComposerWarning(runtimeWarnings.join('；'))
-        }
-        const lanePos = Number(data.lane_queue_position || 0)
-        const laneSize = Number(data.lane_queue_size || 0)
-        setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '处理中...')
-        const nextPendingJob: PendingChatJob = {
-          job_id: data.job_id,
-          request_id: requestId,
-          placeholder_id: placeholderId,
-          user_text: cleanedText,
-          session_id: sessionId,
-          lane_id: data.lane_id,
-          created_at: Date.now(),
-        }
-        pendingChatJobRef.current = nextPendingJob
-        setPendingChatJob(nextPendingJob)
-        setPendingStreamStage('排队中...')
-        setPendingToolRuns([])
-        return true
-      } catch (err: unknown) {
-        const errorMessage = toErrorMessage(err)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === placeholderId
-              ? { ...m, content: `抱歉，请求失败：${errorMessage}`, time: nowTime() }
-              : m,
-          ),
-        )
-        setSending(false)
-        setChatQueueHint('')
-        setPendingStreamStage('')
-        setPendingToolRuns([])
-        pendingChatJobRef.current = null
-        setPendingChatJob(null)
-        return false
-      }
-    },
-    [
-      pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
-      authToken, selectedAnalysisTarget,
-      setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
-      setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setExecutionTimeline, setPendingChatJob,
-    ],
-  )
-  // ── Pending chat job stream effect (fallback to polling) ──────────────
-  useEffect(() => {
-    if (!authToken) return
-    if (!pendingChatJob?.job_id) return
-    let stopped = false
-    let pollCleanup: (() => void) | null = null
-    let pollStarted = false
-    const controller = new AbortController()
-    const targetSessionId = activeSessionId || pendingChatJob.session_id || 'main'
-    const sameSession =
-      !pendingChatJob.session_id || !activeSessionId || pendingChatJob.session_id === activeSessionId
-    const setPlaceholderContent = (content: string) => {
-      if (!sameSession) return
-      setMessages((prev) => {
-        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
-        return overlaid.map((item) =>
-          item.id === pendingChatJob.placeholder_id ? { ...item, content, time: nowTime() } : item,
-        )
-      })
-    }
-    const finishSuccess = (replyText: string) => {
-      setMessages((prev) => {
-        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
-        return overlaid.map((item) =>
-          item.id === pendingChatJob.placeholder_id ? { ...item, content: replyText || '已收到。', time: nowTime() } : item,
-        )
-      })
-      pendingChatJobRef.current = null
-      setPendingChatJob(null)
-      setChatQueueHint('')
-      setPendingStreamStage('')
-      setPendingToolRuns([])
-      setSending(false)
-      void refreshTeacherSessions()
-    }
-    const finishFailure = (message: string) => {
-      setMessages((prev) => {
-        const overlaid = withPendingChatOverlay(prev, pendingChatJob, targetSessionId)
-        return overlaid.map((item) =>
-          item.id === pendingChatJob.placeholder_id
-            ? { ...item, content: `抱歉，请求失败：${message || '请求失败'}`, time: nowTime() }
-            : item,
-        )
-      })
-      pendingChatJobRef.current = null
-      setPendingChatJob(null)
-      setChatQueueHint('')
-      setPendingStreamStage('')
-      setPendingToolRuns([])
-      setSending(false)
-    }
-    const startFallbackPolling = () => {
-      if (pollStarted || stopped) return
-      pollStarted = true
-      pollCleanup = startVisibilityAwareBackoffPolling(
-        async ({ signal }) => {
-          if (pendingChatJob.session_id && activeSessionId && pendingChatJob.session_id !== activeSessionId) {
-            return 'continue'
-          }
-          const res = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, { signal })
-          if (!res.ok) {
-            const text = await res.text()
-            throw new Error(text || `状态码 ${res.status}`)
-          }
-          const data = (await res.json()) as ChatJobStatus
-          if (Array.isArray(data.execution_timeline)) {
-            setExecutionTimeline(data.execution_timeline)
-          }
-          if (data.status === 'done') {
-            finishSuccess(data.reply || '')
-            return 'stop'
-          }
-          if (data.status === 'failed' || data.status === 'cancelled') {
-            finishFailure(data.error_detail || data.error || '请求失败')
-            return 'stop'
-          }
-          const lanePos = Number(data.lane_queue_position || 0)
-          const laneSize = Number(data.lane_queue_size || 0)
-          if (data.status === 'queued') {
-            setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
-            setPendingStreamStage('排队中...')
-          } else if (data.status === 'processing') {
-            setChatQueueHint('处理中...')
-            setPendingStreamStage('处理中...')
-          } else {
-            setChatQueueHint('')
-            setPendingStreamStage('')
-          }
-          return 'continue'
-        },
-        (err) => {
-          const msg = toErrorMessage(err, '网络错误')
-          setPlaceholderContent(`网络波动，正在重试…（${msg}）`)
-        },
-        { kickMode: 'direct', pollTimeoutMs: 15000, inFlightTimeoutMs: 20000 },
-      )
-    }
-    const streamSleep = async (ms: number) =>
-      new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-    const runStream = async () => {
-      let cursor = 0
-      let reconnectAttempts = 0
-      let assistantText = ''
-      let toolCounter = 0
-      const toolStates: PendingToolRun[] = []
-      let assistantRenderTimer: number | null = null
-      let assistantRenderScheduled = false
-      const clearAssistantRenderTimer = () => {
-        if (assistantRenderTimer !== null) {
-          window.clearTimeout(assistantRenderTimer)
-          assistantRenderTimer = null
-        }
-        assistantRenderScheduled = false
-      }
-      const flushAssistantPlaceholder = () => {
-        assistantRenderTimer = null
-        assistantRenderScheduled = false
-        setPlaceholderContent(assistantText || '正在生成…')
-      }
-      const scheduleAssistantPlaceholder = () => {
-        if (assistantRenderScheduled) return
-        assistantRenderScheduled = true
-        assistantRenderTimer = window.setTimeout(() => {
-          flushAssistantPlaceholder()
-        }, 40)
-      }
-      const renderStreamingPlaceholder = () => {
-        clearAssistantRenderTimer()
-        setPendingToolRuns([...toolStates])
-        setPlaceholderContent(assistantText || '正在生成…')
-      }
-      const applyStreamEvent = (eventType: string, payload: Record<string, unknown>, eventId: number) => {
-        if (eventId > cursor) cursor = eventId
-        appendExecutionTimelineEntry(setExecutionTimeline, buildExecutionTimelineEntry(eventType, payload, skillList))
-        if (eventType === 'job.queued') {
-          const lanePos = Number(payload.lane_queue_position || 0)
-          const laneSize = Number(payload.lane_queue_size || 0)
-          setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
-          setPendingStreamStage('排队中...')
-          return
-        }
-        if (eventType === 'job.processing') {
-          setChatQueueHint('处理中...')
-          setPendingStreamStage('处理中...')
-          return
-        }
-        if (eventType === 'workflow.resolved') {
-          const workflowHint = resolveWorkflowHint({
-            requested_skill_id: String(payload.requested_skill_id || ''),
-            effective_skill_id: String(payload.effective_skill_id || ''),
-            reason: String(payload.reason || ''),
-          }, skillList)
-          if (workflowHint) setComposerWarning(workflowHint)
-          return
-        }
-        if (eventType === 'tool.confirm_required') {
-          const confirmId = String(payload.confirm_id || '').trim()
-          if (confirmId) {
-            setToolConfirm({
-              confirm_id: confirmId,
-              tool: String(payload.tool || '').trim() || 'tool',
-              preview: String(payload.preview || '').trim(),
-            })
-            setPendingStreamStage('等待确认写操作…')
-          }
-          renderStreamingPlaceholder()
-          return
-        }
-        if (eventType === 'tool.start') {
-          toolCounter += 1
-          const toolName = String(payload.tool_name || '').trim() || 'tool'
-          const callId = String(payload.tool_call_id || '').trim()
-          const key = callId || `${toolName}#${toolCounter}`
-          toolStates.push({ key, name: toolName, status: 'running' })
-          renderStreamingPlaceholder()
-          return
-        }
-        if (eventType === 'tool.finish') {
-          const toolName = String(payload.tool_name || '').trim() || 'tool'
-          const callId = String(payload.tool_call_id || '').trim()
-          const byCallId = callId ? toolStates.findIndex((item) => item.key === callId) : -1
-          const byName = toolStates.findIndex((item) => item.status === 'running' && item.name === toolName)
-          const idx = byCallId >= 0 ? byCallId : byName
-          const ok = Boolean(payload.ok)
-          const durationMs = Number(payload.duration_ms || 0)
-          const error = String(payload.error || '').trim()
-          if (idx >= 0) {
-            toolStates[idx] = {
-              ...toolStates[idx],
-              status: ok ? 'ok' : 'failed',
-              durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined,
-              error: error || undefined,
-            }
-          } else {
-            toolStates.push({
-              key: callId || `${toolName}#${toolCounter + 1}`,
-              name: toolName,
-              status: ok ? 'ok' : 'failed',
-              durationMs: Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined,
-              error: error || undefined,
-            })
-          }
-          renderStreamingPlaceholder()
-          return
-        }
-        if (eventType === 'assistant.delta') {
-          const delta = String(payload.delta || '')
-          if (delta) {
-            assistantText += delta
-            scheduleAssistantPlaceholder()
-          }
-          return
-        }
-        if (eventType === 'assistant.done') {
-          const text = String(payload.text || '')
-          if (text) assistantText = text
-          scheduleAssistantPlaceholder()
-          return
-        }
-        if (eventType === 'job.done') {
-          clearAssistantRenderTimer()
-          const text = String(payload.reply || assistantText || '')
-          finishSuccess(text)
-          stopped = true
-          return
-        }
-        if (eventType === 'job.failed' || eventType === 'job.cancelled') {
-          clearAssistantRenderTimer()
-          const err = String(payload.error_detail || payload.error || '请求失败')
-          finishFailure(err)
-          stopped = true
-        }
-      }
-      while (!stopped) {
-        if (!pendingChatJobRef.current?.job_id) return
-        try {
-          const url = new URL(`${apiBase}/chat/stream`)
-          url.searchParams.set('job_id', pendingChatJob.job_id)
-          if (cursor > 0) url.searchParams.set('last_event_id', String(cursor))
-          const res = await fetch(url.toString(), {
-            signal: controller.signal,
-            headers: { Accept: 'text/event-stream' },
-          })
-          if (!res.ok || !res.body) {
-            const text = await res.text()
-            throw new Error(text || `状态码 ${res.status}`)
-          }
-          const reader = res.body.getReader()
-          const decoder = new TextDecoder('utf-8')
-          let buffer = ''
-          let sawEventInCurrentStream = false
-          while (!stopped) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const normalized = buffer.replace(/\r/g, '')
-            const parts = normalized.split('\n\n')
-            buffer = parts.pop() || ''
-            for (const raw of parts) {
-              const block = raw.trim()
-              if (!block || block.startsWith(':')) continue
-              let eventType = ''
-              let eventId = 0
-              const dataLines: string[] = []
-              for (const line of block.split('\n')) {
-                if (line.startsWith('event:')) {
-                  eventType = line.slice(6).trim()
-                } else if (line.startsWith('id:')) {
-                  const parsed = Number(line.slice(3).trim())
-                  if (Number.isFinite(parsed) && parsed > 0) eventId = parsed
-                } else if (line.startsWith('data:')) {
-                  dataLines.push(line.slice(5).trim())
-                }
-              }
-              if (!dataLines.length) continue
-              const rawData = dataLines.join('\n')
-              const payloadEnvelope = parseChatStreamEnvelope(rawData)
-              if (!payloadEnvelope) continue
-              if (payloadEnvelope.eventVersion !== CHAT_STREAM_EVENT_VERSION) {
-                clearAssistantRenderTimer()
-                setPlaceholderContent('检测到新版流协议，已自动切换到稳态轮询…')
-                startFallbackPolling()
-                return
-              }
-              const finalType = String(eventType || payloadEnvelope.eventType || '').trim()
-              if (!finalType) continue
-              const payload = payloadEnvelope.payload
-              const finalEventId = Number(payloadEnvelope.eventId ?? eventId ?? 0)
-              if (!Number.isFinite(finalEventId) || finalEventId <= cursor) continue
-              sawEventInCurrentStream = true
-              applyStreamEvent(finalType, payload, finalEventId)
-              if (stopped) break
-            }
-          }
-          if (stopped || !pendingChatJobRef.current?.job_id) return
-          const statusRes = await fetch(`${apiBase}/chat/status?job_id=${encodeURIComponent(pendingChatJob.job_id)}`, {
-            signal: controller.signal,
-          })
-          if (!statusRes.ok) {
-            const text = await statusRes.text()
-            throw new Error(text || `状态码 ${statusRes.status}`)
-          }
-          const statusData = (await statusRes.json()) as ChatJobStatus
-          if (Array.isArray(statusData.execution_timeline)) {
-            setExecutionTimeline(statusData.execution_timeline)
-          }
-          if (statusData.status === 'done') {
-            clearAssistantRenderTimer()
-            finishSuccess(statusData.reply || assistantText || '')
-            stopped = true
-            return
-          }
-          if (statusData.status === 'failed' || statusData.status === 'cancelled') {
-            clearAssistantRenderTimer()
-            finishFailure(statusData.error_detail || statusData.error || '请求失败')
-            stopped = true
-            return
-          }
-          const workflowHint = resolveWorkflowHint(statusData, skillList)
-          if (workflowHint) setComposerWarning(workflowHint)
-          const lanePos = Number(statusData.lane_queue_position || 0)
-          const laneSize = Number(statusData.lane_queue_size || 0)
-          if (statusData.status === 'queued') {
-            setChatQueueHint(lanePos > 0 ? `排队中，前方 ${lanePos} 条（队列 ${laneSize}）` : '排队中...')
-            setPendingStreamStage('排队中...')
-          } else if (statusData.status === 'processing') {
-            setChatQueueHint('处理中...')
-            setPendingStreamStage('处理中...')
-          }
-          if (sawEventInCurrentStream) reconnectAttempts = 0
-          reconnectAttempts += 1
-          if (reconnectAttempts >= 4) {
-            startFallbackPolling()
-            return
-          }
-          await streamSleep(Math.min(3000, reconnectAttempts * 800))
-        } catch (err: unknown) {
-          clearAssistantRenderTimer()
-          if (controller.signal.aborted || stopped) return
-          reconnectAttempts += 1
-          if (reconnectAttempts >= 4) {
-            startFallbackPolling()
-            return
-          }
-          await streamSleep(Math.min(3000, reconnectAttempts * 800))
-        }
-      }
-      clearAssistantRenderTimer()
-    }
-    void runStream()
-    return () => {
-      stopped = true
-      controller.abort()
-      setChatQueueHint('')
-      setPendingStreamStage('')
-      setPendingToolRuns([])
-      if (pollCleanup) pollCleanup()
-    }
-  }, [pendingChatJob, pendingChatJob?.job_id, apiBase, authToken, refreshTeacherSessions, activeSessionId, setMessages, setPendingChatJob, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setExecutionTimeline, setSending, setComposerWarning, skillList])
+  const { submitMessage } = useTeacherChatSend({
+    apiBase,
+    authToken,
+    pendingChatJob,
+    pendingChatJobRef,
+    skillList,
+    activeSkillId,
+    skillPinned,
+    activeSessionId,
+    messages,
+    selectedAnalysisTarget,
+    setComposerWarning,
+    chooseSkill,
+    setActiveSessionId,
+    setWheelScrollZone,
+    enableAutoScroll,
+    setMessages,
+    setInput,
+    setSending,
+    setChatQueueHint,
+    setPendingStreamStage,
+    setPendingToolRuns,
+    setExecutionTimeline,
+    setPendingChatJob,
+  })
+  useTeacherChatStream({
+    apiBase,
+    authToken,
+    pendingChatJob,
+    pendingChatJobRef,
+    activeSessionId,
+    skillList,
+    setMessages,
+    setPendingChatJob,
+    setChatQueueHint,
+    setPendingStreamStage,
+    setPendingToolRuns,
+    setExecutionTimeline,
+    setSending,
+    setComposerWarning,
+    refreshTeacherSessions,
+    setToolConfirm,
+  })
   // ── Session refresh on mount ──────────────────────────────────────────
   useEffect(() => {
     if (!authToken) return
