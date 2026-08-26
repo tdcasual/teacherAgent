@@ -117,3 +117,45 @@ def test_parse_score_rows_for_file_dispatches_by_suffix(monkeypatch: Any, tmp_pa
         assert rows == [{"file_type": expected}]
         assert warnings == []
         assert schema == {"file": expected}
+
+
+def test_xlsx_preview_raise_keeps_script_schema_source(tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from services.api.exam_upload_parse.xlsx_parser import parse_xlsx_score_file
+
+    script_schema = {
+        "mode": "subject",
+        "confidence": 0.91,
+        "needs_confirm": False,
+        "subject": {"candidate_columns": [{"candidate_id": "pair:4:5"}]},
+        "summary": {"data_rows": 2, "parsed_rows": 0},
+    }
+    score_path = tmp_path / "empty.xlsx"
+    score_path.write_text("empty", encoding="utf-8")
+
+    def _raise_preview(_path: Path) -> str:
+        raise RuntimeError("preview exploded")
+
+    deps = SimpleNamespace(
+        parse_xlsx_with_script=lambda *_args, **_kwargs: ([], script_schema),
+        xlsx_to_table_preview=_raise_preview,
+    )
+
+    file_rows, warnings, schema_source = parse_xlsx_score_file(
+        exam_id="EX1",
+        idx=0,
+        fname="empty.xlsx",
+        score_path=score_path,
+        derived_dir=tmp_path,
+        class_name_hint="",
+        selected_candidate_id=None,
+        deps=deps,
+    )
+
+    assert file_rows == []
+    assert schema_source is not None
+    assert schema_source.get("file") == "empty.xlsx"
+    assert schema_source.get("mode") == "subject"
+    assert schema_source.get("confidence") == 0.91
+    assert any("empty.xlsx" in item and "解析异常" in item for item in warnings)

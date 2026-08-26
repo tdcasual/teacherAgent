@@ -1,6 +1,7 @@
 import json
 import unittest
 import zipfile
+from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -932,6 +933,85 @@ class ExamUploadParseServiceTest(unittest.TestCase):
             parsed_names = {str(item.get("student_name") or "") for item in parsed_rows}
             self.assertIn("张三", parsed_names)
             self.assertIn("李四", parsed_names)
+
+    def test_xlsx_preview_raise_keeps_script_schema_source_for_sibling_file(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes: list = []
+            job = {
+                "exam_id": "EX_PREVIEW_RAISE",
+                "paper_files": ["paper.pdf"],
+                "score_files": ["empty.xlsx", "ok.xlsx"],
+                "answer_files": [],
+                "language": "zh",
+                "ocr_mode": "FREE_OCR",
+            }
+            deps_base = self._deps(root, job, writes)
+            job_dir = root / "exam_jobs" / "job-1"
+            (job_dir / "paper" / "paper.pdf").write_text("paper", encoding="utf-8")
+            (job_dir / "scores" / "empty.xlsx").write_text("empty", encoding="utf-8")
+            (job_dir / "scores" / "ok.xlsx").write_text("ok", encoding="utf-8")
+
+            empty_schema = {
+                "mode": "subject",
+                "confidence": 0.91,
+                "needs_confirm": False,
+                "subject": {
+                    "candidate_columns": [
+                        {"candidate_id": "pair:4:5", "type": "subject_pair"}
+                    ]
+                },
+                "summary": {"data_rows": 2, "parsed_rows": 0},
+            }
+
+            def parse_xlsx_with_script(path, _out, _exam_id, _class_name, _subject_candidate_id=None):  # type: ignore[no-untyped-def]
+                if path.name == "empty.xlsx":
+                    return [], empty_schema
+                return [
+                    {
+                        "exam_id": "EX_PREVIEW_RAISE",
+                        "student_id": "S1",
+                        "student_name": "张三",
+                        "class_name": "",
+                        "question_id": "Q1",
+                        "question_no": "1",
+                        "sub_no": "",
+                        "raw_label": "1",
+                        "raw_value": "4",
+                        "raw_answer": "",
+                        "score": 4,
+                        "is_correct": "",
+                    }
+                ], {
+                    "mode": "question",
+                    "confidence": 1.0,
+                    "needs_confirm": False,
+                    "summary": {"data_rows": 1, "parsed_rows": 1},
+                }
+
+            def xlsx_to_table_preview(path):  # type: ignore[no-untyped-def]
+                if path.name == "empty.xlsx":
+                    raise RuntimeError("preview exploded")
+                return ""
+
+            process_exam_upload_job(
+                "job-1",
+                replace(
+                    deps_base,
+                    parse_xlsx_with_script=parse_xlsx_with_script,
+                    xlsx_to_table_preview=xlsx_to_table_preview,
+                ),
+            )
+
+            parsed = json.loads((job_dir / "parsed.json").read_text(encoding="utf-8"))
+            sources = (parsed.get("score_schema") or {}).get("sources") or []
+            source_files = [str(item.get("file") or "") for item in sources if isinstance(item, dict)]
+            self.assertIn("empty.xlsx", source_files)
+            empty_source = next(item for item in sources if item.get("file") == "empty.xlsx")
+            self.assertEqual(empty_source.get("mode"), "subject")
+            self.assertEqual(empty_source.get("confidence"), 0.91)
+            warnings = parsed.get("warnings") or []
+            self.assertTrue(any("empty.xlsx" in str(item) and "解析异常" in str(item) for item in warnings))
 
 
 if __name__ == "__main__":
