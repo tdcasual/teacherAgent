@@ -63,6 +63,15 @@ def test_auth_required_unset_without_secret_raises_startup_error(monkeypatch) ->
         validate_auth_secret_policy()
 
 
+def test_production_auth_required_0_without_secret_raises_startup_error(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_REQUIRED", "0")
+    monkeypatch.delenv("AUTH_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    with pytest.raises(RuntimeError, match="AUTH_TOKEN_SECRET"):
+        validate_auth_secret_policy()
+
+
 def _load_app_auth_mode(tmp_dir: Path, *, auth_required: str, secret: str, app_env: str):
     env_overrides = {
         "MASTER_KEY_DEV_DEFAULT": "dev-key",
@@ -115,6 +124,47 @@ def test_production_ignores_auth_required_0(tmp_path: Path, monkeypatch) -> None
     with TestClient(app_mod.app) as client:
         res = client.get("/teacher/history/sessions", params={"teacher_id": "teacher_anon"})
     assert res.status_code == 401
+
+
+def test_auth_required_off_with_token_still_enforces_assignment_scope(
+    tmp_path: Path, monkeypatch
+) -> None:
+    secret = "auth-off-secret"
+    assignment_dir = tmp_path / "data" / "assignments" / "HW_SEC_OFF"
+    source_dir = assignment_dir / "source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "paper.txt").write_text("secret paper", encoding="utf-8")
+    (assignment_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "assignment_id": "HW_SEC_OFF",
+                "scope": "student",
+                "student_ids": ["student_b"],
+                "source_files": ["paper.txt"],
+                "delivery_mode": "txt",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("APP_ENV", "development")
+    app_mod = _load_app_auth_mode(
+        tmp_path, auth_required="0", secret=secret, app_env="development"
+    )
+    attacker = _auth_headers("student_a", "student", secret=secret)
+    with TestClient(app_mod.app) as client:
+        detail = client.get("/assignment/HW_SEC_OFF", headers=attacker)
+        download = client.get(
+            "/assignment/HW_SEC_OFF/download",
+            headers=attacker,
+            params={"file": "paper.txt"},
+        )
+        anonymous = client.get("/assignment/HW_SEC_OFF")
+    assert detail.status_code == 403
+    assert detail.json().get("detail") == "forbidden_assignment_scope"
+    assert download.status_code == 403
+    assert download.json().get("detail") == "forbidden_assignment_scope"
+    assert anonymous.status_code == 200
 
 
 def test_admin_path_requires_x_admin_key(tmp_path: Path, monkeypatch) -> None:

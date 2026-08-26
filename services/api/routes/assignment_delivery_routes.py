@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from ..auth_service import AuthError, auth_required, require_principal, resolve_student_scope
+from ..auth_service import AuthError, require_principal, resolve_student_scope
 
 
 def _scoped_student_id(student_id: Optional[str]) -> str:
@@ -19,8 +19,6 @@ def _scoped_student_id(student_id: Optional[str]) -> str:
 
 
 def _require_assignment_access(assignment_id: str, *, core: Any) -> None:
-    if not auth_required():
-        return
     try:
         principal = require_principal(roles=("teacher", "student", "admin", "service"))
     except AuthError as exc:
