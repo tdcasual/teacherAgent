@@ -164,6 +164,21 @@ def _score_intent_matches(intents: List[str], text: str, *, assignment_intent: b
     return score, hits
 
 
+def _config_routing_defined(skill_spec: Any) -> bool:
+    routing = getattr(skill_spec, "routing", None)
+    if routing is None:
+        return False
+    return any(
+        (
+            getattr(routing, "keywords", None),
+            getattr(routing, "negative_keywords", None),
+            getattr(routing, "intents", None),
+            getattr(routing, "keyword_weights", None),
+            getattr(routing, "regex_keywords", None),
+        )
+    )
+
+
 def _score_from_skill_config(
     skill_spec: Any,
     text: str,
@@ -313,21 +328,27 @@ def _build_score_rows(
             assignment_intent=assignment_intent,
             assignment_generation=assignment_generation,
         )
-        rule_score, rule_hits = score_role_skill(
-            role,
-            skill_id,
-            text,
-            assignment_intent=assignment_intent,
-            assignment_generation=assignment_generation,
-        )
-        total_score = int(cfg_score) + int(rule_score)
+        # Manifest routing is the score source; hardcoded rules only fill skills with none.
+        if _config_routing_defined(spec):
+            total_score = int(cfg_score)
+            hits = list(cfg_hits)
+        else:
+            rule_score, rule_hits = score_role_skill(
+                role,
+                skill_id,
+                text,
+                assignment_intent=assignment_intent,
+                assignment_generation=assignment_generation,
+            )
+            total_score = int(rule_score)
+            hits = list(rule_hits)
         if total_score <= 0:
             continue
         rows.append(
             _ScoreRow(
                 skill_id=skill_id,
                 score=total_score,
-                hits=list(cfg_hits) + list(rule_hits),
+                hits=hits,
                 min_score=min_score,
                 min_margin=min_margin,
                 confidence_floor=confidence_floor,

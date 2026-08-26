@@ -2,7 +2,9 @@ import unittest
 from pathlib import Path
 
 from services.api.assignment_intent_service import detect_assignment_intent
-from services.api.skill_auto_router import _score_from_skill_config, resolve_effective_skill
+from services.api.skill_auto_router import _build_score_rows, _score_from_skill_config, resolve_effective_skill
+from services.api.skills.auto_route_rules import score_role_skill
+from services.api.skills.loader import load_skills
 from services.api.skills.spec import parse_skill_spec
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -143,6 +145,81 @@ class SkillAutoRouterTest(unittest.TestCase):
         hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
         self.assertIn(r"cfg-regex:(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))", hits)
         self.assertNotIn("single_student_regex", hits)
+
+    def test_config_and_rule_hit_total_equals_config(self):
+        text = "登记核心例题 ce042，并补两道变式题。"
+        spec = load_skills(APP_ROOT / "skills").skills["physics-core-examples"]
+        cfg_score, _, *_ = _score_from_skill_config(
+            spec,
+            text,
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        rule_score, _ = score_role_skill(
+            "teacher",
+            "physics-core-examples",
+            text,
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        self.assertGreater(cfg_score, 0)
+        self.assertGreater(rule_score, 0)
+
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id="",
+            last_user_text="登记核心例题 CE042，并补两道变式题。",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
+        self.assertEqual(result.get("best_score"), cfg_score)
+        self.assertNotEqual(result.get("best_score"), cfg_score + rule_score)
+        hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
+        self.assertTrue(hits)
+        self.assertTrue(all(str(hit).startswith("cfg") for hit in hits))
+
+    def test_rule_score_used_when_config_routing_absent(self):
+        spec = parse_skill_spec(
+            skill_id="physics-core-examples",
+            source_path="(in-memory)",
+            raw={
+                "id": "physics-core-examples",
+                "schema_version": 2,
+                "title": "核心例题库",
+                "allowed_roles": ["teacher"],
+                "agent": {"prompt_modules": [], "tools": {"allow": []}, "budgets": {}, "model_policy": {}},
+                "ui": {"prompts": [], "examples": []},
+            },
+        )
+        text = "登记核心例题"
+        cfg_score, _, *_ = _score_from_skill_config(
+            spec,
+            text,
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        rule_score, rule_hits = score_role_skill(
+            "teacher",
+            "physics-core-examples",
+            text,
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        self.assertEqual(cfg_score, 0)
+        self.assertGreater(rule_score, 0)
+
+        rows = _build_score_rows(
+            available_ids=["physics-core-examples"],
+            skills={"physics-core-examples": spec},
+            role="teacher",
+            text=text,
+            assignment_intent=False,
+            assignment_generation=False,
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].score, rule_score)
+        self.assertEqual(rows[0].hits, list(rule_hits))
 
 
 if __name__ == "__main__":

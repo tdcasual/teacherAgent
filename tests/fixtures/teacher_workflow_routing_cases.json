@@ -28,7 +28,7 @@
       "last_user_text": "分析一下张三这次考试的薄弱点，给我学生诊断",
       "expected_skill_id": "physics-student-focus",
       "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
+      "min_confidence": 0.44,
       "first_candidate_skill_id": "physics-student-focus"
     },
     {
@@ -107,9 +107,9 @@
       "requested_skill_id": "",
       "last_user_text": "帮我找出李四在最近三次作业里的错误模式",
       "expected_skill_id": "physics-teacher-ops",
-      "expected_reason": "auto_threshold_blocked_default",
+      "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "first_candidate_skill_id": "physics-homework-generator"
+      "expect_candidates_empty": true
     },
     {
       "name": "core_examples_by_variants",
@@ -138,7 +138,7 @@
       "last_user_text": "帮我采集课堂拍照内容并输出知识点",
       "expected_skill_id": "physics-lesson-capture",
       "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
+      "min_confidence": 0.52,
       "first_candidate_skill_id": "physics-lesson-capture"
     },
     {
@@ -178,7 +178,7 @@
       "last_user_text": "帮我备课，下周讲电场",
       "expected_skill_id": "physics-teacher-ops",
       "expected_reason": "auto_rule",
-      "min_confidence": 0.6,
+      "min_confidence": 0.44,
       "first_candidate_skill_id": "physics-teacher-ops"
     },
     {
@@ -188,7 +188,7 @@
       "last_user_text": "把考试讲评和错因分析整理一下",
       "expected_skill_id": "physics-teacher-ops",
       "expected_reason": "auto_rule",
-      "min_confidence": 0.6,
+      "min_confidence": 0.44,
       "first_candidate_skill_id": "physics-teacher-ops"
     },
     {
