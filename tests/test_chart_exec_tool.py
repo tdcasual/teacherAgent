@@ -27,15 +27,16 @@ def load_app(
         env_unset.append("AUTH_TOKEN_SECRET")
     else:
         env_overrides["AUTH_TOKEN_SECRET"] = auth_secret
+    env_overrides.setdefault("ADMIN_USERNAME", "admin")
     return create_test_app(tmp_dir, env_overrides=env_overrides, env_unset=env_unset)
 
 
 def _auth_headers(*, actor_id: str, role: str, secret: str) -> Dict[str, str]:
     now = int(time.time())
-    token = mint_test_token(
-        {"sub": actor_id, "role": role, "exp": now + 3600},
-        secret=secret,
-    )
+    claims = {"sub": actor_id, "role": role, "exp": now + 3600}
+    if role == "admin":
+        claims["tv"] = 1
+    token = mint_test_token(claims, secret=secret)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -163,7 +164,7 @@ class ChartExecToolTest(unittest.TestCase):
 
             student_headers = _auth_headers(actor_id="student_a", role="student", secret=secret)
             teacher_headers = _auth_headers(actor_id="teacher_a", role="teacher", secret=secret)
-            admin_headers = _auth_headers(actor_id="admin_a", role="admin", secret=secret)
+            admin_headers = _auth_headers(actor_id="admin", role="admin", secret=secret)
             service_headers = _auth_headers(actor_id="svc_ops", role="service", secret=secret)
 
             self.assertEqual(client.get("/charts/chr_test123/main.png", headers=student_headers).status_code, 403)

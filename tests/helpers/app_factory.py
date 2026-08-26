@@ -77,4 +77,8 @@ def create_test_app(
         app = app_mod._build_runtime_entrypoint()
     else:
         app = app_mod.create_app(app_mod.load_settings())
+    if os.environ.get("AUTH_REQUIRED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        from services.api.auth_registry_service import build_auth_registry_store
+
+        build_auth_registry_store(data_dir=tmp_dir / "data").bootstrap_admin()
     return TestAppModule(app=app, _core=app_mod.get_core(app))

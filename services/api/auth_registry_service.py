@@ -1001,8 +1001,7 @@ class AuthRegistryStore:
                 (sid,),
             ).fetchone()
         if row is None:
-            # Unregistered admin JWTs stay signature-gated (existing test tokens).
-            return role_norm == "admin"
+            return False
         if int(row["is_disabled"] or 0) == 1:
             return False
         return int(row["token_version"] or 0) == int(token_version)

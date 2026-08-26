@@ -12,14 +12,14 @@ from tests.helpers.app_factory import create_test_app
 
 def _auth_headers(actor_id: str, role: str, *, secret: str) -> dict[str, str]:
     now = int(time.time())
-    token = mint_test_token(
-        {
-            "sub": actor_id,
-            "role": role,
-            "exp": now + 3600,
-        },
-        secret=secret,
-    )
+    claims = {
+        "sub": actor_id,
+        "role": role,
+        "exp": now + 3600,
+    }
+    if role == "admin":
+        claims["tv"] = 1
+    token = mint_test_token(claims, secret=secret)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -84,7 +84,7 @@ def test_student_token_password_login_and_token_rotation(tmp_path: Path):
 
     app_mod = _load_app(tmp_path, secret=secret)
     client = TestClient(app_mod.app)
-    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
 
     export_res = client.post(
         "/auth/admin/student/export-tokens",
@@ -183,7 +183,7 @@ def test_teacher_identify_requires_email_for_duplicate_names(tmp_path: Path):
 
     app_mod = _load_app(tmp_path, secret=secret)
     client = TestClient(app_mod.app)
-    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
 
     export_res = client.post(
         "/auth/admin/teacher/export-tokens",
@@ -268,7 +268,7 @@ def test_teacher_can_reset_student_passwords_by_scope(tmp_path: Path):
 
     app_mod = _load_app(tmp_path, secret=secret)
     client = TestClient(app_mod.app)
-    admin_headers = _auth_headers("admin_1", "admin", secret=secret)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
 
     export_teacher_res = client.post(
         "/auth/admin/teacher/export-tokens",

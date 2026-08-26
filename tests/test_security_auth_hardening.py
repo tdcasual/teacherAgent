@@ -26,6 +26,8 @@ def _auth_headers(actor_id: str, role: str, *, secret: str, tenant_id: str = "")
         "role": role,
         "exp": now + 3600,
     }
+    if role == "admin":
+        claims["tv"] = 1
     if tenant_id:
         claims["tenant_id"] = tenant_id
     token = mint_test_token(claims, secret=secret)
@@ -39,6 +41,7 @@ def load_app(tmp_dir: Path, *, secret: str = "test-secret"):
             "MASTER_KEY_DEV_DEFAULT": "dev-key",
             "AUTH_REQUIRED": "1",
             "AUTH_TOKEN_SECRET": secret,
+            "ADMIN_USERNAME": "admin",
         },
         use_runtime_entrypoint=True,
         reload_module=True,
@@ -642,7 +645,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
 
             export_res = client.post(
                 "/auth/admin/student/export-tokens",
@@ -739,7 +742,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
 
             export_res = client.post(
                 "/auth/admin/student/export-tokens",
@@ -766,7 +769,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
 
             export_res = client.post(
                 "/auth/admin/teacher/export-tokens",
@@ -821,7 +824,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
 
             warmup = client.post(
                 "/auth/admin/teacher/export-tokens",
@@ -1036,7 +1039,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             )
             app_mod = load_app(root, secret=self.SECRET)
             client = TestClient(app_mod.app)
-            admin_headers = _auth_headers("admin_a", "admin", secret=self.SECRET)
+            admin_headers = _auth_headers("admin", "admin", secret=self.SECRET)
 
             warmup = client.post(
                 "/auth/admin/teacher/export-tokens",

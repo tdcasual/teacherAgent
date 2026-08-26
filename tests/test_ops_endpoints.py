@@ -19,6 +19,7 @@ _ENV_KEYS = [
     "MASTER_KEY_DEV_DEFAULT",
     "AUTH_REQUIRED",
     "AUTH_TOKEN_SECRET",
+    "ADMIN_USERNAME",
 ]
 
 
@@ -28,6 +29,7 @@ def _load_app(tmp_dir: Path, *, auth_required: str, auth_secret: str = ""):
     os.environ["DIAG_LOG"] = "0"
     os.environ["MASTER_KEY_DEV_DEFAULT"] = "dev-key"
     os.environ["AUTH_REQUIRED"] = auth_required
+    os.environ["ADMIN_USERNAME"] = "admin"
     if auth_secret:
         os.environ["AUTH_TOKEN_SECRET"] = auth_secret
     else:
@@ -40,10 +42,10 @@ def _load_app(tmp_dir: Path, *, auth_required: str, auth_secret: str = ""):
 
 def _auth_headers(*, actor_id: str = "ops_service", role: str = "service", secret: str) -> Dict[str, str]:
     now = int(time.time())
-    token = mint_test_token(
-        {"sub": actor_id, "role": role, "exp": now + 3600},
-        secret=secret,
-    )
+    claims = {"sub": actor_id, "role": role, "exp": now + 3600}
+    if role == "admin":
+        claims["tv"] = 1
+    token = mint_test_token(claims, secret=secret)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -125,7 +127,7 @@ def test_ops_endpoints_restrict_role_to_service_or_admin_when_auth_enabled() -> 
                 teacher_headers = _auth_headers(actor_id="teacher_a", role="teacher", secret=secret)
                 student_headers = _auth_headers(actor_id="student_a", role="student", secret=secret)
                 service_headers = _auth_headers(actor_id="svc_ops", role="service", secret=secret)
-                admin_headers = _auth_headers(actor_id="admin_a", role="admin", secret=secret)
+                admin_headers = _auth_headers(actor_id="admin", role="admin", secret=secret)
 
                 assert client.get("/ops/metrics", headers=teacher_headers).status_code == 403
                 assert client.get("/ops/slo", headers=teacher_headers).status_code == 403

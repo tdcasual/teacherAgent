@@ -85,6 +85,45 @@ def test_admin_token_without_tv_is_rejected(tmp_path: Path):
     assert rejected.json().get("detail") == "token_revoked"
 
 
+def test_unregistered_admin_token_without_tv_is_rejected(tmp_path: Path):
+    secret = "admin-tv-unregistered-missing-secret"
+    app_mod = _load_app(
+        tmp_path,
+        secret=secret,
+        admin_username="principal_admin",
+        admin_password="AdminPass1",
+    )
+    client = TestClient(app_mod.app)
+
+    token = mint_access_token(subject_id="admin_a", role="admin")
+    assert "tv" not in _token_claims(token)
+    rejected = client.get(
+        "/auth/admin/teacher/list",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert rejected.status_code == 401
+    assert rejected.json().get("detail") == "token_revoked"
+
+
+def test_unregistered_admin_token_with_tv_is_rejected(tmp_path: Path):
+    secret = "admin-tv-unregistered-secret"
+    app_mod = _load_app(
+        tmp_path,
+        secret=secret,
+        admin_username="principal_admin",
+        admin_password="AdminPass1",
+    )
+    client = TestClient(app_mod.app)
+
+    token = mint_access_token(subject_id="admin_a", role="admin", token_version=1)
+    rejected = client.get(
+        "/auth/admin/teacher/list",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert rejected.status_code == 401
+    assert rejected.json().get("detail") == "token_revoked"
+
+
 def test_admin_password_rotation_revokes_old_token(tmp_path: Path):
     secret = "admin-tv-rotate-secret"
     username = "principal_admin"
