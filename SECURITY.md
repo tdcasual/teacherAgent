@@ -48,6 +48,19 @@ https://github.com/tdcasual/teacherAgent/security/advisories/new
    - 复审日期
    - 退出条件
 
+## 历史凭据作废
+
+`data/auth/admin_bootstrap.txt` 曾被提交到 git，含明文管理员口令。该历史口令 **已作废**，必须视为已泄露。
+
+Git 历史与既有克隆/fork 仍可能持有旧 blob。Owner 已决：不 rewrite `main` 历史、不做 `git filter-repo`。取消跟踪与 gitignore 只能阻止新提交。
+
+生产/校内部署 **必须** 同时：
+
+1. 轮换 admin 密码，停止使用历史 bootstrap 口令。
+2. 轮换 `AUTH_TOKEN_SECRET`（及 `AUTH_TOKEN_SECRET_FILE` 内容）。旧 Bearer 全部失效，所有角色必须重新登录。
+
+操作步骤见 `docs/how-to/auth-and-account-troubleshooting.md`。不要把新明文提交进仓库。
+
 ## 安全变更发布
 
 1. 高风险修复合并前需至少 2 名评审。

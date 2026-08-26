@@ -1,6 +1,6 @@
 # Security Incident Response Runbook
 
-Last updated: 2026-02-15
+Last updated: 2026-08-26
 
 ## 目标
 
@@ -61,6 +61,29 @@ Last updated: 2026-02-15
 3. Scribe（记录员）
    - 记录时间线、操作命令、关键证据链接。
 
+## 凭据泄露（SEV-1）
+
+已提交到 git 的口令、token、密钥一律视为已泄露。取消跟踪、gitignore、删除工作区文件都 **不能** 从历史或既有克隆中抹去 blob；不要在本波 rewrite `main` 历史。只有轮换才能让旧凭据失效。
+
+### 已提交的 admin bootstrap 明文
+
+适用：`data/auth/admin_bootstrap.txt` 曾入库（`username=admin` 与明文 `password=`）。关联 `RISK-ADMIN-BOOTSTRAP-001`。
+
+1. 立即将该历史 admin 口令视为已泄露。所有克隆/fork 仍持有 blob，直到轮换完成。
+2. **必须**轮换生产/校内部署的 admin 密码。可登录则 `POST /auth/admin/login` 后改密；否则设置新的 `ADMIN_PASSWORD`，删除 volume 内 `admin_auth` 行与 `${DATA_DIR}/auth/admin_bootstrap.txt` 后重启（仅当确认无其他 admin）。
+3. **生产必做**：同时轮换 `AUTH_TOKEN_SECRET` 以及 `AUTH_TOKEN_SECRET_FILE` 内容。旧 Bearer 全部失效，学生、教师、管理员必须重新登录。
+4. 确认 `.gitignore` 覆盖 `data/auth/admin_bootstrap.txt` 与 `data/auth/*bootstrap*`，且该文件不再被 git 跟踪。不要把新密码提交进仓库。
+5. 证据保全：记录发现时间、受影响部署/克隆、轮换完成时间；导出相关审计与部署记录。
+6. 操作细节见 `docs/how-to/auth-and-account-troubleshooting.md` 与 `SECURITY.md`。
+
+### 通用凭据泄露步骤
+
+1. 判定分级为 SEV-1，15 分钟内首次通报。
+2. 止损：轮换泄露凭据与由其签发的会话（admin 口令、`AUTH_TOKEN_SECRET`、相关 token）。
+3. 评估影响面：哪些环境克隆过仓库、哪些账号仍在使用旧口令/旧 Bearer。
+4. 修复验证：回归测试覆盖「不再跟踪明文」；运营确认轮换已落地。
+5. 更新 `docs/reference/risk-register.md` 的状态、补偿控制与退出条件。
+
 ## 检查清单
 
 1. 凭据是否已轮换（如 token secret、管理员口令）。
@@ -68,6 +91,7 @@ Last updated: 2026-02-15
 3. 审计日志是否覆盖事件窗口并可导出。
 4. 修复是否包含自动化回归测试。
 5. 风险登记是否更新复审日期与退出条件。
+6. 若为仓库明文泄露：gitignore / 取消跟踪已落地，且生产已轮换 admin 密码与 `AUTH_TOKEN_SECRET`。
 
 ## 关联文档
 

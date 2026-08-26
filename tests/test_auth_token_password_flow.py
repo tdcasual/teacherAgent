@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import stat
 import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from services.api.auth_registry_service import AuthRegistryStore
 from services.api.auth_service import mint_test_token
 from tests.helpers.app_factory import create_test_app
 
@@ -397,6 +399,7 @@ def test_admin_bootstrap_login_and_manage_teacher_accounts(tmp_path: Path):
 
     bootstrap_path = tmp_path / "data" / "auth" / "admin_bootstrap.txt"
     assert bootstrap_path.exists()
+    assert stat.S_IMODE(bootstrap_path.stat().st_mode) == 0o600
     bootstrap_text = bootstrap_path.read_text(encoding="utf-8")
     assert "username=principal_admin" in bootstrap_text
     password_line = next(
@@ -486,3 +489,17 @@ def test_admin_bootstrap_login_and_manage_teacher_accounts(tmp_path: Path):
     )
     assert pwd_login_res.status_code == 200
     assert pwd_login_res.json().get("ok") is True
+
+
+def test_write_admin_bootstrap_file_chmod_600(tmp_path: Path) -> None:
+    store = AuthRegistryStore(tmp_path / "auth.sqlite3", data_dir=tmp_path / "data")
+    written = Path(
+        store._write_admin_bootstrap_file(
+            username="principal_admin",
+            password="test-only-bootstrap",
+        )
+    )
+    assert written.exists()
+    assert written.name == "admin_bootstrap.txt"
+    assert written.parent == (tmp_path / "data" / "auth").resolve()
+    assert stat.S_IMODE(written.stat().st_mode) == 0o600
