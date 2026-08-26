@@ -81,6 +81,7 @@
 
 @media (pointer: coarse), (max-width: 900px) {
   .app-dialog-btn {
+    min-width: 44px;
     min-height: 44px;
   }
 }

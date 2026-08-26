@@ -57,23 +57,35 @@ describe('mobile shared style guardrails', () => {
     expect(studentFocusBlock).toContain('outline-offset: 2px;');
     expect(dialogFocusBlock).toContain('outline: 2px solid var(--color-accent, #0052cc);');
 
-    expect(teacherCss).toMatch(
-      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?\.ghost[\s\S]*?min-height:\s*44px/,
-    );
-    expect(studentCss).toMatch(
-      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?\.ghost[\s\S]*?min-height:\s*44px/,
-    );
-    expect(dialogCss).toMatch(
-      /@media \(pointer: coarse\),\s*\(max-width: 900px\)\s*\{[\s\S]*?min-height:\s*44px/,
-    );
+    const coarseTarget = (selector: string) =>
+      new RegExp(
+        `@media \\(pointer: coarse\\),\\s*\\(max-width: 900px\\)\\s*\\{[\\s\\S]*?${selector}[\\s\\S]*?min-width:\\s*44px;[\\s\\S]*?min-height:\\s*44px`,
+      );
+
+    expect(teacherCss).toMatch(coarseTarget('\\.ghost'));
+    expect(teacherCss).toMatch(coarseTarget('\\.composer-btn'));
+    expect(studentCss).toMatch(coarseTarget('\\.ghost'));
+    expect(studentCss).toMatch(coarseTarget('\\.composer-btn'));
+    expect(dialogCss).toMatch(coarseTarget('\\.app-dialog-btn'));
     expect(mobileCss).toContain('--mobile-topbar-compact-btn-height: 44px;');
-    expect(mobileCss).toContain('min-width: 44px;');
+    expect(
+      extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .mobile-topbar-compact .ghost"),
+    ).toContain('min-width: var(--mobile-topbar-compact-btn-height);');
+    expect(
+      extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-trigger"),
+    ).toContain('min-width: 44px;');
     expect(
       extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-trigger"),
     ).toContain('min-height: 44px;');
     expect(
       extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-item"),
+    ).toContain('min-width: 44px;');
+    expect(
+      extractRuleBlock(mobileCss, ".app[data-mobile-shell-v2='1'] .session-menu-item"),
     ).toContain('min-height: 44px;');
+    expect(mobileCss).toMatch(
+      /@media \(pointer: coarse\)\s*\{[\s\S]*?\.session-menu-trigger[\s\S]*?min-width:\s*44px/,
+    );
   });
 
   it('keeps tab icons at a stable touch-friendly visual size', () => {
@@ -106,6 +118,7 @@ describe('mobile shared style guardrails', () => {
     expect(css).toContain('--mobile-topbar-compact-height:');
     expect(css).toContain('--mobile-topbar-compact-btn-height:');
     expect(compactHeaderBlock).toContain('min-height: var(--mobile-topbar-compact-height);');
+    expect(compactGhostBlock).toContain('min-width: var(--mobile-topbar-compact-btn-height);');
     expect(compactGhostBlock).toContain('min-height: var(--mobile-topbar-compact-btn-height);');
   });
 

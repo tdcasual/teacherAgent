@@ -268,6 +268,7 @@
   }
 
   .app[data-mobile-shell-v2='1'] .mobile-topbar-compact .ghost {
+    min-width: var(--mobile-topbar-compact-btn-height);
     min-height: var(--mobile-topbar-compact-btn-height);
     padding: 4px 9px;
   }
@@ -307,6 +308,15 @@
   }
 
   .app[data-mobile-shell-v2='1'] .session-menu-item {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  .session-menu-trigger,
+  .session-menu-item {
+    min-width: 44px;
     min-height: 44px;
   }
 }

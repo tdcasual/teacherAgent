@@ -131,6 +131,7 @@ body {
   @media (pointer: coarse), (max-width: 900px) {
     .ghost,
     .composer-btn {
+      min-width: 44px;
       min-height: 44px;
     }
   }
