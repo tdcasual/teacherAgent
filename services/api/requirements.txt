@@ -13,5 +13,5 @@ matplotlib==3.10.8
 numpy==2.4.2
 pandas==3.0.0
 seaborn==0.13.2
-deepseek-ocr>=0.3.0; python_version>="3.10"
-multi-ocr-sdk>=0.5.1; python_version>="3.10"
+deepseek-ocr==0.3.0; python_version>="3.10"
+multi-ocr-sdk==0.5.1; python_version>="3.10"
