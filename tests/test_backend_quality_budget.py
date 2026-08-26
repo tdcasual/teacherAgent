@@ -28,5 +28,12 @@ def test_quality_budget_is_tightened_against_baseline() -> None:
     data = _load_budget()
     for key, baseline in _BASELINE_BUDGET.items():
         value = int(data[key])
-        assert value > 0, f"{key} must be a positive integer"
+        assert value >= 0, f"{key} must be a non-negative integer"
         assert value < baseline, f"{key}={value} must be lower than baseline={baseline}"
+
+
+def test_quality_budget_never_raises_wave5_floors() -> None:
+    data = _load_budget()
+    assert int(data["ruff_max"]) <= 0
+    assert int(data["mypy_max"]) <= 8
+    assert int(data["app_core_max_lines"]) <= 260

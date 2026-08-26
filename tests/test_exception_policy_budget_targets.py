@@ -20,4 +20,4 @@ def test_chat_lock_allowlist_entries_reduced_to_budget() -> None:
 
 def test_global_allowlist_entries_reduced_to_budget() -> None:
     rows = _entries()
-    assert len(rows) <= 340, f"allowlist still too high: {len(rows)}"
+    assert len(rows) <= 139, f"allowlist still too high: {len(rows)}"
