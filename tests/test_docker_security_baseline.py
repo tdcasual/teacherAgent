@@ -103,3 +103,21 @@ def test_compose_backup_services_use_minimum_required_mounts() -> None:
         assert "./:/workspace" not in block
         for mount in required_mounts:
             assert mount in block, f"{service} missing mount: {mount}"
+
+
+def test_compose_frontend_healthcheck_does_not_use_curl() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    for service in ("frontend_student", "frontend_teacher"):
+        block = _service_block(text, service)
+        assert "healthcheck:" in block, f"{service} should define healthcheck"
+        test_match = re.search(r"test:\s*(\[[^\]]+\])", block)
+        assert test_match is not None, f"{service} should define healthcheck.test"
+        test_cmd = test_match.group(1)
+        assert "curl" not in test_cmd, f"{service} healthcheck must not use curl"
+        assert "wget -qO- http://127.0.0.1/" in test_cmd
+        assert "true" not in test_cmd, f"{service} healthcheck must not be a no-op true"
+
+    for path in ("frontend/Dockerfile.student", "frontend/Dockerfile.teacher"):
+        dockerfile = Path(path).read_text(encoding="utf-8")
+        assert "FROM nginx:alpine" in dockerfile
+        assert "curl" not in dockerfile
