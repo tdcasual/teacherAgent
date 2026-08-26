@@ -33,9 +33,10 @@
 - default_app（非 dispatcher）不得新增 `/admin/` 业务路由；若出现，必须有独立 key 检查。
 
 ## 学生认证流程
-1. `name + class_name` identify。
-2. 仅支持 `password` 登录；`credential_type=token` 返回 `invalid_credential_type`。
+1. `name + class_name` identify。响应 `candidate_id` 为不透明短时句柄（`cid_<32hex>`，TTL 10 分钟），不含稳定 `student_id`。
+2. 仅支持 `password` 登录；`credential_type=token` 返回 `invalid_credential_type`。登录入参使用 identify 返回的不透明 `candidate_id`；成功后 token `sub` 仍是内部 `student_id`。
 3. 密码由老师端发放或重置，学生端不再提供 token 登录入口。
+4. 遗留 `POST /student/verify` 需要 teacher/admin；响应同样省略 `student_id`。
 
 ## 教师认证流程
 1. `name` identify。

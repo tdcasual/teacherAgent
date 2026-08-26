@@ -29,6 +29,7 @@ class StudentOpsServiceTest(unittest.TestCase):
             student_candidates_by_name=lambda _name: [{"student_id": "S1", "class_name": "高二2401班"}, {"student_id": "S2", "class_name": "高二2402班"}],
             normalize=lambda s: "".join(str(s).split()).lower(),
             diag_log=lambda event, payload=None: logs.append((event, payload or {})),
+            issue_student_candidate_id=lambda sid: f"cid_{sid}",
         )
         missing = verify_student("", "", deps=deps)
         self.assertEqual(missing.get("error"), "missing_name")
@@ -36,6 +37,10 @@ class StudentOpsServiceTest(unittest.TestCase):
         multiple = verify_student("张三", "", deps=deps)
         self.assertEqual(multiple.get("error"), "multiple")
         self.assertEqual(logs[-1][0], "student.verify.multiple")
+        for item in multiple.get("candidates") or []:
+            self.assertNotIn("student_id", item)
+            self.assertNotIn("student_id", item.get("student") or {})
+            self.assertTrue(str(item.get("candidate_id") or "").startswith("cid_"))
 
     def test_update_profile_builds_script_args(self):
         captured = {}
@@ -48,6 +53,7 @@ class StudentOpsServiceTest(unittest.TestCase):
             student_candidates_by_name=lambda _name: [],
             normalize=lambda s: str(s),
             diag_log=lambda _e, _p=None: None,
+            issue_student_candidate_id=lambda sid: f"cid_{sid}",
         )
         payload = update_profile(
             student_id="S1",
@@ -79,6 +85,7 @@ class StudentOpsServiceTest(unittest.TestCase):
                 student_candidates_by_name=lambda _name: [],
                 normalize=lambda s: str(s),
                 diag_log=lambda _e, _p=None: None,
+                issue_student_candidate_id=lambda sid: f"cid_{sid}",
             )
 
             async def _run():

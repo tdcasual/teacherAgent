@@ -29,6 +29,10 @@ from .settings import default_teacher_id
 
 _log = logging.getLogger(__name__)
 
+# Identify/verify must not echo durable subject IDs; login maps these handles for 10 minutes.
+_OPAQUE_CANDIDATE_PREFIX = "cid_"
+_OPAQUE_CANDIDATE_TTL = timedelta(minutes=10)
+
 
 @dataclass(frozen=True)
 class AuthRegistryStore:
@@ -137,6 +141,20 @@ class AuthRegistryStore:
                 "CREATE INDEX IF NOT EXISTS idx_admin_username_norm ON admin_auth(username_norm)"
             )
             self._migrate_admin_token_version(conn)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS auth_candidate_map (
+                    candidate_id TEXT PRIMARY KEY,
+                    role TEXT NOT NULL,
+                    subject_id TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_auth_candidate_map_expiry ON auth_candidate_map(expires_at)"
+            )
 
     def _migrate_admin_token_version(self, conn: sqlite3.Connection) -> None:
         try:
@@ -147,24 +165,51 @@ class AuthRegistryStore:
             if "duplicate column" not in str(exc).lower():
                 raise
 
+    def issue_opaque_candidate_id(self, *, role: str, subject_id: str) -> str:
+        role_norm = _normalize_role(role)
+        sid = str(subject_id or "").strip()
+        cid = _new_opaque_candidate_id()
+        now = _utc_now()
+        with self._connect() as conn:
+            _purge_expired_candidate_map(conn, now=now)
+            conn.execute(
+                (
+                    "INSERT INTO auth_candidate_map(candidate_id, role, subject_id, expires_at, created_at) "
+                    "VALUES (?, ?, ?, ?, ?)"
+                ),
+                (
+                    cid,
+                    role_norm,
+                    sid,
+                    _iso(now + _OPAQUE_CANDIDATE_TTL),
+                    _iso(now),
+                ),
+            )
+        return cid
+
+    def resolve_opaque_candidate_id(self, *, role: str, candidate_id: str) -> str:
+        raw = str(candidate_id or "").strip()
+        if not _is_opaque_candidate_id(raw):
+            return raw
+        role_norm = _normalize_role(role)
+        now = _utc_now()
+        with self._connect() as conn:
+            _purge_expired_candidate_map(conn, now=now)
+            row = conn.execute(
+                "SELECT subject_id FROM auth_candidate_map WHERE candidate_id = ? AND role = ?",
+                (raw, role_norm),
+            ).fetchone()
+        if row is None:
+            return raw
+        return str(row["subject_id"] or "").strip() or raw
+
     def identify_student(self, *, name: str, class_name: Optional[str]) -> Dict[str, Any]:
         q_name = str(name or "").strip()
         q_class = str(class_name or "").strip()
         if not q_name:
             return {"ok": False, "error": "missing_name", "message": "请先输入姓名。"}
 
-        name_norm = normalize(q_name)
-        class_norm = normalize(q_class)
-        profiles = [
-            item
-            for item in self._list_student_profiles()
-            if normalize(item.get("student_name", "")) == name_norm
-        ]
-        if class_norm:
-            profiles = [
-                item for item in profiles if normalize(item.get("class_name", "")) == class_norm
-            ]
-
+        profiles = self._match_student_profiles(name=q_name, class_name=q_class)
         if not profiles:
             return {
                 "ok": False,
@@ -172,28 +217,7 @@ class AuthRegistryStore:
                 "message": "未找到该学生，请检查姓名或班级。",
             }
 
-        candidates: List[Dict[str, Any]] = []
-        for profile in profiles:
-            ensured = self._ensure_student_auth(
-                student_id=str(profile.get("student_id") or "").strip(),
-                student_name=str(profile.get("student_name") or "").strip(),
-                class_name=str(profile.get("class_name") or "").strip(),
-                regenerate_token=False,
-            )
-            if not ensured:
-                continue
-            candidates.append(
-                {
-                    "candidate_id": ensured["student_id"],
-                    "student": {
-                        "student_id": ensured["student_id"],
-                        "student_name": ensured["student_name"],
-                        "class_name": ensured["class_name"],
-                    },
-                    "password_set": bool(ensured.get("password_hash")),
-                }
-            )
-
+        candidates = self._student_identify_candidates(profiles)
         if not candidates:
             return {
                 "ok": False,
@@ -243,14 +267,7 @@ class AuthRegistryStore:
                 "error": "multiple",
                 "message": "同名教师，请补充邮箱进行确认。",
                 "need_email_disambiguation": True,
-                "candidates": [
-                    {
-                        "teacher_id": str(row["teacher_id"] or ""),
-                        "teacher_name": str(row["teacher_name"] or ""),
-                        "email": str(row["email"] or ""),
-                    }
-                    for row in rows[:10]
-                ],
+                "candidates": self._teacher_disambiguation_candidates(rows),
             }
 
         if len(rows) > 1:
@@ -261,17 +278,7 @@ class AuthRegistryStore:
                 "need_email_disambiguation": True,
             }
 
-        row = rows[0]
-        return {
-            "ok": True,
-            "candidate_id": str(row["teacher_id"] or ""),
-            "teacher": {
-                "teacher_id": str(row["teacher_id"] or ""),
-                "teacher_name": str(row["teacher_name"] or ""),
-                "email": str(row["email"] or ""),
-            },
-            "password_set": bool(str(row["password_hash"] or "").strip()),
-        }
+        return {"ok": True, **self._public_teacher_identify_item(rows[0])}
 
     def login(
         self,
@@ -284,7 +291,7 @@ class AuthRegistryStore:
         return handle_login(
             self,
             role=role,
-            candidate_id=candidate_id,
+            candidate_id=self.resolve_opaque_candidate_id(role=role, candidate_id=candidate_id),
             credential_type=credential_type,
             credential=credential,
             normalize_role=_normalize_role,
@@ -768,7 +775,7 @@ class AuthRegistryStore:
 
         role_norm = _normalize_role(role)
         table, id_field = _table_for_role(role_norm)
-        sid = str(candidate_id or "").strip()
+        sid = str(auth_result.get("subject_id") or "").strip()
         now = _utc_now()
         with self._connect() as conn:
             conn.execute(
@@ -1279,6 +1286,69 @@ class AuthRegistryStore:
                 out["_plain_token"] = token_plain
             return out
 
+    def _match_student_profiles(self, *, name: str, class_name: str) -> List[Dict[str, str]]:
+        name_norm = normalize(name)
+        class_norm = normalize(class_name)
+        profiles = [
+            item
+            for item in self._list_student_profiles()
+            if normalize(item.get("student_name", "")) == name_norm
+        ]
+        if class_norm:
+            profiles = [
+                item for item in profiles if normalize(item.get("class_name", "")) == class_norm
+            ]
+        return profiles
+
+    def _public_student_identify_item(self, ensured: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "candidate_id": self.issue_opaque_candidate_id(
+                role="student",
+                subject_id=str(ensured.get("student_id") or ""),
+            ),
+            "student": {
+                "student_name": str(ensured.get("student_name") or ""),
+                "class_name": str(ensured.get("class_name") or ""),
+            },
+            "password_set": bool(ensured.get("password_hash")),
+        }
+
+    def _student_identify_candidates(
+        self, profiles: Sequence[Dict[str, str]]
+    ) -> List[Dict[str, Any]]:
+        candidates: List[Dict[str, Any]] = []
+        for profile in profiles:
+            ensured = self._ensure_student_auth(
+                student_id=str(profile.get("student_id") or "").strip(),
+                student_name=str(profile.get("student_name") or "").strip(),
+                class_name=str(profile.get("class_name") or "").strip(),
+                regenerate_token=False,
+            )
+            if not ensured:
+                continue
+            candidates.append(self._public_student_identify_item(ensured))
+        return candidates
+
+    def _public_teacher_identify_item(self, row: Any) -> Dict[str, Any]:
+        return {
+            "candidate_id": self.issue_opaque_candidate_id(
+                role="teacher",
+                subject_id=str(row["teacher_id"] or ""),
+            ),
+            "teacher": {
+                "teacher_name": str(row["teacher_name"] or ""),
+                "email": str(row["email"] or ""),
+            },
+            "password_set": bool(str(row["password_hash"] or "").strip()),
+        }
+
+    def _teacher_disambiguation_candidates(self, rows: Sequence[Any]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        for row in rows[:10]:
+            item = self._public_teacher_identify_item(row)
+            out.append({"candidate_id": item["candidate_id"], "teacher": item["teacher"]})
+        return out
+
     def _list_student_profiles(self) -> List[Dict[str, str]]:
         root = self.data_dir / "student_profiles"
         if not root.exists():
@@ -1436,6 +1506,7 @@ class AuthRegistryStore:
             sid = str(student_id or "").strip()
             if not sid:
                 return {"ok": False, "error": "missing_student_id"}
+            sid = self.resolve_opaque_candidate_id(role="student", candidate_id=sid)
             identity = self._get_student_identity(sid)
             if identity is None:
                 return {"ok": False, "error": "not_found"}
@@ -1540,6 +1611,23 @@ def _teacher_identity_record(teacher_id: str, teacher_name: str, email: str) -> 
 
 def _normalize_role(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _new_opaque_candidate_id() -> str:
+    return f"{_OPAQUE_CANDIDATE_PREFIX}{secrets.token_hex(16)}"
+
+
+def _is_opaque_candidate_id(value: str) -> bool:
+    text = str(value or "").strip()
+    prefix = _OPAQUE_CANDIDATE_PREFIX
+    if not text.startswith(prefix):
+        return False
+    hexpart = text[len(prefix) :]
+    return len(hexpart) == 32 and all(ch in "0123456789abcdefABCDEF" for ch in hexpart)
+
+
+def _purge_expired_candidate_map(conn: sqlite3.Connection, *, now: datetime) -> None:
+    conn.execute("DELETE FROM auth_candidate_map WHERE expires_at <= ?", (_iso(now),))
 
 
 def _utc_now() -> datetime:

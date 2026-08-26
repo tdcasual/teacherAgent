@@ -32,6 +32,7 @@ class StudentOpsDeps:
     student_candidates_by_name: Callable[[str], List[Dict[str, Any]]]
     normalize: Callable[[str], str]
     diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
+    issue_student_candidate_id: Callable[[str], str]
 
 
 def _name_taken(path: Path) -> bool:
@@ -197,6 +198,20 @@ def update_profile(
     return {"ok": True, "output": out}
 
 
+def _public_verify_candidate(
+    candidate: Dict[str, Any],
+    issue_student_candidate_id: Callable[[str], str],
+) -> Dict[str, Any]:
+    sid = str(candidate.get("student_id") or "").strip()
+    return {
+        "candidate_id": issue_student_candidate_id(sid) if sid else "",
+        "student": {
+            "student_name": str(candidate.get("student_name") or ""),
+            "class_name": str(candidate.get("class_name") or ""),
+        },
+    }
+
+
 def verify_student(name: str, class_name: Optional[str], *, deps: StudentOpsDeps) -> Dict[str, Any]:
     name = (name or "").strip()
     class_name = (class_name or "").strip()
@@ -209,7 +224,10 @@ def verify_student(name: str, class_name: Optional[str], *, deps: StudentOpsDeps
     if not candidates:
         deps.diag_log("student.verify.not_found", {"name": name, "class_name": class_name})
         return {"ok": False, "error": "not_found", "message": "未找到该学生，请检查姓名或班级。"}
-    if len(candidates) > 1:
+    public_candidates = [
+        _public_verify_candidate(item, deps.issue_student_candidate_id) for item in candidates
+    ]
+    if len(public_candidates) > 1:
         deps.diag_log(
             "student.verify.multiple",
             {"name": name, "class_name": class_name, "candidates": candidates[:10]},
@@ -218,8 +236,8 @@ def verify_student(name: str, class_name: Optional[str], *, deps: StudentOpsDeps
             "ok": False,
             "error": "multiple",
             "message": "同名学生，请补充班级。",
-            "candidates": candidates[:10],
+            "candidates": public_candidates[:10],
         }
     candidate = candidates[0]
     deps.diag_log("student.verify.ok", candidate)
-    return {"ok": True, "student": candidate}
+    return {"ok": True, **public_candidates[0]}

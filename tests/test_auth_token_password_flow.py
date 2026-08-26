@@ -107,7 +107,10 @@ def test_student_token_password_login_and_token_rotation(tmp_path: Path):
     identify_payload = identify_res.json()
     assert identify_payload.get("ok") is True
     candidate_id = str(identify_payload.get("candidate_id") or "")
-    assert candidate_id == "S001"
+    assert candidate_id.startswith("cid_")
+    assert candidate_id != "S001"
+    assert "student_id" not in identify_payload
+    assert "student_id" not in (identify_payload.get("student") or {})
 
     login_res = client.post(
         "/auth/student/login",
@@ -217,13 +220,17 @@ def test_teacher_identify_requires_email_for_duplicate_names(tmp_path: Path):
     assert identified.status_code == 200
     identified_payload = identified.json()
     assert identified_payload.get("ok") is True
-    assert identified_payload.get("candidate_id") == "teacher_alpha"
+    teacher_candidate_id = str(identified_payload.get("candidate_id") or "")
+    assert teacher_candidate_id.startswith("cid_")
+    assert teacher_candidate_id != "teacher_alpha"
+    assert "teacher_id" not in identified_payload
+    assert "teacher_id" not in (identified_payload.get("teacher") or {})
 
     token_alpha = str(by_id["teacher_alpha"].get("token") or "")
     login_res = client.post(
         "/auth/teacher/login",
         json={
-            "candidate_id": "teacher_alpha",
+            "candidate_id": teacher_candidate_id,
             "credential_type": "token",
             "credential": token_alpha,
         },

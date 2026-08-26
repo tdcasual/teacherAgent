@@ -38,6 +38,7 @@ def register_student_ops_routes(router: APIRouter, core: Any) -> None:
 
     @router.post("/student/verify")
     def verify_student(req: StudentVerifyRequest) -> Any:
+        _require_teacher_or_admin()
         return core.verify_student(req.name, req.class_name)
 
     @router.post("/student/submit")

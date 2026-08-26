@@ -14,6 +14,7 @@ __all__ = [
 
 from datetime import datetime
 
+from ..auth_registry_service import build_auth_registry_store
 from ..student_directory_service import StudentDirectoryDeps
 from ..student_import_service import StudentImportDeps
 from ..student_memory_service import (
@@ -80,6 +81,7 @@ def _student_directory_deps(core=None):
 
 def _student_ops_deps(core=None):
     _ac = _app_core(core)
+    store = build_auth_registry_store(data_dir=_ac.DATA_DIR)
     return StudentOpsDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
@@ -89,6 +91,10 @@ def _student_ops_deps(core=None):
         student_candidates_by_name=_ac.student_candidates_by_name,
         normalize=_ac.normalize,
         diag_log=_ac.diag_log,
+        issue_student_candidate_id=lambda sid: store.issue_opaque_candidate_id(
+            role="student",
+            subject_id=str(sid or ""),
+        ),
     )
 
 
