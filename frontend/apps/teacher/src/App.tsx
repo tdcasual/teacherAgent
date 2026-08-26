@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
 import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
 import TeacherTopbar from './features/layout/TeacherTopbar'
@@ -6,7 +6,6 @@ import TeacherTaskStrip from './features/layout/TeacherTaskStrip'
 import { useChatScroll } from './features/chat/useChatScroll'
 import { readTeacherLocalViewState, type SessionViewStatePayload } from './features/chat/viewState'
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
-import { withPendingChatOverlay } from './features/chat/pendingOverlay'
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
 import TeacherChatMainContent from './features/chat/TeacherChatMainContent'
 import TeacherSessionRail from './features/chat/TeacherSessionRail'
@@ -20,12 +19,12 @@ import { formatDraftSummary, formatExamDraftSummary, formatExamJobStatus, format
 import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { resolveRuntimeApiBase } from '../../shared/apiBase'
-import { readFeatureFlag, readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
+import { readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
 import { MobileTabBar } from '../../shared/mobile/MobileTabBar'
 import { useChatAttachments } from '../../shared/useChatAttachments'
-import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
+import { safeLocalStorageGetItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
 import { formatSessionUpdatedLabel, nowTime } from './utils/time'
 import { useTeacherWorkbenchState } from './features/state/useTeacherWorkbenchState'
@@ -40,36 +39,18 @@ import { useTeacherChatApi } from './features/chat/useTeacherChatApi'
 import { useTeacherComposerInteractions } from './features/chat/useTeacherComposerInteractions'
 import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSessionSidebarModel'
 import { useTeacherUiPanels } from './features/chat/useTeacherUiPanels'
-import { parsePendingChatJob } from '../../shared/pendingChatJob'
+import { useTeacherPendingChatJob } from './features/chat/useTeacherPendingChatJob'
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import { readTeacherAuthSubject } from './features/auth/teacherAuth'
-import { isTeacherMobileTab, teacherMobilePanelsFromTab } from './features/layout/mobileShellState'
-import type { Message, PendingChatJob, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
-import { DESKTOP_BREAKPOINT, WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, TEACHER_MOBILE_TAB_ITEMS, workbenchMaxWidthForViewport } from './teacherAppChrome'
+import { useTeacherMobileShell } from './features/layout/useTeacherMobileShell'
+import type { Message, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
+import { WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, TEACHER_MOBILE_TAB_ITEMS, workbenchMaxWidthForViewport } from './teacherAppChrome'
 
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
   const workbenchPanelRef = useRef<PanelImperativeHandle | null>(null)
   const workbench = useTeacherWorkbenchState()
   const session = useTeacherSessionState(initialViewStateRef.current)
-  const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
-  const isMobileLayout = viewportWidth <= DESKTOP_BREAKPOINT
-  const workbenchMaxWidth = workbenchMaxWidthForViewport(viewportWidth)
-  const mobileShellV2Enabled = useMemo(() => {
-    const source: Record<string, string | undefined> = {
-      mobileShellV2: import.meta.env.VITE_MOBILE_SHELL_V2_TEACHER,
-    }
-    if (typeof window !== 'undefined') {
-      try {
-        const localOverride = window.localStorage.getItem('teacherMobileShellV2')
-        if (localOverride != null) source.mobileShellV2 = localOverride
-      } catch {
-        // ignore localStorage read failures
-      }
-    }
-    return readFeatureFlag('mobileShellV2', true, source)
-  }, [])
-  const teacherUseMobileShellV2 = mobileShellV2Enabled && isMobileLayout
   const [initialWorkbenchWidth] = useState(() => {
     if (typeof window === 'undefined') return WORKBENCH_DEFAULT_WIDTH
     const initialViewportWidth = window.innerWidth
@@ -129,7 +110,6 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(() => safeLocalStorageGetItem('teacherSessionSidebarOpen') !== 'false')
   const [skillsOpen, setSkillsOpen] = useState(() => safeLocalStorageGetItem('teacherSkillsOpen') !== 'false')
-  const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'workbench'>('chat')
   const [workbenchTab, setWorkbenchTab] = useState<WorkbenchTab>(() => {
     const raw = safeLocalStorageGetItem('teacherWorkbenchTab')
     return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
@@ -153,11 +133,39 @@ export default function App() {
   const [chatQueueHint, setChatQueueHint] = useState('')
   const [pendingStreamStage, setPendingStreamStage] = useState('')
   const [pendingToolRuns, setPendingToolRuns] = useState<PendingToolRun[]>([])
-  const PENDING_CHAT_KEY = 'teacherPendingChatJob'
-  const [pendingChatJob, setPendingChatJob] = useState<PendingChatJob | null>(() =>
-    parsePendingChatJob(safeLocalStorageGetItem(PENDING_CHAT_KEY)),
-  )
   const [topbarHeight, setTopbarHeight] = useState(64)
+  const { pendingChatJob, setPendingChatJob, pendingChatKey } = useTeacherPendingChatJob({
+    activeSessionId,
+    setActiveSessionId,
+    setLocalDraftSessionIds,
+    setMessages,
+    setPendingStreamStage,
+    setPendingToolRuns,
+  })
+  const {
+    setViewportWidth,
+    isMobileLayout,
+    workbenchMaxWidth,
+    mobileShellV2Enabled,
+    teacherUseMobileShellV2,
+    mobileTab,
+    setMobileTab,
+    isMobileViewport,
+    handleTeacherMobileTabChange,
+    handleSelectSessionFromSheet,
+    handleTopbarSessionToggle,
+    handleTopbarWorkbenchToggle,
+  } = useTeacherMobileShell({
+    sessionSidebarOpen,
+    skillsOpen,
+    setSessionSidebarOpen,
+    setSkillsOpen,
+    setActiveSessionId,
+    setSessionCursor,
+    setSessionHasMore,
+    setSessionError,
+    setOpenSessionMenuId,
+  })
   const appRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const topbarRef = useRef<HTMLElement | null>(null)
@@ -276,7 +284,7 @@ export default function App() {
   useLocalStorageSync({
     apiBase, favorites, skillsOpen, workbenchTab, sessionSidebarOpen,
     activeSkillId, skillPinned, localDraftSessionIds, activeSessionId, uploadMode,
-    pendingChatJob, pendingChatKey: PENDING_CHAT_KEY,
+    pendingChatJob, pendingChatKey,
     activeSessionRef, historyCursorRef, historyHasMoreRef, localDraftSessionIdsRef, pendingChatJobRef,
     historyCursor, historyHasMore,
     topbarRef, setTopbarHeight, setViewportWidth,
@@ -310,11 +318,6 @@ export default function App() {
     setProgressPanelCollapsed, setProgressAssignmentId, setProgressLoading, setProgressError, setProgressData,
     setExamStatusPollNonce,
   })
-  useEffect(() => {
-    const sid = String(pendingChatJob?.session_id || '').trim()
-    if (!sid || sid === 'main') return
-    setLocalDraftSessionIds((prev) => (prev.includes(sid) ? prev : [sid, ...prev]))
-  }, [pendingChatJob?.session_id, setLocalDraftSessionIds])
   useTeacherSessionViewStateSync({
     apiBase,
     activeSessionId,
@@ -343,36 +346,6 @@ export default function App() {
       // ignore
     }
   }, [setExamJobId, setUploadJobId, setUploadMode])
-  useEffect(() => {
-    if (pendingChatJob) safeLocalStorageSetItem(PENDING_CHAT_KEY, JSON.stringify(pendingChatJob))
-    else safeLocalStorageRemoveItem(PENDING_CHAT_KEY)
-  }, [pendingChatJob, PENDING_CHAT_KEY])
-  useEffect(() => {
-    if (pendingChatJob?.job_id) return
-    setPendingStreamStage('')
-    setPendingToolRuns([])
-  }, [pendingChatJob?.job_id])
-  useEffect(() => {
-    if (!pendingChatJob?.job_id) return
-    if (!activeSessionId || pendingChatJob.session_id !== activeSessionId) return
-    setMessages((prev) => withPendingChatOverlay(prev, pendingChatJob, activeSessionId))
-  }, [
-    activeSessionId,
-    pendingChatJob,
-    pendingChatJob?.created_at,
-    pendingChatJob?.job_id,
-    pendingChatJob?.placeholder_id,
-    pendingChatJob?.session_id,
-    pendingChatJob?.user_text,
-  ])
-  useEffect(() => {
-    if (!pendingChatJob?.job_id) return
-    if (pendingChatJob.session_id && pendingChatJob.session_id !== activeSessionId) {
-      setActiveSessionId(pendingChatJob.session_id)
-    }
-    // Run only on mount to recover the original pending session once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   useAssignmentUploadStatusPolling({
     apiBase,
     uploadJobId,
@@ -559,16 +532,12 @@ export default function App() {
     showArchivedSessions,
     archiveDialogSessionId,
   })
-  const isMobileViewport = useCallback(() => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 900px)').matches
-  }, [])
   const {
     startNewTeacherSession, renameSession, toggleSessionMenu,
     toggleSessionArchive,
     cancelRenameDialog, confirmRenameDialog,
     cancelArchiveDialog, confirmArchiveDialog,
-    closeSessionSidebarOnMobile, toggleSessionSidebar,
+    closeSessionSidebarOnMobile,
   } = useSessionActions({
     sessionRequestRef, visibleHistorySessions,
     activeSessionId, renameDialogSessionId, archiveDialogSessionId, deletedSessionIds,
@@ -580,7 +549,6 @@ export default function App() {
     isMobileViewport,
   })
   const {
-    toggleSkillsWorkbench,
     requestCloseSettings,
     toggleSettingsPanel,
     openModelSettingsPanel,
@@ -592,46 +560,6 @@ export default function App() {
     settingsOpen,
     setSettingsOpen,
   })
-  useEffect(() => {
-    if (!teacherUseMobileShellV2) return
-    const nextPanels = teacherMobilePanelsFromTab(mobileTab)
-    if (sessionSidebarOpen !== nextPanels.sessionSidebarOpen) setSessionSidebarOpen(nextPanels.sessionSidebarOpen)
-    if (skillsOpen !== nextPanels.skillsOpen) setSkillsOpen(nextPanels.skillsOpen)
-  }, [teacherUseMobileShellV2, mobileTab, sessionSidebarOpen, skillsOpen, setSessionSidebarOpen, setSkillsOpen])
-  const handleTeacherMobileTabChange = useCallback((tabId: string) => {
-    if (!isTeacherMobileTab(tabId)) return
-    setMobileTab(tabId)
-  }, [])
-  const handleSelectSessionFromSheet = useCallback((sessionId: string) => {
-    const sid = String(sessionId || '').trim()
-    if (!sid) return
-    setActiveSessionId(sid)
-    setSessionCursor(-1)
-    setSessionHasMore(false)
-    setSessionError('')
-    setOpenSessionMenuId('')
-    setMobileTab('chat')
-  }, [
-    setActiveSessionId,
-    setSessionCursor,
-    setSessionHasMore,
-    setSessionError,
-    setOpenSessionMenuId,
-  ])
-  const handleTopbarSessionToggle = useCallback(() => {
-    if (!teacherUseMobileShellV2) {
-      toggleSessionSidebar()
-      return
-    }
-    setMobileTab((prev) => (prev === 'sessions' ? 'chat' : 'sessions'))
-  }, [teacherUseMobileShellV2, toggleSessionSidebar])
-  const handleTopbarWorkbenchToggle = useCallback(() => {
-    if (!teacherUseMobileShellV2) {
-      toggleSkillsWorkbench()
-      return
-    }
-    setMobileTab((prev) => (prev === 'workbench' ? 'chat' : 'workbench'))
-  }, [teacherUseMobileShellV2, toggleSkillsWorkbench])
   const {
     isWorkbenchResizing,
     startWorkbenchResize,

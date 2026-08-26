@@ -17,7 +17,7 @@ _PERSONA_DIR = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "p
 
 def test_teacher_app_line_budget() -> None:
     line_count = len(_APP_PATH.read_text(encoding="utf-8").splitlines())
-    assert line_count < 980
+    assert line_count < 900
 
 
 def test_teacher_topbar_line_budget() -> None:
