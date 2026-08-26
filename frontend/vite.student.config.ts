@@ -20,7 +20,7 @@ export default defineConfig({
         name: '物理学习助手（学生端）',
         short_name: '物理学生端',
         description: '物理学习助手学生端控制台',
-        theme_color: '#2f6d6b',
+        theme_color: '#0052CC',
         background_color: '#f6f2ea',
         display: 'standalone',
         start_url: '/',

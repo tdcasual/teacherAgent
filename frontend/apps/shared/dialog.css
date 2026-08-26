@@ -92,14 +92,14 @@
 }
 
 .app-dialog-btn.primary {
-  background: var(--color-accent, #10a37f);
-  border-color: var(--color-accent, #10a37f);
+  background: var(--color-accent, #0052cc);
+  border-color: var(--color-accent, #0052cc);
   color: #fff;
 }
 
 .app-dialog-btn.primary:hover {
-  background: color-mix(in srgb, var(--color-accent, #10a37f) 88%, #000);
-  border-color: color-mix(in srgb, var(--color-accent, #10a37f) 88%, #000);
+  background: color-mix(in srgb, var(--color-accent, #0052cc) 88%, #000);
+  border-color: color-mix(in srgb, var(--color-accent, #0052cc) 88%, #000);
 }
 
 .app-dialog-btn.danger {

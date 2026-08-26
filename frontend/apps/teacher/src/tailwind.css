@@ -25,12 +25,12 @@
   --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
   --shadow-md: 0 6px 18px rgba(9, 30, 66, 0.12);
 
-  --font-sans: "Noto Sans SC", "PingFang SC", "Helvetica Neue", Arial,
-    sans-serif;
+  --font-sans: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
 }
 
 /* ── Chat layout custom properties ── */
 :root {
+  color-scheme: light;
   --chat-content-max-width: 720px;
   --chat-bubble-max-width: 520px;
   --chat-assistant-bubble-max-width: 680px;
