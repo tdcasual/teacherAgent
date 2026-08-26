@@ -1,5 +1,22 @@
 from pathlib import Path
 
+_SECURITY_CRITICAL_RUFF_PATHS = (
+    "services/mcp/app.py",
+    "services/api/auth_service.py",
+    "services/api/chart/policy_service.py",
+    "services/api/rate_limit.py",
+)
+
+
+def _ci_ruff_step(text: str) -> str:
+    marker = "python -m ruff check"
+    start = text.find(marker)
+    assert start != -1
+    name_start = text.rfind("- name:", 0, start)
+    assert name_start != -1
+    end = text.find("\n      - name:", start)
+    return text[name_start:] if end == -1 else text[name_start:end]
+
 
 def test_ci_contains_quality_jobs() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
@@ -45,6 +62,15 @@ def test_frontend_quality_runs_unit_tests() -> None:
     end = text.index("\n  smoke-e2e:")
     job = text[start:end]
     assert "npm run test:unit" in job
+
+
+def test_ci_ruff_gate_is_scoped_and_covers_security_critical_files() -> None:
+    text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    step = _ci_ruff_step(text)
+    header = step.splitlines()[0]
+    assert "scoped" in header.lower()
+    for path in _SECURITY_CRITICAL_RUFF_PATHS:
+        assert path in step
 
 
 def test_frontend_jobs_emit_dependency_install_metrics_summary() -> None:

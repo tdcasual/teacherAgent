@@ -49,12 +49,16 @@ jobs:
             scripts/backup/pre_upgrade_snapshot.sh
           bash scripts/backup/verify_restore.sh dry-run
 
-      - name: Ruff (backend quality gate)
+      - name: Ruff (scoped backend quality gate)
         run: |
           python -m ruff check \
             services/api/settings.py \
             services/api/runtime/runtime_manager.py \
             services/api/routes \
+            services/mcp/app.py \
+            services/api/auth_service.py \
+            services/api/chart/policy_service.py \
+            services/api/rate_limit.py \
             tests/test_ci_workflow_quality.py \
             tests/test_ci_backend_scope.py
 
