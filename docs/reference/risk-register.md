@@ -2,7 +2,7 @@
 
 - 适用角色：管理员、平台负责人
 - 最后验证日期：2026-08-26
-- 主要来源：`docs/plans/2026-08-26-audit-remediation-design.md`
+- 主要来源：`docs/plans/2026-02-13-code-audit-findings.md`
 
 ## 进行中风险
 
@@ -98,4 +98,4 @@
 ## 相关文档
 - `docs/how-to/auth-and-account-troubleshooting.md`
 - `docs/reference/permissions-and-security.md`
-- `docs/plans/2026-08-26-audit-remediation-design.md`
+- `docs/plans/2026-02-13-code-audit-findings.md`
