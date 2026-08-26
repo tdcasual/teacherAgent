@@ -102,7 +102,7 @@ services:
       redis-server
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
       --appendonly yes
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
