@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import StudentImportRequest, StudentVerifyRequest
 from ..auth_service import AuthError, require_principal, resolve_student_scope
+from ..student_submit_service import StudentSubmitError
 
 
 def _scoped_student_id(student_id: str | None) -> str:
@@ -47,9 +48,12 @@ def register_student_ops_routes(router: APIRouter, core: Any) -> None:
         auto_assignment: bool = Form(False),
     ) -> Any:
         sid = _scoped_student_id(student_id)
-        return await core.student_submit(
-            student_id=sid,
-            files=files,
-            assignment_id=assignment_id,
-            auto_assignment=auto_assignment,
-        )
+        try:
+            return await core.student_submit(
+                student_id=sid,
+                files=files,
+                assignment_id=assignment_id,
+                auto_assignment=auto_assignment,
+            )
+        except StudentSubmitError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc

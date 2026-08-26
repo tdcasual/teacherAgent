@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
@@ -12,7 +13,16 @@ from ..wiring.assignment_wiring import (
 
 
 @dataclass(frozen=True)
-class AssignmentApplicationDeps:
+class AssignmentAccessDeps:
+    resolve_assignment_dir: Callable[[str], Path]
+    load_assignment_meta: Callable[[Path], Dict[str, Any]]
+    resolve_student_profile_path: Callable[[str], Path]
+    load_profile_file: Callable[[Path], Dict[str, Any]]
+    assignment_specificity: Callable[[Dict[str, Any], Optional[str], Optional[str]], int]
+
+
+@dataclass(frozen=True)
+class AssignmentApplicationDeps(AssignmentAccessDeps):
     list_assignments: Callable[[int, int], Awaitable[Dict[str, Any]]]
     teacher_assignment_progress: Callable[[str, bool], Awaitable[Dict[str, Any]]]
     teacher_assignments_progress: Callable[[Optional[str]], Awaitable[Dict[str, Any]]]
@@ -39,10 +49,17 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         )
 
     return AssignmentApplicationDeps(
+        resolve_assignment_dir=lambda assignment_id: core.resolve_assignment_dir(assignment_id),
+        load_assignment_meta=lambda folder: core.load_assignment_meta(folder),
+        resolve_student_profile_path=lambda student_id: core.resolve_student_profile_path(
+            student_id
+        ),
+        load_profile_file=lambda path: core.load_profile_file(path),
+        assignment_specificity=lambda meta, student_id, class_name: core.assignment_specificity(
+            meta, student_id, class_name
+        ),
         list_assignments=lambda limit, cursor: core.assignment_handlers.assignments(
-            limit=limit,
-            cursor=cursor,
-            deps=_assignment_handlers_deps()
+            limit=limit, cursor=cursor, deps=_assignment_handlers_deps()
         ),
         teacher_assignment_progress=lambda assignment_id, include_students: core.assignment_handlers.teacher_assignment_progress(
             assignment_id,

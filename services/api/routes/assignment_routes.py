@@ -22,7 +22,7 @@ def build_router(core: Any) -> APIRouter:
         router, app_deps=app_deps, assignment_app=assignment_application
     )
     register_assignment_delivery_routes(
-        router, app_deps=app_deps, assignment_app=assignment_application, core=core
+        router, app_deps=app_deps, assignment_app=assignment_application
     )
     register_assignment_generation_routes(
         router, app_deps=app_deps, assignment_app=assignment_application

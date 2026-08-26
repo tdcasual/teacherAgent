@@ -3,9 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from fastapi import HTTPException
-
-from services.api.student_submit_service import StudentSubmitDeps, submit
+from services.api.student_submit_service import StudentSubmitDeps, StudentSubmitError, submit
 
 
 @dataclass
@@ -33,7 +31,10 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 student_submissions_dir=root / "submissions",
                 run_script=_run_script,
                 compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
+                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+                    "ok": False,
+                    "created": False,
+                },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
             )
@@ -66,7 +67,10 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 student_submissions_dir=root / "submissions",
                 run_script=_run_script,
                 compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
+                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+                    "ok": False,
+                    "created": False,
+                },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
             )
@@ -93,12 +97,15 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 student_submissions_dir=root / "submissions",
                 run_script=lambda _args: "ok",
                 compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
+                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+                    "ok": False,
+                    "created": False,
+                },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
             )
 
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(StudentSubmitError) as ctx:
                 await submit(
                     student_id="../escape",
                     files=[_Upload(filename="a1.pdf", content=b"1")],
@@ -118,12 +125,15 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 student_submissions_dir=root / "submissions",
                 run_script=lambda _args: "ok",
                 compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
+                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+                    "ok": False,
+                    "created": False,
+                },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
             )
 
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(StudentSubmitError) as ctx:
                 await submit(
                     student_id="S1",
                     files=[_Upload(filename="a1.pdf", content=b"1")],
@@ -192,6 +202,15 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(auto_kwargs.get("student_id"), "S1")
             self.assertEqual(auto_kwargs.get("assignment_id"), "HW_1")
             self.assertIsInstance(auto_kwargs.get("evidence"), dict)
+
+
+class StudentSubmitServiceImportGuardTest(unittest.TestCase):
+    def test_student_submit_service_does_not_import_fastapi(self):
+        from pathlib import Path
+
+        source = Path("services/api/student_submit_service.py").read_text(encoding="utf-8")
+        self.assertNotIn("from fastapi", source)
+        self.assertNotIn("import fastapi", source)
 
 
 if __name__ == "__main__":

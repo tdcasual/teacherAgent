@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import UploadFile
-
 from ..api_models import ExamUploadConfirmRequest, ExamUploadDraftSaveRequest
 from .deps import ExamApplicationDeps
 
@@ -37,9 +35,9 @@ async def start_exam_upload(
     exam_id: Optional[str],
     date: Optional[str],
     class_name: Optional[str],
-    paper_files: list[UploadFile],
-    score_files: list[UploadFile],
-    answer_files: Optional[list[UploadFile]],
+    paper_files: list[Any],
+    score_files: list[Any],
+    answer_files: Optional[list[Any]],
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: ExamApplicationDeps,
@@ -64,7 +62,9 @@ async def get_exam_upload_draft(job_id: str, *, deps: ExamApplicationDeps) -> An
     return await deps.exam_upload_draft(job_id)
 
 
-async def save_exam_upload_draft(req: ExamUploadDraftSaveRequest, *, deps: ExamApplicationDeps) -> Any:
+async def save_exam_upload_draft(
+    req: ExamUploadDraftSaveRequest, *, deps: ExamApplicationDeps
+) -> Any:
     return await deps.exam_upload_draft_save(req)
 
 

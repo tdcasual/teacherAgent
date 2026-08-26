@@ -23,3 +23,12 @@ def test_exam_application_module_mypy_clean() -> None:
     )
     output = f"{proc.stdout}\n{proc.stderr}".strip()
     assert proc.returncode == 0, output
+
+
+def test_exam_application_module_has_no_fastapi_import() -> None:
+    repo_root = Path(__file__).resolve().parent.parent
+    source = (repo_root / "services" / "api" / "exam" / "application.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from fastapi" not in source
+    assert "import fastapi" not in source

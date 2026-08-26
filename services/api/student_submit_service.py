@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import HTTPException
+
+class StudentSubmitError(Exception):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = int(status_code)
+        self.detail = str(detail or "student_submit_error")
 
 
 def _default_sanitize_filename(name: str) -> str:
@@ -18,9 +23,9 @@ _SAFE_ID_RE = re.compile(r"^[\w-]+$")
 def _require_safe_id(value: str, field: str) -> str:
     token = str(value or "").strip()
     if not token:
-        raise HTTPException(status_code=400, detail=f"{field} is required")
+        raise StudentSubmitError(400, f"{field} is required")
     if not _SAFE_ID_RE.fullmatch(token):
-        raise HTTPException(status_code=400, detail=f"invalid_{field}")
+        raise StudentSubmitError(400, f"invalid_{field}")
     return token
 
 

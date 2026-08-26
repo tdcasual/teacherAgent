@@ -2,13 +2,53 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import UploadFile
-
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
-from .deps import AssignmentApplicationDeps
+from ..auth_service import AuthError, auth_required, require_principal
+from .deps import AssignmentAccessDeps, AssignmentApplicationDeps
 
 
-async def list_assignments(*, limit: int = 50, cursor: int = 0, deps: AssignmentApplicationDeps) -> Any:
+class AssignmentAccessError(Exception):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = int(status_code)
+        self.detail = str(detail or "assignment_access_error")
+
+
+def require_assignment_access(assignment_id: str, *, deps: AssignmentAccessDeps) -> None:
+    if not auth_required():
+        return
+    try:
+        principal = require_principal(roles=("teacher", "student", "admin", "service"))
+    except AuthError as exc:
+        raise AssignmentAccessError(exc.status_code, exc.detail) from exc
+    if principal is None:
+        return
+    if principal.role in {"teacher", "admin", "service"}:
+        return
+
+    # Student: same specificity rules as assignment_today selection.
+    try:
+        folder = deps.resolve_assignment_dir(assignment_id)
+    except ValueError as exc:
+        raise AssignmentAccessError(400, str(exc)) from exc
+    if not folder.exists():
+        raise AssignmentAccessError(404, "assignment not found")
+
+    meta = deps.load_assignment_meta(folder)
+    class_name = ""
+    try:
+        profile_path = deps.resolve_student_profile_path(principal.actor_id)
+        profile = deps.load_profile_file(profile_path)
+        class_name = str(profile.get("class_name") or "").strip()
+    except Exception:  # policy: allowed-broad-except
+        class_name = ""
+    if int(deps.assignment_specificity(meta, principal.actor_id, class_name)) <= 0:
+        raise AssignmentAccessError(403, "forbidden_assignment_scope")
+
+
+async def list_assignments(
+    *, limit: int = 50, cursor: int = 0, deps: AssignmentApplicationDeps
+) -> Any:
     return await deps.list_assignments(int(limit), int(cursor))
 
 
@@ -21,7 +61,9 @@ async def get_teacher_assignment_progress(
     return await deps.teacher_assignment_progress(assignment_id, include_students)
 
 
-async def get_teacher_assignments_progress(*, date: Optional[str], deps: AssignmentApplicationDeps) -> Any:
+async def get_teacher_assignments_progress(
+    *, date: Optional[str], deps: AssignmentApplicationDeps
+) -> Any:
     return await deps.teacher_assignments_progress(date)
 
 
@@ -31,11 +73,14 @@ async def post_assignment_requirements(
     return await deps.assignment_requirements(req)
 
 
-async def get_assignment_requirements(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
+async def get_assignment_requirements(
+    assignment_id: str, *, deps: AssignmentApplicationDeps
+) -> Any:
     return await deps.assignment_requirements_get(assignment_id)
 
 
 async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_detail(assignment_id)
 
 
@@ -47,8 +92,8 @@ async def upload_assignment_start(
     scope: Optional[str],
     class_name: Optional[str],
     student_ids: Optional[str],
-    files: list[UploadFile],
-    answer_files: Optional[list[UploadFile]],
+    files: list[Any],
+    answer_files: Optional[list[Any]],
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentApplicationDeps,
@@ -81,7 +126,9 @@ async def save_assignment_upload_draft(
     return await deps.assignment_upload_draft_save(req)
 
 
-async def confirm_assignment_upload(req: UploadConfirmRequest, *, deps: AssignmentApplicationDeps) -> Any:
+async def confirm_assignment_upload(
+    req: UploadConfirmRequest, *, deps: AssignmentApplicationDeps
+) -> Any:
     return await deps.assignment_upload_confirm(req)
 
 
@@ -91,6 +138,7 @@ async def download_assignment_file(
     *,
     deps: AssignmentApplicationDeps,
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_download(assignment_id, file)
 
 
@@ -153,7 +201,7 @@ async def post_render_assignment(assignment_id: str, *, deps: AssignmentApplicat
 async def post_assignment_questions_ocr(
     *,
     assignment_id: str,
-    files: list[UploadFile],
+    files: list[Any],
     kp_id: Optional[str],
     difficulty: Optional[str],
     tags: Optional[str],

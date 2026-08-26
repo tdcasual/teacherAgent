@@ -80,7 +80,6 @@ services/api/paths.py:*: broad-except without policy marker
 services/api/profile_service.py:*: broad-except without policy marker
 services/api/report_adapters/self_hosted_form_adapter.py:*: broad-except without policy marker
 services/api/review_queue_service.py:*: broad-except without policy marker
-services/api/routes/assignment_delivery_routes.py:*: broad-except without policy marker
 services/api/routes/chat_route_handlers.py:*: broad-except without policy marker
 services/api/routes/chat_route_handlers.py:*: empty-pass without policy marker
 services/api/routes/misc_health_routes.py:*: broad-except without policy marker
