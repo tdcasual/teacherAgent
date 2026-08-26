@@ -1,3 +1,4 @@
+import { normalizeApiBase, resolveRuntimeApiBase } from './apiBase';
 import { safeLocalStorageGetItem } from './storage';
 
 type AuthFetchUnauthorizedContext = {
@@ -7,9 +8,15 @@ type AuthFetchUnauthorizedContext = {
 
 type AuthFetchUnauthorizedHandler = (context: AuthFetchUnauthorizedContext) => void | Promise<void>;
 
+type AuthFetchOptions = {
+  onUnauthorized?: AuthFetchUnauthorizedHandler;
+  apiBase?: string;
+};
+
 type AuthFetchState = {
   originalFetch: typeof window.fetch;
   tokenHandlers: Map<string, AuthFetchUnauthorizedHandler | undefined>;
+  apiBase: string;
 };
 
 declare global {
@@ -28,29 +35,68 @@ const firstToken = (
   return null;
 };
 
-export const installAuthFetchInterceptor = (
-  tokenKey: string,
-  options?: { onUnauthorized?: AuthFetchUnauthorizedHandler },
-) => {
+const requestUrlOf = (input: RequestInfo | URL): string => {
+  if (typeof input === 'string') return input;
+  if (typeof URL !== 'undefined' && input instanceof URL) return input.href;
+  if (typeof Request !== 'undefined' && input instanceof Request) return input.url;
+  return String(input);
+};
+
+const isApiOriginRequest = (input: RequestInfo | URL, apiBase: string): boolean => {
+  const raw = requestUrlOf(input).trim();
+  if (!raw || raw.startsWith('//')) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    // Relative URLs are same-origin API calls.
+    return true;
+  }
+  const allowed = normalizeApiBase(apiBase);
+  if (!allowed) return false;
+  try {
+    return parsed.origin === new URL(allowed).origin;
+  } catch {
+    return false;
+  }
+};
+
+const applyInstallOptions = (state: AuthFetchState, key: string, options?: AuthFetchOptions) => {
+  if (!options || 'onUnauthorized' in options) {
+    state.tokenHandlers.set(key, options?.onUnauthorized);
+  } else if (!state.tokenHandlers.has(key)) {
+    state.tokenHandlers.set(key, undefined);
+  }
+  if (options && 'apiBase' in options) {
+    state.apiBase = String(options.apiBase || '');
+  }
+};
+
+export const installAuthFetchInterceptor = (tokenKey: string, options?: AuthFetchOptions) => {
   if (typeof window === 'undefined') return;
   const key = String(tokenKey || '').trim();
   if (!key) return;
 
   const existing = window.__authFetchState;
   if (existing) {
-    existing.tokenHandlers.set(key, options?.onUnauthorized);
+    applyInstallOptions(existing, key, options);
     return;
   }
 
   const state: AuthFetchState = {
     originalFetch: window.fetch.bind(window),
-    tokenHandlers: new Map<string, AuthFetchUnauthorizedHandler | undefined>([
-      [key, options?.onUnauthorized],
-    ]),
+    tokenHandlers: new Map<string, AuthFetchUnauthorizedHandler | undefined>(),
+    apiBase: String(options?.apiBase || ''),
   };
+  applyInstallOptions(state, key, options);
   window.__authFetchState = state;
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const effectiveApiBase = resolveRuntimeApiBase(state.apiBase);
+    if (!isApiOriginRequest(input, effectiveApiBase)) {
+      return state.originalFetch(input, init);
+    }
+
     const authState = firstToken(state.tokenHandlers);
     if (!authState) return state.originalFetch(input, init);
 

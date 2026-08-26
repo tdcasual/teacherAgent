@@ -1,4 +1,5 @@
 import { useCallback, useReducer, useRef } from 'react'
+import { resolveRuntimeApiBase } from '../../../shared/apiBase'
 import { makeId } from '../../../shared/id'
 import { safeLocalStorageGetItem } from '../../../shared/storage'
 import { nowTime } from '../../../shared/time'
@@ -19,8 +20,6 @@ export const RECENT_COMPLETION_KEY_PREFIX = 'studentRecentCompletion:'
 export const RECENT_COMPLETION_TTL_MS = 3 * 60 * 1000
 const STUDENT_WELCOME_MESSAGE = '学生端已就绪。请先填写姓名完成验证，然后开始提问或进入作业讨论。'
 export const STUDENT_NEW_SESSION_MESSAGE = '已开启新会话。你可以继续提问，或输入"开始今天作业"。'
-
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const recentCompletionKeyOf = (item: RecentCompletedReply) =>
   `${item.session_id}::${item.completed_at}::${item.user_text}::${item.reply_text}`
@@ -167,7 +166,7 @@ function studentReducer(state: StudentState, action: StudentAction): StudentStat
 }
 
 function buildInitialState(): StudentState {
-  const apiBase = safeLocalStorageGetItem('apiBaseStudent') || DEFAULT_API_URL
+  const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseStudent'))
   let verifiedStudent: VerifiedStudent | null = null
   const rawVerified = safeLocalStorageGetItem('verifiedStudent')
   if (rawVerified) {

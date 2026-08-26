@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { installAuthFetchInterceptor } from '../../../../shared/authFetch'
 
 type PurposeKey = 'conversation' | 'embedding' | 'ocr' | 'image_generation'
 
@@ -132,6 +133,7 @@ const normalizeModels = (value: unknown): Record<PurposeKey, PurposeModelConfig>
 }
 
 export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
+  const apiBaseLocked = Boolean(import.meta.env.PROD)
   const [models, setModels] = useState<Record<PurposeKey, PurposeModelConfig>>(emptyModels)
   const [catalogProviders, setCatalogProviders] = useState<CatalogProvider[]>([])
   const [privateProviders, setPrivateProviders] = useState<PrivateProvider[]>([])
@@ -326,7 +328,13 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
           <span className="text-xs text-muted">API Base</span>
           <input
             value={apiBase}
-            onChange={(event) => onApiBaseChange(event.target.value)}
+            onChange={(event) => {
+              if (apiBaseLocked) return
+              const next = event.target.value
+              onApiBaseChange(next)
+              installAuthFetchInterceptor('teacherAuthAccessToken', { apiBase: next })
+            }}
+            readOnly={apiBaseLocked}
             placeholder="http://localhost:8000"
             className="w-full"
           />
