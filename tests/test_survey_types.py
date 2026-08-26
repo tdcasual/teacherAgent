@@ -48,6 +48,7 @@ def test_survey_api_models_minimal_roundtrip() -> None:
 def test_survey_settings_accessors_defaults(monkeypatch) -> None:
     monkeypatch.delenv('SURVEY_ANALYSIS_ENABLED', raising=False)
     monkeypatch.delenv('SURVEY_WEBHOOK_SECRET', raising=False)
+    monkeypatch.delenv('SURVEY_WEBHOOK_ALLOW_INSECURE', raising=False)
     monkeypatch.delenv('SURVEY_SHADOW_MODE', raising=False)
     monkeypatch.delenv('SURVEY_MAX_ATTACHMENT_BYTES', raising=False)
     monkeypatch.delenv('SURVEY_REVIEW_CONFIDENCE_FLOOR', raising=False)
@@ -55,6 +56,7 @@ def test_survey_settings_accessors_defaults(monkeypatch) -> None:
 
     assert settings.survey_analysis_enabled() is False
     assert settings.survey_webhook_secret() == ''
+    assert settings.survey_webhook_allow_insecure() is False
     assert settings.survey_shadow_mode() is True
     assert settings.survey_max_attachment_bytes() >= 1024
     assert 0.0 <= settings.survey_review_confidence_floor() <= 1.0
@@ -66,6 +68,7 @@ def test_survey_settings_accessors_defaults(monkeypatch) -> None:
 def test_survey_settings_accessors_from_env(monkeypatch) -> None:
     monkeypatch.setenv('SURVEY_ANALYSIS_ENABLED', '1')
     monkeypatch.setenv('SURVEY_WEBHOOK_SECRET', 'secret-123')
+    monkeypatch.setenv('SURVEY_WEBHOOK_ALLOW_INSECURE', '1')
     monkeypatch.setenv('SURVEY_SHADOW_MODE', '0')
     monkeypatch.setenv('SURVEY_MAX_ATTACHMENT_BYTES', '8192')
     monkeypatch.setenv('SURVEY_REVIEW_CONFIDENCE_FLOOR', '0.72')
@@ -73,8 +76,24 @@ def test_survey_settings_accessors_from_env(monkeypatch) -> None:
 
     assert settings.survey_analysis_enabled() is True
     assert settings.survey_webhook_secret() == 'secret-123'
+    assert settings.survey_webhook_allow_insecure() is True
     assert settings.survey_shadow_mode() is False
     assert settings.survey_max_attachment_bytes() == 8192
     assert settings.survey_review_confidence_floor() == 0.72
     assert settings.survey_beta_teacher_allowlist_raw() == 'teacher_a, teacher_b\nteacher_c  teacher_b'
     assert settings.survey_beta_teacher_allowlist() == ['teacher_a', 'teacher_b', 'teacher_c']
+
+
+def test_survey_webhook_secret_required_in_production_and_auth_required(monkeypatch) -> None:
+    monkeypatch.setenv('APP_ENV', 'production')
+    monkeypatch.setenv('AUTH_REQUIRED', '0')
+    monkeypatch.setenv('SURVEY_WEBHOOK_ALLOW_INSECURE', '1')
+    assert settings.survey_webhook_secret_required() is True
+
+    monkeypatch.setenv('APP_ENV', 'development')
+    monkeypatch.setenv('AUTH_REQUIRED', '1')
+    assert settings.survey_webhook_secret_required() is True
+
+    monkeypatch.setenv('APP_ENV', 'development')
+    monkeypatch.setenv('AUTH_REQUIRED', '0')
+    assert settings.survey_webhook_secret_required() is False

@@ -7,6 +7,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from . import settings as api_settings
+
 
 class SurveyWebhookError(Exception):
     def __init__(self, status_code: int, detail: str):
@@ -46,6 +48,17 @@ def _verify_signature(payload: Dict[str, Any], signature: str, secret: str) -> N
     expected = compute_survey_signature(payload, secret)
     if not hmac.compare_digest(str(signature or ""), expected):
         raise SurveyWebhookError(401, "invalid_signature")
+
+
+
+def _authenticate_webhook(payload: Dict[str, Any], signature: str, secret: str) -> None:
+    if secret:
+        _verify_signature(payload, signature, secret)
+        return
+    # Production / AUTH_REQUIRED always require a secret; insecure ingest is a
+    # local-dev opt-in and is ignored when a secret is required.
+    if api_settings.survey_webhook_secret_required() or not api_settings.survey_webhook_allow_insecure():
+        raise SurveyWebhookError(503, "webhook_secret_missing")
 
 
 
@@ -91,8 +104,7 @@ def ingest_survey_webhook(
     deps: SurveyWebhookDeps,
 ) -> Dict[str, Any]:
     secret = str(deps.webhook_secret() or "").strip()
-    if secret:
-        _verify_signature(payload, signature, secret)
+    _authenticate_webhook(payload, signature, secret)
 
     teacher_id = _payload_teacher_id(payload)
     class_name = _payload_class_name(payload)

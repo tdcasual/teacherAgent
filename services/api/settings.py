@@ -321,6 +321,18 @@ def survey_webhook_secret() -> str:
 
 
 
+def survey_webhook_allow_insecure() -> bool:
+    return env_bool("SURVEY_WEBHOOK_ALLOW_INSECURE", "0")
+
+
+
+def survey_webhook_secret_required() -> bool:
+    if is_production():
+        return True
+    return env_bool("AUTH_REQUIRED", "0")
+
+
+
 def survey_shadow_mode() -> bool:
     return env_bool("SURVEY_SHADOW_MODE", "1")
 

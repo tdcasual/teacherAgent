@@ -7,6 +7,7 @@ def test_compose_defaults_require_auth_and_stronger_redis_boundary() -> None:
     assert "AUTH_REQUIRED=${AUTH_REQUIRED:-1}" in text
     assert "${REDIS_PASSWORD:?REDIS_PASSWORD is required}" in text
     assert "127.0.0.1:${REDIS_PORT:-6379}:6379" in text
+    assert "SURVEY_WEBHOOK_ALLOW_INSECURE" not in text
 
 
 def test_compose_api_mounts_config_for_auth_secret_persistence() -> None:

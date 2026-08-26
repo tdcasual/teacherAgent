@@ -89,8 +89,112 @@ def test_ingest_survey_webhook_rejects_invalid_signature(tmp_path: Path) -> None
     }
     deps = _deps(tmp_path, enqueue_calls)
 
-    with pytest.raises(SurveyWebhookError, match="invalid_signature"):
+    with pytest.raises(SurveyWebhookError, match="invalid_signature") as excinfo:
         ingest_survey_webhook(provider="provider", payload=payload, signature="sha256=bad", deps=deps)
+
+    assert excinfo.value.status_code == 401
+    assert enqueue_calls == []
+    with pytest.raises(FileNotFoundError):
+        load_survey_job("survey_provider_sub-1", core=_Core(tmp_path))
+
+
+def test_ingest_survey_webhook_rejects_empty_secret_in_production(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("AUTH_REQUIRED", "1")
+    monkeypatch.delenv("SURVEY_WEBHOOK_ALLOW_INSECURE", raising=False)
+    enqueue_calls: list[str] = []
+    payload = {
+        "submission_id": "sub-1",
+        "teacher_id": "teacher_1",
+        "class_name": "高二2403班",
+    }
+    deps = _deps(tmp_path, enqueue_calls, secret="")
+
+    with pytest.raises(SurveyWebhookError, match="webhook_secret_missing") as excinfo:
+        ingest_survey_webhook(provider="provider", payload=payload, signature="", deps=deps)
+
+    assert excinfo.value.status_code == 503
+    assert enqueue_calls == []
+    with pytest.raises(FileNotFoundError):
+        load_survey_job("survey_provider_sub-1", core=_Core(tmp_path))
+
+
+def test_ingest_survey_webhook_rejects_empty_secret_when_auth_required(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("AUTH_REQUIRED", "1")
+    monkeypatch.setenv("SURVEY_WEBHOOK_ALLOW_INSECURE", "1")
+    enqueue_calls: list[str] = []
+    payload = {
+        "submission_id": "sub-1",
+        "teacher_id": "teacher_1",
+        "class_name": "高二2403班",
+    }
+    deps = _deps(tmp_path, enqueue_calls, secret="  ")
+
+    with pytest.raises(SurveyWebhookError, match="webhook_secret_missing") as excinfo:
+        ingest_survey_webhook(provider="provider", payload=payload, signature="", deps=deps)
+
+    assert excinfo.value.status_code == 503
+    assert enqueue_calls == []
+    with pytest.raises(FileNotFoundError):
+        load_survey_job("survey_provider_sub-1", core=_Core(tmp_path))
+
+
+def test_ingest_survey_webhook_production_ignores_insecure_flag(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SURVEY_WEBHOOK_ALLOW_INSECURE", "1")
+    monkeypatch.delenv("AUTH_REQUIRED", raising=False)
+    enqueue_calls: list[str] = []
+    payload = {
+        "submission_id": "sub-1",
+        "teacher_id": "teacher_1",
+        "class_name": "高二2403班",
+    }
+    deps = _deps(tmp_path, enqueue_calls, secret="")
+
+    with pytest.raises(SurveyWebhookError, match="webhook_secret_missing") as excinfo:
+        ingest_survey_webhook(provider="provider", payload=payload, signature="", deps=deps)
+
+    assert excinfo.value.status_code == 503
+    assert enqueue_calls == []
+
+
+def test_ingest_survey_webhook_dev_insecure_opt_in_skips_signature(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("AUTH_REQUIRED", "0")
+    monkeypatch.setenv("SURVEY_WEBHOOK_ALLOW_INSECURE", "1")
+    enqueue_calls: list[str] = []
+    payload = {
+        "submission_id": "sub-1",
+        "teacher_id": "teacher_1",
+        "class_name": "高二2403班",
+    }
+    deps = _deps(tmp_path, enqueue_calls, secret="")
+
+    result = ingest_survey_webhook(provider="provider", payload=payload, signature="", deps=deps)
+
+    assert result["ok"] is True
+    assert result["status"] == "queued"
+    assert enqueue_calls == [result["job_id"]]
+
+
+def test_ingest_survey_webhook_dev_requires_explicit_insecure_flag(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("AUTH_REQUIRED", "0")
+    monkeypatch.delenv("SURVEY_WEBHOOK_ALLOW_INSECURE", raising=False)
+    enqueue_calls: list[str] = []
+    payload = {
+        "submission_id": "sub-1",
+        "teacher_id": "teacher_1",
+        "class_name": "高二2403班",
+    }
+    deps = _deps(tmp_path, enqueue_calls, secret="")
+
+    with pytest.raises(SurveyWebhookError, match="webhook_secret_missing") as excinfo:
+        ingest_survey_webhook(provider="provider", payload=payload, signature="", deps=deps)
+
+    assert excinfo.value.status_code == 503
+    assert enqueue_calls == []
 
 
 
