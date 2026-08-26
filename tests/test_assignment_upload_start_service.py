@@ -146,6 +146,30 @@ class AssignmentUploadStartServiceTest(unittest.TestCase):
             self.assertEqual(cm.exception.status_code, 400)
             self.assertIn("不支持的文件类型", str(cm.exception.detail))
 
+    def test_start_upload_accepts_tex_and_bmp(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps, writes, queued, _logs = self._deps(root)
+            result = asyncio.run(
+                start_assignment_upload(
+                    assignment_id="HW_1",
+                    date="2026-02-08",
+                    due_at="",
+                    scope="public",
+                    class_name="",
+                    student_ids="",
+                    files=[_FakeUpload("paper.tex"), _FakeUpload("scan.bmp")],
+                    answer_files=None,
+                    ocr_mode="FREE_OCR",
+                    language="zh",
+                    deps=deps,
+                )
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(queued, ["job_fixed_001"])
+            job = writes["job_fixed_001"]
+            self.assertEqual(job.get("source_files"), ["paper.tex", "scan.bmp"])
+
 
 if __name__ == "__main__":
     unittest.main()

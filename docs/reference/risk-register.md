@@ -25,8 +25,8 @@
 
 ### RISK-UPLOAD-UNBOUNDED-001
 - 风险描述：`/upload` 与 `/student/submit` 无共享数量/字节限额；后缀门不完整；`/upload` 无角色门。
-- 状态：进行中
-- 关闭说明：修复 PR 进行中。
+- 状态：补偿控制已落地，待合并复核后关闭
+- 关闭说明：共享 20/20MB/80MB（`upload_limits.py` 仅数字）；后缀唯一录取门；MIME 不单独放行也不否决合法后缀；`/upload` `require_principal`；submit/OCR 走 `save_upload_file` 且同名不覆盖。
 - Owner：平台
 - 下次复审日期：2026-11-26
 - 退出条件：`/upload` 与 `/student/submit` 共享限额 + 后缀门 + `/upload` 角色门。

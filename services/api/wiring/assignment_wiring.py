@@ -351,6 +351,7 @@ def _assignment_questions_ocr_deps(core: Any | None = None):
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
         run_script=_ac.run_script,
+        save_upload_file=_ac.save_upload_file,
         sanitize_filename=_ac.sanitize_filename,
         sanitize_assignment_id=_ac.safe_slug,
     )

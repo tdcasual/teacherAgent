@@ -6,13 +6,22 @@ from tempfile import TemporaryDirectory
 from services.api.student_submit_service import StudentSubmitDeps, StudentSubmitError, submit
 
 
+async def _save_upload_file(upload, dest: Path) -> int:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    payload = getattr(upload, "content", b"")
+    dest.write_bytes(payload)
+    return len(payload)
+
+
 @dataclass
 class _Upload:
     filename: str
     content: bytes
 
-    async def read(self) -> bytes:
-        return self.content
+    async def read(self, size: int = -1) -> bytes:
+        if size is None or int(size) < 0:
+            raise AssertionError("full read() is forbidden")
+        return self.content[: int(size)] if int(size) else b""
 
 
 class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -37,6 +46,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
             )
 
             result = await submit(
@@ -73,6 +83,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
             )
 
             await submit(
@@ -103,6 +114,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
             )
 
             with self.assertRaises(StudentSubmitError) as ctx:
@@ -131,6 +143,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 },
                 resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
                 diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
             )
 
             with self.assertRaises(StudentSubmitError) as ctx:
@@ -185,6 +198,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 student_memory_auto_propose_from_assignment_evidence=_auto_propose,
                 resolve_teacher_id=lambda value: str(value or "teacher-default"),
                 diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
             )
 
             result = await submit(

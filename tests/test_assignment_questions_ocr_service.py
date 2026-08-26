@@ -9,13 +9,22 @@ from services.api.assignment_questions_ocr_service import (
 )
 
 
+async def _save_upload_file(upload, dest: Path) -> int:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    payload = getattr(upload, "content", b"")
+    dest.write_bytes(payload)
+    return len(payload)
+
+
 @dataclass
 class _Upload:
     filename: str
     content: bytes
 
-    async def read(self) -> bytes:
-        return self.content
+    async def read(self, size: int = -1) -> bytes:
+        if size is None or int(size) < 0:
+            raise AssertionError("full read() is forbidden")
+        return self.content[: int(size)] if int(size) else b""
 
 
 class AssignmentQuestionsOcrServiceTest(unittest.IsolatedAsyncioTestCase):
@@ -32,6 +41,7 @@ class AssignmentQuestionsOcrServiceTest(unittest.IsolatedAsyncioTestCase):
                 uploads_dir=root / "uploads",
                 app_root=root / "repo",
                 run_script=_run_script,
+                save_upload_file=_save_upload_file,
             )
 
             result = await assignment_questions_ocr(
@@ -68,6 +78,7 @@ class AssignmentQuestionsOcrServiceTest(unittest.IsolatedAsyncioTestCase):
                 uploads_dir=root / "uploads",
                 app_root=root / "repo",
                 run_script=_run_script,
+                save_upload_file=_save_upload_file,
             )
 
             result = await assignment_questions_ocr(

@@ -3,7 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+from .assignment_upload_start_service import _ASSIGNMENT_ALLOWED_SUFFIXES
+from .student_ops_service import UploadLimitError, raise_upload_limit_http, save_capped_uploads
+
+OCR_ALLOWED_SUFFIXES = set(_ASSIGNMENT_ALLOWED_SUFFIXES)
 
 
 def _default_sanitize_filename(name: str) -> str:
@@ -21,6 +26,7 @@ class AssignmentQuestionsOcrDeps:
     uploads_dir: Path
     app_root: Path
     run_script: Callable[[list[str]], str]
+    save_upload_file: Callable[[Any, Path], Awaitable[int]]
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
     sanitize_assignment_id: Callable[[str], str] = _default_sanitize_assignment_id
 
@@ -46,14 +52,17 @@ async def assignment_questions_ocr(
         raise ValueError("invalid assignment_id path")
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    file_paths: List[str] = []
-    for upload_file in files:
-        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
-        if not filename:
-            continue
-        dest = batch_dir / filename
-        dest.write_bytes(await upload_file.read())
-        file_paths.append(str(dest))
+    try:
+        saved = await save_capped_uploads(
+            files,
+            target_dir=batch_dir,
+            sanitize_filename=deps.sanitize_filename,
+            save_upload_file=deps.save_upload_file,
+            allowed_suffixes=OCR_ALLOWED_SUFFIXES,
+        )
+    except UploadLimitError as exc:
+        raise_upload_limit_http(exc)
+    file_paths = [str(path) for path in saved]
 
     script = deps.app_root / "skills" / "physics-student-coach" / "scripts" / "ingest_assignment_questions.py"
     args = [

@@ -54,6 +54,7 @@ def _student_submit_deps(core=None):
         ),
         resolve_teacher_id=resolve_teacher_id,
         diag_log=_ac.diag_log,
+        save_upload_file=_ac.save_upload_file,
     )
 
 

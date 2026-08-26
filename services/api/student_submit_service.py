@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 
 class StudentSubmitError(Exception):
@@ -11,6 +11,13 @@ class StudentSubmitError(Exception):
         super().__init__(detail)
         self.status_code = int(status_code)
         self.detail = str(detail or "student_submit_error")
+
+from .student_ops_service import (
+    STUDENT_ALLOWED_SUFFIXES,
+    UploadLimitError,
+    raise_upload_limit_http,
+    save_capped_uploads,
+)
 
 
 def _default_sanitize_filename(name: str) -> str:
@@ -39,6 +46,7 @@ class StudentSubmitDeps:
     student_memory_auto_propose_from_assignment_evidence: Callable[..., Dict[str, Any]]
     resolve_teacher_id: Callable[[Optional[str]], str]
     diag_log: Callable[[str, Dict[str, Any]], None]
+    save_upload_file: Callable[[Any, Path], Awaitable[int]]
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
 
 
@@ -76,14 +84,17 @@ async def submit(
     safe_student_id = _require_safe_id(student_id, "student_id")
     safe_assignment_id: Optional[str] = None
 
-    file_paths: List[str] = []
-    for upload_file in files:
-        filename = deps.sanitize_filename(getattr(upload_file, "filename", ""))
-        if not filename:
-            continue
-        dest = deps.uploads_dir / filename
-        dest.write_bytes(await upload_file.read())
-        file_paths.append(str(dest))
+    try:
+        saved = await save_capped_uploads(
+            files,
+            target_dir=deps.uploads_dir,
+            sanitize_filename=deps.sanitize_filename,
+            save_upload_file=deps.save_upload_file,
+            allowed_suffixes=STUDENT_ALLOWED_SUFFIXES,
+        )
+    except UploadLimitError as exc:
+        raise_upload_limit_http(exc)
+    file_paths = [str(path) for path in saved]
 
     script = deps.app_root / "scripts" / "grade_submission.py"
     args = [

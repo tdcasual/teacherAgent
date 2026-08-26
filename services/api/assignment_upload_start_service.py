@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from .auth_service import get_current_principal
+from .upload_limits import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES
 
 
 class AssignmentUploadStartError(Exception):
@@ -15,9 +16,9 @@ class AssignmentUploadStartError(Exception):
         self.detail = detail
 
 
-MAX_FILES_PER_UPLOAD_FIELD = 20
-MAX_UPLOAD_FILE_SIZE_BYTES = 20 * 1024 * 1024
-MAX_UPLOAD_TOTAL_SIZE_BYTES = 80 * 1024 * 1024
+MAX_FILES_PER_UPLOAD_FIELD = MAX_FILES
+MAX_UPLOAD_FILE_SIZE_BYTES = MAX_FILE_BYTES
+MAX_UPLOAD_TOTAL_SIZE_BYTES = MAX_TOTAL_BYTES
 _ASSIGNMENT_ALLOWED_SUFFIXES = {
     ".pdf",
     ".png",
