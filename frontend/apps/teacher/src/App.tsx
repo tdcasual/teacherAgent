@@ -22,8 +22,7 @@ import { difficultyLabel, difficultyOptions, formatMissingRequirements, normaliz
 import { readFeatureFlag, readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
 import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
 import { BottomSheet } from '../../shared/mobile/BottomSheet'
-import { MobileTabBar, type MobileTabItem } from '../../shared/mobile/MobileTabBar'
-import { MobileTabChatIcon, MobileTabSessionIcon, MobileTabWorkbenchIcon } from '../../shared/mobile/tabIcons'
+import { MobileTabBar } from '../../shared/mobile/MobileTabBar'
 import { useChatAttachments } from '../../shared/useChatAttachments'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from './utils/storage'
 import { makeId } from './utils/id'
@@ -45,23 +44,7 @@ import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import { readTeacherAuthSubject } from './features/auth/teacherAuth'
 import { isTeacherMobileTab, teacherMobilePanelsFromTab } from './features/layout/mobileShellState'
 import type { Message, PendingChatJob, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
-import 'katex/dist/katex.min.css'
-const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const DESKTOP_BREAKPOINT = 900
-const WORKBENCH_DEFAULT_WIDTH = 320
-const WORKBENCH_MIN_WIDTH = 280
-const WORKBENCH_BASE_MAX_WIDTH = 620
-const WORKBENCH_MAX_WIDTH_RATIO = 0.42
-const WORKBENCH_HARD_MAX_WIDTH = 920
-const TEACHER_MOBILE_TAB_ITEMS: MobileTabItem[] = [
-  { id: 'chat', label: '聊天', icon: <MobileTabChatIcon /> },
-  { id: 'sessions', label: '会话', icon: <MobileTabSessionIcon /> },
-  { id: 'workbench', label: '工作台', icon: <MobileTabWorkbenchIcon /> },
-]
-const workbenchMaxWidthForViewport = (viewportWidth: number) => {
-  const fluidMax = Math.round(viewportWidth * WORKBENCH_MAX_WIDTH_RATIO)
-  return Math.min(WORKBENCH_HARD_MAX_WIDTH, Math.max(WORKBENCH_BASE_MAX_WIDTH, fluidMax))
-}
+import { DEFAULT_API_URL, DESKTOP_BREAKPOINT, WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, TEACHER_MOBILE_TAB_ITEMS, workbenchMaxWidthForViewport } from './teacherAppChrome'
 
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
