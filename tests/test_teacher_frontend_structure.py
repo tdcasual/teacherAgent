@@ -1,5 +1,6 @@
 """Maintainability guardrails for simplified teacher frontend structure."""
 
+import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -12,8 +13,20 @@ _TOPBAR_PATH = (
 )
 _TOPBAR_OVERFLOW_PATH = _TOPBAR_PATH.with_name("TeacherTopbarOverflowMenu.tsx")
 _TOPBAR_ADMIN_MENU_PATH = _TOPBAR_PATH.with_name("TeacherTopbarAdminMenu.tsx")
+_CHROME_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "teacherAppChrome.tsx"
+_MARKDOWN_PATH = _ROOT / "frontend" / "apps" / "shared" / "markdown.ts"
+_STUDENT_APP_PATH = _ROOT / "frontend" / "apps" / "student" / "src" / "App.tsx"
 _ROUTING_DIR = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "routing"
 _PERSONA_DIR = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "persona"
+_KATEX_CSS = "katex/dist/katex.min.css"
+
+
+def _has_static_css_import(source: str, css_path: str) -> bool:
+    return bool(re.search(rf"import\s+['\"]{re.escape(css_path)}['\"]", source))
+
+
+def _has_dynamic_css_import(source: str, css_path: str) -> bool:
+    return bool(re.search(rf"import\(\s*['\"]{re.escape(css_path)}['\"]\s*\)", source))
 
 
 def test_teacher_app_line_budget() -> None:
@@ -76,3 +89,30 @@ def test_teacher_css_has_no_routing_tokens() -> None:
         / "tailwind.css"
     ).read_text(encoding="utf-8")
     assert ".routing-" not in css
+
+
+def test_teacher_layout_lazy_loads_workbench() -> None:
+    layout = _LAYOUT_PATH.read_text(encoding="utf-8")
+    assert "lazy(" in layout
+    assert "import('../workbench/TeacherWorkbench')" in layout
+    assert "import TeacherWorkbench from '../workbench/TeacherWorkbench'" not in layout
+
+
+def test_teacher_layout_lazy_loads_settings() -> None:
+    layout = _LAYOUT_PATH.read_text(encoding="utf-8")
+    settings = _SETTINGS_PANEL_PATH.read_text(encoding="utf-8")
+    lazy_settings_panel = "import('../settings/TeacherSettingsPanel')" in layout
+    lazy_model_settings = "import('./ModelSettingsPage')" in settings and "lazy(" in settings
+    assert lazy_settings_panel or lazy_model_settings
+    if lazy_settings_panel:
+        assert "import TeacherSettingsPanel from '../settings/TeacherSettingsPanel'" not in layout
+
+
+def test_katex_css_loads_with_markdown_renderer_not_chrome() -> None:
+    markdown = _MARKDOWN_PATH.read_text(encoding="utf-8")
+    chrome = _CHROME_PATH.read_text(encoding="utf-8")
+    student_app = _STUDENT_APP_PATH.read_text(encoding="utf-8")
+    assert _has_dynamic_css_import(markdown, _KATEX_CSS)
+    assert not _has_static_css_import(chrome, _KATEX_CSS)
+    assert not _has_static_css_import(student_app, _KATEX_CSS)
+    assert not _has_static_css_import(markdown, _KATEX_CSS)

@@ -34,7 +34,6 @@ import SessionSidebar from './features/chat/SessionSidebar'
 import SessionSidebarDialogs from './features/chat/SessionSidebarDialogs'
 import SessionSidebarHistorySection from './features/chat/SessionSidebarHistorySection'
 import SessionSidebarLearningSection from './features/chat/SessionSidebarLearningSection'
-import 'katex/dist/katex.min.css'
 
 const DESKTOP_BREAKPOINT = 900
 

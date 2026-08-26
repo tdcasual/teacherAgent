@@ -1,12 +1,10 @@
-import type { ComponentProps, CSSProperties, MutableRefObject, ReactNode } from 'react'
+import { lazy, Suspense, type ComponentProps, type CSSProperties, type MutableRefObject, type ReactNode } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import type { PanelImperativeHandle } from 'react-resizable-panels'
-import TeacherSettingsPanel from '../settings/TeacherSettingsPanel'
 import TeacherTopbar from './TeacherTopbar'
 import TeacherChatMainContent from '../chat/TeacherChatMainContent'
 import TeacherSessionRail from '../chat/TeacherSessionRail'
 import SessionSidebar from '../chat/SessionSidebar'
-import TeacherWorkbench from '../workbench/TeacherWorkbench'
 import type { TeacherWorkbenchViewModel } from '../workbench/teacherWorkbenchViewModel'
 import { ConfirmDialog, PromptDialog } from '../../../../shared/dialog'
 import { BottomSheet } from '../../../../shared/mobile/BottomSheet'
@@ -14,6 +12,20 @@ import { MobileTabBar } from '../../../../shared/mobile/MobileTabBar'
 import { formatSessionUpdatedLabel } from '../../utils/time'
 import { TEACHER_MOBILE_TAB_ITEMS, WORKBENCH_MIN_WIDTH } from '../../teacherAppChrome'
 import type { TeacherMobileTab } from './mobileShellState'
+
+// Keep workbench and settings out of the teacher shell chunk.
+const TeacherWorkbench = lazy(() => import('../workbench/TeacherWorkbench'))
+const TeacherSettingsPanel = lazy(() => import('../settings/TeacherSettingsPanel'))
+
+const workbenchFallback = <div className="h-full w-full min-h-0 bg-surface" aria-busy="true" />
+
+function SuspendedTeacherWorkbench({ viewModel }: { viewModel: TeacherWorkbenchViewModel }) {
+  return (
+    <Suspense fallback={workbenchFallback}>
+      <TeacherWorkbench viewModel={viewModel} />
+    </Suspense>
+  )
+}
 
 type SessionSidebarSharedProps = Omit<
   ComponentProps<typeof SessionSidebar>,
@@ -142,12 +154,16 @@ export default function TeacherAppLayout({
         onToggleSkillsWorkbench={onToggleSkillsWorkbench}
         onToggleSettingsPanel={onToggleSettingsPanel}
       />
-      <TeacherSettingsPanel
-        open={settingsOpen}
-        onClose={onCloseSettings}
-        apiBase={apiBase}
-        onApiBaseChange={onApiBaseChange}
-      />
+      {settingsOpen ? (
+        <Suspense fallback={null}>
+          <TeacherSettingsPanel
+            open={settingsOpen}
+            onClose={onCloseSettings}
+            apiBase={apiBase}
+            onApiBaseChange={onApiBaseChange}
+          />
+        </Suspense>
+      ) : null}
       <div
         className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${
           teacherUseMobileShellV2
@@ -218,7 +234,7 @@ export default function TeacherAppLayout({
                     }
                   }}
                 >
-                  <TeacherWorkbench viewModel={workbenchViewModel} />
+                  <SuspendedTeacherWorkbench viewModel={workbenchViewModel} />
                 </Panel>
               </>
             )}
@@ -243,7 +259,7 @@ export default function TeacherAppLayout({
         onClose={closeMobileSheet}
         title="工作台"
       >
-        <TeacherWorkbench viewModel={workbenchViewModel} />
+        <SuspendedTeacherWorkbench viewModel={workbenchViewModel} />
       </BottomSheet>
       {teacherUseMobileShellV2 ? (
         <MobileTabBar

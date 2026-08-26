@@ -1,6 +1,5 @@
 import { type MobileTabItem } from '../../shared/mobile/MobileTabBar'
 import { MobileTabChatIcon, MobileTabSessionIcon, MobileTabWorkbenchIcon } from '../../shared/mobile/tabIcons'
-import 'katex/dist/katex.min.css'
 
 export const DEFAULT_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 export const DESKTOP_BREAKPOINT = 900

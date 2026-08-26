@@ -187,7 +187,7 @@ const buildProps = (overrides: Partial<TeacherAppLayoutProps> = {}): TeacherAppL
 })
 
 describe('TeacherAppLayout', () => {
-  it('renders the desktop teacher shell with rail, chat, and workbench', () => {
+  it('renders the desktop teacher shell with rail, chat, and workbench', async () => {
     render(<TeacherAppLayout {...buildProps()} />)
 
     const shell = document.querySelector('.app.teacher')
@@ -198,13 +198,22 @@ describe('TeacherAppLayout', () => {
     expect(screen.getByTestId('teacher-topbar')).toBeTruthy()
     expect(screen.getByTestId('teacher-session-rail')).toBeTruthy()
     expect(screen.getByTestId('teacher-chat')).toBeTruthy()
-    expect(screen.getAllByTestId('teacher-workbench')).toHaveLength(1)
+    expect(await screen.findAllByTestId('teacher-workbench')).toHaveLength(1)
     expect(screen.queryByTestId('mobile-tab-bar')).toBeNull()
     expect(screen.queryByTestId('bottom-sheet-历史会话')).toBeNull()
     expect(screen.queryByTestId('bottom-sheet-工作台')).toBeNull()
+    expect(screen.queryByTestId('teacher-settings')).toBeNull()
   })
 
-  it('switches to mobile shell v2: hides rail, shows tab bar, and opens sheets from the active tab', () => {
+  it('lazy-loads settings only after the panel is opened', async () => {
+    const { rerender } = render(<TeacherAppLayout {...buildProps({ settingsOpen: false })} />)
+    expect(screen.queryByTestId('teacher-settings')).toBeNull()
+
+    rerender(<TeacherAppLayout {...buildProps({ settingsOpen: true })} />)
+    expect(await screen.findByTestId('teacher-settings')).toBeTruthy()
+  })
+
+  it('switches to mobile shell v2: hides rail, shows tab bar, and opens sheets from the active tab', async () => {
     const setMobileTab = vi.fn()
     const { rerender } = render(
       <TeacherAppLayout
@@ -255,7 +264,7 @@ describe('TeacherAppLayout', () => {
     )
 
     expect(screen.getByTestId('bottom-sheet-工作台')).toBeTruthy()
-    expect(screen.getAllByTestId('teacher-workbench').length).toBeGreaterThan(0)
+    expect((await screen.findAllByTestId('teacher-workbench')).length).toBeGreaterThan(0)
   })
 
   it('opens session rename and archive dialogs from session ids', () => {

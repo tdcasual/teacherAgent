@@ -186,6 +186,8 @@ const normalizeMathDelimiters = (content: string) => {
 };
 
 export const renderMarkdown = (content: string) => {
+  // Load KaTeX CSS with the renderer instead of the app chrome.
+  void import('katex/dist/katex.min.css');
   const normalized = normalizeMathDelimiters(content || '');
   const result = processor.processSync(normalized);
   return String(result);
