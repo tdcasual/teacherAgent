@@ -4,6 +4,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
 _APP_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "App.tsx"
+_LAYOUT_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "layout" / "TeacherAppLayout.tsx"
 _SETTINGS_PANEL_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "settings" / "TeacherSettingsPanel.tsx"
 _MODEL_SETTINGS_PAGE_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "settings" / "ModelSettingsPage.tsx"
 _TOPBAR_PATH = (
@@ -17,7 +18,18 @@ _PERSONA_DIR = _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "p
 
 def test_teacher_app_line_budget() -> None:
     line_count = len(_APP_PATH.read_text(encoding="utf-8").splitlines())
-    assert line_count < 900
+    assert line_count < 770
+
+
+def test_teacher_app_layout_is_extracted() -> None:
+    assert _LAYOUT_PATH.exists()
+    source = _APP_PATH.read_text(encoding="utf-8")
+    layout = _LAYOUT_PATH.read_text(encoding="utf-8")
+    assert "TeacherAppLayout" in source
+    assert "teacher-layout" not in source
+    assert "TeacherTopbar" not in source
+    assert "teacher-layout" in layout
+    assert "teacher-mobile-shell-v2" in layout
 
 
 def test_teacher_topbar_line_budget() -> None:

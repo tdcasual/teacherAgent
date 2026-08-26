@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Group, Panel, Separator, type PanelImperativeHandle } from 'react-resizable-panels'
-import TeacherSettingsPanel from './features/settings/TeacherSettingsPanel'
-import TeacherTopbar from './features/layout/TeacherTopbar'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PanelImperativeHandle } from 'react-resizable-panels'
 import TeacherTaskStrip from './features/layout/TeacherTaskStrip'
+import TeacherAppLayout from './features/layout/TeacherAppLayout'
 import { useChatScroll } from './features/chat/useChatScroll'
 import { readTeacherLocalViewState, type SessionViewStatePayload } from './features/chat/viewState'
 import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessionViewStateSync'
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
-import TeacherChatMainContent from './features/chat/TeacherChatMainContent'
-import TeacherSessionRail from './features/chat/TeacherSessionRail'
-import SessionSidebar from './features/chat/SessionSidebar'
-import TeacherWorkbench from './features/workbench/TeacherWorkbench'
 import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWorkbenchViewModel'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
@@ -20,13 +15,10 @@ import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWor
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { resolveRuntimeApiBase } from '../../shared/apiBase'
 import { readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
-import { ConfirmDialog, PromptDialog } from '../../shared/dialog'
-import { BottomSheet } from '../../shared/mobile/BottomSheet'
-import { MobileTabBar } from '../../shared/mobile/MobileTabBar'
 import { useChatAttachments } from '../../shared/useChatAttachments'
-import { safeLocalStorageGetItem, safeLocalStorageSetItem } from './utils/storage'
+import { safeLocalStorageGetItem } from './utils/storage'
 import { makeId } from './utils/id'
-import { formatSessionUpdatedLabel, nowTime } from './utils/time'
+import { nowTime } from './utils/time'
 import { useTeacherWorkbenchState } from './features/state/useTeacherWorkbenchState'
 import { useDraftMutations } from './features/workbench/hooks/useDraftMutations'
 import { useAnalysisReports } from './features/workbench/hooks/useAnalysisReports'
@@ -44,7 +36,7 @@ import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import { readTeacherAuthSubject } from './features/auth/teacherAuth'
 import { useTeacherMobileShell } from './features/layout/useTeacherMobileShell'
 import type { Message, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
-import { WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, TEACHER_MOBILE_TAB_ITEMS, workbenchMaxWidthForViewport } from './teacherAppChrome'
+import { WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, workbenchMaxWidthForViewport } from './teacherAppChrome'
 
 export default function App() {
   const initialViewStateRef = useRef<SessionViewStatePayload>(readTeacherLocalViewState())
@@ -661,236 +653,110 @@ export default function App() {
     rerunAnalysisReportsBulk,
     executionTimeline,
   })
-  const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
-    '--teacher-topbar-height': `${topbarHeight}px`,
-    overscrollBehavior: 'none',
-  }
   return (
-    <div
-      ref={appRef}
-      className={`app teacher h-dvh flex flex-col bg-bg overflow-hidden ${teacherUseMobileShellV2 ? 'teacher-mobile-shell-v2' : ''}`.trim()}
-      style={appStyle}
-      data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
-    >
-      <TeacherTopbar
-        topbarRef={topbarRef}
-        sessionSidebarOpen={sessionSidebarOpen}
-        skillsOpen={skillsOpen}
-        compactMobile={teacherUseMobileShellV2}
-        onToggleSessionSidebar={handleTopbarSessionToggle}
-        onOpenModelSettingsPanel={openModelSettingsPanel}
-        onToggleSkillsWorkbench={handleTopbarWorkbenchToggle}
-        onToggleSettingsPanel={toggleSettingsPanel}
-      />
-      <TeacherSettingsPanel
-        open={settingsOpen}
-        onClose={requestCloseSettings}
-        apiBase={apiBase}
-        onApiBaseChange={setApiBase}
-      />
-      <div
-        className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${
-          teacherUseMobileShellV2
-            ? 'grid-cols-[minmax(0,1fr)]'
-            : sessionSidebarOpen
-              ? 'grid-cols-[300px_minmax(0,1fr)] max-[900px]:grid-cols-[minmax(0,1fr)]'
-              : 'grid-cols-[0_minmax(0,1fr)]'
-        }`}
-        style={{ overscrollBehavior: 'none' }}
-      >
-        {teacherUseMobileShellV2 ? null : (
-          <TeacherSessionRail
-            sessionSidebarOpen={sessionSidebarOpen}
-            skillsOpen={skillsOpen}
-            setSessionSidebarOpen={setSessionSidebarOpen}
-            setSkillsOpen={setSkillsOpen}
-            setActiveSessionId={setActiveSessionId}
-            setSessionCursor={setSessionCursor}
-            setSessionHasMore={setSessionHasMore}
-            setSessionError={setSessionError}
-            setOpenSessionMenuId={setOpenSessionMenuId}
-            closeSessionSidebarOnMobile={closeSessionSidebarOnMobile}
-            historyQuery={historyQuery}
-            historyLoading={historyLoading}
-            historyError={historyError}
-            showArchivedSessions={showArchivedSessions}
-            visibleHistoryCount={visibleHistorySessions.length}
-            groupedHistorySessions={groupedHistorySessions}
-            activeSessionId={activeSessionId}
-            openSessionMenuId={openSessionMenuId}
-            deletedSessionIds={deletedSessionIds}
-            historyHasMore={historyHasMore}
-            sessionHasMore={sessionHasMore}
-            sessionLoading={sessionLoading}
-            sessionError={sessionError}
-            onStartNewSession={startNewTeacherSession}
-            onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
-            onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
-            onHistoryQueryChange={setHistoryQuery}
-            onToggleSessionMenu={toggleSessionMenu}
-            onRenameSession={renameSession}
-            onToggleSessionArchive={toggleSessionArchive}
-            onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
-            getSessionTitle={getSessionTitle}
-            formatSessionUpdatedLabel={formatSessionUpdatedLabel}
-          />
-        )}
-        <div className="min-w-0 min-h-0 flex overflow-hidden">
-          <Group
-            orientation="horizontal"
-            disabled={isMobileLayout}
-            className={`w-full h-full min-w-0 min-h-0 ${isWorkbenchResizing ? 'dragging' : ''}`}
-          >
-            <Panel
-              className="min-w-0 min-h-0 overflow-hidden flex"
-              minSize={isMobileLayout ? 0 : 360}
-            >
-              <TeacherChatMainContent
-                taskStrip={teacherTaskStrip}
-                renderedMessages={renderedMessages}
-                sending={sending}
-                hasPendingChatJob={Boolean(pendingChatJob?.job_id)}
-                typingTimeLabel={nowTime()}
-                messagesRef={messagesRef}
-                onMessagesScroll={handleMessagesScroll}
-                showScrollToBottom={showScrollToBottom}
-                onScrollToBottom={() => scrollMessagesToBottom('smooth')}
-                activeSkillId={activeSkillId}
-                skillPinned={skillPinned}
-                input={input}
-                chatQueueHint={chatQueueHint}
-                pendingStreamStage={pendingStreamStage}
-                pendingToolRuns={pendingToolRuns}
-                composerWarning={composerWarning}
-                attachments={attachments}
-                uploadingAttachments={uploadingAttachments}
-                hasSendableAttachments={hasSendableAttachments}
-                inputRef={inputRef}
-                onSubmit={handleSend}
-                onInputChange={(value, selectionStart) => {
-                  setInput(value)
-                  setCursorPos(selectionStart)
-                }}
-                onInputClick={(selectionStart) => setCursorPos(selectionStart)}
-                onInputKeyUp={(selectionStart) => setCursorPos(selectionStart)}
-                onInputKeyDown={handleKeyDown}
-                onPickFiles={addFiles}
-                onRemoveAttachment={removeAttachment}
-                mention={mention}
-                mentionIndex={mentionIndex}
-                onInsertMention={insertMention}
-              />
-            </Panel>
-            {teacherUseMobileShellV2 ? null : (
-              <>
-                <Separator
-                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)] ${isWorkbenchResizing ? 'bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
-                  onPointerDown={startWorkbenchResize}
-                  onDoubleClick={handleWorkbenchResizeReset}
-                >
-                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-accent' : 'bg-[#d1d5db] group-hover:bg-accent'}`} />
-                </Separator>
-                <Panel
-                  panelRef={workbenchPanelRef}
-                  className="min-w-0 min-h-0 overflow-hidden flex"
-                  minSize={WORKBENCH_MIN_WIDTH}
-                  maxSize={workbenchMaxWidth}
-                  defaultSize={initialWorkbenchWidth}
-                  collapsible
-                  collapsedSize={0}
-                  onResize={(panelSize) => {
-                    if (isMobileLayout) return
-                    const width = Math.round(panelSize.inPixels || 0)
-                    if (!Number.isFinite(width) || width <= 0) return
-                    const clamped = Math.min(workbenchMaxWidth, Math.max(WORKBENCH_MIN_WIDTH, width))
-                    try {
-                      window.localStorage.setItem('teacherWorkbenchWidth', String(clamped))
-                    } catch {
-                      // ignore
-                    }
-                  }}
-                >
-                  <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
-                </Panel>
-              </>
-            )}
-          </Group>
-        </div>
-      </div>
-      <BottomSheet
-        open={teacherUseMobileShellV2 && mobileTab === 'sessions'}
-        onClose={() => {
-          setMobileTab('chat')
-        }}
-        title="历史会话"
-      >
-        <SessionSidebar
-          mobilePresentation="sheet"
-          open
-          historyQuery={historyQuery}
-          historyLoading={historyLoading}
-          historyError={historyError}
-          showArchivedSessions={showArchivedSessions}
-          visibleHistoryCount={visibleHistorySessions.length}
-          groupedHistorySessions={groupedHistorySessions}
-          activeSessionId={activeSessionId}
-          openSessionMenuId={openSessionMenuId}
-          deletedSessionIds={deletedSessionIds}
-          historyHasMore={historyHasMore}
-          sessionHasMore={sessionHasMore}
-          sessionLoading={sessionLoading}
-          sessionError={sessionError}
-          onStartNewSession={startNewTeacherSession}
-          onRefreshSessions={(mode) => void refreshTeacherSessions(mode)}
-          onToggleArchived={() => setShowArchivedSessions((prev) => !prev)}
-          onHistoryQueryChange={setHistoryQuery}
-          onSelectSession={handleSelectSessionFromSheet}
-          onToggleSessionMenu={toggleSessionMenu}
-          onRenameSession={renameSession}
-          onToggleSessionArchive={toggleSessionArchive}
-          onLoadOlderMessages={() => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true)}
-          getSessionTitle={getSessionTitle}
-          formatSessionUpdatedLabel={formatSessionUpdatedLabel}
-        />
-      </BottomSheet>
-      <BottomSheet
-        open={teacherUseMobileShellV2 && mobileTab === 'workbench'}
-        onClose={() => {
-          setMobileTab('chat')
-        }}
-        title="工作台"
-      >
-        <TeacherWorkbench viewModel={teacherWorkbenchViewModel} />
-      </BottomSheet>
-      {teacherUseMobileShellV2 ? (
-        <MobileTabBar
-          items={TEACHER_MOBILE_TAB_ITEMS}
-          activeId={mobileTab}
-          onChange={handleTeacherMobileTabChange}
-          ariaLabel="教师端移动导航"
-        />
-      ) : null}
-      <PromptDialog
-        open={Boolean(renameDialogSessionId)}
-        title="重命名会话"
-        description="可留空以删除自定义名称。"
-        label="会话名称"
-        placeholder="输入会话名称"
-        defaultValue={renameDialogSessionId ? getSessionTitle(renameDialogSessionId) : ''}
-        confirmText="保存"
-        onCancel={cancelRenameDialog}
-        onConfirm={confirmRenameDialog}
-      />
-      <ConfirmDialog
-        open={Boolean(archiveDialogSessionId)}
-        title={`确认${archiveDialogActionLabel}会话？`}
-        description={archiveDialogSessionId ? `会话：${getSessionTitle(archiveDialogSessionId)}` : undefined}
-        confirmText={archiveDialogActionLabel}
-        confirmTone={archiveDialogIsArchived ? 'primary' : 'danger'}
-        cancelText="取消"
-        onCancel={cancelArchiveDialog}
-        onConfirm={confirmArchiveDialog}
-      />
-    </div>
+    <TeacherAppLayout
+      appRef={appRef}
+      topbarRef={topbarRef}
+      workbenchPanelRef={workbenchPanelRef}
+      topbarHeight={topbarHeight}
+      teacherUseMobileShellV2={teacherUseMobileShellV2}
+      mobileShellV2Enabled={mobileShellV2Enabled}
+      sessionSidebarOpen={sessionSidebarOpen}
+      skillsOpen={skillsOpen}
+      isMobileLayout={isMobileLayout}
+      isWorkbenchResizing={isWorkbenchResizing}
+      workbenchMaxWidth={workbenchMaxWidth}
+      initialWorkbenchWidth={initialWorkbenchWidth}
+      mobileTab={mobileTab}
+      setMobileTab={setMobileTab}
+      settingsOpen={settingsOpen}
+      apiBase={apiBase}
+      onApiBaseChange={setApiBase}
+      onCloseSettings={requestCloseSettings}
+      onToggleSessionSidebar={handleTopbarSessionToggle}
+      onOpenModelSettingsPanel={openModelSettingsPanel}
+      onToggleSkillsWorkbench={handleTopbarWorkbenchToggle}
+      onToggleSettingsPanel={toggleSettingsPanel}
+      startWorkbenchResize={startWorkbenchResize}
+      onWorkbenchResizeReset={handleWorkbenchResizeReset}
+      onMobileTabChange={handleTeacherMobileTabChange}
+      onSelectSessionFromSheet={handleSelectSessionFromSheet}
+      setSessionSidebarOpen={setSessionSidebarOpen}
+      setSkillsOpen={setSkillsOpen}
+      setActiveSessionId={setActiveSessionId}
+      setSessionCursor={setSessionCursor}
+      setSessionHasMore={setSessionHasMore}
+      setSessionError={setSessionError}
+      setOpenSessionMenuId={setOpenSessionMenuId}
+      closeSessionSidebarOnMobile={closeSessionSidebarOnMobile}
+      taskStrip={teacherTaskStrip}
+      workbenchViewModel={teacherWorkbenchViewModel}
+      sessionSidebar={{
+        historyQuery,
+        historyLoading,
+        historyError,
+        showArchivedSessions,
+        visibleHistoryCount: visibleHistorySessions.length,
+        groupedHistorySessions,
+        activeSessionId,
+        openSessionMenuId,
+        deletedSessionIds,
+        historyHasMore,
+        sessionHasMore,
+        sessionLoading,
+        sessionError,
+        onStartNewSession: startNewTeacherSession,
+        onRefreshSessions: (mode) => void refreshTeacherSessions(mode),
+        onToggleArchived: () => setShowArchivedSessions((prev) => !prev),
+        onHistoryQueryChange: setHistoryQuery,
+        onToggleSessionMenu: toggleSessionMenu,
+        onRenameSession: renameSession,
+        onToggleSessionArchive: toggleSessionArchive,
+        onLoadOlderMessages: () => void loadTeacherSessionMessages(activeSessionId, sessionCursor, true),
+        getSessionTitle,
+      }}
+      chat={{
+        renderedMessages,
+        sending,
+        hasPendingChatJob: Boolean(pendingChatJob?.job_id),
+        typingTimeLabel: nowTime(),
+        messagesRef,
+        onMessagesScroll: handleMessagesScroll,
+        showScrollToBottom,
+        onScrollToBottom: () => scrollMessagesToBottom('smooth'),
+        activeSkillId,
+        skillPinned,
+        input,
+        chatQueueHint,
+        pendingStreamStage,
+        pendingToolRuns,
+        composerWarning,
+        attachments,
+        uploadingAttachments,
+        hasSendableAttachments,
+        inputRef,
+        onSubmit: handleSend,
+        onInputChange: (value, selectionStart) => {
+          setInput(value)
+          setCursorPos(selectionStart)
+        },
+        onInputClick: (selectionStart) => setCursorPos(selectionStart),
+        onInputKeyUp: (selectionStart) => setCursorPos(selectionStart),
+        onInputKeyDown: handleKeyDown,
+        onPickFiles: addFiles,
+        onRemoveAttachment: removeAttachment,
+        mention,
+        mentionIndex,
+        onInsertMention: insertMention,
+      }}
+      renameDialogSessionId={renameDialogSessionId}
+      archiveDialogSessionId={archiveDialogSessionId}
+      archiveDialogActionLabel={archiveDialogActionLabel}
+      archiveDialogIsArchived={archiveDialogIsArchived}
+      onCancelRenameDialog={cancelRenameDialog}
+      onConfirmRenameDialog={confirmRenameDialog}
+      onCancelArchiveDialog={cancelArchiveDialog}
+      onConfirmArchiveDialog={confirmArchiveDialog}
+    />
   )
 }

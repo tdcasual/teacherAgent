@@ -14,6 +14,10 @@
 | `frontend/apps/student/src/App.tsx` `frontend/apps/student/src/features/session/*` | Student Frontend | Platform/API | 会话壳层结构、跨模块状态 |
 | `frontend/apps/student/src/features/chat/*` | Student Frontend | Chat Domain | 聊天渲染、发送/恢复交互 |
 | `frontend/apps/student/src/features/workbench/*` | Student Frontend | Assignment Domain | 学习信息、侧栏信息架构 |
+| `frontend/apps/teacher/src/App.tsx` `frontend/apps/teacher/src/features/layout/*` | Teacher Frontend | Platform/API | 应用壳层结构、跨模块状态 |
+| `frontend/apps/teacher/src/features/chat/*` | Teacher Frontend | Chat Domain | 聊天渲染、发送/恢复交互 |
+| `frontend/apps/teacher/src/features/workbench/*` | Teacher Frontend | Assignment Domain | 工作台、作业/考试工作流 |
+| `frontend/apps/teacher/src/features/settings/*` | Teacher Frontend | Platform/API | 模型与连接设置 |
 | `frontend/vite.student.config.ts` `apps/shared/markdown.ts` | Frontend Platform | Student Frontend | 打包策略、bundle 预算 |
 | `docs/architecture/*` | Platform/API | Frontend Platform | 边界规则、责任人定义 |
 
@@ -21,7 +25,7 @@
 
 1. 修改 `runtime` 或 `workers` 时，必须至少有 Runtime 角色评审。
 2. 修改 `routes/*` 同时变更业务逻辑时，必须有对应 Domain 角色评审。
-3. 修改 `App.tsx` 且新增 UI 区块时，必须确认是否可下沉至 `features/*`。
+3. 修改 `App.tsx` 且新增 UI 区块时，必须确认是否可下沉至 `features/*`。教师端壳层改动应落在 `TeacherAppLayout`，而不是把 JSX 加回 `App.tsx`。
 4. 变更 bundling 配置时，必须附带预算测试或构建产物对比证据。
 
 ## Escalation Guide
