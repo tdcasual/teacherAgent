@@ -22,6 +22,8 @@ cp .env.production.min.example .env
 docker compose up -d
 ```
 
+compose 现在要求 `MCP_API_KEY`；`REDIS_PASSWORD` 仍然必填，见下一份 env PR（W1-P4）。
+
 启动后访问：
 - 老师端：`http://localhost:3002`
 - 学生端：`http://localhost:3001`

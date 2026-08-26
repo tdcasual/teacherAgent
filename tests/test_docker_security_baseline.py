@@ -47,6 +47,25 @@ def test_compose_backup_and_qdrant_have_runtime_safety_baseline() -> None:
     assert "healthcheck:" in qdrant
 
 
+def test_compose_mcp_binds_loopback_and_requires_key() -> None:
+    text = Path("docker-compose.yml").read_text(encoding="utf-8")
+    mcp_block = _service_block(text, "mcp")
+    assert "127.0.0.1:9000:9000" in mcp_block
+    assert "${MCP_API_KEY:?MCP_API_KEY is required}" in mcp_block
+    assert '"9000:9000"' not in mcp_block
+    dockerfile = Path("services/mcp/Dockerfile").read_text(encoding="utf-8")
+    assert '"--host", "0.0.0.0"' in dockerfile
+    assert '"--port", "9000"' in dockerfile
+
+
+def test_env_examples_have_nonempty_mcp_api_key_placeholder() -> None:
+    for path in (".env.production.min.example", ".env.example"):
+        text = Path(path).read_text(encoding="utf-8")
+        match = re.search(r"^MCP_API_KEY=(.*)$", text, re.M)
+        assert match is not None, f"{path} must set MCP_API_KEY"
+        assert match.group(1).strip(), f"{path} MCP_API_KEY must be a non-empty placeholder"
+
+
 def test_compose_backup_services_use_minimum_required_mounts() -> None:
     text = Path("docker-compose.yml").read_text(encoding="utf-8")
     required_mounts = (

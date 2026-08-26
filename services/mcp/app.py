@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hmac
 import json
 import logging
 import os
@@ -19,7 +20,24 @@ _log = logging.getLogger(__name__)
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
+UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
 API_KEY = os.getenv("MCP_API_KEY", "")
+_USER_PATH_ARG_KEYS = frozenset(
+    {
+        "sources",
+        "discussion_notes",
+        "lesson_plan",
+        "out_base",
+        "out",
+        "stem_file",
+        "solution_file",
+        "model_file",
+        "figure_file",
+        "discussion_file",
+        "variant_file",
+        "assignment_questions",
+    }
+)
 SCRIPT_TIMEOUT_ENV = os.getenv("MCP_SCRIPT_TIMEOUT_SEC", "600").strip()
 SCRIPT_TIMEOUT_SEC: Optional[float]
 if not SCRIPT_TIMEOUT_ENV or SCRIPT_TIMEOUT_ENV.lower() in {"0", "none", "null", "inf", "infinite"}:
@@ -70,9 +88,61 @@ async def health():
     return {"status": "ok"}
 
 
-def auth(x_api_key: Optional[str]):
-    if API_KEY and x_api_key != API_KEY:
+def auth(x_api_key: Optional[str]) -> None:
+    expected = (API_KEY or "").encode("utf-8")
+    provided = (x_api_key or "").encode("utf-8")
+    if not expected:
+        raise HTTPException(status_code=503, detail="mcp_auth_not_configured")
+    # compare_digest raises on length mismatch; fail closed with 401 instead of 500
+    if len(provided) != len(expected) or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _is_under_root(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _require_contained_path(path_value: Any, field: str) -> str:
+    raw = str(path_value or "").strip()
+    if not raw:
+        raise ValueError(f"missing required field: {field}")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = APP_ROOT / path
+    resolved = path.resolve()
+    data_root = DATA_DIR.resolve()
+    uploads_root = UPLOADS_DIR.resolve()
+    if not _is_under_root(resolved, data_root) and not _is_under_root(resolved, uploads_root):
+        raise ValueError(f"{field} must be under DATA_DIR or UPLOADS_DIR")
+    return str(resolved)
+
+
+def _require_allowed_script(script_value: Any) -> Path:
+    raw = str(script_value or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="script_not_allowed")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = APP_ROOT / path
+    resolved = path.resolve()
+    allowed_render = (APP_ROOT / "scripts" / "render_assignment_pdf.py").resolve()
+    if resolved == allowed_render:
+        return resolved
+    skills_root = (APP_ROOT / "skills").resolve()
+    if not _is_under_root(resolved, skills_root) or resolved.suffix != ".py" or resolved.parent.name != "scripts":
+        raise HTTPException(status_code=400, detail="script_not_allowed")
+    return resolved
+
+
+def _optional_contained_arg(args: Dict[str, Any], key: str) -> Optional[str]:
+    if not args.get(key):
+        return None
+    return _require_contained_path(args.get(key), key)
+
 
 def _jsonrpc_ok(request_id: Optional[Union[str, int]], result: Any) -> Dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
@@ -571,7 +641,11 @@ def _tool_student_search(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"ok": True, "query": query, "students": results[:limit]}
 
 def run_script(args: list[str]) -> str:
-    proc = subprocess.run(args, capture_output=True, text=True, cwd=str(APP_ROOT), timeout=SCRIPT_TIMEOUT_SEC)
+    if len(args) < 2:
+        raise HTTPException(status_code=400, detail="script_not_allowed")
+    script = _require_allowed_script(args[1])
+    cmd = [str(args[0]), str(script), *args[2:]]
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=str(APP_ROOT), timeout=SCRIPT_TIMEOUT_SEC)
     if proc.returncode != 0:
         raise HTTPException(status_code=500, detail=proc.stderr or proc.stdout)
     return proc.stdout
@@ -653,22 +727,26 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                 sources = args.get("sources")
                 if not isinstance(sources, list) or not sources:
                     raise ValueError("sources must be a non-empty array of file paths")
+                resolved_sources = [_require_contained_path(s, "sources") for s in sources]
                 script = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
-                cmd = ["python3", str(script), "--lesson-id", lesson_id, "--topic", topic, "--sources", *[str(s) for s in sources]]
+                cmd = ["python3", str(script), "--lesson-id", lesson_id, "--topic", topic, "--sources", *resolved_sources]
                 if args.get("class_name"):
                     cmd += ["--class-name", str(args.get("class_name"))]
-                if args.get("discussion_notes"):
-                    cmd += ["--discussion-notes", str(args.get("discussion_notes"))]
-                if args.get("lesson_plan"):
-                    cmd += ["--lesson-plan", str(args.get("lesson_plan"))]
+                discussion_notes = _optional_contained_arg(args, "discussion_notes")
+                if discussion_notes:
+                    cmd += ["--discussion-notes", discussion_notes]
+                lesson_plan = _optional_contained_arg(args, "lesson_plan")
+                if lesson_plan:
+                    cmd += ["--lesson-plan", lesson_plan]
                 if args.get("force_ocr"):
                     cmd += ["--force-ocr"]
                 if args.get("ocr_mode"):
                     cmd += ["--ocr-mode", str(args.get("ocr_mode"))]
                 if args.get("language"):
                     cmd += ["--language", str(args.get("language"))]
-                if args.get("out_base"):
-                    cmd += ["--out-base", str(args.get("out_base"))]
+                out_base = _optional_contained_arg(args, "out_base")
+                if out_base:
+                    cmd += ["--out-base", out_base]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)
 
@@ -708,8 +786,14 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                     "lesson_example_id",
                     "lesson_figure",
                 ):
-                    if args.get(key):
-                        cmd += [f"--{key.replace('_','-')}", str(args.get(key))]
+                    if not args.get(key):
+                        continue
+                    value = str(args.get(key))
+                    if key in _USER_PATH_ARG_KEYS:
+                        value = _require_contained_path(value, key)
+                    elif key in {"from_lesson", "lesson_figure"}:
+                        value = _require_safe_id(value, key)
+                    cmd += [f"--{key.replace('_','-')}", value]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)
 
@@ -717,8 +801,9 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                 example_id = _require_safe_id(args.get("example_id"), "example_id")
                 script = APP_ROOT / "skills" / "physics-core-examples" / "scripts" / "render_core_example_pdf.py"
                 cmd = ["python3", str(script), "--example-id", example_id]
-                if args.get("out"):
-                    cmd += ["--out", str(args.get("out"))]
+                out_path = _optional_contained_arg(args, "out")
+                if out_path:
+                    cmd += ["--out", out_path]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)
 
@@ -753,10 +838,12 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
                 assignment_id = _require_safe_id(args.get("assignment_id"), "assignment_id")
                 script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
                 cmd = ["python3", str(script), "--assignment-id", assignment_id]
-                if args.get("assignment_questions"):
-                    cmd += ["--assignment-questions", str(args.get("assignment_questions"))]
-                if args.get("out"):
-                    cmd += ["--out", str(args.get("out"))]
+                assignment_questions = _optional_contained_arg(args, "assignment_questions")
+                if assignment_questions:
+                    cmd += ["--assignment-questions", assignment_questions]
+                out_path = _optional_contained_arg(args, "out")
+                if out_path:
+                    cmd += ["--out", out_path]
                 out = run_script(cmd)
                 return _jsonrpc_ok(req.id, out)
         except ValueError as exc:

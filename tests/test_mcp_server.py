@@ -1,5 +1,6 @@
 import csv
 import importlib
+import inspect
 import json
 import os
 import unittest
@@ -9,8 +10,9 @@ from tempfile import TemporaryDirectory
 from fastapi.testclient import TestClient
 
 
-def load_mcp(tmp_dir: Path, api_key: str = ""):
+def load_mcp(tmp_dir: Path, api_key: str = "test-key"):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
+    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
     import services.mcp.app as mcp_mod
@@ -142,6 +144,60 @@ class MCPServerTest(unittest.TestCase):
             client = TestClient(mcp_mod.app)
             res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
             self.assertEqual(res.status_code, 401)
+
+    def test_load_mcp_default_api_key_is_test_key(self):
+        self.assertEqual(inspect.signature(load_mcp).parameters["api_key"].default, "test-key")
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td))
+            client = TestClient(mcp_mod.app)
+            missing = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            self.assertEqual(missing.status_code, 401)
+            ok = client.post(
+                "/mcp",
+                headers={"X-API-Key": "test-key"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertIn("result", ok.json())
+
+    def test_mcp_empty_api_key_rejects_rpc(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="")
+            client = TestClient(mcp_mod.app)
+            res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            self.assertEqual(res.status_code, 503)
+            self.assertEqual(res.json()["detail"], "mcp_auth_not_configured")
+            health = client.get("/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["status"], "ok")
+
+    def test_mcp_missing_header_is_401(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            client = TestClient(mcp_mod.app)
+            res = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}})
+            self.assertEqual(res.status_code, 401)
+            self.assertEqual(res.json()["detail"], "Unauthorized")
+            self.assertNotEqual(res.status_code, 500)
+
+    def test_mcp_wrong_key_401(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            client = TestClient(mcp_mod.app)
+            wrong = client.post(
+                "/mcp",
+                headers={"X-API-Key": "nope"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            )
+            self.assertEqual(wrong.status_code, 401)
+            self.assertEqual(wrong.json()["detail"], "Unauthorized")
+            ok = client.post(
+                "/mcp",
+                headers={"X-API-Key": "secret"},
+                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+            )
+            self.assertEqual(ok.status_code, 200)
+            self.assertIn("result", ok.json())
 
 
 if __name__ == "__main__":
