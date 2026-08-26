@@ -79,7 +79,8 @@ services:
       - UPLOADS_DIR=/app/uploads
       - JOB_QUEUE_BACKEND=rq
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
-      - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-0}
+      - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-1}
+      - RQ_HEARTBEAT_PATH=/tmp/rq_worker_heartbeat
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant
@@ -91,7 +92,7 @@ services:
     mem_limit: 2g
     cpus: 2.0
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'rq worker' || exit 1"]
+      test: ["CMD-SHELL", "test $(( $(date +%s) - $(stat -c %Y /tmp/rq_worker_heartbeat) )) -lt 30"]
       interval: 30s
       timeout: 10s
       retries: 3

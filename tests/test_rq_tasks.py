@@ -9,6 +9,35 @@ import pytest
 from services.api.workers import rq_tasks
 
 
+def _retry_kwargs() -> Dict[str, Any]:
+    return {
+        "retry": rq_tasks.RETRY,
+        "job_timeout": rq_tasks.JOB_TIMEOUT,
+        "result_ttl": rq_tasks.RESULT_TTL,
+    }
+
+
+def _chat_timeout_kwargs() -> Dict[str, Any]:
+    return {
+        "job_timeout": rq_tasks.JOB_TIMEOUT,
+        "result_ttl": rq_tasks.RESULT_TTL,
+    }
+
+
+def _assert_retry_and_timeout(kwargs: Dict[str, Any]) -> None:
+    assert kwargs["retry"] is rq_tasks.RETRY
+    assert kwargs["retry"].max == 3
+    assert list(kwargs["retry"].intervals) == [10, 30, 90]
+    assert kwargs["job_timeout"] == rq_tasks.JOB_TIMEOUT
+    assert kwargs["result_ttl"] == rq_tasks.RESULT_TTL
+
+
+def _assert_timeout_without_retry(kwargs: Dict[str, Any]) -> None:
+    assert "retry" not in kwargs
+    assert kwargs["job_timeout"] == rq_tasks.JOB_TIMEOUT
+    assert kwargs["result_ttl"] == rq_tasks.RESULT_TTL
+
+
 class _FakeQueue:
     def __init__(self) -> None:
         self.calls: List[Dict[str, Any]] = []
@@ -133,15 +162,15 @@ def test_enqueue_basic_jobs_use_queue(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert queue.calls[0]["func"] is rq_tasks.run_upload_job
     assert queue.calls[0]["args"] == ("up-1",)
-    assert queue.calls[0]["kwargs"] == {"tenant_id": "t1"}
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "t1", **_retry_kwargs()}
 
     assert queue.calls[1]["func"] is rq_tasks.run_exam_job
     assert queue.calls[1]["args"] == ("exam-1",)
-    assert queue.calls[1]["kwargs"] == {"tenant_id": "t2"}
+    assert queue.calls[1]["kwargs"] == {"tenant_id": "t2", **_retry_kwargs()}
 
     assert queue.calls[2]["func"] is rq_tasks.run_profile_update
     assert queue.calls[2]["args"] == ()
-    assert queue.calls[2]["kwargs"] == {"payload": {"uid": "u-1"}, "tenant_id": "t3"}
+    assert queue.calls[2]["kwargs"] == {"payload": {"uid": "u-1"}, "tenant_id": "t3", **_retry_kwargs()}
 
 
 def test_enqueue_chat_job_resolves_lane_and_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -162,7 +191,8 @@ def test_enqueue_chat_job_resolves_lane_and_dispatches(monkeypatch: pytest.Monke
     assert len(queue.calls) == 1
     assert queue.calls[0]["func"] is rq_tasks.run_chat_job
     assert queue.calls[0]["args"] == ("chat-1", "L-1")
-    assert queue.calls[0]["kwargs"] == {"tenant_id": "tenant-a"}
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "tenant-a", **_chat_timeout_kwargs()}
+    _assert_timeout_without_retry(queue.calls[0]["kwargs"])
 
 
 def test_enqueue_chat_job_fallback_lane_and_no_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,6 +329,8 @@ def test_run_chat_job_requeues_next_job(monkeypatch: pytest.MonkeyPatch) -> None
     assert len(queue.calls) == 1
     assert queue.calls[0]["func"] is rq_tasks.run_chat_job
     assert queue.calls[0]["args"] == ("chat-next", "lane-1")
+    assert queue.calls[0]["kwargs"] == {"tenant_id": "t", **_chat_timeout_kwargs()}
+    _assert_timeout_without_retry(queue.calls[0]["kwargs"])
 
 
 def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -359,3 +391,36 @@ def test_run_chat_job_finally_runs_even_on_error(monkeypatch: pytest.MonkeyPatch
     ]
     assert finish_calls == ["chat-2:lane-2"]
     assert queue.calls == []
+
+
+def test_enqueue_upload_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = _FakeQueue()
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
+
+    rq_tasks.enqueue_upload_job("up-1", tenant_id="t1")
+    rq_tasks.enqueue_exam_job("exam-1", tenant_id="t2")
+    rq_tasks.enqueue_survey_job("survey-1", tenant_id="t3")
+    rq_tasks.enqueue_profile_update({"uid": "u-1"}, tenant_id="t4")
+
+    assert [call["func"] for call in queue.calls] == [
+        rq_tasks.run_upload_job,
+        rq_tasks.run_exam_job,
+        rq_tasks.run_survey_job,
+        rq_tasks.run_profile_update,
+    ]
+    for call in queue.calls:
+        _assert_retry_and_timeout(call["kwargs"])
+
+
+def test_enqueue_chat_job_has_timeout_but_no_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    queue = _FakeQueue()
+    store = SimpleNamespace(enqueue=lambda job_id, lane_id: ({"lane_queue_position": 0}, True))
+    mod = SimpleNamespace()
+    monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
+    monkeypatch.setattr(rq_tasks, "_lane_store", lambda _mod, tenant_id: store)
+    monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
+
+    rq_tasks.enqueue_chat_job("chat-1", lane_id="L-1", tenant_id="t")
+
+    assert queue.calls[0]["func"] is rq_tasks.run_chat_job
+    _assert_timeout_without_retry(queue.calls[0]["kwargs"])

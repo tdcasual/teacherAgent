@@ -6,13 +6,17 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
-from rq import Queue
+from rq import Queue, Retry
 
 from services.api.chat_redis_lane_store import ChatRedisLaneStore
 from services.api.redis_clients import get_redis_client
 from services.api.workers.rq_tenant_runtime import load_tenant_module
 
 _log = logging.getLogger(__name__)
+
+RETRY = Retry(max=3, interval=[10, 30, 90])
+JOB_TIMEOUT = 600
+RESULT_TTL = 86400
 
 
 
@@ -41,6 +45,30 @@ def _get_queue() -> Queue:
     return Queue(_queue_name(), connection=redis)
 
 
+def _enqueue_retry_job(func: Any, *args: Any, **kwargs: Any) -> Any:
+    queue = _get_queue()
+    return queue.enqueue(
+        func,
+        *args,
+        **kwargs,
+        retry=RETRY,
+        job_timeout=JOB_TIMEOUT,
+        result_ttl=RESULT_TTL,
+    )
+
+
+def _enqueue_chat_rq_job(func: Any, *args: Any, **kwargs: Any) -> Any:
+    # run_chat_job always finish()es the lane; Retry would double-run without try_claim_running.
+    queue = _get_queue()
+    return queue.enqueue(
+        func,
+        *args,
+        **kwargs,
+        job_timeout=JOB_TIMEOUT,
+        result_ttl=RESULT_TTL,
+    )
+
+
 def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
     tenant_key = str(tenant_id or getattr(mod, "TENANT_ID", "") or "").strip() or "default"
     return ChatRedisLaneStore(
@@ -52,23 +80,19 @@ def _lane_store(mod: Any, tenant_id: Optional[str]) -> ChatRedisLaneStore:
 
 
 def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_upload_job, job_id, tenant_id=tenant_id)
+    _enqueue_retry_job(run_upload_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_exam_job, job_id, tenant_id=tenant_id)
+    _enqueue_retry_job(run_exam_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_survey_job, job_id, tenant_id=tenant_id)
+    _enqueue_retry_job(run_survey_job, job_id, tenant_id=tenant_id)
 
 
 def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
-    queue = _get_queue()
-    queue.enqueue(run_profile_update, payload=payload, tenant_id=tenant_id)
+    _enqueue_retry_job(run_profile_update, payload=payload, tenant_id=tenant_id)
 
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
@@ -85,8 +109,7 @@ def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: O
     store = _lane_store(mod, tenant_id)
     info, dispatch = store.enqueue(job_id, lane_final)
     if dispatch:
-        queue = _get_queue()
-        queue.enqueue(run_chat_job, job_id, lane_final, tenant_id=tenant_id)
+        _enqueue_chat_rq_job(run_chat_job, job_id, lane_final, tenant_id=tenant_id)
     return {"lane_id": lane_final, **info}
 
 
@@ -215,5 +238,4 @@ def run_chat_job(job_id: str, lane_id: str, *, tenant_id: Optional[str] = None) 
     finally:
         next_job_id = store.finish(job_id, lane_id)
         if next_job_id:
-            queue = _get_queue()
-            queue.enqueue(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)
+            _enqueue_chat_rq_job(run_chat_job, next_job_id, lane_id, tenant_id=tenant_id)

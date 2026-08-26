@@ -15,3 +15,9 @@ def test_coverage_references_existing_sources_only() -> None:
 
     missing = [rel for rel in referenced if not (root / rel).exists()]
     assert missing == [], f"coverage references missing files: {missing}"
+
+
+def test_coverage_does_not_omit_rq_worker() -> None:
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    assert "services/api/workers/rq_worker.py" not in text
