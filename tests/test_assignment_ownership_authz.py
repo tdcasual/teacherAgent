@@ -91,6 +91,29 @@ def test_teacher_progress_forbids_other_teachers_assignment() -> None:
         assert res.json().get("detail") == "forbidden_assignment_owner"
 
 
+def test_teacher_grade_forbids_other_teachers_assignment() -> None:
+    with _auth_env(), TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write_json(
+            tmp / "data" / "assignments" / "HW_B" / "meta.json",
+            {
+                "assignment_id": "HW_B",
+                "teacher_id": "t_li",
+                "visibility_status": "published",
+                "expected_students": ["S001"],
+            },
+        )
+        app_mod = _auth_app(tmp)
+        with TestClient(app_mod.app) as client:
+            res = client.post(
+                "/teacher/assignment/HW_B/student/S001/grade",
+                headers=_bearer("t_zhang", "teacher"),
+                json={"comment": "nope"},
+            )
+        assert res.status_code == 403
+        assert res.json().get("detail") == "forbidden_assignment_owner"
+
+
 def test_teacher_progress_allows_owner() -> None:
     with _auth_env(), TemporaryDirectory() as td:
         tmp = Path(td)

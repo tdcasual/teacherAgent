@@ -292,7 +292,7 @@ export default function App() {
   })
   const {
     handleUploadAssignment, saveDraft, handleConfirmUpload,
-    fetchAssignmentProgress, archiveAssignment, unarchiveAssignment, refreshWorkflowWorkbench, scrollToWorkflowSection,
+    fetchAssignmentProgress, archiveAssignment, unarchiveAssignment, saveStudentGrade, refreshWorkflowWorkbench, scrollToWorkflowSection,
     assignmentWorkflowIndicator, updateDraftRequirement, updateDraftQuestion,
   } = useAssignmentWorkflow({
     apiBase,
@@ -582,6 +582,7 @@ export default function App() {
     fetchAssignmentProgress,
     archiveAssignment,
     unarchiveAssignment,
+    saveStudentGrade,
     fetchSkills,
     filteredSkills,
     formatDraftSummary,

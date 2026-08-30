@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .assignment_learning_evidence_service import build_assignment_progress_evidence
+from .teacher_grade_service import load_teacher_grade, official_score_from
 
 
 @dataclass(frozen=True)
@@ -21,7 +23,7 @@ class AssignmentProgressDeps:
     best_submission_attempt: Callable[[List[Dict[str, Any]]], Optional[Dict[str, Any]]]
     resolve_assignment_date: Callable[[Dict[str, Any], Any], Optional[str]]
     atomic_write_json: Callable[[Any, Any], None]
-    time_time: Callable[[], float]
+    today_iso: Callable[[], str]
     now_iso: Callable[[], str]
 
 
@@ -29,12 +31,13 @@ _log = logging.getLogger(__name__)
 
 
 _DEFAULT_COMPLETION_POLICY: Dict[str, Any] = {
-    "requires_discussion": True,
+    "requires_discussion": False,
     "requires_submission": True,
     "min_graded_total": 1,
     "best_attempt": "score_earned_then_correct_then_graded_total",
-    "version": 1,
+    "version": 2,
 }
+_PROCESS_STATUSES = frozenset({"none", "pending", "frozen", "partial"})
 
 
 def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path]:
@@ -59,14 +62,56 @@ def _load_expected_students(meta: Dict[str, Any]) -> List[str]:
     return [str(student).strip() for student in expected_raw if str(student).strip()]
 
 
-def _parse_due_timestamp(due_at: str) -> Optional[float]:
+def _parse_due_date(due_at: str) -> Optional[date]:
     if not due_at:
         return None
     try:
-        return datetime.fromisoformat(due_at.replace("Z", "+00:00")).timestamp()
+        return datetime.fromisoformat(due_at.replace("Z", "+00:00")).date()
     except ValueError:
         _log.debug("operation failed", exc_info=True)
         return None
+
+
+def _today_date(deps: AssignmentProgressDeps) -> Optional[date]:
+    raw = str(deps.today_iso() or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        _log.debug("invalid today_iso", exc_info=True)
+        return None
+
+
+def _is_overdue(*, today: Optional[date], due_date: Optional[date], submitted: bool) -> bool:
+    return bool(due_date and today and today > due_date and not submitted)
+
+
+def _is_completed(submitted: bool, requires_submission: bool) -> bool:
+    return submitted if requires_submission else True
+
+
+def _process_column(folder: Path, student_id: str) -> Dict[str, Any]:
+    empty: Dict[str, Any] = {"status": "none", "stuck_points": [], "has_memory_proposal": False}
+    token = str(student_id or "").strip()
+    if not token or "/" in token or "\\" in token:
+        return empty
+    path = folder / "process_archives" / f"{token}.json"
+    if not path.exists():
+        return empty
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(payload, dict):
+        return empty
+    status = str(payload.get("status") or "none").strip().lower()
+    stuck = payload.get("stuck_points")
+    return {
+        "status": status if status in _PROCESS_STATUSES else "none",
+        "stuck_points": stuck if isinstance(stuck, list) else [],
+        "has_memory_proposal": False,
+    }
 
 
 def _profile_map(profiles: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -205,6 +250,46 @@ def _best_attempt_for_policy(
     return deps.best_submission_attempt(eligible)
 
 
+def _student_payload(
+    *,
+    student_id: str,
+    profile: Dict[str, Any],
+    discussion: Dict[str, Any],
+    attempts: List[Dict[str, Any]],
+    best: Optional[Dict[str, Any]],
+    completion_policy: Dict[str, Any],
+    completion_checks: Dict[str, Any],
+    evidence: Dict[str, Any],
+    completed: bool,
+    overdue: bool,
+    submitted: bool,
+    official_score: Optional[float],
+    process: Dict[str, Any],
+    teacher_grade: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "student_id": student_id,
+        "student_name": profile.get("student_name") or "",
+        "class_name": profile.get("class_name") or "",
+        "discussion": discussion,
+        "submission": {"attempts": len(attempts), "best": best},
+        "completion": {"policy": completion_policy, "checks": completion_checks},
+        "evidence": evidence,
+        "complete": completed,
+        "submitted": submitted,
+        "overdue": overdue,
+        "official_score": official_score,
+        "result": {
+            "attempts": len(attempts),
+            "official_score": official_score,
+            "overdue": overdue,
+            "submitted": submitted,
+        },
+        "process": process,
+        "teacher_grade": teacher_grade,
+    }
+
+
 def _student_progress(
     assignment_id: str,
     student_id: str,
@@ -212,8 +297,9 @@ def _student_progress(
     *,
     deps: AssignmentProgressDeps,
     completion_policy: Dict[str, Any],
-    due_ts: Optional[float],
-    now_ts: float,
+    due_date: Optional[date],
+    today: Optional[date],
+    folder: Path,
     include_student_payload: bool,
 ) -> Dict[str, Any]:
     discussion = deps.session_discussion_pass(student_id, assignment_id)
@@ -221,10 +307,16 @@ def _student_progress(
     attempts = deps.list_submission_attempts(assignment_id, student_id)
     best = _best_attempt_for_policy(attempts, policy=completion_policy, deps=deps)
     submitted = bool(best)
-    requires_discussion = bool(completion_policy.get("requires_discussion", True))
+    requires_discussion = bool(completion_policy.get("requires_discussion", False))
     requires_submission = bool(completion_policy.get("requires_submission", True))
-    completed = (discussion_pass or not requires_discussion) and (submitted or not requires_submission)
-    overdue = bool(due_ts and now_ts > due_ts and not completed)
+    completed = _is_completed(submitted, requires_submission)
+    overdue = _is_overdue(today=today, due_date=due_date, submitted=submitted)
+    teacher_grade = load_teacher_grade(deps.data_dir, assignment_id, student_id)
+    official_score = official_score_from(
+        auto_score=(best or {}).get("score_earned") if best else None,
+        teacher_grade=teacher_grade,
+    )
+    process = _process_column(folder, student_id)
     completion_checks: Dict[str, Any] = {
         "discussion_required": requires_discussion,
         "discussion_pass": discussion_pass,
@@ -241,20 +333,26 @@ def _student_progress(
         best_attempt=best,
         completion_policy=completion_policy,
         completed=completed,
+        official_score=official_score,
     )
     payload: Optional[Dict[str, Any]] = None
     if include_student_payload:
-        payload = {
-            "student_id": student_id,
-            "student_name": profile.get("student_name") or "",
-            "class_name": profile.get("class_name") or "",
-            "discussion": discussion,
-            "submission": {"attempts": len(attempts), "best": best},
-            "completion": {"policy": completion_policy, "checks": completion_checks},
-            "evidence": evidence,
-            "complete": completed,
-            "overdue": overdue,
-        }
+        payload = _student_payload(
+            student_id=student_id,
+            profile=profile,
+            discussion=discussion,
+            attempts=attempts,
+            best=best,
+            completion_policy=completion_policy,
+            completion_checks=completion_checks,
+            evidence=evidence,
+            completed=completed,
+            overdue=overdue,
+            submitted=submitted,
+            official_score=official_score,
+            process=process,
+            teacher_grade=teacher_grade,
+        )
     return {
         "discussion_pass": discussion_pass,
         "submitted": submitted,
@@ -293,8 +391,8 @@ def compute_assignment_progress(
     expected_students = _load_expected_students(meta)
     completion_policy = _normalize_completion_policy(meta)
     due_at = deps.normalize_due_at(meta.get("due_at"))
-    due_ts = _parse_due_timestamp(due_at)
-    now_ts = deps.time_time()
+    due_date = _parse_due_date(due_at)
+    today = _today_date(deps)
     profiles = _profile_map(deps.list_all_student_profiles())
 
     students_out: List[Dict[str, Any]] = []
@@ -310,8 +408,9 @@ def compute_assignment_progress(
             profiles.get(sid) or {},
             deps=deps,
             completion_policy=completion_policy,
-            due_ts=due_ts,
-            now_ts=now_ts,
+            due_date=due_date,
+            today=today,
+            folder=folder,
             include_student_payload=include_students,
         )
         discussion_pass_count += int(bool(student["discussion_pass"]))

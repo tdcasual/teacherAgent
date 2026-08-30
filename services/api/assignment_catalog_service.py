@@ -93,12 +93,12 @@ def _default_assignment_completion_policy(
     discussion_complete_marker: str,
 ) -> Dict[str, Any]:
     return {
-        "requires_discussion": True,
+        "requires_discussion": False,
         "discussion_marker": discussion_complete_marker,
         "requires_submission": True,
         "min_graded_total": 1,
         "best_attempt": "score_earned_then_correct_then_graded_total",
-        "version": 1,
+        "version": 2,
     }
 
 

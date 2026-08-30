@@ -11,6 +11,7 @@ from .assignment.visibility import assignment_owner_id, effective_visibility_sta
 from .auth.identity_graph_service import student_enrolled as _student_enrolled
 from .auth_registry_service import build_auth_registry_store
 from .settings import env_int
+from .teacher_grade_service import load_teacher_grade, official_score_from
 
 _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
@@ -100,13 +101,23 @@ def _qualifying_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, An
     return max(valid, key=lambda item: str(item.get("submitted_at") or ""))
 
 
-def _official_score(attempt: Optional[Dict[str, Any]]) -> Any:
-    if not attempt:
-        return None
-    try:
-        return float(attempt.get("score_earned"))
-    except (TypeError, ValueError):
-        return None
+def _official_score(
+    attempt: Optional[Dict[str, Any]],
+    *,
+    data_dir: Path,
+    assignment_id: str,
+    student_id: str,
+) -> Any:
+    auto_score = None
+    if attempt:
+        try:
+            auto_score = float(attempt.get("score_earned"))
+        except (TypeError, ValueError):
+            auto_score = None
+    return official_score_from(
+        auto_score=auto_score,
+        teacher_grade=load_teacher_grade(data_dir, assignment_id, student_id),
+    )
 
 
 def _process_archive_status(folder: Path, student_id: str) -> str:
@@ -216,7 +227,12 @@ def _today_item(
         "progress": {
             "submitted": submitted,
             "overdue": overdue,
-            "official_score": _official_score(best),
+            "official_score": _official_score(
+                best,
+                data_dir=deps.data_dir,
+                assignment_id=assignment_id,
+                student_id=student_id,
+            ),
             "process_archive_status": _process_archive_status(folder, student_id),
         },
     }
@@ -288,7 +304,12 @@ def _history_item(
         "due_at": str(meta.get("due_at") or "").strip(),
         "visibility_status": vis,
         "submitted": bool(best),
-        "official_score": _official_score(best),
+        "official_score": _official_score(
+            best,
+            data_dir=deps.data_dir,
+            assignment_id=assignment_id,
+            student_id=student_id,
+        ),
         "archived_at": meta.get("archived_at"),
     }
 

@@ -112,6 +112,14 @@ interface UseAssignmentWorkflowReturn {
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
   archiveAssignment: (assignmentId?: string) => Promise<void>
   unarchiveAssignment: (assignmentId?: string) => Promise<void>
+  saveStudentGrade: (
+    studentId: string,
+    payload: {
+      override_score?: number | null
+      comment?: string
+      adopted_coach_excerpts?: Array<{ text: string }>
+    },
+  ) => Promise<void>
   refreshWorkflowWorkbench: () => void
   scrollToWorkflowSection: (sectionId: string) => void
   assignmentWorkflowIndicator: WorkflowIndicator
@@ -464,6 +472,45 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   const unarchiveAssignment = useCallback(
     (assignmentId?: string) => mutateAssignmentVisibility('unarchive', assignmentId),
     [mutateAssignmentVisibility],
+  )
+
+  const saveStudentGrade = useCallback(
+    async (
+      studentId: string,
+      payload: {
+        override_score?: number | null
+        comment?: string
+        adopted_coach_excerpts?: Array<{ text: string }>
+      },
+    ) => {
+      const aid = (progressAssignmentId || '').trim()
+      const sid = (studentId || '').trim()
+      if (!aid || !sid) {
+        setProgressError('请先填写作业编号')
+        return
+      }
+      setProgressLoading(true)
+      setProgressError('')
+      try {
+        const res = await fetch(
+          `${apiBase}/teacher/assignment/${encodeURIComponent(aid)}/student/${encodeURIComponent(sid)}/grade`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          },
+        )
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        await fetchAssignmentProgress(aid)
+      } catch (err: unknown) {
+        setProgressError(toErrorMessage(err))
+        setProgressLoading(false)
+      }
+    },
+    [apiBase, fetchAssignmentProgress, progressAssignmentId, setProgressError, setProgressLoading],
   )
 
   // ---- refreshWorkflowWorkbench ----
@@ -871,6 +918,7 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     fetchAssignmentProgress,
     archiveAssignment,
     unarchiveAssignment,
+    saveStudentGrade,
     refreshWorkflowWorkbench,
     scrollToWorkflowSection,
     assignmentWorkflowIndicator,

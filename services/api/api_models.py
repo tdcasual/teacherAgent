@@ -105,6 +105,16 @@ class AssignmentRequirementsRequest(BaseModel):
     created_by: Optional[str] = None
 
 
+class TeacherGradeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    override_score: Optional[float] = None
+    override_score_earned: Optional[float] = None
+    comment: Optional[str] = None
+    adopted_coach_excerpts: Optional[List[Dict[str, Any]]] = None
+    attempt_id: Optional[str] = None
+
+
 class StudentVerifyRequest(BaseModel):
     name: str
     class_name: Optional[str] = None

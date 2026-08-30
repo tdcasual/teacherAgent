@@ -90,13 +90,15 @@ def _progress_signals(progress: Dict[str, Any], student_id: str) -> Dict[str, An
 
 
 def _official_score(signals: Dict[str, Any]) -> Optional[float]:
-    raw = signals.get("best_score_earned")
-    if raw is None:
-        return None
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return None
+    for key in ("official_score", "best_score_earned"):
+        raw = signals.get(key)
+        if raw is None:
+            continue
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            continue
+    return None
 
 
 def _submit_reason(progress: Dict[str, Any], student_id: str, signals: Dict[str, Any]) -> str:

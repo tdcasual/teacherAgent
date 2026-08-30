@@ -135,6 +135,7 @@ from ..assignment_upload_start_service import (
 )
 from ..assignment_uploaded_question_service import AssignmentUploadedQuestionDeps
 from ..handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers
+from ..paths import today_iso as _today_iso
 from . import get_app_core as _app_core
 
 
@@ -253,7 +254,7 @@ def _assignment_progress_deps(core: Any | None = None):
         best_submission_attempt=_ac.best_submission_attempt,
         resolve_assignment_date=_ac.resolve_assignment_date,
         atomic_write_json=_ac._atomic_write_json,
-        time_time=time.time,
+        today_iso=_today_iso,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 

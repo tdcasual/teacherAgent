@@ -253,8 +253,25 @@ export type AssignmentProgressStudent = {
   class_name?: string
   complete?: boolean
   overdue?: boolean
+  official_score?: number | null
   discussion?: { status?: string; pass?: boolean; message_count?: number; last_ts?: string }
   submission?: { attempts?: number; best?: unknown }
+  result?: {
+    attempts?: number
+    official_score?: number | null
+    overdue?: boolean
+    submitted?: boolean
+  }
+  process?: {
+    status?: string
+    stuck_points?: Array<{ summary?: string }>
+    has_memory_proposal?: boolean
+  }
+  teacher_grade?: {
+    comment?: string
+    override_score_earned?: number | null
+    adopted_coach_excerpts?: Array<{ text?: string }>
+  }
 }
 
 export type AssignmentProgress = {

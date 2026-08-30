@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 
-from ..api_models import AssignmentRequirementsRequest
+from ..api_models import AssignmentRequirementsRequest, TeacherGradeRequest
 from ..assignment.application import AssignmentAccessError
 from ..assignment_archive_service import (
     AssignmentArchiveError,
@@ -18,6 +18,7 @@ from ..assignment_recompute_roster_service import (
     recompute_assignment_roster,
 )
 from ..auth_service import AuthError, require_principal
+from ..teacher_grade_service import TeacherGradeError, save_teacher_grade_from_request
 
 
 def _require_teacher_or_admin() -> None:
@@ -73,6 +74,30 @@ def _register_progress_routes(
             raise _http_from_assignment_access(exc) from exc
 
 
+def _register_grade_routes(
+    router: APIRouter, *, app_deps: Any, assignment_app: Any, data_dir: Any
+) -> None:
+    @router.post("/teacher/assignment/{assignment_id}/student/{student_id}/grade")
+    def teacher_student_grade(
+        assignment_id: str, student_id: str, req: TeacherGradeRequest
+    ) -> Any:
+        _require_teacher_or_admin()
+        try:
+            assignment_app.require_assignment_access(assignment_id, deps=app_deps)
+            principal = require_principal(roles=("teacher", "admin"))
+            return save_teacher_grade_from_request(
+                assignment_id,
+                student_id,
+                principal=principal,
+                data_dir=data_dir,
+                request=req,
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
+        except TeacherGradeError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
 def _register_archive_routes(router: APIRouter, *, data_dir: Any) -> None:
     @router.post("/assignment/{assignment_id}/archive")
     def assignment_archive(assignment_id: str) -> Any:
@@ -103,6 +128,9 @@ def register_assignment_listing_routes(
             raise _http_from_assignment_access(exc) from exc
 
     _register_progress_routes(
+        router, app_deps=app_deps, assignment_app=assignment_app, data_dir=data_dir
+    )
+    _register_grade_routes(
         router, app_deps=app_deps, assignment_app=assignment_app, data_dir=data_dir
     )
 

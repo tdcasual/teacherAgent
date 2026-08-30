@@ -59,7 +59,7 @@ class AssignmentProgressTest(unittest.TestCase):
             assignment_id = "HW_INCLUDE_FLAG_2026-02-05"
             write_json(
                 tmp / "data" / "assignments" / assignment_id / "meta.json",
-                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]},
+                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"], "expected_students": ["S001"]},
             )
             with TestClient(app_mod.app) as client:
                 res = client.get(
@@ -81,7 +81,7 @@ class AssignmentProgressTest(unittest.TestCase):
             assignment_id = "HW_STUDENT_DEDUP_2026-02-05"
             write_json(
                 tmp / "data" / "assignments" / assignment_id / "meta.json",
-                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S002", "S001", "S001"]},
+                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S002", "S001", "S001"], "expected_students": ["S001", "S002"]},
             )
             with TestClient(app_mod.app) as client:
                 res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
@@ -114,6 +114,7 @@ class AssignmentProgressTest(unittest.TestCase):
                     "scope": "public",
                     "class_name": "",
                     "student_ids": [],
+                    "expected_students": ["S001", "S002"],
                     "source": "teacher",
                     "generated_at": "2026-02-05T10:00:00",
                 },
@@ -174,7 +175,7 @@ class AssignmentProgressTest(unittest.TestCase):
 
             write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001", "student_name": "张三"})
             assignment_id = "HW2_2026-02-05"
-            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
+            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"], "expected_students": ["S001"]})
 
             # Discussion marker so completion depends only on submission best attempt.
             sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
@@ -245,6 +246,54 @@ class AssignmentProgressTest(unittest.TestCase):
                 self.assertEqual(best["score_earned"], 8.0)
                 self.assertTrue(student["complete"])
 
+    def test_submitted_without_discussion_is_complete_under_default_policy(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            app_mod = load_app(tmp)
+
+            write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
+            assignment_id = "HW_SUBMIT_ONLY_2026-02-05"
+            write_json(
+                tmp / "data" / "assignments" / assignment_id / "meta.json",
+                {
+                    "assignment_id": assignment_id,
+                    "date": "2026-02-05",
+                    "scope": "student",
+                    "student_ids": ["S001"],
+                    "expected_students": ["S001"],
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
+                    "visibility_status": "published",
+                },
+            )
+            write_json(
+                tmp
+                / "data"
+                / "student_submissions"
+                / assignment_id
+                / "S001"
+                / "submission_20260205_101000"
+                / "grading_report.json",
+                {
+                    "student_id": "S001",
+                    "assignment_id": assignment_id,
+                    "graded_total": 1,
+                    "ungraded": 0,
+                    "correct": 1,
+                    "items": [{"status": "matched", "confidence": 1.0, "score": 1.0}],
+                },
+            )
+
+            with TestClient(app_mod.app) as client:
+                res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                student = next(s for s in data["students"] if s.get("student_id") == "S001")
+                self.assertFalse(student["discussion"]["pass"])
+                self.assertTrue(student["complete"])
+                self.assertTrue(student["completion"]["checks"]["submitted"])
+                self.assertFalse(student["completion"]["policy"]["requires_discussion"])
+
     def test_graded_total_zero_does_not_count_as_submitted(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
@@ -252,7 +301,7 @@ class AssignmentProgressTest(unittest.TestCase):
 
             write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
             assignment_id = "HW3_2026-02-05"
-            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
+            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"], "expected_students": ["S001"]})
 
             # Discussion pass marker
             sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
@@ -304,7 +353,7 @@ class AssignmentProgressTest(unittest.TestCase):
             assignment_id = "HW4_2026-02-05"
             write_json(
                 tmp / "data" / "assignments" / assignment_id / "meta.json",
-                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]},
+                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"], "expected_students": ["S001"]},
             )
 
             # Session index points to a non-assignment session id
@@ -367,7 +416,7 @@ class AssignmentProgressTest(unittest.TestCase):
 
             write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
             assignment_id = "HW5_2026-02-05"
-            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"]})
+            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "student", "student_ids": ["S001"], "expected_students": ["S001"]})
 
             # Marker appears in user role only -> should NOT count as discussion pass
             sess_path = app_mod.get_core().student_session_file("S001", assignment_id)
@@ -400,7 +449,7 @@ class AssignmentProgressTest(unittest.TestCase):
             assignment_id = "HW_CLASS_2026-02-05"
             write_json(
                 tmp / "data" / "assignments" / assignment_id / "meta.json",
-                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "class", "class_name": "高二2403班"},
+                {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "class", "class_name": "高二2403班", "expected_students": ["S001"]},
             )
 
             with TestClient(app_mod.app) as client:
@@ -425,6 +474,7 @@ class AssignmentProgressTest(unittest.TestCase):
                     "date": "2026-02-05",
                     "scope": "student",
                     "student_ids": ["S001"],
+                    "expected_students": ["S001"],
                     "due_at": "2000-01-01",  # far past -> overdue
                 },
             )
@@ -446,7 +496,7 @@ class AssignmentProgressTest(unittest.TestCase):
 
             write_json(tmp / "data" / "student_profiles" / "S001.json", {"student_id": "S001"})
             assignment_id = "HW_SNAPSHOT_2026-02-05"
-            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "public"})
+            write_json(tmp / "data" / "assignments" / assignment_id / "meta.json", {"assignment_id": assignment_id, "date": "2026-02-05", "scope": "public", "expected_students": ["S001"]})
 
             with TestClient(app_mod.app) as client:
                 res = client.get("/teacher/assignment/progress", params={"assignment_id": assignment_id})
@@ -492,6 +542,7 @@ class AssignmentProgressTest(unittest.TestCase):
                     "date": "2026-02-05",
                     "scope": "student",
                     "student_ids": ["S001"],
+                    "expected_students": ["S001"],
                     "completion_policy": {
                         "requires_discussion": False,
                         "requires_submission": True,
@@ -544,6 +595,7 @@ class AssignmentProgressTest(unittest.TestCase):
                     "date": "2026-02-05",
                     "scope": "student",
                     "student_ids": ["S001"],
+                    "expected_students": ["S001"],
                     "completion_policy": {
                         "requires_discussion": True,
                         "requires_submission": False,
@@ -587,6 +639,7 @@ class AssignmentProgressTest(unittest.TestCase):
                     "date": "2026-02-05",
                     "scope": "student",
                     "student_ids": ["S001"],
+                    "expected_students": ["S001"],
                     "completion_policy": {
                         "requires_discussion": False,
                         "requires_submission": True,

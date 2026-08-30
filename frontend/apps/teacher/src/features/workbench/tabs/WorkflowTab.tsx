@@ -37,6 +37,14 @@ export type WorkflowTabProps =
     progressError: string
     archiveAssignment?: (assignmentId?: string) => Promise<void>
     unarchiveAssignment?: (assignmentId?: string) => Promise<void>
+    saveStudentGrade?: (
+      studentId: string,
+      payload: {
+        override_score?: number | null
+        comment?: string
+        adopted_coach_excerpts?: Array<{ text: string }>
+      },
+    ) => Promise<void>
     draftLoading: boolean
     draftError: string
     draftSaving: boolean
@@ -250,6 +258,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             progressError={props.progressError}
             archiveAssignment={props.archiveAssignment}
             unarchiveAssignment={props.unarchiveAssignment}
+            saveStudentGrade={props.saveStudentGrade}
           />
         )}
         <WorkflowTimeline entries={props.executionTimeline} />

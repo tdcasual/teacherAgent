@@ -237,6 +237,36 @@ class StudentAssignmentHistoryTests(unittest.TestCase):
             self.assertEqual(ids, ["HW_ARCHIVED"])
             self.assertEqual(result["assignments"][0]["visibility_status"], "archived")
 
+    def test_official_score_prefers_teacher_override(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_meta(root, "HW_1", _PUBLISHED)
+            grade_path = root / "data" / "student_submissions" / "HW_1" / "S1" / "teacher_grade.json"
+            grade_path.parent.mkdir(parents=True, exist_ok=True)
+            grade_path.write_text(
+                json.dumps({"schema": "teacher_grade/v1", "override_score_earned": 19.5}),
+                encoding="utf-8",
+            )
+            result = list_student_assignment_history(
+                student_id="S1",
+                limit=50,
+                cursor=0,
+                deps=_deps(
+                    root,
+                    enrolled={("S1", "t_zhang", "physics")},
+                    attempts={
+                        ("HW_1", "S1"): [
+                            {
+                                "valid_submission": True,
+                                "score_earned": 10,
+                                "submitted_at": "2026-08-21T09:00:00",
+                            }
+                        ]
+                    },
+                ),
+            )
+            self.assertEqual(result["assignments"][0]["official_score"], 19.5)
+
 
 class AssignmentTodayServiceTests(unittest.TestCase):
     def test_returns_assignments_list_without_top_level_assignment(self):
