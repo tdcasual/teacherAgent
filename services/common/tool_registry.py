@@ -424,6 +424,66 @@ def build_default_registry() -> ToolRegistry:
             required=["assignment_id"],
         ),
     )
+    tools["assignment.progress"] = ToolDef(
+        name="assignment.progress",
+        description="Get assignment progress (results and process columns)",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.missing"] = ToolDef(
+        name="assignment.missing",
+        description="List students who have not submitted an assignment",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.overdue"] = ToolDef(
+        name="assignment.overdue",
+        description="List students overdue and unsubmitted for an assignment",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.attempt.get"] = ToolDef(
+        name="assignment.attempt.get",
+        description="Get one student's attempt and official score for an assignment",
+        parameters=_schema_object(
+            {
+                "assignment_id": {"type": "string"},
+                "student_id": {"type": "string"},
+            },
+            required=["assignment_id", "student_id"],
+        ),
+    )
+    tools["assignment.publish"] = ToolDef(
+        name="assignment.publish",
+        mutating=True,
+        description="Publish a draft assignment (draft → published)",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.archive"] = ToolDef(
+        name="assignment.archive",
+        mutating=True,
+        description="Archive a published assignment (today list excludes it immediately)",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.unarchive"] = ToolDef(
+        name="assignment.unarchive",
+        mutating=True,
+        description="Unarchive an assignment (archived → published)",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.recompute_roster"] = ToolDef(
+        name="assignment.recompute_roster",
+        mutating=True,
+        description="Overwrite expected_students from current enrollments",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
+    tools["assignment.my_today"] = ToolDef(
+        name="assignment.my_today",
+        description="Student today assignment list (same source as HTTP today)",
+        parameters=_schema_object({"date": {"type": "string"}}),
+    )
+    tools["assignment.my_result"] = ToolDef(
+        name="assignment.my_result",
+        description="Student official score and submission status for one assignment",
+        parameters=_schema_object({"assignment_id": {"type": "string"}}, required=["assignment_id"]),
+    )
     tools["lesson.list"] = ToolDef(
         name="lesson.list",
         description="List available lessons",

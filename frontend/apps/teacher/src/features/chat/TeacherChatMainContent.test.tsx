@@ -33,7 +33,7 @@ describe('TeacherChatMainContent', () => {
         onMessagesScroll={() => undefined}
         showScrollToBottom={false}
         onScrollToBottom={() => undefined}
-        activeSkillId="physics-teacher-ops"
+        activeSkillId="teacher-assignment-ops"
         skillPinned={false}
         input=""
         chatQueueHint=""

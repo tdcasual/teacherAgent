@@ -2,17 +2,17 @@ import type { Skill } from '../../appTypes'
 
 export const fallbackSkills: Skill[] = [
   {
-    id: 'physics-teacher-ops',
-    title: '教师运营',
-    desc: '考试分析、课前检测、教学备课与课堂讨论。',
+    id: 'teacher-assignment-ops',
+    title: '作业运营',
+    desc: '作业进度、未交/逾期名单与发布归档。',
     instructions: '',
-    prompts: ['列出所有考试，并给出最新考试概览。'],
-    examples: ['列出考试', '生成课前检测清单', '做一次考试分析'],
+    prompts: ['列出今天未交作业的学生。'],
+    examples: ['谁没交', '查看作业进度', '逾期名单'],
     keywords: [],
     source_type: 'system',
   },
   {
-    id: 'physics-homework-generator',
+    id: 'homework-generator',
     title: '作业生成',
     desc: '基于课堂讨论生成课后诊断与作业。',
     instructions: '',
@@ -32,7 +32,7 @@ export const fallbackSkills: Skill[] = [
     source_type: 'system',
   },
   {
-    id: 'physics-student-coach',
+    id: 'student-coach',
     title: '学生教练',
     desc: '学生侧讨论、作业批改与画像更新。',
     instructions: '',

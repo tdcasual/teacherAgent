@@ -17,7 +17,7 @@ class SkillRouterStressEvalScriptTest(unittest.TestCase):
                 "role": "teacher",
                 "requested_skill_id": "",
                 "text": "请生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
-                "expected_skill_id": "physics-homework-generator",
+                "expected_skill_id": "homework-generator",
                 "bucket": "golden",
             },
             {
@@ -25,7 +25,7 @@ class SkillRouterStressEvalScriptTest(unittest.TestCase):
                 "role": "teacher",
                 "requested_skill_id": "",
                 "text": "先读取最新考试概览，再生成讲评提纲",
-                "expected_skill_id": "physics-teacher-ops",
+                "expected_skill_id": "teacher-assignment-ops",
                 "bucket": "golden",
             },
             {
@@ -33,7 +33,7 @@ class SkillRouterStressEvalScriptTest(unittest.TestCase):
                 "role": "student",
                 "requested_skill_id": "",
                 "text": "开始今天作业",
-                "expected_skill_id": "physics-student-coach",
+                "expected_skill_id": "student-coach",
                 "bucket": "golden",
             },
         ]
@@ -89,7 +89,7 @@ class SkillRouterStressEvalScriptTest(unittest.TestCase):
                 "role": "teacher",
                 "requested_skill_id": "",
                 "text": "请帮我生成作业",
-                "expected_skill_id": "physics-homework-generator",
+                "expected_skill_id": "homework-generator",
                 "bucket": "golden",
             }
         ]

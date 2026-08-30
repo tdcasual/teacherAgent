@@ -128,6 +128,8 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
     assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"
     assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "student.profile.update"
     assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.generate"
+    generate_denied = tool_dispatch("assignment.generate", {"topic": "t"}, role="student", deps=deps, confirmed=True)
+    assert generate_denied.get("error") == "permission denied"
     assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 

@@ -422,10 +422,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
                     "requested_skill_id": "",
-                    "effective_skill_id": "physics-homework-generator",
+                    "effective_skill_id": "homework-generator",
                     "reason": "auto_rule",
                     "confidence": 0.64,
-                    "candidates": [{"skill_id": "physics-homework-generator", "score": 12}],
+                    "candidates": [{"skill_id": "homework-generator", "score": 12}],
                 },
             )
 
@@ -438,7 +438,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertEqual(reply, "OK")
             self.assertEqual(role_hint, "teacher")
             self.assertEqual(last_user, "请帮我生成作业")
-            self.assertEqual(captured["skill_id"], "physics-homework-generator")
+            self.assertEqual(captured["skill_id"], "homework-generator")
             self.assertEqual(captured["teacher_id"], "teacher-1")
             self.assertIn("teacher-context", str(captured["extra_system"] or ""))
             self.assertIn(
@@ -446,10 +446,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                     "workflow.resolved",
                     {
                         "requested_skill_id": "",
-                        "effective_skill_id": "physics-homework-generator",
+                        "effective_skill_id": "homework-generator",
                         "reason": "auto_rule",
                         "confidence": 0.64,
-                        "candidates": [{"skill_id": "physics-homework-generator", "score": 12}],
+                        "candidates": [{"skill_id": "homework-generator", "score": 12}],
                         "resolution_mode": "auto",
                         "auto_selected": True,
                         "requested_rewritten": False,
@@ -484,11 +484,11 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=lambda *_args, **_kwargs: calls.update({"run_agent": calls["run_agent"] + 1}) or {"reply": "OK"},
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-teacher-ops",
+                    "effective_skill_id": "teacher-assignment-ops",
                     "reason": "auto_rule",
                 },
                 teacher_workflow_preflight=lambda _req, effective_skill_id, last_user_text, attachment_context: (
-                    "请先提供考试编号或上传成绩单。" if effective_skill_id == "physics-teacher-ops" else None
+                    "请先提供考试编号或上传成绩单。" if effective_skill_id == "teacher-assignment-ops" else None
                 ),
             )
 
@@ -541,7 +541,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=_run_agent,
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-teacher-ops",
+                    "effective_skill_id": "teacher-assignment-ops",
                     "reason": "explicit",
                     "confidence": 1.0,
                 },
@@ -606,7 +606,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=_run_agent,
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-homework-generator",
+                    "effective_skill_id": "homework-generator",
                     "reason": "auto_rule",
                 },
                 resolve_teacher_workflow=lambda _req, effective_skill_id, last_user_text, attachment_context: {

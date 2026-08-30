@@ -113,7 +113,7 @@ const buildChat = (): TeacherAppLayoutProps['chat'] => ({
   onMessagesScroll: noop,
   showScrollToBottom: false,
   onScrollToBottom: noop,
-  activeSkillId: 'physics-teacher-ops',
+  activeSkillId: 'teacher-assignment-ops',
   skillPinned: false,
   input: '',
   chatQueueHint: '',

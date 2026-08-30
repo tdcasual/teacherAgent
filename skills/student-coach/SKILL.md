@@ -1,5 +1,5 @@
 ---
-name: physics-student-coach
+name: student-coach
 description: Student-facing physics coaching: verify identity, read the student's profile and exam responses, diagnose weak knowledge points, assign targeted practice, explain mistakes, and write back profile updates. Use when students request evaluation, remediation, or personalized homework.
 ---
 
@@ -8,7 +8,7 @@ description: Student-facing physics coaching: verify identity, read the student'
 ## Overview
 Use this skill to interact with students after identity verification. Provide diagnostics, targeted practice, and explanations, then write back derived profile updates without changing exam facts.
 
-Note: Teacher-side batch homework is handled by the `physics-homework-generator` skill.
+Note: Teacher-side batch homework is handled by the `homework-generator` skill.
 Note: Teacher-side targeted student updates are handled by the `physics-student-focus` skill.
 
 ## Required Inputs
@@ -93,9 +93,9 @@ Tags: {KP-ID, topic}
 ## Tools
 - Question bank file: `data/question_bank/questions.csv`
 - Submission grader: `scripts/grade_submission.py`
-- Practice selector (bank-first): `skills/physics-student-coach/scripts/select_practice.py`
+- Practice selector (bank-first): `skills/student-coach/scripts/select_practice.py`
 - Assignment PDF renderer: `scripts/render_assignment_pdf.py`
-- Profile updater: `skills/physics-student-coach/scripts/update_profile.py`
+- Profile updater: `skills/student-coach/scripts/update_profile.py`
 - Session finalizer: `scripts/student_session_finalize.py`
 - Profile change checker: `scripts/check_profile_changes.py`
 - Profile -> mem0 writer: `scripts/profile_to_mem0.py`

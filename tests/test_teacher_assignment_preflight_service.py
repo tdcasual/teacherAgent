@@ -146,7 +146,8 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         result = teacher_assignment_preflight(req, deps=deps)
         self.assertIsInstance(result, str)
         assert isinstance(result, str)
-        self.assertIn("作业已生成：A1", result)
+        self.assertIn("作业草稿已写入：A1", result)
+        self.assertIn("draft", result)
         self.assertEqual(len(saved), 1)
         self.assertEqual(len(generated), 1)
         self.assertEqual(generated[0]["assignment_id"], "A1")
@@ -322,21 +323,18 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         deps, _logs, _saved, _generated = self._deps(analysis=None)
         req = _Req(
             messages=[_Msg(role="user", content="请做一次考试分析并给出讲评建议")],
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         result = teacher_workflow_preflight_reply(
             req,
-            effective_skill_id="physics-teacher-ops",
+            effective_skill_id="teacher-assignment-ops",
             last_user_text="请做一次考试分析并给出讲评建议",
             attachment_context="",
             deps=deps,
         )
 
-        self.assertIsInstance(result, str)
-        assert isinstance(result, str)
-        self.assertIn("考试编号", result)
-        self.assertIn("成绩单", result)
+        self.assertIsNone(result)
 
     def test_student_focus_workflow_requires_specific_student_when_reference_is_ambiguous(self):
         deps, _logs, _saved, _generated = self._deps(analysis=None)

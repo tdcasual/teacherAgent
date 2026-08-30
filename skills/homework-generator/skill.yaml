@@ -1,4 +1,4 @@
-id: physics-homework-generator
+id: homework-generator
 schema_version: 2
 title: 作业生成
 desc: 基于课堂讨论生成课后诊断与作业
@@ -41,6 +41,7 @@ agent:
       - assignment.generate
       - assignment.requirements.save
       - assignment.render
+      - assignment.publish
       - lesson.list
       - student.search
       - student.profile.get

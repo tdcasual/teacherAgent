@@ -13,7 +13,7 @@ describe('ChatComposer copy', () => {
   it('surfaces workflow capability wording for automatic routing', () => {
     render(
       <ChatComposer
-        activeSkillId="physics-teacher-ops"
+        activeSkillId="teacher-assignment-ops"
         skillPinned={false}
         input=""
         pendingChatJob={false}
@@ -45,7 +45,7 @@ describe('ChatComposer copy', () => {
   it('shows pinned capability label when a workflow is explicitly chosen', () => {
     render(
       <ChatComposer
-        activeSkillId="physics-homework-generator"
+        activeSkillId="homework-generator"
         skillPinned
         input="生成一份作业"
         pendingChatJob={false}
@@ -66,6 +66,6 @@ describe('ChatComposer copy', () => {
       />,
     )
 
-    expect(screen.getByText('当前路由: $physics-homework-generator')).toBeTruthy()
+    expect(screen.getByText('当前路由: $homework-generator')).toBeTruthy()
   })
 })

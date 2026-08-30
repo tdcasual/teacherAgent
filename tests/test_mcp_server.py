@@ -15,6 +15,7 @@ def load_mcp(tmp_dir: Path, api_key: str = "test-key"):
     os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -92,8 +93,10 @@ class MCPServerTest(unittest.TestCase):
             self.assertIn("result", payload)
             names = {t.get("name") for t in payload["result"]}
             self.assertIn("student.profile.get", names)
-            self.assertIn("exam.get", names)
-            self.assertIn("assignment.generate", names)
+            self.assertNotIn("exam.get", names)
+            self.assertNotIn("assignment.generate", names)
+            self.assertNotIn("assignment.list", names)
+            self.assertEqual(mcp_mod.app.title, "MCP Server")
 
             res = client.post(
                 "/mcp",
@@ -119,23 +122,7 @@ class MCPServerTest(unittest.TestCase):
                 },
             )
             self.assertEqual(res.status_code, 200)
-            self.assertTrue(res.json()["result"]["ok"])
-            self.assertEqual(res.json()["result"]["counts"]["students"], 2)
-
-            res = client.post(
-                "/mcp",
-                headers=headers,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 4,
-                    "method": "tools/call",
-                    "params": {"name": "exam.students.list", "arguments": {"exam_id": exam_id, "limit": 10}},
-                },
-            )
-            self.assertEqual(res.status_code, 200)
-            students = res.json()["result"]["students"]
-            self.assertEqual(len(students), 2)
-            self.assertEqual(students[0]["rank"], 1)
+            self.assertIn("error", res.json())
 
     def test_auth_enforced_when_configured(self):
         with TemporaryDirectory() as td:
@@ -198,6 +185,50 @@ class MCPServerTest(unittest.TestCase):
             )
             self.assertEqual(ok.status_code, 200)
             self.assertIn("result", ok.json())
+
+    def test_assignment_list_requires_bound_teacher(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret")
+            client = TestClient(mcp_mod.app)
+            unbound = client.post(
+                "/mcp",
+                headers={"X-API-Key": "secret"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "assignment.list", "arguments": {}},
+                },
+            )
+            self.assertEqual(unbound.status_code, 200)
+            self.assertIn("error", unbound.json())
+
+            os.environ["MCP_BOUND_TEACHER_ID"] = "t_bound"
+            import importlib
+
+            mcp_mod = importlib.reload(mcp_mod)
+            data_dir = Path(os.environ["DATA_DIR"])
+            mine = data_dir / "assignments" / "HW_MINE"
+            other = data_dir / "assignments" / "HW_OTHER"
+            mine.mkdir(parents=True, exist_ok=True)
+            other.mkdir(parents=True, exist_ok=True)
+            (mine / "meta.json").write_text('{"teacher_id":"t_bound"}', encoding="utf-8")
+            (other / "meta.json").write_text('{"teacher_id":"t_other"}', encoding="utf-8")
+            client = TestClient(mcp_mod.app)
+            listed = client.post(
+                "/mcp",
+                headers={"X-API-Key": "secret"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "assignment.list", "arguments": {}},
+                },
+            )
+            self.assertEqual(listed.status_code, 200)
+            names = listed.json()["result"]["assignments"]
+            self.assertEqual(names, ["HW_MINE"])
 
 
 if __name__ == "__main__":

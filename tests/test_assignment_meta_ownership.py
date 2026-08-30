@@ -36,7 +36,7 @@ from services.api.paths import InvalidAssignmentDate, optional_assignment_date, 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "skills" / "physics-student-coach" / "scripts"
+SCRIPT = ROOT / "skills" / "student-coach" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 import select_practice  # type: ignore  # noqa: E402
 

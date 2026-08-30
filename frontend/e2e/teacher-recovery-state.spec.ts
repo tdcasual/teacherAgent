@@ -435,7 +435,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
           body: JSON.stringify({
             skills: [
               {
-                id: 'physics-teacher-ops',
+                id: 'teacher-assignment-ops',
                 title: '教学运营',
                 desc: '老师运营流程',
                 prompts: ['请总结班级学习情况'],
@@ -663,12 +663,12 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await composer.press('ArrowDown')
     await composer.press('Enter')
 
-    await expect(composer).toHaveValue(/\$physics-homework-generator/)
+    await expect(composer).toHaveValue(/\$homework-generator/)
     await composer.type(' 诊断')
     await composer.press('Enter')
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+    expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   },
 
   H005: async ({ page }) => {

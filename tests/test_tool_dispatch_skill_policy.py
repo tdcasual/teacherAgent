@@ -33,8 +33,8 @@ class _FakeRuntime:
 class ToolDispatchSkillPolicyTest(unittest.TestCase):
     def _deps(self):
         runtimes = {
-            "physics-homework-generator": _FakeRuntime({"assignment.generate"}),
-            "physics-teacher-ops": _FakeRuntime({"exam.get", "chart.exec", "chart.agent.run"}),
+            "homework-generator": _FakeRuntime({"assignment.generate"}),
+            "teacher-assignment-ops": _FakeRuntime({"exam.get", "chart.exec", "chart.agent.run"}),
         }
         return ToolDispatchDeps(
             tool_registry=_FakeRegistry(),
@@ -82,19 +82,19 @@ class ToolDispatchSkillPolicyTest(unittest.TestCase):
             "exam.get",
             {"exam_id": "EX-1"},
             role="teacher",
-            skill_id="physics-homework-generator",
+            skill_id="homework-generator",
             deps=self._deps(),
         )
         self.assertEqual(out.get("error"), "tool_not_allowed")
         self.assertEqual(out.get("tool"), "exam.get")
-        self.assertEqual(out.get("skill_id"), "physics-homework-generator")
+        self.assertEqual(out.get("skill_id"), "homework-generator")
 
     def test_skill_runtime_can_allow_teacher_tool_for_matching_skill(self):
         out = tool_dispatch(
             "exam.get",
             {"exam_id": "EX-1"},
             role="teacher",
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
             deps=self._deps(),
         )
         self.assertTrue(out.get("ok"))
@@ -115,7 +115,7 @@ class ToolDispatchSkillPolicyTest(unittest.TestCase):
             "chart.exec",
             {},
             role="student",
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
             deps=self._deps(),
         )
         self.assertEqual(out.get("error"), "permission denied")

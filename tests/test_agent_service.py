@@ -105,7 +105,7 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         reply = str(result.get("reply") or "")
@@ -150,7 +150,7 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         self.assertEqual(result.get("reply"), "normal_teacher_reply")
@@ -193,7 +193,7 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         reply = str(result.get("reply") or "")
@@ -242,7 +242,7 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         self.assertEqual(result.get("reply"), "subject_score_reply")

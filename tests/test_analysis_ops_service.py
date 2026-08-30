@@ -12,7 +12,7 @@ def test_analysis_ops_service_merges_metrics_review_feedback_and_replay_summary(
     metrics_service.record_workflow_resolution(
         role='teacher',
         requested_skill_id='',
-        effective_skill_id='physics-homework-generator',
+        effective_skill_id='homework-generator',
         reason='auto_rule',
         confidence=0.64,
         resolution_mode='auto',

@@ -21,7 +21,7 @@ def generated_assignment_completion_policy(discussion_marker: str = "") -> Dict[
 
 
 def assignment_generate_script(app_root: Path) -> Path:
-    return app_root / "skills" / "physics-student-coach" / "scripts" / "select_practice.py"
+    return app_root / "skills" / "student-coach" / "scripts" / "select_practice.py"
 
 
 def append_assignment_generate_options(

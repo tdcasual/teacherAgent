@@ -111,7 +111,7 @@ def test_analysis_report_ops_route_exposes_unified_ops_snapshot(tmp_path: Path) 
     core.analysis_metrics_service.record_workflow_resolution(
         role='teacher',
         requested_skill_id='',
-        effective_skill_id='physics-homework-generator',
+        effective_skill_id='homework-generator',
         reason='auto_rule',
         confidence=0.64,
         resolution_mode='auto',

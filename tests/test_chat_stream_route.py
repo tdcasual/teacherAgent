@@ -112,7 +112,7 @@ def test_chat_stream_route_replays_workflow_resolution_event(tmp_path: Path) -> 
         "workflow.resolved",
         {
             "requested_skill_id": "",
-            "effective_skill_id": "physics-homework-generator",
+            "effective_skill_id": "homework-generator",
             "reason": "auto_rule",
             "confidence": 0.64,
         },
@@ -129,7 +129,7 @@ def test_chat_stream_route_replays_workflow_resolution_event(tmp_path: Path) -> 
     text = _stream_text(app, job_id="job-stream-workflow")
 
     assert "event: workflow.resolved" in text
-    assert 'physics-homework-generator' in text
+    assert 'homework-generator' in text
     assert 'auto_rule' in text
 
 

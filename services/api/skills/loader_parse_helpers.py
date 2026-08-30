@@ -364,7 +364,8 @@ def _load_skill_spec_from_folder(skill_id: str, folder: Path) -> Tuple[Optional[
     if skill_md_path.exists():
         return _load_markdown_skill_spec(skill_id, folder, skill_md_path)
 
-    return None, SkillLoadError(skill_id=skill_id, path=str(spec_path), message="skill.yaml not found")
+    # Scripts-only folders (e.g. leftover exam parsers) are not skills.
+    return None, None
 
 
 def load_skills(skills_dir: Path) -> LoadedSkills:

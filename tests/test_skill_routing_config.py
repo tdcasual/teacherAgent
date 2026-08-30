@@ -9,8 +9,8 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 class SkillRoutingConfigTest(unittest.TestCase):
     def test_skill_spec_exposes_routing_config(self):
         loaded = load_skills(APP_ROOT / "skills")
-        self.assertIn("physics-homework-generator", loaded.skills)
-        spec = loaded.skills["physics-homework-generator"]
+        self.assertIn("homework-generator", loaded.skills)
+        spec = loaded.skills["homework-generator"]
         routing = getattr(spec, "routing", None)
         self.assertIsNotNone(routing)
         self.assertIn("生成作业", list(getattr(routing, "keywords", []) or []))
@@ -18,7 +18,7 @@ class SkillRoutingConfigTest(unittest.TestCase):
 
     def test_routing_thresholds_have_safe_defaults(self):
         loaded = load_skills(APP_ROOT / "skills")
-        spec = loaded.skills["physics-teacher-ops"]
+        spec = loaded.skills["teacher-assignment-ops"]
         routing = getattr(spec, "routing", None)
         self.assertIsNotNone(routing)
         self.assertGreaterEqual(int(getattr(routing, "min_score", 0)), 1)
@@ -49,21 +49,24 @@ class SkillRoutingConfigTest(unittest.TestCase):
             {r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))": 4},
         )
 
-        homework = loaded.skills["physics-homework-generator"]
+        homework = loaded.skills["homework-generator"]
         self.assertEqual(getattr(homework.routing, "regex_keywords", {}), {r"作业\s*id": 6})
 
 
     def test_teacher_workflow_skills_define_explicit_tool_policies(self):
         loaded = load_skills(APP_ROOT / "skills")
 
-        teacher_ops = loaded.skills["physics-teacher-ops"]
+        teacher_ops = loaded.skills["teacher-assignment-ops"]
         self.assertIsNotNone(teacher_ops.agent.tools.allow)
-        self.assertIn("exam.get", list(teacher_ops.agent.tools.allow or []))
-        self.assertIn("exam.analysis.get", list(teacher_ops.agent.tools.allow or []))
+        self.assertIn("assignment.missing", list(teacher_ops.agent.tools.allow or []))
+        self.assertIn("assignment.progress", list(teacher_ops.agent.tools.allow or []))
         self.assertNotIn("assignment.generate", list(teacher_ops.agent.tools.allow or []))
+        self.assertNotIn("exam.get", list(teacher_ops.agent.tools.allow or []))
+        self.assertNotIn("exam.analysis.get", list(teacher_ops.agent.tools.allow or []))
 
-        homework = loaded.skills["physics-homework-generator"]
+        homework = loaded.skills["homework-generator"]
         self.assertIn("assignment.generate", list(homework.agent.tools.allow or []))
+        self.assertIn("assignment.publish", list(homework.agent.tools.allow or []))
         self.assertNotIn("exam.analysis.get", list(homework.agent.tools.allow or []))
 
         capture = loaded.skills["physics-lesson-capture"]

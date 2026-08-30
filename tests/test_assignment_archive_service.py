@@ -9,6 +9,7 @@ from services.api.assignment_archive_service import (
     AssignmentArchiveError,
     archive_assignment,
     maybe_auto_archive,
+    publish_assignment,
     unarchive_assignment,
 )
 from services.api.auth_service import AuthPrincipal
@@ -41,6 +42,16 @@ _META = {
 
 
 class AssignmentArchiveServiceTests(unittest.TestCase):
+    def test_owner_can_publish_draft(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_meta(root, "HW_DRAFT", {**_META, "visibility_status": "draft"})
+            published = publish_assignment("HW_DRAFT", principal=_owner(), data_dir=root)
+            self.assertEqual(published["visibility_status"], "published")
+            meta = _read_meta(root, "HW_DRAFT")
+            self.assertEqual(meta["visibility_status"], "published")
+            self.assertTrue(str(meta.get("published_at") or "").strip())
+
     def test_owner_can_archive_and_unarchive(self):
         with TemporaryDirectory() as td:
             root = Path(td)

@@ -91,7 +91,7 @@ def test_student_cannot_execute_mutating_tool_without_ticket() -> None:
     assert executed == []
     generate = tool_dispatch(
         "assignment.generate",
-        {"assignment_id": "A1"},
+        {"assignment_id": "A1", "subject_id": "physics"},
         role="student",
         deps=_deps(executed=executed),
     )

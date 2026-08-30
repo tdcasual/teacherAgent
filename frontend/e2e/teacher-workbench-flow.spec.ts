@@ -426,7 +426,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(page.locator('.skill-card')).toHaveCount(1)
     await expect(page.locator('.skill-card').first()).toContainText('作业生成')
 
-    await search.fill('physics-teacher-ops')
+    await search.fill('teacher-assignment-ops')
     await expect(page.locator('.skill-card')).toHaveCount(1)
     await expect(page.locator('.skill-card').first()).toContainText('教学运营')
 
@@ -446,7 +446,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await expect(page.locator('.skill-card').first()).toContainText('作业生成')
 
     await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
-    await expect(composer).toHaveValue(/\$physics-homework-generator/)
+    await expect(composer).toHaveValue(/\$homework-generator/)
   },
 
   C003: async ({ page }) => {
@@ -455,12 +455,12 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await homeworkSkillCard.getByLabel('收藏能力').click()
     await expect
       .poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('teacherSkillFavorites') || '[]')))
-      .toContain('physics-homework-generator')
+      .toContain('homework-generator')
 
     await page.reload()
     await expect
       .poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('teacherSkillFavorites') || '[]')))
-      .toContain('physics-homework-generator')
+      .toContain('homework-generator')
     await page.getByLabel('只看收藏').check()
 
     await expect(page.locator('.skill-card')).toHaveCount(1)
@@ -480,7 +480,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+    expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   },
 
   C005: async ({ page }) => {
@@ -515,7 +515,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await composer.press('ArrowLeft')
     await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
 
-    await expect(composer).toHaveValue('alpha $physics-homework-generator beta')
+    await expect(composer).toHaveValue('alpha $homework-generator beta')
   },
 
   C007: async ({ page }) => {
@@ -591,7 +591,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         body: JSON.stringify({
           skills: [
             {
-              id: 'physics-teacher-ops',
+              id: 'teacher-assignment-ops',
               title: '教学运营',
               desc: '老师运营流程',
               prompts: ['请总结班级学习情况'],
@@ -599,7 +599,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
               allowed_roles: ['teacher'],
             },
             {
-              id: 'physics-homework-generator',
+              id: 'homework-generator',
               title: '作业生成',
               desc: '生成分层作业',
               prompts: ['生成静电场作业'],
@@ -649,7 +649,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+    expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   },
 
   C012: async ({ page }) => {
@@ -660,11 +660,11 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
     const base = (await composer.inputValue()).trim()
-    await composer.fill(`${base} 混合场景 $physics-teacher-ops`)
+    await composer.fill(`${base} 混合场景 $teacher-assignment-ops`)
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].skill_id).toBe('physics-teacher-ops')
+    expect(chatStartCalls[0].skill_id).toBe('teacher-assignment-ops')
   },
 
   D001: async ({ page }) => {

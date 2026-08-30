@@ -136,10 +136,12 @@ class TestAllowedTools:
     def test_teacher(self):
         tools = allowed_tools("teacher")
         assert len(tools) > 0
-        assert "exam.list" in tools
+        assert "exam.list" not in tools
+        assert "assignment.list" in tools
+        assert "assignment.publish" in tools
 
     def test_student(self):
-        assert allowed_tools("student") == set()
+        assert allowed_tools("student") == {"assignment.my_today", "assignment.my_result"}
 
     def test_none(self):
         assert allowed_tools(None) == set()

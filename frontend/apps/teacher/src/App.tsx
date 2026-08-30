@@ -107,7 +107,7 @@ export default function App() {
     const raw = safeLocalStorageGetItem('teacherWorkbenchTab')
     return raw === 'memory' || raw === 'workflow' ? raw : 'skills'
   })
-  const [activeSkillId, setActiveSkillId] = useState(() => safeLocalStorageGetItem('teacherActiveSkillId') || 'physics-teacher-ops')
+  const [activeSkillId, setActiveSkillId] = useState(() => safeLocalStorageGetItem('teacherActiveSkillId') || 'teacher-assignment-ops')
   const [skillPinned, setSkillPinned] = useState(() => safeLocalStorageGetItem('teacherSkillPinned') === 'true')
   const [cursorPos, setCursorPos] = useState(0)
   const [skillQuery, setSkillQuery] = useState('')

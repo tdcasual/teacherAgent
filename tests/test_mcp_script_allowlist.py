@@ -13,6 +13,7 @@ def load_mcp(tmp_dir: Path, api_key: str = "secret"):
     os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ["MCP_BOUND_TEACHER_ID"] = "t_bound"
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -157,6 +158,12 @@ def test_contained_paths_under_data_or_uploads_are_accepted(monkeypatch):
         assert "result" in res.json()
         assert str(source.resolve()) in (captured.get("args") or [])
 
+        assignment_dir = data_dir / "assignments" / "A1"
+        assignment_dir.mkdir(parents=True, exist_ok=True)
+        (assignment_dir / "meta.json").write_text(
+            '{"assignment_id":"A1","teacher_id":"t_bound"}',
+            encoding="utf-8",
+        )
         render = _rpc(client, "assignment.render", {"assignment_id": "A1", "out": str(out)})
         assert render.status_code == 200
         assert "result" in render.json()

@@ -12,7 +12,7 @@ _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
         {
             "role": "teacher",
             "text": "请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
-            "expected_skill_id": "physics-homework-generator",
+            "expected_skill_id": "homework-generator",
         },
         {
             "role": "teacher",
@@ -37,19 +37,19 @@ _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
         {
             "role": "teacher",
             "text": "请做一次考试分析并给试卷讲评建议",
-            "expected_skill_id": "physics-teacher-ops",
+            "expected_skill_id": "teacher-assignment-ops",
         },
         {
             "role": "student",
             "text": "开始今天作业",
-            "expected_skill_id": "physics-student-coach",
+            "expected_skill_id": "student-coach",
         },
     ],
     "drift": [
         {
             "role": "teacher",
             "text": "帮我生成一套课后巩固包，按知识点分层出题",
-            "expected_skill_id": "physics-homework-generator",
+            "expected_skill_id": "homework-generator",
         },
         {
             "role": "teacher",
@@ -74,19 +74,19 @@ _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
         {
             "role": "teacher",
             "text": "输出本次测验的班级讲评提纲和备课要点",
-            "expected_skill_id": "physics-teacher-ops",
+            "expected_skill_id": "teacher-assignment-ops",
         },
         {
             "role": "student",
             "text": "开始我的今日练习并讲解错题",
-            "expected_skill_id": "physics-student-coach",
+            "expected_skill_id": "student-coach",
         },
     ],
     "fuzz": [
         {
             "role": "teacher",
             "text": "【紧急】请立刻生成作业，顺带给我作业ID模板",
-            "expected_skill_id": "physics-homework-generator",
+            "expected_skill_id": "homework-generator",
         },
         {
             "role": "teacher",
@@ -111,19 +111,19 @@ _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
         {
             "role": "teacher",
             "text": "考试分析 + 试卷讲评，给个可执行版本",
-            "expected_skill_id": "physics-teacher-ops",
+            "expected_skill_id": "teacher-assignment-ops",
         },
         {
             "role": "student",
             "text": "开始作业，最好顺便讲解错题",
-            "expected_skill_id": "physics-student-coach",
+            "expected_skill_id": "student-coach",
         },
     ],
     "adversarial": [
         {
             "role": "teacher",
             "text": "不要路由回滚，我只要生成作业和作业ID",
-            "expected_skill_id": "physics-homework-generator",
+            "expected_skill_id": "homework-generator",
         },
         {
             "role": "teacher",
@@ -148,12 +148,12 @@ _BASE_CASES: Dict[str, List[Dict[str, str]]] = {
         {
             "role": "teacher",
             "text": "不是模型路由，我要考试分析和课前检测建议",
-            "expected_skill_id": "physics-teacher-ops",
+            "expected_skill_id": "teacher-assignment-ops",
         },
         {
             "role": "student",
             "text": "不要看老师路由，开始今天作业并讲解错题",
-            "expected_skill_id": "physics-student-coach",
+            "expected_skill_id": "student-coach",
         },
     ],
 }

@@ -71,7 +71,7 @@ const setTeacherWorkflowState = async (page: Page) => {
       localStorage.setItem('teacherSkillsOpen', 'true')
       localStorage.setItem('teacherWorkbenchTab', 'workflow')
       localStorage.setItem('teacherSkillPinned', 'false')
-      localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
+      localStorage.setItem('teacherActiveSkillId', 'teacher-assignment-ops')
       sessionStorage.setItem(seededKey, '1')
     }
     localStorage.setItem('apiBaseTeacher', base)

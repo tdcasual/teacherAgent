@@ -29,9 +29,6 @@ agent:
       - student.search
       - student.profile.get
       - student.profile.update
-      - exam.get
-      - exam.analysis.get
-      - exam.student.get
       - assignment.list
       - chart.agent.run
       - chart.exec

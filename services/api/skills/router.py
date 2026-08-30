@@ -2,20 +2,32 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 from .loader import LoadedSkills
 from .spec import SkillSpec
 
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
 
+SKILL_ID_ALIASES = {
+    "physics-teacher-ops": "teacher-assignment-ops",
+    "physics-homework-generator": "homework-generator",
+    "physics-student-coach": "student-coach",
+}
+
 
 def default_skill_id_for_role(role_hint: Optional[str]) -> str:
     if role_hint == "student":
-        return "physics-student-coach"
-    if role_hint == "teacher":
-        return "physics-teacher-ops"
-    return "physics-teacher-ops"
+        return "student-coach"
+    return "teacher-assignment-ops"
+
+
+def canonicalize_skill_id(skill_id: str) -> Tuple[str, bool]:
+    raw = str(skill_id or "").strip()
+    aliased = SKILL_ID_ALIASES.get(raw)
+    if aliased:
+        return aliased, True
+    return raw, False
 
 
 @dataclass(frozen=True)
@@ -34,6 +46,11 @@ def resolve_skill(
     if skill_id and not _SKILL_ID_RE.match(skill_id):
         warning = "invalid skill_id; fell back to default skill."
         skill_id = ""
+
+    if skill_id:
+        skill_id, aliased = canonicalize_skill_id(skill_id)
+        if aliased:
+            warning = warning or "skill_id_aliased"
 
     if not skill_id:
         skill_id = default_skill_id_for_role(role_hint)

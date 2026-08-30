@@ -21,6 +21,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -108,7 +109,7 @@ class ToolRegistrySyncTest(unittest.TestCase):
             result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
-                skill_id="physics-teacher-ops",
+                skill_id="teacher-assignment-ops",
             )
             self.assertEqual(result.get("reply"), "ok")
             self.assertEqual(set(captured.get("tool_names") or []), set(allowed_tools("teacher")))

@@ -12,7 +12,7 @@ const baseProps = (): SkillsTabProps => ({
   apiBase: 'http://localhost:8000',
   filteredSkills: [
     {
-      id: 'physics-teacher-ops',
+      id: 'teacher-assignment-ops',
       title: '教师运营',
       desc: '考试分析、课前检测、教学备课与课堂讨论。',
       instructions: '',
@@ -23,7 +23,7 @@ const baseProps = (): SkillsTabProps => ({
     },
   ],
   favorites: [],
-  activeSkillId: 'physics-teacher-ops',
+  activeSkillId: 'teacher-assignment-ops',
   skillPinned: true,
   skillQuery: '',
   showFavoritesOnly: false,

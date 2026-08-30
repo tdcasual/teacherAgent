@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Import the script module by path (skills folder isn't a Python package).
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "skills" / "physics-student-coach" / "scripts"
+SCRIPT = ROOT / "skills" / "student-coach" / "scripts"
 sys.path.insert(0, str(SCRIPT))
 import select_practice  # type: ignore  # noqa: E402
 

@@ -93,7 +93,7 @@ def test_metrics_service_tracks_workflow_resolution_and_outcome_feedback_loop() 
     service.record_workflow_resolution(
         role='teacher',
         requested_skill_id='',
-        effective_skill_id='physics-homework-generator',
+        effective_skill_id='homework-generator',
         reason='auto_rule',
         confidence=0.64,
         resolution_mode='auto',
@@ -103,7 +103,7 @@ def test_metrics_service_tracks_workflow_resolution_and_outcome_feedback_loop() 
     service.record_workflow_outcome(
         role='teacher',
         requested_skill_id='',
-        effective_skill_id='physics-homework-generator',
+        effective_skill_id='homework-generator',
         reason='auto_rule',
         resolution_mode='auto',
         outcome='done',
@@ -116,8 +116,8 @@ def test_metrics_service_tracks_workflow_resolution_and_outcome_feedback_loop() 
     assert routing['counters']['resolution_count'] == 1
     assert routing['counters']['auto_selected_count'] == 1
     assert routing['counters']['outcome_count'] == 1
-    assert routing['by_effective_skill']['physics-homework-generator']['resolved'] == 1
-    assert routing['by_effective_skill']['physics-homework-generator']['done'] == 1
+    assert routing['by_effective_skill']['homework-generator']['resolved'] == 1
+    assert routing['by_effective_skill']['homework-generator']['done'] == 1
     assert routing['by_reason']['auto_rule'] == 1
     assert routing['by_resolution_mode']['auto'] == 1
     assert routing['by_outcome']['done'] == 1

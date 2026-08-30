@@ -71,6 +71,22 @@ def _default_allowed_tools(_role: Optional[str]) -> Set[str]:
     return set()
 
 
+def _default_assignment_progress(_assignment_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_progress_not_available"}
+
+
+def _default_assignment_mutate(_assignment_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_mutate_not_available"}
+
+
+def _default_assignment_my_today(_student_id: str, _date: Optional[str] = None) -> Dict[str, Any]:
+    return {"error": "assignment_today_not_available"}
+
+
+def _default_assignment_my_result(_assignment_id: str, _student_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_result_not_available"}
+
+
 @dataclass(frozen=True)
 class ToolDispatchDeps:
     tool_registry: Any
@@ -118,6 +134,13 @@ class ToolDispatchDeps:
     analysis_review_list: Callable[[str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_review_list
     load_skill_runtime: Callable[[Optional[str], Optional[str]], Tuple[Optional[Any], Optional[str]]] = _default_load_skill_runtime
     allowed_tools: Callable[[Optional[str]], Set[str]] = _default_allowed_tools
+    assignment_progress: Callable[[str], Dict[str, Any]] = _default_assignment_progress
+    assignment_publish: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_archive: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_unarchive: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_recompute_roster: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_my_today: Callable[[str, Optional[str]], Dict[str, Any]] = _default_assignment_my_today
+    assignment_my_result: Callable[[str, str], Dict[str, Any]] = _default_assignment_my_result
 
 
 
@@ -223,6 +246,54 @@ def _assignment_list_for_actor(
     return deps.list_assignments(owner_teacher_id=owner)
 
 
+def _student_id_for_actor(*, role: Optional[str], actor_id: Optional[str], teacher_id: Optional[str]) -> str:
+    role_norm = str(role or "").strip().lower()
+    if role_norm == "student":
+        return str(actor_id or "").strip()
+    return str(actor_id or teacher_id or "").strip()
+
+
+def _filter_progress_students(progress: Dict[str, Any], *, predicate) -> Dict[str, Any]:
+    if not isinstance(progress, dict) or progress.get("error"):
+        return progress
+    students = [item for item in (progress.get("students") or []) if isinstance(item, dict) and predicate(item)]
+    out = dict(progress)
+    out["students"] = students
+    out["count"] = len(students)
+    return out
+
+
+def _is_unsubmitted(student: Dict[str, Any]) -> bool:
+    submission = student.get("submission") if isinstance(student.get("submission"), dict) else {}
+    return not bool(submission.get("best"))
+
+
+def _assignment_missing(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
+    return _filter_progress_students(
+        deps.assignment_progress(str(args.get("assignment_id") or "")),
+        predicate=_is_unsubmitted,
+    )
+
+
+def _assignment_overdue(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
+    return _filter_progress_students(
+        deps.assignment_progress(str(args.get("assignment_id") or "")),
+        predicate=lambda student: bool(student.get("overdue")),
+    )
+
+
+def _assignment_attempt_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
+    assignment_id = str(args.get("assignment_id") or "")
+    student_id = str(args.get("student_id") or "")
+    progress = deps.assignment_progress(assignment_id)
+    if not isinstance(progress, dict) or progress.get("error"):
+        return progress
+    for student in progress.get("students") or []:
+        if isinstance(student, dict) and str(student.get("student_id") or "") == student_id:
+            return {"ok": True, "assignment_id": assignment_id, "student": student}
+    return {"error": "attempt_not_found", "assignment_id": assignment_id, "student_id": student_id}
+
+
 def _chart_exec_handler(
     args: Dict[str, Any],
     *,
@@ -295,6 +366,7 @@ def _build_handlers(
     role: Optional[str],
     deps: ToolDispatchDeps,
     teacher_id: Optional[str],
+    actor_id: Optional[str] = None,
 ) -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
     return {
         "exam.list": lambda _args: deps.list_exams(),
@@ -404,6 +476,54 @@ def _build_handlers(
         "assignment.list": lambda _args: _assignment_list_for_actor(
             deps=deps, role=role, teacher_id=teacher_id
         ),
+        "assignment.progress": _teacher_only_handler(
+            role=role,
+            detail="assignment.progress requires teacher role",
+            fn=lambda args: deps.assignment_progress(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.missing": _teacher_only_handler(
+            role=role,
+            detail="assignment.missing requires teacher role",
+            fn=lambda args: _assignment_missing(args, deps),
+        ),
+        "assignment.overdue": _teacher_only_handler(
+            role=role,
+            detail="assignment.overdue requires teacher role",
+            fn=lambda args: _assignment_overdue(args, deps),
+        ),
+        "assignment.attempt.get": _teacher_only_handler(
+            role=role,
+            detail="assignment.attempt.get requires teacher role",
+            fn=lambda args: _assignment_attempt_get(args, deps),
+        ),
+        "assignment.publish": _teacher_only_handler(
+            role=role,
+            detail="assignment.publish requires teacher role",
+            fn=lambda args: deps.assignment_publish(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.archive": _teacher_only_handler(
+            role=role,
+            detail="assignment.archive requires teacher role",
+            fn=lambda args: deps.assignment_archive(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.unarchive": _teacher_only_handler(
+            role=role,
+            detail="assignment.unarchive requires teacher role",
+            fn=lambda args: deps.assignment_unarchive(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.recompute_roster": _teacher_only_handler(
+            role=role,
+            detail="assignment.recompute_roster requires teacher role",
+            fn=lambda args: deps.assignment_recompute_roster(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.my_today": lambda args: deps.assignment_my_today(
+            _student_id_for_actor(role=role, actor_id=actor_id, teacher_id=teacher_id),
+            str(args.get("date") or "").strip() or None,
+        ),
+        "assignment.my_result": lambda args: deps.assignment_my_result(
+            str(args.get("assignment_id") or ""),
+            _student_id_for_actor(role=role, actor_id=actor_id, teacher_id=teacher_id),
+        ),
         "lesson.list": lambda _args: deps.list_lessons(),
         "lesson.capture": lambda args: deps.lesson_capture(args),
         "student.search": lambda args: deps.student_search(
@@ -417,7 +537,11 @@ def _build_handlers(
             detail="student.import requires teacher role",
             fn=lambda args: deps.student_import(args),
         ),
-        "assignment.generate": lambda args: deps.assignment_generate(args),
+        "assignment.generate": _teacher_only_handler(
+            role=role,
+            detail="assignment.generate requires teacher role",
+            fn=lambda args: deps.assignment_generate(args),
+        ),
         "assignment.render": lambda args: deps.assignment_render(args),
         "assignment.requirements.save": lambda args: deps.save_assignment_requirements(
             str(args.get("assignment_id", "")),
@@ -516,7 +640,7 @@ def tool_dispatch(
             "skill_id": str(skill_id or ""),
         }
 
-    handlers = _build_handlers(role=role, deps=deps, teacher_id=teacher_id)
+    handlers = _build_handlers(role=role, deps=deps, teacher_id=teacher_id, actor_id=actor_id)
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"unknown tool: {name}"}

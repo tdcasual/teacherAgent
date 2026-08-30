@@ -1,4 +1,4 @@
-id: physics-student-coach
+id: student-coach
 schema_version: 2
 title: 学生教练
 desc: 学生侧讨论、作业批改与画像更新
@@ -24,9 +24,8 @@ agent:
     - student/skills/student_coach.md
   tools:
     allow:
-      - assignment.list
-      - assignment.generate
-      - assignment.render
+      - assignment.my_today
+      - assignment.my_result
       - student.search
       - student.profile.get
       - student.profile.update

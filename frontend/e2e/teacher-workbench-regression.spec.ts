@@ -21,13 +21,13 @@ test('skills favorites filter keeps insertion target and sends cleaned payload',
   await expect(page.locator('.skill-card')).toHaveCount(1)
 
   await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
-  await expect(composer).toHaveValue(/\$physics-homework-generator\s*$/)
+  await expect(composer).toHaveValue(/\$homework-generator\s*$/)
 
   await composer.type(' 生成 3 道巩固题')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
-  expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   expect(chatStartCalls[0].messages?.[chatStartCalls[0].messages!.length - 1]?.content).toBe('生成 3 道巩固题')
 })
 
@@ -205,7 +205,7 @@ test('workbench template path can toggle back to auto routing and omit skill_id'
   await expect(homeworkSkillCard).toBeVisible()
 
   await homeworkSkillCard.getByRole('button', { name: '使用模板' }).first().click()
-  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
+  await expect(page.getByText('当前路由: $homework-generator')).toBeVisible()
 
   await page.getByRole('button', { name: '切回自动推荐' }).click()
   await expect(page.getByText('当前路由: 自动编排')).toBeVisible()

@@ -92,7 +92,7 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
       if (!trimmed && attachmentRefs.length === 0) return false
       const parsedInvocation = parseInvocationInput(trimmed, {
         knownSkillIds: skillList.map((item) => item.id),
-        activeSkillId: activeSkillId || 'physics-teacher-ops',
+        activeSkillId: activeSkillId || 'teacher-assignment-ops',
       })
       let cleanedText = parsedInvocation.cleanedInput.trim()
       if (!cleanedText && attachmentRefs.length > 0) {

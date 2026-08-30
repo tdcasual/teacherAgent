@@ -121,18 +121,6 @@ def teacher_workflow_preflight_reply(
     skill_id = str(effective_skill_id or "").strip()
     attachment = str(attachment_context or "").strip()
 
-    if skill_id == "physics-teacher-ops" and _looks_like_exam_analysis_request(last_user_text):
-        exam_id = _extract_exam_id_from_messages(req, deps)
-        if not exam_id and not attachment:
-            deps.diag_log(
-                "teacher_preflight.workflow_exam_analysis_missing_context",
-                {"skill_id": skill_id, "query_preview": str(last_user_text or "")[:160]},
-            )
-            return (
-                "当前按考试分析 workflow 处理。请补充考试编号（如 EX20260209_9b92e1），"
-                "或上传成绩单 / 分析文件后继续。"
-            )
-
     if skill_id == "physics-student-focus":
         student_id = str(getattr(req, "student_id", "") or "").strip()
         if not student_id and _looks_like_ambiguous_student_focus_request(last_user_text):
@@ -331,7 +319,7 @@ def _disabled_assignment_generation_reply(
     title = "作业生成"
     try:
         if loaded:
-            hw = loaded.skills.get("physics-homework-generator")
+            hw = loaded.skills.get("homework-generator") or loaded.skills.get("physics-homework-generator")
             if hw and hw.title:
                 title = hw.title
     except Exception:
@@ -451,10 +439,11 @@ def _generate_assignment_reply(
     )
     output = result.get("output", "")
     return (
-        f"作业已生成：{assignment_id}\n"
+        f"作业草稿已写入：{assignment_id}（visibility_status=draft，对学生不可见）。\n"
         f"- 日期：{date_str}\n"
         f"- 模式：{mode}\n"
         f"- 每个知识点题量：{per_kp}\n"
+        f"请到工作台确认后再发布（assignment.publish）。\n"
         f"{output}"
     )
 

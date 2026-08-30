@@ -1,5 +1,5 @@
 ---
-name: physics-homework-generator
+name: homework-generator
 description: Teacher-side batch generator for post-class diagnostics and personalized homework based on lesson discussions, lesson plans, and optional exam data. Use when teachers want class-wide and student-specific homework plans.
 ---
 

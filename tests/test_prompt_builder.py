@@ -9,7 +9,8 @@ class TestPromptBuilder(unittest.TestCase):
         self.assertTrue(prompt.strip())
         self.assertIn("安全规则", prompt)
         self.assertIn("作业流程", prompt)
-        self.assertIn("exam.list", prompt)
+        self.assertNotIn("exam.list", prompt)
+        self.assertIn("assignment.list", prompt)
         self.assertTrue(any("teacher/10_role.md" in m for m in modules))
 
     def test_student_prompt_compiles(self):

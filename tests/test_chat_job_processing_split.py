@@ -44,19 +44,19 @@ def test_chat_job_processing_workflow_payload_hotspot_removed() -> None:
 
 def test_normalize_workflow_resolution_payload_keeps_expected_shape() -> None:
     payload = _normalize_workflow_resolution_payload(
-        " physics-homework-generator ",
-        "physics-teacher-ops",
+        " homework-generator ",
+        "teacher-assignment-ops",
         {
             "reason": "auto_rule.teacher",
             "confidence": "0.64",
             "candidates": [
                 {
-                    "skill_id": "physics-teacher-ops",
+                    "skill_id": "teacher-assignment-ops",
                     "score": "12",
                     "hits": ["考试", "分析", "", None],
                 },
                 {
-                    "skill_id": "physics-homework-generator",
+                    "skill_id": "homework-generator",
                     "score": "oops",
                     "hits": list("123456789"),
                 },
@@ -67,13 +67,13 @@ def test_normalize_workflow_resolution_payload_keeps_expected_shape() -> None:
     )
 
     assert payload == {
-        "requested_skill_id": "physics-homework-generator",
-        "effective_skill_id": "physics-teacher-ops",
+        "requested_skill_id": "homework-generator",
+        "effective_skill_id": "teacher-assignment-ops",
         "reason": "auto_rule.teacher",
         "confidence": 0.64,
         "candidates": [
-            {"skill_id": "physics-teacher-ops", "score": 12, "hits": ["考试", "分析"]},
-            {"skill_id": "physics-homework-generator", "hits": ["1", "2", "3", "4", "5", "6"]},
+            {"skill_id": "teacher-assignment-ops", "score": 12, "hits": ["考试", "分析"]},
+            {"skill_id": "homework-generator", "hits": ["1", "2", "3", "4", "5", "6"]},
         ],
         "resolution_mode": "auto",
         "auto_selected": True,

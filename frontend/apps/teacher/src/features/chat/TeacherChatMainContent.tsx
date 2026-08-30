@@ -119,7 +119,7 @@ export default function TeacherChatMainContent({
         />
 
         <ChatComposer
-          activeSkillId={activeSkillId || 'physics-teacher-ops'}
+          activeSkillId={activeSkillId || 'teacher-assignment-ops'}
           skillPinned={skillPinned}
           input={input}
           pendingChatJob={hasPendingChatJob}

@@ -17,22 +17,22 @@ _KW = dict(assignment_intent=False, assignment_generation=False)
     ("作业id是什么", "作业"),
 ])
 def test_homework_generator_matches(text, expected_hit):
-    score, hits = score_role_skill("teacher", "physics-homework-generator", text, **_KW)
+    score, hits = score_role_skill("teacher", "homework-generator", text, **_KW)
     assert score > 0
     assert expected_hit in hits
 
 
 def test_homework_generator_intent_flags():
     score_both, h1 = score_role_skill(
-        "teacher", "physics-homework-generator", "作业",
+        "teacher", "homework-generator", "作业",
         assignment_intent=True, assignment_generation=True,
     )
     score_intent, h2 = score_role_skill(
-        "teacher", "physics-homework-generator", "作业",
+        "teacher", "homework-generator", "作业",
         assignment_intent=True, assignment_generation=False,
     )
     score_none, _ = score_role_skill(
-        "teacher", "physics-homework-generator", "作业", **_KW,
+        "teacher", "homework-generator", "作业", **_KW,
     )
     assert score_both > score_intent > score_none
     assert "assignment_generation" in h1
@@ -64,23 +64,23 @@ def test_student_focus_matches():
 
 
 def test_student_coach_teacher():
-    score, hits = score_role_skill("teacher", "physics-student-coach", "开始今天作业", **_KW)
+    score, hits = score_role_skill("teacher", "student-coach", "开始今天作业", **_KW)
     assert score > 0
     assert "开始今天作业" in hits
 
 
 def test_teacher_ops_matches():
-    score, hits = score_role_skill("teacher", "physics-teacher-ops", "考试分析试卷备课", **_KW)
+    score, hits = score_role_skill("teacher", "teacher-assignment-ops", "谁没交作业进度逾期", **_KW)
     assert score > 0
-    assert "考试分析" in hits
-    assert "试卷" in hits
-    assert "备课" in hits
+    assert "谁没交" in hits
+    assert "逾期" in hits
+    assert "作业进度" in hits
 
 
 # ── Non-matching text returns 0 ──
 
 def test_non_matching_text_returns_zero():
-    score, hits = score_role_skill("teacher", "physics-homework-generator", "今天天气不错", **_KW)
+    score, hits = score_role_skill("teacher", "homework-generator", "今天天气不错", **_KW)
     assert score == 0
     assert hits == []
 
@@ -93,16 +93,16 @@ def test_unknown_skill_returns_zero():
     assert hits == []
 
 
-# ── Student role only scores physics-student-coach ──
+# ── Student role only scores student-coach ──
 
 def test_student_role_coach_positive():
-    score, hits = score_role_skill("student", "physics-student-coach", "开始今天作业讲解错题", **_KW)
+    score, hits = score_role_skill("student", "student-coach", "开始今天作业讲解错题", **_KW)
     assert score > 0
     assert "开始今天作业" in hits
 
 
 def test_student_role_other_skill_zero():
-    score, hits = score_role_skill("student", "physics-homework-generator", "生成作业", **_KW)
+    score, hits = score_role_skill("student", "homework-generator", "生成作业", **_KW)
     assert score == 0
     assert hits == []
 
@@ -111,6 +111,6 @@ def test_student_role_other_skill_zero():
 
 @pytest.mark.parametrize("role", [None, "", "admin", "unknown"])
 def test_unknown_role_returns_zero(role):
-    score, hits = score_role_skill(role, "physics-homework-generator", "生成作业", **_KW)
+    score, hits = score_role_skill(role, "homework-generator", "生成作业", **_KW)
     assert score == 0
     assert hits == []

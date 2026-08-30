@@ -151,6 +151,79 @@ def _tool_dispatch_deps(core: Any | None = None):
             deps=_build_analysis_report_deps(core),
         )
 
+    def _assignment_publish(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, publish_assignment
+        from ..auth_service import get_current_principal
+
+        try:
+            return publish_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_archive(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, archive_assignment
+        from ..auth_service import get_current_principal
+
+        try:
+            return archive_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_unarchive(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, unarchive_assignment
+        from ..auth_service import get_current_principal
+
+        try:
+            return unarchive_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_recompute_roster(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_recompute_roster_service import (
+            AssignmentRecomputeRosterError,
+            recompute_assignment_roster,
+        )
+        from ..auth_service import get_current_principal
+
+        try:
+            return recompute_assignment_roster(assignment_id, principal=get_current_principal())
+        except AssignmentRecomputeRosterError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_my_today(student_id: str, date: str | None = None) -> dict[str, Any]:
+        from ..assignment_today_service import AssignmentTodayError, assignment_today
+        from .assignment_wiring import assignment_today_deps
+
+        try:
+            return assignment_today(
+                student_id=student_id,
+                date=date,
+                auto_generate=False,
+                generate=False,
+                per_kp=5,
+                deps=assignment_today_deps(_ac),
+            )
+        except AssignmentTodayError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_my_result(assignment_id: str, student_id: str) -> dict[str, Any]:
+        progress = _ac.compute_assignment_progress(assignment_id, include_students=True)
+        if not isinstance(progress, dict) or progress.get("error") or not progress.get("ok"):
+            return progress if isinstance(progress, dict) else {"error": "assignment_not_found"}
+        for student in progress.get("students") or []:
+            if isinstance(student, dict) and str(student.get("student_id") or "") == str(student_id or ""):
+                submission = student.get("submission") if isinstance(student.get("submission"), dict) else {}
+                best = submission.get("best") if isinstance(submission.get("best"), dict) else {}
+                return {
+                    "ok": True,
+                    "assignment_id": assignment_id,
+                    "student_id": student_id,
+                    "submitted": bool(best),
+                    "official_score": best.get("score_earned"),
+                    "student": student,
+                }
+        return {"error": "attempt_not_found", "assignment_id": assignment_id, "student_id": student_id}
+
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
         list_exams=_ac.list_exams,
@@ -197,6 +270,15 @@ def _tool_dispatch_deps(core: Any | None = None):
         analysis_review_list=analysis_review_list,
         load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
         allowed_tools=_ac.allowed_tools,
+        assignment_progress=lambda assignment_id: _ac.compute_assignment_progress(
+            assignment_id, include_students=True
+        ),
+        assignment_publish=_assignment_publish,
+        assignment_archive=_assignment_archive,
+        assignment_unarchive=_assignment_unarchive,
+        assignment_recompute_roster=_assignment_recompute_roster,
+        assignment_my_today=_assignment_my_today,
+        assignment_my_result=_assignment_my_result,
     )
 
 

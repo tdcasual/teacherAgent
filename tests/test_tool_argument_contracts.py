@@ -21,6 +21,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -63,14 +64,14 @@ class ToolArgumentContractsTest(unittest.TestCase):
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "exam.get", "arguments": {"exam_id": "EX1", "unexpected": "x"}},
+                    "params": {"name": "student.search", "arguments": {"query": "x", "unexpected": "x"}},
                 },
             )
             self.assertEqual(res.status_code, 200)
             payload = res.json()
             self.assertEqual(payload["error"]["code"], -32602)
             self.assertEqual(payload["error"]["message"], "invalid arguments")
-            self.assertEqual(payload["error"]["data"]["tool"], "exam.get")
+            self.assertEqual(payload["error"]["data"]["tool"], "student.search")
             self.assertTrue(any("unexpected" in item for item in payload["error"]["data"]["issues"]))
 
 

@@ -70,6 +70,32 @@ def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def publish_assignment(
+    assignment_id: str,
+    *,
+    principal: Optional[AuthPrincipal],
+    data_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    resolved = _resolve_data_dir(data_dir)
+    folder = _resolve_assignment_folder(assignment_id, resolved)
+    if not folder.exists():
+        raise AssignmentArchiveError(404, "assignment not found")
+    meta = _load_meta(folder)
+    _require_owner(meta, principal)
+    vis = effective_visibility_status(meta)
+    if vis != "draft":
+        raise AssignmentArchiveError(409, "invalid_visibility_status")
+    meta["visibility_status"] = "published"
+    meta["published_at"] = _now_iso()
+    atomic_write_json(folder / "meta.json", meta)
+    return {
+        "ok": True,
+        "assignment_id": str(meta.get("assignment_id") or assignment_id),
+        "visibility_status": "published",
+        "published_at": meta["published_at"],
+    }
+
+
 def archive_assignment(
     assignment_id: str,
     *,

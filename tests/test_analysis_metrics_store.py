@@ -32,7 +32,7 @@ def test_analysis_metrics_store_round_trips_snapshot(tmp_path: Path) -> None:
     service.record_workflow_resolution(
         role='teacher',
         requested_skill_id='',
-        effective_skill_id='physics-homework-generator',
+        effective_skill_id='homework-generator',
         reason='auto_rule',
         confidence=0.64,
         resolution_mode='auto',
@@ -45,7 +45,7 @@ def test_analysis_metrics_store_round_trips_snapshot(tmp_path: Path) -> None:
 
     assert snapshot['counters']['run_count'] == 1
     assert snapshot['workflow_routing']['counters']['resolution_count'] == 1
-    assert snapshot['workflow_routing']['by_effective_skill']['physics-homework-generator']['resolved'] == 1
+    assert snapshot['workflow_routing']['by_effective_skill']['homework-generator']['resolved'] == 1
 
 
 

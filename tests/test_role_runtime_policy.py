@@ -9,7 +9,7 @@ class RoleRuntimePolicyTest(unittest.TestCase):
     def test_teacher_policy_fields_are_stable(self):
         policy = get_role_runtime_policy('teacher')
         self.assertEqual(policy.role, 'teacher')
-        self.assertEqual(policy.default_skill_id, 'physics-teacher-ops')
+        self.assertEqual(policy.default_skill_id, 'teacher-assignment-ops')
         self.assertEqual(policy.default_session_id, 'main')
         self.assertTrue(policy.supports_workflow_explanation)
         self.assertTrue(policy.supports_memory_proposals)
@@ -19,7 +19,7 @@ class RoleRuntimePolicyTest(unittest.TestCase):
     def test_student_policy_fields_are_stable(self):
         policy = get_role_runtime_policy('student')
         self.assertEqual(policy.role, 'student')
-        self.assertEqual(policy.default_skill_id, 'physics-student-coach')
+        self.assertEqual(policy.default_skill_id, 'student-coach')
         self.assertIsNone(policy.default_session_id)
         self.assertFalse(policy.supports_workflow_explanation)
         self.assertTrue(policy.supports_memory_proposals)

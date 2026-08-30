@@ -50,10 +50,10 @@ class ChatStatusServiceTest(unittest.TestCase):
                 "status": "done",
                 "lane_id": "lane:teacher:main",
                 "skill_id_requested": "",
-                "skill_id_effective": "physics-homework-generator",
+                "skill_id_effective": "homework-generator",
                 "skill_reason": "auto_rule",
                 "skill_confidence": 0.64,
-                "skill_candidates": [{"skill_id": "physics-homework-generator", "score": 17}],
+                "skill_candidates": [{"skill_id": "homework-generator", "score": 17}],
                 "skill_resolution_mode": "auto",
                 "skill_auto_selected": True,
                 "skill_requested_rewritten": False,
@@ -68,10 +68,10 @@ class ChatStatusServiceTest(unittest.TestCase):
         )
 
         result = get_chat_status("cjob_003", deps=deps)
-        self.assertEqual(result["skill_id_effective"], "physics-homework-generator")
+        self.assertEqual(result["skill_id_effective"], "homework-generator")
         self.assertEqual(result["skill_reason"], "auto_rule")
         self.assertAlmostEqual(float(result["skill_confidence"]), 0.64)
-        self.assertEqual(result["skill_candidates"][0]["skill_id"], "physics-homework-generator")
+        self.assertEqual(result["skill_candidates"][0]["skill_id"], "homework-generator")
         self.assertEqual(result["skill_resolution_mode"], "auto")
         self.assertTrue(bool(result["skill_auto_selected"]))
         self.assertFalse(bool(result["skill_requested_rewritten"]))

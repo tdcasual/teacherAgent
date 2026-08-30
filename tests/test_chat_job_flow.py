@@ -227,16 +227,16 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(data["status"], "done")
                 self.assertIn("echo:teacher:", data.get("reply", ""))
                 self.assertEqual(data.get("skill_id_requested"), "")
-                self.assertEqual(data.get("skill_id_effective"), "physics-homework-generator")
+                self.assertEqual(data.get("skill_id_effective"), "homework-generator")
                 self.assertEqual(data.get("skill_reason"), "auto_rule")
                 self.assertGreater(float(data.get("skill_confidence") or 0.0), 0.28)
-                self.assertEqual((data.get("skill_candidates") or [])[0].get("skill_id"), "physics-homework-generator")
+                self.assertEqual((data.get("skill_candidates") or [])[0].get("skill_id"), "homework-generator")
                 self.assertEqual(data.get("skill_resolution_mode"), "auto")
                 self.assertTrue(bool(data.get("skill_auto_selected")))
                 self.assertFalse(bool(data.get("skill_requested_rewritten")))
                 self.assertEqual(data.get("skill_outcome"), "done")
                 self.assertEqual(data.get("skill_outcome_reason"), "done")
-                self.assertEqual(captured["skill_id"], "physics-homework-generator")
+                self.assertEqual(captured["skill_id"], "homework-generator")
 
     def test_chat_status_missing_job(self):
         with TemporaryDirectory() as td:

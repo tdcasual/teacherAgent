@@ -11,7 +11,7 @@ class SkillsFirstClassTest(unittest.TestCase):
 
         loaded = load_skills(Path(APP_ROOT) / "skills")
         self.assertIn("physics-core-examples", loaded.skills)
-        self.assertIn("physics-teacher-ops", loaded.skills)
+        self.assertIn("teacher-assignment-ops", loaded.skills)
 
         role_allowed = set(allowed_tools("teacher"))
 
@@ -35,18 +35,18 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertTrue(core_model_targets)
         self.assertEqual((core_model_targets[0] or {}).get("route_id"), "core_summary")
 
-        teacher_ops = loaded.skills["physics-teacher-ops"]
+        teacher_ops = loaded.skills["teacher-assignment-ops"]
         ops_rt = compile_skill_runtime(teacher_ops)
         filtered_ops = ops_rt.apply_tool_policy(role_allowed)
         self.assertEqual(filtered_ops, role_allowed)
-        ops_longform_targets = ops_rt.resolve_model_targets(
+        ops_planning_targets = ops_rt.resolve_model_targets(
             role_hint="teacher",
-            kind="chat.exam_longform",
+            kind="chat.agent_no_tools",
             needs_tools=False,
             needs_json=False,
         )
-        self.assertTrue(ops_longform_targets)
-        self.assertEqual((ops_longform_targets[0] or {}).get("route_id"), "exam_longform")
+        self.assertTrue(ops_planning_targets)
+        self.assertEqual((ops_planning_targets[0] or {}).get("route_id"), "planning_no_tools")
 
     def test_router_fallback_and_role_gate(self):
         from services.api.config import APP_ROOT
@@ -57,12 +57,22 @@ class SkillsFirstClassTest(unittest.TestCase):
 
         sel = resolve_skill(loaded, requested_skill_id="!!!", role_hint="teacher")
         self.assertIsNotNone(sel.skill)
-        self.assertEqual(sel.skill.skill_id, "physics-teacher-ops")
+        self.assertEqual(sel.skill.skill_id, "teacher-assignment-ops")
 
         # Student cannot select teacher-only skills; should fall back to student default.
         sel2 = resolve_skill(loaded, requested_skill_id="physics-core-examples", role_hint="student")
         self.assertIsNotNone(sel2.skill)
-        self.assertEqual(sel2.skill.skill_id, "physics-student-coach")
+        self.assertEqual(sel2.skill.skill_id, "student-coach")
+
+        aliased = resolve_skill(loaded, requested_skill_id="physics-teacher-ops", role_hint="teacher")
+        self.assertIsNotNone(aliased.skill)
+        self.assertEqual(aliased.skill.skill_id, "teacher-assignment-ops")
+        self.assertEqual(aliased.warning, "skill_id_aliased")
+
+        aliased_hw = resolve_skill(loaded, requested_skill_id="physics-homework-generator", role_hint="teacher")
+        self.assertIsNotNone(aliased_hw.skill)
+        self.assertEqual(aliased_hw.skill.skill_id, "homework-generator")
+        self.assertEqual(aliased_hw.warning, "skill_id_aliased")
 
     def test_chart_exec_policy_teacher_yes_student_no(self):
         from services.api.config import APP_ROOT
@@ -96,7 +106,7 @@ class SkillsFirstClassTest(unittest.TestCase):
         from services.api.skills.runtime import compile_skill_runtime
 
         loaded = load_skills(Path(APP_ROOT) / "skills")
-        coach_rt = compile_skill_runtime(loaded.skills["physics-student-coach"])
+        coach_rt = compile_skill_runtime(loaded.skills["student-coach"])
 
         teacher_targets = coach_rt.resolve_model_targets(
             role_hint="teacher",

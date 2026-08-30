@@ -1,23 +1,27 @@
-id: physics-teacher-ops
+id: teacher-assignment-ops
 schema_version: 2
-title: 教师运营
-desc: 考试分析、课前检测、备课与课堂讨论
+title: 作业运营
+desc: 作业进度、未交/逾期名单与发布归档
 allowed_roles: [teacher]
 routing:
-  intents: [teacher_ops]
+  intents: [teacher_ops, assignment_ops]
   keywords:
-    - 考试分析
-    - 试卷讲评
-    - 课前检测
-    - 备课建议
-    - 课堂讨论
+    - 未交
+    - 逾期
+    - 进度
+    - 谁没交
+    - 作业进度
+    - 缺交
   negative_keywords:
     - 模型路由
     - 生成作业
   keyword_weights:
-    考试分析: 7
-    试卷讲评: 6
-    课前检测: 5
+    未交: 7
+    逾期: 7
+    谁没交: 7
+    缺交: 6
+    作业进度: 6
+    进度: 4
   min_score: 3
   min_margin: 1
   confidence_floor: 0.28
@@ -27,14 +31,15 @@ agent:
     - teacher/skills/teacher_ops.md
   tools:
     allow:
-      - exam.list
-      - exam.get
-      - exam.analysis.get
-      - exam.analysis.charts.generate
-      - exam.students.list
-      - exam.student.get
       - assignment.list
-      - lesson.list
+      - assignment.progress
+      - assignment.missing
+      - assignment.overdue
+      - assignment.attempt.get
+      - assignment.publish
+      - assignment.archive
+      - assignment.unarchive
+      - assignment.recompute_roster
       - student.search
       - student.profile.get
       - chart.agent.run
@@ -50,17 +55,6 @@ agent:
       model: deepseek-ai/DeepSeek-V3.2
       temperature: 0.2
     routes:
-      - id: exam_longform
-        priority: 220
-        match:
-          kinds: [chat.exam_longform]
-          needs_tools: false
-        target:
-          provider: openai
-          mode: openai-chat
-          model: gpt-4.1-mini
-          temperature: 0.2
-          max_tokens: 4096
       - id: planning_no_tools
         priority: 180
         match:
@@ -73,8 +67,8 @@ agent:
           temperature: 0.2
 ui:
   prompts:
-    - 列出所有考试，并给出最新考试概览。
+    - 列出今天未交作业的学生。
   examples:
-    - 列出考试
-    - 做一次考试分析
-    - 生成课前检测清单
+    - 谁没交
+    - 查看作业进度
+    - 逾期名单

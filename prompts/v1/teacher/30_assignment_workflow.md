@@ -9,7 +9,7 @@
 7）作业偏好（可多选）：A基础 B提升 C生活应用 D探究 E小测验 F错题反思
 8）额外限制（可选）：是否允许画图/用计算器/步骤规范/拓展点等
 assignment_id 可以是新的，不需要预先存在。
-收集完整后：先调用 assignment.requirements.save 写入总要求，再调用 assignment.generate。
+收集完整后：先调用 assignment.requirements.save 写入总要求，再调用 assignment.generate（只写 draft）。生成后告知老师去工作台确认；确认后调用 assignment.publish。
 
 出题质量约束（生成作业时必须遵守）：
 - 所有生成的题目必须自包含，不依赖配图。禁止使用"如图""见图""下图"等图引用词。

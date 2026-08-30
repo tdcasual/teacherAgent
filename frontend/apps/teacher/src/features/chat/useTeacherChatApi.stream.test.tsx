@@ -99,7 +99,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
     const [executionTimeline, setExecutionTimeline] = React.useState<ExecutionTimelineEntry[]>([])
     const [skillList, setSkillList] = React.useState<Skill[]>([
       {
-        id: 'physics-teacher-ops',
+        id: 'teacher-assignment-ops',
         title: '考试分析',
         desc: 'ops',
         instructions: 'ops',
@@ -109,7 +109,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
         source_type: 'system',
       },
       {
-        id: 'physics-homework-generator',
+        id: 'homework-generator',
         title: '作业生成',
         desc: 'homework',
         instructions: 'homework',
@@ -172,7 +172,7 @@ const renderTeacherChatHarness = (apiBase = 'http://localhost:8000') =>
       apiBase,
       activeSessionId,
       messages,
-      activeSkillId: 'physics-teacher-ops',
+      activeSkillId: 'teacher-assignment-ops',
       skillPinned: false,
       skillList,
       pendingChatJob,
@@ -248,7 +248,7 @@ describe('useTeacherChatApi stream mapping', () => {
       toSseEvent(1, 'job.processing', {}),
       toSseEvent(2, 'workflow.resolved', {
         requested_skill_id: '',
-        effective_skill_id: 'physics-homework-generator',
+        effective_skill_id: 'homework-generator',
         reason: 'auto_rule',
         confidence: 0.64,
       }),
@@ -269,8 +269,8 @@ describe('useTeacherChatApi stream mapping', () => {
       if (url.includes('/skills')) {
         return jsonResponse({
           skills: [
-            { id: 'physics-teacher-ops', title: 'Physics Ops', desc: 'ops' },
-            { id: 'physics-homework-generator', title: '作业生成', desc: 'homework' },
+            { id: 'teacher-assignment-ops', title: 'Physics Ops', desc: 'ops' },
+            { id: 'homework-generator', title: '作业生成', desc: 'homework' },
           ],
         })
       }
@@ -300,7 +300,7 @@ describe('useTeacherChatApi stream mapping', () => {
       toSseEvent(1, 'job.processing', {}),
       toSseEvent(2, 'workflow.resolved', {
         requested_skill_id: '',
-        effective_skill_id: 'physics-teacher-ops',
+        effective_skill_id: 'teacher-assignment-ops',
         reason: 'role_default',
         confidence: 0.28,
       }),
@@ -321,7 +321,7 @@ describe('useTeacherChatApi stream mapping', () => {
       if (url.includes('/skills')) {
         return jsonResponse({
           skills: [
-            { id: 'physics-teacher-ops', title: '考试分析', desc: 'ops' },
+            { id: 'teacher-assignment-ops', title: '考试分析', desc: 'ops' },
           ],
         })
       }

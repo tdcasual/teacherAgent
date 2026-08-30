@@ -280,21 +280,21 @@ def build_system_prompt(
 def allowed_tools(role_hint: Optional[str]) -> Set[str]:
     if role_hint == "teacher":
         return {
-            "exam.list",
-            "exam.get",
-            "exam.analysis.get",
-            "exam.analysis.charts.generate",
-            "exam.students.list",
-            "exam.student.get",
-            "exam.question.get",
-            "exam.range.top_students",
-            "exam.range.summary.batch",
-            "exam.question.batch.get",
             "analysis.report.list",
             "analysis.report.get",
             "analysis.report.rerun",
             "analysis.review.list",
             "assignment.list",
+            "assignment.progress",
+            "assignment.missing",
+            "assignment.overdue",
+            "assignment.attempt.get",
+            "assignment.publish",
+            "assignment.archive",
+            "assignment.unarchive",
+            "assignment.recompute_roster",
+            "assignment.my_today",
+            "assignment.my_result",
             "lesson.list",
             "lesson.capture",
             "student.search",
@@ -314,6 +314,11 @@ def allowed_tools(role_hint: Optional[str]) -> Set[str]:
             "teacher.memory.search",
             "teacher.memory.propose",
             "teacher.memory.apply",
+        }
+    if role_hint == "student":
+        return {
+            "assignment.my_today",
+            "assignment.my_result",
         }
     return set()
 
