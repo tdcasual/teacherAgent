@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from .auth_registry_service import build_auth_registry_store
 from .core_utils import parse_ids_value, resolve_scope
-from .fs_atomic import atomic_write_json
+from .fs_atomic import atomic_write_json, atomic_write_text
 from .settings import default_teacher_id
 
 REQUIRED_TABLES = ("subjects", "teacher_roster", "student_enrollments")
@@ -69,6 +69,24 @@ def _auth_db_path(data_dir: Path) -> Path:
     return Path(data_dir) / "auth" / "auth_registry.sqlite3"
 
 
+def _connect_auth_ro(data_dir: Path) -> sqlite3.Connection:
+    db_path = _auth_db_path(data_dir)
+    conn = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _visibility_status(meta: Dict[str, Any]) -> str:
+    return _text(meta.get("visibility_status")).casefold()
+
+
+def _meta_scope(meta: Dict[str, Any]) -> Tuple[str, str, List[str]]:
+    student_ids = parse_ids_value(meta.get("student_ids") or [])
+    class_name = _text(meta.get("class_name"))
+    scope_val = resolve_scope(_text(meta.get("scope")), student_ids, class_name)
+    return scope_val, class_name, student_ids
+
+
 def _pragma_table_names(conn: sqlite3.Connection) -> set[str]:
     names: set[str] = set()
     for table in REQUIRED_TABLES:
@@ -113,9 +131,7 @@ def _load_json_object(path: Path) -> Dict[str, Any]:
 
 
 def load_subject_index(data_dir: Path) -> Dict[str, Dict[str, str]]:
-    db_path = _auth_db_path(data_dir)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    conn = _connect_auth_ro(data_dir)
     try:
         rows = conn.execute(
             "SELECT subject_id, display_name, pack_id FROM subjects"
@@ -204,7 +220,7 @@ def _should_skip(meta: Dict[str, Any], subject_index: Dict[str, Dict[str, str]])
         return False
     if _text(meta.get("subject_id")) not in subject_index:
         return False
-    if _text(meta.get("visibility_status")) not in TERMINAL_VISIBILITY:
+    if _visibility_status(meta) not in TERMINAL_VISIBILITY:
         return False
     if _truthy_flag(meta.get("needs_subject_review")):
         return False
@@ -214,6 +230,9 @@ def _should_skip(meta: Dict[str, Any], subject_index: Dict[str, Dict[str, str]])
 
 
 def _ensure_policy_v2(meta: Dict[str, Any]) -> None:
+    # Design: ownership migration backfills policy v2. A missing
+    # requires_discussion must not keep the progress-service implicit True.
+    # Explicit True is preserved.
     raw = meta.get("completion_policy")
     policy = dict(raw) if isinstance(raw, dict) else {}
     if "requires_discussion" not in policy:
@@ -257,27 +276,40 @@ def _apply_subject_mapping(
     meta.pop("unmapped_subject", None)
 
 
+def _public_expected_students_ro(
+    data_dir: Path, *, teacher_id: str, subject_id: str
+) -> List[str]:
+    conn = _connect_auth_ro(data_dir)
+    try:
+        classes = conn.execute(
+            "SELECT 1 FROM teacher_roster WHERE teacher_id = ? AND subject_id = ? LIMIT 1",
+            (teacher_id, subject_id),
+        ).fetchone()
+        if classes is None:
+            return []
+        rows = conn.execute(
+            "SELECT DISTINCT student_id FROM student_enrollments "
+            "WHERE teacher_id = ? AND subject_id = ? ORDER BY student_id",
+            (teacher_id, subject_id),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [_text(row["student_id"]) for row in rows if _text(row["student_id"])]
+
+
 def _recompute_public_expected(
     meta: Dict[str, Any], *, data_dir: Path, teacher_id: str, subject_id: str
 ) -> None:
-    store = build_auth_registry_store(data_dir=data_dir)
-    student_ids = parse_ids_value(meta.get("student_ids") or [])
-    class_name = _text(meta.get("class_name"))
-    scope_val = resolve_scope(_text(meta.get("scope")), student_ids, class_name)
+    scope_val, _class_name, _student_ids = _meta_scope(meta)
     if scope_val != "public":
         return
     if not teacher_id or not subject_id:
         meta["needs_roster_review"] = True
         return
-    result = store.resolve_expected_students(
-        scope="public",
-        class_name=class_name,
-        student_ids=student_ids,
-        teacher_id=teacher_id,
-        subject_id=subject_id,
+    items = _public_expected_students_ro(
+        data_dir, teacher_id=teacher_id, subject_id=subject_id
     )
-    items = [item for item in list(result.get("items") or []) if _text(item)]
-    if not result.get("ok") or not items:
+    if not items:
         meta["needs_roster_review"] = True
         return
     meta["expected_students"] = items
@@ -286,7 +318,7 @@ def _recompute_public_expected(
 
 def _assign_visibility(meta: Dict[str, Any], *, teacher_id: str) -> None:
     source = _text(meta.get("source")).lower()
-    current = _text(meta.get("visibility_status"))
+    current = _visibility_status(meta)
     needs_review = _truthy_flag(meta.get("needs_subject_review")) or _truthy_flag(
         meta.get("needs_roster_review")
     )
@@ -298,14 +330,7 @@ def _assign_visibility(meta: Dict[str, Any], *, teacher_id: str) -> None:
         meta.pop("teacher_id", None)
         return
     if needs_review:
-        if current in {"", "published"}:
-            meta["visibility_status"] = "draft"
-        elif current:
-            meta["visibility_status"] = current
-        else:
-            meta["visibility_status"] = "draft"
-        if meta["visibility_status"] == "published":
-            meta["visibility_status"] = "draft"
+        meta["visibility_status"] = "draft" if current in {"", "published"} else current
         return
     if current in TERMINAL_VISIBILITY or current == "draft":
         meta["visibility_status"] = current
@@ -346,7 +371,7 @@ def migrate_one_meta(
     if _truthy_flag(updated.get("needs_subject_review")) or _truthy_flag(
         updated.get("needs_roster_review")
     ):
-        if _text(updated.get("visibility_status")) == "published":
+        if _visibility_status(updated) == "published":
             updated["visibility_status"] = "draft"
     return updated, False
 
@@ -356,13 +381,14 @@ def _classify(counts: Dict[str, int], meta: Dict[str, Any], *, skipped: bool) ->
         counts["skipped"] += 1
         return
     counts["migrated"] += 1
-    if _text(meta.get("visibility_status")) == "orphan_draft":
+    status = _visibility_status(meta)
+    if status == "orphan_draft":
         counts["orphan"] += 1
     if _truthy_flag(meta.get("needs_subject_review")):
         counts["needs_subject_review"] += 1
     if _truthy_flag(meta.get("needs_roster_review")):
         counts["needs_roster_review"] += 1
-    if _text(meta.get("visibility_status")) == "retired_auto":
+    if status == "retired_auto":
         counts["retired_auto"] += 1
 
 
@@ -374,14 +400,12 @@ def _iter_assignment_folders(data_dir: Path) -> List[Path]:
     return sorted(folders, key=lambda path: path.name)
 
 
-def _write_meta_with_bak(folder: Path, original: Dict[str, Any], updated: Dict[str, Any]) -> None:
+def _write_meta_with_bak(folder: Path, updated: Dict[str, Any]) -> None:
     bak_path = folder / "meta.json.bak"
+    meta_path = folder / "meta.json"
     if not bak_path.exists():
-        bak_path.write_text(
-            json.dumps(original, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-    atomic_write_json(folder / "meta.json", updated)
+        atomic_write_text(bak_path, meta_path.read_text(encoding="utf-8"))
+    atomic_write_json(meta_path, updated)
 
 
 def migrate_assignment_meta_ownership(
@@ -411,7 +435,7 @@ def migrate_assignment_meta_ownership(
         _classify(counts, updated, skipped=skipped)
         changed = (not skipped) and updated != original
         if apply and changed:
-            _write_meta_with_bak(folder, original, updated)
+            _write_meta_with_bak(folder, updated)
         items.append(
             {
                 "assignment_id": _text(updated.get("assignment_id")) or folder.name,
@@ -428,7 +452,7 @@ def list_orphan_assignments(data_dir: Path) -> Dict[str, Any]:
     items: List[Dict[str, Any]] = []
     for folder in _iter_assignment_folders(Path(data_dir)):
         meta = _load_json_object(folder / "meta.json")
-        if _text(meta.get("visibility_status")) != "orphan_draft":
+        if _visibility_status(meta) != "orphan_draft":
             continue
         items.append(
             {
@@ -455,13 +479,16 @@ def _resolve_assignment_folder(assignment_id: str, data_dir: Path) -> Path:
     return folder
 
 
-def _require_claim_roster(store: Any, *, teacher_id: str, subject_id: str, class_name: str) -> None:
+def _require_claim_roster(
+    store: Any, *, teacher_id: str, subject_id: str, meta: Dict[str, Any]
+) -> None:
     from .auth.identity_graph_service import list_roster_class_names
 
     classes = list_roster_class_names(store, teacher_id=teacher_id, subject_id=subject_id)
     if not classes:
         raise AssignmentClaimError(400, "roster_required")
-    if class_name and class_name not in classes:
+    scope_val, class_name, _student_ids = _meta_scope(meta)
+    if scope_val == "class" and class_name and class_name not in classes:
         raise AssignmentClaimError(400, "roster_required")
 
 
@@ -473,9 +500,7 @@ def _claimed_expected_students(
     subject_id: str,
     visibility_status: str,
 ) -> List[str]:
-    student_ids = parse_ids_value(meta.get("student_ids") or [])
-    class_name = _text(meta.get("class_name"))
-    scope_val = resolve_scope(_text(meta.get("scope")), student_ids, class_name)
+    scope_val, class_name, student_ids = _meta_scope(meta)
     result = store.resolve_expected_students(
         scope=scope_val,
         class_name=class_name,
@@ -515,7 +540,7 @@ def claim_assignment(
     if not meta_path.is_file():
         raise AssignmentClaimError(404, "assignment not found")
     meta = _load_json_object(meta_path)
-    if _text(meta.get("visibility_status")) != "orphan_draft":
+    if _visibility_status(meta) != "orphan_draft":
         raise AssignmentClaimError(409, "not_orphan")
 
     store = build_auth_registry_store(data_dir=Path(data_dir))
@@ -528,9 +553,7 @@ def claim_assignment(
         ).fetchone()
     if teacher_row is None:
         raise AssignmentClaimError(404, "teacher_not_found")
-    _require_claim_roster(
-        store, teacher_id=tid, subject_id=sid, class_name=_text(meta.get("class_name"))
-    )
+    _require_claim_roster(store, teacher_id=tid, subject_id=sid, meta=meta)
     expected = _claimed_expected_students(
         store, meta, teacher_id=tid, subject_id=sid, visibility_status=vis
     )

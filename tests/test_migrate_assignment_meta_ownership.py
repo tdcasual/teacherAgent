@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.api.assignment_meta_ownership_migrate_service import (
+    AssignmentClaimError,
     MigrationPreflightError,
     claim_assignment,
     migrate_assignment_meta_ownership,
@@ -192,6 +193,8 @@ def test_dry_run_default_does_not_write(tmp_path: Path) -> None:
         {"subject": "物理"},
     )
 
+    db_path = tmp_path / "data" / "auth" / "auth_registry.sqlite3"
+    db_before = db_path.read_bytes()
     result = migrate_assignment_meta_ownership(
         data_dir=tmp_path / "data",
         uploads_dir=tmp_path / "uploads",
@@ -203,6 +206,7 @@ def test_dry_run_default_does_not_write(tmp_path: Path) -> None:
     assert meta_path.read_text(encoding="utf-8")
     assert _read_json(meta_path) == original
     assert not (meta_path.parent / "meta.json.bak").exists()
+    assert db_path.read_bytes() == db_before
 
     code, _ = _run_cli(tmp_path)
     assert code == 0
@@ -250,6 +254,10 @@ def test_apply_writes_owner_fields_and_bak(tmp_path: Path) -> None:
     assert meta["expected_students"] == ["S001"]
     assert meta.get("needs_subject_review") not in {True, "true"}
     assert meta.get("needs_roster_review") not in {True, "true"}
+    policy = meta.get("completion_policy") or {}
+    assert policy.get("requires_discussion") is False
+    assert policy.get("version") == 2
+    assert policy.get("requires_submission") is True
 
 
 def test_second_apply_skips_and_does_not_overwrite_bak(tmp_path: Path) -> None:
@@ -374,6 +382,30 @@ def test_rerun_after_roster_clears_review_flags_but_does_not_publish(tmp_path: P
     assert second["counts"]["needs_roster_review"] == 0
 
 
+def test_explicit_requires_discussion_true_is_kept(tmp_path: Path) -> None:
+    _seed_teacher_class(tmp_path)
+    folder = tmp_path / "data" / "assignments" / "HW_discuss"
+    _write_json(
+        folder / "meta.json",
+        {
+            "assignment_id": "HW_discuss",
+            "teacher_id": "t_zhang",
+            "subject_id": "physics",
+            "scope": "class",
+            "class_name": "高二2403班",
+            "source": "teacher",
+            "due_at": "",
+            "completion_policy": {"requires_discussion": True, "version": 1},
+        },
+    )
+    migrate_assignment_meta_ownership(
+        data_dir=tmp_path / "data", uploads_dir=tmp_path / "uploads", apply=True
+    )
+    policy = _read_json(folder / "meta.json").get("completion_policy") or {}
+    assert policy.get("requires_discussion") is True
+    assert policy.get("version") == 1
+
+
 def test_missing_teacher_is_orphan_and_auto_is_retired(tmp_path: Path) -> None:
     _seed_teacher_class(tmp_path)
     orphan_path = tmp_path / "data" / "assignments" / "HW_orphan" / "meta.json"
@@ -454,7 +486,9 @@ def _load_app(tmp_path: Path, *, secret: str, auth_required: str = "1"):
 def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
     secret = "migrate-claim-secret"
     store = _seed_teacher_class(tmp_path)
+    store.add_subject(subject_id="math", display_name="数学", pack_id="math")
     orphan_id = "HW_claim"
+    leftover_id = "HW_public_stale_class"
     _write_json(
         tmp_path / "data" / "assignments" / orphan_id / "meta.json",
         {
@@ -465,6 +499,17 @@ def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
             "due_at": "",
             "subject_id": "generic",
             "needs_subject_review": True,
+        },
+    )
+    _write_json(
+        tmp_path / "data" / "assignments" / leftover_id / "meta.json",
+        {
+            "assignment_id": leftover_id,
+            "visibility_status": "orphan_draft",
+            "scope": "public",
+            "class_name": "高二9999班",
+            "source": "teacher",
+            "due_at": "",
         },
     )
     app_mod = _load_app(tmp_path, secret=secret)
@@ -481,7 +526,7 @@ def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
     listed = client.get("/auth/admin/assignments/orphans", headers=admin)
     assert listed.status_code == 200
     items = listed.json().get("items") or []
-    assert {item["assignment_id"] for item in items} == {orphan_id}
+    assert {item["assignment_id"] for item in items} == {orphan_id, leftover_id}
 
     forbidden_claim = client.post(
         f"/auth/admin/assignments/{orphan_id}/claim",
@@ -500,6 +545,14 @@ def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
         json={"teacher_id": "t_zhang", "subject_id": "physics", "visibility_status": "draft"},
     )
     assert teacher_claim.status_code == 403
+
+    no_roster = client.post(
+        f"/auth/admin/assignments/{orphan_id}/claim",
+        headers=admin,
+        json={"teacher_id": "t_zhang", "subject_id": "math", "visibility_status": "draft"},
+    )
+    assert no_roster.status_code == 400
+    assert no_roster.json().get("detail") == "roster_required"
 
     claimed = client.post(
         f"/auth/admin/assignments/{orphan_id}/claim",
@@ -521,21 +574,32 @@ def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
     assert meta["teacher_id"] != "teacher"
     assert "S001" in (meta.get("expected_students") or [])
 
+    already = client.post(
+        f"/auth/admin/assignments/{orphan_id}/claim",
+        headers=admin,
+        json={"teacher_id": "t_zhang", "subject_id": "physics", "visibility_status": "draft"},
+    )
+    assert already.status_code == 409
+    assert already.json().get("detail") == "not_orphan"
+
+    leftover = client.post(
+        f"/auth/admin/assignments/{leftover_id}/claim",
+        headers=admin,
+        json={"teacher_id": "t_zhang", "subject_id": "physics", "visibility_status": "published"},
+    )
+    assert leftover.status_code == 200
+    leftover_meta = _read_json(tmp_path / "data" / "assignments" / leftover_id / "meta.json")
+    assert leftover_meta["teacher_id"] == "t_zhang"
+    assert leftover_meta["visibility_status"] == "published"
+    assert "S001" in (leftover_meta.get("expected_students") or [])
+
     gone = client.get("/auth/admin/assignments/orphans", headers=admin)
     assert gone.status_code == 200
     assert gone.json().get("items") == []
 
-    no_roster = client.post(
-        f"/auth/admin/assignments/{orphan_id}/claim",
-        headers=admin,
-        json={"teacher_id": "t_zhang", "subject_id": "math", "visibility_status": "draft"},
-    )
-    assert no_roster.status_code in {400, 409}
-
-    store.add_subject(subject_id="math", display_name="数学", pack_id="math")
-    with pytest.raises(Exception):
+    with pytest.raises(AssignmentClaimError) as claim_exc:
         claim_assignment(
-            orphan_id,
+            leftover_id,
             teacher_id="teacher",
             subject_id="physics",
             visibility_status="draft",
@@ -543,6 +607,7 @@ def test_orphans_and_claim_admin_only(tmp_path: Path) -> None:
             principal_actor_id="admin",
             principal_role="admin",
         )
+    assert claim_exc.value.detail == "default_teacher_id_forbidden"
 
 
 def test_orphans_reject_admin_local_when_auth_off(tmp_path: Path) -> None:
