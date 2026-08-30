@@ -187,6 +187,17 @@ describe('StudentTodayHome', () => {
           title: '今天的任务已提交',
           primaryActionLabel: '查看提交',
           statusLabel: '已提交',
+          items: [
+            {
+              assignment_id: 'A001',
+              teacher_id: 't_zhang',
+              subject_id: 'physics',
+              title: '牛顿第二定律练习',
+              dueLabel: '2026-03-14 截止',
+              overdue: false,
+              submitted: true,
+            },
+          ],
         })}
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
@@ -198,6 +209,7 @@ describe('StudentTodayHome', () => {
 
     expect(screen.getByRole('button', { name: '查看提交' })).toBeTruthy()
     expect(screen.getAllByTestId('student-today-primary-action')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: '提交作业' })).toBeNull()
   })
 
   it('wires primary and secondary actions', () => {

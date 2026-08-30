@@ -78,7 +78,7 @@ export default function StudentTodayHome({
                         >
                           进入任务
                         </button>
-                        {onOpenSubmit ? (
+                        {onOpenSubmit && !item.submitted ? (
                           <button
                             type="button"
                             className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-border bg-white px-4 py-2 text-[13px] font-medium text-ink"

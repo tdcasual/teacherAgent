@@ -236,7 +236,7 @@
 - `assignment_id`（必填）
 - `auto_assignment`（若为 `true` → 400 `auto_assignment_disabled`）
 
-成功时 HTTP 200。`submitted=false` 表示这次没有记为提交（例如未达到 `min_graded_total`），不是传输失败。
+成功时 HTTP 200。`submitted=false` 表示这次没有记为提交，不是传输失败。`reason=min_graded_total` 为有效评分不足；`reason=progress_unavailable` 为提交后未能读到 progress，不能当成评分不足。
 
 ---
 

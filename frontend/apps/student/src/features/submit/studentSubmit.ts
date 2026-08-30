@@ -1,7 +1,3 @@
-export type ChatSubmitAttachment = {
-  fileName: string
-}
-
 export type StudentSubmitResult = {
   ok: boolean
   submitted: boolean
@@ -13,6 +9,21 @@ export type StudentSubmitResult = {
 }
 
 const NOT_COUNTED_MESSAGE = '未记为提交。有效评分不足，请补充作业材料后再交。'
+const PROGRESS_UNAVAILABLE_MESSAGE = '未记为提交。暂时无法确认评分结果，请稍后在作业记录中查看。'
+
+export function matchReadyChatFiles(ready: Array<{ fileName: string }>, files: File[]): File[] {
+  const remaining = [...files]
+  const matched: File[] = []
+  for (const item of ready) {
+    const name = String(item.fileName || '').trim()
+    if (!name) return []
+    const index = remaining.findIndex((file) => file.name === name)
+    if (index < 0) return []
+    matched.push(remaining[index])
+    remaining.splice(index, 1)
+  }
+  return matched
+}
 
 const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
@@ -38,14 +49,15 @@ export function parseStudentSubmitResponse(payload: unknown, httpStatus: number)
     }
   }
   if (!submitted) {
+    const resolvedReason = reason || 'min_graded_total'
     return {
       ok: true,
       submitted: false,
       assignment_id: assignmentId,
       attempt_id: attemptId,
       official_score: null,
-      reason: reason || 'min_graded_total',
-      message: NOT_COUNTED_MESSAGE,
+      reason: resolvedReason,
+      message: resolvedReason === 'progress_unavailable' ? PROGRESS_UNAVAILABLE_MESSAGE : NOT_COUNTED_MESSAGE,
     }
   }
   return {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { ChatSubmitAttachment, StudentSubmitResult } from './studentSubmit'
+import type { StudentSubmitResult } from './studentSubmit'
 import { postStudentSubmit } from './studentSubmit'
 
 type StudentSubmitPanelProps = {
@@ -7,7 +7,6 @@ type StudentSubmitPanelProps = {
   studentId: string
   assignmentId: string
   assignmentTitle: string
-  chatAttachments: ChatSubmitAttachment[]
   chatFiles: File[]
   onClose: () => void
   onSubmitted: (result: StudentSubmitResult) => void
@@ -20,7 +19,6 @@ export default function StudentSubmitPanel({
   studentId,
   assignmentId,
   assignmentTitle,
-  chatAttachments,
   chatFiles,
   onClose,
   onSubmitted,
@@ -31,15 +29,13 @@ export default function StudentSubmitPanel({
   const [result, setResult] = useState<StudentSubmitResult | null>(null)
   const [error, setError] = useState('')
 
-  const previewNames = useMemo(() => {
-    if (chatConfirmArmed) return chatAttachments.map((item) => item.fileName).filter(Boolean)
-    return pickedFiles.map((file) => file.name)
-  }, [chatConfirmArmed, chatAttachments, pickedFiles])
+  const previewFiles = chatConfirmArmed ? chatFiles : pickedFiles
+  const previewNames = useMemo(
+    () => previewFiles.map((file) => file.name).filter(Boolean),
+    [previewFiles],
+  )
 
-  const submitFiles = (): File[] => {
-    if (chatConfirmArmed) return chatFiles.filter((file) => Boolean(file?.name))
-    return pickedFiles
-  }
+  const submitFiles = (): File[] => (chatConfirmArmed ? chatFiles : pickedFiles)
 
   const runSubmit = async () => {
     const files = submitFiles()
@@ -91,7 +87,7 @@ export default function StudentSubmitPanel({
               }}
             />
           </label>
-          {chatAttachments.length ? (
+          {chatFiles.length ? (
             <button
               type="button"
               className="student-supporting-link justify-self-start"
@@ -106,8 +102,8 @@ export default function StudentSubmitPanel({
           ) : null}
           {previewNames.length ? (
             <ul className="m-0 grid gap-1 p-0 list-none text-[13px]" data-testid="student-submit-preview">
-              {previewNames.map((name) => (
-                <li key={name} className="rounded-[12px] border border-border px-3 py-2">{name}</li>
+              {previewNames.map((name, index) => (
+                <li key={`${name}-${index}`} className="rounded-[12px] border border-border px-3 py-2">{name}</li>
               ))}
             </ul>
           ) : null}
@@ -115,7 +111,7 @@ export default function StudentSubmitPanel({
             <button
               type="button"
               className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
-              disabled={busy}
+              disabled={busy || chatFiles.length === 0}
               onClick={() => { void runSubmit() }}
             >
               确认提交

@@ -99,7 +99,22 @@ def _official_score(signals: Dict[str, Any]) -> Optional[float]:
         return None
 
 
-def _submit_payload(*, assignment_id: str, output: str, signals: Dict[str, Any]) -> Dict[str, Any]:
+def _submit_reason(progress: Dict[str, Any], student_id: str, signals: Dict[str, Any]) -> str:
+    if bool(signals.get("submitted")):
+        return ""
+    if _find_student_evidence(progress=progress, student_id=student_id) is None:
+        return "progress_unavailable"
+    return "min_graded_total"
+
+
+def _submit_payload(
+    *,
+    assignment_id: str,
+    output: str,
+    progress: Dict[str, Any],
+    student_id: str,
+    signals: Dict[str, Any],
+) -> Dict[str, Any]:
     submitted = bool(signals.get("submitted"))
     payload: Dict[str, Any] = {
         "ok": True,
@@ -110,7 +125,7 @@ def _submit_payload(*, assignment_id: str, output: str, signals: Dict[str, Any])
         "output": output,
     }
     if not submitted:
-        payload["reason"] = "min_graded_total"
+        payload["reason"] = _submit_reason(progress, student_id, signals)
     return payload
 
 
@@ -214,4 +229,10 @@ async def submit(
             assignment_id=safe_assignment_id,
             progress=progress,
         )
-    return _submit_payload(assignment_id=safe_assignment_id, output=out, signals=signals)
+    return _submit_payload(
+        assignment_id=safe_assignment_id,
+        output=out,
+        progress=progress,
+        student_id=safe_student_id,
+        signals=signals,
+    )

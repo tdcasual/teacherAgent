@@ -147,6 +147,41 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.get("reason"), "min_graded_total")
             self.assertIsNone(result.get("official_score"))
 
+    async def test_submit_uses_progress_unavailable_when_progress_read_fails(self):
+        with TemporaryDirectory() as td:
+            def _boom(_assignment_id, _include_students):
+                raise RuntimeError("progress down")
+
+            deps = _deps(Path(td), compute_assignment_progress=_boom)
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertEqual(result.get("reason"), "progress_unavailable")
+            self.assertIsNone(result.get("official_score"))
+
+    async def test_submit_uses_progress_unavailable_when_progress_not_ok(self):
+        with TemporaryDirectory() as td:
+            deps = _deps(
+                Path(td),
+                compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertEqual(result.get("reason"), "progress_unavailable")
+
     async def test_submit_rejects_invalid_student_id(self):
         with TemporaryDirectory() as td:
             deps = _deps(Path(td))

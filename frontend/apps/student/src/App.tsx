@@ -15,6 +15,7 @@ import StudentTodayHome from './features/home/StudentTodayHome'
 import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState'
 import StudentAssignmentHistoryPage from './features/history/StudentAssignmentHistoryPage'
 import StudentSubmitPanel from './features/submit/StudentSubmitPanel'
+import { matchReadyChatFiles } from './features/submit/studentSubmit'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import {
@@ -228,6 +229,23 @@ export default function App() {
     setChatPickedFiles([])
   }, [attachmentSessionId])
 
+  useEffect(() => {
+    const keepNames = attachments
+      .filter((item) => item.status === 'ready' || item.status === 'uploading')
+      .map((item) => item.fileName)
+    setChatPickedFiles((prev) => {
+      const remaining = [...keepNames]
+      const next = prev.filter((file) => {
+        const index = remaining.indexOf(file.name)
+        if (index < 0) return false
+        remaining.splice(index, 1)
+        return true
+      })
+      if (next.length === prev.length && next.every((file, index) => file === prev[index])) return prev
+      return next
+    })
+  }, [attachments])
+
   const { handleSend } = useStudentSendFlow({
     apiBase: state.apiBase,
     input: state.input,
@@ -362,6 +380,7 @@ export default function App() {
     dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
     setSubmitAssignmentId(aid)
     if (!studentUseMobileShellV2) return
+    setHomeOpen(true)
     setMobileTab('learning')
     setMobileSessionListOpen(false)
     if (state.sidebarOpen) {
@@ -512,8 +531,10 @@ export default function App() {
       studentId={state.verifiedStudent?.student_id || ''}
       assignmentId={submitAssignmentId}
       assignmentTitle={submitTitle}
-      chatAttachments={attachments.filter((item) => item.status === 'ready').map((item) => ({ fileName: item.fileName }))}
-      chatFiles={chatPickedFiles}
+      chatFiles={matchReadyChatFiles(
+        attachments.filter((item) => item.status === 'ready'),
+        chatPickedFiles,
+      )}
       onClose={() => setSubmitAssignmentId('')}
       onSubmitted={handleSubmitCompleted}
     />

@@ -28,7 +28,6 @@ describe('StudentSubmitPanel', () => {
         studentId="S1"
         assignmentId="HW_1"
         assignmentTitle="力学练习"
-        chatAttachments={[]}
         chatFiles={[]}
         onClose={() => undefined}
         onSubmitted={() => undefined}
@@ -66,7 +65,6 @@ describe('StudentSubmitPanel', () => {
         studentId="S1"
         assignmentId="HW_1"
         assignmentTitle="力学练习"
-        chatAttachments={[{ fileName: 'hw.pdf' }]}
         chatFiles={[chatFile]}
         onClose={() => undefined}
         onSubmitted={() => undefined}
@@ -80,6 +78,23 @@ describe('StudentSubmitPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '确认提交' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const body = fetchMock.mock.calls[0][1]?.body as FormData
+    expect((body.get('files') as File).name).toBe('hw.pdf')
+  })
+
+  it('hides chat reuse and disables confirm when there are no File blobs', () => {
+    render(
+      <StudentSubmitPanel
+        apiBase="http://localhost:8000"
+        studentId="S1"
+        assignmentId="HW_1"
+        assignmentTitle="力学练习"
+        chatFiles={[]}
+        onClose={() => undefined}
+        onSubmitted={() => undefined}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: '把当前聊天附件作为本次提交' })).toBeNull()
   })
 
   it('shows a clear not-submitted banner when min_graded_total fails on HTTP 200', async () => {
@@ -97,7 +112,6 @@ describe('StudentSubmitPanel', () => {
         studentId="S1"
         assignmentId="HW_1"
         assignmentTitle="力学练习"
-        chatAttachments={[]}
         chatFiles={[]}
         onClose={() => undefined}
         onSubmitted={() => undefined}

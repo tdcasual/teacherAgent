@@ -30,10 +30,10 @@ const studentLoopCases: MatrixCase[] = [
   {
     id: 'I004',
     priority: 'P0',
-    title: 'Student multi-image submit returns grading summary',
+    title: 'Student multi-image submit returns official score',
     given: '/student/submit endpoint is available',
     when: 'Upload multiple homework images',
-    then: 'Response includes grading summary',
+    then: 'Response includes submitted=true and official_score',
   },
   {
     id: 'I005',
@@ -170,6 +170,10 @@ test('student shell defaults to today-first home and enters chat on primary acti
   await expect(page.getByTestId('student-chat-panel')).toBeVisible()
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
   await expect(page.getByText('对话不会记为提交').first()).toBeVisible()
+  await page.getByRole('button', { name: '提交作业' }).click()
+  await expect(page.getByTestId('student-submit-panel')).toBeVisible()
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
+  await expect(page.getByTestId('student-chat-panel')).toHaveCount(0)
 })
 
 test('student submit panel requires assignment files and history is not session sidebar', async ({ page }) => {
@@ -369,12 +373,10 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         contentType: 'application/json',
         body: JSON.stringify({
           ok: true,
+          submitted: true,
           assignment_id: 'A-ACCESSIBLE-001',
-          grading: {
-            score_earned: 78,
-            score_total: 100,
-            graded_pages: 2,
-          },
+          attempt_id: 'submission_ok',
+          official_score: 78,
         }),
       })
     })
@@ -394,8 +396,9 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     expect(data.ok).toBe(true)
-    expect(data.grading.score_earned).toBe(78)
-    expect(data.grading.graded_pages).toBe(2)
+    expect(data.submitted).toBe(true)
+    expect(data.official_score).toBe(78)
+    expect(data.attempt_id).toBe('submission_ok')
   },
 
   I005: async ({ page }) => {
