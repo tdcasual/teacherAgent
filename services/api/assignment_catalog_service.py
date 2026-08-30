@@ -257,7 +257,7 @@ def find_assignment_for_date(
         if not folder.is_dir():
             continue
         meta = deps.load_assignment_meta(folder)
-        if not student_can_read_assignment(meta, for_today=True, assignment_id=folder.name):
+        if not student_can_read_assignment(meta, for_today=True):
             continue
         assignment_date = resolve_assignment_date(meta, folder)
         if assignment_date != date_str:

@@ -112,7 +112,7 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
             )
             self.assertIsNone(found)
 
-    def test_find_assignment_for_date_treats_missing_visibility_with_owner_as_published(self):
+    def test_find_assignment_for_date_hides_missing_visibility_even_with_owner(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             folder = root / "data" / "assignments" / "HW_LEGACY"
@@ -136,8 +136,7 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
                 class_name="高二2403班",
                 deps=self._catalog_deps(root),
             )
-            self.assertIsNotNone(found)
-            self.assertEqual(found["meta"].get("assignment_id"), "HW_LEGACY")
+            self.assertIsNone(found)
 
     def test_list_assignments_filters_by_owner_teacher_id(self):
         with TemporaryDirectory() as td:

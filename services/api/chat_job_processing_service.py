@@ -456,9 +456,7 @@ def _student_can_attach_assignment(
     if not isinstance(detail, dict):
         return False
     meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else detail
-    if not student_can_read_assignment(
-        meta, assignment_id=str((meta or {}).get("assignment_id") or "")
-    ):
+    if not student_can_read_assignment(meta):
         return False
     return int(assignment_specificity(meta or {}, student_id, class_name)) > 0
 

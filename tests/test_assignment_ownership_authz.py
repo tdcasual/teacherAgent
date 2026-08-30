@@ -119,7 +119,7 @@ def test_teacher_progress_allows_owner() -> None:
         assert res.json().get("ok") is True
 
 
-def test_student_assignment_detail_compat_published_without_visibility_status() -> None:
+def test_student_assignment_detail_hides_without_visibility_status() -> None:
     with _auth_env(), TemporaryDirectory() as td:
         tmp = Path(td)
         _write_json(
@@ -136,7 +136,7 @@ def test_student_assignment_detail_compat_published_without_visibility_status() 
                 "/assignment/HW_LEGACY",
                 headers=_bearer("S001", "student"),
             )
-        assert res.status_code == 200
+        assert res.status_code == 403
 
 
 def test_student_assignment_detail_hides_orphan_without_teacher_id() -> None:

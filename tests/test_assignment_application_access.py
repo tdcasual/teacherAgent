@@ -151,7 +151,11 @@ def test_require_assignment_access_allows_in_scope_student(monkeypatch, tmp_path
     )
     require_assignment_access(
         "HW_OK",
-        deps=_deps(folder=folder, specificity=3, meta={"teacher_id": "t1"}),
+        deps=_deps(
+            folder=folder,
+            specificity=3,
+            meta={"teacher_id": "t1", "visibility_status": "published"},
+        ),
     )
 
 
@@ -172,31 +176,27 @@ def test_require_assignment_access_hides_student_when_meta_has_no_teacher_id(mon
     assert exc.value.detail == "forbidden_assignment_scope"
 
 
-def test_require_assignment_access_student_missing_visibility_with_owner_is_published(
+def test_require_assignment_access_student_missing_visibility_with_owner_is_hidden(
     monkeypatch, tmp_path
 ):
     folder = tmp_path / "HW_LEGACY"
     folder.mkdir()
-    logs: list[tuple[str, dict]] = []
     monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
     monkeypatch.setattr(
         "services.api.assignment.application.require_principal",
         lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
     )
-    monkeypatch.setattr(
-        "services.api.assignment.visibility.log_missing_visibility_owner",
-        lambda **payload: logs.append(("assignment.meta.missing_owner", dict(payload))),
-    )
-    require_assignment_access(
-        "HW_LEGACY",
-        deps=_deps(
-            folder=folder,
-            specificity=3,
-            meta={"teacher_id": "t1", "scope": "public"},
-        ),
-    )
-    assert logs
-    assert logs[0][0] == "assignment.meta.missing_owner"
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_LEGACY",
+            deps=_deps(
+                folder=folder,
+                specificity=3,
+                meta={"teacher_id": "t1", "scope": "public"},
+            ),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"
 
 
 def test_require_assignment_access_student_draft_is_hidden(monkeypatch, tmp_path):

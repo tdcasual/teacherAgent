@@ -37,9 +37,9 @@ def _require_teacher_owner(actor_id: str, meta: dict) -> None:
 
 
 def _require_student_assignment_access(
-    assignment_id: str, principal: Any, meta: dict, *, deps: AssignmentAccessDeps
+    principal: Any, meta: dict, *, deps: AssignmentAccessDeps
 ) -> None:
-    if not student_can_read_assignment(meta, assignment_id=assignment_id):
+    if not student_can_read_assignment(meta):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
     class_name = ""
     try:
@@ -91,7 +91,7 @@ def require_assignment_access(
             raise AssignmentAccessError(400, "teacher_id_required")
         _require_teacher_owner(actor, meta)
         return
-    _require_student_assignment_access(assignment_id, principal, meta, deps=deps)
+    _require_student_assignment_access(principal, meta, deps=deps)
 
 
 async def list_assignments(
