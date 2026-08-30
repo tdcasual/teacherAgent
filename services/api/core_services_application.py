@@ -243,12 +243,13 @@ def compute_expected_students(
     student_ids: List[str],
     teacher_id: str = "",
     subject_id: str = "",
+    data_dir: Optional[Path] = None,
 ) -> List[str]:
     from .auth.identity_graph_service import ExpectedStudentsError
     from .auth_registry_service import build_auth_registry_store
 
     scope_val = resolve_scope(scope, student_ids, class_name)
-    store = build_auth_registry_store()
+    store = build_auth_registry_store(data_dir=data_dir)
     result = store.resolve_expected_students(
         scope=scope_val,
         class_name=class_name,

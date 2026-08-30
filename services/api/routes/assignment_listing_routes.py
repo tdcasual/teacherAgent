@@ -25,7 +25,7 @@ def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
 
 
 def register_assignment_listing_routes(
-    router: APIRouter, *, app_deps: Any, assignment_app: Any
+    router: APIRouter, *, app_deps: Any, assignment_app: Any, data_dir: Any = None
 ) -> None:
     @router.get("/assignments")
     async def assignments(limit: int = 50, cursor: int = 0) -> Any:
@@ -83,6 +83,8 @@ def register_assignment_listing_routes(
         if principal is None:
             raise HTTPException(status_code=401, detail="missing_authorization")
         try:
-            return recompute_assignment_roster(assignment_id, principal=principal)
+            return recompute_assignment_roster(
+                assignment_id, principal=principal, data_dir=data_dir
+            )
         except AssignmentRecomputeRosterError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)

@@ -279,6 +279,26 @@ def _assignment_catalog_deps(core: Any | None = None):
     )
 
 
+def _bound_compute_expected_students(core: Any) -> Any:
+    def _compute(
+        scope: str,
+        class_name: str,
+        student_ids: list[str],
+        teacher_id: str = "",
+        subject_id: str = "",
+    ) -> list[str]:
+        return core.compute_expected_students(
+            scope,
+            class_name,
+            student_ids,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            data_dir=core.DATA_DIR,
+        )
+
+    return _compute
+
+
 def _assignment_meta_postprocess_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentMetaPostprocessDeps(
@@ -288,7 +308,7 @@ def _assignment_meta_postprocess_deps(core: Any | None = None):
         parse_ids_value=_ac.parse_ids_value,
         resolve_scope=_ac.resolve_scope,
         normalize_due_at=_ac.normalize_due_at,
-        compute_expected_students=_ac.compute_expected_students,
+        compute_expected_students=_bound_compute_expected_students(_ac),
         atomic_write_json=_ac._atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
@@ -440,7 +460,7 @@ def _assignment_upload_confirm_deps(core: Any | None = None):
         parse_ids_value=_ac.parse_ids_value,
         resolve_scope=_ac.resolve_scope,
         normalize_due_at=_ac.normalize_due_at,
-        compute_expected_students=_ac.compute_expected_students,
+        compute_expected_students=_bound_compute_expected_students(_ac),
         atomic_write_json=_ac._atomic_write_json,
         copy2=shutil.copy2,
     )

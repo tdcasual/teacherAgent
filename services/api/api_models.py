@@ -193,6 +193,7 @@ class AdminEnrollClassRequest(BaseModel):
     teacher_id: str
     subject_id: str
     class_name: str
+    resync: bool = False
 
 
 class AdminEnrollRequest(BaseModel):

@@ -111,4 +111,35 @@ describe('UploadSection', () => {
       }),
     )
   })
+
+  it('refetches roster after teacher login', async () => {
+    const tokenSpy = vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('')
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        items: [{ teacher_id: 't_zhang', subject_id: 'physics', class_name: '高二2403班' }],
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<UploadSection {...baseProps} uploadSubjectId="generic" uploadScope="public" />)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    tokenSpy.mockReturnValue('teacher-token')
+    window.dispatchEvent(new Event(teacherAuth.TEACHER_AUTH_EVENT))
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/teacher/roster'),
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer teacher-token' },
+        }),
+      )
+    })
+    await waitFor(() => {
+      const subject = screen.getByLabelText('学科') as HTMLSelectElement
+      expect(Array.from(subject.options).map((option) => option.value)).toContain('physics')
+    })
+  })
 })

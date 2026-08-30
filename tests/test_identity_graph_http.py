@@ -188,6 +188,24 @@ def test_password_reset_scope_all_admin_only(tmp_path: Path) -> None:
     assert allowed.status_code == 200
     assert allowed.json().get("ok") is True
 
+    store._ensure_student_auth(
+        student_id="S999", student_name="外人", class_name="高二2404班", regenerate_token=False
+    )
+    outsider = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=teacher,
+        json={"scope": "student", "student_id": "S999"},
+    )
+    assert outsider.status_code == 403
+    assert outsider.json().get("detail") == "forbidden"
+    admin_one = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=admin,
+        json={"scope": "student", "student_id": "S999", "new_password": "AdminPwd123"},
+    )
+    assert admin_one.status_code == 200
+    assert admin_one.json().get("ok") is True
+
 
 def test_recompute_roster_overwrites_snapshot(tmp_path: Path) -> None:
     secret = "identity-recompute-secret"

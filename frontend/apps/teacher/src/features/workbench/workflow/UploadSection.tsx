@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { resolveRuntimeApiBase } from '../../../../../shared/apiBase'
-import { readTeacherAccessToken } from '../../auth/teacherAuth'
+import { TEACHER_AUTH_EVENT, readTeacherAccessToken } from '../../auth/teacherAuth'
 import { safeLocalStorageGetItem } from '../../../utils/storage'
 import type { UploadScope, UploadSectionProps } from '../../../types/workflow'
 import LabeledField from './LabeledField'
@@ -24,17 +24,26 @@ type Props = UploadSectionProps & {
 }
 
 export default function UploadSection(props: Props) {
+  const [accessToken, setAccessToken] = useState(() => readTeacherAccessToken())
   const [rosterItems, setRosterItems] = useState<RosterItem[]>([])
   useEffect(() => {
-    const token = readTeacherAccessToken()
-    if (!token) {
+    const sync = () => setAccessToken(readTeacherAccessToken())
+    window.addEventListener('storage', sync)
+    window.addEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    }
+  }, [])
+  useEffect(() => {
+    if (!accessToken) {
       setRosterItems([])
       return
     }
     const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
     let cancelled = false
     void fetch(`${apiBase}/teacher/roster`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then(async (res) => (res.ok ? ((await res.json()) as { items?: RosterItem[] }) : { items: [] }))
       .then((payload) => {
@@ -46,7 +55,7 @@ export default function UploadSection(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [accessToken])
 
   const {
     uploadMode, setUploadMode, uploadCardCollapsed, setUploadCardCollapsed,

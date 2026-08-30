@@ -430,7 +430,7 @@ Commands:
   roster add <teacher_id> <subject_id> <class_name>
   roster remove <teacher_id> <subject_id> <class_name>
   roster list [teacher_id]
-  enroll-class <teacher_id> <subject_id> <class_name>
+  enroll-class <teacher_id> <subject_id> <class_name> [--resync]
   enroll <student_id> <subject_id> <class_name>
   unenroll <student_id> <subject_id> <class_name>
   bulk-move <subject_id> <from> <to> [student_id…]
@@ -704,17 +704,27 @@ Compatibility aliases:
         print("Usage: roster list [teacher_id] | roster add <teacher_id> <subject_id> <class_name> | roster remove <teacher_id> <subject_id> <class_name>")
 
     def _cmd_enroll_class(self, tail: List[str]) -> None:
-        if len(tail) < 3:
-            print("Usage: enroll-class <teacher_id> <subject_id> <class_name>")
+        resync = "--resync" in tail
+        args = [item for item in tail if item != "--resync"]
+        if len(args) < 3:
+            print("Usage: enroll-class <teacher_id> <subject_id> <class_name> [--resync]")
             return
-        teacher_id, subject_id, class_name = tail[0], tail[1], tail[2]
+        teacher_id, subject_id, class_name = args[0], args[1], args[2]
         result = self._identity_call(
             local_fn=lambda: self._local_store.enroll_class(
-                teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+                teacher_id=teacher_id,
+                subject_id=subject_id,
+                class_name=class_name,
+                resync=resync,
             ),
             method="POST",
             path="/auth/admin/enrollments/enroll-class",
-            payload={"teacher_id": teacher_id, "subject_id": subject_id, "class_name": class_name},
+            payload={
+                "teacher_id": teacher_id,
+                "subject_id": subject_id,
+                "class_name": class_name,
+                "resync": resync,
+            },
         )
         self._print_identity_result(result, action="enroll-class")
 

@@ -408,51 +408,75 @@ def _require_owner(
     return None
 
 
+def _import_class_from_student_auth(
+    conn: sqlite3.Connection,
+    *,
+    teacher_id: str,
+    subject_id: str,
+    class_name: str,
+) -> int:
+    class_norm = normalize(class_name)
+    students = conn.execute(
+        (
+            "SELECT student_id FROM student_auth "
+            "WHERE class_name = ? OR class_norm = ? ORDER BY student_id"
+        ),
+        (class_name, class_norm),
+    ).fetchall()
+    inserted = 0
+    for row in students:
+        student_id = _text(row["student_id"])
+        if not student_id:
+            continue
+        if _insert_enrollment(
+            conn,
+            student_id=student_id,
+            subject_id=subject_id,
+            class_name=class_name,
+            teacher_id=teacher_id,
+        ):
+            inserted += 1
+    return inserted
+
+
 def enroll_class(
     store: Any,
     *,
     teacher_id: str,
     subject_id: str,
     class_name: str,
+    resync: bool = False,
 ) -> Dict[str, Any]:
     tid = _text(teacher_id)
     sid = _text(subject_id)
     class_text = _text(class_name)
     if not tid or not sid or not class_text:
         return _fail("missing_class_name" if not class_text else "missing_teacher_id")
-    class_norm = normalize(class_text)
     with store._connect() as conn:
         owner_error = _require_owner(
             conn, teacher_id=tid, subject_id=sid, class_name=class_text
         )
         if owner_error:
             return _fail(owner_error)
-        students = conn.execute(
-            (
-                "SELECT student_id FROM student_auth "
-                "WHERE class_name = ? OR class_norm = ? ORDER BY student_id"
-            ),
-            (class_text, class_norm),
-        ).fetchall()
-        inserted = 0
-        for row in students:
-            student_id = _text(row["student_id"])
-            if not student_id:
-                continue
-            if _insert_enrollment(
-                conn,
-                student_id=student_id,
-                subject_id=sid,
-                class_name=class_text,
-                teacher_id=tid,
-            ):
-                inserted += 1
+        already = _count_enrollments(conn, subject_id=sid, class_name=class_text)
+        if already > 0 and not resync:
+            skip_bootstrap = True
+            inserted = 0
+        else:
+            skip_bootstrap = False
+            inserted = _import_class_from_student_auth(
+                conn, teacher_id=tid, subject_id=sid, class_name=class_text
+            )
+    listed = list_enrollments(store, subject_id=sid, class_name=class_text)
+    items = listed.get("items") or []
     return _ok(
         teacher_id=tid,
         subject_id=sid,
         class_name=class_text,
-        count=inserted,
-        source="student_auth",
+        count=len(items) if skip_bootstrap else inserted,
+        items=items,
+        source="enrollments" if skip_bootstrap else "student_auth",
+        bootstrapped=not skip_bootstrap,
     )
 
 
@@ -772,16 +796,18 @@ def list_roster_class_names(
 
 
 def student_enrolled(
-    store: Any, *, student_id: str, teacher_id: str, subject_id: str
+    store: Any, *, student_id: str, teacher_id: str, subject_id: str = ""
 ) -> bool:
+    sid = _text(student_id)
+    tid = _text(teacher_id)
+    subject = _text(subject_id)
+    sql = "SELECT 1 FROM student_enrollments WHERE student_id = ? AND teacher_id = ?"
+    params: List[str] = [sid, tid]
+    if subject:
+        sql += " AND subject_id = ?"
+        params.append(subject)
     with store._connect() as conn:
-        row = conn.execute(
-            (
-                "SELECT 1 FROM student_enrollments "
-                "WHERE student_id = ? AND teacher_id = ? AND subject_id = ?"
-            ),
-            (_text(student_id), _text(teacher_id), _text(subject_id)),
-        ).fetchone()
+        row = conn.execute(sql, params).fetchone()
     return row is not None
 
 
@@ -970,9 +996,14 @@ class IdentityGraphMixin:
         teacher_id: str,
         subject_id: str,
         class_name: str,
+        resync: bool = False,
     ) -> Dict[str, Any]:
         return enroll_class(
-            self, teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+            self,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            class_name=class_name,
+            resync=resync,
         )
 
     def enroll(

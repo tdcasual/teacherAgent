@@ -1325,6 +1325,14 @@ class AuthRegistryStore(IdentityGraphMixin):
             identity = self._get_student_identity(sid)
             if identity is None:
                 return {"ok": False, "error": "not_found"}
+            role = str(actor_role or "").strip().lower()
+            if role != "admin":
+                from .auth.identity_graph_service import student_enrolled
+
+                if not student_enrolled(
+                    self, student_id=sid, teacher_id=str(actor_id or "")
+                ):
+                    return {"ok": False, "error": "forbidden"}
             return {"ok": True, "scope": scope, "items": [identity]}
 
         from .auth.identity_graph_service import list_class_reset_targets

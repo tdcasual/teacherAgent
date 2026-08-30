@@ -128,6 +128,42 @@ def test_single_enroll_and_enroll_class_bootstrap(tmp_path: Path) -> None:
     assert ids == {"S001", "S002", "S003"}
 
 
+def test_enroll_class_does_not_reimport_after_bootstrap(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _add_teacher(store)
+    _add_student(store, "S001", "高二2403班")
+    store.add_roster(teacher_id="t_zhang", subject_id="physics", class_name="高二2403班")
+    first = store.enroll_class(
+        teacher_id="t_zhang", subject_id="physics", class_name="高二2403班"
+    )
+    assert first["bootstrapped"] is True
+    assert first["source"] == "student_auth"
+    _add_student(store, "S002", "高二2403班")
+    replay = store.enroll_class(
+        teacher_id="t_zhang", subject_id="physics", class_name="高二2403班"
+    )
+    assert replay["ok"] is True
+    assert replay["bootstrapped"] is False
+    assert replay["source"] == "enrollments"
+    ids = {
+        item["student_id"]
+        for item in store.list_enrollments(subject_id="physics", class_name="高二2403班")["items"]
+    }
+    assert ids == {"S001"}
+    resync = store.enroll_class(
+        teacher_id="t_zhang",
+        subject_id="physics",
+        class_name="高二2403班",
+        resync=True,
+    )
+    assert resync["bootstrapped"] is True
+    resync_ids = {
+        item["student_id"]
+        for item in store.list_enrollments(subject_id="physics", class_name="高二2403班")["items"]
+    }
+    assert resync_ids == {"S001", "S002"}
+
+
 def test_student_auth_class_name_is_not_visibility_source(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _add_teacher(store)

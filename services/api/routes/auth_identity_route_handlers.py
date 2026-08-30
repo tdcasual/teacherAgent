@@ -113,6 +113,7 @@ def register_identity_admin_routes(router: APIRouter, core: Any) -> None:
                 teacher_id=req.teacher_id,
                 subject_id=req.subject_id,
                 class_name=req.class_name,
+                resync=bool(req.resync),
             )
         )
 
