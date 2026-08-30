@@ -241,3 +241,35 @@ def test_repo_generic_and_physics_packs_exist() -> None:
     assert "【学科 overlay：通用】" in svc.student_prompt_overlay(None)
     assert "【学科 overlay：物理】" in svc.student_prompt_overlay("physics")
     assert svc.grade_adapter("generic") is None
+
+
+def test_skill_affiliates_parsed_and_deduped(packs_dir: Path) -> None:
+    math_dir = packs_dir / "math"
+    _write_pack(
+        math_dir,
+        subject_id="math",
+        display_name="数学",
+        student_overlay="【学科 overlay：数学】",
+    )
+    manifest = yaml.safe_load((math_dir / "pack.yaml").read_text(encoding="utf-8"))
+    manifest["skill_affiliates"] = ["math-core", "math-core", "", "math-lesson"]
+    (math_dir / "pack.yaml").write_text(
+        yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    svc.clear_pack_cache()
+    pack = svc.load_pack("math")
+    assert pack.skill_affiliates == ("math-core", "math-lesson")
+    assert svc.load_pack("generic").skill_affiliates == ()
+
+
+def test_physics_pack_lists_remaining_physics_skill_affiliates() -> None:
+    svc.clear_pack_cache()
+    physics = svc.load_pack("physics")
+    generic = svc.load_pack("generic")
+    assert physics.skill_affiliates == (
+        "physics-lesson-capture",
+        "physics-core-examples",
+        "physics-student-focus",
+    )
+    assert generic.skill_affiliates == ()

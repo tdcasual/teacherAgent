@@ -78,6 +78,29 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertEqual(aliased_hw.skill.skill_id, "homework-generator")
         self.assertEqual(aliased_hw.warning, "skill_id_aliased")
 
+    def test_remaining_physics_skill_ids_are_pack_affiliates_not_defaults(self):
+        from services.api.config import APP_ROOT
+        from services.api.skills.loader import load_skills
+        from services.api.skills.router import default_skill_id_for_role
+        from services.api.subject_pack_service import load_pack
+
+        loaded = load_skills(Path(APP_ROOT) / "skills")
+        physics_ids = {skill_id for skill_id in loaded.skills if skill_id.startswith("physics-")}
+        affiliates = set(load_pack("physics").skill_affiliates)
+        self.assertEqual(
+            physics_ids,
+            {
+                "physics-lesson-capture",
+                "physics-core-examples",
+                "physics-student-focus",
+            },
+        )
+        self.assertEqual(physics_ids, affiliates)
+        self.assertNotIn(default_skill_id_for_role("teacher"), physics_ids)
+        self.assertNotIn(default_skill_id_for_role("student"), physics_ids)
+        self.assertTrue((Path(APP_ROOT) / "skills" / "physics-lesson-capture" / "skill.yaml").is_file())
+        self.assertTrue((Path(APP_ROOT) / "skills" / "physics-core-examples" / "skill.yaml").is_file())
+
     def test_chart_exec_policy_teacher_yes_student_no(self):
         from services.api.config import APP_ROOT
         from services.api.core_services import allowed_tools

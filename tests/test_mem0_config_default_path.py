@@ -26,3 +26,33 @@ def test_get_config_default_qdrant_path_is_repo_relative(monkeypatch) -> None:
     qdrant_path = config["vector_store"]["config"]["path"]
     assert MACHINE_LOCAL_MARKER not in qdrant_path
     assert Path(qdrant_path) == PROJECT_ROOT / ".qdrant"
+
+
+def test_get_config_default_collection_is_school_mem(monkeypatch) -> None:
+    monkeypatch.delenv("MEM0_COLLECTION", raising=False)
+    monkeypatch.delenv("TENANT_ID", raising=False)
+    config = get_config()
+    assert config["vector_store"]["config"]["collection_name"] == "school_mem"
+
+
+def test_get_config_collection_uses_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("MEM0_COLLECTION", "custom_mem")
+    config = get_config()
+    assert config["vector_store"]["config"]["collection_name"] == "custom_mem"
+
+
+def test_mem0_config_default_is_not_physics_or_tenant_collection() -> None:
+    text = Path("mem0_config.py").read_text(encoding="utf-8")
+    assert 'os.getenv("MEM0_COLLECTION", "school_mem")' in text
+    assert 'os.getenv("MEM0_COLLECTION", "physics_mem")' not in text
+    assert "tenant_${" not in text
+    assert "tenant_{" not in text
+
+
+def test_mem0_config_does_not_auto_migrate_qdrant_collections() -> None:
+    source = Path("mem0_config.py").read_text(encoding="utf-8")
+    adapter = Path("services/api/mem0_adapter.py").read_text(encoding="utf-8")
+    combined = source + "\n" + adapter
+    assert "recreate_collection" not in combined
+    assert "rename_collection" not in combined
+    assert "migrate_collection" not in combined

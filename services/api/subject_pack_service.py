@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple
 
 import yaml
 
@@ -52,6 +52,7 @@ class PackManifest:
     pack_dir: Path
     fallback: bool = False
     requested_subject_id: str = ""
+    skill_affiliates: Tuple[str, ...] = ()
 
 
 def clear_pack_cache() -> None:
@@ -151,6 +152,20 @@ def _normalize_prompts(value: Any) -> Dict[str, str]:
     return prompts
 
 
+def _normalize_skill_affiliates(value: Any) -> Tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    affiliates: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        token = str(item or "").strip()
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        affiliates.append(token)
+    return tuple(affiliates)
+
+
 def _manifest_from_yaml(path: Path, *, fallback: bool, requested_subject_id: str) -> PackManifest:
     data = _read_yaml_mapping(path)
     pack_dir = path.parent
@@ -169,6 +184,7 @@ def _manifest_from_yaml(path: Path, *, fallback: bool, requested_subject_id: str
         pack_dir=pack_dir,
         fallback=fallback,
         requested_subject_id=requested_subject_id,
+        skill_affiliates=_normalize_skill_affiliates(data.get("skill_affiliates")),
     )
 
 

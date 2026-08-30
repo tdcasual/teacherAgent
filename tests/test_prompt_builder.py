@@ -18,9 +18,39 @@ class TestPromptBuilder(unittest.TestCase):
 
         prompt, modules = compile_system_prompt("student", version="v1", debug=False)
         self.assertTrue(prompt.strip())
-        self.assertIn("学生端物理学习助手", prompt)
+        self.assertIn("学生端学习助手", prompt)
+        self.assertNotIn("物理学习助手", prompt)
+        self.assertNotIn("物理教学助手", prompt)
+        self.assertNotIn("列出考试", prompt)
         self.assertIn("LaTeX", prompt)
         self.assertTrue(any("student/10_role.md" in m for m in modules))
+
+    def test_role_prompts_drop_physics_product_identity(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        teacher, _ = compile_system_prompt("teacher", version="v1", debug=False)
+        student, _ = compile_system_prompt("student", version="v1", debug=False)
+        self.assertIn("教学助手", teacher)
+        self.assertNotIn("物理教学助手", teacher)
+        self.assertNotIn("列出考试", teacher)
+        self.assertIn("学生端学习助手", student)
+        self.assertNotIn("物理学习助手", student)
+        self.assertNotIn("列出考试", student)
+        self.assertNotIn("生成作业", student)
+
+    def test_generic_overlay_does_not_fight_student_base_identity(self):
+        from services.api.prompt_builder import compile_system_prompt
+        from services.api.subject_pack_service import student_prompt_overlay
+
+        overlay = student_prompt_overlay("generic")
+        prompt, modules = compile_system_prompt(
+            "student", version="v1", debug=False, overlay=overlay
+        )
+        self.assertIn("学生端学习助手", prompt)
+        self.assertIn("【学科 overlay：通用】", prompt)
+        self.assertIn("subject_overlay", modules)
+        self.assertNotIn("物理学习助手", prompt)
+        self.assertNotIn("物理教学助手", prompt)
 
     def test_unknown_prompt_compiles(self):
         from services.api.prompt_builder import compile_system_prompt

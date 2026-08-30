@@ -5,3 +5,7 @@ grader: none
 prompts:
   student_overlay: prompts/student_overlay.md
   teacher_overlay: prompts/teacher_overlay.md
+skill_affiliates:
+  - physics-lesson-capture
+  - physics-core-examples
+  - physics-student-focus

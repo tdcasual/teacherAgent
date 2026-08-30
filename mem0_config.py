@@ -46,7 +46,8 @@ def get_config() -> dict:
     qdrant_path = os.getenv("QDRANT_PATH", str(PROJECT_ROOT / ".qdrant"))
     qdrant_host = os.getenv("QDRANT_HOST")
     qdrant_port = os.getenv("QDRANT_PORT")
-    collection = os.getenv("MEM0_COLLECTION", "physics_mem")
+    # School-scoped default. Do not rename leftover Qdrant collections at runtime.
+    collection = os.getenv("MEM0_COLLECTION", "school_mem")
 
     qdrant_config = {
         "collection_name": collection,

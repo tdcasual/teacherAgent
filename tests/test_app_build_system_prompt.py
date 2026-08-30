@@ -7,6 +7,8 @@ class TestAppBuildSystemPrompt(unittest.TestCase):
 
         prompt, _modules = compile_system_prompt("teacher", version="v1", debug=False)
         self.assertIn("教学助手", prompt)
+        self.assertNotIn("物理教学助手", prompt)
+        self.assertNotIn("列出考试", prompt)
         self.assertNotIn("exam.list", prompt)
         self.assertIn("assignment.list", prompt)
 
@@ -14,7 +16,9 @@ class TestAppBuildSystemPrompt(unittest.TestCase):
         from services.api.prompt_builder import compile_system_prompt
 
         prompt, _modules = compile_system_prompt("student", version="v1", debug=False)
-        self.assertIn("学生端物理学习助手", prompt)
+        self.assertIn("学生端学习助手", prompt)
+        self.assertNotIn("物理学习助手", prompt)
+        self.assertNotIn("列出考试", prompt)
         self.assertIn("LaTeX", prompt)
 
 
