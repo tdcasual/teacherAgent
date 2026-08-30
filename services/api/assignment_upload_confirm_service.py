@@ -254,15 +254,26 @@ def _resolve_students_scope(
     return student_ids_list, scope_val
 
 
-def _require_meta_owner(job: Dict[str, Any]) -> tuple[str, str]:
+def _mark_confirm_failed(job_id: str, deps: AssignmentUploadConfirmDeps, error: str) -> None:
+    deps.write_upload_job(job_id, {"status": "failed", "error": error, "step": "failed"})
+
+
+def _require_meta_owner(
+    job: Dict[str, Any],
+    *,
+    job_id: str,
+    deps: AssignmentUploadConfirmDeps,
+) -> tuple[str, str]:
     teacher_id = str(job.get("teacher_id") or "").strip()
     if not teacher_id:
         principal = get_current_principal()
         teacher_id = str(getattr(principal, "actor_id", "") or "").strip()
     subject_id = str(job.get("subject_id") or "").strip()
     if not teacher_id:
+        _mark_confirm_failed(job_id, deps, "teacher_id_required")
         raise AssignmentUploadConfirmError(400, "teacher_id_required")
     if not subject_id:
+        _mark_confirm_failed(job_id, deps, "subject_id_required")
         raise AssignmentUploadConfirmError(400, "subject_id_required")
     return teacher_id, subject_id
 
@@ -277,9 +288,10 @@ def _build_assignment_meta(
     prepared: _PreparedConfirmData,
     student_ids_list: List[str],
     scope_val: str,
+    teacher_id: str,
+    subject_id: str,
     deps: AssignmentUploadConfirmDeps,
 ) -> Dict[str, Any]:
-    teacher_id, subject_id = _require_meta_owner(job)
     return {
         "assignment_id": assignment_id,
         "teacher_id": teacher_id,
@@ -355,7 +367,7 @@ def confirm_assignment_upload(
         missing=prepared.missing,
         deps=deps,
     )
-    _require_meta_owner(job)
+    teacher_id, subject_id = _require_meta_owner(job, job_id=job_id, deps=deps)
 
     assignment_id, out_dir, meta_path = _resolve_output_target(job_id, job, deps)
     _copy_uploaded_files(job_id, job, job_dir, out_dir, deps)
@@ -378,6 +390,8 @@ def confirm_assignment_upload(
         prepared=prepared,
         student_ids_list=student_ids_list,
         scope_val=scope_val,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
         deps=deps,
     )
     deps.atomic_write_json(meta_path, meta)

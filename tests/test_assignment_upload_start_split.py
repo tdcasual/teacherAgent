@@ -10,6 +10,7 @@ from services.api.assignment_upload_start_service import (
     AssignmentUploadStartDeps,
     start_assignment_upload,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class _FakeUpload:
@@ -81,22 +82,26 @@ def test_assignment_upload_start_hotspot_removed() -> None:
 
 def test_start_upload_keeps_image_mode_when_only_answer_is_pdf(tmp_path: Path) -> None:
     writes: dict[str, dict] = {}
-    result = asyncio.run(
-        start_assignment_upload(
-            assignment_id="HW_1",
-            date="2026-02-08",
-            due_at="2026-02-09T20:00:00",
-            subject_id="physics",
-            scope="class",
-            class_name="高二2403班",
-            student_ids="",
-            files=[_FakeUpload("paper.png")],
-            answer_files=[_FakeUpload("answer.pdf")],
-            ocr_mode="FREE_OCR",
-            language="zh",
-            deps=_deps(tmp_path, writes=writes),
+    token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+    try:
+        result = asyncio.run(
+            start_assignment_upload(
+                assignment_id="HW_1",
+                date="2026-02-08",
+                due_at="2026-02-09T20:00:00",
+                subject_id="physics",
+                scope="class",
+                class_name="高二2403班",
+                student_ids="",
+                files=[_FakeUpload("paper.png")],
+                answer_files=[_FakeUpload("answer.pdf")],
+                ocr_mode="FREE_OCR",
+                language="zh",
+                deps=_deps(tmp_path, writes=writes),
+            )
         )
-    )
+    finally:
+        reset_current_principal(token)
 
     assert result["ok"] is True
     assert writes["job_fixed_001"]["delivery_mode"] == "image"

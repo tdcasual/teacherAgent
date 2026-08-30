@@ -275,10 +275,15 @@ def build_generated_assignment_meta(
     due_at: str,
     generated_at: str,
 ) -> dict:
+    teacher_val = str(teacher_id or "").strip()
     subject_val = str(subject_id or "").strip()
+    if not teacher_val:
+        raise SystemExit("teacher_id_required")
+    if not subject_val:
+        raise SystemExit("subject_id_required")
     return {
         "assignment_id": assignment_id,
-        "teacher_id": str(teacher_id or "").strip(),
+        "teacher_id": teacher_val,
         "subject_id": subject_val,
         "pack_id": subject_val,
         "date": date_str or "",
@@ -405,9 +410,7 @@ def main():
     parser.add_argument("--teacher-id", default="", help="owning teacher id")
     parser.add_argument("--subject-id", default="", help="opaque subject id (physics|math|generic)")
     parser.add_argument("--due-at", default="", help="optional due datetime")
-    parser.add_argument(
-        "--visibility-status", default="draft", help="ignored; generate always writes draft"
-    )
+    parser.add_argument("--visibility-status", default="draft", help="ignored")
     args = parser.parse_args()
 
     kp_list = parse_kp_list(args.kp)
@@ -580,7 +583,6 @@ def main():
         )
     assignment_md.write_text("\n".join(lines), encoding="utf-8")
 
-    # write meta — generate/select_practice is always draft until teacher confirm
     meta = build_generated_assignment_meta(
         assignment_id=args.assignment_id,
         date_str=date_str,

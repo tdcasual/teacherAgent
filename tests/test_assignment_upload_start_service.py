@@ -8,6 +8,7 @@ from services.api.assignment_upload_start_service import (
     AssignmentUploadStartError,
     start_assignment_upload,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class _FakeUpload:
@@ -16,6 +17,12 @@ class _FakeUpload:
 
 
 class AssignmentUploadStartServiceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+
+    def tearDown(self) -> None:
+        reset_current_principal(self._token)
+
     def _deps(self, root: Path):  # type: ignore[no-untyped-def]
         writes = {}
         queued = []

@@ -33,6 +33,7 @@ from services.api.assignment_upload_start_service import (
 )
 from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 from services.api.paths import InvalidAssignmentDate, optional_assignment_date, parse_date_str
+from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "skills" / "physics-student-coach" / "scripts"
@@ -140,6 +141,19 @@ class AssignmentUploadOwnershipTest(unittest.TestCase):
                     self._start(Path(td), writes, subject_id="  ")
                 self.assertEqual(cm.exception.status_code, 400)
                 self.assertEqual(cm.exception.detail, "subject_id_required")
+        finally:
+            reset_current_principal(token)
+
+    def test_teacher_id_required_when_principal_missing(self) -> None:
+        token = set_current_principal(None)
+        try:
+            with TemporaryDirectory() as td:
+                writes: dict[str, dict] = {}
+                with self.assertRaises(AssignmentUploadStartError) as cm:
+                    self._start(Path(td), writes)
+                self.assertEqual(cm.exception.status_code, 400)
+                self.assertEqual(cm.exception.detail, "teacher_id_required")
+                self.assertEqual(writes, {})
         finally:
             reset_current_principal(token)
 
@@ -288,6 +302,8 @@ class AssignmentConfirmOwnershipTest(unittest.TestCase):
                 )
             self.assertEqual(cm.exception.status_code, 400)
             self.assertEqual(cm.exception.detail, "subject_id_required")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+            self.assertEqual(writes[-1][1].get("error"), "subject_id_required")
 
     def test_confirm_requires_teacher_id(self) -> None:
         token = set_current_principal(None)
@@ -313,6 +329,8 @@ class AssignmentConfirmOwnershipTest(unittest.TestCase):
                     )
                 self.assertEqual(cm.exception.status_code, 400)
                 self.assertEqual(cm.exception.detail, "teacher_id_required")
+                self.assertEqual(writes[-1][1].get("status"), "failed")
+                self.assertEqual(writes[-1][1].get("error"), "teacher_id_required")
         finally:
             reset_current_principal(token)
 
@@ -440,6 +458,15 @@ class AssignmentGenerateDraftTest(unittest.TestCase):
             reset_current_principal(token)
 
 
+class AssignmentGenerateToolSchemaTest(unittest.TestCase):
+    def test_generate_schema_requires_subject_id(self) -> None:
+        tool = DEFAULT_TOOL_REGISTRY.require("assignment.generate")
+        schema = tool.to_openai()["function"]["parameters"]
+        self.assertIn("subject_id", schema.get("properties") or {})
+        self.assertIn("due_at", schema.get("properties") or {})
+        self.assertIn("subject_id", schema.get("required") or [])
+
+
 class SelectPracticeMetaDraftTest(unittest.TestCase):
     def test_generated_meta_is_draft_with_owner_fields(self) -> None:
         meta = select_practice.build_generated_assignment_meta(
@@ -472,6 +499,44 @@ class SelectPracticeMetaDraftTest(unittest.TestCase):
         self.assertEqual(select_practice.safe_date(""), "")
         self.assertEqual(select_practice.safe_date("   "), "")
         self.assertEqual(select_practice.safe_date("2026-08-28"), "2026-08-28")
+
+    def test_rejects_empty_teacher_id(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            select_practice.build_generated_assignment_meta(
+                assignment_id="HW_1",
+                date_str="",
+                mode="kp",
+                kp_list=["力学"],
+                question_ids=["Q1"],
+                class_name="",
+                student_ids=[],
+                scope="public",
+                source="teacher",
+                teacher_id="  ",
+                subject_id="physics",
+                due_at="",
+                generated_at="2026-08-28T12:00:00",
+            )
+        self.assertEqual(str(cm.exception), "teacher_id_required")
+
+    def test_rejects_empty_subject_id(self) -> None:
+        with self.assertRaises(SystemExit) as cm:
+            select_practice.build_generated_assignment_meta(
+                assignment_id="HW_1",
+                date_str="",
+                mode="kp",
+                kp_list=["力学"],
+                question_ids=["Q1"],
+                class_name="",
+                student_ids=[],
+                scope="public",
+                source="teacher",
+                teacher_id="t_zhang",
+                subject_id="",
+                due_at="",
+                generated_at="2026-08-28T12:00:00",
+            )
+        self.assertEqual(str(cm.exception), "subject_id_required")
 
 
 class PostprocessOwnerFieldsTest(unittest.TestCase):

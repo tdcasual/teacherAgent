@@ -141,7 +141,9 @@ def _validate_schema(schema: Dict[str, Any], value: Any, path: str, issues: List
             issues.append(f"{path}: expected integer")
             return
     elif schema_type == "number":
-        if not ((isinstance(value, int) and not isinstance(value, bool)) or isinstance(value, float)):
+        if not (
+            (isinstance(value, int) and not isinstance(value, bool)) or isinstance(value, float)
+        ):
             issues.append(f"{path}: expected number")
             return
     elif schema_type == "boolean":
@@ -380,12 +382,17 @@ def build_default_registry() -> ToolRegistry:
                 "generate": {"type": "boolean", "default": False},
                 "mode": {"type": "string"},
                 "date": {"type": "string"},
+                "due_at": {"type": "string"},
+                "subject_id": {
+                    "type": "string",
+                    "description": "opaque subject id: physics | math | generic",
+                },
                 "class_name": {"type": "string"},
                 "student_ids": {"type": "string"},
                 "source": {"type": "string"},
                 "requirements": {"type": "object"},
             },
-            required=["assignment_id"],
+            required=["assignment_id", "subject_id"],
         ),
     )
     tools["assignment.requirements.save"] = ToolDef(
@@ -393,7 +400,11 @@ def build_default_registry() -> ToolRegistry:
         mutating=True,
         description="Save assignment requirements (8-item teacher checklist)",
         parameters=_schema_object(
-            {"assignment_id": {"type": "string"}, "date": {"type": "string"}, "requirements": {"type": "object"}},
+            {
+                "assignment_id": {"type": "string"},
+                "date": {"type": "string"},
+                "requirements": {"type": "object"},
+            },
             required=["assignment_id", "requirements"],
         ),
     )
@@ -404,7 +415,10 @@ def build_default_registry() -> ToolRegistry:
         parameters=_schema_object(
             {
                 "assignment_id": {"type": "string"},
-                "assignment_questions": {"type": "string", "description": "optional csv path override"},
+                "assignment_questions": {
+                    "type": "string",
+                    "description": "optional csv path override",
+                },
                 "out": {"type": "string", "description": "optional output pdf path"},
             },
             required=["assignment_id"],
@@ -440,7 +454,10 @@ def build_default_registry() -> ToolRegistry:
     tools["student.search"] = ToolDef(
         name="student.search",
         description="Search students by name or keyword",
-        parameters=_schema_object({"query": {"type": "string"}, "limit": {"type": "integer", "default": 5}}, required=["query"]),
+        parameters=_schema_object(
+            {"query": {"type": "string"}, "limit": {"type": "integer", "default": 5}},
+            required=["query"],
+        ),
     )
     tools["student.profile.get"] = ToolDef(
         name="student.profile.get",
@@ -469,7 +486,11 @@ def build_default_registry() -> ToolRegistry:
         description="Import students from exam responses into student_profiles",
         parameters=_schema_object(
             {
-                "source": {"type": "string", "description": "responses_scored or responses", "default": "responses_scored"},
+                "source": {
+                    "type": "string",
+                    "description": "responses_scored or responses",
+                    "default": "responses_scored",
+                },
                 "exam_id": {"type": "string", "description": "exam id to locate manifest"},
                 "file_path": {"type": "string", "description": "override responses csv path"},
                 "mode": {"type": "string", "description": "merge or overwrite", "default": "merge"},
@@ -511,7 +532,9 @@ def build_default_registry() -> ToolRegistry:
     tools["core_example.render"] = ToolDef(
         name="core_example.render",
         description="Render core example PDF",
-        parameters=_schema_object({"example_id": {"type": "string"}, "out": {"type": "string"}}, required=["example_id"]),
+        parameters=_schema_object(
+            {"example_id": {"type": "string"}, "out": {"type": "string"}}, required=["example_id"]
+        ),
     )
 
     # Charts / code execution (teacher-only in API role gate)
@@ -528,13 +551,26 @@ def build_default_registry() -> ToolRegistry:
         ),
         parameters=_schema_object(
             {
-                "python_code": {"type": "string", "description": "Python code to execute. Use save_file(path) to save output files."},
-                "input_data": {"type": "object", "description": "optional JSON object passed to python as input_data"},
+                "python_code": {
+                    "type": "string",
+                    "description": "Python code to execute. Use save_file(path) to save output files.",
+                },
+                "input_data": {
+                    "type": "object",
+                    "description": "optional JSON object passed to python as input_data",
+                },
                 "chart_hint": {"type": "string", "description": "optional intent/notes"},
                 "timeout_sec": {"type": "integer", "default": 120},
-                "save_as": {"type": "string", "description": "optional PNG filename, e.g. main.png"},
+                "save_as": {
+                    "type": "string",
+                    "description": "optional PNG filename, e.g. main.png",
+                },
                 "auto_install": {"type": "boolean", "default": False},
-                "packages": {"type": "array", "items": {"type": "string"}, "description": "optional pip packages to install"},
+                "packages": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "optional pip packages to install",
+                },
                 "max_retries": {"type": "integer", "default": 1},
             },
             required=["python_code"],
@@ -548,14 +584,21 @@ def build_default_registry() -> ToolRegistry:
             {
                 "task": {"type": "string", "description": "chart requirement in natural language"},
                 "input_data": {"type": "object", "description": "optional structured input data"},
-                "title": {"type": "string", "description": "optional markdown title for rendered image"},
+                "title": {
+                    "type": "string",
+                    "description": "optional markdown title for rendered image",
+                },
                 "engine": {"type": "string", "description": "llm(default)|auto"},
                 "chart_hint": {"type": "string"},
                 "save_as": {"type": "string"},
                 "timeout_sec": {"type": "integer", "default": 180},
                 "max_retries": {"type": "integer", "default": 3},
                 "auto_install": {"type": "boolean", "default": True},
-                "packages": {"type": "array", "items": {"type": "string"}, "description": "optional pip package hints"},
+                "packages": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "optional pip package hints",
+                },
                 "opencode_enabled": {"type": "boolean"},
                 "opencode_bin": {"type": "string"},
                 "opencode_mode": {"type": "string", "description": "run|attach"},
@@ -574,7 +617,9 @@ def build_default_registry() -> ToolRegistry:
     tools["teacher.workspace.init"] = ToolDef(
         name="teacher.workspace.init",
         description="Initialize teacher workspace files (AGENTS/USER/MEMORY/etc.)",
-        parameters=_schema_object({"teacher_id": {"type": "string", "description": "optional teacher id"}}),
+        parameters=_schema_object(
+            {"teacher_id": {"type": "string", "description": "optional teacher id"}}
+        ),
     )
     tools["teacher.memory.get"] = ToolDef(
         name="teacher.memory.get",
@@ -582,7 +627,10 @@ def build_default_registry() -> ToolRegistry:
         parameters=_schema_object(
             {
                 "teacher_id": {"type": "string"},
-                "file": {"type": "string", "description": "MEMORY.md/USER.md/AGENTS.md/SOUL.md/HEARTBEAT.md or DAILY"},
+                "file": {
+                    "type": "string",
+                    "description": "MEMORY.md/USER.md/AGENTS.md/SOUL.md/HEARTBEAT.md or DAILY",
+                },
                 "date": {"type": "string", "description": "used when file=DAILY"},
                 "max_chars": {"type": "integer", "default": 8000},
             }
@@ -592,7 +640,11 @@ def build_default_registry() -> ToolRegistry:
         name="teacher.memory.search",
         description="Search teacher memory/workspace files for a keyword",
         parameters=_schema_object(
-            {"teacher_id": {"type": "string"}, "query": {"type": "string"}, "limit": {"type": "integer", "default": 5}},
+            {
+                "teacher_id": {"type": "string"},
+                "query": {"type": "string"},
+                "limit": {"type": "integer", "default": 5},
+            },
             required=["query"],
         ),
     )
@@ -602,7 +654,11 @@ def build_default_registry() -> ToolRegistry:
         parameters=_schema_object(
             {
                 "teacher_id": {"type": "string"},
-                "target": {"type": "string", "description": "MEMORY|DAILY|USER|AGENTS|SOUL|HEARTBEAT", "default": "MEMORY"},
+                "target": {
+                    "type": "string",
+                    "description": "MEMORY|DAILY|USER|AGENTS|SOUL|HEARTBEAT",
+                    "default": "MEMORY",
+                },
                 "title": {"type": "string"},
                 "content": {"type": "string"},
             },
@@ -614,7 +670,11 @@ def build_default_registry() -> ToolRegistry:
         mutating=True,
         description="Apply or reject a proposed memory update",
         parameters=_schema_object(
-            {"teacher_id": {"type": "string"}, "proposal_id": {"type": "string"}, "approve": {"type": "boolean", "default": True}},
+            {
+                "teacher_id": {"type": "string"},
+                "proposal_id": {"type": "string"},
+                "approve": {"type": "boolean", "default": True},
+            },
             required=["proposal_id"],
         ),
     )

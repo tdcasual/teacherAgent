@@ -171,6 +171,13 @@ def _principal_teacher_id() -> str:
     return str(getattr(principal, "actor_id", "") or "").strip()
 
 
+def _require_teacher_id() -> str:
+    teacher_id = _principal_teacher_id()
+    if not teacher_id:
+        raise AssignmentUploadStartError(400, "teacher_id_required")
+    return teacher_id
+
+
 def _build_upload_record(
     *,
     job_id: str,
@@ -240,6 +247,7 @@ async def start_assignment_upload(
 ) -> Dict[str, Any]:
     date_str = _job_assignment_date(date, deps)
     subject_id_val = _require_subject_id(subject_id)
+    teacher_id = _require_teacher_id()
     job_id = deps.new_job_id()
     job_dir = deps.upload_job_path(job_id)
     source_dir = job_dir / "source"
@@ -259,7 +267,6 @@ async def start_assignment_upload(
     )
     _ensure_total_upload_size(source_known_total + answer_known_total)
 
-    teacher_id = _principal_teacher_id()
     try:
         saved_sources, total_written, delivery_mode = await _save_upload_batch(
             source_inputs,

@@ -14,6 +14,15 @@ from .subject_score_guard_service import (
 
 _log = logging.getLogger(__name__)
 
+_SUBJECT_ID_ALIASES = {
+    "physics": "physics",
+    "math": "math",
+    "generic": "generic",
+    "物理": "physics",
+    "数学": "math",
+    "通用": "generic",
+}
+
 
 def _default_extract_exam_id(_text: str) -> Optional[str]:
     return None
@@ -90,7 +99,9 @@ def _extract_lesson_id_from_messages(req: Any) -> Optional[str]:
 
 def _looks_like_exam_analysis_request(text: str) -> bool:
     content = str(text or "").strip()
-    return any(token in content for token in ("考试分析", "讲评", "成绩", "试卷", "班级分析", "exam"))
+    return any(
+        token in content for token in ("考试分析", "讲评", "成绩", "试卷", "班级分析", "exam")
+    )
 
 
 def _looks_like_ambiguous_student_focus_request(text: str) -> bool:
@@ -158,7 +169,9 @@ def _build_subject_total_mode_reply(
     requested_subject: Optional[str],
     inferred_subject: Optional[str],
 ) -> str:
-    totals = overview.get("totals_summary") if isinstance(overview.get("totals_summary"), dict) else {}
+    totals = (
+        overview.get("totals_summary") if isinstance(overview.get("totals_summary"), dict) else {}
+    )
     avg_total = _fmt_score((totals or {}).get("avg_total"))
     median_total = _fmt_score((totals or {}).get("median_total"))
     max_total = _fmt_score((totals or {}).get("max_total_observed"))
@@ -184,7 +197,7 @@ def _build_subject_total_mode_reply(
 
     return (
         f"## 考试 {exam_id} 单科成绩说明\n\n"
-        "当前数据为**总分模式**（`score_mode: \"total\"`），系统仅有 `TOTAL` 总分字段，"
+        '当前数据为**总分模式**（`score_mode: "total"`），系统仅有 `TOTAL` 总分字段，'
         f"{unsupported_subject_line}\n\n"
         f"{cannot_treat_line}\n\n"
         f"{inferred_hint}"
@@ -213,7 +226,9 @@ def _subject_score_total_mode_preflight(
     if not isinstance(overview, dict) or not overview.get("ok"):
         return None
 
-    should_guard, requested_subject, inferred_subject = should_guard_total_mode_subject_request(last_user_text, overview)
+    should_guard, requested_subject, inferred_subject = should_guard_total_mode_subject_request(
+        last_user_text, overview
+    )
     if not should_guard:
         score_mode = str(overview.get("score_mode") or "").strip().lower()
         score_mode_source = str(overview.get("score_mode_source") or "").strip().lower()
@@ -310,7 +325,9 @@ def _allowed_assignment_tools(
     return allowed, loaded
 
 
-def _disabled_assignment_generation_reply(loaded: Any, *, deps: TeacherAssignmentPreflightDeps) -> str:
+def _disabled_assignment_generation_reply(
+    loaded: Any, *, deps: TeacherAssignmentPreflightDeps
+) -> str:
     title = "作业生成"
     try:
         if loaded:
@@ -349,7 +366,9 @@ def _missing_reply(
     deps: TeacherAssignmentPreflightDeps,
 ) -> str:
     deps.diag_log("teacher_preflight.missing", {"missing": missing})
-    prompt = analysis.get("next_prompt") or deps.format_requirements_prompt(errors=missing, include_assignment_id=not assignment_id)
+    prompt = analysis.get("next_prompt") or deps.format_requirements_prompt(
+        errors=missing, include_assignment_id=not assignment_id
+    )
     prompt_text = str(prompt or "")
     if len(missing) <= 3 and (not prompt_text or _looks_like_full_template_prompt(prompt_text)):
         return _build_incremental_missing_prompt(missing)
@@ -365,7 +384,24 @@ def _maybe_save_requirements(
 ) -> None:
     requirements_payload = analysis.get("requirements") or {}
     if requirements_payload:
-        deps.save_assignment_requirements(assignment_id, requirements_payload, date_str, created_by="teacher", validate=False)
+        deps.save_assignment_requirements(
+            assignment_id, requirements_payload, date_str, created_by="teacher", validate=False
+        )
+
+
+def _preflight_subject_id(analysis: Dict[str, Any]) -> str:
+    requirements = analysis.get("requirements")
+    req = requirements if isinstance(requirements, dict) else {}
+    raw = str(
+        analysis.get("subject_id")
+        or analysis.get("subject")
+        or req.get("subject_id")
+        or req.get("subject")
+        or ""
+    ).strip()
+    if not raw:
+        return ""
+    return _SUBJECT_ID_ALIASES.get(raw) or _SUBJECT_ID_ALIASES.get(raw.lower()) or raw
 
 
 def _generate_assignment_reply(
@@ -377,7 +413,10 @@ def _generate_assignment_reply(
 ) -> str:
     if not analysis.get("ready_to_generate"):
         deps.diag_log("teacher_preflight.not_ready", {"assignment_id": assignment_id})
-        return analysis.get("next_prompt") or "已保存作业要求。请补充知识点或上传截图题目后再生成作业。"
+        return (
+            analysis.get("next_prompt")
+            or "已保存作业要求。请补充知识点或上传截图题目后再生成作业。"
+        )
 
     kp_list = analysis.get("kp_list") or []
     question_ids = analysis.get("question_ids") or []
@@ -390,13 +429,17 @@ def _generate_assignment_reply(
         "per_kp": per_kp,
         "mode": mode,
         "date": date_str,
+        "due_at": str(analysis.get("due_at") or "").strip(),
+        "subject_id": _preflight_subject_id(analysis),
         "source": "teacher",
         "skip_validation": True,
     }
     result = deps.assignment_generate(args)
     if result.get("error"):
         deps.diag_log("teacher_preflight.generate_error", {"error": result.get("error")})
-        return analysis.get("next_prompt") or deps.format_requirements_prompt(errors=[str(result.get("error"))])
+        return analysis.get("next_prompt") or deps.format_requirements_prompt(
+            errors=[str(result.get("error"))]
+        )
 
     deps.diag_log(
         "teacher_preflight.generated",
@@ -416,7 +459,9 @@ def _generate_assignment_reply(
     )
 
 
-def teacher_assignment_preflight(req: Any, *, deps: TeacherAssignmentPreflightDeps) -> Optional[str]:
+def teacher_assignment_preflight(
+    req: Any, *, deps: TeacherAssignmentPreflightDeps
+) -> Optional[str]:
     last_user_text = _last_user_text(req)
 
     subject_mode_reply = _subject_score_total_mode_preflight(req, last_user_text, deps)

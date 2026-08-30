@@ -25,7 +25,11 @@ class _Req:
 
 
 class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
-    def _deps(self, analysis: Optional[Dict[str, Any]], allow_tools=("assignment.generate", "assignment.requirements.save")):
+    def _deps(
+        self,
+        analysis: Optional[Dict[str, Any]],
+        allow_tools=("assignment.generate", "assignment.requirements.save"),
+    ):
         logs = []
         saved = []
         generated = []
@@ -39,6 +43,8 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
 
         def _gen(args: Dict[str, Any]):
             generated.append(args)
+            if not str(args.get("subject_id") or "").strip():
+                return {"error": "subject_id_required"}
             return {"ok": True, "output": "ok"}
 
         deps = TeacherAssignmentPreflightDeps(
@@ -52,7 +58,9 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
             format_requirements_prompt=lambda **kwargs: f"PROMPT:{kwargs.get('errors')}",
             save_assignment_requirements=_save,
             assignment_generate=_gen,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
+            extract_exam_id=lambda text: (
+                "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None
+            ),
             exam_get=lambda _exam_id: {},
         )
         return deps, logs, saved, generated
@@ -142,6 +150,26 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertEqual(len(saved), 1)
         self.assertEqual(len(generated), 1)
         self.assertEqual(generated[0]["assignment_id"], "A1")
+        self.assertEqual(generated[0]["subject_id"], "physics")
+
+    def test_generate_surfaces_subject_id_required_when_missing(self):
+        analysis = {
+            "intent": "assignment",
+            "assignment_id": "A1",
+            "date": "2026-02-07",
+            "missing": [],
+            "ready_to_generate": True,
+            "kp_list": ["牛顿定律"],
+            "mode": "kp",
+        }
+        deps, logs, _saved, generated = self._deps(analysis=analysis)
+        req = _Req(messages=[_Msg(role="user", content="请生成今天作业")], skill_id="default")
+        result = teacher_assignment_preflight(req, deps=deps)
+        self.assertIsInstance(result, str)
+        assert isinstance(result, str)
+        self.assertIn("subject_id_required", result)
+        self.assertEqual(generated[0]["subject_id"], "")
+        self.assertTrue(any(event == "teacher_preflight.generate_error" for event, _ in logs))
 
     def test_returns_disabled_message_when_tools_not_allowed(self):
         analysis = {
@@ -151,7 +179,9 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
             "missing": [],
             "ready_to_generate": True,
         }
-        deps, _logs, _saved, generated = self._deps(analysis=analysis, allow_tools=("assignment.generate",))
+        deps, _logs, _saved, generated = self._deps(
+            analysis=analysis, allow_tools=("assignment.generate",)
+        )
         req = _Req(messages=[_Msg(role="user", content="请生成作业")], skill_id="default")
         result = teacher_assignment_preflight(req, deps=deps)
         self.assertIsInstance(result, str)
@@ -189,7 +219,7 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertIsInstance(result, str)
         assert isinstance(result, str)
         self.assertIn("单科成绩说明", result)
-        self.assertIn("score_mode: \"total\"", result)
+        self.assertIn('score_mode: "total"', result)
         self.assertIn("不能把总分当作物理单科成绩", result)
         self.assertEqual(generated, [])
         self.assertTrue(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
@@ -248,12 +278,15 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         self.assertIsInstance(result, str)
         assert isinstance(result, str)
         self.assertIn("单科成绩说明", result)
-        self.assertIn("score_mode: \"total\"", result)
+        self.assertIn('score_mode: "total"', result)
         self.assertIn("不能把总分当作物理单科成绩", result)
         self.assertEqual(generated, [])
         self.assertTrue(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
-        self.assertFalse(any(event == "teacher_preflight.subject_total_allow_single_subject" for event, _ in logs))
-
+        self.assertFalse(
+            any(
+                event == "teacher_preflight.subject_total_allow_single_subject" for event, _ in logs
+            )
+        )
 
     def test_subject_score_request_on_total_mode_with_auto_extracted_subject_is_not_guarded(self):
         deps, logs, _saved, generated = self._deps(analysis=None)
@@ -278,13 +311,19 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
         result = teacher_assignment_preflight(req, deps=deps)
         self.assertIsNone(result)
         self.assertEqual(generated, [])
-        self.assertTrue(any(event == "teacher_preflight.subject_total_auto_extract_subject" for event, _ in logs))
+        self.assertTrue(
+            any(
+                event == "teacher_preflight.subject_total_auto_extract_subject" for event, _ in logs
+            )
+        )
         self.assertFalse(any(event == "teacher_preflight.subject_total_guard" for event, _ in logs))
-
 
     def test_exam_analysis_workflow_requires_exam_or_attachment(self):
         deps, _logs, _saved, _generated = self._deps(analysis=None)
-        req = _Req(messages=[_Msg(role="user", content="请做一次考试分析并给出讲评建议")], skill_id="physics-teacher-ops")
+        req = _Req(
+            messages=[_Msg(role="user", content="请做一次考试分析并给出讲评建议")],
+            skill_id="physics-teacher-ops",
+        )
 
         result = teacher_workflow_preflight_reply(
             req,
@@ -301,7 +340,10 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
 
     def test_student_focus_workflow_requires_specific_student_when_reference_is_ambiguous(self):
         deps, _logs, _saved, _generated = self._deps(analysis=None)
-        req = _Req(messages=[_Msg(role="user", content="请分析这个学生最近为什么掉分")], skill_id="physics-student-focus")
+        req = _Req(
+            messages=[_Msg(role="user", content="请分析这个学生最近为什么掉分")],
+            skill_id="physics-student-focus",
+        )
 
         result = teacher_workflow_preflight_reply(
             req,
@@ -318,7 +360,10 @@ class TeacherAssignmentPreflightServiceTest(unittest.TestCase):
 
     def test_lesson_capture_workflow_requires_attachment_or_lesson_id(self):
         deps, _logs, _saved, _generated = self._deps(analysis=None)
-        req = _Req(messages=[_Msg(role="user", content="把这节课的板书整理成讲义")], skill_id="physics-lesson-capture")
+        req = _Req(
+            messages=[_Msg(role="user", content="把这节课的板书整理成讲义")],
+            skill_id="physics-lesson-capture",
+        )
 
         result = teacher_workflow_preflight_reply(
             req,
