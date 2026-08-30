@@ -1,42 +1,4 @@
 import type { ExecutionTimelineEntry, Skill } from '../../appTypes'
-import type { AnalysisReportSummary } from '../../types/workflow'
-
-export const buildAnalysisTargetContract = (
-  target: AnalysisReportSummary | null | undefined,
-): Record<string, string> | null => {
-  if (!target) return null
-  const reportId = String(target.report_id || '').trim()
-  const targetId = String(target.target_id || reportId).trim()
-  if (!targetId) return null
-  const domain = String(target.domain || target.analysis_type || '').trim()
-  const targetType = String(target.target_type || '').trim() || 'report'
-  const strategyId = String(target.strategy_id || '').trim()
-  const analysisTarget: Record<string, string> = {
-    target_type: targetType,
-    target_id: targetId,
-  }
-  if (domain) analysisTarget.source_domain = domain
-  if (targetType === 'report' && reportId) analysisTarget.report_id = reportId
-  if (strategyId) analysisTarget.strategy_id = strategyId
-  return analysisTarget
-}
-
-export const buildAnalysisTargetContextMessage = (target: AnalysisReportSummary | null | undefined): string => {
-  if (!target) return ''
-  const reportId = String(target.report_id || '').trim()
-  const targetId = String(target.target_id || reportId).trim()
-  if (!targetId) return ''
-  const domain = String(target.domain || target.analysis_type || '').trim()
-  const targetType = String(target.target_type || '').trim()
-  const strategyId = String(target.strategy_id || '').trim()
-  const parts = ['[analysis_target]']
-  if (domain) parts.push(`domain=${domain}`)
-  if (targetType) parts.push(`target_type=${targetType}`)
-  parts.push(`target_id=${targetId}`)
-  if (reportId) parts.push(`report_id=${reportId}`)
-  if (strategyId) parts.push(`strategy_id=${strategyId}`)
-  return parts.join(' ')
-}
 
 export const appendExecutionTimelineEntry = (
   setExecutionTimeline: React.Dispatch<React.SetStateAction<ExecutionTimelineEntry[]>>,

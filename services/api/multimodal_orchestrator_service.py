@@ -19,7 +19,7 @@ from .specialist_agents.job_graph_models import JobGraphNode, SpecialistJobGraph
 from .specialist_agents.job_graph_runtime import SpecialistJobGraphRuntime
 from .strategies.planner import build_handoff_plan, build_lineage_metadata
 from .strategies.selector import StrategySelectionError, build_default_strategy_selector
-from .wiring.survey_wiring import build_multimodal_specialist_runtime
+from .domains.runtime_builder import build_domain_specialist_runtime
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ def build_multimodal_orchestrator_deps(core: Any | None = None) -> MultimodalOrc
         load_submission=lambda submission_id: load_multimodal_submission_view(submission_id, core=core),
         load_job=lambda submission_id: _load_job_optional(submission_id, service_deps),
         write_job=lambda submission_id, updates: write_multimodal_report_job(submission_id, updates, deps=service_deps),
-        specialist_runtime=build_multimodal_specialist_runtime(core),
+        specialist_runtime=build_domain_specialist_runtime(domain_id='video_homework', core=core),
         deliver_report=lambda **kwargs: deliver_multimodal_report(deps=service_deps, **kwargs),
         enqueue_review_item=lambda **kwargs: enqueue_multimodal_review_item(deps=service_deps, **kwargs),
         review_confidence_floor=settings.survey_review_confidence_floor,

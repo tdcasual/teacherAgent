@@ -113,14 +113,14 @@ def test_compare_analysis_runs_outputs_compact_diff_summary(tmp_path: Path) -> N
 
 def test_export_analysis_ops_snapshot_script_outputs_replay_compare_summary(tmp_path: Path) -> None:
     data_dir = tmp_path / 'data'
-    reports_dir = data_dir / 'survey_reports'
+    reports_dir = data_dir / 'video_homework_reports' / 'reports'
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / 'report_2.json').write_text(
         json.dumps(
             {
                 'report_id': 'report_2',
                 'updated_at': '2026-03-12T12:00:00',
-                'strategy_id': 'survey.teacher.report',
+                'strategy_id': 'video_homework.teacher.report',
                 'rerun_base_lineage': {'report_id': 'report_1', 'strategy_version': 'v1'},
             },
             ensure_ascii=False,

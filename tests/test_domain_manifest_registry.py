@@ -17,29 +17,16 @@ from services.api.domains.manifest_registry import (
 from services.api.specialist_agents.registry import SpecialistAgentSpec
 from services.api.strategies.contracts import StrategySpec
 from services.api.strategies.selector import build_default_strategy_selector
-from services.api.wiring.survey_wiring import (
-    build_class_report_specialist_registry,
-    build_multimodal_specialist_registry,
-    build_survey_specialist_registry,
-)
+from services.api.domains.runtime_builder import build_domain_specialist_registry
 
 
 def test_default_domain_manifest_registry_exposes_supported_domains_and_rollout_flags() -> None:
     registry = build_default_domain_manifest_registry(review_confidence_floor=0.65)
 
     manifests = registry.list()
-    assert [item.domain_id for item in manifests] == ['class_report', 'survey', 'video_homework']
+    assert [item.domain_id for item in manifests] == ['video_homework']
 
-    survey = registry.get('survey')
-    class_report = registry.get('class_report')
     video_homework = registry.get('video_homework')
-
-    assert {item.strategy_id for item in survey.strategies} == {
-        'survey.teacher.report',
-        'survey.chat.followup',
-    }
-    assert survey.feature_flags == ['SURVEY_ANALYSIS_ENABLED', 'SURVEY_SHADOW_MODE', 'SURVEY_BETA_TEACHER_ALLOWLIST']
-    assert class_report.feature_flags == []
     assert video_homework.feature_flags == [
         'MULTIMODAL_ENABLED',
         'MULTIMODAL_MAX_UPLOAD_BYTES',
@@ -59,18 +46,8 @@ def test_platform_artifact_registry_matches_manifest_declarations() -> None:
         for spec in manifest.artifact_adapters
     }
 
-    assert declared_adapter_ids == {
-        'survey.bundle.adapter',
-        'class_report.self_hosted_form.adapter',
-        'class_report.web_export.adapter',
-        'class_report.pdf_summary.adapter',
-    }
-    assert runtime_registry.get('survey.bundle.adapter').output_artifact_type == 'survey_evidence_bundle'
-    assert [item.adapter_id for item in runtime_registry.find(output_artifact_type='class_signal_bundle')] == [
-        'class_report.pdf_summary.adapter',
-        'class_report.self_hosted_form.adapter',
-        'class_report.web_export.adapter',
-    ]
+    assert declared_adapter_ids == set()
+    assert runtime_registry.find(output_artifact_type='class_signal_bundle') == []
 
 
 
@@ -89,7 +66,6 @@ def test_default_strategy_selector_uses_manifest_declared_specs() -> None:
     selector_strategy_ids = {spec.strategy_id for spec in selector._specs}
 
     assert selector_strategy_ids == manifest_strategy_ids
-    assert next(spec for spec in selector._specs if spec.strategy_id == 'survey.teacher.report').confidence_floor == 0.66
     assert next(spec for spec in selector._specs if spec.strategy_id == 'video_homework.teacher.report').specialist_agent == 'video_homework_analyst'
 
 
@@ -97,29 +73,17 @@ def test_default_strategy_selector_uses_manifest_declared_specs() -> None:
 def test_specialist_registries_reuse_manifest_specs() -> None:
     manifest_registry = build_default_domain_manifest_registry(review_confidence_floor=0.65)
 
-    survey_manifest = manifest_registry.get('survey')
-    class_report_manifest = manifest_registry.get('class_report')
     video_homework_manifest = manifest_registry.get('video_homework')
-
-    assert build_survey_specialist_registry(object()).get('survey_analyst') == survey_manifest.specialists[0]
-    assert build_class_report_specialist_registry(object()).get('class_signal_analyst') == class_report_manifest.specialists[0]
-    assert build_multimodal_specialist_registry(object()).get('video_homework_analyst') == video_homework_manifest.specialists[0]
+    registry = build_domain_specialist_registry(domain_id='video_homework', manifests=manifest_registry, core=object())
+    assert registry.get('video_homework_analyst') == video_homework_manifest.specialists[0]
 
 
 
 def test_default_manifest_registry_declares_report_binding_metadata() -> None:
     registry = build_default_domain_manifest_registry(review_confidence_floor=0.65)
 
-    survey = registry.get('survey')
-    class_report = registry.get('class_report')
     video_homework = registry.get('video_homework')
-
-    assert survey.report_binding is not None
-    assert survey.report_binding.provider_factory == 'build_survey_analysis_report_provider'
-    assert class_report.report_binding is not None
-    assert class_report.report_binding.provider_factory == 'build_class_report_analysis_report_provider'
-    assert video_homework.report_binding is not None
-    assert video_homework.report_binding.provider_factory == 'build_video_homework_analysis_report_provider'
+    assert video_homework.report_binding is None
 
 
 SCRIPT_PATH = Path('scripts/check_analysis_domain_contract.py')
@@ -129,9 +93,7 @@ def test_analysis_domain_contract_checker_reports_default_registry_ready() -> No
     payload = check_analysis_domain_contract()
 
     assert payload['ok'] is True
-    assert payload['domains']['survey']['has_runtime_binding'] is True
-    assert payload['domains']['survey']['has_report_binding'] is True
-    assert payload['domains']['survey']['strategy_ids'] == ['survey.chat.followup', 'survey.teacher.report']
+    assert payload['domains']['video_homework']['has_runtime_binding'] is True
     assert payload['domains']['video_homework']['specialist_ids'] == [
         'reviewer_analyst',
         'video_homework_analyst',
@@ -149,7 +111,9 @@ def test_analysis_domain_contract_checker_cli_json_output() -> None:
     assert proc.returncode == 0, proc.stderr or proc.stdout
     payload = json.loads(proc.stdout)
     assert payload['ok'] is True
-    assert 'class_report' in payload['domains']
+    assert 'video_homework' in payload['domains']
+    assert 'survey' not in payload['domains']
+    assert 'class_report' not in payload['domains']
 
 
 

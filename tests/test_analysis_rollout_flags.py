@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from services.api.job_repository import load_survey_job, write_survey_job
 from services.api.multimodal_orchestrator_service import (
     build_multimodal_orchestrator_deps,
     process_multimodal_submission,
@@ -16,11 +15,7 @@ from services.api.multimodal_repository import (
     write_multimodal_extraction,
     write_multimodal_submission,
 )
-from services.api.survey_orchestrator_service import (
-    build_survey_orchestrator_deps,
-    process_survey_job,
-)
-from services.api.survey_repository import read_survey_review_queue, write_survey_raw_payload
+
 
 
 class _Core:
@@ -82,47 +77,6 @@ def _multimodal_payload(parse_confidence: float = 0.84) -> dict:
         'missing_fields': ['teacher_rubric'],
         'provenance': {'source': 'upload'},
     }
-
-
-
-def test_survey_domain_disablement_marks_job_failed_without_review(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv('ANALYSIS_DISABLED_DOMAINS', 'survey')
-    core = _Core(tmp_path, call_llm=lambda *_args, **_kwargs: {})
-    write_survey_job(
-        'job_disabled',
-        {
-            'job_id': 'job_disabled',
-            'provider': 'provider',
-            'teacher_id': 'teacher_1',
-            'class_name': '高二2403班',
-            'status': 'webhook_received',
-            'created_at': '2026-03-06T10:00:00',
-        },
-        core=core,
-    )
-    write_survey_raw_payload(
-        'job_disabled',
-        'provider.json',
-        {
-            'submission_id': 'sub-disabled',
-            'title': '课堂反馈问卷',
-            'teacher_id': 'teacher_1',
-            'class_name': '高二2403班',
-            'sample_size': 35,
-            'questions': [{'id': 'Q1', 'prompt': '本节课难度如何？', 'response_type': 'single_choice', 'stats': {'偏难': 12}}],
-        },
-        core=core,
-    )
-
-    result = process_survey_job('job_disabled', deps=build_survey_orchestrator_deps(core))
-    job = load_survey_job('job_disabled', core=core)
-    queue = read_survey_review_queue(core=core)
-
-    assert result['status'] == 'failed'
-    assert result['error'] == 'analysis_domain_disabled'
-    assert job['status'] == 'failed'
-    assert job['error'] == 'analysis_domain_disabled'
-    assert queue == []
 
 
 

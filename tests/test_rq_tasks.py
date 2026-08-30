@@ -380,7 +380,6 @@ def test_enqueue_upload_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyP
 
     assert [call["func"] for call in queue.calls] == [
         rq_tasks.run_upload_job,
-        rq_tasks.run_survey_job,
         rq_tasks.run_profile_update,
     ]
     for call in queue.calls:

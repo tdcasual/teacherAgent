@@ -134,16 +134,15 @@ def _domain_summary(manifest) -> Dict[str, Any]:
     ok = bool(
         str(manifest.domain_id or '').strip()
         and has_runtime_binding
-        and has_report_binding
         and has_runtime_lookup
         and has_runner_lookup
-        and has_report_lookup
         and has_onboarding_docs
         and has_report_plane_contract
         and has_replay_compare_support
         and len(strategy_ids) > 0
         and len(specialist_ids) > 0
         and not missing_specialists
+        and (not has_report_binding or has_report_lookup)
     )
     return {
         'domain_id': manifest.domain_id,

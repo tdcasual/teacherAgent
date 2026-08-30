@@ -280,10 +280,6 @@ def build_system_prompt(
 def allowed_tools(role_hint: Optional[str]) -> Set[str]:
     if role_hint == "teacher":
         return {
-            "analysis.report.list",
-            "analysis.report.get",
-            "analysis.report.rerun",
-            "analysis.review.list",
             "assignment.list",
             "assignment.progress",
             "assignment.missing",

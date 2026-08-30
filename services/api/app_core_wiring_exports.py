@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .survey_orchestrator_service import process_survey_job
 from .wiring.assignment_wiring import (
     assignment_catalog_deps,
     assignment_generate_deps,
@@ -52,13 +51,6 @@ from .wiring.student_wiring import (
     student_ops_deps,
     student_submit_deps,
 )
-from .wiring.survey_wiring import (
-    survey_get_report,
-    survey_list_reports,
-    survey_list_review_queue,
-    survey_load_bundle,
-    survey_rerun_report,
-)
 from .wiring.teacher_wiring import (
     teacher_assignment_preflight_deps,
     teacher_model_config_deps,
@@ -67,7 +59,6 @@ from .wiring.teacher_wiring import (
 from .wiring.worker_wiring import (
     process_archive_worker_deps,
     profile_update_worker_deps,
-    survey_worker_deps,
     upload_worker_deps,
 )
 
@@ -120,13 +111,6 @@ __all__ = [
     "teacher_model_config_deps",
     "teacher_provider_registry_deps",
     "upload_worker_deps",
-    "survey_worker_deps",
     "profile_update_worker_deps",
     "process_archive_worker_deps",
-    "process_survey_job",
-    "survey_get_report",
-    "survey_list_reports",
-    "survey_list_review_queue",
-    "survey_load_bundle",
-    "survey_rerun_report",
 ]

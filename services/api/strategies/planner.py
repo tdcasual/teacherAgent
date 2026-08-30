@@ -9,8 +9,6 @@ from ..specialist_agents.contracts import ArtifactRef, HandoffContract
 from .contracts import StrategyDecision
 
 _ARTIFACT_TYPE_BY_DOMAIN = {
-    'survey': 'survey_evidence_bundle',
-    'class_report': 'class_signal_bundle',
     'video_homework': 'multimodal_submission_bundle',
 }
 

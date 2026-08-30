@@ -34,21 +34,6 @@ from ..agent_service import (
 from ..agent_service import (
     default_teacher_tools_to_openai as _default_teacher_tools_to_openai_impl,
 )
-from ..analysis_report_service import (
-    build_analysis_report_deps as _build_analysis_report_deps,
-)
-from ..analysis_report_service import (
-    get_analysis_report as _get_analysis_report_impl,
-)
-from ..analysis_report_service import (
-    list_analysis_reports as _list_analysis_reports_impl,
-)
-from ..analysis_report_service import (
-    list_analysis_review_queue as _list_analysis_review_queue_impl,
-)
-from ..analysis_report_service import (
-    rerun_analysis_report as _rerun_analysis_report_impl,
-)
 from ..assignment_requirements_service import (
     compute_requirements_missing as _compute_requirements_missing_impl,
 )
@@ -87,65 +72,10 @@ from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
 from . import get_app_core as _app_core
-from .survey_wiring import build_survey_specialist_runtime
 
 
 def _tool_dispatch_deps(core: Any | None = None):
     _ac = _app_core(core)
-
-    def analysis_report_list(
-        teacher_id: str,
-        domain: str | None = None,
-        status: str | None = None,
-        strategy_id: str | None = None,
-        target_type: str | None = None,
-    ) -> dict[str, Any]:
-        return _list_analysis_reports_impl(
-            teacher_id=teacher_id,
-            domain=domain,
-            status=status,
-            strategy_id=strategy_id,
-            target_type=target_type,
-            deps=_build_analysis_report_deps(core),
-        )
-
-    def analysis_report_get(
-        report_id: str,
-        teacher_id: str,
-        domain: str | None = None,
-    ) -> dict[str, Any]:
-        return _get_analysis_report_impl(
-            report_id=report_id,
-            teacher_id=teacher_id,
-            domain=domain,
-            deps=_build_analysis_report_deps(core),
-        )
-
-    def analysis_report_rerun(
-        report_id: str,
-        teacher_id: str,
-        domain: str | None = None,
-        reason: str | None = None,
-    ) -> dict[str, Any]:
-        return _rerun_analysis_report_impl(
-            report_id=report_id,
-            teacher_id=teacher_id,
-            domain=domain,
-            reason=reason,
-            deps=_build_analysis_report_deps(core),
-        )
-
-    def analysis_review_list(
-        teacher_id: str,
-        domain: str | None = None,
-        status: str | None = None,
-    ) -> dict[str, Any]:
-        return _list_analysis_review_queue_impl(
-            teacher_id=teacher_id,
-            domain=domain,
-            status=status,
-            deps=_build_analysis_report_deps(core),
-        )
 
     def _assignment_publish(assignment_id: str) -> dict[str, Any]:
         from ..assignment_archive_service import AssignmentArchiveError, publish_assignment
@@ -281,13 +211,6 @@ def _tool_dispatch_deps(core: Any | None = None):
         teacher_memory_search=_ac.teacher_memory_search,
         teacher_memory_propose=_ac.teacher_memory_propose,
         teacher_memory_apply=_ac.teacher_memory_apply,
-        survey_report_list=_ac.survey_list_reports,
-        survey_report_get=_ac.survey_get_report,
-        survey_report_rerun=_ac.survey_rerun_report,
-        analysis_report_list=analysis_report_list,
-        analysis_report_get=analysis_report_get,
-        analysis_report_rerun=analysis_report_rerun,
-        analysis_review_list=analysis_review_list,
         load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
         allowed_tools=_ac.allowed_tools,
         assignment_progress=lambda assignment_id: _ac.compute_assignment_progress(
@@ -412,10 +335,6 @@ def _agent_runtime_deps(core: Any | None = None):
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
-        survey_list_reports=_ac.survey_list_reports,
-        survey_get_report=_ac.survey_get_report,
-        load_survey_bundle=_ac.survey_load_bundle,
-        survey_specialist_runtime=build_survey_specialist_runtime(_ac),
     )
 
 

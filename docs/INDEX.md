@@ -36,7 +36,6 @@
 - 多域分析发布清单：`docs/operations/multi-domain-analysis-rollout-checklist.md`
 - 多域分析发布说明：`docs/operations/2026-03-07-multi-domain-analysis-release-notes.md`
 - 多域分析 go-live 摘要：`docs/operations/2026-03-07-multi-domain-analysis-go-live-summary.md`
-- 问卷分析发布清单：`docs/operations/survey-analysis-release-checklist.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
 - PR 变更模板：`.github/pull_request_template.md`
@@ -46,7 +45,6 @@
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
-- 问卷分析契约：`docs/reference/survey-analysis-contract.md`
 - 分析域 onboarding 模板：`docs/reference/analysis-domain-onboarding-template.md`
 - 分析域 onboarding contract：`docs/reference/analysis-domain-onboarding-contract.md`
 - 分析域接入 checklist：`docs/reference/analysis-domain-checklist.md`

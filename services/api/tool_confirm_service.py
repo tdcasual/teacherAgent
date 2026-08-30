@@ -33,8 +33,6 @@ MUTATING_TOOL_NAMES = frozenset(
         "lesson.capture",
         "core_example.register",
         "teacher.memory.apply",
-        "analysis.report.rerun",
-        "survey.report.rerun",
         "chart.exec",
         "chart.agent.run",
     }

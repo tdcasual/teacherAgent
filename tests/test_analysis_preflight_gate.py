@@ -135,7 +135,7 @@ def test_analysis_preflight_gate_cli_accepts_policy_config_and_blocks_on_eval(tm
         json.dumps(
             {
                 'strategy_eval': {
-                    'required_edge_case_tags': ['provider_attachment_noise', 'brand_new_edge_case'],
+                    'required_edge_case_tags': ['long_duration_submission', 'brand_new_edge_case'],
                 }
             },
             ensure_ascii=False,
@@ -207,7 +207,7 @@ def test_analysis_preflight_gate_adds_owner_classification_for_eval_block(tmp_pa
     review_feedback_path.write_text('', encoding='utf-8')
     baseline_dir, candidate_dir = _write_shadow_dirs(tmp_path)
     policy_path.write_text(
-        json.dumps({'strategy_eval': {'required_edge_case_tags': ['provider_attachment_noise', 'brand_new_edge_case']}}, ensure_ascii=False),
+        json.dumps({'strategy_eval': {'required_edge_case_tags': ['long_duration_submission', 'brand_new_edge_case']}}, ensure_ascii=False),
         encoding='utf-8',
     )
 

@@ -20,19 +20,19 @@ def test_analysis_ops_service_merges_metrics_review_feedback_and_replay_summary(
         requested_rewritten=False,
     )
     metrics_service.record_review_downgrade(
-        domain='survey',
-        strategy_id='survey.teacher.report',
-        agent_id='survey_analyst',
+        domain='video_homework',
+        strategy_id='video_homework.teacher.report',
+        agent_id='video_homework_analyst',
         reason_code='invalid_output',
     )
     append_review_feedback_row(
         tmp_path / 'analysis' / 'review_feedback.jsonl',
         {
-            'item_id': 'survey_1',
+            'item_id': 'video_1',
             'report_id': 'report_1',
             'teacher_id': 'teacher_1',
-            'domain': 'survey',
-            'strategy_id': 'survey.teacher.report',
+            'domain': 'video_homework',
+            'strategy_id': 'video_homework.teacher.report',
             'target_type': 'report',
             'target_id': 'report_1',
             'status': 'rejected',
@@ -68,10 +68,10 @@ def test_analysis_ops_service_merges_metrics_review_feedback_and_replay_summary(
 
 def test_analysis_ops_service_exposes_recent_rerun_compare_candidates(tmp_path: Path) -> None:
     data_dir = tmp_path / 'data'
-    reports_dir = data_dir / 'survey_reports'
+    reports_dir = data_dir / 'video_homework_reports' / 'reports'
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / 'report_2.json').write_text(
-        '{"report_id": "report_2", "updated_at": "2026-03-12T12:00:00", "strategy_id": "survey.teacher.report", "rerun_base_lineage": {"report_id": "report_1", "strategy_version": "v1"}}',
+        '{"report_id": "report_2", "updated_at": "2026-03-12T12:00:00", "strategy_id": "video_homework.teacher.report", "rerun_base_lineage": {"report_id": "report_1", "strategy_version": "v1"}}',
         encoding='utf-8',
     )
 

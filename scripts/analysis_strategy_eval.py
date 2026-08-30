@@ -11,37 +11,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import services.api.survey_normalize_structured_service as survey_normalize_structured_service  # noqa: E402
 from services.api.analysis_policy_service import load_analysis_policy, load_analysis_policy_from_path  # noqa: E402
-from services.api.class_signal_bundle_models import ClassSignalBundle  # noqa: E402
 from services.api.multimodal_submission_models import MultimodalSubmissionBundle  # noqa: E402
-from services.api.report_adapters import (  # noqa: E402
-    adapt_pdf_report_summary,
-    adapt_self_hosted_form_json,
-    adapt_web_export_html,
-)
 from services.api.review_feedback_service import build_review_feedback_dataset  # noqa: E402
 from services.api.strategies.selector import build_default_strategy_selector  # noqa: E402
-from services.api.survey_report_parse_service import (  # noqa: E402
-    SurveyReportParseDeps,
-    parse_survey_report_payload,
-)
-from services.api.upload_text_service import extract_text_from_html  # noqa: E402
 
-SURVEY_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'sample_size', 'question_summaries')
-CLASS_REPORT_REQUIRED_FIELDS = ('title', 'teacher_id', 'class_name', 'question_like_signals', 'theme_like_signals')
 VIDEO_HOMEWORK_REQUIRED_FIELDS = ('submission_id', 'teacher_id', 'student_id', 'media_files', 'evidence_channels')
 MIN_FIXTURE_COUNT_BY_DOMAIN = {
-    'survey': 3,
-    'class_report': 3,
     'video_homework': 3,
 }
 REQUIRED_EDGE_CASE_TAGS = (
-    'provider_attachment_noise',
     'long_duration_submission',
     'low_confidence_parse',
     'ocr_noise',
-    'web_export_complex',
 )
 
 
@@ -58,14 +40,6 @@ def _closed_loop_template(name: str, policy: Dict[str, Any] | None = None) -> Di
 
 
 
-def _parse_deps() -> SurveyReportParseDeps:
-    return SurveyReportParseDeps(
-        extract_text_from_file=lambda _path, **_kwargs: '',
-        extract_text_from_html=extract_text_from_html,
-    )
-
-
-
 def _load_json(path: Path) -> Dict[str, Any]:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(payload, dict):
@@ -75,7 +49,7 @@ def _load_json(path: Path) -> Dict[str, Any]:
 
 
 def _iter_fixture_paths(fixtures_dir: Path) -> Iterable[Path]:
-    allowed_roots = {'surveys', 'analysis_reports', 'multimodal'}
+    allowed_roots = {'multimodal'}
     for path in sorted(fixtures_dir.rglob('*.json')):
         if not path.is_file():
             continue
@@ -90,10 +64,6 @@ def _infer_domain(path: Path, fixture: Dict[str, Any]) -> str:
     if domain:
         return domain
     rel_parts = path.parts
-    if 'surveys' in rel_parts:
-        return 'survey'
-    if 'analysis_reports' in rel_parts:
-        return 'class_report'
     if 'multimodal' in rel_parts:
         return 'video_homework'
     raise ValueError(f'cannot infer domain for fixture: {path}')
@@ -104,30 +74,6 @@ def _build_artifact(path: Path, fixture: Dict[str, Any]):
     domain = _infer_domain(path, fixture)
     payload = dict(fixture.get('payload') or {})
     mode = str(fixture.get('mode') or '').strip()
-
-    if domain == 'survey':
-        provider = str(fixture.get('provider') or 'provider').strip() or 'provider'
-        if mode == 'structured':
-            bundle = survey_normalize_structured_service.normalize_structured_survey_payload(provider=provider, payload=payload)
-        elif mode == 'unstructured':
-            bundle = parse_survey_report_payload(provider=provider, payload=payload, deps=_parse_deps())
-        else:
-            raise ValueError(f'unsupported survey fixture mode {mode!r} for {path}')
-        return domain, bundle, bundle.to_artifact_envelope(), 'survey.analysis', 'class'
-
-    if domain == 'class_report':
-        if mode == 'self_hosted_form_json':
-            artifact = adapt_self_hosted_form_json(payload, {})
-        elif mode == 'web_export_html':
-            artifact = adapt_web_export_html(payload, {})
-        elif mode == 'pdf_report_summary':
-            artifact = adapt_pdf_report_summary(payload, {})
-        elif mode == 'artifact':
-            artifact = ClassSignalBundle.model_validate(payload).to_artifact_envelope()
-        else:
-            raise ValueError(f'unsupported class_report fixture mode {mode!r} for {path}')
-        bundle = ClassSignalBundle.model_validate(artifact.payload)
-        return domain, bundle, artifact, 'class_report.analysis', 'class'
 
     if domain == 'video_homework':
         if mode != 'artifact':
@@ -140,34 +86,6 @@ def _build_artifact(path: Path, fixture: Dict[str, Any]):
 
 
 def _present_required_fields(domain: str, bundle: Any) -> List[str]:
-    if domain == 'survey':
-        present: List[str] = []
-        if bundle.survey_meta.title:
-            present.append('title')
-        if bundle.audience_scope.teacher_id:
-            present.append('teacher_id')
-        if bundle.audience_scope.class_name:
-            present.append('class_name')
-        if bundle.audience_scope.sample_size is not None:
-            present.append('sample_size')
-        if bundle.question_summaries:
-            present.append('question_summaries')
-        return present
-
-    if domain == 'class_report':
-        present = []
-        if bundle.source_meta.title:
-            present.append('title')
-        if bundle.class_scope.teacher_id:
-            present.append('teacher_id')
-        if bundle.class_scope.class_name:
-            present.append('class_name')
-        if bundle.question_like_signals:
-            present.append('question_like_signals')
-        if bundle.theme_like_signals:
-            present.append('theme_like_signals')
-        return present
-
     if domain == 'video_homework':
         present = []
         if bundle.source_meta.submission_id:
@@ -187,10 +105,6 @@ def _present_required_fields(domain: str, bundle: Any) -> List[str]:
 
 
 def _required_fields(domain: str) -> Tuple[str, ...]:
-    if domain == 'survey':
-        return SURVEY_REQUIRED_FIELDS
-    if domain == 'class_report':
-        return CLASS_REPORT_REQUIRED_FIELDS
     if domain == 'video_homework':
         return VIDEO_HOMEWORK_REQUIRED_FIELDS
     raise ValueError(f'unsupported domain {domain!r}')
@@ -198,25 +112,6 @@ def _required_fields(domain: str) -> Tuple[str, ...]:
 
 
 def _artifact_completeness(domain: str, bundle: Any) -> float:
-    if domain == 'survey':
-        attachments = list(bundle.attachments or [])
-        if not attachments:
-            return 1.0
-        parsed = 0
-        for item in attachments:
-            if str(item.get('parse_status') or '') == 'parsed' and int(item.get('text_length') or 0) > 0:
-                parsed += 1
-        return round(parsed / len(attachments), 4)
-
-    if domain == 'class_report':
-        channels = [
-            bool(bundle.question_like_signals),
-            bool(bundle.theme_like_signals),
-            bool(bundle.risk_like_signals),
-            bool(bundle.narrative_blocks),
-        ]
-        return round(sum(1 for item in channels if item) / len(channels), 4)
-
     if domain == 'video_homework':
         channels = [
             bool(bundle.media_files),

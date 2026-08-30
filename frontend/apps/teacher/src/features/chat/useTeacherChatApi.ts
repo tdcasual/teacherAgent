@@ -29,7 +29,6 @@ import type {
   WheelScrollZone,
   WorkbenchTab,
 } from '../../appTypes'
-import type { AnalysisReportSummary } from '../../types/workflow'
 
 export type UseTeacherChatApiParams = {
   apiBase: string
@@ -44,7 +43,6 @@ export type UseTeacherChatApiParams = {
   studentMemoryStudentFilter: string
   skillsOpen: boolean
   workbenchTab: WorkbenchTab
-  selectedAnalysisTarget?: AnalysisReportSummary | null
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setSending: React.Dispatch<React.SetStateAction<boolean>>
   setActiveSessionId: React.Dispatch<React.SetStateAction<string>>
@@ -107,7 +105,6 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     studentMemoryStudentFilter,
     skillsOpen,
     workbenchTab,
-    selectedAnalysisTarget,
     setMessages,
     setSending,
     setActiveSessionId,
@@ -544,7 +541,6 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     skillPinned,
     activeSessionId,
     messages,
-    selectedAnalysisTarget,
     setComposerWarning,
     chooseSkill,
     setActiveSessionId,

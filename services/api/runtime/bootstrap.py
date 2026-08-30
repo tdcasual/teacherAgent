@@ -48,7 +48,6 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
     profile_deps = core.profile_update_worker_deps()
     process_archive_deps = core.process_archive_worker_deps()
     chat_deps = core.chat_worker_deps()
-    survey_deps = core.survey_worker_deps()
     profile_update_async = bool(getattr(core, "PROFILE_UPDATE_ASYNC", False))
 
     return build_inline_backend(
@@ -64,19 +63,14 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         enqueue_chat_job_fn=lambda job_id, lane_id=None: chat_worker_service.enqueue_chat_job(
             job_id, deps=chat_deps, lane_id=lane_id
         ),
-        enqueue_survey_job_fn=lambda job_id: core.survey_worker_service.enqueue_survey_job_inline(
-            job_id, deps=survey_deps
-        ),
+        enqueue_survey_job_fn=lambda _job_id: None,
         scan_pending_upload_jobs_fn=lambda: upload_worker_service.scan_pending_upload_jobs_inline(
             deps=upload_deps
         ),
         scan_pending_chat_jobs_fn=lambda: chat_worker_service.scan_pending_chat_jobs(deps=chat_deps),
-        scan_pending_survey_jobs_fn=lambda: core.survey_worker_service.scan_pending_survey_jobs_inline(
-            deps=survey_deps
-        ),
+        scan_pending_survey_jobs_fn=lambda: 0,
         start_fn=lambda: start_inline_workers(
             upload_deps=upload_deps,
-            survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
@@ -84,7 +78,6 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         ),
         stop_fn=lambda: stop_inline_workers(
             upload_deps=upload_deps,
-            survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,

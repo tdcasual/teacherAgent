@@ -9,7 +9,6 @@ from services.api.artifacts.registry import (
     ArtifactAdapterSpec,
 )
 from services.api.artifacts.runtime import ArtifactAdapterRuntime
-from services.api.wiring.survey_wiring import build_survey_artifact_registry
 
 
 def test_registry_registers_and_queries_artifact_adapters() -> None:
@@ -80,10 +79,3 @@ def test_runtime_raises_for_unknown_adapter_resolution() -> None:
 
 
 
-def test_survey_wiring_registers_survey_artifact_adapter() -> None:
-    registry = build_survey_artifact_registry(object())
-
-    spec = registry.get('survey.bundle.adapter')
-
-    assert spec.output_artifact_type == 'survey_evidence_bundle'
-    assert spec.accepted_inputs == ['survey_bundle']

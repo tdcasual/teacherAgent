@@ -146,13 +146,12 @@ from .chat_session_utils import (
 from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
 from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
-from services.api.workers import process_archive_worker_service, profile_update_worker_service, survey_worker_service, upload_worker_service
+from services.api.workers import process_archive_worker_service, profile_update_worker_service, upload_worker_service
 from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
     enqueue_chat_job as _enqueue_chat_job_impl,
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
 )
-from services.api.workers.survey_worker_service import SurveyWorkerDeps
 from services.api.workers.process_archive_worker_service import ProcessArchiveWorkerDeps
 from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
 from .assignment_process_archive_service import (

@@ -3,7 +3,8 @@
   "domain": "video_homework",
   "mode": "artifact",
   "edge_case_tags": [
-    "ocr_noise"
+    "ocr_noise",
+    "low_confidence_parse"
   ],
   "payload": {
     "source_meta": {

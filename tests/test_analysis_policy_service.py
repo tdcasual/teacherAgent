@@ -18,8 +18,8 @@ def test_analysis_policy_service_returns_default_policy_shape() -> None:
     assert policy['release_readiness']['thresholds']['max_timeout_rate'] == 0.05
     assert policy['release_readiness']['thresholds']['window_sec'] == 3600
     assert policy['review_feedback']['reason_recommendation_specs']['invalid_output']['action_type'] == 'harden_output_schema'
-    assert policy['strategy_eval']['minimum_fixture_count_by_domain']['survey'] == 3
-    assert 'provider_attachment_noise' in policy['strategy_eval']['required_edge_case_tags']
+    assert policy['strategy_eval']['minimum_fixture_count_by_domain']['video_homework'] == 3
+    assert 'long_duration_submission' in policy['strategy_eval']['required_edge_case_tags']
 
 
 

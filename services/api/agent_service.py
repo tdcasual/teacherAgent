@@ -14,7 +14,6 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 from .agent_context_resolution_service import (
     find_last_user_text as _find_last_user_text,
 )
-from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .role_runtime_policy import get_role_runtime_policy
 from .tool_confirm_service import (
@@ -24,18 +23,6 @@ from .tool_confirm_service import (
 )
 
 _log = logging.getLogger(__name__)
-
-
-def _default_survey_list_reports(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
-    return {"items": []}
-
-
-def _default_survey_get_report(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
-    return {}
-
-
-def _default_load_survey_bundle(_job_id: str) -> Dict[str, Any]:
-    return {}
 
 
 @dataclass(frozen=True)
@@ -52,10 +39,6 @@ class AgentRuntimeDeps:
     call_llm: Callable[..., Dict[str, Any]]
     tool_dispatch: Callable[..., Dict[str, Any]]
     teacher_tools_to_openai: Callable[..., List[Dict[str, Any]]]
-    survey_list_reports: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_list_reports
-    survey_get_report: Callable[[str, str], Dict[str, Any]] = _default_survey_get_report
-    load_survey_bundle: Callable[[str], Dict[str, Any]] = _default_load_survey_bundle
-    survey_specialist_runtime: Any = None
 
 
 def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
@@ -745,14 +728,7 @@ def _maybe_teacher_runtime_shortcut_reply(
 ) -> Optional[Dict[str, Any]]:
     if not is_teacher_role:
         return None
-    return maybe_route_analysis_followup(
-        deps,
-        messages=messages,
-        last_user_text=last_user_text,
-        teacher_id=teacher_id,
-        analysis_target=analysis_target,
-        event_sink=event_sink,
-    )
+    return None
 
 
 def _runtime_tools_for_role(

@@ -13,15 +13,12 @@ def build_inline_backend_factory(
     upload_deps = app_core_wiring_exports_module.upload_worker_deps(current_core)
     profile_deps = app_core_wiring_exports_module.profile_update_worker_deps(current_core)
     process_archive_deps = app_core_wiring_exports_module.process_archive_worker_deps(current_core)
-    survey_deps = app_core_wiring_exports_module.survey_worker_deps(current_core)
     chat_deps = app_core_wiring_exports_module.chat_worker_deps(current_core)
     return core_service_imports_module.build_inline_backend(
         enqueue_upload_job_fn=lambda job_id: core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(
             job_id, deps=upload_deps
         ),
-        enqueue_survey_job_fn=lambda job_id: core_service_imports_module.survey_worker_service.enqueue_survey_job_inline(
-            job_id, deps=survey_deps
-        ),
+        enqueue_survey_job_fn=lambda _job_id: None,
         enqueue_profile_update_fn=lambda payload: core_service_imports_module.profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
         ),
@@ -34,13 +31,10 @@ def build_inline_backend_factory(
         scan_pending_upload_jobs_fn=lambda: core_service_imports_module.upload_worker_service.scan_pending_upload_jobs_inline(
             deps=upload_deps
         ),
-        scan_pending_survey_jobs_fn=lambda: core_service_imports_module.survey_worker_service.scan_pending_survey_jobs_inline(
-            deps=survey_deps
-        ),
+        scan_pending_survey_jobs_fn=lambda: 0,
         scan_pending_chat_jobs_fn=lambda: core_service_imports_module._scan_pending_chat_jobs_impl(deps=chat_deps),
         start_fn=lambda: core_service_imports_module.start_inline_workers(
             upload_deps=upload_deps,
-            survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
@@ -48,7 +42,6 @@ def build_inline_backend_factory(
         ),
         stop_fn=lambda: core_service_imports_module.stop_inline_workers(
             upload_deps=upload_deps,
-            survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,

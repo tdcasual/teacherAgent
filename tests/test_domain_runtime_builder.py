@@ -20,8 +20,6 @@ _RUNTIME_BUILDER_PATH = (
     Path(__file__).resolve().parent.parent / 'services' / 'api' / 'domains' / 'runtime_builder.py'
 )
 _DOMAIN_DEPS_FACTORIES = (
-    'build_survey_analyst_deps',
-    'build_class_signal_analyst_deps',
     'build_video_homework_analyst_deps',
 )
 
@@ -29,36 +27,6 @@ _DOMAIN_DEPS_FACTORIES = (
 @pytest.mark.parametrize(
     ('domain_id', 'to_agent', 'task_kind', 'constraints'),
     [
-        (
-            'survey',
-            'survey_analyst',
-            'survey.analysis',
-            {
-                'teacher_context': {'teacher_id': 'teacher_1'},
-                'survey_evidence_bundle': {
-                    'survey_meta': {'provider': 'provider_a', 'title': '班级问卷'},
-                    'audience_scope': {'teacher_id': 'teacher_1', 'class_name': '高一(1)班'},
-                    'question_summaries': [{'question_id': 'q1', 'prompt': '课堂节奏', 'stats': {'偏快': 8}}],
-                    'parse_confidence': 0.92,
-                },
-            },
-        ),
-        (
-            'class_report',
-            'class_signal_analyst',
-            'class_report.analysis',
-            {
-                'teacher_context': {'teacher_id': 'teacher_1'},
-                'class_signal_bundle': {
-                    'source_meta': {'provider': 'self_hosted', 'source_type': 'self_hosted_form', 'title': '班级周报'},
-                    'class_scope': {'teacher_id': 'teacher_1', 'class_name': '高一(1)班'},
-                    'question_like_signals': [
-                        {'signal_id': 'signal_1', 'title': '作业完成度', 'summary': '整体完成度一般'}
-                    ],
-                    'parse_confidence': 0.87,
-                },
-            },
-        ),
         (
             'video_homework',
             'video_homework_analyst',

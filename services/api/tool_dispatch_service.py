@@ -6,63 +6,6 @@ from typing import Any, Callable, Dict, Optional, Set, Tuple
 from .tool_confirm_service import maybe_confirmation_required, tool_is_mutating
 
 
-def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
-    return {"items": []}
-
-
-
-def _default_survey_report_get(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
-    return {"error": "survey_not_available"}
-
-
-
-def _default_survey_report_rerun(
-    _report_id: str,
-    _teacher_id: str,
-    _reason: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "survey_not_available"}
-
-
-
-def _default_analysis_report_list(
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _status: Optional[str] = None,
-    _strategy_id: Optional[str] = None,
-    _target_type: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"items": []}
-
-
-
-def _default_analysis_report_get(
-    _report_id: str,
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "analysis_report_not_available"}
-
-
-
-def _default_analysis_report_rerun(
-    _report_id: str,
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _reason: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "analysis_report_not_available"}
-
-
-
-def _default_analysis_review_list(
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _status: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"items": []}
-
-
 def _default_load_skill_runtime(_role: Optional[str], _skill_id: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
     return None, None
 
@@ -119,13 +62,6 @@ class ToolDispatchDeps:
     teacher_memory_search: Callable[[str, str, int], Dict[str, Any]]
     teacher_memory_propose: Callable[..., Dict[str, Any]]
     teacher_memory_apply: Callable[..., Dict[str, Any]]
-    survey_report_list: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_report_list
-    survey_report_get: Callable[[str, str], Dict[str, Any]] = _default_survey_report_get
-    survey_report_rerun: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_survey_report_rerun
-    analysis_report_list: Callable[[str, Optional[str], Optional[str], Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_report_list
-    analysis_report_get: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_analysis_report_get
-    analysis_report_rerun: Callable[[str, str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_report_rerun
-    analysis_review_list: Callable[[str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_review_list
     load_skill_runtime: Callable[[Optional[str], Optional[str]], Tuple[Optional[Any], Optional[str]]] = _default_load_skill_runtime
     allowed_tools: Callable[[Optional[str]], Set[str]] = _default_allowed_tools
     assignment_progress: Callable[[str], Dict[str, Any]] = _default_assignment_progress
@@ -143,14 +79,6 @@ def _require_teacher(role: Optional[str], detail: str) -> Optional[Dict[str, Any
     if role == "teacher":
         return None
     return {"error": "permission denied", "detail": detail}
-
-
-def _resolve_survey_report_id(args: Dict[str, Any]) -> str:
-    return str(args.get("report_id") or args.get("target_id") or "").strip()
-
-
-def _resolve_analysis_report_id(args: Dict[str, Any]) -> str:
-    return str(args.get("report_id") or args.get("target_id") or "").strip()
 
 
 def _resolve_skill_allowed_tools(
@@ -450,70 +378,6 @@ def _build_handlers(
     actor_id: Optional[str] = None,
 ) -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
     return {
-        "analysis.report.list": _teacher_only_handler(
-            role=role,
-            detail="analysis.report.list requires teacher role",
-            fn=lambda args: deps.analysis_report_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("status") or "").strip() or None,
-                str(args.get("strategy_id") or "").strip() or None,
-                str(args.get("target_type") or "").strip() or None,
-            ),
-        ),
-        "analysis.report.get": _teacher_only_handler(
-            role=role,
-            detail="analysis.report.get requires teacher role",
-            fn=lambda args: deps.analysis_report_get(
-                _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-            ),
-        ),
-        "analysis.report.rerun": _teacher_only_handler(
-            role=role,
-            detail="analysis.report.rerun requires teacher role",
-            fn=lambda args: deps.analysis_report_rerun(
-                _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("reason") or "").strip() or None,
-            ),
-        ),
-        "analysis.review.list": _teacher_only_handler(
-            role=role,
-            detail="analysis.review.list requires teacher role",
-            fn=lambda args: deps.analysis_review_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("status") or "").strip() or None,
-            ),
-        ),
-        "survey.report.list": _teacher_only_handler(
-            role=role,
-            detail="survey.report.list requires teacher role",
-            fn=lambda args: deps.survey_report_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("status") or "").strip() or None,
-            ),
-        ),
-        "survey.report.get": _teacher_only_handler(
-            role=role,
-            detail="survey.report.get requires teacher role",
-            fn=lambda args: deps.survey_report_get(
-                _resolve_survey_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-            ),
-        ),
-        "survey.report.rerun": _teacher_only_handler(
-            role=role,
-            detail="survey.report.rerun requires teacher role",
-            fn=lambda args: deps.survey_report_rerun(
-                _resolve_survey_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("reason") or "").strip() or None,
-            ),
-        ),
         "assignment.list": lambda _args: _assignment_list_for_actor(
             deps=deps, role=role, teacher_id=teacher_id
         ),
@@ -671,10 +535,6 @@ def tool_dispatch(
         return {"error": f"unknown tool: {name}"}
 
     issues = deps.tool_registry.validate_arguments(name, args)
-    if name in {"survey.report.get", "survey.report.rerun"} and not _resolve_survey_report_id(args):
-        issues = [*issues, "arguments.report_id: required (or provide target_id)"]
-    if name in {"analysis.report.get", "analysis.report.rerun"} and not _resolve_analysis_report_id(args):
-        issues = [*issues, "arguments.report_id: required (or provide target_id)"]
     if issues:
         return {"error": "invalid_arguments", "tool": name, "issues": issues[:20]}
 

@@ -94,16 +94,12 @@ _BUILTIN_ANALYSIS_POLICY: Dict[str, Any] = {
     },
     'strategy_eval': {
         'minimum_fixture_count_by_domain': {
-            'survey': 3,
-            'class_report': 3,
             'video_homework': 3,
         },
         'required_edge_case_tags': [
-            'provider_attachment_noise',
             'long_duration_submission',
             'low_confidence_parse',
             'ocr_noise',
-            'web_export_complex',
         ],
         'closed_loop_recommendations': {
             'expectation_failures': {

@@ -82,8 +82,6 @@ class AnalysisOpsService:
 
 def _report_locations(data_dir: Path) -> list[tuple[str, Path, str]]:
     return [
-        ('survey', data_dir / 'survey_reports', '*.json'),
-        ('class_report', data_dir / 'class_reports' / 'reports', '*.json'),
         ('video_homework', data_dir / 'video_homework_reports' / 'reports', '*.json'),
     ]
 

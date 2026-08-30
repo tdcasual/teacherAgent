@@ -1,19 +1,8 @@
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from services.api.analysis_metrics_service import AnalysisMetricsService
 from services.api.analysis_metrics_store import AnalysisMetricsStore
-from services.api.routes.analysis_report_routes import build_router
 from services.api.specialist_agents.events import SpecialistRuntimeEvent
-
-
-class _Core:
-    def __init__(self, root: Path) -> None:
-        self.DATA_DIR = root / 'data'
-        self.analysis_metrics_service = None
-
 
 
 def test_analysis_metrics_store_round_trips_snapshot(tmp_path: Path) -> None:
@@ -49,26 +38,16 @@ def test_analysis_metrics_store_round_trips_snapshot(tmp_path: Path) -> None:
 
 
 
-def test_analysis_report_routes_metrics_endpoint_reads_persisted_snapshot(tmp_path: Path) -> None:
+def test_analysis_metrics_store_persists_review_downgrade_snapshot(tmp_path: Path) -> None:
     store = AnalysisMetricsStore(tmp_path / 'data' / 'analysis' / 'metrics_snapshot.json')
     writer = AnalysisMetricsService(store=store)
     writer.record_review_downgrade(
-        domain='survey',
-        strategy_id='survey.teacher.report',
-        agent_id='survey_analyst',
+        domain='video_homework',
+        strategy_id='video_homework.teacher.report',
+        agent_id='video_homework_analyst',
         reason_code='invalid_output',
     )
 
-    core = _Core(tmp_path)
-    core.analysis_metrics_service = AnalysisMetricsService(store=store)
-
-    app = FastAPI()
-    app.include_router(build_router(core))
-
-    with TestClient(app) as client:
-        metrics_res = client.get('/teacher/analysis/metrics')
-
-    assert metrics_res.status_code == 200
-    payload = metrics_res.json()
-    assert payload['metrics']['counters']['review_downgrade_count'] == 1
-    assert payload['metrics']['by_domain']['survey']['review_downgraded'] == 1
+    payload = AnalysisMetricsService(store=store).snapshot()
+    assert payload['counters']['review_downgrade_count'] == 1
+    assert payload['by_domain']['video_homework']['review_downgraded'] == 1
