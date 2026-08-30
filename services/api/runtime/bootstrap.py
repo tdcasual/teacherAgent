@@ -13,7 +13,6 @@ from services.api.runtime.runtime_manager import (
 from services.api.teacher_provider_registry_service import validate_master_key_policy
 from services.api.workers import (
     chat_worker_service,
-    exam_worker_service,
     process_archive_worker_service,
     profile_update_worker_service,
     upload_worker_service,
@@ -46,7 +45,6 @@ def _resolve_app_core(app_mod: Any) -> Any:
 def build_inline_backend_for_app(app_mod: Any) -> Any:
     core = _resolve_app_core(app_mod)
     upload_deps = core.upload_worker_deps()
-    exam_deps = core.exam_worker_deps()
     profile_deps = core.profile_update_worker_deps()
     process_archive_deps = core.process_archive_worker_deps()
     chat_deps = core.chat_worker_deps()
@@ -57,7 +55,7 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         enqueue_upload_job_fn=lambda job_id: upload_worker_service.enqueue_upload_job_inline(
             job_id, deps=upload_deps
         ),
-        enqueue_exam_job_fn=lambda job_id: exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
+        enqueue_exam_job_fn=lambda _job_id: None,
         enqueue_profile_update_fn=lambda payload: profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
         ),
@@ -73,14 +71,13 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         scan_pending_upload_jobs_fn=lambda: upload_worker_service.scan_pending_upload_jobs_inline(
             deps=upload_deps
         ),
-        scan_pending_exam_jobs_fn=lambda: exam_worker_service.scan_pending_exam_jobs_inline(deps=exam_deps),
+        scan_pending_exam_jobs_fn=lambda: 0,
         scan_pending_chat_jobs_fn=lambda: chat_worker_service.scan_pending_chat_jobs(deps=chat_deps),
         scan_pending_survey_jobs_fn=lambda: core.survey_worker_service.scan_pending_survey_jobs_inline(
             deps=survey_deps
         ),
         start_fn=lambda: start_inline_workers(
             upload_deps=upload_deps,
-            exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,
@@ -89,7 +86,6 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         ),
         stop_fn=lambda: stop_inline_workers(
             upload_deps=upload_deps,
-            exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
             process_archive_deps=process_archive_deps,

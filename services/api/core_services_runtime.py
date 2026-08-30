@@ -67,12 +67,6 @@ from .core_example_tool_service import (
 from .core_example_tool_service import (
     core_example_search as _core_example_search_impl,
 )
-from .exam_longform_service import (
-    build_exam_longform_context as _build_exam_longform_context_impl,
-)
-from .exam_longform_service import (
-    summarize_exam_students as _summarize_exam_students_impl,
-)
 from .handlers import chat_handlers as _chat_handlers_module
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
 from .paths import DATA_DIR, parse_date_str
@@ -116,7 +110,6 @@ from .wiring.chat_wiring import (
     _chat_support_deps,
     _compute_chat_reply_deps,
 )
-from .wiring.exam_wiring import _exam_longform_deps
 from .wiring.misc_wiring import (
     _agent_runtime_deps,
     _chart_agent_run_deps,
@@ -349,12 +342,6 @@ def is_exam_analysis_request(text: str) -> bool:
     return _is_exam_analysis_request_impl(text)
 
 
-def summarize_exam_students(
-    exam_id: str, max_total: Optional[float], core: Any | None = None
-) -> Dict[str, Any]:
-    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps(core))
-
-
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
     from .content_catalog_service import load_kp_catalog as _load_kp_catalog_impl
 
@@ -368,7 +355,8 @@ def load_question_kp_map() -> Dict[str, str]:
 
 
 def build_exam_longform_context(exam_id: str, core: Any | None = None) -> Dict[str, Any]:
-    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps(core))
+    del exam_id, core
+    return {}
 
 
 def run_agent(

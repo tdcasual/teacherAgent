@@ -80,10 +80,14 @@ class ToolDispatchSecurityTest(unittest.TestCase):
             self.assertEqual(result["error"], "opencode_forbidden")
             self.assertEqual(result.get("status_code"), 400)
 
-    def test_exam_analysis_charts_generate_requires_teacher(self):
+    def test_assignment_generate_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.get_core().tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX001"}, role="student")
+            denied = app_mod.get_core().tool_dispatch(
+                "assignment.generate",
+                {"assignment_id": "HW1", "subject_id": "physics"},
+                role="student",
+            )
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
 

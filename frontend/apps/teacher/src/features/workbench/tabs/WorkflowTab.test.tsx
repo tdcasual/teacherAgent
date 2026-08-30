@@ -15,10 +15,6 @@ vi.mock('../workflow/AssignmentProgressSection', () => ({
   default: () => <div>workflow-progress-section</div>,
 }))
 
-vi.mock('../workflow/ExamDraftSection', () => ({
-  default: () => <div>workflow-exam-draft-section</div>,
-}))
-
 vi.mock('../workflow/AssignmentDraftSection', () => ({
   default: () => <div>workflow-assignment-draft-section</div>,
 }))

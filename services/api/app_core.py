@@ -83,8 +83,6 @@ from .chat_lane_repository import (
     _chat_request_map_set_if_absent,
 )
 
-from . import exam_utils as _exam_utils_module
-
 from . import core_utils as _core_utils_module
 
 from . import profile_service as _profile_service_module
@@ -103,7 +101,6 @@ _core_service_imports_module._reset_runtime_state(
 
 from .wiring import chat_wiring as _chat_wiring_module
 from .wiring import assignment_wiring as _assignment_wiring_module
-from .wiring import exam_wiring as _exam_wiring_module
 from .wiring import student_wiring as _student_wiring_module
 from .wiring import teacher_wiring as _teacher_wiring_module
 from .wiring import worker_wiring as _worker_wiring_module
@@ -120,7 +117,6 @@ _DELEGATE_MODULES: Tuple[Any, ...] = (
     _job_repository_module,
     _session_store_module,
     _chat_lane_repository_module,
-    _exam_utils_module,
     _core_utils_module,
     _profile_service_module,
     _assignment_data_service_module,

@@ -10,7 +10,6 @@ from rq import Worker
 from services.api.redis_clients import get_redis_client
 from services.api.workers.rq_tasks import (
     scan_pending_chat_jobs,
-    scan_pending_exam_jobs,
     scan_pending_upload_jobs,
 )
 
@@ -71,7 +70,6 @@ def main() -> None:
 
     if _truthy(os.getenv("RQ_SCAN_PENDING_ON_START", "")):
         scan_pending_upload_jobs(tenant_id=tenant_id)
-        scan_pending_exam_jobs(tenant_id=tenant_id)
         scan_pending_chat_jobs(tenant_id=tenant_id)
 
     redis = get_redis_client(os.getenv("REDIS_URL", ""), decode_responses=False)

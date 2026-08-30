@@ -98,7 +98,6 @@ jobs:
             services/api/teacher_provider_registry_service.py \
             services/api/chart_executor.py \
             services/api/chart_sandbox.py \
-            services/api/exam_utils.py \
             services/api/core_utils.py
 
       - name: Check backend quality budget
@@ -130,7 +129,6 @@ jobs:
             tests/test_assignment_wiring_structure.py \
             tests/test_chat_wiring_structure.py \
             tests/test_chat_workers_signature_fallback_guard.py \
-            tests/test_exam_wiring_structure.py \
             tests/test_misc_wiring_structure.py \
             tests/test_no_duplicate_route_files.py \
             tests/test_no_star_imports_guardrail.py \

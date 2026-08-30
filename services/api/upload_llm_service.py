@@ -251,17 +251,9 @@ def _extract_xlsx_students_compact(rows: List[Tuple[int, Dict[int, Any]]], max_s
 def xlsx_to_table_preview(path: Path, *, deps: UploadLlmDeps, max_rows: int = 60, max_cols: int = 30) -> str:
     """Best-effort preview table for LLM fallback when heuristic parsing fails."""
     try:
-        import importlib.util
+        from .xlsx_rows import iter_rows
 
-        parser_path = deps.app_root / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
-        if not parser_path.exists():
-            return ""
-        spec = importlib.util.spec_from_file_location("_parse_scores", str(parser_path))
-        if not spec or not spec.loader:
-            return ""
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)  # type: ignore[call-arg]
-        rows = list(mod.iter_rows(path, sheet_index=0, sheet_name=None))
+        rows = list(iter_rows(path, sheet_index=0, sheet_name=None))
         if not rows:
             return ""
         compact_students = _extract_xlsx_students_compact(rows)

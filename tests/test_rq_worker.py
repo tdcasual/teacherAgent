@@ -61,11 +61,6 @@ def test_rq_worker_main_scans_when_env_truthy(tmp_path: Path, monkeypatch: pytes
     )
     monkeypatch.setattr(
         rq_worker,
-        "scan_pending_exam_jobs",
-        lambda tenant_id=None: scanned.append(("exam", tenant_id)),
-    )
-    monkeypatch.setattr(
-        rq_worker,
         "scan_pending_chat_jobs",
         lambda tenant_id=None: scanned.append(("chat", tenant_id)),
     )
@@ -88,7 +83,7 @@ def test_rq_worker_main_scans_when_env_truthy(tmp_path: Path, monkeypatch: pytes
 
     rq_worker.main()
 
-    assert scanned == [("upload", "tenant-a"), ("exam", "tenant-a"), ("chat", "tenant-a")]
+    assert scanned == [("upload", "tenant-a"), ("chat", "tenant-a")]
     assert heartbeat.is_file()
     assert created[0].queues == ["jobs"]
     assert created[0].worked is True
@@ -106,7 +101,6 @@ def test_rq_worker_main_skips_scan_when_env_falsy(tmp_path: Path, monkeypatch: p
     monkeypatch.delenv("RQ_QUEUE_NAME", raising=False)
 
     monkeypatch.setattr(rq_worker, "scan_pending_upload_jobs", lambda tenant_id=None: scanned.append("upload"))
-    monkeypatch.setattr(rq_worker, "scan_pending_exam_jobs", lambda tenant_id=None: scanned.append("exam"))
     monkeypatch.setattr(rq_worker, "scan_pending_chat_jobs", lambda tenant_id=None: scanned.append("chat"))
     monkeypatch.setattr(rq_worker, "get_redis_client", lambda _url, decode_responses: "conn")
 

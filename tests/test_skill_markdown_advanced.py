@@ -52,7 +52,7 @@ def test_markdown_skill_supports_advanced_frontmatter_and_includes(tmp_path: Pat
             agent:
               tools:
                 allow:
-                  - exam.list
+                  - assignment.list
                   - chart.exec
                 deny:
                   - chart.exec
@@ -91,7 +91,7 @@ def test_markdown_skill_supports_advanced_frontmatter_and_includes(tmp_path: Pat
     assert spec.routing.confidence_floor == 0.41
     assert spec.routing.match_mode == "word_boundary"
 
-    assert spec.agent.tools.allow == ["exam.list", "chart.exec"]
+    assert spec.agent.tools.allow == ["assignment.list", "chart.exec"]
     assert spec.agent.tools.deny == ["chart.exec"]
     assert spec.agent.budgets.max_tool_rounds == 2
     assert spec.agent.budgets.max_tool_calls == 3

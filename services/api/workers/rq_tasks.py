@@ -84,7 +84,8 @@ def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
 
 
 def enqueue_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    _enqueue_retry_job(run_exam_job, job_id, tenant_id=tenant_id)
+    del job_id, tenant_id
+    return
 
 
 def enqueue_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
@@ -158,11 +159,8 @@ def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
 
 
 def scan_pending_exam_jobs(*, tenant_id: Optional[str] = None) -> int:
-    mod = load_tenant_module(tenant_id)
-    return _scan_pending_jobs(
-        mod.EXAM_UPLOAD_JOB_DIR,
-        enqueue_fn=lambda data: enqueue_exam_job(str(data.get("job_id") or ""), tenant_id=tenant_id),
-    )
+    del tenant_id
+    return 0
 
 
 def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
@@ -191,8 +189,8 @@ def run_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
 
 
 def run_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    mod = load_tenant_module(tenant_id)
-    mod.process_exam_upload_job(job_id)
+    del job_id, tenant_id
+    return
 
 
 def run_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:

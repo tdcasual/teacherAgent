@@ -9,7 +9,6 @@ _BUILD_ROUTER_BUDGETS = {
     "assignment_routes.py": 60,
     "chat_routes.py": 20,
     "class_report_routes.py": 75,
-    "exam_routes.py": 60,
     "misc_routes.py": 30,
     "multimodal_routes.py": 90,
     "skill_routes.py": 35,

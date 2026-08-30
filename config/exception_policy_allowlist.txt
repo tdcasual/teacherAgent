@@ -48,21 +48,6 @@ services/api/core_services_application.py:*: broad-except without policy marker
 services/api/core_utils.py:*: broad-except without policy marker
 services/api/core_utils.py:*: empty-pass without policy marker
 services/api/domains/manifest_registry.py:*: empty-pass without policy marker
-services/api/exam_catalog_service.py:*: broad-except without policy marker
-services/api/exam_detail_service.py:*: broad-except without policy marker
-services/api/exam_longform_service.py:*: broad-except without policy marker
-services/api/exam_overview_service.py:*: broad-except without policy marker
-services/api/exam_range_query_helpers.py:*: broad-except without policy marker
-services/api/exam_range_query_helpers.py:*: empty-pass without policy marker
-services/api/exam_score_processing_service.py:*: broad-except without policy marker
-services/api/exam_upload_confirm_service.py:*: broad-except without policy marker
-services/api/exam_upload_draft_service.py:*: broad-except without policy marker
-services/api/exam_upload_job_service.py:*: broad-except without policy marker
-services/api/exam_upload_parse_service.py:*: broad-except without policy marker
-services/api/exam_upload_service.py:*: broad-except without policy marker
-services/api/exam_upload_start_service.py:*: broad-except without policy marker
-services/api/exam_utils.py:*: broad-except without policy marker
-services/api/exam_utils.py:*: empty-pass without policy marker
 services/api/fs_atomic.py:*: broad-except without policy marker
 services/api/fs_atomic.py:*: empty-pass without policy marker
 services/api/global_limits.py:*: broad-except without policy marker
@@ -102,7 +87,6 @@ services/api/specialist_agents/survey_analyst.py:*: broad-except without policy 
 services/api/specialist_agents/video_homework_analyst.py:*: broad-except without policy marker
 services/api/student_import_service.py:*: broad-except without policy marker
 services/api/student_memory_service.py:*: broad-except without policy marker
-services/api/subject_score_guard_service.py:*: broad-except without policy marker
 services/api/survey_delivery_service.py:*: broad-except without policy marker
 services/api/survey_orchestrator_service.py:*: broad-except without policy marker
 services/api/survey_report_parse_service.py:*: broad-except without policy marker
@@ -133,7 +117,6 @@ services/api/tool_dispatch_service.py:*: broad-except without policy marker
 services/api/upload_llm_service.py:*: broad-except without policy marker
 services/api/upload_text_service.py:*: broad-except without policy marker
 services/api/upload_text_service.py:*: empty-pass without policy marker
-services/api/workers/exam_worker_service.py:*: broad-except without policy marker
 services/api/workers/profile_update_worker_service.py:*: broad-except without policy marker
 services/api/workers/rq_tasks.py:*: broad-except without policy marker
 services/api/workers/survey_worker_service.py:*: broad-except without policy marker

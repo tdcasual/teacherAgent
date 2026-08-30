@@ -48,7 +48,6 @@ const baseProps = {
   setExamPaperFiles: vi.fn(),
   setExamAnswerFiles: vi.fn(),
   setExamScoreFiles: vi.fn(),
-  examUploading: false,
   examUploadError: '',
   examUploadStatus: '',
 }

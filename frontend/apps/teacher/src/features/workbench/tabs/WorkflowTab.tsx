@@ -2,7 +2,6 @@ import type { Dispatch, SetStateAction } from 'react'
 import type {
   UploadSectionProps,
   AssignmentDraftSectionProps,
-  ExamDraftSectionProps,
   WorkflowSummaryCardProps,
   AnalysisReportSectionProps,
   VideoHomeworkAnalysisSectionProps,
@@ -12,7 +11,6 @@ import type { ExecutionTimelineEntry } from '../../../appTypes'
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
 import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
-import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
 import AnalysisReportSection from '../workflow/AnalysisReportSection'
 import VideoHomeworkAnalysisSection from '../workflow/VideoHomeworkAnalysisSection'
@@ -23,7 +21,6 @@ export type WorkflowTabProps =
   WorkflowSummaryCardProps &
   UploadSectionProps &
   AssignmentDraftSectionProps &
-  ExamDraftSectionProps &
   AnalysisReportSectionProps &
   VideoHomeworkAnalysisSectionProps & {
     uploading: boolean
@@ -58,11 +55,10 @@ export type WorkflowTabProps =
 export default function WorkflowTab(props: WorkflowTabProps) {
   const {
     uploadMode, draftLoading, draftError, uploadDraft,
-    examDraftLoading, examDraftError, examDraft,
   } = props
-  const isAssignmentMode = uploadMode === 'assignment'
+  const isAssignmentMode = uploadMode !== 'exam'
   const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator)
-  const focusLabel = activeStep?.label || (isAssignmentMode ? '上传文件' : '上传考试材料')
+  const focusLabel = activeStep?.label || '上传文件'
 
   return (
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
@@ -144,45 +140,10 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           setExamPaperFiles={props.setExamPaperFiles}
           setExamAnswerFiles={props.setExamAnswerFiles}
           setExamScoreFiles={props.setExamScoreFiles}
-          examUploading={props.examUploading}
           examUploadError={props.examUploadError}
           examUploadStatus={props.examUploadStatus}
         />
-        {uploadMode === 'exam' && examDraftLoading && (
-          <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
-            <h3>考试解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
-          </section>
-        )}
-        {uploadMode === 'exam' && examDraftError && (
-          <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
-            <h3>考试解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-danger-soft text-danger">{examDraftError}</div>
-          </section>
-        )}
-        {uploadMode === 'exam' && examDraft && (
-          <ExamDraftSection
-            examDraft={props.examDraft}
-            examDraftLoading={props.examDraftLoading}
-            examDraftError={props.examDraftError}
-            examDraftPanelCollapsed={props.examDraftPanelCollapsed}
-            setExamDraftPanelCollapsed={props.setExamDraftPanelCollapsed}
-            examDraftSaving={props.examDraftSaving}
-            examDraftActionError={props.examDraftActionError}
-            examDraftActionStatus={props.examDraftActionStatus}
-            examConfirming={props.examConfirming}
-            examJobInfo={props.examJobInfo}
-            formatExamDraftSummary={props.formatExamDraftSummary}
-            saveExamDraft={props.saveExamDraft}
-            handleConfirmExamUpload={props.handleConfirmExamUpload}
-            updateExamDraftMeta={props.updateExamDraftMeta}
-            updateExamQuestionField={props.updateExamQuestionField}
-            updateExamAnswerKeyText={props.updateExamAnswerKeyText}
-            updateExamScoreSchemaSelectedCandidate={props.updateExamScoreSchemaSelectedCandidate}
-            stopKeyPropagation={props.stopKeyPropagation}
-          />
-        )}
-        {uploadMode === 'assignment' && draftLoading && (
+        {isAssignmentMode && draftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
             <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>

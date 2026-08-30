@@ -25,26 +25,6 @@ def _deps(tools: set[str]):
 
     deps = ToolDispatchDeps(
         tool_registry=_Registry(tools),
-        list_exams=lambda: {"tool": "exam.list"},
-        exam_get=lambda exam_id: _remember("exam.get", exam_id),
-        exam_analysis_get=lambda exam_id: _remember("exam.analysis.get", exam_id),
-        exam_analysis_charts_generate=lambda args: _remember("exam.analysis.charts.generate", args),
-        exam_students_list=lambda exam_id, limit: _remember("exam.students.list", (exam_id, limit)),
-        exam_student_detail=lambda exam_id, student_id=None, student_name=None, class_name=None: _remember(
-            "exam.student.get", (exam_id, student_id, student_name, class_name)
-        ),
-        exam_question_detail=lambda exam_id, question_id=None, question_no=None, top_n=5: _remember(
-            "exam.question.get", (exam_id, question_id, question_no, top_n)
-        ),
-        exam_range_top_students=lambda exam_id, start_question_no=None, end_question_no=None, top_n=10: _remember(
-            "exam.range.top_students", (exam_id, start_question_no, end_question_no, top_n)
-        ),
-        exam_range_summary_batch=lambda exam_id, ranges=None, top_n=5: _remember(
-            "exam.range.summary.batch", (exam_id, ranges, top_n)
-        ),
-        exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: _remember(
-            "exam.question.batch.get", (exam_id, question_nos, top_n)
-        ),
         list_assignments=lambda owner_teacher_id=None: {
             "tool": "assignment.list",
             "owner": owner_teacher_id,
@@ -83,14 +63,8 @@ def _deps(tools: set[str]):
     return deps, calls
 
 
-def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
+def test_tool_dispatch_covers_core_assignment_and_student_paths():
     names = {
-        "exam.list",
-        "exam.get",
-        "exam.analysis.get",
-        "exam.students.list",
-        "exam.student.get",
-        "exam.question.get",
         "assignment.list",
         "lesson.list",
         "student.search",
@@ -102,22 +76,6 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
     }
     deps, calls = _deps(names)
 
-    assert tool_dispatch("exam.list", {}, role="teacher", deps=deps)["tool"] == "exam.list"
-    assert tool_dispatch("exam.get", {"exam_id": "e1"}, role="teacher", deps=deps)["tool"] == "exam.get"
-    assert tool_dispatch("exam.analysis.get", {"exam_id": "e2"}, role="teacher", deps=deps)["tool"] == "exam.analysis.get"
-    assert tool_dispatch("exam.students.list", {"exam_id": "e3", "limit": 7}, role="teacher", deps=deps)["tool"] == "exam.students.list"
-    assert tool_dispatch(
-        "exam.student.get",
-        {"exam_id": "e4", "student_id": "s1", "student_name": "N", "class_name": "C"},
-        role="teacher",
-        deps=deps,
-    )["tool"] == "exam.student.get"
-    assert tool_dispatch(
-        "exam.question.get",
-        {"exam_id": "e5", "question_id": "q1", "question_no": 2, "top_n": 6},
-        role="teacher",
-        deps=deps,
-    )["tool"] == "exam.question.get"
     listed = tool_dispatch("assignment.list", {}, role="teacher", teacher_id="t_zhang", deps=deps)
     assert listed["tool"] == "assignment.list"
     assert listed["owner"] == "t_zhang"
@@ -133,7 +91,6 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
     assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 
-    assert calls["exam.students.list"] == ("e3", 7)
     assert calls["student.search"] == ("abc", 3)
 
 
@@ -221,53 +178,21 @@ def test_tool_dispatch_teacher_memory_search_propose_and_apply():
     assert applied["tool"] == "teacher.memory.apply"
 
 
-def test_tool_dispatch_covers_remaining_exam_lesson_and_core_example_branches():
+def test_tool_dispatch_covers_remaining_lesson_and_core_example_branches():
     names = {
-        "exam.analysis.charts.generate",
-        "exam.range.top_students",
-        "exam.range.summary.batch",
-        "exam.question.batch.get",
         "lesson.capture",
         "core_example.register",
         "core_example.render",
     }
-    deps, calls = _deps(names)
+    deps, _calls = _deps(names)
 
-    denied = tool_dispatch("exam.analysis.charts.generate", {"exam_id": "e1"}, role="student", deps=deps)
-    allowed = tool_dispatch("exam.analysis.charts.generate", {"exam_id": "e1"}, role="teacher", deps=deps)
-    top_students = tool_dispatch(
-        "exam.range.top_students",
-        {"exam_id": "e2", "start_question_no": 1, "end_question_no": 3, "top_n": 6},
-        role="teacher",
-        deps=deps,
-    )
-    summary_batch = tool_dispatch(
-        "exam.range.summary.batch",
-        {"exam_id": "e3", "ranges": [[1, 3]], "top_n": 2},
-        role="teacher",
-        deps=deps,
-    )
-    question_batch = tool_dispatch(
-        "exam.question.batch.get",
-        {"exam_id": "e4", "question_nos": [1, 2], "top_n": 9},
-        role="teacher",
-        deps=deps,
-    )
     captured = tool_dispatch("lesson.capture", {"topic": "x"}, role="teacher", deps=deps, confirmed=True)
     registered = tool_dispatch("core_example.register", {"id": "c1"}, role="teacher", deps=deps, confirmed=True)
     rendered = tool_dispatch("core_example.render", {"id": "c1"}, role="teacher", deps=deps)
 
-    assert denied["error"] == "permission denied"
-    assert allowed["tool"] == "exam.analysis.charts.generate"
-    assert top_students["tool"] == "exam.range.top_students"
-    assert summary_batch["tool"] == "exam.range.summary.batch"
-    assert question_batch["tool"] == "exam.question.batch.get"
     assert captured["tool"] == "lesson.capture"
     assert registered["tool"] == "core_example.register"
     assert rendered["tool"] == "core_example.render"
-    assert calls["exam.range.top_students"] == ("e2", 1, 3, 6)
-    assert calls["exam.range.summary.batch"] == ("e3", [[1, 3]], 2)
-    assert calls["exam.question.batch.get"] == ("e4", [1, 2], 9)
 
 
 def test_tool_dispatch_chart_tools_require_teacher_role():

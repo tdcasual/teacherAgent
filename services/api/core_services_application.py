@@ -114,34 +114,6 @@ from .assignment_submission_attempt_service import (
 from .auth_service import get_current_principal
 from .config import DISCUSSION_COMPLETE_MARKER
 from .core_utils import resolve_scope
-from .exam_analysis_charts_service import (
-    exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
-)
-from .exam_catalog_service import list_exams as _list_exams_impl
-from .exam_detail_service import (
-    exam_question_detail as _exam_question_detail_impl,
-)
-from .exam_detail_service import (
-    exam_student_detail as _exam_student_detail_impl,
-)
-from .exam_overview_service import (
-    exam_analysis_get as _exam_analysis_get_impl,
-)
-from .exam_overview_service import (
-    exam_get as _exam_get_impl,
-)
-from .exam_overview_service import (
-    exam_students_list as _exam_students_list_impl,
-)
-from .exam_range_service import (
-    exam_question_batch_detail as _exam_question_batch_detail_impl,
-)
-from .exam_range_service import (
-    exam_range_summary_batch as _exam_range_summary_batch_impl,
-)
-from .exam_range_service import (
-    exam_range_top_students as _exam_range_top_students_impl,
-)
 from .session_discussion_service import (
     SessionDiscussionDeps,
 )
@@ -213,13 +185,6 @@ from .wiring.assignment_wiring import (
     _assignment_submission_attempt_deps,
 )
 from .wiring.chat_wiring import _session_history_deps
-from .wiring.exam_wiring import (
-    _exam_analysis_charts_deps,
-    _exam_catalog_deps,
-    _exam_detail_deps,
-    _exam_overview_deps,
-    _exam_range_deps,
-)
 from .wiring.student_wiring import (
     _student_directory_deps,
     _student_ops_deps,
@@ -413,89 +378,6 @@ def teacher_history_session(
         direction=direction,
         deps=_session_history_deps(),
     )
-
-
-def list_exams(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
-    return _list_exams_impl(limit=limit, cursor=cursor, deps=_exam_catalog_deps())
-
-
-def exam_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_get_impl(exam_id, _exam_overview_deps())
-
-
-def exam_analysis_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_analysis_get_impl(exam_id, _exam_overview_deps())
-
-
-def exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
-    return _exam_students_list_impl(exam_id, limit, _exam_overview_deps())
-
-
-def exam_student_detail(
-    exam_id: str,
-    student_id: Optional[str] = None,
-    student_name: Optional[str] = None,
-    class_name: Optional[str] = None,
-) -> Dict[str, Any]:
-    return _exam_student_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        student_id=student_id,
-        student_name=student_name,
-        class_name=class_name,
-    )
-
-
-def exam_question_detail(
-    exam_id: str,
-    question_id: Optional[str] = None,
-    question_no: Optional[str] = None,
-    top_n: int = 5,
-) -> Dict[str, Any]:
-    return _exam_question_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        question_id=question_id,
-        question_no=question_no,
-        top_n=top_n,
-    )
-
-
-def exam_range_top_students(
-    exam_id: str,
-    start_question_no: Any,
-    end_question_no: Any,
-    top_n: int = 10,
-) -> Dict[str, Any]:
-    return _exam_range_top_students_impl(
-        exam_id,
-        start_question_no,
-        end_question_no,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_range_summary_batch_impl(
-        exam_id,
-        ranges,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_question_batch_detail_impl(
-        exam_id,
-        question_nos,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
 
 
 def list_assignments(

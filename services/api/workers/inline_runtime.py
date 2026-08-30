@@ -3,10 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from services.api.workers.chat_worker_service import start_chat_worker, stop_chat_worker
-from services.api.workers.exam_worker_service import (
-    start_exam_upload_worker,
-    stop_exam_upload_worker,
-)
 from services.api.workers.process_archive_worker_service import (
     start_process_archive_worker,
     stop_process_archive_worker,
@@ -22,7 +18,6 @@ from services.api.workers.upload_worker_service import start_upload_worker, stop
 def start_inline_workers(
     *,
     upload_deps: Any,
-    exam_deps: Any,
     survey_deps: Any,
     profile_deps: Any,
     process_archive_deps: Any,
@@ -33,7 +28,6 @@ def start_inline_workers(
     if profile_update_async:
         start_profile_update_worker(deps=profile_deps)
     start_process_archive_worker(deps=process_archive_deps)
-    start_exam_upload_worker(deps=exam_deps)
     start_survey_worker(deps=survey_deps)
     start_chat_worker(deps=chat_deps)
 
@@ -41,7 +35,6 @@ def start_inline_workers(
 def stop_inline_workers(
     *,
     upload_deps: Any,
-    exam_deps: Any,
     survey_deps: Any,
     profile_deps: Any,
     process_archive_deps: Any,
@@ -50,7 +43,6 @@ def stop_inline_workers(
 ) -> None:
     stop_chat_worker(deps=chat_deps)
     stop_survey_worker(deps=survey_deps)
-    stop_exam_upload_worker(deps=exam_deps)
     stop_upload_worker(deps=upload_deps)
     stop_process_archive_worker(deps=process_archive_deps)
     if profile_update_async:

@@ -8,9 +8,8 @@ import { useTeacherSessionViewStateSync } from './features/chat/useTeacherSessio
 import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
 import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWorkbenchViewModel'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
-import { useExamUploadStatusPolling } from './features/workbench/useExamUploadStatusPolling'
 import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeacherWorkbenchPanelControls'
-import { formatDraftSummary, formatExamDraftSummary, formatExamJobStatus, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
+import { formatDraftSummary, formatExamDraftSummary, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
 import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { resolveRuntimeApiBase } from '../../shared/apiBase'
@@ -27,7 +26,6 @@ import { useWheelScrollZone } from './features/chat/useWheelScrollZone'
 import { useLocalStorageSync } from './features/state/useLocalStorageSync'
 import { useSessionActions } from './features/chat/useSessionActions'
 import { useAssignmentWorkflow } from './features/workbench/hooks/useAssignmentWorkflow'
-import { useExamWorkflow } from './features/workbench/hooks/useExamWorkflow'
 import { useTeacherChatApi } from './features/chat/useTeacherChatApi'
 import { useTeacherComposerInteractions } from './features/chat/useTeacherComposerInteractions'
 import { useTeacherSessionSidebarModel } from './features/chat/useTeacherSessionSidebarModel'
@@ -331,9 +329,6 @@ export default function App() {
       if (data?.type === 'assignment' && data?.job_id) {
         setUploadMode('assignment')
         setUploadJobId(String(data.job_id))
-      } else if (data?.type === 'exam' && data?.job_id) {
-        setUploadMode('exam')
-        setExamJobId(String(data.job_id))
       }
     } catch {
       // ignore
@@ -347,15 +342,6 @@ export default function App() {
     setUploadError,
     setUploadJobInfo,
     setUploadStatus,
-  })
-  useExamUploadStatusPolling({
-    apiBase,
-    examJobId,
-    examStatusPollNonce,
-    formatExamJobStatus,
-    setExamJobInfo,
-    setExamUploadError,
-    setExamUploadStatus,
   })
   const examWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
     return buildExamWorkflowIndicator({
@@ -428,42 +414,9 @@ export default function App() {
     setSkillsOpen,
     setMobileTab,
   ])
-  const examWorkflowAutoState = useMemo(() => {
-    const stepState = (key: string) => examWorkflowIndicator.steps.find((s) => s.key === key)?.state || 'todo'
-    const uploadStep = stepState('upload')
-    const parseStep = stepState('parse')
-    const reviewStep = stepState('review')
-    const confirmStep = stepState('confirm')
-    if (parseStep === 'error') return 'parse-error'
-    if (reviewStep === 'error') return 'review-error'
-    if (confirmStep === 'error') return 'confirm-error'
-    if (confirmStep === 'done') return 'confirmed'
-    if (confirmStep === 'active') return 'confirming'
-    if (reviewStep === 'active') return 'review'
-    if (parseStep === 'active') return 'parsing'
-    if (uploadStep === 'active') return 'uploading'
-    return 'idle'
-  }, [examWorkflowIndicator])
-  const {
-    handleUploadExam, saveExamDraft, handleConfirmExamUpload,
-  } = useExamWorkflow({
-    apiBase,
-    examId, examDate, examClassName,
-    examPaperFiles, examScoreFiles, examAnswerFiles,
-    examUploading, examUploadError,
-    examJobId, examJobInfo, examDraft,
-    examDraftPanelCollapsed, examDraftError, examDraftActionError,
-    examDraftSaving, examConfirming, examStatusPollNonce,
-    uploadCardCollapsed, uploadMode, examWorkflowAutoState,
-    setExamUploadError, setExamUploadStatus,
-    setExamJobId, setExamJobInfo, setExamDraft,
-    setExamDraftPanelCollapsed, setExamDraftLoading, setExamDraftError,
-    setExamDraftSaving, setExamDraftActionStatus, setExamDraftActionError,
-    setExamUploading, setExamConfirming,
-    setExamPaperFiles, setExamScoreFiles, setExamAnswerFiles,
-    setUploadCardCollapsed,
-    setExamStatusPollNonce,
-  })
+  const handleUploadExam = async () => undefined
+  const saveExamDraft = async () => undefined
+  const handleConfirmExamUpload = async () => undefined
   const {
     attachments,
     addFiles,

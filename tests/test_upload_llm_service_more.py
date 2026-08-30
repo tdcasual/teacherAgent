@@ -164,72 +164,28 @@ def test_xlsx_to_table_preview_branches(monkeypatch: pytest.MonkeyPatch, tmp_pat
         normalize_excel_cell=deps.normalize_excel_cell,
     )
 
-    # parser path missing
+    monkeypatch.setattr("services.api.xlsx_rows.iter_rows", lambda *_args, **_kwargs: [])
     assert xlsx_to_table_preview(fake_file, deps=deps) == ""
 
-    parser_path = tmp_path / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
-    parser_path.parent.mkdir(parents=True, exist_ok=True)
-    parser_path.write_text("# placeholder", encoding="utf-8")
-
-    import importlib.util as util
-    real_spec_from_file_location = util.spec_from_file_location
-
-    # spec missing
-    monkeypatch.setattr(util, "spec_from_file_location", lambda *_args, **_kwargs: None)
-    assert xlsx_to_table_preview(fake_file, deps=deps) == ""
-
-    # loader missing
     monkeypatch.setattr(
-        util,
-        "spec_from_file_location",
-        lambda *_args, **_kwargs: types.SimpleNamespace(loader=None),
-    )
-    assert xlsx_to_table_preview(fake_file, deps=deps) == ""
-
-    class _Loader:
-        def __init__(self, rows):
-            self.rows = rows
-
-        def exec_module(self, mod):
-            mod.iter_rows = lambda *_args, **_kwargs: self.rows
-
-    # empty rows
-    monkeypatch.setattr(util, "spec_from_file_location", real_spec_from_file_location)
-    parser_path.write_text(
-        (
-            "def iter_rows(path, sheet_index=0, sheet_name=None):\n"
-            "    return []\n"
-        ),
-        encoding="utf-8",
-    )
-    assert xlsx_to_table_preview(fake_file, deps=deps) == ""
-
-    # success
-    monkeypatch.setattr(util, "spec_from_file_location", real_spec_from_file_location)
-    parser_path.write_text(
-        (
-            "def iter_rows(path, sheet_index=0, sheet_name=None):\n"
-            "    return [\n"
-            "        (1, {1: ' 张三 ', 2: '80'}),\n"
-            "        (2, {1: '李四', 2: '90'}),\n"
-            "    ]\n"
-        ),
-        encoding="utf-8",
+        "services.api.xlsx_rows.iter_rows",
+        lambda *_args, **_kwargs: [
+            (1, {1: " 张三 ", 2: "80"}),
+            (2, {1: "李四", 2: "90"}),
+        ],
     )
     preview = xlsx_to_table_preview(fake_file, deps=deps)
     assert "row\tC1\tC2" in preview
     assert "1\t张三\t80" in preview
 
-    # exception branch
     monkeypatch.setattr(
-        util,
-        "spec_from_file_location",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("spec boom")),
+        "services.api.xlsx_rows.iter_rows",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("rows boom")),
     )
     assert xlsx_to_table_preview(fake_file, deps=deps) == ""
 
 
-def test_xlsx_to_table_preview_includes_compact_students_block(tmp_path: Path) -> None:
+def test_xlsx_to_table_preview_includes_compact_students_block(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     fake_file = tmp_path / "scores.xlsx"
     fake_file.write_text("x", encoding="utf-8")
 
@@ -244,18 +200,10 @@ def test_xlsx_to_table_preview_includes_compact_students_block(tmp_path: Path) -
         normalize_excel_cell=deps.normalize_excel_cell,
     )
 
-    parser_path = tmp_path / "skills" / "physics-teacher-ops" / "scripts" / "parse_scores.py"
-    parser_path.parent.mkdir(parents=True, exist_ok=True)
-    parser_path.write_text(
-        (
-            "def iter_rows(path, sheet_index=0, sheet_name=None):\n"
-            "    rows = [(1, {1: '班级', 2: '姓名', 30: '总分'})]\n"
-            "    for i in range(2, 82):\n"
-            "        rows.append((i, {1: '2401班', 2: '张三', 30: str(300 + i)}))\n"
-            "    return rows\n"
-        ),
-        encoding="utf-8",
-    )
+    rows = [(1, {1: "班级", 2: "姓名", 30: "总分"})]
+    for i in range(2, 82):
+        rows.append((i, {1: "2401班", 2: "张三", 30: str(300 + i)}))
+    monkeypatch.setattr("services.api.xlsx_rows.iter_rows", lambda *_args, **_kwargs: rows)
 
     preview = xlsx_to_table_preview(fake_file, deps=deps)
     assert "[students_compact] total=80" in preview

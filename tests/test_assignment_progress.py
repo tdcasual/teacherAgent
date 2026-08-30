@@ -724,14 +724,13 @@ class AssignmentProgressTest(unittest.TestCase):
                 res = client.get("/student/profile/%2e%2e")
                 self.assertEqual(res.status_code, 404)
 
-    def test_exam_endpoints_treat_invalid_exam_id_as_not_found(self):
+    def test_assignment_endpoints_treat_invalid_assignment_id_as_not_found(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
-                self.assertEqual(client.get("/exam/%2e%2e").status_code, 404)
-                self.assertEqual(client.get("/exam/%2e%2e/analysis").status_code, 404)
-                self.assertEqual(client.get("/exam/%2e%2e/students").status_code, 404)
+                self.assertEqual(client.get("/assignment/%2e%2e").status_code, 404)
+                self.assertEqual(client.get("/assignment/%2e%2e/progress").status_code, 404)
 
 
 if __name__ == "__main__":

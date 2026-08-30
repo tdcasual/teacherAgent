@@ -59,7 +59,7 @@ def test_create_tenant_and_dispatch_health():
         assert isinstance(payload.get("skills"), list)
 
 
-def test_tenant_data_dir_isolated_for_exams_list():
+def test_tenant_exam_routes_are_unmounted():
     with TemporaryDirectory() as td:
         tmp = Path(td)
         app_mod = _load_app(tmp, admin_key="k")
@@ -85,12 +85,8 @@ def test_tenant_data_dir_isolated_for_exams_list():
 
         r1 = client.get("/t/t1/exams")
         r2 = client.get("/t/t2/exams")
-        assert r1.status_code == 200
-        assert r2.status_code == 200
-
-        assert any(x.get("exam_id") == "EX_T1" for x in (r1.json().get("exams") or []))
-        assert not any(x.get("exam_id") == "EX_T2" for x in (r1.json().get("exams") or []))
-        assert any(x.get("exam_id") == "EX_T2" for x in (r2.json().get("exams") or []))
+        assert r1.status_code == 404
+        assert r2.status_code == 404
 
 
 def test_tenant_unload_stops_chat_workers():

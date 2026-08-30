@@ -81,16 +81,12 @@ from ..chart_agent_run_service import (
 )
 from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
-from ..core_utils import _is_safe_tool_id, _resolve_app_path
-from ..exam_longform_service import generate_longform_reply as _generate_longform_reply_impl
-from ..exam_score_processing_service import normalize_excel_cell as _normalize_excel_cell_impl
-from ..exam_utils import _safe_int_arg
+from ..core_utils import _is_safe_tool_id, _resolve_app_path, _safe_int_arg, normalize_excel_cell
 from ..lesson_core_tool_service import LessonCaptureDeps
 from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
 from . import get_app_core as _app_core
-from .exam_wiring import _exam_longform_deps
 from .survey_wiring import build_survey_specialist_runtime
 
 
@@ -218,7 +214,7 @@ def _tool_dispatch_deps(core: Any | None = None):
 
         try:
             meta = load_assignment_meta(folder)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             return None
         return str(assignment_owner_id(meta) if isinstance(meta, dict) else "").strip()
 
@@ -238,7 +234,7 @@ def _tool_dispatch_deps(core: Any | None = None):
 
         try:
             meta = load_assignment_meta(folder)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             return {"error": "assignment_not_found", "assignment_id": aid}
         if not isinstance(meta, dict):
             meta = {}
@@ -260,16 +256,6 @@ def _tool_dispatch_deps(core: Any | None = None):
 
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
-        list_exams=_ac.list_exams,
-        exam_get=_ac.exam_get,
-        exam_analysis_get=_ac.exam_analysis_get,
-        exam_analysis_charts_generate=_ac.exam_analysis_charts_generate,
-        exam_students_list=_ac.exam_students_list,
-        exam_student_detail=_ac.exam_student_detail,
-        exam_question_detail=_ac.exam_question_detail,
-        exam_range_top_students=_ac.exam_range_top_students,
-        exam_range_summary_batch=_ac.exam_range_summary_batch,
-        exam_question_batch_detail=_ac.exam_question_batch_detail,
         list_assignments=_ac.list_assignments,
         list_lessons=_ac.list_lessons,
         lesson_capture=_ac.lesson_capture,
@@ -326,7 +312,7 @@ def _upload_llm_deps(core: Any | None = None):
         parse_list_value=_ac.parse_list_value,
         compute_requirements_missing=_compute_requirements_missing_impl,
         merge_requirements=_merge_requirements_impl,
-        normalize_excel_cell=_normalize_excel_cell_impl,
+        normalize_excel_cell=normalize_excel_cell,
     )
 
 
@@ -422,18 +408,10 @@ def _agent_runtime_deps(core: Any | None = None):
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,
         extract_min_chars_requirement=_ac.extract_min_chars_requirement,
-        extract_exam_id=_ac.extract_exam_id,
-        is_exam_analysis_request=_ac.is_exam_analysis_request,
-        build_exam_longform_context=_ac.build_exam_longform_context,
-        generate_longform_reply=lambda convo, min_chars, role_hint, skill_id=None, teacher_id=None, skill_runtime=None: _generate_longform_reply_impl(
-            convo,
-            min_chars,
-            role_hint,
-            skill_id,
-            teacher_id,
-            skill_runtime,
-            deps=_exam_longform_deps(core),
-        ),
+        extract_exam_id=lambda _text: None,
+        is_exam_analysis_request=lambda _text: False,
+        build_exam_longform_context=lambda _exam_id: {},
+        generate_longform_reply=lambda *args, **kwargs: "",
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,

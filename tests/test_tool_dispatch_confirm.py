@@ -11,16 +11,6 @@ from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 def _deps(*, executed: list):
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
-        list_exams=lambda: {"ok": True},
-        exam_get=lambda exam_id: {"ok": True, "exam_id": exam_id},
-        exam_analysis_get=lambda exam_id: {"ok": True},
-        exam_analysis_charts_generate=lambda args: {"ok": True},
-        exam_students_list=lambda exam_id, limit: {"ok": True},
-        exam_student_detail=lambda exam_id, student_id=None, student_name=None, class_name=None: {"ok": True},
-        exam_question_detail=lambda exam_id, question_id=None, question_no=None, top_n=5: {"ok": True},
-        exam_range_top_students=lambda exam_id, start_question_no=None, end_question_no=None, top_n=10: {"ok": True},
-        exam_range_summary_batch=lambda exam_id, ranges=None, top_n=5: {"ok": True},
-        exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: {"ok": True},
         list_assignments=lambda owner_teacher_id=None: {"ok": True},
         list_lessons=lambda: {"ok": True},
         lesson_capture=lambda args: executed.append("lesson.capture") or {"ok": True},

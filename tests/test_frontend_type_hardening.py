@@ -82,35 +82,23 @@ def test_skills_tab_and_assignment_progress_section_avoid_any_hotspots() -> None
     assert "as any" not in progress_source
 
 
-def test_draft_mutations_and_exam_workflow_hooks_avoid_any_hotspots() -> None:
+def test_draft_mutations_hooks_avoid_any_hotspots() -> None:
     draft_mutations_source = _read(
         "frontend/apps/teacher/src/features/workbench/hooks/useDraftMutations.ts",
-    )
-    exam_workflow_source = _read(
-        "frontend/apps/teacher/src/features/workbench/hooks/useExamWorkflow.ts",
     )
 
     assert "Record<string, any>" not in draft_mutations_source
     assert "value: any" not in draft_mutations_source
     assert "(candidate: any)" not in draft_mutations_source
 
-    assert "(candidate: any)" not in exam_workflow_source
-    assert "catch (err: any)" not in exam_workflow_source
 
-
-def test_assignment_and_exam_status_polling_hooks_avoid_any_hotspots() -> None:
+def test_assignment_status_polling_hooks_avoid_any_hotspots() -> None:
     assignment_polling_source = _read(
         "frontend/apps/teacher/src/features/workbench/useAssignmentUploadStatusPolling.ts",
-    )
-    exam_polling_source = _read(
-        "frontend/apps/teacher/src/features/workbench/useExamUploadStatusPolling.ts",
     )
 
     assert "data as any" not in assignment_polling_source
     assert "catch (err: any)" not in assignment_polling_source
-
-    assert "data as any" not in exam_polling_source
-    assert "catch (err: any)" not in exam_polling_source
 
 
 def test_workbench_utils_and_model_settings_page_avoid_any_hotspots() -> None:
@@ -124,19 +112,6 @@ def test_workbench_utils_and_model_settings_page_avoid_any_hotspots() -> None:
     assert "normalizeDifficulty = (value: any)" not in workbench_utils_source
     assert "difficultyLabel = (value: any)" not in workbench_utils_source
     assert " as any" not in model_settings_source
-
-
-def test_exam_candidate_analysis_avoids_any_hotspots() -> None:
-    source = _read(
-        "frontend/apps/teacher/src/features/workbench/workflow/examCandidateAnalysis.ts",
-    )
-    assert "candidate: any" not in source
-    assert "examCandidateSummaries: any[]" not in source
-    assert ".map((item: any)" not in source
-    assert "map((x: any)" not in source
-    assert ".filter((item: any)" not in source
-    assert "examCandidateColumns: any[]" not in source
-    assert "(candidate: any)" not in source
 
 
 def test_teacher_app_avoids_any_hotspots() -> None:

@@ -12,16 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
 from .agent_context_resolution_service import (
-    build_longform_context_prompt as _build_longform_context_prompt,
-)
-from .agent_context_resolution_service import (
-    find_exam_id_for_longform as _find_exam_id_for_longform,
-)
-from .agent_context_resolution_service import (
     find_last_user_text as _find_last_user_text,
-)
-from .agent_runtime_guards import (
-    maybe_guard_teacher_subject_total as _maybe_guard_teacher_subject_total,
 )
 from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
@@ -161,33 +152,8 @@ def _maybe_generate_teacher_longform_reply(
     teacher_id: Optional[str],
     skill_runtime: Optional[Any],
 ) -> Optional[Dict[str, Any]]:
-    min_chars = deps.extract_min_chars_requirement(last_user_text)
-    if not min_chars:
-        return None
-    required_exam_tools = {"exam.get", "exam.analysis.get", "exam.students.list"}
-    if not required_exam_tools.issubset(set(allowed)):
-        deps.diag_log("exam.longform.skip", {"reason": "skill_policy_denied"})
-        return None
-    exam_id = _find_exam_id_for_longform(
-        last_user_text,
-        messages,
-        extract_exam_id=deps.extract_exam_id,
-    )
-    if not exam_id or not deps.is_exam_analysis_request(last_user_text):
-        return None
-    context = deps.build_exam_longform_context(exam_id)
-    if not context.get("exam_analysis", {}).get("ok"):
-        return None
-    convo.append({"role": "system", "content": _build_longform_context_prompt(min_chars, context)})
-    reply = deps.generate_longform_reply(
-        convo,
-        min_chars=min_chars,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-    )
-    return {"reply": reply}
+    del deps, messages, last_user_text, allowed, convo, role_hint, skill_id, teacher_id, skill_runtime
+    return None
 
 
 def _dispatch_tool_safely(
@@ -813,13 +779,6 @@ def _maybe_teacher_runtime_shortcut_reply(
     )
     if followup_reply:
         return followup_reply
-    guarded_reply = _maybe_guard_teacher_subject_total(
-        deps,
-        messages=messages,
-        last_user_text=last_user_text,
-    )
-    if guarded_reply:
-        return guarded_reply
     return _maybe_generate_teacher_longform_reply(
         deps=deps,
         messages=messages,

@@ -94,16 +94,6 @@ def _default_assignment_owner_id(_assignment_id: str) -> Optional[str]:
 @dataclass(frozen=True)
 class ToolDispatchDeps:
     tool_registry: Any
-    list_exams: Callable[[], Dict[str, Any]]
-    exam_get: Callable[[str], Dict[str, Any]]
-    exam_analysis_get: Callable[[str], Dict[str, Any]]
-    exam_analysis_charts_generate: Callable[[Dict[str, Any]], Dict[str, Any]]
-    exam_students_list: Callable[[str, int], Dict[str, Any]]
-    exam_student_detail: Callable[..., Dict[str, Any]]
-    exam_question_detail: Callable[..., Dict[str, Any]]
-    exam_range_top_students: Callable[..., Dict[str, Any]]
-    exam_range_summary_batch: Callable[..., Dict[str, Any]]
-    exam_question_batch_detail: Callable[..., Dict[str, Any]]
     list_assignments: Callable[..., Dict[str, Any]]
     list_lessons: Callable[[], Dict[str, Any]]
     lesson_capture: Callable[[Dict[str, Any]], Dict[str, Any]]
@@ -460,46 +450,6 @@ def _build_handlers(
     actor_id: Optional[str] = None,
 ) -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
     return {
-        "exam.list": lambda _args: deps.list_exams(),
-        "exam.get": lambda args: deps.exam_get(args.get("exam_id", "")),
-        "exam.analysis.get": lambda args: deps.exam_analysis_get(args.get("exam_id", "")),
-        "exam.analysis.charts.generate": _teacher_only_handler(
-            role=role,
-            detail="exam.analysis.charts.generate requires teacher role",
-            fn=lambda args: deps.exam_analysis_charts_generate(args),
-        ),
-        "exam.students.list": lambda args: deps.exam_students_list(
-            args.get("exam_id", ""),
-            int(args.get("limit", 50) or 50),
-        ),
-        "exam.student.get": lambda args: deps.exam_student_detail(
-            args.get("exam_id", ""),
-            student_id=args.get("student_id"),
-            student_name=args.get("student_name"),
-            class_name=args.get("class_name"),
-        ),
-        "exam.question.get": lambda args: deps.exam_question_detail(
-            args.get("exam_id", ""),
-            question_id=args.get("question_id"),
-            question_no=args.get("question_no"),
-            top_n=args.get("top_n", 5),
-        ),
-        "exam.range.top_students": lambda args: deps.exam_range_top_students(
-            args.get("exam_id", ""),
-            start_question_no=args.get("start_question_no"),
-            end_question_no=args.get("end_question_no"),
-            top_n=args.get("top_n", 10),
-        ),
-        "exam.range.summary.batch": lambda args: deps.exam_range_summary_batch(
-            args.get("exam_id", ""),
-            ranges=args.get("ranges"),
-            top_n=args.get("top_n", 5),
-        ),
-        "exam.question.batch.get": lambda args: deps.exam_question_batch_detail(
-            args.get("exam_id", ""),
-            question_nos=args.get("question_nos"),
-            top_n=args.get("top_n", 5),
-        ),
         "analysis.report.list": _teacher_only_handler(
             role=role,
             detail="analysis.report.list requires teacher role",

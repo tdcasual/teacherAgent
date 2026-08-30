@@ -148,13 +148,12 @@ from .chat_session_utils import (
 from .chat_start_service import ChatStartDeps, start_chat_orchestration as _start_chat_orchestration_impl
 from .chat_state_store import create_chat_idempotency_store
 from .chat_status_service import ChatStatusDeps, get_chat_status as _get_chat_status_impl
-from services.api.workers import exam_worker_service, process_archive_worker_service, profile_update_worker_service, survey_worker_service, upload_worker_service
+from services.api.workers import process_archive_worker_service, profile_update_worker_service, survey_worker_service, upload_worker_service
 from services.api.workers.chat_worker_service import (
     ChatWorkerDeps,
     enqueue_chat_job as _enqueue_chat_job_impl,
     scan_pending_chat_jobs as _scan_pending_chat_jobs_impl,
 )
-from services.api.workers.exam_worker_service import ExamWorkerDeps
 from services.api.workers.survey_worker_service import SurveyWorkerDeps
 from services.api.workers.process_archive_worker_service import ProcessArchiveWorkerDeps
 from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
@@ -191,7 +190,7 @@ from .chart_agent_run_service import (
     chart_agent_run as _chart_agent_run_impl,
 )
 from .chart_executor import execute_chart_exec, resolve_chart_image_path, resolve_chart_run_meta_path
-from .handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers, chat_handlers, exam_upload_handlers
+from .handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers, chat_handlers
 from .content_catalog_service import (
     ContentCatalogDeps,
     list_lessons as _list_lessons_impl,
@@ -203,45 +202,6 @@ from .core_example_tool_service import (
     core_example_render as _core_example_render_impl,
     core_example_search as _core_example_search_impl,
 )
-from .exam_detail_service import (
-    ExamDetailDeps,
-    exam_question_detail as _exam_question_detail_impl,
-    exam_student_detail as _exam_student_detail_impl,
-)
-from .exam_analysis_charts_service import (
-    ExamAnalysisChartsDeps,
-    exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
-)
-from .exam_catalog_service import ExamCatalogDeps, list_exams as _list_exams_impl
-from .exam_longform_service import (
-    ExamLongformDeps,
-    build_exam_longform_context as _build_exam_longform_context_impl,
-    generate_longform_reply as _generate_longform_reply_impl,
-    summarize_exam_students as _summarize_exam_students_impl,
-)
-from .exam_overview_service import (
-    ExamOverviewDeps,
-    exam_analysis_get as _exam_analysis_get_impl,
-    exam_get as _exam_get_impl,
-    exam_students_list as _exam_students_list_impl,
-)
-from .exam_range_service import (
-    ExamRangeDeps,
-    exam_question_batch_detail as _exam_question_batch_detail_impl,
-    exam_range_summary_batch as _exam_range_summary_batch_impl,
-    exam_range_top_students as _exam_range_top_students_impl,
-)
-from .exam_upload_confirm_service import (
-    ExamUploadConfirmDeps,
-    confirm_exam_upload as _confirm_exam_upload_impl,
-)
-from .exam_upload_draft_service import (
-    build_exam_upload_draft as _build_exam_upload_draft_impl,
-    exam_upload_not_ready_detail as _exam_upload_not_ready_detail_impl,
-    load_exam_draft_override as _load_exam_draft_override_impl,
-    save_exam_draft_override as _save_exam_draft_override_impl,
-)
-from .exam_upload_start_service import ExamUploadStartDeps, start_exam_upload as _start_exam_upload_impl
 from .lesson_core_tool_service import LessonCaptureDeps, lesson_capture as _lesson_capture_impl
 from .opencode_executor import resolve_opencode_status, run_opencode_codegen
 from .prompt_builder import compile_system_prompt

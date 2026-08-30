@@ -13,12 +13,6 @@ from services.api.assignment_questions_ocr_service import (
     assignment_questions_ocr,
 )
 from services.api.assignment_upload_start_service import _ASSIGNMENT_ALLOWED_SUFFIXES
-from services.api.exam_upload_start_service import (
-    _ALLOWED_PAPER_SUFFIXES,
-    _ALLOWED_SCORE_SUFFIXES,
-    ExamUploadStartDeps,
-    start_exam_upload,
-)
 from services.api.student_ops_service import (
     STUDENT_ALLOWED_SUFFIXES,
     StudentOpsDeps,
@@ -142,23 +136,6 @@ def _ocr_deps(root: Path) -> AssignmentQuestionsOcrDeps:
     )
 
 
-def _exam_deps(root: Path) -> ExamUploadStartDeps:
-    async def save_upload_file(upload: _ExamUpload, dest: Path) -> None:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(upload.payload)
-
-    return ExamUploadStartDeps(
-        parse_date_str=lambda raw: str(raw or ""),
-        exam_job_path=lambda job_id: root / "exam_jobs" / job_id,
-        sanitize_filename=lambda name: str(name or "").strip().replace("/", "_"),
-        save_upload_file=save_upload_file,
-        write_exam_job=lambda job_id, updates, overwrite=False: updates,
-        enqueue_exam_job=lambda _job_id: None,
-        now_iso=lambda: "2026-02-08T12:00:00",
-        diag_log=lambda _event, _payload=None: None,
-        uuid_hex=lambda: "abcdef1234567890",
-    )
-
 
 def _error_code(exc: HTTPException) -> str:
     detail = exc.detail
@@ -183,22 +160,16 @@ def test_upload_limits_module_is_numbers_only() -> None:
     assert "MAX_TOTAL_BYTES" in source
 
 
-def test_exam_and_assignment_import_shared_numeric_caps() -> None:
+def test_assignment_import_shared_numeric_caps() -> None:
     from services.api import assignment_upload_start_service as assignment
-    from services.api import exam_upload_start_service as exam
     from services.api import upload_limits as limits
 
-    assert exam.MAX_FILES_PER_UPLOAD_FIELD is limits.MAX_FILES
-    assert exam.MAX_UPLOAD_FILE_SIZE_BYTES is limits.MAX_FILE_BYTES
-    assert exam.MAX_UPLOAD_TOTAL_SIZE_BYTES is limits.MAX_TOTAL_BYTES
     assert assignment.MAX_FILES_PER_UPLOAD_FIELD is limits.MAX_FILES
     assert assignment.MAX_UPLOAD_FILE_SIZE_BYTES is limits.MAX_FILE_BYTES
     assert assignment.MAX_UPLOAD_TOTAL_SIZE_BYTES is limits.MAX_TOTAL_BYTES
 
 
-def test_exam_and_assignment_keep_wide_suffix_sets() -> None:
-    assert {".xlsx", ".xls", ".csv"} <= _ALLOWED_SCORE_SUFFIXES
-    assert {".bmp", ".tex", ".markdown"} <= _ALLOWED_PAPER_SUFFIXES
+def test_assignment_keep_wide_suffix_sets() -> None:
     assert {".bmp", ".tex", ".markdown"} <= _ASSIGNMENT_ALLOWED_SUFFIXES
     assert OCR_ALLOWED_SUFFIXES == _ASSIGNMENT_ALLOWED_SUFFIXES
 
@@ -390,38 +361,6 @@ def test_ocr_accepts_tex_and_bmp(tmp_path: Path) -> None:
     assert len(result.get("files") or []) == 2
 
 
-def test_exam_start_accepts_xlsx_with_octet_stream(tmp_path: Path) -> None:
-    result = asyncio.run(
-        start_exam_upload(
-            exam_id="EX1",
-            date="2026-02-08",
-            class_name="高二2403班",
-            paper_files=[_ExamUpload("paper.pdf", b"paper", "application/pdf")],
-            score_files=[_ExamUpload("scores.xlsx", b"score", "application/octet-stream")],
-            answer_files=None,
-            ocr_mode="FREE_OCR",
-            language="zh",
-            deps=_exam_deps(tmp_path),
-        )
-    )
-    assert result.get("ok") is True
-
-
-def test_exam_start_rejects_exe_even_with_pdf_mime(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="不支持的文件类型"):
-        asyncio.run(
-            start_exam_upload(
-                exam_id="EX1",
-                date="2026-02-08",
-                class_name="",
-                paper_files=[_ExamUpload("paper.pdf", b"paper", "application/pdf")],
-                score_files=[_ExamUpload("scores.exe", b"MZ", "application/pdf")],
-                answer_files=None,
-                ocr_mode="FREE_OCR",
-                language="zh",
-                deps=_exam_deps(tmp_path),
-            )
-        )
 
 
 def test_unique_upload_dest_skips_existing_and_symlink(tmp_path: Path) -> None:
@@ -434,27 +373,6 @@ def test_unique_upload_dest_skips_existing_and_symlink(tmp_path: Path) -> None:
     skipped = unique_upload_dest(tmp_path, "ghost")
     assert skipped.name != "ghost"
 
-
-def test_http_exam_start_xlsx_octet_stream_is_200(tmp_path: Path) -> None:
-    from fastapi.testclient import TestClient
-
-    from tests.helpers.app_factory import create_test_app
-
-    app_mod = create_test_app(tmp_path)
-    with TestClient(app_mod.app) as client:
-        res = client.post(
-            "/exam/upload/start",
-            data={"exam_id": "EX_OCTET", "date": "2026-02-08", "class_name": "高二2403班"},
-            files=[
-                ("paper_files", ("paper.pdf", b"%PDF-1.4 dummy paper " * 8, "application/pdf")),
-                (
-                    "score_files",
-                    ("scores.xlsx", b"PK\x03\x04 dummy-xlsx", "application/octet-stream"),
-                ),
-            ],
-        )
-    assert res.status_code == 200
-    assert res.json().get("ok") is True
 
 
 def test_http_upload_exe_with_pdf_mime_is_invalid_suffix(tmp_path: Path) -> None:

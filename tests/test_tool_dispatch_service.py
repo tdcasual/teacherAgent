@@ -6,15 +6,13 @@ from services.api.tool_dispatch_service import ToolDispatchDeps, tool_dispatch
 
 class _FakeRegistry:
     def __init__(self):
-        self._tools = {"exam.get", "chart.agent.run", "teacher.memory.get", "teacher.memory.propose"}
+        self._tools = {"assignment.list", "chart.agent.run", "teacher.memory.get", "teacher.memory.propose"}
 
     def get(self, name):
         return name if name in self._tools else None
 
     def validate_arguments(self, name, args):
-        if name == "exam.get":
-            if "exam_id" not in args:
-                return ["'exam_id' is required"]
+        if name == "assignment.list":
             if "unexpected" in args:
                 return ["unexpected is not allowed"]
         return []
@@ -24,16 +22,6 @@ class ToolDispatchServiceTest(unittest.TestCase):
     def _deps(self):
         return ToolDispatchDeps(
             tool_registry=_FakeRegistry(),
-            list_exams=lambda: {"ok": True},
-            exam_get=lambda exam_id: {"ok": True, "exam_id": exam_id},
-            exam_analysis_get=lambda exam_id: {"ok": True, "exam_id": exam_id},
-            exam_analysis_charts_generate=lambda args: {"ok": True, "args": args},
-            exam_students_list=lambda exam_id, limit: {"ok": True, "exam_id": exam_id, "limit": limit},
-            exam_student_detail=lambda exam_id, student_id=None, student_name=None, class_name=None: {"ok": True, "exam_id": exam_id},
-            exam_question_detail=lambda exam_id, question_id=None, question_no=None, top_n=5: {"ok": True, "exam_id": exam_id},
-            exam_range_top_students=lambda exam_id, start_question_no=None, end_question_no=None, top_n=10: {"ok": True},
-            exam_range_summary_batch=lambda exam_id, ranges=None, top_n=5: {"ok": True},
-            exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: {"ok": True},
             list_assignments=lambda owner_teacher_id=None: {"ok": True, "owner": owner_teacher_id},
             list_lessons=lambda: {"ok": True},
             lesson_capture=lambda args: {"ok": True, "args": args},
@@ -66,9 +54,9 @@ class ToolDispatchServiceTest(unittest.TestCase):
         self.assertEqual(out.get("error"), "unknown tool: missing.tool")
 
     def test_invalid_arguments_short_circuit(self):
-        out = tool_dispatch("exam.get", {"unexpected": 1}, role="teacher", deps=self._deps())
+        out = tool_dispatch("assignment.list", {"unexpected": 1}, role="teacher", deps=self._deps())
         self.assertEqual(out.get("error"), "invalid_arguments")
-        self.assertEqual(out.get("tool"), "exam.get")
+        self.assertEqual(out.get("tool"), "assignment.list")
 
     def test_teacher_only_tool_requires_teacher_role(self):
         out = tool_dispatch("chart.agent.run", {}, role="student", deps=self._deps())

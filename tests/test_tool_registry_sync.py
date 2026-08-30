@@ -52,11 +52,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
         from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
         for name in (
-            "exam.get",
-            "exam.students.list",
-            "exam.range.top_students",
-            "exam.range.summary.batch",
-            "exam.question.batch.get",
+            "assignment.list",
+            "assignment.progress",
             "assignment.generate",
             "lesson.capture",
             "core_example.register",

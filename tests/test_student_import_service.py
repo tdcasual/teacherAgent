@@ -49,7 +49,7 @@ class StudentImportServiceTest(unittest.TestCase):
             resolved = resolve_responses_file(None, "exports/responses.csv", deps=deps)
             self.assertEqual(resolved, target.resolve())
 
-    def test_resolve_responses_file_reads_manifest_responses_path(self):
+    def test_resolve_responses_file_ignores_exam_manifest_and_uses_staging(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             app_root = root / "app"
@@ -60,7 +60,7 @@ class StudentImportServiceTest(unittest.TestCase):
                 json.dumps({"files": {"responses": "data/staging/latest_responses.csv"}}, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            target = app_root / "data" / "staging" / "latest_responses.csv"
+            target = data_dir / "staging" / "latest_responses.csv"
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("student_id,student_name,class_name,exam_id\n", encoding="utf-8")
             deps = StudentImportDeps(

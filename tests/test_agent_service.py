@@ -109,11 +109,9 @@ class AgentServiceTest(unittest.TestCase):
         )
 
         reply = str(result.get("reply") or "")
-        self.assertIn("单科成绩说明", reply)
-        self.assertIn("score_mode: \"total\"", reply)
-        self.assertIn("不能把总分当作物理单科成绩", reply)
-        self.assertEqual(len(llm_calls), 0)
-        self.assertTrue(any(event == "teacher.subject_total_guard" for event, _ in logs))
+        self.assertNotIn("单科成绩说明", reply)
+        self.assertEqual(len(llm_calls), 1)
+        self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
 
     def test_run_agent_runtime_subject_request_non_total_continues(self):
         llm_calls = []
@@ -197,11 +195,9 @@ class AgentServiceTest(unittest.TestCase):
         )
 
         reply = str(result.get("reply") or "")
-        self.assertIn("单科成绩说明", reply)
-        self.assertIn("score_mode: \"total\"", reply)
-        self.assertIn("不能把总分当作物理单科成绩", reply)
-        self.assertEqual(len(llm_calls), 0)
-        self.assertTrue(any(event == "teacher.subject_total_guard" for event, _ in logs))
+        self.assertNotIn("单科成绩说明", reply)
+        self.assertEqual(len(llm_calls), 1)
+        self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
         self.assertFalse(any(event == "teacher.subject_total_allow_single_subject" for event, _ in logs))
 
 
@@ -247,7 +243,7 @@ class AgentServiceTest(unittest.TestCase):
 
         self.assertEqual(result.get("reply"), "subject_score_reply")
         self.assertEqual(len(llm_calls), 1)
-        self.assertTrue(any(event == "teacher.subject_total_auto_extract_subject" for event, _ in logs))
+        self.assertFalse(any(event == "teacher.subject_total_auto_extract_subject" for event, _ in logs))
         self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
 
 
