@@ -28,21 +28,18 @@
   - 老师端 workflow 解释（`requested -> effective -> reason -> confidence`）属于 chat application contract
   - 高频教学场景优先在 chat application 层补 workflow orchestration / preflight，不把“猜下一步”外包给模型
 
-### Exam Context
-- 入口：`services/api/routes/exam_routes.py`
-- 应用编排：`services/api/exam/application.py`
-- 依赖注入：`services/api/exam/deps.py`
-- 约束：
-  - 任何新的考试聚合逻辑放入 `exam/application.py`
-  - `app_core.py` 只保留组合根职责，不新增 exam 编排逻辑
-
 ### Assignment Context
-- 入口：`services/api/routes/assignment_routes.py`
+- 入口：`services/api/routes/assignment_routes.py`（listing / upload / delivery / generation）
 - 应用编排：`services/api/assignment/application.py`
 - 依赖注入：`services/api/assignment/deps.py`
+- 学科 pack：`packs/subjects/<id>/`（`pack.yaml` + overlays），装载器 `services/api/subject_pack_service.py`
+- 孤儿认领：`POST /auth/admin/assignments/{assignment_id}/claim`（`services/api/routes/auth_identity_route_handlers.py` + `assignment_meta_ownership_migrate_service.claim_assignment`）
 - 约束：
   - 路由层仅调用 application 公开函数
   - assignment 编排逻辑不得回流到 `app_core.py`
+  - 产品主线是 upload → confirm → progress，不再挂 exam 路由或 exam application
+  - 未知 `subject_id` 回退 `packs/subjects/generic/`，禁止回退物理 pack
+  - `generic` pack 缺失必须失败，不能静默用其他学科顶上
 
 ### Composition Root
 - 模块：`services/api/app.py`、`services/api/container.py`
@@ -87,7 +84,7 @@
 - 约束：
   - `App.tsx` 只做跨模块状态编排与 hook 装配；壳层 JSX 留在 `TeacherAppLayout`，不得把 `.teacher-layout` / 移动 tab / 会话 sheet 回流到 `App.tsx`
   - 新 UI 区块优先进入 `features/*`，避免将复杂视图回流到 `App.tsx`
-  - 布局/顶栏/移动 tab 不承载 chat send、upload、exam 业务编排
+  - 布局/顶栏/移动 tab 不承载 chat send、assignment upload/confirm/progress 业务编排
   - `TeacherAppLayout` 可以组合 chat / workbench 表面；`features/chat` 与 `features/workbench` 不得反向依赖 `TeacherAppLayout` 或 `App.tsx`
   - E2E 稳定定位器必须使用 `data-testid`
   - 壳层 class（`.app.teacher`、`.teacher-layout`、`.teacher-mobile-shell-v2`）变更必须跑 `frontend/e2e/teacher-layout-sentinel.spec.ts`

@@ -1,6 +1,6 @@
 # MCP Interface
 
-This document describes the MCP server interface exposed by this project.
+This document describes the MCP server interface exposed by this project. The product surface is **assignment-only**. Exam HTTP/MCP tools (`exam.*`) have been removed; do not call them.
 
 ## Endpoint
 - **URL**: `/mcp`
@@ -16,7 +16,13 @@ This document describes the MCP server interface exposed by this project.
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
 - `MCP_BOUND_TEACHER_ID` (optional): when set, registers mutating assignment/student/lesson/core_example tools and filters `assignment.list` / `assignment.render` to that teacher. When empty, those tools are unregistered.
-- `exam.*` and `assignment.generate` are not MCP tools. Generate assignments via HTTP or teacher chat. Exam HTTP/MCP surfaces have been removed.
+- `exam.*` is not an MCP tool. Exam HTTP/MCP surfaces have been removed.
+- `assignment.generate` is not an MCP tool. Generate assignments via HTTP `POST /assignment/generate` or teacher chat.
+- Subject packs live on disk at `packs/subjects/<id>/` (see `docs/http_api.md`); MCP does not expose a pack loader tool.
+
+Registered when unbound: `student.search`, `student.profile.get`, `lesson.list`, `core_example.search`.
+
+Registered only when `MCP_BOUND_TEACHER_ID` is set: `student.profile.update`, `assignment.list`, `assignment.render`, `lesson.capture`, `core_example.register`, `core_example.render`.
 
 ---
 
@@ -109,7 +115,7 @@ Invoke a tool.
 ---
 
 ### student.profile.update
-**Purpose**: Update derived student profile fields.
+**Purpose**: Update derived student profile fields. Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `student_id` (string, required)
@@ -125,7 +131,7 @@ Invoke a tool.
 ---
 
 ### assignment.list
-**Purpose**: List assignments owned by `MCP_BOUND_TEACHER_ID`. Unregistered when that env var is empty.
+**Purpose**: List assignments owned by `MCP_BOUND_TEACHER_ID`. Unregistered when that env var is empty. Orphan drafts (`visibility_status=orphan_draft`) are not owned until an admin claims them via `POST /auth/admin/assignments/{id}/claim`.
 
 **Arguments**: none (`teacher_id` in args is ignored)
 
@@ -134,8 +140,18 @@ Invoke a tool.
 
 ---
 
+### lesson.list
+**Purpose**: List lesson folders under `data/lessons/`. Always registered.
+
+**Arguments**: none
+
+**Result**
+- `{ ok, lessons: ["...", ...] }`
+
+---
+
 ### lesson.capture
-**Purpose**: OCR and extract lesson materials.
+**Purpose**: OCR and extract lesson materials. Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `lesson_id` (string, required)
@@ -191,23 +207,8 @@ Invoke a tool.
 
 ---
 
-### assignment.generate
-**Purpose**: Not an MCP tool. Generate via HTTP `POST /assignment/generate` or teacher chat `assignment.generate` (writes draft). MCP no longer registers this name.
-
-**Arguments**
-- `assignment_id` (string, required)
-- `kp` (string, optional; required if no `question_ids`)
-- `question_ids` (string, optional; required if no `kp`)
-- `core_examples` (string, optional)
-- `generate` (boolean, optional)
-
-**Result**
-- stdout from `select_practice.py`
-
----
-
 ### assignment.render
-**Purpose**: Render assignment PDF (requires `reportlab`).
+**Purpose**: Render assignment PDF (requires `reportlab`). Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `assignment_id` (string, required)
@@ -216,6 +217,15 @@ Invoke a tool.
 
 **Result**
 - stdout from `render_assignment_pdf.py`
+
+---
+
+## Not MCP tools
+
+- `exam.*` — removed with the exam HTTP surface. Use assignment upload / progress instead.
+- `assignment.generate` — generate via HTTP `POST /assignment/generate` or teacher chat. MCP no longer registers this name.
+- Orphan claim — admin HTTP only: `POST /auth/admin/assignments/{assignment_id}/claim`.
+- Subject pack load — filesystem `packs/subjects/<id>/`, not an MCP tool.
 
 ---
 
