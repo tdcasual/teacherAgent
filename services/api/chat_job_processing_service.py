@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .assignment.visibility import student_can_read_assignment
+from .assignment_catalog_service import assignment_specificity
 from .chat_job_processing.compute import _compute_reply_with_runtime_events
 from .chat_job_processing.confirm import _persist_confirmation_pause
 from .chat_job_processing.history import (
@@ -19,6 +21,7 @@ from .chat_job_state_machine import (
     normalize_chat_job_status,
     transition_chat_job_status,
 )
+from .paths import TeacherIdentityError, require_teacher_id
 
 _log = logging.getLogger(__name__)
 
@@ -425,10 +428,10 @@ def _teacher_extra_system(
     teacher_id_override: Optional[str],
     workflow_payload: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    raw = str(teacher_id_override or getattr(req, "teacher_id", "") or "").strip()
-    if not raw:
+    try:
+        teacher_id = require_teacher_id(teacher_id_override or getattr(req, "teacher_id", None))
+    except TeacherIdentityError:
         return None, None
-    teacher_id = deps.resolve_teacher_id(raw)
     teacher_context = deps.teacher_build_context(
         teacher_id, last_user_text, 6000, str(session_id or "main")
     )
@@ -436,6 +439,19 @@ def _teacher_extra_system(
         _merge_teacher_extra_system(teacher_context, workflow_payload or {}),
         teacher_id,
     )
+
+
+def _student_can_attach_assignment(
+    detail: Optional[Dict[str, Any]], *, student_id: Optional[str], class_name: Optional[str]
+) -> bool:
+    if not isinstance(detail, dict):
+        return False
+    meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else detail
+    if not student_can_read_assignment(
+        meta, assignment_id=str((meta or {}).get("assignment_id") or "")
+    ):
+        return False
+    return int(assignment_specificity(meta or {}, student_id, class_name)) > 0
 
 
 def _student_extra_system(
@@ -458,13 +474,13 @@ def _student_extra_system(
             profile = deps.load_profile_file(profile_path)
         extra_parts.append(deps.build_verified_student_context(req.student_id, profile))
 
+    class_name = str(profile.get("class_name") or "").strip() or None
     if req.assignment_id:
         folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
         if folder and folder.exists():
             assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
     elif req.student_id:
         date_str = deps.parse_date_str(req.assignment_date)
-        class_name = profile.get("class_name")
         found = deps.find_assignment_for_date(
             date_str, student_id=req.student_id, class_name=class_name
         )
@@ -472,6 +488,10 @@ def _student_extra_system(
             assignment_detail = deps.build_assignment_detail_cached(
                 found["folder"], include_text=False
             )
+    if assignment_detail and not _student_can_attach_assignment(
+        assignment_detail, student_id=req.student_id, class_name=class_name
+    ):
+        assignment_detail = None
 
     if assignment_detail and study_mode:
         extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))

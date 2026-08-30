@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .paths import TeacherIdentityError, require_teacher_id
+
 _log = logging.getLogger(__name__)
 
 _ALLOWED_MEMORY_TYPES = {
@@ -186,10 +188,11 @@ def _build_student_memory_provenance(
     return result
 
 def _final_teacher_id(teacher_id: Optional[str], deps: StudentMemoryDeps) -> str:
-    raw = str(teacher_id or "").strip()
-    if not raw:
-        raise ValueError("teacher_id_required")
-    return deps.resolve_teacher_id(raw)
+    del deps
+    try:
+        return require_teacher_id(teacher_id)
+    except TeacherIdentityError as exc:
+        raise ValueError("teacher_id_required") from exc
 
 
 def create_proposal_api(

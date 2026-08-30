@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
+from ..paths import TeacherIdentityError, require_teacher_id
+
 if TYPE_CHECKING:
     from ..chat_job_processing_service import ChatJobProcessDeps, _ChatJobStatusWriter
 
@@ -20,13 +22,15 @@ def _persist_teacher_history(
     deps: ChatJobProcessDeps,
     status_writer: _ChatJobStatusWriter,
 ) -> tuple[bool, str, str]:
-    raw = str(job.get("teacher_id") or "").strip() or str(getattr(req, "teacher_id", "") or "").strip()
-    if not raw:
+    try:
+        teacher_id = require_teacher_id(
+            job.get("teacher_id") or getattr(req, "teacher_id", None)
+        )
+    except TeacherIdentityError:
         status_writer.transition(
             "failed", {"error": "teacher_id_required", "error_detail": "teacher_id_required"}
         )
         return False, "", str(job.get("session_id") or "").strip() or "main"
-    teacher_id = deps.resolve_teacher_id(raw)
     session_id = str(job.get("session_id") or "").strip() or "main"
     try:
         if not user_turn_persisted:

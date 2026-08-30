@@ -153,3 +153,56 @@ def test_student_assignment_detail_hides_orphan_without_teacher_id() -> None:
                 headers=_bearer("S001", "student"),
             )
         assert res.status_code == 403
+
+
+def test_teacher_assignments_progress_filters_to_owner() -> None:
+    with _auth_env(), TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write_json(
+            tmp / "data" / "assignments" / "HW_A" / "meta.json",
+            {
+                "assignment_id": "HW_A",
+                "teacher_id": "t_zhang",
+                "date": "2026-02-05",
+                "scope": "public",
+            },
+        )
+        _write_json(
+            tmp / "data" / "assignments" / "HW_B" / "meta.json",
+            {
+                "assignment_id": "HW_B",
+                "teacher_id": "t_li",
+                "date": "2026-02-05",
+                "scope": "public",
+            },
+        )
+        app_mod = _auth_app(tmp)
+        with TestClient(app_mod.app) as client:
+            res = client.get(
+                "/teacher/assignments/progress",
+                params={"date": "2026-02-05"},
+                headers=_bearer("t_zhang", "teacher"),
+            )
+        assert res.status_code == 200
+        ids = [item.get("assignment_id") for item in res.json().get("assignments") or []]
+        assert ids == ["HW_A"]
+
+
+def test_service_list_includes_orphans() -> None:
+    with _auth_env(), TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write_json(
+            tmp / "data" / "assignments" / "HW_A" / "meta.json",
+            {"assignment_id": "HW_A", "teacher_id": "t_zhang", "generated_at": "2026-02-08T09:00:00"},
+        )
+        _write_json(
+            tmp / "data" / "assignments" / "HW_ORPHAN" / "meta.json",
+            {"assignment_id": "HW_ORPHAN", "generated_at": "2026-02-08T10:00:00"},
+        )
+        app_mod = _auth_app(tmp)
+        with TestClient(app_mod.app) as client:
+            res = client.get("/assignments", headers=_bearer("svc", "service"))
+        assert res.status_code == 200
+        ids = [item.get("assignment_id") for item in res.json().get("assignments") or []]
+        assert "HW_A" in ids
+        assert "HW_ORPHAN" in ids

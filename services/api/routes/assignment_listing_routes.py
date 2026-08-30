@@ -11,7 +11,7 @@ from ..auth_service import AuthError, require_principal
 
 def _require_teacher_or_admin() -> None:
     try:
-        require_principal(roles=("teacher", "admin"))
+        require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
@@ -57,9 +57,15 @@ def register_assignment_listing_routes(
     @router.post("/assignment/requirements")
     async def assignment_requirements(req: AssignmentRequirementsRequest) -> Any:
         _require_teacher_or_admin()
-        return await assignment_app.post_assignment_requirements(req, deps=app_deps)
+        try:
+            return await assignment_app.post_assignment_requirements(req, deps=app_deps)
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
 
     @router.get("/assignment/{assignment_id}/requirements")
     async def assignment_requirements_get(assignment_id: str) -> Any:
         _require_teacher_or_admin()
-        return await assignment_app.get_assignment_requirements(assignment_id, deps=app_deps)
+        try:
+            return await assignment_app.get_assignment_requirements(assignment_id, deps=app_deps)
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc

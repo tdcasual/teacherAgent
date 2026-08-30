@@ -84,7 +84,7 @@ class ToolDispatchDeps:
     exam_range_top_students: Callable[..., Dict[str, Any]]
     exam_range_summary_batch: Callable[..., Dict[str, Any]]
     exam_question_batch_detail: Callable[..., Dict[str, Any]]
-    list_assignments: Callable[[], Dict[str, Any]]
+    list_assignments: Callable[..., Dict[str, Any]]
     list_lessons: Callable[[], Dict[str, Any]]
     lesson_capture: Callable[[Dict[str, Any]], Dict[str, Any]]
     student_search: Callable[[str, int], Dict[str, Any]]
@@ -206,6 +206,21 @@ def _resolve_tool_teacher_id(
 ) -> str:
     raw_teacher_id = args.get("teacher_id") or teacher_id or ""
     return deps.resolve_teacher_id(raw_teacher_id)
+
+
+def _assignment_list_for_actor(
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    role_norm = str(role or "").strip().lower()
+    if role_norm in {"admin", "service"}:
+        return deps.list_assignments(owner_teacher_id=None)
+    owner = str(teacher_id or "").strip()
+    if not owner:
+        return {"error": "teacher_id_required"}
+    return deps.list_assignments(owner_teacher_id=owner)
 
 
 def _chart_exec_handler(
@@ -386,7 +401,9 @@ def _build_handlers(
                 str(args.get("reason") or "").strip() or None,
             ),
         ),
-        "assignment.list": lambda _args: deps.list_assignments(),
+        "assignment.list": lambda _args: _assignment_list_for_actor(
+            deps=deps, role=role, teacher_id=teacher_id
+        ),
         "lesson.list": lambda _args: deps.list_lessons(),
         "lesson.capture": lambda args: deps.lesson_capture(args),
         "student.search": lambda args: deps.student_search(

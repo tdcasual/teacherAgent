@@ -34,7 +34,7 @@ class ToolDispatchServiceTest(unittest.TestCase):
             exam_range_top_students=lambda exam_id, start_question_no=None, end_question_no=None, top_n=10: {"ok": True},
             exam_range_summary_batch=lambda exam_id, ranges=None, top_n=5: {"ok": True},
             exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: {"ok": True},
-            list_assignments=lambda: {"ok": True},
+            list_assignments=lambda owner_teacher_id=None: {"ok": True, "owner": owner_teacher_id},
             list_lessons=lambda: {"ok": True},
             lesson_capture=lambda args: {"ok": True, "args": args},
             student_search=lambda query, limit: {"ok": True, "query": query, "limit": limit},

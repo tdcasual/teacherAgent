@@ -8,6 +8,7 @@ _log = logging.getLogger(__name__)
 MISSING_OWNER_EVENT = "assignment.meta.missing_owner"
 _STUDENT_READABLE = frozenset({"published", "archived"})
 _STUDENT_TODAY = frozenset({"published"})
+_LOGGED_MISSING_VISIBILITY: set[str] = set()
 
 
 def assignment_owner_id(meta: Optional[Dict[str, Any]]) -> str:
@@ -15,6 +16,11 @@ def assignment_owner_id(meta: Optional[Dict[str, Any]]) -> str:
 
 
 def log_missing_visibility_owner(*, assignment_id: str = "", teacher_id: str = "") -> None:
+    key = str(assignment_id or "").strip() or str(teacher_id or "").strip()
+    if key and key in _LOGGED_MISSING_VISIBILITY:
+        return
+    if key:
+        _LOGGED_MISSING_VISIBILITY.add(key)
     payload = {"assignment_id": assignment_id, "teacher_id": teacher_id}
     _log.info("%s %s", MISSING_OWNER_EVENT, payload)
     try:

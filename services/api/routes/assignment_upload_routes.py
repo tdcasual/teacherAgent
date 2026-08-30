@@ -5,14 +5,19 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
+from ..assignment.application import AssignmentAccessError
 from ..auth_service import AuthError, require_principal
 
 
 def _require_teacher_or_admin() -> None:
     try:
-        require_principal(roles=("teacher", "admin"))
+        require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def register_assignment_upload_routes(
@@ -33,20 +38,23 @@ def register_assignment_upload_routes(
         language: Optional[str] = Form("zh"),
     ) -> Any:
         _require_teacher_or_admin()
-        return await assignment_app.upload_assignment_start(
-            assignment_id=assignment_id,
-            date=date,
-            due_at=due_at,
-            subject_id=subject_id,
-            scope=scope,
-            class_name=class_name,
-            student_ids=student_ids,
-            files=files,
-            answer_files=answer_files,
-            ocr_mode=ocr_mode,
-            language=language,
-            deps=app_deps,
-        )
+        try:
+            return await assignment_app.upload_assignment_start(
+                assignment_id=assignment_id,
+                date=date,
+                due_at=due_at,
+                subject_id=subject_id,
+                scope=scope,
+                class_name=class_name,
+                student_ids=student_ids,
+                files=files,
+                answer_files=answer_files,
+                ocr_mode=ocr_mode,
+                language=language,
+                deps=app_deps,
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
 
     @router.get("/assignment/upload/status")
     async def assignment_upload_status(job_id: str) -> Any:

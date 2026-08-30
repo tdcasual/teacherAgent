@@ -30,17 +30,6 @@ def listing_owner_teacher_id() -> Optional[str]:
     return actor
 
 
-def _load_assignment_meta(assignment_id: str, *, deps: AssignmentAccessDeps):
-    try:
-        folder = deps.resolve_assignment_dir(assignment_id)
-    except ValueError as exc:
-        raise AssignmentAccessError(400, str(exc)) from exc
-    if not folder.exists():
-        raise AssignmentAccessError(404, "assignment not found")
-    meta = deps.load_assignment_meta(folder)
-    return meta if isinstance(meta, dict) else {}
-
-
 def _require_teacher_owner(actor_id: str, meta: dict) -> None:
     owner = str(meta.get("teacher_id") or "").strip()
     if not owner or owner != actor_id:
@@ -63,18 +52,39 @@ def _require_student_assignment_access(
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
 
 
-def require_assignment_access(assignment_id: str, *, deps: AssignmentAccessDeps) -> None:
-    if not auth_required():
-        return
+def _assignment_principal():
     try:
-        principal = require_principal(roles=("teacher", "student", "admin", "service"))
+        return require_principal(roles=("teacher", "student", "admin", "service"))
     except AuthError as exc:
         raise AssignmentAccessError(exc.status_code, exc.detail) from exc
-    if principal is None:
+
+
+def _missing_folder_access(principal: Any, *, allow_missing: bool) -> None:
+    if allow_missing:
+        if principal.role == "teacher" and not str(principal.actor_id or "").strip():
+            raise AssignmentAccessError(400, "teacher_id_required")
         return
-    if principal.role in {"admin", "service"}:
+    raise AssignmentAccessError(404, "assignment not found")
+
+
+def require_assignment_access(
+    assignment_id: str, *, deps: AssignmentAccessDeps, allow_missing: bool = False
+) -> None:
+    if not auth_required():
         return
-    meta = _load_assignment_meta(assignment_id, deps=deps)
+    principal = _assignment_principal()
+    if principal is None or principal.role in {"admin", "service"}:
+        return
+    try:
+        folder = deps.resolve_assignment_dir(assignment_id)
+    except ValueError as exc:
+        raise AssignmentAccessError(400, str(exc)) from exc
+    if not folder.exists():
+        _missing_folder_access(principal, allow_missing=allow_missing)
+        return
+    meta = deps.load_assignment_meta(folder)
+    if not isinstance(meta, dict):
+        meta = {}
     if principal.role == "teacher":
         actor = str(principal.actor_id or "").strip()
         if not actor:
@@ -87,7 +97,8 @@ def require_assignment_access(assignment_id: str, *, deps: AssignmentAccessDeps)
 async def list_assignments(
     *, limit: int = 50, cursor: int = 0, deps: AssignmentApplicationDeps
 ) -> Any:
-    return await deps.list_assignments(int(limit), int(cursor))
+    owner = listing_owner_teacher_id()
+    return await deps.list_assignments(int(limit), int(cursor), owner)
 
 
 async def get_teacher_assignment_progress(
@@ -103,18 +114,21 @@ async def get_teacher_assignment_progress(
 async def get_teacher_assignments_progress(
     *, date: Optional[str], deps: AssignmentApplicationDeps
 ) -> Any:
-    return await deps.teacher_assignments_progress(date)
+    owner = listing_owner_teacher_id()
+    return await deps.teacher_assignments_progress(date, owner)
 
 
 async def post_assignment_requirements(
     req: AssignmentRequirementsRequest, *, deps: AssignmentApplicationDeps
 ) -> Any:
+    require_assignment_access(req.assignment_id, deps=deps, allow_missing=True)
     return await deps.assignment_requirements(req)
 
 
 async def get_assignment_requirements(
     assignment_id: str, *, deps: AssignmentApplicationDeps
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_requirements_get(assignment_id)
 
 
@@ -138,6 +152,7 @@ async def upload_assignment_start(
     language: Optional[str],
     deps: AssignmentApplicationDeps,
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps, allow_missing=True)
     return await deps.assignment_upload_start(
         assignment_id=assignment_id,
         date=date,
@@ -219,6 +234,7 @@ async def post_generate_assignment(
     requirements_json: Optional[str],
     deps: AssignmentApplicationDeps,
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps, allow_missing=True)
     return await deps.generate_assignment(
         assignment_id=assignment_id,
         kp=kp,
@@ -238,6 +254,7 @@ async def post_generate_assignment(
 
 
 async def post_render_assignment(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.render_assignment(assignment_id)
 
 
@@ -252,6 +269,7 @@ async def post_assignment_questions_ocr(
     language: Optional[str],
     deps: AssignmentApplicationDeps,
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_questions_ocr(
         assignment_id=assignment_id,
         files=files,

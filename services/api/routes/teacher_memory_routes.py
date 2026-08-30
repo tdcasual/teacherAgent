@@ -10,13 +10,10 @@ from .teacher_route_helpers import ensure_ok_error_detail, scoped_teacher_id
 
 
 def _required_teacher_id(teacher_id) -> str:
-    raw = str(teacher_id or "").strip()
-    if not raw:
-        raise HTTPException(status_code=400, detail="teacher_id_required")
     try:
-        return require_teacher_id(raw)
+        return require_teacher_id(teacher_id)
     except TeacherIdentityError as exc:
-        raise HTTPException(status_code=400, detail=str(exc) or "teacher_id_required") from exc
+        raise HTTPException(status_code=400, detail="teacher_id_required") from exc
 
 
 def register_memory_routes(router: APIRouter, core: Any) -> None:

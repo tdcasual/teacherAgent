@@ -144,7 +144,9 @@ def _assignment_handlers_deps(core: Any | None = None) -> assignment_handlers.As
         return _ac.build_assignment_detail(folder, include_text=True)
 
     return assignment_handlers.AssignmentHandlerDeps(
-        list_assignments=lambda limit, cursor: _ac.list_assignments(limit=limit, cursor=cursor),
+        list_assignments=lambda limit, cursor, owner_teacher_id=None: _ac.list_assignments(
+            limit=limit, cursor=cursor, owner_teacher_id=owner_teacher_id
+        ),
         compute_assignment_progress=_ac.compute_assignment_progress,
         parse_date_str=_ac.parse_date_str,
         save_assignment_requirements=_ac.save_assignment_requirements,

@@ -9,6 +9,8 @@ from services.api.assignment.application import (
     AssignmentAccessError,
     download_assignment_file,
     get_assignment_detail,
+    list_assignments,
+    listing_owner_teacher_id,
     require_assignment_access,
 )
 from services.api.assignment.deps import AssignmentAccessDeps
@@ -23,6 +25,41 @@ def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None) -> As
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda _meta, _student_id, _class_name: specificity,
     )
+
+
+def test_listing_owner_teacher_id_empty_actor_is_400(monkeypatch):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        listing_owner_teacher_id()
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "teacher_id_required"
+
+
+def test_list_assignments_passes_owner_from_principal(monkeypatch):
+    captured: dict = {}
+
+    async def _list(limit, cursor, owner=None):
+        captured["limit"] = limit
+        captured["cursor"] = cursor
+        captured["owner"] = owner
+        return {"assignments": []}
+
+    monkeypatch.setattr(
+        "services.api.assignment.application.listing_owner_teacher_id",
+        lambda: "t_zhang",
+    )
+    deps = type("Deps", (), {})()
+    deps.list_assignments = _list
+
+    async def _run() -> None:
+        await list_assignments(limit=20, cursor=2, deps=deps)
+
+    asyncio.run(_run())
+    assert captured == {"limit": 20, "cursor": 2, "owner": "t_zhang"}
 
 
 def test_require_assignment_access_skips_when_auth_off(monkeypatch, tmp_path):

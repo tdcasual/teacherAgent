@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from llm_gateway import UnifiedLLMRequest
 
+from .paths import TeacherIdentityError, require_teacher_id
 from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
@@ -172,10 +173,11 @@ def _attempt_teacher_route(
     stream: bool,
     token_sink: Optional[Callable[[str], None]],
 ) -> tuple[Optional[Any], ChatRuntimeRouteState]:
-    raw = str(teacher_id or "").strip()
-    if not raw:
+    try:
+        actor = require_teacher_id(teacher_id)
+    except TeacherIdentityError:
         return None, ChatRuntimeRouteState(reason="teacher_id_required")
-    state = ChatRuntimeRouteState(actor=deps.resolve_teacher_id(raw))
+    state = ChatRuntimeRouteState(actor=actor)
     config_payload = _load_teacher_model_config(state.actor, deps=deps, state=state)
     provider, mode, model = _conversation_route_target(config_payload)
     if not (provider and mode and model):

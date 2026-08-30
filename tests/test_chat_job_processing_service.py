@@ -3,7 +3,11 @@ from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.chat_job_processing_service import ComputeChatReplyDeps, compute_chat_reply_sync
+from services.api.chat_job_processing_service import (
+    ComputeChatReplyDeps,
+    _student_can_attach_assignment,
+    compute_chat_reply_sync,
+)
 
 
 class _Msg:
@@ -96,6 +100,35 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(role_hint, "student")
             self.assertEqual(last_user, "讲一下牛顿第二定律")
             self.assertEqual(calls["build_assignment_detail"], 0)
+
+    def test_student_cannot_attach_draft_or_orphan_assignment(self):
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {"meta": {"teacher_id": "t1", "visibility_status": "draft", "scope": "public"}},
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {"meta": {"scope": "public"}},
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertTrue(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "public",
+                    }
+                },
+                student_id="S1",
+                class_name="c",
+            )
+        )
 
     def test_compute_chat_reply_ignores_invalid_student_profile_path(self):
         with TemporaryDirectory() as td:
@@ -314,7 +347,16 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             captured = {"skill_id": None, "teacher_id": None, "extra_system": None}
             events = []
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                event_sink=None,
+                **_kwargs,
+            ):
                 del messages, role_hint, event_sink
                 captured["skill_id"] = skill_id
                 captured["teacher_id"] = teacher_id
@@ -426,7 +468,17 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             root = Path(td)
             captured = {"analysis_target": None}
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, analysis_target=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                analysis_target=None,
+                event_sink=None,
+                **_kwargs,
+            ):
                 del messages, role_hint, extra_system, skill_id, teacher_id, event_sink
                 captured["analysis_target"] = analysis_target
                 return {"reply": "OK"}
@@ -482,7 +534,16 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             root = Path(td)
             captured = {"extra_system": None}
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                event_sink=None,
+                **_kwargs,
+            ):
                 del messages, role_hint, skill_id, teacher_id, event_sink
                 captured["extra_system"] = extra_system
                 return {"reply": "OK"}

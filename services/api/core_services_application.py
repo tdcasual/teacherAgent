@@ -443,14 +443,15 @@ def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
     return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
 
 
-def list_assignments(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
-    from .assignment.application import listing_owner_teacher_id
-
-    owner = listing_owner_teacher_id()
+def list_assignments(
+    limit: int = 50,
+    cursor: int = 0,
+    owner_teacher_id: Optional[str] = None,
+) -> Dict[str, Any]:
     return _list_assignments_impl(
         limit=limit,
         cursor=cursor,
-        owner_teacher_id=owner,
+        owner_teacher_id=owner_teacher_id,
         deps=_assignment_catalog_deps(),
     )
 

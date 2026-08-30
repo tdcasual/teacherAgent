@@ -271,7 +271,7 @@ def _chat_runtime_deps(core: Any | None = None):
             GLOBAL_LLM_SEMAPHORE,
             GLOBAL_LLM_SEMAPHORE_TEACHER,
         ),
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         resolve_teacher_model_config=lambda teacher_id: _resolve_teacher_model_config_impl(
             teacher_id,
             deps=_teacher_model_config_deps(core),
@@ -343,7 +343,7 @@ def _chat_job_process_deps(core: Any | None = None):
     _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
     student_memory_deps = StudentMemoryDeps(
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
@@ -383,7 +383,7 @@ def _chat_job_process_deps(core: Any | None = None):
         append_student_session_message=_ac.append_student_session_message,
         update_student_session_index=_ac.update_student_session_index,
         parse_date_str=_ac.parse_date_str,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         ensure_teacher_workspace=_ac.ensure_teacher_workspace,
         append_teacher_session_message=_ac.append_teacher_session_message,
         update_teacher_session_index=_ac.update_teacher_session_index,
@@ -431,7 +431,7 @@ def _compute_chat_reply_deps(core: Any | None = None):
         detect_role=_ac.detect_role,
         diag_log=_ac.diag_log,
         teacher_assignment_preflight=_ac.teacher_assignment_preflight,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_build_context=lambda teacher_id, query, max_chars, session_id: _ac.teacher_build_context(
             teacher_id,
             query=query,
@@ -498,7 +498,7 @@ def _session_history_deps(core: Any | None = None):
         student_session_file=_ac.student_session_file,
         teacher_session_file=_ac.teacher_session_file,
         load_session_messages=_load_session_messages_impl,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
     )
 
 

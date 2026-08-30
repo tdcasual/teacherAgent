@@ -45,7 +45,10 @@ def _deps(tools: set[str]):
         exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: _remember(
             "exam.question.batch.get", (exam_id, question_nos, top_n)
         ),
-        list_assignments=lambda: {"tool": "assignment.list"},
+        list_assignments=lambda owner_teacher_id=None: {
+            "tool": "assignment.list",
+            "owner": owner_teacher_id,
+        },
         list_lessons=lambda: {"tool": "lesson.list"},
         lesson_capture=lambda args: _remember("lesson.capture", args),
         student_search=lambda query, limit: _remember("student.search", (query, limit)),
@@ -115,7 +118,11 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
         role="teacher",
         deps=deps,
     )["tool"] == "exam.question.get"
-    assert tool_dispatch("assignment.list", {}, role="teacher", deps=deps)["tool"] == "assignment.list"
+    listed = tool_dispatch("assignment.list", {}, role="teacher", teacher_id="t_zhang", deps=deps)
+    assert listed["tool"] == "assignment.list"
+    assert listed["owner"] == "t_zhang"
+    missing = tool_dispatch("assignment.list", {}, role="teacher", deps=deps)
+    assert missing.get("error") == "teacher_id_required"
     assert tool_dispatch("lesson.list", {}, role="teacher", deps=deps)["tool"] == "lesson.list"
     assert tool_dispatch("student.search", {"query": "abc", "limit": 3}, role="teacher", deps=deps)["tool"] == "student.search"
     assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"

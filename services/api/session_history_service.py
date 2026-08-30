@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .paths import TeacherIdentityError
+
 
 class SessionHistoryError(Exception):
     def __init__(self, status_code: int, detail: str):
@@ -91,7 +93,10 @@ def _history_teacher_id(teacher_id: Optional[str], deps: SessionHistoryDeps) -> 
     raw = str(teacher_id or "").strip()
     if not raw:
         raise SessionHistoryError(status_code=400, detail="teacher_id_required")
-    return deps.resolve_teacher_id(raw)
+    try:
+        return deps.resolve_teacher_id(raw)
+    except TeacherIdentityError as exc:
+        raise SessionHistoryError(status_code=400, detail="teacher_id_required") from exc
 
 
 def teacher_history_sessions(teacher_id: Optional[str], limit: int, cursor: int, *, deps: SessionHistoryDeps) -> Dict[str, Any]:

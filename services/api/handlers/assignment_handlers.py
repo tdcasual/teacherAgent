@@ -12,7 +12,7 @@ from ..api_models import AssignmentRequirementsRequest
 
 @dataclass
 class AssignmentHandlerDeps:
-    list_assignments: Callable[[int, int], Dict[str, Any]]
+    list_assignments: Callable[..., Dict[str, Any]]
     compute_assignment_progress: Callable[[str, bool], Dict[str, Any]]
     parse_date_str: Callable[[Optional[str]], str]
     save_assignment_requirements: Callable[..., Dict[str, Any]]
@@ -28,8 +28,16 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def assignments(*, limit: int = 50, cursor: int = 0, deps: AssignmentHandlerDeps) -> Any:
-    return await _maybe_await(deps.list_assignments(int(limit), int(cursor)))
+async def assignments(
+    *,
+    limit: int = 50,
+    cursor: int = 0,
+    owner_teacher_id: Optional[str] = None,
+    deps: AssignmentHandlerDeps,
+) -> Any:
+    return await _maybe_await(
+        deps.list_assignments(int(limit), int(cursor), owner_teacher_id)
+    )
 
 
 async def teacher_assignment_progress(
@@ -50,13 +58,14 @@ async def teacher_assignment_progress(
 async def teacher_assignments_progress(
     *,
     date: Optional[str] = None,
+    owner_teacher_id: Optional[str] = None,
     deps: AssignmentHandlerDeps,
 ) -> Any:
     date_str = deps.parse_date_str(date)
     items: List[Dict[str, Any]] = []
     cursor = 0
     while True:
-        page = await _maybe_await(deps.list_assignments(100, cursor))
+        page = await _maybe_await(deps.list_assignments(100, cursor, owner_teacher_id))
         page_items_raw = page.get("assignments")
         page_items_any = page_items_raw if isinstance(page_items_raw, list) else []
         page_items = [item for item in page_items_any if isinstance(item, dict)]
