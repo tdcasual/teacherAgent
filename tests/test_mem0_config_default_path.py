@@ -56,3 +56,12 @@ def test_mem0_config_does_not_auto_migrate_qdrant_collections() -> None:
     assert "recreate_collection" not in combined
     assert "rename_collection" not in combined
     assert "migrate_collection" not in combined
+
+
+def test_ops_docs_note_leftover_physics_mem_is_unused() -> None:
+    env_example = Path(".env.production.min.example").read_text(encoding="utf-8")
+    governance = Path("docs/reference/memory-governance.md").read_text(encoding="utf-8")
+    assert "MEM0_COLLECTION=school_mem" in env_example
+    assert "physics_mem" in env_example
+    assert "school_mem" in governance
+    assert "physics_mem" in governance

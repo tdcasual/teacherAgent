@@ -44,6 +44,7 @@
 - 保留教学上长期有价值的偏好、稳定误区、长期目标、有效干预。
 - 不把原始成绩表、逐题 OCR 噪声、短时状态抖动直接写入长期记忆。
 - 对 auto_flush 这类摘要型 proposal，优先写提案，不直接落最终记忆。
+- Mem0 Qdrant collection 默认 `school_mem`（`MEM0_COLLECTION`）。旧 `physics_mem` 索引不会自动迁移，仍留在磁盘上但不会被读取，除非运维 rename collection 或把环境变量钉回 `physics_mem`。
 
 ## Non-memory Operational Logs
 
