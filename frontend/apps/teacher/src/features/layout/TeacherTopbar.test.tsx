@@ -111,7 +111,8 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByText('密码设置', { exact: true })).toBeTruthy()
     expect(screen.getByText('设置或更新当前账号密码。')).toBeTruthy()
     expect(screen.getByText('学生密码管理', { exact: true })).toBeTruthy()
-    expect(screen.getByText('按学生、班级或全部学生重置密码。')).toBeTruthy()
+    expect(screen.getByText('按学生或班级重置密码。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '全部学生' })).toBeNull()
   })
 
   it('associates admin form labels with their fields', () => {

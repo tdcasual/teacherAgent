@@ -1,3 +1,8 @@
+import { useEffect, useMemo, useState } from 'react'
+
+import { resolveRuntimeApiBase } from '../../../../../shared/apiBase'
+import { readTeacherAccessToken } from '../../auth/teacherAuth'
+import { safeLocalStorageGetItem } from '../../../utils/storage'
 import type { UploadScope, UploadSectionProps } from '../../../types/workflow'
 import LabeledField from './LabeledField'
 
@@ -7,12 +12,42 @@ const ASSIGNMENT_SUBJECT_OPTIONS = [
   { id: 'generic', label: '通用' },
 ] as const
 
+type RosterItem = {
+  teacher_id?: string
+  subject_id?: string
+  class_name?: string
+}
+
 type Props = UploadSectionProps & {
   uploading: boolean
   examUploading: boolean
 }
 
 export default function UploadSection(props: Props) {
+  const [rosterItems, setRosterItems] = useState<RosterItem[]>([])
+  useEffect(() => {
+    const token = readTeacherAccessToken()
+    if (!token) {
+      setRosterItems([])
+      return
+    }
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
+    let cancelled = false
+    void fetch(`${apiBase}/teacher/roster`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => (res.ok ? ((await res.json()) as { items?: RosterItem[] }) : { items: [] }))
+      .then((payload) => {
+        if (!cancelled) setRosterItems(Array.isArray(payload.items) ? payload.items : [])
+      })
+      .catch(() => {
+        if (!cancelled) setRosterItems([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const {
     uploadMode, setUploadMode, uploadCardCollapsed, setUploadCardCollapsed,
     formatUploadJobSummary, formatExamJobSummary, uploadJobInfo, uploadAssignmentId,
@@ -25,6 +60,31 @@ export default function UploadSection(props: Props) {
     setExamPaperFiles, setExamAnswerFiles, setExamScoreFiles,
     examUploading, examUploadError, examUploadStatus,
   } = props
+
+  const staticLabel = (id: string) =>
+    ASSIGNMENT_SUBJECT_OPTIONS.find((option) => option.id === id)?.label || id
+
+  const subjectOptions = useMemo(() => {
+    const rosterSubjects = Array.from(
+      new Set(rosterItems.map((item) => String(item.subject_id || '').trim()).filter(Boolean)),
+    )
+    const ids = rosterSubjects.length ? rosterSubjects : ASSIGNMENT_SUBJECT_OPTIONS.map((option) => option.id)
+    const merged = ids.includes(uploadSubjectId) ? ids : [uploadSubjectId, ...ids]
+    return merged.map((id) => ({ id, label: staticLabel(id) }))
+  }, [rosterItems, uploadSubjectId])
+
+  const classOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          rosterItems
+            .filter((item) => String(item.subject_id || '').trim() === uploadSubjectId)
+            .map((item) => String(item.class_name || '').trim())
+            .filter(Boolean),
+        ),
+      ),
+    [rosterItems, uploadSubjectId],
+  )
 
   return (
               <section id="workflow-upload-section" className={`bg-surface border border-border rounded-[14px] shadow-sm ${uploadCardCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
@@ -84,7 +144,7 @@ export default function UploadSection(props: Props) {
     	                        </LabeledField>
     	                        <LabeledField label="学科">
     	                          <select value={uploadSubjectId} onChange={(e) => setUploadSubjectId(e.target.value)}>
-    	                            {ASSIGNMENT_SUBJECT_OPTIONS.map((option) => (
+    	                            {subjectOptions.map((option) => (
     	                              <option key={option.id} value={option.id}>{option.label}</option>
     	                            ))}
     	                          </select>
@@ -97,11 +157,20 @@ export default function UploadSection(props: Props) {
     	                          </select>
     	                        </LabeledField>
     	                        <LabeledField label="班级（班级作业必填）">
-    	                          <input
-    	                            value={uploadClassName}
-    	                            onChange={(e) => setUploadClassName(e.target.value)}
-    	                            placeholder="例如：高二2403班"
-    	                          />
+    	                          {classOptions.length ? (
+    	                            <select value={uploadClassName} onChange={(e) => setUploadClassName(e.target.value)}>
+    	                              <option value="">选择班级</option>
+    	                              {classOptions.map((className) => (
+    	                                <option key={className} value={className}>{className}</option>
+    	                              ))}
+    	                            </select>
+    	                          ) : (
+    	                            <input
+    	                              value={uploadClassName}
+    	                              onChange={(e) => setUploadClassName(e.target.value)}
+    	                              placeholder="例如：高二2403班"
+    	                            />
+    	                          )}
     	                        </LabeledField>
     	                        <LabeledField label="学生编号（私人作业必填）">
     	                          <input

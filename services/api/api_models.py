@@ -176,6 +176,51 @@ class TeacherStudentPasswordResetRequest(BaseModel):
     new_password: Optional[str] = None
 
 
+class AdminSubjectAddRequest(BaseModel):
+    subject_id: str
+    display_name: str
+    pack_id: Optional[str] = None
+
+
+class AdminRosterRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    class_name: str
+    allow_empty: bool = True
+
+
+class AdminEnrollClassRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    class_name: str
+
+
+class AdminEnrollRequest(BaseModel):
+    student_id: str
+    subject_id: str
+    class_name: str
+    teacher_id: Optional[str] = None
+
+
+class AdminUnenrollRequest(BaseModel):
+    student_id: str
+    subject_id: str
+    class_name: str
+
+
+class AdminBulkMoveRequest(BaseModel):
+    subject_id: str
+    from_class: str
+    to_class: str
+    student_ids: Optional[List[str]] = None
+
+
+class AdminRenameClassRequest(BaseModel):
+    subject_id: str
+    old_class_name: str
+    new_class_name: str
+
+
 class UploadConfirmRequest(BaseModel):
     job_id: str
     requirements_override: Optional[Dict[str, Any]] = None

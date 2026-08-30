@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .auth.identity_graph_service import ExpectedStudentsError
 from .auth_service import get_current_principal
 from .paths import InvalidAssignmentDate
 
@@ -44,7 +45,7 @@ class AssignmentUploadConfirmDeps:
     parse_ids_value: Callable[[Any], List[str]]
     resolve_scope: Callable[[str, List[str], str], str]
     normalize_due_at: Callable[[Any], Optional[str]]
-    compute_expected_students: Callable[[str, str, List[str]], List[str]]
+    compute_expected_students: Callable[..., List[str]]
     atomic_write_json: Callable[[Path, Dict[str, Any]], None]
     copy2: Callable[[Path, Path], Any]
 
@@ -258,6 +259,29 @@ def _mark_confirm_failed(job_id: str, deps: AssignmentUploadConfirmDeps, error: 
     deps.write_upload_job(job_id, {"status": "failed", "error": error, "step": "failed"})
 
 
+def _compute_confirm_expected_students(
+    deps: AssignmentUploadConfirmDeps,
+    *,
+    scope_val: str,
+    class_name: str,
+    student_ids: List[str],
+    teacher_id: str,
+    subject_id: str,
+    job_id: str,
+) -> List[str]:
+    try:
+        return deps.compute_expected_students(
+            scope_val,
+            class_name,
+            student_ids,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+        )
+    except ExpectedStudentsError as exc:
+        _mark_confirm_failed(job_id, deps, exc.error)
+        raise AssignmentUploadConfirmError(400, exc.error) from exc
+
+
 def _require_meta_owner(
     job: Dict[str, Any],
     *,
@@ -307,8 +331,14 @@ def _build_assignment_meta(
         "class_name": job.get("class_name") or "",
         "student_ids": student_ids_list,
         "scope": scope_val,
-        "expected_students": deps.compute_expected_students(
-            scope_val, job.get("class_name") or "", student_ids_list
+        "expected_students": _compute_confirm_expected_students(
+            deps,
+            scope_val=scope_val,
+            class_name=str(job.get("class_name") or ""),
+            student_ids=student_ids_list,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            job_id=job_id,
         ),
         "expected_students_generated_at": deps.now_iso(),
         "completion_policy": {

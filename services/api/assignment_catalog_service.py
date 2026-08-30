@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
 from .assignment.visibility import student_can_read_assignment
+from .auth.identity_graph_service import ExpectedStudentsError
 
 _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
@@ -33,7 +34,7 @@ class AssignmentMetaPostprocessDeps:
     parse_ids_value: Callable[[Any], List[str]]
     resolve_scope: Callable[[str, List[str], str], str]
     normalize_due_at: Callable[[Any], str]
-    compute_expected_students: Callable[[str, str, List[str]], List[str]]
+    compute_expected_students: Callable[..., List[str]]
     atomic_write_json: Callable[[Path, Any], None]
     now_iso: Callable[[], str]
 
@@ -73,7 +74,16 @@ def _resolve_expected_students_for_postprocess(
         resolved = []
     if resolved:
         return resolved
-    return deps.compute_expected_students(scope_val, class_name, student_ids)
+    try:
+        return deps.compute_expected_students(
+            scope_val,
+            class_name,
+            student_ids,
+            teacher_id=str(meta.get("teacher_id") or ""),
+            subject_id=str(meta.get("subject_id") or ""),
+        )
+    except ExpectedStudentsError:
+        return []
 
 
 def _default_assignment_completion_policy(
@@ -125,6 +135,9 @@ def assignment_specificity(
     if scope == "class":
         return 2 if class_name and class_meta and class_name == class_meta else 0
     if scope == "public":
+        expected = meta.get("expected_students") or []
+        if expected:
+            return 1 if student_id and student_id in expected else 0
         return 1
 
     if student_ids:

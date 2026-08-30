@@ -23,6 +23,8 @@ from .auth.bootstrap_service import (
     write_admin_bootstrap_file,
 )
 from .auth.identify_service import handle_identify_student, handle_identify_teacher
+from .auth.identity_graph_service import IdentityGraphMixin
+from .auth.identity_graph_service import ensure_roster_tables as _ensure_roster_tables
 from .auth.login_service import handle_login
 from .auth.password_reset_service import (
     handle_reset_student_passwords,
@@ -41,7 +43,7 @@ _OPAQUE_CANDIDATE_TTL = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
-class AuthRegistryStore:
+class AuthRegistryStore(IdentityGraphMixin):
     db_path: Path
     data_dir: Path
 
@@ -151,6 +153,7 @@ class AuthRegistryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_auth_candidate_map_expiry ON auth_candidate_map(expires_at)"
             )
+        _ensure_roster_tables(self)
 
     def _migrate_admin_token_version(self, conn: sqlite3.Connection) -> None:
         try:
@@ -1300,9 +1303,19 @@ class AuthRegistryStore:
         scope: str,
         student_id: Optional[str],
         class_name: Optional[str],
+        actor_id: str = "",
+        actor_role: str = "",
     ) -> Dict[str, Any]:
         if scope not in {"student", "class", "all"}:
             return {"ok": False, "error": "invalid_scope"}
+
+        if scope == "all":
+            if str(actor_role or "").strip().lower() != "admin":
+                return {"ok": False, "error": "forbidden"}
+            all_students = self._list_student_identities()
+            if not all_students:
+                return {"ok": False, "error": "not_found"}
+            return {"ok": True, "scope": scope, "items": all_students}
 
         if scope == "student":
             sid = str(student_id or "").strip()
@@ -1314,24 +1327,14 @@ class AuthRegistryStore:
                 return {"ok": False, "error": "not_found"}
             return {"ok": True, "scope": scope, "items": [identity]}
 
-        all_students = self._list_student_identities()
-        if scope == "all":
-            if not all_students:
-                return {"ok": False, "error": "not_found"}
-            return {"ok": True, "scope": scope, "items": all_students}
+        from .auth.identity_graph_service import list_class_reset_targets
 
-        class_text = str(class_name or "").strip()
-        if not class_text:
-            return {"ok": False, "error": "missing_class_name"}
-        class_norm = normalize(class_text)
-        class_students = [
-            item
-            for item in all_students
-            if normalize(str(item.get("class_name") or "").strip()) == class_norm
-        ]
-        if not class_students:
-            return {"ok": False, "error": "not_found"}
-        return {"ok": True, "scope": scope, "items": class_students}
+        return list_class_reset_targets(
+            self,
+            class_name=str(class_name or ""),
+            actor_id=str(actor_id or ""),
+            actor_role=str(actor_role or ""),
+        )
 
     def _to_csv(self, role: str, items: Sequence[Dict[str, Any]]) -> str:
         output = StringIO()

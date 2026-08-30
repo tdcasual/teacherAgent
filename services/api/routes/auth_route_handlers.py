@@ -20,6 +20,7 @@ from ..api_models import (
 )
 from ..auth_registry_service import build_auth_registry_store
 from ..auth_service import AuthError, access_token_ttl_sec, mint_access_token, require_principal
+from .auth_identity_route_handlers import register_identity_admin_routes
 
 
 def _mask_login_failure(payload: dict[str, Any]) -> dict[str, Any]:
@@ -64,6 +65,18 @@ def _build_store(core: Any) -> Any:
 def _raise_not_found(result: dict[str, Any]) -> None:
     if not result.get("ok") and result.get("error") == "not_found":
         raise HTTPException(status_code=404, detail="not_found")
+
+
+def _raise_student_reset_result(result: dict[str, Any]) -> dict[str, Any]:
+    _raise_not_found(result)
+    if result.get("ok"):
+        return result
+    error = str(result.get("error") or "")
+    if error == "forbidden":
+        raise HTTPException(status_code=403, detail="forbidden")
+    if error == "roster_required":
+        raise HTTPException(status_code=400, detail="roster_required")
+    return result
 
 
 def _student_login_response(login_result: dict[str, Any]) -> dict[str, Any]:
@@ -166,8 +179,7 @@ def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=actor_id,
             actor_role=actor_role,
         )
-        _raise_not_found(result)
-        return result
+        return _raise_student_reset_result(result)
 
 
 def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
@@ -271,6 +283,7 @@ def _register_admin_auth_routes(router: APIRouter, core: Any) -> None:
 
     _register_admin_teacher_routes(router, core)
     _register_admin_token_routes(router, core)
+    register_identity_admin_routes(router, core)
 
 
 def register_auth_routes(router: APIRouter, core: Any) -> None:

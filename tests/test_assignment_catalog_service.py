@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from services.api.assignment_catalog_service import (
     AssignmentCatalogDeps,
     AssignmentMetaPostprocessDeps,
+    assignment_specificity,
     build_assignment_detail,
     find_assignment_for_date,
     list_assignments,
@@ -14,6 +15,18 @@ from services.api.assignment_catalog_service import (
 
 
 class AssignmentCatalogServiceTest(unittest.TestCase):
+    def test_public_specificity_uses_expected_students_snapshot(self):
+        meta = {
+            "scope": "public",
+            "teacher_id": "t_zhang",
+            "subject_id": "physics",
+            "expected_students": ["S001", "S002"],
+        }
+        self.assertEqual(assignment_specificity(meta, "S001", "高二2403班"), 1)
+        self.assertEqual(assignment_specificity(meta, "S999", "高二2404班"), 0)
+        legacy = {"scope": "public"}
+        self.assertEqual(assignment_specificity(legacy, "S999", ""), 1)
+
     def _catalog_deps(self, root: Path):
         return AssignmentCatalogDeps(
             data_dir=root / "data",
@@ -236,7 +249,7 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
                 parse_ids_value=lambda value: [str(x).strip() for x in (value if isinstance(value, list) else []) if str(x).strip()],
                 resolve_scope=lambda scope, _student_ids, class_name: "class" if scope == "class" and class_name else "public",
                 normalize_due_at=lambda value: str(value or "").strip(),
-                compute_expected_students=lambda scope, class_name, _student_ids: ["S1", "S2"] if scope == "class" and class_name else [],
+                compute_expected_students=lambda scope, class_name, _student_ids, **_kwargs: ["S1", "S2"] if scope == "class" and class_name else [],
                 atomic_write_json=_atomic_write_json,
                 now_iso=lambda: "2026-02-08T12:00:00",
             )
@@ -271,7 +284,7 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
                 parse_ids_value=lambda value: [str(x).strip() for x in (value if isinstance(value, list) else []) if str(x).strip()],
                 resolve_scope=lambda scope, _student_ids, class_name: "class" if scope == "class" and class_name else "public",
                 normalize_due_at=lambda value: str(value or "").strip(),
-                compute_expected_students=lambda scope, class_name, _student_ids: ["S1", "S2"] if scope == "class" and class_name else [],
+                compute_expected_students=lambda scope, class_name, _student_ids, **_kwargs: ["S1", "S2"] if scope == "class" and class_name else [],
                 atomic_write_json=_atomic_write_json,
                 now_iso=lambda: "2026-02-08T12:00:00",
             )

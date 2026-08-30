@@ -6,6 +6,10 @@ from fastapi import APIRouter, HTTPException
 
 from ..api_models import AssignmentRequirementsRequest
 from ..assignment.application import AssignmentAccessError
+from ..assignment_recompute_roster_service import (
+    AssignmentRecomputeRosterError,
+    recompute_assignment_roster,
+)
 from ..auth_service import AuthError, require_principal
 
 
@@ -69,3 +73,16 @@ def register_assignment_listing_routes(
             return await assignment_app.get_assignment_requirements(assignment_id, deps=app_deps)
         except AssignmentAccessError as exc:
             raise _http_from_assignment_access(exc) from exc
+
+    @router.post("/assignment/{assignment_id}/recompute-roster")
+    def assignment_recompute_roster(assignment_id: str) -> Any:
+        try:
+            principal = require_principal(roles=("teacher", "admin"))
+        except AuthError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+        if principal is None:
+            raise HTTPException(status_code=401, detail="missing_authorization")
+        try:
+            return recompute_assignment_roster(assignment_id, principal=principal)
+        except AssignmentRecomputeRosterError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)

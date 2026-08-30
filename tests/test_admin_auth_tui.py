@@ -123,3 +123,60 @@ def test_record_history_avoids_deprecated_datetime_utcnow(monkeypatch) -> None:
 
     app._record_history(action="noop", total=1, success=1, failed=0, detail="ok")
     assert app.state.history[-1]["ts"] == "2026-02-15T16:00:00Z"
+
+
+def test_identity_commands_use_local_store_in_trusted_mode(capsys) -> None:
+    mod = _load_module()
+    calls: dict = {}
+
+    class _FakeStore:
+        def add_roster(self, **kwargs):
+            calls["add_roster"] = kwargs
+            return {"ok": True, "warning": "empty_class"}
+
+        def list_subjects(self):
+            calls["list_subjects"] = True
+            return {"ok": True, "items": [{"subject_id": "physics"}]}
+
+    app = mod.AdminAuthTUI(
+        base_url="http://127.0.0.1:8000",
+        username="",
+        password="",
+        trusted_local=True,
+    )
+    app._local_store = _FakeStore()
+    app._cmd_identity("roster", ["add", "t_zhang", "physics", "高二2403班"])
+    app._cmd_identity("subject", ["list"])
+    assert calls["add_roster"]["teacher_id"] == "t_zhang"
+    assert calls["add_roster"]["class_name"] == "高二2403班"
+    assert calls["list_subjects"] is True
+    out = capsys.readouterr().out
+    assert "roster add ok" in out
+    assert "warning=empty_class" in out
+
+
+def test_identity_commands_use_http_when_not_local(monkeypatch, capsys) -> None:
+    mod = _load_module()
+    seen: dict = {}
+
+    def _fake_request_json(*, method, url, payload=None, bearer_token=None, timeout_sec=15):
+        seen["method"] = method
+        seen["url"] = url
+        seen["payload"] = payload
+        seen["token"] = bearer_token
+        return 200, {"ok": True, "items": [{"student_id": "S001"}]}
+
+    monkeypatch.setattr(mod, "_request_json", _fake_request_json)
+    app = mod.AdminAuthTUI(
+        base_url="http://127.0.0.1:8000",
+        username="admin",
+        password="",
+        trusted_local=False,
+    )
+    app.access_token = "admin-token"
+    app._cmd_identity("enrollments", ["list", "physics", "高二2403班"])
+    assert seen["method"] == "GET"
+    assert seen["url"].startswith("http://127.0.0.1:8000/auth/admin/enrollments?")
+    assert "subject_id=physics" in seen["url"]
+    assert seen["token"] == "admin-token"
+    assert "enrollments list ok" in capsys.readouterr().out

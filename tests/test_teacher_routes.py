@@ -27,6 +27,7 @@ def test_teacher_routes_build_router():
     assert _has_route(router, "POST", "/teacher/provider-registry/providers")
     assert _has_route(router, "GET", "/teacher/model-config")
     assert _has_route(router, "PUT", "/teacher/model-config")
+    assert _has_route(router, "GET", "/teacher/roster")
     assert not _has_route(router, "GET", "/teacher/llm-routing")
     assert not _has_route(router, "POST", "/teacher/llm-routing/simulate")
     assert not _has_route(router, "POST", "/teacher/llm-routing/rollback")

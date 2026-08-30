@@ -237,13 +237,28 @@ def list_student_ids_by_class(class_name: str) -> List[str]:
     return _list_student_ids_by_class_impl(class_name, _student_directory_deps())
 
 
-def compute_expected_students(scope: str, class_name: str, student_ids: List[str]) -> List[str]:
+def compute_expected_students(
+    scope: str,
+    class_name: str,
+    student_ids: List[str],
+    teacher_id: str = "",
+    subject_id: str = "",
+) -> List[str]:
+    from .auth.identity_graph_service import ExpectedStudentsError
+    from .auth_registry_service import build_auth_registry_store
+
     scope_val = resolve_scope(scope, student_ids, class_name)
-    if scope_val == "student":
-        return sorted(list(dict.fromkeys([s for s in student_ids if s])))
-    if scope_val == "class":
-        return list_student_ids_by_class(class_name)
-    return list_all_student_ids()
+    store = build_auth_registry_store()
+    result = store.resolve_expected_students(
+        scope=scope_val,
+        class_name=class_name,
+        student_ids=student_ids,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+    )
+    if not result.get("ok"):
+        raise ExpectedStudentsError(str(result.get("error") or "roster_required"))
+    return list(result.get("items") or [])
 
 
 async def upload_files(files: List[Any]) -> Dict[str, Any]:

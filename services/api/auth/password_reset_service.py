@@ -220,6 +220,8 @@ def handle_reset_student_passwords(
         scope=scope_norm,
         student_id=student_id,
         class_name=class_name,
+        actor_id=actor_id,
+        actor_role=actor_role,
     )
     if not targets_result.get("ok"):
         return targets_result

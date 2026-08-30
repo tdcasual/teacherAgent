@@ -1,52 +1,66 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as teacherAuth from '../../auth/teacherAuth'
 import UploadSection from './UploadSection'
 
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+const baseProps = {
+  uploadMode: 'assignment' as const,
+  setUploadMode: vi.fn(),
+  uploadCardCollapsed: false,
+  setUploadCardCollapsed: vi.fn(),
+  formatUploadJobSummary: () => 'upload',
+  formatExamJobSummary: () => 'exam',
+  uploadJobInfo: null,
+  uploadAssignmentId: 'HW-1',
+  examJobInfo: null,
+  examId: '',
+  handleUploadAssignment: vi.fn(),
+  handleUploadExam: vi.fn(),
+  setUploadAssignmentId: vi.fn(),
+  uploadDate: '',
+  setUploadDate: vi.fn(),
+  uploadDueAt: '',
+  setUploadDueAt: vi.fn(),
+  uploadSubjectId: 'physics',
+  setUploadSubjectId: vi.fn(),
+  uploadScope: 'class' as const,
+  setUploadScope: vi.fn(),
+  uploadClassName: '',
+  setUploadClassName: vi.fn(),
+  uploadStudentIds: '',
+  setUploadStudentIds: vi.fn(),
+  setUploadFiles: vi.fn(),
+  setUploadAnswerFiles: vi.fn(),
+  uploading: false,
+  uploadError: '',
+  uploadStatus: '',
+  setExamId: vi.fn(),
+  examDate: '',
+  setExamDate: vi.fn(),
+  examClassName: '',
+  setExamClassName: vi.fn(),
+  setExamPaperFiles: vi.fn(),
+  setExamAnswerFiles: vi.fn(),
+  setExamScoreFiles: vi.fn(),
+  examUploading: false,
+  examUploadError: '',
+  examUploadStatus: '',
+}
+
 describe('UploadSection', () => {
-  it('offers a static subject list and optional due_at, not a roster dropdown', () => {
+  it('falls back to a static subject list when roster is empty', () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('')
     render(
       <UploadSection
-        uploadMode="assignment"
-        setUploadMode={vi.fn()}
-        uploadCardCollapsed={false}
-        setUploadCardCollapsed={vi.fn()}
-        formatUploadJobSummary={() => 'upload'}
-        formatExamJobSummary={() => 'exam'}
-        uploadJobInfo={null}
-        uploadAssignmentId="HW-1"
-        examJobInfo={null}
-        examId=""
-        handleUploadAssignment={vi.fn()}
-        handleUploadExam={vi.fn()}
-        setUploadAssignmentId={vi.fn()}
-        uploadDate=""
-        setUploadDate={vi.fn()}
-        uploadDueAt=""
-        setUploadDueAt={vi.fn()}
+        {...baseProps}
         uploadSubjectId="generic"
-        setUploadSubjectId={vi.fn()}
         uploadScope="public"
-        setUploadScope={vi.fn()}
-        uploadClassName=""
-        setUploadClassName={vi.fn()}
-        uploadStudentIds=""
-        setUploadStudentIds={vi.fn()}
-        setUploadFiles={vi.fn()}
-        setUploadAnswerFiles={vi.fn()}
-        uploading={false}
-        uploadError=""
-        uploadStatus=""
-        setExamId={vi.fn()}
-        examDate=""
-        setExamDate={vi.fn()}
-        examClassName=""
-        setExamClassName={vi.fn()}
-        setExamPaperFiles={vi.fn()}
-        setExamAnswerFiles={vi.fn()}
-        setExamScoreFiles={vi.fn()}
-        examUploading={false}
-        examUploadError=""
-        examUploadStatus=""
       />,
     )
 
@@ -59,5 +73,42 @@ describe('UploadSection', () => {
     ])
     expect(screen.getByLabelText('截止日期（可选）')).toBeTruthy()
     expect(screen.getByRole('button', { name: '考试', exact: true })).toBeTruthy()
+  })
+
+  it('uses GET /teacher/roster for subject and class dropdowns', async () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('teacher-token')
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        items: [
+          { teacher_id: 't_zhang', subject_id: 'physics', class_name: '高二2403班' },
+          { teacher_id: 't_zhang', subject_id: 'math', class_name: '高二2403班' },
+        ],
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<UploadSection {...baseProps} />)
+
+    await waitFor(() => {
+      const subject = screen.getByLabelText('学科') as HTMLSelectElement
+      expect(Array.from(subject.options).map((option) => option.value)).toEqual([
+        'physics',
+        'math',
+      ])
+    })
+    const classField = screen.getByLabelText('班级（班级作业必填）') as HTMLSelectElement
+    expect(classField.tagName).toBe('SELECT')
+    expect(Array.from(classField.options).map((option) => option.value)).toEqual([
+      '',
+      '高二2403班',
+    ])
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/teacher/roster'),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer teacher-token' },
+      }),
+    )
   })
 })

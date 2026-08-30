@@ -211,7 +211,7 @@ class AssignmentConfirmOwnershipTest(unittest.TestCase):
             parse_ids_value=lambda value: value if isinstance(value, list) else [],
             resolve_scope=lambda scope, _student_ids, _class_name: str(scope or ""),
             normalize_due_at=lambda value: str(value or "").strip() or None,
-            compute_expected_students=lambda _scope, _class_name, _student_ids: ["S1"],
+            compute_expected_students=lambda *_args, **_kwargs: ["S1"],
             atomic_write_json=lambda path, data: path.write_text(
                 json.dumps(data, ensure_ascii=False), encoding="utf-8"
             ),
@@ -555,7 +555,7 @@ class PostprocessOwnerFieldsTest(unittest.TestCase):
                 parse_ids_value=lambda value: [],
                 resolve_scope=lambda scope, _student_ids, _class_name: str(scope or "public"),
                 normalize_due_at=lambda value: str(value or "").strip() or None,
-                compute_expected_students=lambda *_args: [],
+                compute_expected_students=lambda *_args, **_kwargs: [],
                 atomic_write_json=lambda path, payload: path.write_text(
                     json.dumps(payload, ensure_ascii=False), encoding="utf-8"
                 ),

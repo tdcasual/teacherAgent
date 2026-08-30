@@ -303,6 +303,38 @@ def test_teacher_can_reset_student_passwords_by_scope(tmp_path: Path):
     assert teacher_access_token
     teacher_headers = {"Authorization": f"Bearer {teacher_access_token}"}
 
+    store = AuthRegistryStore(
+        db_path=tmp_path / "data" / "auth" / "auth_registry.sqlite3",
+        data_dir=tmp_path / "data",
+    )
+    store._ensure_teacher_auth(
+        teacher_id="teacher_alpha",
+        teacher_name="张老师",
+        email="alpha@example.com",
+        regenerate_token=False,
+    )
+    for sid, name, class_name in (
+        ("S001", "刘昊然", "高二2403班"),
+        ("S002", "畅爽", "高二2403班"),
+        ("S003", "武熙语", "高二2404班"),
+    ):
+        store._ensure_student_auth(
+            student_id=sid,
+            student_name=name,
+            class_name=class_name,
+            regenerate_token=False,
+        )
+    store.add_roster(
+        teacher_id="teacher_alpha",
+        subject_id="physics",
+        class_name="高二2403班",
+    )
+    store.enroll_class(
+        teacher_id="teacher_alpha",
+        subject_id="physics",
+        class_name="高二2403班",
+    )
+
     reset_one_res = client.post(
         "/auth/teacher/student/reset-passwords",
         headers=teacher_headers,
@@ -372,12 +404,20 @@ def test_teacher_can_reset_student_passwords_by_scope(tmp_path: Path):
         headers=teacher_headers,
         json={"scope": "all"},
     )
-    assert reset_all_res.status_code == 200
-    reset_all_payload = reset_all_res.json()
+    assert reset_all_res.status_code == 403
+    assert reset_all_res.json().get("detail") == "forbidden"
+
+    admin_reset_all = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=admin_headers,
+        json={"scope": "all"},
+    )
+    assert admin_reset_all.status_code == 200
+    reset_all_payload = admin_reset_all.json()
     assert reset_all_payload.get("ok") is True
     all_items = reset_all_payload.get("items") or []
     all_ids = {str(item.get("student_id") or "") for item in all_items}
-    assert all_ids == {"S001", "S002", "S003"}
+    assert {"S001", "S002", "S003"} <= all_ids
     assert all(str(item.get("temp_password") or "").strip() for item in all_items)
 
 

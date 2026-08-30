@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -8,6 +9,7 @@ from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmError,
     confirm_assignment_upload,
 )
+from services.api.auth.identity_graph_service import ExpectedStudentsError
 
 
 class AssignmentUploadConfirmServiceTest(unittest.TestCase):
@@ -32,7 +34,7 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             parse_ids_value=lambda value: value if isinstance(value, list) else [],
             resolve_scope=lambda scope, _student_ids, _class_name: str(scope or ""),
             normalize_due_at=lambda value: str(value or ""),
-            compute_expected_students=lambda _scope, _class_name, _student_ids: [],
+            compute_expected_students=lambda *_args, **_kwargs: [],
             atomic_write_json=lambda path, data: path.write_text(
                 json.dumps(data, ensure_ascii=False), encoding="utf-8"
             ),
@@ -167,6 +169,49 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual(ctx.exception.detail, "invalid assignment_id")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+
+    def test_confirm_maps_roster_required(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            def _raise_roster(*_args, **_kwargs):
+                raise ExpectedStudentsError("roster_required")
+
+            deps = replace(self._deps(root, writes), compute_expected_students=_raise_roster)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "HW-1",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "scope": "class",
+                        "class_name": "高二2403班",
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "roster_required")
             self.assertEqual(writes[-1][1].get("status"), "failed")
 
 
