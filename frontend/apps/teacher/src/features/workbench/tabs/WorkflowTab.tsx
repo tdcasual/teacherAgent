@@ -3,8 +3,6 @@ import type {
   UploadSectionProps,
   AssignmentDraftSectionProps,
   WorkflowSummaryCardProps,
-  AnalysisReportSectionProps,
-  VideoHomeworkAnalysisSectionProps,
 } from '../../../types/workflow'
 import type { ExecutionTimelineEntry } from '../../../appTypes'
 
@@ -12,17 +10,13 @@ import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
 import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
-import AnalysisReportSection from '../workflow/AnalysisReportSection'
-import VideoHomeworkAnalysisSection from '../workflow/VideoHomeworkAnalysisSection'
 import WorkflowTimeline from '../workflow/WorkflowTimeline'
 import { findActiveWorkflowStep } from '../workflowIndicators'
 
 export type WorkflowTabProps =
   WorkflowSummaryCardProps &
   UploadSectionProps &
-  AssignmentDraftSectionProps &
-  AnalysisReportSectionProps &
-  VideoHomeworkAnalysisSectionProps & {
+  AssignmentDraftSectionProps & {
     uploading: boolean
     progressPanelCollapsed: boolean
     setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
@@ -173,7 +167,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           </div>
           <strong>补充参考</strong>
           <div className="text-[12px] text-muted">
-            完成情况、执行记录与分析结果放在这里，主线处理完成后再看。
+            完成情况与执行记录放在这里，主线处理完成后再看。
           </div>
         </div>
         <AssignmentProgressSection
@@ -193,36 +187,6 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           saveStudentGrade={props.saveStudentGrade}
         />
         <WorkflowTimeline entries={props.executionTimeline} />
-        <AnalysisReportSection
-          analysisFeatureEnabled={props.analysisFeatureEnabled}
-          analysisFeatureShadowMode={props.analysisFeatureShadowMode}
-          analysisReportsLoading={props.analysisReportsLoading}
-          analysisReportsError={props.analysisReportsError}
-          analysisReports={props.analysisReports}
-          selectedAnalysisReportId={props.selectedAnalysisReportId}
-          selectedAnalysisReport={props.selectedAnalysisReport}
-          analysisReviewQueue={props.analysisReviewQueue}
-          analysisReportsSummary={props.analysisReportsSummary}
-          analysisReviewSummary={props.analysisReviewSummary}
-          analysisOpsSnapshot={props.analysisOpsSnapshot}
-          analysisDomainFilter={props.analysisDomainFilter}
-          analysisStatusFilter={props.analysisStatusFilter}
-          analysisStrategyFilter={props.analysisStrategyFilter}
-          analysisTargetTypeFilter={props.analysisTargetTypeFilter}
-          setAnalysisDomainFilter={props.setAnalysisDomainFilter}
-          setAnalysisStatusFilter={props.setAnalysisStatusFilter}
-          setAnalysisStrategyFilter={props.setAnalysisStrategyFilter}
-          setAnalysisTargetTypeFilter={props.setAnalysisTargetTypeFilter}
-          refreshAnalysisReports={props.refreshAnalysisReports}
-          selectAnalysisReport={props.selectAnalysisReport}
-          rerunAnalysisReport={props.rerunAnalysisReport}
-          rerunAnalysisReportsBulk={props.rerunAnalysisReportsBulk}
-        />
-        <VideoHomeworkAnalysisSection
-          videoHomeworkFeatureEnabled={props.videoHomeworkFeatureEnabled}
-          analysisReports={props.analysisReports}
-          selectedAnalysisReport={props.selectedAnalysisReport}
-        />
       </section>
     </section>
   )

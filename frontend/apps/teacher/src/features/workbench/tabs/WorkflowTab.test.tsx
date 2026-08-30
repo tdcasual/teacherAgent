@@ -19,14 +19,6 @@ vi.mock('../workflow/AssignmentDraftSection', () => ({
   default: () => <div>workflow-assignment-draft-section</div>,
 }))
 
-vi.mock('../workflow/AnalysisReportSection', () => ({
-  default: () => <div>workflow-analysis-section</div>,
-}))
-
-vi.mock('../workflow/VideoHomeworkAnalysisSection', () => ({
-  default: () => <div>workflow-video-analysis-section</div>,
-}))
-
 vi.mock('../workflow/WorkflowTimeline', () => ({
   default: () => <div>workflow-timeline-section</div>,
 }))
@@ -60,30 +52,6 @@ const buildProps = (): WorkflowTabProps => ({
   progressAssignmentId: 'HW-1',
   progressLoading: false,
   fetchAssignmentProgress: async () => undefined,
-  analysisFeatureEnabled: true,
-  analysisFeatureShadowMode: false,
-  analysisReportsLoading: false,
-  analysisReportsError: '',
-  analysisReports: [],
-  selectedAnalysisReportId: '',
-  selectedAnalysisReport: null,
-  analysisReviewQueue: [],
-  analysisReportsSummary: '',
-  analysisReviewSummary: '',
-  analysisOpsSnapshot: null,
-  analysisDomainFilter: 'all',
-  analysisStatusFilter: 'all',
-  analysisStrategyFilter: 'all',
-  analysisTargetTypeFilter: 'all',
-  setAnalysisDomainFilter: () => undefined,
-  setAnalysisStatusFilter: () => undefined,
-  setAnalysisStrategyFilter: () => undefined,
-  setAnalysisTargetTypeFilter: () => undefined,
-  refreshAnalysisReports: async () => undefined,
-  selectAnalysisReport: async () => undefined,
-  rerunAnalysisReport: async () => undefined,
-  rerunAnalysisReportsBulk: async () => undefined,
-  videoHomeworkFeatureEnabled: true,
   uploading: false,
   progressPanelCollapsed: false,
   setProgressPanelCollapsed: () => undefined,
@@ -154,8 +122,9 @@ describe('WorkflowTab', () => {
     expect(screen.getByText('补充参考')).toBeTruthy()
     expect(screen.getByText('按需查看')).toBeTruthy()
     expect(screen.getByText('workflow-progress-section')).toBeTruthy()
-    expect(screen.getByText('workflow-analysis-section')).toBeTruthy()
-    expect(screen.getByText('workflow-video-analysis-section')).toBeTruthy()
+    expect(screen.queryByText('workflow-analysis-section')).toBeNull()
+    expect(screen.queryByText('workflow-video-analysis-section')).toBeNull()
+    expect(screen.queryByText('统一分析报告')).toBeNull()
     expect(screen.getByText('workflow-timeline-section')).toBeTruthy()
     expect(screen.getByTestId('teacher-workflow-primary-stage').getAttribute('data-workflow-tier')).toBe('primary')
     expect(screen.getByTestId('teacher-workflow-secondary-stage').getAttribute('data-workflow-tier')).toBe('supporting')
