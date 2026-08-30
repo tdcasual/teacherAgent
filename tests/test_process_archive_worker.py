@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from collections import deque
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,8 +13,10 @@ import pytest
 
 from services.api.assignment_process_archive_service import (
     AssignmentProcessArchiveDeps,
+    ProcessArchiveError,
     freeze_process_archive,
     read_process_archive,
+    read_process_archive_summary,
     request_process_archive,
     trigger_on_submit,
     write_pending_skeleton,
@@ -76,6 +79,7 @@ def _archive_deps(root: Path, **overrides: Any) -> AssignmentProcessArchiveDeps:
         "assignment_id": "HW_1",
         "teacher_id": "t_zhang",
         "subject_id": "physics",
+        "visibility_status": "published",
         "expected_students": ["S1"],
     }
     fields: Dict[str, Any] = dict(
@@ -445,6 +449,95 @@ def test_pii_filter_drops_blocked_quotes() -> None:
         assert all("13812345678" not in str(text) for text in texts)
 
 
+def test_pii_filter_drops_blocked_stuck_points_from_llm() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        payload = {
+            "quotes": [
+                {
+                    "text": "我觉得加速度和速度是一回事",
+                    "turn_ref": "ses_abc:1",
+                    "speaker": "student",
+                }
+            ],
+            "stuck_points": [
+                {"summary": "手机号13812345678", "evidence_refs": ["ses_abc:1"]},
+                {"summary": "把 v 与 a 混用", "evidence_refs": ["ses_abc:1"]},
+            ],
+            "reasoning_types": ["unit_confusion", "成绩 90"],
+            "coach_comment_excerpts": [
+                {"text": "身份证号110101199001011234", "turn_ref": "ses_abc:2"}
+            ],
+        }
+
+        def _llm(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
+            return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+
+        archive_deps = _archive_deps(
+            root,
+            load_student_sessions=lambda *_a, **_k: ["ses_abc"],
+            load_session_turns=lambda *_a, **_k: [
+                {"role": "user", "content": "我觉得加速度和速度是一回事", "ts": "2026-08-28T11:41:00"}
+            ],
+            call_llm=_llm,
+        )
+        write_pending_skeleton(
+            assignment_id="HW_1", student_id="S1", reason="submit", deps=archive_deps
+        )
+        freeze_process_archive(
+            {"assignment_id": "HW_1", "student_id": "S1", "reason": "submit"},
+            deps=archive_deps,
+        )
+        saved = json.loads(_archive_path(root).read_text(encoding="utf-8"))
+        summaries = [str(item.get("summary") or "") for item in saved.get("stuck_points") or []]
+        assert "把 v 与 a 混用" in summaries
+        blob = json.dumps(saved, ensure_ascii=False)
+        assert "13812345678" not in blob
+        assert "110101199001011234" not in blob
+        assert "成绩 90" not in blob
+        summary = read_process_archive_summary(root, "HW_1", "S1")
+        summary_text = json.dumps(summary, ensure_ascii=False)
+        assert "13812345678" not in summary_text
+        assert "把 v 与 a 混用" in summary_text
+
+
+def test_hung_llm_does_not_block_freeze_past_budget() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        release = threading.Event()
+
+        def _hang(*_args: Any, **_kwargs: Any) -> Dict[str, Any]:
+            release.wait(timeout=30)
+            return {"choices": [{"message": {"content": "{}"}}]}
+
+        archive_deps = _archive_deps(
+            root,
+            call_llm=_hang,
+            monotonic=time.monotonic,
+            load_student_sessions=lambda *_a, **_k: ["ses_abc"],
+            load_session_turns=lambda *_a, **_k: [
+                {"role": "user", "content": "卡点", "ts": "2026-08-28T11:00:00"}
+            ],
+        )
+        write_pending_skeleton(
+            assignment_id="HW_1", student_id="S1", reason="submit", deps=archive_deps
+        )
+        started = time.monotonic()
+        try:
+            result = freeze_process_archive(
+                {"assignment_id": "HW_1", "student_id": "S1", "reason": "submit"},
+                deps=archive_deps,
+                deadline=time.monotonic() + 0.15,
+            )
+            elapsed = time.monotonic() - started
+            assert elapsed < 2.0
+            assert result["status"] == "partial"
+            saved = json.loads(_archive_path(root).read_text(encoding="utf-8"))
+            assert saved["status"] == "partial"
+        finally:
+            release.set()
+
+
 def test_request_process_archive_sync_timeout_keeps_pending_and_enqueues() -> None:
     with TemporaryDirectory() as td:
         root = Path(td)
@@ -490,7 +583,7 @@ def test_request_process_archive_rejects_cross_student() -> None:
     with TemporaryDirectory() as td:
         root = Path(td)
         archive_deps = _archive_deps(root)
-        with pytest.raises(Exception) as ctx:
+        with pytest.raises(ProcessArchiveError) as ctx:
             request_process_archive(
                 assignment_id="HW_1",
                 student_id="S1",
@@ -499,7 +592,70 @@ def test_request_process_archive_rejects_cross_student() -> None:
                 deps=archive_deps,
                 enqueue=lambda _payload: None,
             )
-        assert getattr(ctx.value, "status_code", None) == 403
+        assert ctx.value.status_code == 403
+        assert not _archive_path(root).exists()
+
+
+def test_request_process_archive_rejects_non_owner_teacher() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        archive_deps = _archive_deps(root)
+        with pytest.raises(ProcessArchiveError) as ctx:
+            request_process_archive(
+                assignment_id="HW_1",
+                student_id="S1",
+                reason="manual",
+                principal=AuthPrincipal(actor_id="t_other", role="teacher"),
+                deps=archive_deps,
+                enqueue=lambda _payload: None,
+            )
+        assert ctx.value.status_code == 403
+        assert ctx.value.detail == "forbidden_assignment_owner"
+        assert not _archive_path(root).exists()
+
+
+def test_request_process_archive_missing_assignment_404() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        archive_deps = _archive_deps(root)
+        with pytest.raises(ProcessArchiveError) as ctx:
+            request_process_archive(
+                assignment_id="missing",
+                student_id="S1",
+                reason="manual",
+                principal=AuthPrincipal(actor_id="S1", role="student"),
+                deps=archive_deps,
+                enqueue=lambda _payload: None,
+            )
+        assert ctx.value.status_code == 404
+        assert not (root / "assignments" / "missing" / "process_archives" / "S1.json").exists()
+
+
+def test_request_process_archive_rejects_unpublished_student() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        archive_deps = _archive_deps(
+            root,
+            load_assignment_meta=lambda _folder: {
+                "assignment_id": "HW_1",
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
+                "visibility_status": "draft",
+                "expected_students": ["S1"],
+            },
+        )
+        with pytest.raises(ProcessArchiveError) as ctx:
+            request_process_archive(
+                assignment_id="HW_1",
+                student_id="S1",
+                reason="manual",
+                principal=AuthPrincipal(actor_id="S1", role="student"),
+                deps=archive_deps,
+                enqueue=lambda _payload: None,
+            )
+        assert ctx.value.status_code == 403
+        assert ctx.value.detail == "forbidden_assignment_scope"
+        assert not _archive_path(root).exists()
 
 
 def test_request_process_archive_allows_owner_teacher() -> None:
@@ -548,3 +704,14 @@ def test_rq_run_process_archive_does_not_raise_after_partial() -> None:
         )
         saved = json.loads(_archive_path(root).read_text(encoding="utf-8"))
         assert saved["status"] == "partial"
+
+
+def test_rq_enqueue_process_archive_has_60s_timeout_and_no_retry() -> None:
+    source = Path("services/api/workers/rq_tasks.py").read_text(encoding="utf-8")
+    start = source.index("def enqueue_process_archive")
+    end = source.index("\ndef ", start + 1)
+    body = source[start:end]
+    assert "PROCESS_ARCHIVE_JOB_TIMEOUT = 60" in source
+    assert "job_timeout=PROCESS_ARCHIVE_JOB_TIMEOUT" in body
+    assert "retry=" not in body
+    assert "_enqueue_retry_job" not in body

@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from .assignment.visibility import assignment_owner_id
+from .assignment.visibility import (
+    assignment_owner_id,
+    effective_visibility_status,
+    snapshot_student_ids,
+    student_can_read_assignment,
+)
 from .assignment_llm_gate_service import parse_json_from_text
 from .auth_service import AuthPrincipal
 from .fs_atomic import atomic_write_json
@@ -44,6 +51,7 @@ class AssignmentProcessArchiveDeps:
     diag_log: Callable[[str, Dict[str, Any]], None]
     monotonic: Callable[[], float]
     new_id: Callable[[], str]
+    student_enrolled: Optional[Callable[[str, str, str], bool]] = None
 
 
 def _require_id(value: str, field: str) -> str:
@@ -103,7 +111,7 @@ def read_process_archive_summary(
     stuck = rec.get("stuck_points")
     return {
         "status": status,
-        "stuck_points": stuck if isinstance(stuck, list) else [],
+        "stuck_points": _filter_text_records(stuck, text_key="summary") if isinstance(stuck, list) else [],
         "process_archive_id": str(rec.get("job_id") or rec.get("process_archive_id") or ""),
     }
 
@@ -151,6 +159,32 @@ def _filter_quotes(quotes: List[Any]) -> List[Dict[str, Any]]:
         out.append(quote)
         if len(out) >= MAX_QUOTES:
             break
+    return out
+
+
+def _filter_pii_strings(values: List[Any]) -> List[str]:
+    out: List[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and not _quote_blocked(text):
+            out.append(text)
+    return out
+
+
+def _filter_text_records(items: List[Any], *, text_key: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get(text_key) or "").strip()
+        if not text or _quote_blocked(text):
+            continue
+        rec = dict(item)
+        rec[text_key] = text
+        refs = rec.get("evidence_refs")
+        if isinstance(refs, list):
+            rec["evidence_refs"] = _filter_pii_strings(refs)
+        out.append(rec)
     return out
 
 
@@ -313,15 +347,15 @@ def _llm_messages(quotes: List[Dict[str, Any]]) -> List[Dict[str, str]]:
 def _apply_llm_fields(archive: Dict[str, Any], parsed: Dict[str, Any]) -> Dict[str, Any]:
     extra: Dict[str, Any] = {}
     if isinstance(parsed.get("reasoning_types"), list):
-        extra["reasoning_types"] = [str(item) for item in parsed["reasoning_types"] if str(item).strip()]
+        extra["reasoning_types"] = _filter_pii_strings(parsed["reasoning_types"])
     if isinstance(parsed.get("stuck_points"), list):
-        extra["stuck_points"] = [item for item in parsed["stuck_points"] if isinstance(item, dict)]
+        extra["stuck_points"] = _filter_text_records(parsed["stuck_points"], text_key="summary")
     if isinstance(parsed.get("evidence_refs"), list):
-        extra["evidence_refs"] = [str(item) for item in parsed["evidence_refs"] if str(item).strip()]
+        extra["evidence_refs"] = _filter_pii_strings(parsed["evidence_refs"])
     if isinstance(parsed.get("coach_comment_excerpts"), list):
-        extra["coach_comment_excerpts"] = [
-            item for item in parsed["coach_comment_excerpts"] if isinstance(item, dict)
-        ]
+        extra["coach_comment_excerpts"] = _filter_text_records(
+            parsed["coach_comment_excerpts"], text_key="text"
+        )
     quotes_src = parsed.get("quotes") if isinstance(parsed.get("quotes"), list) else archive.get("quotes")
     extra["quotes"] = quotes_src
     return extra
@@ -394,6 +428,22 @@ def _llm_content(resp: Any) -> str:
     return str(message.get("content") or "")
 
 
+def _invoke_llm_bounded(
+    deps: AssignmentProcessArchiveDeps,
+    messages: List[Dict[str, str]],
+    timeout_sec: float,
+) -> Dict[str, Any]:
+    timeout = max(0.05, float(timeout_sec))
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parch-llm")
+    try:
+        future = executor.submit(deps.call_llm, messages)
+        return future.result(timeout=timeout)
+    except FuturesTimeout as exc:
+        raise TimeoutError("process_archive llm timeout") from exc
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def _freeze_with_llm(
     archive: Dict[str, Any],
     *,
@@ -402,9 +452,9 @@ def _freeze_with_llm(
     deadline: float,
     on_timeout: str,
 ) -> Dict[str, Any]:
-    remaining = max(0.1, float(deadline) - float(deps.monotonic()))
+    remaining = max(0.05, min(LLM_TIMEOUT_SEC, float(deadline) - float(deps.monotonic())))
     try:
-        resp = deps.call_llm(_llm_messages(raw_quotes), timeout_sec=min(LLM_TIMEOUT_SEC, remaining))
+        resp = _invoke_llm_bounded(deps, _llm_messages(raw_quotes), remaining)
         parsed = parse_json_from_text(_llm_content(resp)) or {}
         extra = _apply_llm_fields(archive, parsed)
         llm_quotes = extra.pop("quotes", raw_quotes)
@@ -414,6 +464,8 @@ def _freeze_with_llm(
         return _finalize(archive, status="frozen", quotes=quotes_final, deps=deps, extra=extra)
     except ProcessArchiveTimeout:
         raise
+    except TimeoutError:
+        return _timeout_result(archive, raw_quotes=raw_quotes, deps=deps, on_timeout=on_timeout)
     except Exception:  # policy: allowed-broad-except
         _log.debug("process archive freeze failed", exc_info=True)
         if on_timeout == "pending" and _past_deadline(deadline, deps):
@@ -505,6 +557,43 @@ def trigger_on_submit(
     return archive
 
 
+def _load_existing_meta(
+    assignment_id: str, deps: AssignmentProcessArchiveDeps
+) -> Dict[str, Any]:
+    folder = assignment_folder(deps.data_dir, assignment_id)
+    if not folder.exists():
+        raise ProcessArchiveError(404, "assignment not found")
+    meta = _load_meta(folder, deps)
+    if not meta:
+        raise ProcessArchiveError(404, "assignment not found")
+    return meta
+
+
+def _authorize_student(
+    *,
+    actor: str,
+    student_id: str,
+    meta: Dict[str, Any],
+    deps: AssignmentProcessArchiveDeps,
+) -> None:
+    if actor != student_id:
+        raise ProcessArchiveError(403, "forbidden_process_archive")
+    if not student_can_read_assignment(meta):
+        raise ProcessArchiveError(403, "forbidden_assignment_scope")
+    if student_id not in snapshot_student_ids(meta):
+        raise ProcessArchiveError(403, "forbidden_assignment_scope")
+    vis = effective_visibility_status(meta)
+    if vis == "archived":
+        return
+    teacher_id = assignment_owner_id(meta)
+    subject_id = str(meta.get("subject_id") or "").strip()
+    if not teacher_id or not subject_id:
+        raise ProcessArchiveError(403, "forbidden_assignment_scope")
+    enrolled = deps.student_enrolled
+    if enrolled is not None and not enrolled(student_id, teacher_id, subject_id):
+        raise ProcessArchiveError(403, "forbidden_assignment_scope")
+
+
 def _authorize(
     *,
     principal: Optional[AuthPrincipal],
@@ -512,6 +601,7 @@ def _authorize(
     student_id: str,
     deps: AssignmentProcessArchiveDeps,
 ) -> None:
+    meta = _load_existing_meta(assignment_id, deps)
     if principal is None:
         return
     role = str(principal.role or "").strip().lower()
@@ -519,12 +609,9 @@ def _authorize(
     if role == "admin":
         return
     if role == "student":
-        if actor != student_id:
-            raise ProcessArchiveError(403, "forbidden_process_archive")
+        _authorize_student(actor=actor, student_id=student_id, meta=meta, deps=deps)
         return
     if role == "teacher":
-        folder = assignment_folder(deps.data_dir, assignment_id)
-        meta = _load_meta(folder, deps)
         owner = assignment_owner_id(meta)
         if not actor or owner != actor:
             raise ProcessArchiveError(403, "forbidden_assignment_owner")

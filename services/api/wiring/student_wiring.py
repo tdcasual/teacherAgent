@@ -17,8 +17,6 @@ import json
 import logging
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -28,6 +26,7 @@ from ..assignment_process_archive_service import (
     AssignmentProcessArchiveDeps,
     trigger_on_submit,
 )
+from ..assignment_student_list_service import student_currently_enrolled
 from ..auth_registry_service import build_auth_registry_store
 from ..paths import student_session_file
 from ..session_store import load_student_sessions_index
@@ -96,22 +95,6 @@ def _load_session_turns(student_id: str, session_id: str) -> List[Dict[str, Any]
     return turns
 
 
-def _call_llm_timed(core: Any, messages: List[Dict[str, Any]], timeout_sec: float = 20.0) -> Dict[str, Any]:
-    timeout = max(0.1, float(timeout_sec or 20.0))
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(
-            lambda: core.call_llm(
-                messages,
-                role_hint="teacher",
-                kind="assignment.process_archive",
-            )
-        )
-        try:
-            return fut.result(timeout=timeout)
-        except FuturesTimeout as exc:
-            raise TimeoutError("process_archive llm timeout") from exc
-
-
 def _queue_backend_for_core(core: Any) -> Any:
     return queue_runtime.app_queue_backend(
         tenant_id=getattr(core, "TENANT_ID", None) or None,
@@ -127,13 +110,18 @@ def assignment_process_archive_deps(core=None) -> AssignmentProcessArchiveDeps:
         load_assignment_meta=_ac.load_assignment_meta,
         load_student_sessions=_load_student_sessions,
         load_session_turns=_load_session_turns,
-        call_llm=lambda messages, timeout_sec=20.0, **_kwargs: _call_llm_timed(
-            _ac, messages, timeout_sec=timeout_sec
+        call_llm=lambda messages, timeout_sec=20.0, **_kwargs: _ac.call_llm(
+            messages,
+            role_hint="teacher",
+            kind="assignment.process_archive",
         ),
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         diag_log=_ac.diag_log,
         monotonic=time.monotonic,
         new_id=lambda: f"parch_{uuid.uuid4().hex[:16]}",
+        student_enrolled=lambda sid, tid, sub: student_currently_enrolled(
+            sid, tid, sub, data_dir=_ac.DATA_DIR
+        ),
     )
 
 
