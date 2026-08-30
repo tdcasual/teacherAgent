@@ -24,69 +24,91 @@ class _Upload:
         return self.content[: int(size)] if int(size) else b""
 
 
-class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
-    async def test_submit_without_assignment_sets_auto_assignment(self):
-        with TemporaryDirectory() as td:
-            root = Path(td)
-            captured = {}
+def _deps(root: Path, **overrides) -> StudentSubmitDeps:
+    fields = dict(
+        uploads_dir=root / "uploads",
+        app_root=root / "repo",
+        student_submissions_dir=root / "submissions",
+        run_script=lambda _args: "ok",
+        compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
+        student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
+            "ok": False,
+            "created": False,
+        },
+        load_assignment_teacher_id=lambda _assignment_id: None,
+        diag_log=lambda _event, _payload: None,
+        save_upload_file=_save_upload_file,
+    )
+    fields.update(overrides)
+    return StudentSubmitDeps(**fields)
 
-            def _run_script(args):
-                captured["args"] = list(args)
-                return "ok"
 
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
-                run_script=_run_script,
-                compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
-                    "ok": False,
-                    "created": False,
+def _progress(*, submitted: bool, score: float = 0.0, attempt_id: str = "submission_1") -> dict:
+    return {
+        "ok": True,
+        "students": [
+            {
+                "student_id": "S1",
+                "evidence": {
+                    "schema": "assignment_progress_evidence/v1",
+                    "signals": {
+                        "submitted": submitted,
+                        "best_graded_total": 10 if submitted else 0,
+                        "best_score_earned": score,
+                        "best_attempt_id": attempt_id,
+                        "min_graded_total": 1,
+                    },
                 },
-                load_assignment_teacher_id=lambda _assignment_id: None,
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
-            )
+            }
+        ],
+    }
 
-            result = await submit(
-                student_id="S1",
-                files=[_Upload(filename="a1.pdf", content=b"1")],
-                assignment_id=None,
-                auto_assignment=False,
-                deps=deps,
-            )
 
-            self.assertEqual(result.get("ok"), True)
-            args = captured["args"]
-            self.assertIn("--auto-assignment", args)
-            self.assertNotIn("--assignment-id", args)
+class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_submit_requires_assignment_id(self):
+        with TemporaryDirectory() as td:
+            captured = {}
+            deps = _deps(Path(td), run_script=lambda args: captured.setdefault("args", list(args)) or "ok")
+            with self.assertRaises(StudentSubmitError) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="a1.pdf", content=b"1")],
+                    assignment_id=None,
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "assignment_id_required")
+            self.assertNotIn("args", captured)
+
+    async def test_submit_rejects_auto_assignment_true(self):
+        with TemporaryDirectory() as td:
+            captured = {}
+            deps = _deps(Path(td), run_script=lambda args: captured.setdefault("args", list(args)) or "ok")
+            with self.assertRaises(StudentSubmitError) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="a1.pdf", content=b"1")],
+                    assignment_id="HW_1",
+                    auto_assignment=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "auto_assignment_disabled")
+            self.assertNotIn("args", captured)
 
     async def test_submit_with_assignment_keeps_assignment_flag(self):
         with TemporaryDirectory() as td:
-            root = Path(td)
             captured = {}
-
-            def _run_script(args):
-                captured["args"] = list(args)
-                return "ok"
-
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
-                run_script=_run_script,
-                compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
-                    "ok": False,
-                    "created": False,
-                },
-                load_assignment_teacher_id=lambda _assignment_id: None,
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
+            deps = _deps(
+                Path(td),
+                run_script=lambda args: captured.setdefault("args", list(args)) or "ok",
+                compute_assignment_progress=lambda _assignment_id, _include_students: _progress(
+                    submitted=True, score=8.0, attempt_id="submission_ok"
+                ),
             )
 
-            await submit(
+            result = await submit(
                 student_id="S1",
                 files=[_Upload(filename="a1.pdf", content=b"1")],
                 assignment_id="HW_1",
@@ -98,24 +120,36 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("--assignment-id", args)
             self.assertIn("HW_1", args)
             self.assertNotIn("--auto-assignment", args)
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("submitted"))
+            self.assertEqual(result.get("assignment_id"), "HW_1")
+            self.assertEqual(result.get("attempt_id"), "submission_ok")
+            self.assertEqual(result.get("official_score"), 8.0)
+
+    async def test_submit_returns_200_payload_when_min_graded_total_fails(self):
+        with TemporaryDirectory() as td:
+            deps = _deps(
+                Path(td),
+                compute_assignment_progress=lambda _assignment_id, _include_students: _progress(
+                    submitted=False, score=0.0, attempt_id="submission_empty"
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="blank.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertEqual(result.get("assignment_id"), "HW_1")
+            self.assertEqual(result.get("reason"), "min_graded_total")
+            self.assertIsNone(result.get("official_score"))
 
     async def test_submit_rejects_invalid_student_id(self):
         with TemporaryDirectory() as td:
-            root = Path(td)
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
-                run_script=lambda _args: "ok",
-                compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
-                    "ok": False,
-                    "created": False,
-                },
-                load_assignment_teacher_id=lambda _assignment_id: None,
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
-            )
+            deps = _deps(Path(td))
 
             with self.assertRaises(StudentSubmitError) as ctx:
                 await submit(
@@ -130,21 +164,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_rejects_invalid_assignment_id(self):
         with TemporaryDirectory() as td:
-            root = Path(td)
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
-                run_script=lambda _args: "ok",
-                compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
-                student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {
-                    "ok": False,
-                    "created": False,
-                },
-                load_assignment_teacher_id=lambda _assignment_id: None,
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
-            )
+            deps = _deps(Path(td))
 
             with self.assertRaises(StudentSubmitError) as ctx:
                 await submit(
@@ -189,18 +209,14 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 captured["auto_kwargs"] = dict(kwargs)
                 return {"ok": True, "created": True, "proposal_id": "smem_1"}
 
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
+            deps = _deps(
+                root,
                 run_script=_run_script,
                 compute_assignment_progress=_compute_assignment_progress,
                 student_memory_auto_propose_from_assignment_evidence=_auto_propose,
                 load_assignment_teacher_id=lambda assignment_id: (
                     "t_zhang" if assignment_id == "HW_1" else None
                 ),
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
             )
 
             result = await submit(
@@ -229,27 +245,10 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 captured["auto_kwargs"] = dict(kwargs)
                 return {"ok": True, "created": True, "proposal_id": "smem_1"}
 
-            deps = StudentSubmitDeps(
-                uploads_dir=root / "uploads",
-                app_root=root / "repo",
-                student_submissions_dir=root / "submissions",
-                run_script=lambda _args: "ok",
-                compute_assignment_progress=lambda _assignment_id, _include_students: {
-                    "ok": True,
-                    "students": [
-                        {
-                            "student_id": "S1",
-                            "evidence": {
-                                "schema": "assignment_progress_evidence/v1",
-                                "signals": {"submitted": True, "best_graded_total": 10, "best_score_earned": 3},
-                            },
-                        }
-                    ],
-                },
+            deps = _deps(
+                root,
+                compute_assignment_progress=lambda _assignment_id, _include_students: _progress(submitted=True, score=3),
                 student_memory_auto_propose_from_assignment_evidence=_auto_propose,
-                load_assignment_teacher_id=lambda _assignment_id: None,
-                diag_log=lambda _event, _payload: None,
-                save_upload_file=_save_upload_file,
             )
 
             result = await submit(

@@ -24,6 +24,7 @@ type Props = {
   hasSendableAttachments: boolean
   onPickFiles: (files: File[]) => void | Promise<void>
   onRemoveAttachment: (localId: string) => void | Promise<void>
+  onOpenSubmit?: () => void
 }
 
 export default function ChatPanel(props: Props) {
@@ -36,6 +37,14 @@ export default function ChatPanel(props: Props) {
         isNearBottom={props.isNearBottom}
         scrollToBottom={props.scrollToBottom}
       />
+      {props.onOpenSubmit ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-white px-5 py-2 max-[900px]:px-3">
+          <span className="text-xs text-muted">对话不会记为提交</span>
+          <button type="button" className="student-supporting-link" onClick={props.onOpenSubmit}>
+            提交作业
+          </button>
+        </div>
+      ) : null}
       <ChatComposer
         verifiedStudent={props.verifiedStudent}
         pendingChatJobId={props.pendingChatJobId}

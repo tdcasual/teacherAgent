@@ -51,6 +51,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -73,6 +74,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -124,6 +126,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -147,6 +150,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -167,6 +171,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -187,6 +192,7 @@ describe('StudentTodayHome', () => {
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
         onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
       />,
     )
 
@@ -199,6 +205,7 @@ describe('StudentTodayHome', () => {
     const onOpenHistory = vi.fn()
     const onOpenFreeChat = vi.fn()
     const onOpenAssignmentHistory = vi.fn()
+    const onOpenSubmit = vi.fn()
 
     render(
       <StudentTodayHome
@@ -208,15 +215,18 @@ describe('StudentTodayHome', () => {
         onOpenHistory={onOpenHistory}
         onOpenFreeChat={onOpenFreeChat}
         onOpenAssignmentHistory={onOpenAssignmentHistory}
+        onOpenSubmit={onOpenSubmit}
       />,
     )
 
     fireEvent.click(screen.getAllByRole('button', { name: '进入任务' })[0])
+    fireEvent.click(screen.getByRole('button', { name: '提交作业' }))
     fireEvent.click(screen.getByRole('button', { name: '历史任务' }))
     fireEvent.click(screen.getByRole('button', { name: '作业记录' }))
     fireEvent.click(screen.getByRole('button', { name: '自由提问' }))
 
     expect(onPrimaryAction).toHaveBeenCalledTimes(1)
+    expect(onOpenSubmit).toHaveBeenCalledWith('A001')
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
     expect(onOpenAssignmentHistory).toHaveBeenCalledTimes(1)
     expect(onOpenFreeChat).toHaveBeenCalledTimes(1)

@@ -50,6 +50,15 @@ class StudentSubmitDeps:
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
 
 
+def _require_assignment_id(assignment_id: Optional[str], auto_assignment: bool) -> str:
+    if bool(auto_assignment):
+        raise StudentSubmitError(400, "auto_assignment_disabled")
+    token = str(assignment_id or "").strip()
+    if not token:
+        raise StudentSubmitError(400, "assignment_id_required")
+    return _require_safe_id(token, "assignment_id")
+
+
 def _find_student_evidence(
     *,
     progress: Dict[str, Any],
@@ -72,6 +81,92 @@ def _find_student_evidence(
     return None
 
 
+def _progress_signals(progress: Dict[str, Any], student_id: str) -> Dict[str, Any]:
+    evidence = _find_student_evidence(progress=progress, student_id=student_id)
+    if not isinstance(evidence, dict):
+        return {}
+    signals = evidence.get("signals")
+    return signals if isinstance(signals, dict) else {}
+
+
+def _official_score(signals: Dict[str, Any]) -> Optional[float]:
+    raw = signals.get("best_score_earned")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _submit_payload(*, assignment_id: str, output: str, signals: Dict[str, Any]) -> Dict[str, Any]:
+    submitted = bool(signals.get("submitted"))
+    payload: Dict[str, Any] = {
+        "ok": True,
+        "submitted": submitted,
+        "assignment_id": assignment_id,
+        "attempt_id": str(signals.get("best_attempt_id") or ""),
+        "official_score": _official_score(signals) if submitted else None,
+        "output": output,
+    }
+    if not submitted:
+        payload["reason"] = "min_graded_total"
+    return payload
+
+
+def _maybe_propose_memory(
+    *,
+    deps: StudentSubmitDeps,
+    student_id: str,
+    assignment_id: str,
+    progress: Dict[str, Any],
+) -> None:
+    evidence = _find_student_evidence(progress=progress, student_id=student_id)
+    if not evidence:
+        return
+    teacher_id = str(deps.load_assignment_teacher_id(assignment_id) or "").strip()
+    if not teacher_id:
+        return
+    try:
+        auto = deps.student_memory_auto_propose_from_assignment_evidence(
+            teacher_id=teacher_id,
+            student_id=student_id,
+            assignment_id=assignment_id,
+            evidence=evidence,
+            request_id=None,
+        )
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "student.memory.assignment_evidence.failed",
+            {"student_id": student_id, "assignment_id": assignment_id, "error": str(exc)[:200]},
+        )
+        return
+    if not bool(auto.get("created")):
+        return
+    deps.diag_log(
+        "student.memory.assignment_evidence.proposed",
+        {
+            "teacher_id": str(auto.get("teacher_id") or teacher_id),
+            "student_id": student_id,
+            "assignment_id": assignment_id,
+            "proposal_id": str(auto.get("proposal_id") or ""),
+            "memory_type": str(auto.get("memory_type") or ""),
+        },
+    )
+
+
+def _read_progress(deps: StudentSubmitDeps, assignment_id: str, student_id: str) -> Dict[str, Any]:
+    try:
+        progress = deps.compute_assignment_progress(assignment_id, True)
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "student.submit.progress.failed",
+            {"student_id": student_id, "assignment_id": assignment_id, "error": str(exc)[:200]},
+        )
+        return {}
+    return progress if isinstance(progress, dict) else {}
+
+
 async def submit(
     *,
     student_id: str,
@@ -82,7 +177,7 @@ async def submit(
 ) -> Dict[str, Any]:
     deps.uploads_dir.mkdir(parents=True, exist_ok=True)
     safe_student_id = _require_safe_id(student_id, "student_id")
-    safe_assignment_id: Optional[str] = None
+    safe_assignment_id = _require_assignment_id(assignment_id, auto_assignment)
 
     try:
         saved = await save_capped_uploads(
@@ -106,46 +201,17 @@ async def submit(
         str(deps.student_submissions_dir),
         "--files",
         *file_paths,
+        "--assignment-id",
+        safe_assignment_id,
     ]
-    if assignment_id:
-        safe_assignment_id = _require_safe_id(assignment_id, "assignment_id")
-        args += ["--assignment-id", safe_assignment_id]
-    if auto_assignment or not assignment_id:
-        args += ["--auto-assignment"]
-
     out = deps.run_script(args)
-    if safe_assignment_id:
-        try:
-            progress = deps.compute_assignment_progress(safe_assignment_id, True)
-            evidence = _find_student_evidence(progress=progress, student_id=safe_student_id)
-            if evidence:
-                teacher_id = str(deps.load_assignment_teacher_id(safe_assignment_id) or "").strip() or None
-                if teacher_id:
-                    auto = deps.student_memory_auto_propose_from_assignment_evidence(
-                        teacher_id=teacher_id,
-                        student_id=safe_student_id,
-                        assignment_id=safe_assignment_id,
-                        evidence=evidence,
-                        request_id=None,
-                    )
-                    if bool(auto.get("created")):
-                        deps.diag_log(
-                            "student.memory.assignment_evidence.proposed",
-                            {
-                                "teacher_id": str(auto.get("teacher_id") or teacher_id or ""),
-                                "student_id": safe_student_id,
-                                "assignment_id": safe_assignment_id,
-                                "proposal_id": str(auto.get("proposal_id") or ""),
-                                "memory_type": str(auto.get("memory_type") or ""),
-                            },
-                        )
-        except Exception as exc:  # policy: allowed-broad-except
-            deps.diag_log(
-                "student.memory.assignment_evidence.failed",
-                {
-                    "student_id": safe_student_id,
-                    "assignment_id": safe_assignment_id,
-                    "error": str(exc)[:200],
-                },
-            )
-    return {"ok": True, "output": out}
+    progress = _read_progress(deps, safe_assignment_id, safe_student_id)
+    signals = _progress_signals(progress, safe_student_id)
+    if bool(signals.get("submitted")):
+        _maybe_propose_memory(
+            deps=deps,
+            student_id=safe_student_id,
+            assignment_id=safe_assignment_id,
+            progress=progress,
+        )
+    return _submit_payload(assignment_id=safe_assignment_id, output=out, signals=signals)

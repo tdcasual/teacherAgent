@@ -1,4 +1,4 @@
-import type { StudentAssignmentHistoryItem, StudentTodayHomeItem, StudentTodayHomeViewModel } from '../../appTypes'
+import type { StudentTodayHomeItem, StudentTodayHomeViewModel } from '../../appTypes'
 import LearningProgressRail from './LearningProgressRail'
 import TaskMaterialList from './TaskMaterialList'
 import TodayHero from './TodayHero'
@@ -12,10 +12,7 @@ type StudentTodayHomeProps = {
   onOpenHistory: () => void
   onOpenFreeChat: () => void
   onOpenAssignmentHistory: () => void
-  assignmentHistoryOpen?: boolean
-  assignmentHistoryLoading?: boolean
-  assignmentHistoryError?: string
-  assignmentHistoryItems?: StudentAssignmentHistoryItem[]
+  onOpenSubmit?: (assignmentId: string) => void
 }
 
 const groupBySubject = (items: StudentTodayHomeItem[]): Array<{ subject_id: string; items: StudentTodayHomeItem[] }> => {
@@ -42,10 +39,7 @@ export default function StudentTodayHome({
   onOpenHistory,
   onOpenFreeChat,
   onOpenAssignmentHistory,
-  assignmentHistoryOpen = false,
-  assignmentHistoryLoading = false,
-  assignmentHistoryError = '',
-  assignmentHistoryItems = [],
+  onOpenSubmit,
 }: StudentTodayHomeProps) {
   const groups = groupBySubject(viewModel.items)
   const showList = viewModel.items.length > 0 && viewModel.status !== 'generating' && viewModel.status !== 'pending_generation'
@@ -76,13 +70,24 @@ export default function StudentTodayHome({
                           {item.overdue ? '逾期未交 · ' : ''}{item.dueLabel}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white"
-                        onClick={() => (onOpenAssignment ? onOpenAssignment(item.assignment_id) : onPrimaryAction())}
-                      >
-                        进入任务
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white"
+                          onClick={() => (onOpenAssignment ? onOpenAssignment(item.assignment_id) : onPrimaryAction())}
+                        >
+                          进入任务
+                        </button>
+                        {onOpenSubmit ? (
+                          <button
+                            type="button"
+                            className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border border-border bg-white px-4 py-2 text-[13px] font-medium text-ink"
+                            onClick={() => onOpenSubmit(item.assignment_id)}
+                          >
+                            提交作业
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
                 </section>
@@ -109,25 +114,6 @@ export default function StudentTodayHome({
             <button type="button" className="student-supporting-link" onClick={onOpenAssignmentHistory}>作业记录</button>
             <button type="button" className="student-supporting-link" onClick={onOpenFreeChat}>自由提问</button>
           </section>
-          {assignmentHistoryOpen ? (
-            <section className="grid gap-2" data-testid="student-assignment-history">
-              <h2 className="m-0 text-[13px] font-medium text-ink">作业记录</h2>
-              {assignmentHistoryLoading ? <div className="text-xs text-muted">加载中…</div> : null}
-              {assignmentHistoryError ? <div className="text-xs text-muted">{assignmentHistoryError}</div> : null}
-              {!assignmentHistoryLoading && !assignmentHistoryError && assignmentHistoryItems.length === 0 ? (
-                <div className="text-xs text-muted">暂无作业记录</div>
-              ) : null}
-              {assignmentHistoryItems.map((item) => (
-                <div key={item.assignment_id} className="rounded-[14px] border border-border bg-white px-3 py-2 text-[13px]">
-                  <div className="font-medium">{item.title}</div>
-                  <div className="text-xs text-muted">
-                    {item.subject_id} · {item.submitted ? '已提交' : '未提交'}
-                    {item.visibility_status === 'archived' ? ' · 已归档' : ''}
-                  </div>
-                </div>
-              ))}
-            </section>
-          ) : null}
         </section>
       </div>
     </main>

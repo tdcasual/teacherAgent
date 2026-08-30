@@ -13,6 +13,8 @@ import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
 import StudentTodayHome from './features/home/StudentTodayHome'
 import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState'
+import StudentAssignmentHistoryPage from './features/history/StudentAssignmentHistoryPage'
+import StudentSubmitPanel from './features/submit/StudentSubmitPanel'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import {
@@ -45,6 +47,8 @@ export default function App() {
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const [homeOpen, setHomeOpen] = useState(true)
   const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false)
+  const [submitAssignmentId, setSubmitAssignmentId] = useState('')
+  const [chatPickedFiles, setChatPickedFiles] = useState<File[]>([])
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning')
   const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false)
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
@@ -204,6 +208,25 @@ export default function App() {
       : '',
   })
   const keepReadyAttachmentsOnSend = useCallback(() => {}, [])
+  const handlePickFiles = useCallback(async (files: File[]) => {
+    if (files.length) setChatPickedFiles((prev) => [...prev, ...files])
+    await addFiles(files)
+  }, [addFiles])
+  const handleRemoveAttachment = useCallback(async (localId: string) => {
+    const target = attachments.find((item) => item.localId === localId)
+    if (target?.fileName) {
+      setChatPickedFiles((prev) => {
+        const index = prev.findIndex((file) => file.name === target.fileName)
+        if (index < 0) return prev
+        return prev.filter((_, itemIndex) => itemIndex !== index)
+      })
+    }
+    await removeAttachment(localId)
+  }, [attachments, removeAttachment])
+
+  useEffect(() => {
+    setChatPickedFiles([])
+  }, [attachmentSessionId])
 
   const { handleSend } = useStudentSendFlow({
     apiBase: state.apiBase,
@@ -304,6 +327,8 @@ export default function App() {
 
   const openTodayHome = useCallback(() => {
     setHomeOpen(true)
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(false)
     if (!studentUseMobileShellV2) return
     setMobileTab('learning')
     setMobileSessionListOpen(false)
@@ -326,9 +351,23 @@ export default function App() {
     const aid = assignmentId.trim()
     if (!aid) return
     dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
+    setSubmitAssignmentId('')
     setActiveSession(aid)
     openExecutionState()
   }, [dispatch, openExecutionState, setActiveSession])
+
+  const handleOpenSubmit = useCallback((assignmentId: string) => {
+    const aid = assignmentId.trim()
+    if (!aid) return
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
+    setSubmitAssignmentId(aid)
+    if (!studentUseMobileShellV2) return
+    setMobileTab('learning')
+    setMobileSessionListOpen(false)
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handlePrimaryHomeAction = useCallback(() => {
     if (!state.verifiedStudent) {
@@ -349,8 +388,16 @@ export default function App() {
   }, [dispatch, handleOpenAssignment, openExecutionState, state.verifiedStudent, todayHomeViewModel.items, todayHomeViewModel.status])
 
   const handleOpenAssignmentHistory = useCallback(() => {
-    setAssignmentHistoryOpen((open) => !open)
-  }, [])
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(true)
+    setHomeOpen(true)
+    if (!studentUseMobileShellV2) return
+    setMobileTab('learning')
+    setMobileSessionListOpen(false)
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handleOpenHistory = useCallback(() => {
     setHomeOpen(false)
@@ -367,6 +414,8 @@ export default function App() {
 
   const handleOpenFreeChat = useCallback(() => {
     dispatch({ type: 'SET', field: 'selectedAssignmentId', value: '' })
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(false)
     setActiveSession(`general_${todayDate()}`)
     openExecutionState()
   }, [dispatch, openExecutionState, setActiveSession])
@@ -445,6 +494,42 @@ export default function App() {
     />
   )
 
+  const submitTitle = useMemo(() => {
+    const fromToday = state.todayAssignments.find((item) => item.assignment_id === submitAssignmentId)
+    if (fromToday?.title) return fromToday.title
+    const fromHistory = assignmentHistory.items.find((item) => item.assignment_id === submitAssignmentId)
+    return fromHistory?.title || submitAssignmentId
+  }, [assignmentHistory.items, state.todayAssignments, submitAssignmentId])
+
+  const handleSubmitCompleted = useCallback(() => {
+    dispatch({ type: 'SET', field: 'assignmentRefreshNonce', value: state.assignmentRefreshNonce + 1 })
+    void assignmentHistory.reload()
+  }, [assignmentHistory, dispatch, state.assignmentRefreshNonce])
+
+  const submitPanel = submitAssignmentId ? (
+    <StudentSubmitPanel
+      apiBase={state.apiBase}
+      studentId={state.verifiedStudent?.student_id || ''}
+      assignmentId={submitAssignmentId}
+      assignmentTitle={submitTitle}
+      chatAttachments={attachments.filter((item) => item.status === 'ready').map((item) => ({ fileName: item.fileName }))}
+      chatFiles={chatPickedFiles}
+      onClose={() => setSubmitAssignmentId('')}
+      onSubmitted={handleSubmitCompleted}
+    />
+  ) : null
+
+  const historyPage = (
+    <StudentAssignmentHistoryPage
+      items={assignmentHistory.items}
+      loading={assignmentHistory.loading}
+      error={assignmentHistory.error}
+      onBack={() => setAssignmentHistoryOpen(false)}
+      onSubmit={handleOpenSubmit}
+      onOpenAssignment={handleOpenAssignment}
+    />
+  )
+
   const todayHomeContent = (
     <StudentTodayHome
       dateLabel={heroDateLabel}
@@ -454,12 +539,11 @@ export default function App() {
       onOpenHistory={handleOpenHistory}
       onOpenFreeChat={handleOpenFreeChat}
       onOpenAssignmentHistory={handleOpenAssignmentHistory}
-      assignmentHistoryOpen={assignmentHistoryOpen}
-      assignmentHistoryLoading={assignmentHistory.loading}
-      assignmentHistoryError={assignmentHistory.error}
-      assignmentHistoryItems={assignmentHistory.items}
+      onOpenSubmit={handleOpenSubmit}
     />
   )
+
+  const learningContent = submitPanel || (assignmentHistoryOpen ? historyPage : todayHomeContent)
 
   const chatContent = (
     <ChatPanel
@@ -480,8 +564,9 @@ export default function App() {
       attachments={attachments}
       uploadingAttachments={uploadingAttachments}
       hasSendableAttachments={hasSendableAttachments}
-      onPickFiles={addFiles}
-      onRemoveAttachment={removeAttachment}
+      onPickFiles={handlePickFiles}
+      onRemoveAttachment={handleRemoveAttachment}
+      onOpenSubmit={state.selectedAssignmentId ? () => handleOpenSubmit(state.selectedAssignmentId) : undefined}
     />
   )
 
@@ -508,7 +593,7 @@ export default function App() {
         />
       </div>
     </main>
-  ) : todayHomeContent
+  ) : learningContent
 
   const mobileSessionsContent = (
     <main className="student-mobile-stage student-mobile-sessions-stage" data-testid="student-session-list-panel">
@@ -589,7 +674,7 @@ export default function App() {
         <StudentLayout
           sidebarOpen={state.sidebarOpen}
           sidebar={sessionSidebarContent}
-          chat={homeOpen ? todayHomeContent : chatContent}
+          chat={homeOpen || assignmentHistoryOpen || Boolean(submitAssignmentId) ? learningContent : chatContent}
         />
       )}
       {studentUseMobileShellV2 ? (

@@ -71,6 +71,6 @@ export const selectComposerHint = ({
 }: ComposerHintParams): string => {
   if (!verifiedStudent) return '请先完成身份验证'
   if (pendingChatJobId) return '正在生成回复，请稍候…'
-  if (sending) return '正在提交请求…'
-  return 'Enter 发送 · Shift+Enter 换行'
+  if (sending) return '正在发送…'
+  return '对话不会记为提交 · Enter 发送'
 }

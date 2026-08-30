@@ -244,8 +244,8 @@ def test_submit_rejects_21st_file(tmp_path: Path) -> None:
             submit(
                 student_id="S1",
                 files=files,
-                assignment_id=None,
-                auto_assignment=True,
+                assignment_id="HW_1",
+                auto_assignment=False,
                 deps=_submit_deps(tmp_path),
             )
         )
@@ -290,8 +290,8 @@ def test_submit_rejects_over_max_file_bytes(tmp_path: Path) -> None:
             submit(
                 student_id="S1",
                 files=[_SizedUpload("paper.pdf", MAX_FILE_BYTES + 1)],
-                assignment_id=None,
-                auto_assignment=True,
+                assignment_id="HW_1",
+                auto_assignment=False,
                 deps=_submit_deps(tmp_path),
             )
         )
@@ -359,8 +359,8 @@ def test_submit_does_not_overwrite_same_name(tmp_path: Path) -> None:
         submit(
             student_id="S1",
             files=[_Upload("a.pdf", b"new")],
-            assignment_id=None,
-            auto_assignment=True,
+            assignment_id="HW_1",
+            auto_assignment=False,
             deps=deps,
         )
     )

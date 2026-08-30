@@ -233,8 +233,10 @@
 **multipart/form-data**
 - `student_id`（必填）
 - `files`（必填，支持多文件）
-- `assignment_id`（可选）
-- `auto_assignment`（可选，布尔）
+- `assignment_id`（必填）
+- `auto_assignment`（若为 `true` → 400 `auto_assignment_disabled`）
+
+成功时 HTTP 200。`submitted=false` 表示这次没有记为提交（例如未达到 `min_graded_total`），不是传输失败。
 
 ---
 
