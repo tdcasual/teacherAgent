@@ -120,6 +120,68 @@ class TestTeacherGradeService:
         assert official_score_from(auto_score=8, teacher_grade={"comment": "no score"}) == 8.0
         assert official_score_from(auto_score=None, teacher_grade=None) is None
 
+    def test_student_id_cannot_escape_into_another_assignment(self, tmp_path: Path) -> None:
+        _write_json(tmp_path / "assignments" / "HW_A" / "meta.json", _meta(assignment_id="HW_A"))
+        _write_json(
+            tmp_path / "assignments" / "HW_B" / "meta.json",
+            _meta(assignment_id="HW_B", teacher_id="t_li"),
+        )
+        try:
+            save_teacher_grade(
+                "HW_A",
+                "../HW_B/S1",
+                principal=_owner(),
+                data_dir=tmp_path,
+                updates={"override_score": 99, "comment": "planted"},
+            )
+        except TeacherGradeError as exc:
+            assert exc.status_code == 400
+            assert exc.detail == "invalid_student_id"
+        else:
+            raise AssertionError("expected TeacherGradeError")
+        planted = tmp_path / "student_submissions" / "HW_B" / "S1" / "teacher_grade.json"
+        assert not planted.exists()
+        assert load_teacher_grade(tmp_path, "HW_B", "S1") is None
+
+    def test_dot_student_id_does_not_write_assignment_root_grade(self, tmp_path: Path) -> None:
+        _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+        try:
+            save_teacher_grade(
+                "HW_1",
+                ".",
+                principal=_owner(),
+                data_dir=tmp_path,
+                updates={"comment": "root"},
+            )
+        except TeacherGradeError as exc:
+            assert exc.status_code == 400
+            assert exc.detail == "invalid_student_id"
+        else:
+            raise AssertionError("expected TeacherGradeError")
+        assert not (tmp_path / "student_submissions" / "HW_1" / "teacher_grade.json").exists()
+
+    def test_null_override_restores_auto_score(self, tmp_path: Path) -> None:
+        _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+        save_teacher_grade(
+            "HW_1",
+            "S1",
+            principal=_owner(),
+            data_dir=tmp_path,
+            updates={"override_score": 12.5, "comment": "覆盖"},
+        )
+        save_teacher_grade(
+            "HW_1",
+            "S1",
+            principal=_owner(),
+            data_dir=tmp_path,
+            updates={"override_score": None},
+        )
+        stored = load_teacher_grade(tmp_path, "HW_1", "S1")
+        assert stored is not None
+        assert stored["override_score_earned"] is None
+        assert stored["comment"] == "覆盖"
+        assert official_score_from(auto_score=8, teacher_grade=stored) == 8.0
+
 
 def test_grade_endpoint_writes_teacher_grade_json() -> None:
     with TemporaryDirectory() as td:
@@ -170,3 +232,47 @@ def test_chat_comments_are_not_copied_until_adopted() -> None:
         assert stored["comment"] == "老师自己写的评语"
         assert stored.get("adopted_coach_excerpts") == []
         assert stored.get("override_score_earned") is None
+
+
+def test_grade_endpoint_rejects_student_id_path_traversal() -> None:
+    with TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write_json(tmp / "data" / "assignments" / "HW_A" / "meta.json", _meta(assignment_id="HW_A"))
+        _write_json(
+            tmp / "data" / "assignments" / "HW_B" / "meta.json",
+            _meta(assignment_id="HW_B", teacher_id="t_li"),
+        )
+        app_mod = create_test_app(tmp)
+        with TestClient(app_mod.app) as client:
+            res = client.post(
+                "/teacher/assignment/HW_A/student/%2e%2e%2fHW_B%2fS1/grade",
+                json={"override_score": 99, "comment": "planted"},
+            )
+        assert res.status_code in {400, 404}
+        planted = tmp / "data" / "student_submissions" / "HW_B" / "S1" / "teacher_grade.json"
+        assert not planted.exists()
+
+
+def test_grade_endpoint_null_override_clears_score() -> None:
+    with TemporaryDirectory() as td:
+        tmp = Path(td)
+        _write_json(tmp / "data" / "assignments" / "HW_1" / "meta.json", _meta())
+        app_mod = create_test_app(tmp)
+        with TestClient(app_mod.app) as client:
+            first = client.post(
+                "/teacher/assignment/HW_1/student/S1/grade",
+                json={"override_score": 15, "comment": "覆盖"},
+            )
+            assert first.status_code == 200
+            cleared = client.post(
+                "/teacher/assignment/HW_1/student/S1/grade",
+                json={"override_score": None},
+            )
+        assert cleared.status_code == 200
+        stored = json.loads(
+            (tmp / "data" / "student_submissions" / "HW_1" / "S1" / "teacher_grade.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert stored["override_score_earned"] is None
+        assert stored["comment"] == "覆盖"

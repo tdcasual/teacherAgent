@@ -30,18 +30,33 @@ def _resolve_data_dir(data_dir: Optional[Path]) -> Path:
     return Path(env_data_dir) if env_data_dir else Path(DATA_DIR)
 
 
+def _is_safe_id_token(token: str) -> bool:
+    value = str(token or "").strip()
+    if not value or value in {".", ".."}:
+        return False
+    if "/" in value or "\\" in value:
+        return False
+    return True
+
+
 def _safe_child(root: Path, *parts: str) -> Optional[Path]:
     resolved_root = root.resolve()
     tokens = [str(part or "").strip() for part in parts]
-    if not all(tokens):
+    if not tokens or any(not _is_safe_id_token(token) for token in tokens):
         return None
     target = resolved_root.joinpath(*tokens).resolve()
     if resolved_root not in target.parents:
         return None
+    if len(tokens) >= 2:
+        assignment_root = (resolved_root / tokens[0]).resolve()
+        if assignment_root not in target.parents:
+            return None
     return target
 
 
 def _student_grade_dir(data_dir: Path, assignment_id: str, student_id: str) -> Optional[Path]:
+    if not _is_safe_id_token(assignment_id) or not _is_safe_id_token(student_id):
+        return None
     return _safe_child(data_dir / "student_submissions", assignment_id, student_id)
 
 
@@ -59,6 +74,8 @@ def _require_student_id(student_id: str) -> str:
     sid = str(student_id or "").strip()
     if not sid:
         raise TeacherGradeError(400, "student_id is required")
+    if not _is_safe_id_token(sid):
+        raise TeacherGradeError(400, "invalid_student_id")
     return sid
 
 

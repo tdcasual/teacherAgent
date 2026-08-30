@@ -224,13 +224,23 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                                           rows={2}
                                         />
                                       </LabeledField>
-                                      <button
-                                        type="submit"
-                                        className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
-                                        disabled={progressLoading}
-                                      >
-                                        保存成绩
-                                      </button>
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          type="submit"
+                                          className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
+                                          disabled={progressLoading}
+                                        >
+                                          保存成绩
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer disabled:opacity-60"
+                                          disabled={progressLoading}
+                                          onClick={() => void saveStudentGrade(s.student_id, { override_score: null })}
+                                        >
+                                          恢复自动分
+                                        </button>
+                                      </div>
                                     </form>
                                   ) : null}
     	                            </div>

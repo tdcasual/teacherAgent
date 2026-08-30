@@ -108,4 +108,32 @@ describe('AssignmentProgressSection', () => {
       adopted_coach_excerpts: [{ text: '先写单位' }],
     })
   })
+
+  it('restores auto score by posting override_score null', () => {
+    const saveStudentGrade = vi.fn(async () => undefined)
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        saveStudentGrade={saveStudentGrade}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1, best: { score_earned: 8 } },
+              official_score: 12,
+              teacher_grade: { override_score_earned: 12, comment: '覆盖' },
+              result: { attempts: 1, official_score: 12, overdue: false, submitted: true },
+              process: { status: 'none' },
+            },
+          ],
+        }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '恢复自动分' }))
+    expect(saveStudentGrade).toHaveBeenCalledWith('S1', { override_score: null })
+  })
 })

@@ -104,3 +104,37 @@ describe('useAssignmentWorkflow upload form', () => {
     expect(appended.some(([key]) => key === 'date')).toBe(false)
   })
 })
+
+describe('useAssignmentWorkflow saveStudentGrade', () => {
+  it('posts grade against loaded progress assignment_id not the typed input', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/grade')) {
+        return { ok: true, json: async () => ({ ok: true }), text: async () => '' }
+      }
+      return {
+        ok: true,
+        json: async () => ({ ok: true, assignment_id: 'HW-LOADED', students: [] }),
+      }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        progressAssignmentId: 'HW-TYPED',
+        progressData: { ok: true, assignment_id: 'HW-LOADED', students: [] },
+        setProgressError: vi.fn(),
+        setProgressLoading: vi.fn(),
+        setProgressData: vi.fn(),
+      }),
+    )
+
+    await act(async () => {
+      await result.current.saveStudentGrade('S1', { override_score: null })
+    })
+
+    const gradeCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/grade'))
+    expect(String(gradeCall?.[0])).toContain('/teacher/assignment/HW-LOADED/student/S1/grade')
+    expect(String(gradeCall?.[0])).not.toContain('HW-TYPED')
+  })
+})

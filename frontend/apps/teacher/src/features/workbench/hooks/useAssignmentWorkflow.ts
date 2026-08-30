@@ -483,7 +483,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         adopted_coach_excerpts?: Array<{ text: string }>
       },
     ) => {
-      const aid = (progressAssignmentId || '').trim()
+      const loadedId = String(params.progressData?.assignment_id || '').trim()
+      const aid = loadedId || (progressAssignmentId || '').trim()
       const sid = (studentId || '').trim()
       if (!aid || !sid) {
         setProgressError('请先填写作业编号')
@@ -510,7 +511,14 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setProgressLoading(false)
       }
     },
-    [apiBase, fetchAssignmentProgress, progressAssignmentId, setProgressError, setProgressLoading],
+    [
+      apiBase,
+      fetchAssignmentProgress,
+      params.progressData?.assignment_id,
+      progressAssignmentId,
+      setProgressError,
+      setProgressLoading,
+    ],
   )
 
   // ---- refreshWorkflowWorkbench ----

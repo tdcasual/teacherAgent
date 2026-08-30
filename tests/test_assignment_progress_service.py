@@ -236,6 +236,20 @@ class TestComputeAssignmentProgress:
         assert student["result"]["official_score"] == 11.5
         assert student["result"]["attempts"] == 1
 
+        grade_path.write_text(
+            json.dumps(
+                {
+                    "schema": "teacher_grade/v1",
+                    "override_score_earned": None,
+                    "comment": "单位漏写",
+                    "adopted_coach_excerpts": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        restored = compute_assignment_progress("hw1", deps=deps)
+        assert restored["students"][0]["official_score"] == 8.0
+
     def test_atomic_write_failure_logged(self, tmp_path: Path, caplog):
         meta = _setup_assignment(tmp_path, "hw1", [])
         deps = _make_deps(
