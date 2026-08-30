@@ -84,6 +84,10 @@ export type UploadSectionProps = {
   setUploadAssignmentId: (v: string) => void
   uploadDate: string
   setUploadDate: (v: string) => void
+  uploadDueAt: string
+  setUploadDueAt: (v: string) => void
+  uploadSubjectId: string
+  setUploadSubjectId: (v: string) => void
   uploadScope: UploadScope
   setUploadScope: (v: UploadScope) => void
   uploadClassName: string

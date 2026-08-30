@@ -111,6 +111,10 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           setUploadAssignmentId={props.setUploadAssignmentId}
           uploadDate={props.uploadDate}
           setUploadDate={props.setUploadDate}
+          uploadDueAt={props.uploadDueAt}
+          setUploadDueAt={props.setUploadDueAt}
+          uploadSubjectId={props.uploadSubjectId}
+          setUploadSubjectId={props.setUploadSubjectId}
           uploadScope={props.uploadScope}
           setUploadScope={props.setUploadScope}
           uploadClassName={props.uploadClassName}

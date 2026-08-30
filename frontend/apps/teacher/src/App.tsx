@@ -60,7 +60,7 @@ export default function App() {
     return WORKBENCH_DEFAULT_WIDTH
   })
   const {
-    uploadMode, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds, uploadFiles, uploadAnswerFiles,
+    uploadMode, uploadAssignmentId, uploadDate, uploadDueAt, uploadSubjectId, uploadScope, uploadClassName, uploadStudentIds, uploadFiles, uploadAnswerFiles,
     uploading, uploadStatus, uploadError, uploadCardCollapsed, uploadJobId, uploadJobInfo, uploadConfirming, uploadStatusPollNonce,
     uploadDraft, draftPanelCollapsed, draftLoading, draftError, questionShowCount, draftSaving, draftActionStatus, draftActionError,
     misconceptionsText, misconceptionsDirty, progressPanelCollapsed, progressAssignmentId, progressLoading, progressError, progressData,
@@ -296,7 +296,7 @@ export default function App() {
     assignmentWorkflowIndicator, updateDraftRequirement, updateDraftQuestion,
   } = useAssignmentWorkflow({
     apiBase,
-    uploadMode, uploadAssignmentId, uploadDate, uploadScope, uploadClassName, uploadStudentIds,
+    uploadMode, uploadAssignmentId, uploadDate, uploadDueAt, uploadSubjectId, uploadScope, uploadClassName, uploadStudentIds,
     uploadFiles, uploadAnswerFiles, uploading, uploadStatus, uploadError, uploadCardCollapsed,
     uploadJobId, uploadJobInfo, uploadConfirming, uploadStatusPollNonce,
     uploadDraft, draftPanelCollapsed, draftLoading, draftError, questionShowCount,

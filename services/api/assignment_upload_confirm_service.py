@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .auth_service import get_current_principal
+from .paths import InvalidAssignmentDate
+
 _log = logging.getLogger(__name__)
 
 
@@ -36,11 +39,11 @@ class AssignmentUploadConfirmDeps:
     merge_requirements: Callable[[Dict[str, Any], Dict[str, Any], bool], Dict[str, Any]]
     compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
     write_uploaded_questions: Callable[[Path, str, List[Dict[str, Any]]], List[Dict[str, Any]]]
-    parse_date_str: Callable[[Any], str]
+    optional_assignment_date: Callable[[Any], Optional[str]]
     save_assignment_requirements: Callable[..., Any]
     parse_ids_value: Callable[[Any], List[str]]
     resolve_scope: Callable[[str, List[str], str], str]
-    normalize_due_at: Callable[[Any], str]
+    normalize_due_at: Callable[[Any], Optional[str]]
     compute_expected_students: Callable[[str, str, List[str]], List[str]]
     atomic_write_json: Callable[[Path, Dict[str, Any]], None]
     copy2: Callable[[Path, Path], Any]
@@ -222,7 +225,10 @@ def _write_questions_and_requirements(
 ) -> tuple[List[Dict[str, Any]], str]:
     deps.write_upload_job(job_id, {"step": "write_questions", "progress": 55})
     rows = deps.write_uploaded_questions(out_dir, assignment_id, questions)
-    date_str = deps.parse_date_str(job.get("date"))
+    try:
+        date_str = deps.optional_assignment_date(job.get("date")) or ""
+    except InvalidAssignmentDate as exc:
+        raise AssignmentUploadConfirmError(400, "invalid_assignment_date") from exc
     deps.write_upload_job(job_id, {"step": "save_requirements", "progress": 70})
     deps.save_assignment_requirements(
         assignment_id,
@@ -248,6 +254,19 @@ def _resolve_students_scope(
     return student_ids_list, scope_val
 
 
+def _require_meta_owner(job: Dict[str, Any]) -> tuple[str, str]:
+    teacher_id = str(job.get("teacher_id") or "").strip()
+    if not teacher_id:
+        principal = get_current_principal()
+        teacher_id = str(getattr(principal, "actor_id", "") or "").strip()
+    subject_id = str(job.get("subject_id") or "").strip()
+    if not teacher_id:
+        raise AssignmentUploadConfirmError(400, "teacher_id_required")
+    if not subject_id:
+        raise AssignmentUploadConfirmError(400, "subject_id_required")
+    return teacher_id, subject_id
+
+
 def _build_assignment_meta(
     job_id: str,
     *,
@@ -260,10 +279,16 @@ def _build_assignment_meta(
     scope_val: str,
     deps: AssignmentUploadConfirmDeps,
 ) -> Dict[str, Any]:
+    teacher_id, subject_id = _require_meta_owner(job)
     return {
         "assignment_id": assignment_id,
-        "date": date_str,
+        "teacher_id": teacher_id,
+        "subject_id": subject_id,
+        "pack_id": subject_id,
+        "date": date_str or "",
         "due_at": deps.normalize_due_at(job.get("due_at")) or "",
+        "visibility_status": "published",
+        "archived_at": None,
         "mode": "upload",
         "target_kp": prepared.requirements.get("core_concepts") or [],
         "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
@@ -275,12 +300,12 @@ def _build_assignment_meta(
         ),
         "expected_students_generated_at": deps.now_iso(),
         "completion_policy": {
-            "requires_discussion": True,
+            "requires_discussion": False,
             "discussion_marker": deps.discussion_complete_marker,
             "requires_submission": True,
             "min_graded_total": 1,
             "best_attempt": "score_earned_then_correct_then_graded_total",
-            "version": 1,
+            "version": 2,
         },
         "source": "teacher",
         "delivery_mode": prepared.delivery_mode,
@@ -330,6 +355,7 @@ def confirm_assignment_upload(
         missing=prepared.missing,
         deps=deps,
     )
+    _require_meta_owner(job)
 
     assignment_id, out_dir, meta_path = _resolve_output_target(job_id, job, deps)
     _copy_uploaded_files(job_id, job, job_dir, out_dir, deps)

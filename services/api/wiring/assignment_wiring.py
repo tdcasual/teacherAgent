@@ -1,5 +1,6 @@
 # mypy: disable-error-code=no-untyped-def
 """Assignment domain deps builders — extracted from app_core."""
+
 from __future__ import annotations
 
 __all__ = [
@@ -149,13 +150,15 @@ def _assignment_handlers_deps(core: Any | None = None) -> assignment_handlers.As
         save_assignment_requirements=_ac.save_assignment_requirements,
         resolve_assignment_dir=_ac.resolve_assignment_dir,
         load_assignment_requirements=_ac.load_assignment_requirements,
-        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: _assignment_today_impl(
-            student_id=student_id,
-            date=date,
-            auto_generate=auto_generate,
-            generate=generate,
-            per_kp=per_kp,
-            deps=_assignment_today_deps(core),
+        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: (
+            _assignment_today_impl(
+                student_id=student_id,
+                date=date,
+                auto_generate=auto_generate,
+                generate=generate,
+                per_kp=per_kp,
+                deps=_assignment_today_deps(core),
+            )
         ),
         get_assignment_detail_api=_get_assignment_detail_api,
     )
@@ -170,23 +173,31 @@ def _assignment_upload_handlers_deps(
             deps=_assignment_upload_start_deps(core),
             **kwargs,
         ),
-        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps(core)),
-        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps(core)),
-        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: _save_assignment_upload_draft_impl(
-            job_id,
-            requirements,
-            questions,
-            deps=_assignment_upload_draft_save_deps(core),
+        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(
+            job_id, deps=_assignment_upload_query_deps(core)
+        ),
+        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(
+            job_id, deps=_assignment_upload_query_deps(core)
+        ),
+        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: (
+            _save_assignment_upload_draft_impl(
+                job_id,
+                requirements,
+                questions,
+                deps=_assignment_upload_draft_save_deps(core),
+            )
         ),
         load_upload_job=_ac.load_upload_job,
         ensure_assignment_upload_confirm_ready=_ensure_assignment_upload_confirm_ready_impl,
-        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: _confirm_assignment_upload_impl(
-            job_id,
-            job,
-            job_dir,
-            requirements_override=requirements_override,
-            strict_requirements=strict_requirements,
-            deps=_assignment_upload_confirm_deps(core),
+        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: (
+            _confirm_assignment_upload_impl(
+                job_id,
+                job,
+                job_dir,
+                requirements_override=requirements_override,
+                strict_requirements=strict_requirements,
+                deps=_assignment_upload_confirm_deps(core),
+            )
         ),
         upload_job_path=_ac.upload_job_path,
     )
@@ -317,7 +328,7 @@ def _assignment_generate_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentGenerateDeps(
         app_root=_ac.APP_ROOT,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         ensure_requirements_for_assignment=_ac.ensure_requirements_for_assignment,
         run_script=_ac.run_script,
         postprocess_assignment_meta=_ac.postprocess_assignment_meta,
@@ -329,7 +340,7 @@ def _assignment_generate_tool_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentGenerateToolDeps(
         app_root=_ac.APP_ROOT,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         ensure_requirements_for_assignment=_ac.ensure_requirements_for_assignment,
         run_script=_ac.run_script,
         postprocess_assignment_meta=_ac.postprocess_assignment_meta,
@@ -366,7 +377,7 @@ def _assignment_upload_start_deps(core: Any | None = None):
     )
     return AssignmentUploadStartDeps(
         new_job_id=lambda: f"job_{uuid.uuid4().hex[:12]}",
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         upload_job_path=_ac.upload_job_path,
         sanitize_filename=_ac.sanitize_filename,
         save_upload_file=_ac.save_upload_file,
@@ -422,7 +433,7 @@ def _assignment_upload_confirm_deps(core: Any | None = None):
         merge_requirements=_ac.merge_requirements,
         compute_requirements_missing=_ac.compute_requirements_missing,
         write_uploaded_questions=_ac.write_uploaded_questions,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         save_assignment_requirements=_ac.save_assignment_requirements,
         parse_ids_value=_ac.parse_ids_value,
         resolve_scope=_ac.resolve_scope,
@@ -437,7 +448,9 @@ def assignment_handlers_deps(core: Any) -> assignment_handlers.AssignmentHandler
     return _assignment_handlers_deps(core)
 
 
-def assignment_upload_handlers_deps(core: Any) -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
+def assignment_upload_handlers_deps(
+    core: Any,
+) -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
     return _assignment_upload_handlers_deps(core)
 
 

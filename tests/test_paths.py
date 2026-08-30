@@ -1,4 +1,5 @@
 """Tests for services.api.paths — path construction and traversal guards."""
+
 from __future__ import annotations
 
 import re
@@ -11,6 +12,7 @@ from services.api import config as _cfg
 from services.api import paths
 
 # ── safe_fs_id ──────────────────────────────────────────────────────────
+
 
 class TestSafeFsId:
     def test_normal_string(self):
@@ -33,6 +35,7 @@ class TestSafeFsId:
 
 # ── parse_date_str ──────────────────────────────────────────────────────
 
+
 class TestParseDateStr:
     def test_valid_iso(self):
         assert paths.parse_date_str("2025-03-15") == "2025-03-15"
@@ -44,7 +47,22 @@ class TestParseDateStr:
         assert paths.parse_date_str("not-a-date") == date.today().isoformat()
 
 
+class TestOptionalAssignmentDate:
+    def test_empty_stays_none(self):
+        assert paths.optional_assignment_date(None) is None
+        assert paths.optional_assignment_date("") is None
+        assert paths.optional_assignment_date("  ") is None
+
+    def test_valid_iso(self):
+        assert paths.optional_assignment_date("2026-08-28") == "2026-08-28"
+
+    def test_invalid_raises(self):
+        with pytest.raises(paths.InvalidAssignmentDate, match="invalid_assignment_date"):
+            paths.optional_assignment_date("nope")
+
+
 # ── resolve_assignment_dir ──────────────────────────────────────────────
+
 
 class TestResolveAssignmentDir:
     def test_valid_id(self):
@@ -62,6 +80,7 @@ class TestResolveAssignmentDir:
 
 # ── resolve_exam_dir ────────────────────────────────────────────────────
 
+
 class TestResolveExamDir:
     def test_valid_id(self):
         result = paths.resolve_exam_dir("midterm")
@@ -74,6 +93,7 @@ class TestResolveExamDir:
 
 # ── resolve_analysis_dir ────────────────────────────────────────────────
 
+
 class TestResolveAnalysisDir:
     def test_valid_id(self):
         result = paths.resolve_analysis_dir("final")
@@ -85,6 +105,7 @@ class TestResolveAnalysisDir:
 
 
 # ── resolve_student_profile_path ────────────────────────────────────────
+
 
 class TestResolveStudentProfilePath:
     def test_valid_id(self):
@@ -101,6 +122,7 @@ class TestResolveStudentProfilePath:
 
 
 # ── resolve_manifest_path ──────────────────────────────────────────────
+
 
 class TestResolveManifestPath:
     def test_none_returns_none(self):
@@ -119,6 +141,7 @@ class TestResolveManifestPath:
 
 
 # ── teacher_workspace_file ──────────────────────────────────────────────
+
 
 class TestTeacherWorkspaceFile:
     def test_allowed_name(self):

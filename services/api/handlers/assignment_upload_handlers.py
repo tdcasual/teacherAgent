@@ -38,6 +38,7 @@ async def assignment_upload_start(
     assignment_id: str,
     date: str,
     due_at: str,
+    subject_id: str,
     scope: str,
     class_name: str,
     student_ids: str,
@@ -53,6 +54,7 @@ async def assignment_upload_start(
                 assignment_id=assignment_id,
                 date=date,
                 due_at=due_at,
+                subject_id=subject_id,
                 scope=scope,
                 class_name=class_name,
                 student_ids=student_ids,
@@ -96,7 +98,9 @@ async def assignment_upload_draft_save(
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
-async def assignment_upload_confirm(req: UploadConfirmRequest, *, deps: AssignmentUploadHandlerDeps) -> Any:
+async def assignment_upload_confirm(
+    req: UploadConfirmRequest, *, deps: AssignmentUploadHandlerDeps
+) -> Any:
     try:
         job = deps.load_upload_job(req.job_id)
     except FileNotFoundError:

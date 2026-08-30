@@ -324,7 +324,9 @@ def student_history_session(
     )
 
 
-def teacher_history_sessions(teacher_id: Optional[str], limit: int = 20, cursor: int = 0) -> Dict[str, Any]:
+def teacher_history_sessions(
+    teacher_id: Optional[str], limit: int = 20, cursor: int = 0
+) -> Dict[str, Any]:
     return _teacher_history_sessions_impl(
         teacher_id,
         limit=limit,
@@ -501,7 +503,9 @@ def ensure_requirements_for_assignment(
     )
 
 
-def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
+def format_requirements_prompt(
+    errors: Optional[List[str]] = None, include_assignment_id: bool = False
+) -> str:
     return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
 
 
@@ -565,7 +569,9 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
     return _resolve_assignment_date_impl(meta, folder)
 
 
-def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
+def assignment_specificity(
+    meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]
+) -> int:
     return _assignment_specificity_impl(meta, student_id, class_name)
 
 
@@ -604,12 +610,18 @@ def postprocess_assignment_meta(
     due_at: Optional[str] = None,
     expected_students: Optional[List[str]] = None,
     completion_policy: Optional[Dict[str, Any]] = None,
+    visibility_status: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
 ) -> None:
     return _postprocess_assignment_meta_impl(
         assignment_id=assignment_id,
         due_at=due_at,
         expected_students=expected_students,
         completion_policy=completion_policy,
+        visibility_status=visibility_status,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
         deps=_assignment_meta_postprocess_deps(),
     )
 
@@ -624,6 +636,7 @@ def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, An
         session_file_fn = getattr(core, "student_session_file", session_file_fn)
         index_path_fn = getattr(core, "student_sessions_index_path", None)
         if callable(index_path_fn):
+
             def _load_index_with_core(student_id_value: str) -> List[Dict[str, Any]]:
                 try:
                     path = index_path_fn(student_id_value)
@@ -649,14 +662,18 @@ def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, An
 
 
 def list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
-    return _list_submission_attempts_impl(assignment_id, student_id, deps=_assignment_submission_attempt_deps())
+    return _list_submission_attempts_impl(
+        assignment_id, student_id, deps=_assignment_submission_attempt_deps()
+    )
 
 
 def best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return _best_submission_attempt_impl(attempts)
 
 
-def compute_assignment_progress(assignment_id: str, include_students: bool = True) -> Dict[str, Any]:
+def compute_assignment_progress(
+    assignment_id: str, include_students: bool = True
+) -> Dict[str, Any]:
     return _compute_assignment_progress_impl(
         assignment_id,
         deps=_assignment_progress_deps(),
@@ -664,7 +681,9 @@ def compute_assignment_progress(assignment_id: str, include_students: bool = Tru
     )
 
 
-def build_assignment_context(detail: Optional[Dict[str, Any]], study_mode: bool = False) -> Optional[str]:
+def build_assignment_context(
+    detail: Optional[Dict[str, Any]], study_mode: bool = False
+) -> Optional[str]:
     return _build_assignment_context_impl(
         detail,
         study_mode=study_mode,

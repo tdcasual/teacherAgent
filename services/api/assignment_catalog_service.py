@@ -104,13 +104,16 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
         return date_val
     raw = meta.get("assignment_id") or folder.name
     import re
+
     match = re.search(r"\d{4}-\d{2}-\d{2}", str(raw))
     if match:
         return match.group(0)
     return None
 
 
-def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
+def assignment_specificity(
+    meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]
+) -> int:
     scope = meta.get("scope")
     student_ids = meta.get("student_ids") or []
     class_meta = meta.get("class_name")
@@ -155,7 +158,9 @@ def _normalize_paging(limit: Any, cursor: Any) -> tuple[int, int]:
     return limit_int, cursor_int
 
 
-def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps: AssignmentCatalogDeps) -> Dict[str, Any]:
+def list_assignments(
+    *, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps: AssignmentCatalogDeps
+) -> Dict[str, Any]:
     limit_int, cursor_int = _normalize_paging(limit, cursor)
     assignments_dir = deps.data_dir / "assignments"
     if not assignments_dir.exists():
@@ -180,7 +185,9 @@ def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps:
         if meta.get("generated_at"):
             updated_at = meta.get("generated_at")
         elif questions_path.exists():
-            updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(timespec="seconds")
+            updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(
+                timespec="seconds"
+            )
         items.append(
             {
                 "assignment_id": assignment_id,
@@ -235,7 +242,9 @@ def find_assignment_for_date(
         if not updated_at:
             questions_path = folder / "questions.csv"
             if questions_path.exists():
-                updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(timespec="seconds")
+                updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(
+                    timespec="seconds"
+                )
         candidates.append((teacher_flag, spec, parse_iso_timestamp(updated_at), folder, meta))
 
     if not candidates:
@@ -307,6 +316,22 @@ def build_assignment_detail(
     }
 
 
+def _apply_generated_owner_fields(
+    meta: Dict[str, Any],
+    *,
+    visibility_status: Optional[str],
+    teacher_id: Optional[str],
+    subject_id: Optional[str],
+) -> None:
+    if visibility_status:
+        meta["visibility_status"] = str(visibility_status)
+    if teacher_id:
+        meta["teacher_id"] = str(teacher_id)
+    if subject_id:
+        meta["subject_id"] = str(subject_id)
+        meta.setdefault("pack_id", str(subject_id))
+
+
 def postprocess_assignment_meta(
     *,
     assignment_id: str,
@@ -314,6 +339,9 @@ def postprocess_assignment_meta(
     expected_students: Optional[List[str]],
     completion_policy: Optional[Dict[str, Any]],
     deps: AssignmentMetaPostprocessDeps,
+    visibility_status: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
 ) -> None:
     meta_path, meta = _load_assignment_meta_for_postprocess(
         assignment_id=assignment_id,
@@ -326,7 +354,11 @@ def postprocess_assignment_meta(
     class_name = str(meta.get("class_name") or "")
     scope_val = deps.resolve_scope(str(meta.get("scope") or ""), student_ids, class_name)
 
-    due_norm = deps.normalize_due_at(due_at) if due_at is not None else deps.normalize_due_at(meta.get("due_at"))
+    due_norm = (
+        deps.normalize_due_at(due_at)
+        if due_at is not None
+        else deps.normalize_due_at(meta.get("due_at"))
+    )
     if due_at is not None:
         meta["due_at"] = due_norm or ""
     elif due_norm:
@@ -351,5 +383,11 @@ def postprocess_assignment_meta(
             deps.discussion_complete_marker,
         )
     meta.setdefault("completion_policy", completion_policy)
+    _apply_generated_owner_fields(
+        meta,
+        visibility_status=visibility_status,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+    )
 
     deps.atomic_write_json(meta_path, meta)

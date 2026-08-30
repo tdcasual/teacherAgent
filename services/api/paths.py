@@ -44,6 +44,7 @@ def _path_from_core(core: Any | None, attr: str, fallback: Path) -> Path:
 # Tiny date helpers (needed by teacher_daily_memory_path)
 # ---------------------------------------------------------------------------
 
+
 def today_iso() -> str:
     return datetime.now().date().isoformat()
 
@@ -58,15 +59,35 @@ def parse_date_str(date_str: Optional[str]) -> str:
         return today_iso()
 
 
+class InvalidAssignmentDate(ValueError):
+    def __init__(self, code: str = "invalid_assignment_date") -> None:
+        super().__init__(code)
+
+
+def optional_assignment_date(date_str: Optional[str]) -> Optional[str]:
+    raw = str(date_str or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw).date().isoformat()
+    except ValueError as exc:
+        raise InvalidAssignmentDate("invalid_assignment_date") from exc
+
+
 # ---------------------------------------------------------------------------
 # Generic filesystem-safe id helpers
 # ---------------------------------------------------------------------------
+
 
 def safe_fs_id(value: str, prefix: str = "id") -> str:
     raw = str(value or "").strip()
     slug = re.sub(r"[^\w-]+", "_", raw).strip("_")
     if len(slug) < 6:
-        digest = hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:10] if raw else uuid.uuid4().hex[:10]
+        digest = (
+            hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()[:10]
+            if raw
+            else uuid.uuid4().hex[:10]
+        )
         slug = f"{prefix}_{digest}"
     return slug
 
@@ -74,6 +95,7 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
 # ---------------------------------------------------------------------------
 # Upload / exam job paths
 # ---------------------------------------------------------------------------
+
 
 def upload_job_path(job_id: str, core: Any | None = None) -> Path:
     raw = str(job_id or "")
@@ -96,6 +118,7 @@ def exam_job_path(job_id: str, core: Any | None = None) -> Path:
 # ---------------------------------------------------------------------------
 # Survey job / report paths
 # ---------------------------------------------------------------------------
+
 
 def survey_job_path(job_id: str, core: Any | None = None) -> Path:
     raw = str(job_id or "")
@@ -125,10 +148,10 @@ def survey_review_queue_path(core: Any | None = None) -> Path:
     return data_dir / "survey_review_queue.jsonl"
 
 
-
 # ---------------------------------------------------------------------------
 # Multimodal submission paths
 # ---------------------------------------------------------------------------
+
 
 def multimodal_submission_path(submission_id: str, core: Any | None = None) -> Path:
     uploads_dir = _path_from_core(core, "UPLOADS_DIR", UPLOADS_DIR)
@@ -156,6 +179,7 @@ def multimodal_extraction_path(submission_id: str, core: Any | None = None) -> P
 # Student session paths
 # ---------------------------------------------------------------------------
 
+
 def student_sessions_base_dir(student_id: str, core: Any | None = None) -> Path:
     sessions_dir = _path_from_core(core, "STUDENT_SESSIONS_DIR", STUDENT_SESSIONS_DIR)
     return sessions_dir / safe_fs_id(student_id, prefix="student")
@@ -170,12 +194,16 @@ def student_session_view_state_path(student_id: str, core: Any | None = None) ->
 
 
 def student_session_file(student_id: str, session_id: str, core: Any | None = None) -> Path:
-    return student_sessions_base_dir(student_id, core=core) / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
+    return (
+        student_sessions_base_dir(student_id, core=core)
+        / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Teacher identity / workspace paths
 # ---------------------------------------------------------------------------
+
 
 def resolve_teacher_id(teacher_id: Optional[str] = None) -> str:
     raw = (teacher_id or _settings.default_teacher_id() or "teacher").strip()
@@ -213,6 +241,7 @@ def teacher_provider_registry_audit_path(
 # Teacher memory paths
 # ---------------------------------------------------------------------------
 
+
 def teacher_daily_memory_dir(teacher_id: str, core: Any | None = None) -> Path:
     return teacher_workspace_dir(teacher_id, core=core) / "memory"
 
@@ -228,6 +257,7 @@ def teacher_daily_memory_path(
 # Teacher session paths
 # ---------------------------------------------------------------------------
 
+
 def teacher_sessions_base_dir(teacher_id: str, core: Any | None = None) -> Path:
     sessions_dir = _path_from_core(core, "TEACHER_SESSIONS_DIR", TEACHER_SESSIONS_DIR)
     return sessions_dir / safe_fs_id(teacher_id, prefix="teacher")
@@ -242,12 +272,16 @@ def teacher_session_view_state_path(teacher_id: str, core: Any | None = None) ->
 
 
 def teacher_session_file(teacher_id: str, session_id: str, core: Any | None = None) -> Path:
-    return teacher_sessions_base_dir(teacher_id, core=core) / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
+    return (
+        teacher_sessions_base_dir(teacher_id, core=core)
+        / f"{safe_fs_id(session_id, prefix='session')}.jsonl"
+    )
 
 
 # ---------------------------------------------------------------------------
 # Assignment / exam / analysis / student-profile directory paths
 # ---------------------------------------------------------------------------
+
 
 def resolve_assignment_dir(assignment_id: str, core: Any | None = None) -> Path:
     data_dir = _path_from_core(core, "DATA_DIR", DATA_DIR)
@@ -300,6 +334,7 @@ def resolve_student_profile_path(student_id: str, core: Any | None = None) -> Pa
 # ---------------------------------------------------------------------------
 # Manifest / exam file path helpers (pure path computation only)
 # ---------------------------------------------------------------------------
+
 
 def resolve_manifest_path(path_value: Any, core: Any | None = None) -> Optional[Path]:
     raw = str(path_value or "").strip()

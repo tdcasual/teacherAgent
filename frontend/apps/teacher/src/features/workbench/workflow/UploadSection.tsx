@@ -1,4 +1,11 @@
 import type { UploadScope, UploadSectionProps } from '../../../types/workflow'
+import LabeledField from './LabeledField'
+
+const ASSIGNMENT_SUBJECT_OPTIONS = [
+  { id: 'physics', label: '物理' },
+  { id: 'math', label: '数学' },
+  { id: 'generic', label: '通用' },
+] as const
 
 type Props = UploadSectionProps & {
   uploading: boolean
@@ -10,7 +17,8 @@ export default function UploadSection(props: Props) {
     uploadMode, setUploadMode, uploadCardCollapsed, setUploadCardCollapsed,
     formatUploadJobSummary, formatExamJobSummary, uploadJobInfo, uploadAssignmentId,
     examJobInfo, examId, handleUploadAssignment, handleUploadExam,
-    setUploadAssignmentId, uploadDate, setUploadDate, uploadScope, setUploadScope,
+    setUploadAssignmentId, uploadDate, setUploadDate, uploadDueAt, setUploadDueAt,
+    uploadSubjectId, setUploadSubjectId, uploadScope, setUploadScope,
     uploadClassName, setUploadClassName, uploadStudentIds, setUploadStudentIds,
     setUploadFiles, setUploadAnswerFiles, uploading, uploadError, uploadStatus,
     setExamId, examDate, setExamDate, examClassName, setExamClassName,
@@ -61,62 +69,65 @@ export default function UploadSection(props: Props) {
     	                    <p className="m-0 mb-3 text-muted">上传后将在后台解析题目与答案，并生成作业 8 点描述。解析完成后需确认创建作业。</p>
     	                    <form className="upload-form grid gap-[10px]" onSubmit={handleUploadAssignment}>
     	                      <div className="grid gap-[10px] grid-cols-1">
-    	                        <div className="grid gap-1.5">
-    	                          <label>作业编号</label>
+    	                        <LabeledField label="作业编号">
     	                          <input
     	                            value={uploadAssignmentId}
     	                            onChange={(e) => setUploadAssignmentId(e.target.value)}
     	                            placeholder="例如：HW-2026-02-05"
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>日期（可选）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="日期（可选）">
     	                          <input value={uploadDate} onChange={(e) => setUploadDate(e.target.value)} placeholder="YYYY-MM-DD" />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>范围</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="截止日期（可选）">
+    	                          <input value={uploadDueAt} onChange={(e) => setUploadDueAt(e.target.value)} placeholder="YYYY-MM-DD 或 ISO 时间" />
+    	                        </LabeledField>
+    	                        <LabeledField label="学科">
+    	                          <select value={uploadSubjectId} onChange={(e) => setUploadSubjectId(e.target.value)}>
+    	                            {ASSIGNMENT_SUBJECT_OPTIONS.map((option) => (
+    	                              <option key={option.id} value={option.id}>{option.label}</option>
+    	                            ))}
+    	                          </select>
+    	                        </LabeledField>
+    	                        <LabeledField label="范围">
     	                          <select value={uploadScope} onChange={(e) => setUploadScope(e.target.value as UploadScope)}>
     	                            <option value="public">公共作业</option>
     	                            <option value="class">班级作业</option>
     	                            <option value="student">私人作业</option>
     	                          </select>
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>班级（班级作业必填）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="班级（班级作业必填）">
     	                          <input
     	                            value={uploadClassName}
     	                            onChange={(e) => setUploadClassName(e.target.value)}
     	                            placeholder="例如：高二2403班"
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>学生编号（私人作业必填）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="学生编号（私人作业必填）">
     	                          <input
     	                            value={uploadStudentIds}
     	                            onChange={(e) => setUploadStudentIds(e.target.value)}
     	                            placeholder="例如：高二2403班_刘昊然"
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>作业文件（文档/图片）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="作业文件（文档/图片）">
     	                          <input
     	                            type="file"
     	                            multiple
     	                            accept="application/pdf,image/*,.md,.markdown,.tex"
     	                            onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>答案文件（可选）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="答案文件（可选）">
     	                          <input
     	                            type="file"
     	                            multiple
     	                            accept="application/pdf,image/*,.md,.markdown,.tex"
     	                            onChange={(e) => setUploadAnswerFiles(Array.from(e.target.files || []))}
     	                          />
-    	                        </div>
+    	                        </LabeledField>
     	                      </div>
-    	                      <button type="submit" className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={uploading}>
+    	                      <button type="submit" className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11" disabled={uploading}>
     	                        {uploading ? '上传中…' : '上传并开始解析'}
     	                      </button>
     	                    </form>
@@ -128,51 +139,45 @@ export default function UploadSection(props: Props) {
     	                    <p className="m-0 mb-3 text-muted">上传考试试卷、标准答案（可选）与成绩表后，系统将生成考试数据与分析草稿。成绩表推荐电子表格（最稳）。</p>
     	                    <form className="upload-form grid gap-[10px]" onSubmit={handleUploadExam}>
     	                      <div className="grid gap-[10px] grid-cols-1">
-    	                        <div className="grid gap-1.5">
-    	                          <label>考试编号（可选）</label>
+    	                        <LabeledField label="考试编号（可选）">
     	                          <input value={examId} onChange={(e) => setExamId(e.target.value)} placeholder="例如：EX2403_PHY" />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>日期（可选）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="日期（可选）">
     	                          <input value={examDate} onChange={(e) => setExamDate(e.target.value)} placeholder="YYYY-MM-DD" />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>班级（可选）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="班级（可选）">
     	                          <input
     	                            value={examClassName}
     	                            onChange={(e) => setExamClassName(e.target.value)}
     	                            placeholder="例如：高二2403班"
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>试卷文件（必填）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="试卷文件（必填）">
     	                          <input
     	                            type="file"
     	                            multiple
     	                            accept="application/pdf,image/*,.md,.markdown,.tex"
     	                            onChange={(e) => setExamPaperFiles(Array.from(e.target.files || []))}
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>答案文件（可选）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="答案文件（可选）">
     	                          <input
     	                            type="file"
     	                            multiple
     	                            accept="application/pdf,image/*,.md,.markdown,.tex"
     	                            onChange={(e) => setExamAnswerFiles(Array.from(e.target.files || []))}
     	                          />
-    	                        </div>
-    	                        <div className="grid gap-1.5">
-    	                          <label>成绩文件（必填）</label>
+    	                        </LabeledField>
+    	                        <LabeledField label="成绩文件（必填）">
     	                          <input
     	                            type="file"
     	                            multiple
     	                            accept="application/pdf,image/*,.xls,.xlsx"
     	                            onChange={(e) => setExamScoreFiles(Array.from(e.target.files || []))}
     	                          />
-    	                        </div>
+    	                        </LabeledField>
     	                      </div>
-    	                      <button type="submit" className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={examUploading}>
+    	                      <button type="submit" className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11" disabled={examUploading}>
     	                        {examUploading ? '上传中…' : '上传并开始解析'}
     	                      </button>
     	                    </form>

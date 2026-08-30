@@ -17,6 +17,8 @@ export type TeacherWorkbenchState = {
 
   uploadAssignmentId: string
   uploadDate: string
+  uploadDueAt: string
+  uploadSubjectId: string
   uploadScope: 'public' | 'class' | 'student'
   uploadClassName: string
   uploadStudentIds: string
@@ -96,6 +98,8 @@ export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
 
     uploadAssignmentId: '',
     uploadDate: '',
+    uploadDueAt: '',
+    uploadSubjectId: 'generic',
     uploadScope: 'public',
     uploadClassName: '',
     uploadStudentIds: '',

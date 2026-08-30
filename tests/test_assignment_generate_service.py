@@ -6,6 +6,7 @@ from services.api.assignment_generate_service import (
     AssignmentGenerateError,
     generate_assignment,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class AssignmentGenerateServiceTest(unittest.TestCase):
@@ -18,7 +19,9 @@ class AssignmentGenerateServiceTest(unittest.TestCase):
 
         deps = AssignmentGenerateDeps(
             app_root=Path("/repo"),
-            parse_date_str=lambda value: str(value or "2026-02-08"),
+            optional_assignment_date=lambda value: (
+                str(value).strip() if str(value or "").strip() else None
+            ),
             ensure_requirements_for_assignment=lambda *_args: {"ok": True},
             run_script=_run_script,
             postprocess_assignment_meta=lambda *_args, **_kwargs: None,
@@ -55,27 +58,33 @@ class AssignmentGenerateServiceTest(unittest.TestCase):
         deps = AssignmentGenerateDeps(
             **{
                 **deps.__dict__,
-                "ensure_requirements_for_assignment": lambda *_args: {"error": "missing_requirements"},
+                "ensure_requirements_for_assignment": lambda *_args: {
+                    "error": "missing_requirements"
+                },
             }
         )
-
-        with self.assertRaises(AssignmentGenerateError) as cm:
-            generate_assignment(
-                assignment_id="HW_1",
-                kp="",
-                question_ids="",
-                per_kp=5,
-                core_examples="",
-                generate=False,
-                mode="",
-                date="2026-02-08",
-                due_at="",
-                class_name="",
-                student_ids="",
-                source="teacher",
-                requirements_json=None,
-                deps=deps,
-            )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            with self.assertRaises(AssignmentGenerateError) as cm:
+                generate_assignment(
+                    assignment_id="HW_1",
+                    kp="",
+                    question_ids="",
+                    per_kp=5,
+                    core_examples="",
+                    generate=False,
+                    mode="",
+                    date="2026-02-08",
+                    due_at="",
+                    class_name="",
+                    student_ids="",
+                    source="teacher",
+                    requirements_json=None,
+                    subject_id="physics",
+                    deps=deps,
+                )
+        finally:
+            reset_current_principal(token)
 
         self.assertEqual(cm.exception.status_code, 400)
         self.assertEqual(cm.exception.detail.get("error"), "missing_requirements")
@@ -85,26 +94,33 @@ class AssignmentGenerateServiceTest(unittest.TestCase):
         deps = AssignmentGenerateDeps(
             **{
                 **deps.__dict__,
-                "postprocess_assignment_meta": lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+                "postprocess_assignment_meta": lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                ),
             }
         )
 
-        result = generate_assignment(
-            assignment_id="HW_1",
-            kp="力学",
-            question_ids="Q1,Q2",
-            per_kp=3,
-            core_examples="EX_A",
-            generate=True,
-            mode="auto",
-            date="2026-02-08",
-            due_at="2026-02-09T20:00:00",
-            class_name="高二2403班",
-            student_ids="S1,S2",
-            source="teacher",
-            requirements_json='{"core_concepts":["力"]}',
-            deps=deps,
-        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            result = generate_assignment(
+                assignment_id="HW_1",
+                kp="力学",
+                question_ids="Q1,Q2",
+                per_kp=3,
+                core_examples="EX_A",
+                generate=True,
+                mode="auto",
+                date="2026-02-08",
+                due_at="2026-02-09T20:00:00",
+                class_name="高二2403班",
+                student_ids="S1,S2",
+                source="teacher",
+                requirements_json='{"core_concepts":["力"]}',
+                subject_id="physics",
+                deps=deps,
+            )
+        finally:
+            reset_current_principal(token)
 
         self.assertEqual(result.get("ok"), True)
         args = captured["args"]

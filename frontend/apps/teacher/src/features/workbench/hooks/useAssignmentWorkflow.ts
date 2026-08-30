@@ -35,6 +35,8 @@ interface UseAssignmentWorkflowParams {
   uploadMode: string
   uploadAssignmentId: string
   uploadDate: string
+  uploadDueAt: string
+  uploadSubjectId: string
   uploadScope: string
   uploadClassName: string
   uploadStudentIds: string
@@ -127,6 +129,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     uploadMode,
     uploadAssignmentId,
     uploadDate,
+    uploadDueAt,
+    uploadSubjectId,
     uploadScope,
     uploadClassName,
     uploadStudentIds,
@@ -584,11 +588,17 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setUploadError('班级作业请填写班级')
         return
       }
+      if (!uploadSubjectId.trim()) {
+        setUploadError('请选择学科')
+        return
+      }
       setUploading(true)
       try {
         const fd = new FormData()
         fd.append('assignment_id', uploadAssignmentId.trim())
         if (uploadDate.trim()) fd.append('date', uploadDate.trim())
+        if (uploadDueAt.trim()) fd.append('due_at', uploadDueAt.trim())
+        fd.append('subject_id', uploadSubjectId.trim())
         fd.append('scope', uploadScope)
         if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim())
         if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim())
@@ -656,6 +666,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       uploadAssignmentId,
       uploadClassName,
       uploadDate,
+      uploadDueAt,
+      uploadSubjectId,
       uploadFiles,
       uploadScope,
       uploadStudentIds,

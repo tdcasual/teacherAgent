@@ -27,7 +27,9 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
-async def assignment_download(assignment_id: str, file: str, *, deps: AssignmentIoHandlerDeps) -> Any:
+async def assignment_download(
+    assignment_id: str, file: str, *, deps: AssignmentIoHandlerDeps
+) -> Any:
     try:
         assignment_dir = deps.resolve_assignment_dir(assignment_id)
     except ValueError as exc:
@@ -89,6 +91,7 @@ async def generate_assignment(
     mode: Optional[str],
     date: Optional[str],
     due_at: Optional[str],
+    subject_id: Optional[str] = None,
     class_name: Optional[str],
     student_ids: Optional[str],
     source: Optional[str],
@@ -107,6 +110,7 @@ async def generate_assignment(
                 mode=mode,
                 date=date,
                 due_at=due_at,
+                subject_id=subject_id,
                 class_name=class_name,
                 student_ids=student_ids,
                 source=source,

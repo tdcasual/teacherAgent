@@ -21,16 +21,21 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             now_iso=lambda: "2026-02-08T12:00:00",
             discussion_complete_marker="[[discussion_complete]]",
             write_upload_job=write_upload_job,
-            merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
+            merge_requirements=lambda base, override, overwrite=True: {
+                **(base or {}),
+                **(override or {}),
+            },
             compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
             write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
-            parse_date_str=lambda v: str(v or ""),
+            optional_assignment_date=lambda v: str(v).strip() if str(v or "").strip() else None,
             save_assignment_requirements=lambda *_args, **_kwargs: None,
             parse_ids_value=lambda value: value if isinstance(value, list) else [],
             resolve_scope=lambda scope, _student_ids, _class_name: str(scope or ""),
             normalize_due_at=lambda value: str(value or ""),
             compute_expected_students=lambda _scope, _class_name, _student_ids: [],
-            atomic_write_json=lambda path, data: path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8"),
+            atomic_write_json=lambda path, data: path.write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            ),
             copy2=lambda src, dst: dst.write_bytes(src.read_bytes()),
         )
 
@@ -60,8 +65,15 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             writes = []
             job_dir = root / "uploads" / "assignment_jobs" / "job-1"
             job_dir.mkdir(parents=True, exist_ok=True)
-            parsed = {"questions": [{"stem": "x"}], "requirements": {}, "missing": ["subject"], "warnings": []}
-            (job_dir / "parsed.json").write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
+            parsed = {
+                "questions": [{"stem": "x"}],
+                "requirements": {},
+                "missing": ["subject"],
+                "warnings": [],
+            }
+            (job_dir / "parsed.json").write_text(
+                json.dumps(parsed, ensure_ascii=False), encoding="utf-8"
+            )
             deps = self._deps(root, writes)
             with self.assertRaises(AssignmentUploadConfirmError) as ctx:
                 confirm_assignment_upload(
@@ -106,6 +118,8 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                     "class_name": "高二2403班",
                     "student_ids": [],
                     "date": "2026-02-08",
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
                 },
                 job_dir,
                 requirements_override=None,
@@ -125,14 +139,27 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             job_dir = root / "uploads" / "assignment_jobs" / "job-1"
             job_dir.mkdir(parents=True, exist_ok=True)
             (job_dir / "parsed.json").write_text(
-                json.dumps({"questions": [{"stem": "x"}], "requirements": {"subject": "物理"}, "missing": [], "warnings": []}, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             deps = self._deps(root, writes)
             with self.assertRaises(AssignmentUploadConfirmError) as ctx:
                 confirm_assignment_upload(
                     "job-1",
-                    {"assignment_id": "../escape", "status": "done"},
+                    {
+                        "assignment_id": "../escape",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                    },
                     job_dir,
                     requirements_override=None,
                     strict_requirements=True,

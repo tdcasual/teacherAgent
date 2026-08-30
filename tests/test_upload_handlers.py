@@ -102,6 +102,7 @@ async def test_assignment_upload_start_maps_error(tmp_path):
             assignment_id="a1",
             date="",
             due_at="",
+            subject_id="physics",
             scope="",
             class_name="",
             student_ids="",
@@ -136,7 +137,9 @@ async def test_assignment_upload_confirm_returns_ready(tmp_path):
     def ensure_assignment_upload_confirm_ready(_job):
         return {"ok": True}
 
-    deps = _assignment_deps(tmp_path, ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready)
+    deps = _assignment_deps(
+        tmp_path, ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready
+    )
 
     result = await assignment_upload_handlers.assignment_upload_confirm(
         UploadConfirmRequest(job_id="job-1"),

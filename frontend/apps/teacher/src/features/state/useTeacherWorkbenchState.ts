@@ -78,6 +78,8 @@ export function useTeacherWorkbenchState() {
   const setUploadMode = useCallback((value: 'assignment' | 'exam') => setField('uploadMode', value), [setField])
   const setUploadAssignmentId = useCallback((value: string) => setField('uploadAssignmentId', value), [setField])
   const setUploadDate = useCallback((value: string) => setField('uploadDate', value), [setField])
+  const setUploadDueAt = useCallback((value: string) => setField('uploadDueAt', value), [setField])
+  const setUploadSubjectId = useCallback((value: string) => setField('uploadSubjectId', value), [setField])
   const setUploadScope = useCallback((value: 'public' | 'class' | 'student') => setField('uploadScope', value), [setField])
   const setUploadClassName = useCallback((value: string) => setField('uploadClassName', value), [setField])
   const setUploadStudentIds = useCallback((value: string) => setField('uploadStudentIds', value), [setField])
@@ -198,6 +200,8 @@ export function useTeacherWorkbenchState() {
     setUploadMode,
     setUploadAssignmentId,
     setUploadDate,
+    setUploadDueAt,
+    setUploadSubjectId,
     setUploadScope,
     setUploadClassName,
     setUploadStudentIds,
