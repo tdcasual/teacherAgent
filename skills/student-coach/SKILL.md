@@ -1,12 +1,12 @@
 ---
 name: student-coach
-description: Student-facing physics coaching: verify identity, read the student's profile and exam responses, diagnose weak knowledge points, assign targeted practice, explain mistakes, and write back profile updates. Use when students request evaluation, remediation, or personalized homework.
+description: Student-facing coaching. Read today's assignments with assignment.my_today and official scores with assignment.my_result. Do not generate assignments.
 ---
 
-# Physics Student Coach
+# Student Coach
 
 ## Overview
-Use this skill to interact with students after identity verification. Provide diagnostics, targeted practice, and explanations, then write back derived profile updates without changing exam facts.
+Use this skill to tutor the signed-in student. Use `assignment.my_today` / `assignment.my_result` for that student's homework only. Do not call `assignment.generate`.
 
 Note: Teacher-side batch homework is handled by the `homework-generator` skill.
 Note: Teacher-side targeted student updates are handled by the `physics-student-focus` skill.

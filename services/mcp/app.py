@@ -85,8 +85,6 @@ def mcp_tool_names() -> List[str]:
         "student.profile.get",
         "lesson.list",
         "core_example.search",
-        "core_example.register",
-        "core_example.render",
     ]
     if _mcp_bound_teacher_id():
         names.extend(
@@ -95,6 +93,8 @@ def mcp_tool_names() -> List[str]:
                 "assignment.list",
                 "assignment.render",
                 "lesson.capture",
+                "core_example.register",
+                "core_example.render",
             ]
         )
     return names

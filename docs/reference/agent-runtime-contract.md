@@ -68,7 +68,7 @@
 
 | Workflow | `skill_id` | Primary Role | Typical Trigger |
 | --- | --- | --- | --- |
-| 考试分析 | `teacher-assignment-ops` | Teacher | 考试分析、讲评、备课、教学运营 |
+| 作业运营 | `teacher-assignment-ops` | Teacher | 未交、逾期、进度、谁没交、发布/归档 |
 | 学生重点分析 | `physics-student-focus` | Teacher | 单个学生诊断、重点追踪、画像补充 |
 | 作业生成 | `homework-generator` | Teacher | 生成作业、分层练习、课后诊断 |
 | 课堂材料采集 | `physics-lesson-capture` | Teacher | 板书 OCR、课堂图片整理、讲义草稿 |

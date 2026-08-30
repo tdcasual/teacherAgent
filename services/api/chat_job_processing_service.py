@@ -794,7 +794,12 @@ def compute_chat_reply_sync(
         event_sink=event_sink,
         job_id=job_id,
         lane_id=lane_id,
-        actor_id=actor_id or effective_teacher_id,
+        actor_id=actor_id
+        or (
+            str(getattr(req, "student_id", "") or "").strip()
+            if role_hint == "student"
+            else effective_teacher_id
+        ),
         initial_convo=initial_convo,
     )
     if blocked_reply:

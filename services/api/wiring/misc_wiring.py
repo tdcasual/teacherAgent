@@ -206,23 +206,57 @@ def _tool_dispatch_deps(core: Any | None = None):
         except AssignmentTodayError as exc:
             return {"error": exc.detail, "status_code": exc.status_code}
 
+    def _assignment_owner_id(assignment_id: str) -> str | None:
+        aid = str(assignment_id or "").strip()
+        if not aid:
+            return None
+        folder = _ac.DATA_DIR / "assignments" / aid
+        if not folder.exists():
+            return None
+        from ..assignment.visibility import assignment_owner_id
+        from ..assignment_data_service import load_assignment_meta
+
+        try:
+            meta = load_assignment_meta(folder)
+        except Exception:
+            return None
+        return str(assignment_owner_id(meta) if isinstance(meta, dict) else "").strip()
+
     def _assignment_my_result(assignment_id: str, student_id: str) -> dict[str, Any]:
-        progress = _ac.compute_assignment_progress(assignment_id, include_students=True)
-        if not isinstance(progress, dict) or progress.get("error") or not progress.get("ok"):
-            return progress if isinstance(progress, dict) else {"error": "assignment_not_found"}
-        for student in progress.get("students") or []:
-            if isinstance(student, dict) and str(student.get("student_id") or "") == str(student_id or ""):
-                submission = student.get("submission") if isinstance(student.get("submission"), dict) else {}
-                best = submission.get("best") if isinstance(submission.get("best"), dict) else {}
-                return {
-                    "ok": True,
-                    "assignment_id": assignment_id,
-                    "student_id": student_id,
-                    "submitted": bool(best),
-                    "official_score": best.get("score_earned"),
-                    "student": student,
-                }
-        return {"error": "attempt_not_found", "assignment_id": assignment_id, "student_id": student_id}
+        from ..assignment.visibility import snapshot_student_ids, student_can_read_assignment
+
+        sid = str(student_id or "").strip()
+        aid = str(assignment_id or "").strip()
+        if not sid:
+            return {"error": "student_id_required"}
+        if not aid:
+            return {"error": "assignment_id is required"}
+        folder = _ac.DATA_DIR / "assignments" / aid
+        if not folder.exists():
+            return {"error": "assignment_not_found", "assignment_id": aid}
+        from ..assignment_data_service import load_assignment_meta
+
+        try:
+            meta = load_assignment_meta(folder)
+        except Exception:
+            return {"error": "assignment_not_found", "assignment_id": aid}
+        if not isinstance(meta, dict):
+            meta = {}
+        if not student_can_read_assignment(meta) or sid not in snapshot_student_ids(meta):
+            return {"error": "forbidden_assignment_scope", "assignment_id": aid}
+        attempts = _ac.list_submission_attempts(aid, sid)
+        best = _ac.best_submission_attempt(attempts)
+        official = None
+        if isinstance(best, dict):
+            official = best.get("score_earned")
+        return {
+            "ok": True,
+            "assignment_id": aid,
+            "student_id": sid,
+            "submitted": bool(best),
+            "official_score": official,
+            "best": best,
+        }
 
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
@@ -279,6 +313,7 @@ def _tool_dispatch_deps(core: Any | None = None):
         assignment_recompute_roster=_assignment_recompute_roster,
         assignment_my_today=_assignment_my_today,
         assignment_my_result=_assignment_my_result,
+        assignment_owner_id=_assignment_owner_id,
     )
 
 

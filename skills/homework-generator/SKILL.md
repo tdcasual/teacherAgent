@@ -1,12 +1,12 @@
 ---
 name: homework-generator
-description: Teacher-side batch generator for post-class diagnostics and personalized homework based on lesson discussions, lesson plans, and optional exam data. Use when teachers want class-wide and student-specific homework plans.
+description: Teacher-side homework generator. assignment.generate writes a draft only; publish with assignment.publish after the teacher confirms on the workbench.
 ---
 
-# Physics Homework Generator (Teacher-side)
+# Homework Generator (Teacher-side)
 
 ## Overview
-Use this skill to generate **class-level post-class diagnostics** and **student-specific homework** in batch. This skill is teacher-facing and does not require student identity verification. The default mode is lesson-first: classroom content and teacher notes are the primary sources; exam data can be merged explicitly.
+Use this skill to generate class homework as a **draft** (`visibility_status=draft`). Tell the teacher to confirm on the workbench (or call `assignment.publish`) before students can see it.
 
 ## Required Inputs
 - lesson_id

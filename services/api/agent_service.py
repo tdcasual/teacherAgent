@@ -197,6 +197,7 @@ def _dispatch_tool_safely(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     try:
         return deps.tool_dispatch(
@@ -205,6 +206,7 @@ def _dispatch_tool_safely(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     except Exception as exc:
         _log.debug("operation failed", exc_info=True)
@@ -337,6 +339,7 @@ def _process_structured_tool_call(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Tuple[bool, Optional[Dict[str, Any]]]:
     name = call["function"]["name"]
@@ -367,6 +370,7 @@ def _process_structured_tool_call(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     finally:
         reset_tool_confirm_context(token)
@@ -405,6 +409,7 @@ def _handle_structured_tool_calls(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -427,6 +432,7 @@ def _handle_structured_tool_calls(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             event_sink=event_sink,
         )
         if counted:
@@ -452,6 +458,7 @@ def _handle_json_tool_request(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -487,6 +494,7 @@ def _handle_json_tool_request(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     finally:
         reset_tool_confirm_context(token)
@@ -567,6 +575,7 @@ def _handle_tool_round_outcome(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -585,6 +594,7 @@ def _handle_tool_round_outcome(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -607,6 +617,7 @@ def _handle_tool_round_outcome(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -638,6 +649,7 @@ def _run_tool_loop(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     skill_runtime: Optional[Any],
     allowed: Set[str],
     max_tool_rounds: int,
@@ -677,6 +689,7 @@ def _run_tool_loop(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -934,6 +947,7 @@ def run_agent_runtime(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             skill_runtime=skill_runtime,
             allowed=allowed,
             max_tool_rounds=max_tool_rounds,

@@ -405,3 +405,95 @@ def test_tool_dispatch_analysis_report_tools_cover_unified_report_plane():
     assert got['payload'] == ('report_1', 't1-resolved', 'survey')
     assert rerun['payload'] == ('report_1', 't1-resolved', 'survey', 'refresh')
     assert review['payload'] == ('t1-resolved', 'survey', 'queued')
+
+
+def test_assignment_progress_tools_require_owner():
+    owners = {"HW_MINE": "t_zhang", "HW_OTHER": "t_li"}
+    calls: list[str] = []
+    base, _ = _deps({"assignment.progress", "assignment.missing", "assignment.overdue", "assignment.attempt.get"})
+    deps = ToolDispatchDeps(
+        **{
+            **base.__dict__,
+            "assignment_owner_id": lambda assignment_id: owners.get(str(assignment_id or "").strip()),
+            "assignment_progress": lambda assignment_id: calls.append(assignment_id) or {
+                "ok": True,
+                "assignment_id": assignment_id,
+                "students": [
+                    {"student_id": "S1", "overdue": True, "submission": {"best": None}},
+                    {"student_id": "S2", "overdue": True, "submission": {"best": {"score_earned": 8}}},
+                ],
+            },
+        }
+    )
+    mine = tool_dispatch(
+        "assignment.progress",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert mine.get("ok") is True
+    forbidden = tool_dispatch(
+        "assignment.missing",
+        {"assignment_id": "HW_OTHER"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert forbidden.get("error") == "forbidden_assignment_owner"
+    missing = tool_dispatch(
+        "assignment.progress",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        deps=deps,
+    )
+    assert missing.get("error") == "teacher_id_required"
+    overdue = tool_dispatch(
+        "assignment.overdue",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert overdue.get("count") == 1
+    assert overdue["students"][0]["student_id"] == "S1"
+    assert "HW_OTHER" not in calls
+
+
+def test_assignment_student_tools_require_student_actor_id():
+    base, _ = _deps({"assignment.my_today", "assignment.my_result"})
+    deps = ToolDispatchDeps(
+        **{
+            **base.__dict__,
+            "assignment_my_today": lambda student_id, date=None: {
+                "ok": True,
+                "student_id": student_id,
+                "date": date,
+            },
+            "assignment_my_result": lambda assignment_id, student_id: {
+                "ok": True,
+                "assignment_id": assignment_id,
+                "student_id": student_id,
+            },
+        }
+    )
+    denied = tool_dispatch("assignment.my_today", {}, role="teacher", teacher_id="t_zhang", deps=deps)
+    assert denied.get("error") == "permission denied"
+    missing = tool_dispatch("assignment.my_today", {}, role="student", deps=deps)
+    assert missing.get("error") == "student_id_required"
+    today = tool_dispatch(
+        "assignment.my_today",
+        {},
+        role="student",
+        actor_id="S_WU",
+        deps=deps,
+    )
+    assert today == {"ok": True, "student_id": "S_WU", "date": None}
+    result = tool_dispatch(
+        "assignment.my_result",
+        {"assignment_id": "HW_1"},
+        role="student",
+        actor_id="S_WU",
+        deps=deps,
+    )
+    assert result == {"ok": True, "assignment_id": "HW_1", "student_id": "S_WU"}

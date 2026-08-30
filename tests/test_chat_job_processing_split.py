@@ -5,6 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from services.api.chat_job_processing.compute import _job_actor_id
 from services.api.chat_job_processing_service import _normalize_workflow_resolution_payload
 
 
@@ -29,6 +30,12 @@ def _issues(path: str) -> list[dict]:
     )
     output = (proc.stdout or "").strip()
     return json.loads(output) if output else []
+
+
+def test_job_actor_id_uses_student_id_for_student_jobs() -> None:
+    assert _job_actor_id({"role": "student", "student_id": "S_WU", "teacher_id": "t_zhang"}) == "S_WU"
+    assert _job_actor_id({"role": "teacher", "student_id": "S_WU", "teacher_id": "t_zhang"}) == "t_zhang"
+    assert _job_actor_id({"role": "student"}) is None
 
 
 def test_chat_job_processing_workflow_payload_hotspot_removed() -> None:

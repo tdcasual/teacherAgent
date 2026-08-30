@@ -112,7 +112,12 @@ class ToolRegistrySyncTest(unittest.TestCase):
                 skill_id="teacher-assignment-ops",
             )
             self.assertEqual(result.get("reply"), "ok")
-            self.assertEqual(set(captured.get("tool_names") or []), set(allowed_tools("teacher")))
+            names = set(captured.get("tool_names") or [])
+            self.assertIn("assignment.progress", names)
+            self.assertIn("assignment.missing", names)
+            self.assertNotIn("assignment.generate", names)
+            self.assertNotIn("exam.get", names)
+            self.assertTrue(names.issubset(set(allowed_tools("teacher"))))
 
     def test_mcp_tools_list_matches_registry(self):
         with TemporaryDirectory() as td:

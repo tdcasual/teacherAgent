@@ -1,4 +1,4 @@
-# MCP Interface (Physics Agent)
+# MCP Interface
 
 This document describes the MCP server interface exposed by this project.
 
@@ -15,6 +15,8 @@ This document describes the MCP server interface exposed by this project.
 
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
+- `MCP_BOUND_TEACHER_ID` (optional): when set, registers mutating assignment/student/lesson/core_example tools and filters `assignment.list` / `assignment.render` to that teacher. When empty, those tools are unregistered.
+- `exam.*` and `assignment.generate` are not MCP tools. Generate via HTTP or teacher chat. Exam HTTP remains until a later PR.
 
 ---
 
@@ -53,8 +55,8 @@ Return the list of available tools.
   "id": 1,
   "result": [
     {
-      "name": "exam.analysis.get",
-      "description": "Get exam analysis draft (or compute minimal totals)",
+      "name": "student.profile.get",
+      "description": "Get student profile JSON",
       "inputSchema": { "...": "JSON Schema for tool arguments" }
     }
   ]
@@ -194,12 +196,12 @@ Invoke a tool.
 ---
 
 ### assignment.list
-**Purpose**: List assignments (folder names under `data/assignments/`).
+**Purpose**: List assignments owned by `MCP_BOUND_TEACHER_ID`. Unregistered when that env var is empty.
 
-**Arguments**: none
+**Arguments**: none (`teacher_id` in args is ignored)
 
 **Result**
-- `{ ok, assignments: ["A2403_2026-02-04", ...] }`
+- `{ ok, assignments: ["A2403_2026-02-04", ...] }` filtered to the bound teacher
 
 ---
 
@@ -235,7 +237,7 @@ Invoke a tool.
 ---
 
 ### core_example.register
-**Purpose**: Register a core example (writes to `data/core_examples/` + appends `examples.csv`).
+**Purpose**: Register a core example (writes to `data/core_examples/` + appends `examples.csv`). Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `example_id` (string, required)
@@ -261,7 +263,7 @@ Invoke a tool.
 ---
 
 ### assignment.generate
-**Purpose**: Generate assignment from KP or core example templates.
+**Purpose**: Not an MCP tool. Generate via HTTP `POST /assignment/generate` or teacher chat `assignment.generate` (writes draft). MCP no longer registers this name.
 
 **Arguments**
 - `assignment_id` (string, required)

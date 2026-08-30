@@ -38,7 +38,11 @@ class SkillsFirstClassTest(unittest.TestCase):
         teacher_ops = loaded.skills["teacher-assignment-ops"]
         ops_rt = compile_skill_runtime(teacher_ops)
         filtered_ops = ops_rt.apply_tool_policy(role_allowed)
-        self.assertEqual(filtered_ops, role_allowed)
+        self.assertIn("assignment.progress", filtered_ops)
+        self.assertIn("assignment.missing", filtered_ops)
+        self.assertNotIn("assignment.generate", filtered_ops)
+        self.assertNotIn("exam.get", filtered_ops)
+        self.assertIn("chart.exec", filtered_ops)
         ops_planning_targets = ops_rt.resolve_model_targets(
             role_hint="teacher",
             kind="chat.agent_no_tools",

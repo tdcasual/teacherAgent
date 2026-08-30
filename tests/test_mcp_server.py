@@ -96,6 +96,7 @@ class MCPServerTest(unittest.TestCase):
             self.assertNotIn("exam.get", names)
             self.assertNotIn("assignment.generate", names)
             self.assertNotIn("assignment.list", names)
+            self.assertNotIn("core_example.register", names)
             self.assertEqual(mcp_mod.app.title, "MCP Server")
 
             res = client.post(

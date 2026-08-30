@@ -80,7 +80,9 @@ class SkillAutoRouterTest(unittest.TestCase):
             detect_assignment_intent=detect_assignment_intent,
         )
         self.assertEqual(result.get("effective_skill_id"), "homework-generator")
-        self.assertEqual(result.get("reason"), "explicit")
+        self.assertEqual(result.get("reason"), "skill_id_aliased")
+        self.assertEqual(result.get("requested_skill_id"), "physics-homework-generator")
+        self.assertTrue(bool(result.get("requested_rewritten")))
 
     def test_student_invalid_requested_skill_falls_back_to_student_default(self):
         result = resolve_effective_skill(

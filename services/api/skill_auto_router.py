@@ -275,7 +275,7 @@ def _requested_reason_prefix(
 
 def _resolution_mode(reason: str) -> str:
     normalized = str(reason or '').strip()
-    if normalized == 'explicit':
+    if normalized in {'explicit', 'skill_id_aliased'}:
         return 'explicit'
     if 'auto_rule' in normalized and not normalized.endswith('_default'):
         return 'auto'
@@ -447,17 +447,17 @@ def resolve_effective_skill(
     available_ids = sorted([skill_id for skill_id, spec in skills.items() if _role_allowed(spec, role)])
     default_skill_id = _default_from_available(role, available_ids)
 
-    requested = str(requested_skill_id or "").strip()
-    requested, _aliased = canonicalize_skill_id(requested)
+    raw_requested = str(requested_skill_id or "").strip()
+    requested, aliased = canonicalize_skill_id(raw_requested)
     requested_valid, requested_exists, requested_allowed = _requested_state(requested, skills, available_ids)
 
     if requested and requested_valid and requested_allowed:
         return _with_resolution_metadata({
-            "requested_skill_id": requested,
+            "requested_skill_id": raw_requested,
             "effective_skill_id": requested,
-            "reason": "explicit",
+            "reason": "skill_id_aliased" if aliased else "explicit",
             "confidence": 1.0,
-            "matched_rule": "explicit",
+            "matched_rule": "skill_id_aliased" if aliased else "explicit",
             "candidates": [],
             "best_score": 0,
             "second_score": 0,
