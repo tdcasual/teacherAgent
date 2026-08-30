@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -88,6 +88,7 @@ def archive_assignment(
     meta["visibility_status"] = "archived"
     meta["archived_at"] = _now_iso()
     meta.pop("auto_archive_exempt", None)
+    meta.pop("auto_archive_exempt_until", None)
     atomic_write_json(folder / "meta.json", meta)
     return {
         "ok": True,
@@ -113,14 +114,16 @@ def unarchive_assignment(
         raise AssignmentArchiveError(409, "invalid_visibility_status")
     meta["visibility_status"] = "published"
     meta["archived_at"] = None
-    meta["auto_archive_exempt"] = True
+    today = date.fromisoformat(_today_iso())
+    meta["auto_archive_exempt_until"] = (today + timedelta(days=1)).isoformat()
+    meta.pop("auto_archive_exempt", None)
     atomic_write_json(folder / "meta.json", meta)
     return {
         "ok": True,
         "assignment_id": str(meta.get("assignment_id") or assignment_id),
         "visibility_status": "published",
         "archived_at": None,
-        "auto_archive_exempt": True,
+        "auto_archive_exempt_until": meta["auto_archive_exempt_until"],
     }
 
 
@@ -134,14 +137,23 @@ def _parse_date_value(value: Any) -> Optional[date]:
         return None
 
 
+def _qualifying_attempts(attempts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [item for item in attempts if isinstance(item, dict) and item.get("valid_submission")]
+
+
 def _qualifying_submitted(attempts: List[Dict[str, Any]]) -> bool:
-    return any(isinstance(item, dict) and item.get("valid_submission") for item in attempts)
+    return bool(_qualifying_attempts(attempts))
 
 
 def _latest_submitted_date(attempts: List[Dict[str, Any]]) -> Optional[date]:
-    dates = [_parse_date_value(item.get("submitted_at")) for item in attempts if isinstance(item, dict)]
+    dates = [_parse_date_value(item.get("submitted_at")) for item in _qualifying_attempts(attempts)]
     present = [item for item in dates if item is not None]
     return max(present) if present else None
+
+
+def _is_auto_archive_exempt(meta: Dict[str, Any], today: date) -> bool:
+    until = _parse_date_value(meta.get("auto_archive_exempt_until"))
+    return until is not None and today <= until
 
 
 def _maybe_auto_archive_inner(
@@ -151,14 +163,18 @@ def _maybe_auto_archive_inner(
     today: date,
     auto_archive_days: int,
     list_submission_attempts: Callable[[str, str], List[Dict[str, Any]]],
+    owner_teacher_id: Optional[str] = None,
 ) -> bool:
     folder = _resolve_assignment_folder(assignment_id, data_dir)
     if not folder.exists():
         return False
     meta = _load_meta(folder)
+    requested_owner = str(owner_teacher_id or "").strip()
+    if requested_owner and assignment_owner_id(meta) != requested_owner:
+        return False
     if effective_visibility_status(meta) != "published":
         return False
-    if bool(meta.get("auto_archive_exempt")):
+    if _is_auto_archive_exempt(meta, today):
         return False
     expected = meta.get("expected_students")
     if not isinstance(expected, list) or not expected:
@@ -183,6 +199,8 @@ def _maybe_auto_archive_inner(
         return False
     meta["visibility_status"] = "archived"
     meta["archived_at"] = _now_iso()
+    meta.pop("auto_archive_exempt", None)
+    meta.pop("auto_archive_exempt_until", None)
     atomic_write_json(folder / "meta.json", meta)
     return True
 
@@ -194,6 +212,7 @@ def maybe_auto_archive(
     today_iso: Optional[str] = None,
     auto_archive_days: Optional[int] = None,
     list_submission_attempts: Optional[Callable[[str, str], List[Dict[str, Any]]]] = None,
+    owner_teacher_id: Optional[str] = None,
 ) -> bool:
     try:
         resolved = _resolve_data_dir(data_dir)
@@ -211,6 +230,7 @@ def maybe_auto_archive(
             today=today,
             auto_archive_days=days,
             list_submission_attempts=list_fn,
+            owner_teacher_id=owner_teacher_id,
         )
     except Exception:  # policy: allowed-broad-except
         _log.warning("assignment.auto_archive.error assignment_id=%s", assignment_id, exc_info=True)
@@ -246,4 +266,5 @@ def maybe_auto_archive_owner_assignments(
             data_dir=resolved,
             today_iso=today_iso,
             list_submission_attempts=list_submission_attempts,
+            owner_teacher_id=owner or None,
         )

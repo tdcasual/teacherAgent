@@ -262,16 +262,20 @@ export function useSessionManager({ state, dispatch, refs, setActiveSession, sav
   const selectStudentSession = useCallback((sessionId: string) => {
     const sid = String(sessionId || '').trim()
     if (!sid) return
+    const storedAssignmentId = String(
+      sessions.find((item) => item.session_id === sid)?.assignment_id || '',
+    ).trim()
     dispatch({ type: 'SET', field: 'forceSessionLoadToken', value: state.forceSessionLoadToken + 1 })
     setActiveSession(sid)
     dispatch({ type: 'BATCH', actions: [
+      { type: 'SET', field: 'selectedAssignmentId', value: storedAssignmentId },
       { type: 'SET', field: 'sessionCursor', value: -1 },
       { type: 'SET', field: 'sessionHasMore', value: false },
       { type: 'SET', field: 'sessionError', value: '' },
       { type: 'SET', field: 'openSessionMenuId', value: '' },
     ]})
     closeSidebarOnMobile()
-  }, [closeSidebarOnMobile, state.forceSessionLoadToken, setActiveSession, dispatch])
+  }, [closeSidebarOnMobile, sessions, state.forceSessionLoadToken, setActiveSession, dispatch])
 
   const resetVerification = useCallback(() => {
     clearStudentAccessToken()
@@ -292,6 +296,7 @@ export function useSessionManager({ state, dispatch, refs, setActiveSession, sav
     dispatch({ type: 'UPDATE_LOCAL_DRAFT_SESSION_IDS', updater: (prev) => prev.includes(next) ? prev : [next, ...prev] })
     dispatch({ type: 'BATCH', actions: [
       { type: 'SET', field: 'showArchivedSessions', value: false },
+      { type: 'SET', field: 'selectedAssignmentId', value: '' },
       { type: 'SET', field: 'sessionCursor', value: -1 },
       { type: 'SET', field: 'sessionHasMore', value: false },
       { type: 'SET', field: 'sessionError', value: '' },

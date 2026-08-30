@@ -48,7 +48,9 @@ def _register_progress_routes(
     async def teacher_assignment_progress(assignment_id: str, include_students: bool = True) -> Any:
         _require_teacher_or_admin()
         try:
-            maybe_auto_archive(assignment_id, data_dir=data_dir)
+            assignment_app.require_assignment_access(assignment_id, deps=app_deps)
+            owner = assignment_app.listing_owner_teacher_id()
+            maybe_auto_archive(assignment_id, data_dir=data_dir, owner_teacher_id=owner)
             return await assignment_app.get_teacher_assignment_progress(
                 assignment_id,
                 include_students=include_students,

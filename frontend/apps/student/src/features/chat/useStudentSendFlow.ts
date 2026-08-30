@@ -3,6 +3,7 @@ import { makeId } from '../../../../shared/id'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
 import { nowTime } from '../../../../shared/time'
 import type { ChatStartResult, Message, PendingChatJob, StudentHistorySession, VerifiedStudent } from '../../appTypes'
+import { assignmentIdForStudentSend } from './studentSendAssignment'
 import { stripTransientPendingBubbles } from './pendingOverlay'
 import { parsePendingChatJobFromStorage } from './pendingChatJob'
 import { withStudentSendLock } from './sendLock'
@@ -147,9 +148,12 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
         if (!activeSessionId) setActiveSession(sessionId)
         const requestId = `schat_${studentId}_${Date.now()}_${Math.random().toString(16).slice(2)}`
         const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
-        const isFreeAsk = sessionId.startsWith('general_') || sessionId.startsWith('free-ask') || sessionId.startsWith('free_ask')
         const sessionAssignmentId = String(sessions.find((item) => item.session_id === sessionId)?.assignment_id || '').trim()
-        const assignmentId = isFreeAsk ? undefined : (selectedAssignmentId.trim() || sessionAssignmentId || undefined)
+        const assignmentId = assignmentIdForStudentSend({
+          sessionId,
+          selectedAssignmentId,
+          sessionAssignmentId,
+        })
 
         setMessages((prev) => {
           const next = stripTransientPendingBubbles(prev)

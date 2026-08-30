@@ -322,21 +322,6 @@ export default function App() {
     }
   }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
-  const handlePrimaryHomeAction = useCallback(() => {
-    if (!state.verifiedStudent) {
-      dispatch({ type: 'SET', field: 'verifyOpen', value: true })
-      return
-    }
-    if (todayHomeViewModel.status === 'empty' || todayHomeViewModel.status === 'generating' || todayHomeViewModel.status === 'pending_generation') return
-    const firstId = todayHomeViewModel.items[0]?.assignment_id || ''
-    if (firstId) dispatch({ type: 'SET', field: 'selectedAssignmentId', value: firstId })
-    if (todayHomeViewModel.status === 'submitted') {
-      setAssignmentHistoryOpen(true)
-      return
-    }
-    openExecutionState()
-  }, [dispatch, openExecutionState, state.verifiedStudent, todayHomeViewModel.items, todayHomeViewModel.status])
-
   const handleOpenAssignment = useCallback((assignmentId: string) => {
     const aid = assignmentId.trim()
     if (!aid) return
@@ -344,6 +329,24 @@ export default function App() {
     setActiveSession(aid)
     openExecutionState()
   }, [dispatch, openExecutionState, setActiveSession])
+
+  const handlePrimaryHomeAction = useCallback(() => {
+    if (!state.verifiedStudent) {
+      dispatch({ type: 'SET', field: 'verifyOpen', value: true })
+      return
+    }
+    if (todayHomeViewModel.status === 'empty' || todayHomeViewModel.status === 'generating' || todayHomeViewModel.status === 'pending_generation') return
+    if (todayHomeViewModel.status === 'submitted') {
+      setAssignmentHistoryOpen(true)
+      return
+    }
+    const firstId = todayHomeViewModel.items[0]?.assignment_id || ''
+    if (firstId) {
+      handleOpenAssignment(firstId)
+      return
+    }
+    openExecutionState()
+  }, [dispatch, handleOpenAssignment, openExecutionState, state.verifiedStudent, todayHomeViewModel.items, todayHomeViewModel.status])
 
   const handleOpenAssignmentHistory = useCallback(() => {
     setAssignmentHistoryOpen((open) => !open)
