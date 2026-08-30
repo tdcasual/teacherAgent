@@ -643,6 +643,33 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
             self.assertIn("OVERLAY:math:student", extra)
             self.assertNotIn("OVERLAY:physics", extra)
 
+    def test_assignment_overlay_prefers_pack_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                build_assignment_detail_cached=lambda _folder, include_text=False: {
+                    "assignment_id": "A1",
+                    "meta": {"subject_id": "math", "pack_id": "physics"},
+                },
+            )
+            reply, _role, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:physics:student", extra)
+            self.assertNotIn("OVERLAY:math:", extra)
+
     def test_free_ask_uses_generic_overlay_never_physics(self):
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -654,6 +681,36 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
                 return {"reply": "OK"}
 
             deps = self._deps(root, run_agent=_run_agent)
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id=""), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_free_ask_ignores_date_lookup_assignment_overlay(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                build_assignment_detail_cached=lambda _folder, include_text=False: {
+                    "assignment_id": "PHYS1",
+                    "meta": {"subject_id": "physics", "pack_id": "physics"},
+                },
+                find_assignment_for_date=lambda *_args, **_kwargs: {
+                    "folder": root / "data" / "assignments" / "PHYS1"
+                },
+            )
             reply, role_hint, _last = compute_chat_reply_sync(
                 _Req(assignment_id=""), deps=deps
             )

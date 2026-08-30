@@ -18,6 +18,12 @@ PACKS_DIR = Path(os.getenv("SUBJECT_PACKS_DIR", APP_ROOT / "packs" / "subjects")
 GENERIC_PACK_ID = "generic"
 _SAFE_SUBJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _GRADER_ADAPTER = "python_adapter"
+SUBJECT_ID_ALIASES = {
+    "物理": "physics",
+    "数学": "math",
+    "通用": "generic",
+}
+_PACK_LOAD_ERRORS = (OSError, UnicodeDecodeError, ValueError, TypeError, yaml.YAMLError)
 
 _fallback_logger: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
@@ -59,6 +65,12 @@ def load_pack(subject_id: Optional[str] = None) -> PackManifest:
     return _load_pack_cached(safe_id, original, str(PACKS_DIR))
 
 
+def pack_id_from_meta(meta: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(meta, dict):
+        return ""
+    return str(meta.get("pack_id") or meta.get("subject_id") or "").strip()
+
+
 def student_prompt_overlay(subject_id: Optional[str] = None) -> str:
     pack = load_pack(subject_id)
     rel = pack.prompts.get("student_overlay") or "prompts/student_overlay.md"
@@ -89,9 +101,10 @@ def _normalize_subject_id(subject_id: Optional[str]) -> str:
     token = str(subject_id or "").strip()
     if not token:
         return GENERIC_PACK_ID
-    if not _SAFE_SUBJECT_ID.fullmatch(token):
+    aliased = SUBJECT_ID_ALIASES.get(token, token)
+    if not _SAFE_SUBJECT_ID.fullmatch(aliased):
         return ""
-    return token
+    return aliased
 
 
 def _emit_pack_fallback(subject_id: str) -> None:
@@ -115,7 +128,9 @@ def _pack_yaml_path(packs_dir: Path, pack_id: str) -> Optional[Path]:
 
 def _read_yaml_mapping(path: Path) -> Dict[str, Any]:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return raw if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError("pack manifest must be a non-empty mapping")
+    return raw
 
 
 def _normalize_grader(value: Any) -> str:
@@ -161,11 +176,14 @@ def _load_generic_pack(packs_dir: Path, *, requested_subject_id: str, fallback: 
     generic_path = _pack_yaml_path(packs_dir, GENERIC_PACK_ID)
     if generic_path is None:
         raise SubjectPackError("generic subject pack is required")
-    return _manifest_from_yaml(
-        generic_path,
-        fallback=fallback,
-        requested_subject_id=requested_subject_id,
-    )
+    try:
+        return _manifest_from_yaml(
+            generic_path,
+            fallback=fallback,
+            requested_subject_id=requested_subject_id,
+        )
+    except _PACK_LOAD_ERRORS as exc:
+        raise SubjectPackError("generic subject pack is required") from exc
 
 
 @lru_cache(maxsize=64)
@@ -175,11 +193,15 @@ def _load_pack_cached(safe_id: str, original: str, packs_dir: str) -> PackManife
     if safe_id and safe_id != GENERIC_PACK_ID:
         yaml_path = _pack_yaml_path(root, safe_id)
         if yaml_path is not None:
-            return _manifest_from_yaml(
-                yaml_path,
-                fallback=False,
-                requested_subject_id=safe_id,
-            )
+            try:
+                return _manifest_from_yaml(
+                    yaml_path,
+                    fallback=False,
+                    requested_subject_id=safe_id,
+                )
+            except _PACK_LOAD_ERRORS:
+                _emit_pack_fallback(requested)
+                return _load_generic_pack(root, requested_subject_id=requested, fallback=True)
         _emit_pack_fallback(requested)
         return _load_generic_pack(root, requested_subject_id=requested, fallback=True)
     if not safe_id:
@@ -237,6 +259,7 @@ __all__ = [
     "grade_adapter",
     "load_pack",
     "overlay_for_role",
+    "pack_id_from_meta",
     "student_prompt_overlay",
     "teacher_prompt_overlay",
 ]

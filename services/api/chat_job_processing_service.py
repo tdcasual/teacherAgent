@@ -532,11 +532,10 @@ def _subject_id_from_assignment_detail(detail: Optional[Dict[str, Any]]) -> Opti
     if not isinstance(detail, dict):
         return None
     meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else {}
-    for key in ("subject_id", "pack_id"):
-        value = str(meta.get(key) or "").strip()
-        if value:
-            return value
-    return None
+    from .subject_pack_service import pack_id_from_meta
+
+    token = pack_id_from_meta(meta)
+    return token or None
 
 
 def _resolve_chat_subject_id(
@@ -545,27 +544,15 @@ def _resolve_chat_subject_id(
     deps: ComputeChatReplyDeps,
     role_hint: Optional[str],
 ) -> Optional[str]:
+    del role_hint
     assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
-    if assignment_id:
-        folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
-        if folder and folder.exists():
-            detail = deps.build_assignment_detail_cached(folder, include_text=False)
-            return _subject_id_from_assignment_detail(detail)
+    if not assignment_id:
         return None
-    if role_hint != "student" or not getattr(req, "student_id", None):
-        return None
-    profile: Dict[str, Any] = {}
-    profile_path = _resolve_student_profile_path(deps.data_dir, str(req.student_id or ""))
-    if profile_path is not None:
-        profile = deps.load_profile_file(profile_path)
-    date_str = deps.parse_date_str(getattr(req, "assignment_date", None))
-    found = deps.find_assignment_for_date(
-        date_str, student_id=req.student_id, class_name=profile.get("class_name")
-    )
-    if not found:
-        return None
-    detail = deps.build_assignment_detail_cached(found["folder"], include_text=False)
-    return _subject_id_from_assignment_detail(detail)
+    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if folder and folder.exists():
+        detail = deps.build_assignment_detail_cached(folder, include_text=False)
+        return _subject_id_from_assignment_detail(detail)
+    return None
 
 
 def _missing_student_attachment_reply(

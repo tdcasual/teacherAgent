@@ -35,6 +35,44 @@ def test_apply_grade_adapter_none_falls_back() -> None:
     assert gs.apply_grade_adapter(None, question={}, student_text="x") is None
 
 
+class _MalformedScoreAdapter:
+    def score_item(self, *, question, student_text):
+        del question, student_text
+        return {"score": "n/a", "status": "matched", "reason": "bad"}
+
+
+class _EmptyPayloadAdapter:
+    def score_item(self, *, question, student_text):
+        del question, student_text
+        return {}
+
+
+class _NonIterableStepsAdapter:
+    def score_item(self, *, question, student_text):
+        del question, student_text
+        return {"score": 1, "matched_steps": 123}
+
+
+def test_apply_grade_adapter_malformed_payload_returns_none() -> None:
+    question = {"question_id": "Q1"}
+    assert gs.apply_grade_adapter(_MalformedScoreAdapter(), question=question, student_text="x") is None
+    assert gs.apply_grade_adapter(_EmptyPayloadAdapter(), question=question, student_text="x") is None
+    assert gs.apply_grade_adapter(_NonIterableStepsAdapter(), question=question, student_text="x") is None
+
+
+def test_evaluate_question_malformed_adapter_uses_objective_match() -> None:
+    result = gs.evaluate_question(
+        question={"question_id": "Q1", "answer_text": "42"},
+        block_text="答案：42",
+        adapter=_MalformedScoreAdapter(),
+        llm_grade=False,
+        llm_confidence_threshold=0.6,
+    )
+    assert result["status"] == "matched"
+    assert result["reason"] == "numeric_match"
+    assert result["score"] == 1.0
+
+
 def test_evaluate_question_prefers_adapter_over_objective() -> None:
     result = gs.evaluate_question(
         question={"question_id": "Q1", "answer_text": "999"},
@@ -69,6 +107,16 @@ def test_resolve_assignment_pack_id_from_meta(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert gs.resolve_assignment_pack_id("HW1", tmp_path) == "math"
+
+
+def test_resolve_assignment_pack_id_prefers_pack_id(tmp_path: Path) -> None:
+    folder = tmp_path / "HW1"
+    folder.mkdir()
+    (folder / "meta.json").write_text(
+        '{"subject_id": "math", "pack_id": "physics"}',
+        encoding="utf-8",
+    )
+    assert gs.resolve_assignment_pack_id("HW1", tmp_path) == "physics"
 
 
 def test_resolve_assignment_pack_id_missing_meta_is_empty(tmp_path: Path) -> None:

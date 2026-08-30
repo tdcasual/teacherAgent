@@ -306,7 +306,9 @@ def resolve_assignment_pack_id(assignment_id: str, assignments_root: Path) -> st
         return ""
     if not isinstance(data, dict):
         return ""
-    return str(data.get("pack_id") or data.get("subject_id") or "").strip()
+    from services.api.subject_pack_service import pack_id_from_meta
+
+    return pack_id_from_meta(data)
 
 
 def load_grade_adapter(pack_id: str):
@@ -322,26 +324,26 @@ def apply_grade_adapter(adapter, *, question: dict, student_text: str) -> Option
         return None
     try:
         raw = adapter.score_item(question=question, student_text=student_text)
+        if not isinstance(raw, dict) or "score" not in raw:
+            return None
+        score = float(raw["score"])
+        confidence = float(raw.get("confidence") or 0.0)
+        status = str(raw.get("status") or "").strip()
+        if not status:
+            status = "matched" if score > 0 else "missed"
+        reason = str(raw.get("reason") or "adapter")
+        return {
+            "matched": status == "matched",
+            "student_answer": str(raw.get("student_answer") or ""),
+            "reason": reason,
+            "status": status,
+            "score": score,
+            "confidence": round(confidence, 3),
+            "matched_steps": list(raw.get("matched_steps") or []),
+            "missing_steps": list(raw.get("missing_steps") or []),
+        }
     except Exception:
         return None
-    if not isinstance(raw, dict):
-        return None
-    score = float(raw.get("score") or 0.0)
-    confidence = float(raw.get("confidence") or 0.0)
-    status = str(raw.get("status") or "").strip()
-    if not status:
-        status = "matched" if score > 0 else "missed"
-    reason = str(raw.get("reason") or "adapter")
-    return {
-        "matched": status == "matched",
-        "student_answer": str(raw.get("student_answer") or ""),
-        "reason": reason,
-        "status": status,
-        "score": score,
-        "confidence": round(confidence, 3),
-        "matched_steps": list(raw.get("matched_steps") or []),
-        "missing_steps": list(raw.get("missing_steps") or []),
-    }
 
 
 def evaluate_question(

@@ -136,6 +136,52 @@ def test_load_pack_empty_or_generic_does_not_log_fallback(packs_dir: Path) -> No
     assert events == []
 
 
+def test_pack_id_from_meta_prefers_pack_id() -> None:
+    assert svc.pack_id_from_meta({"pack_id": "physics", "subject_id": "math"}) == "physics"
+    assert svc.pack_id_from_meta({"subject_id": "math"}) == "math"
+    assert svc.pack_id_from_meta({}) == ""
+    assert svc.pack_id_from_meta(None) == ""
+
+
+def test_chinese_subject_alias_loads_named_pack(packs_dir: Path) -> None:
+    pack = svc.load_pack("物理")
+    assert pack.subject_id == "physics"
+    assert pack.fallback is False
+    assert "【学科 overlay：物理】" in svc.student_prompt_overlay("物理")
+    generic = svc.load_pack("通用")
+    assert generic.subject_id == "generic"
+    assert generic.fallback is False
+
+
+def test_invalid_pack_yaml_falls_back_to_generic(packs_dir: Path) -> None:
+    math_dir = packs_dir / "math"
+    math_dir.mkdir()
+    (math_dir / "pack.yaml").write_text(":{ not yaml", encoding="utf-8")
+    svc.clear_pack_cache()
+    events: list[tuple[str, dict[str, Any]]] = []
+    svc._fallback_logger = lambda event, payload: events.append((event, payload))
+    try:
+        pack = svc.load_pack("math")
+    finally:
+        svc._fallback_logger = None
+    assert pack.subject_id == "generic"
+    assert pack.fallback is True
+    assert events == [
+        ("subject_pack_fallback", {"subject_id": "math", "pack": "generic"}),
+    ]
+
+
+def test_invalid_generic_pack_still_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "subjects"
+    generic = root / "generic"
+    generic.mkdir(parents=True)
+    (generic / "pack.yaml").write_text(":{ not yaml", encoding="utf-8")
+    monkeypatch.setattr(svc, "PACKS_DIR", root)
+    svc.clear_pack_cache()
+    with pytest.raises(svc.SubjectPackError):
+        svc.load_pack("generic")
+
+
 def test_load_pack_rejects_path_traversal_as_generic_fallback(packs_dir: Path) -> None:
     events: list[tuple[str, dict[str, Any]]] = []
     svc._fallback_logger = lambda event, payload: events.append((event, payload))
