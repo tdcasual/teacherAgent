@@ -127,7 +127,7 @@ def _submit_deps(root: Path) -> StudentSubmitDeps:
             "ok": False,
             "created": False,
         },
-        resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+        load_assignment_teacher_id=lambda _assignment_id: None,
         diag_log=lambda _event, _payload: None,
         save_upload_file=_save_upload_file,
     )

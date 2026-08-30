@@ -172,7 +172,10 @@ def _attempt_teacher_route(
     stream: bool,
     token_sink: Optional[Callable[[str], None]],
 ) -> tuple[Optional[Any], ChatRuntimeRouteState]:
-    state = ChatRuntimeRouteState(actor=deps.resolve_teacher_id(teacher_id))
+    raw = str(teacher_id or "").strip()
+    if not raw:
+        return None, ChatRuntimeRouteState(reason="teacher_id_required")
+    state = ChatRuntimeRouteState(actor=deps.resolve_teacher_id(raw))
     config_payload = _load_teacher_model_config(state.actor, deps=deps, state=state)
     provider, mode, model = _conversation_route_target(config_payload)
     if not (provider and mode and model):

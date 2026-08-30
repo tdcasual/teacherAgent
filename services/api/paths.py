@@ -205,6 +205,20 @@ def student_session_file(student_id: str, session_id: str, core: Any | None = No
 # ---------------------------------------------------------------------------
 
 
+class TeacherIdentityError(ValueError):
+    def __init__(self, code: str = "teacher_id_required") -> None:
+        super().__init__(code)
+        self.status_code = 400
+        self.detail = code
+
+
+def require_teacher_id(teacher_id: Optional[str] = None) -> str:
+    raw = str(teacher_id or "").strip()
+    if not raw:
+        raise TeacherIdentityError("teacher_id_required")
+    return safe_fs_id(raw, prefix="teacher")
+
+
 def resolve_teacher_id(teacher_id: Optional[str] = None) -> str:
     raw = (teacher_id or _settings.default_teacher_id() or "teacher").strip()
     # Use a stable filesystem-safe id; keep original value in USER.md if needed.

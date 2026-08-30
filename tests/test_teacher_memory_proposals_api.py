@@ -212,7 +212,10 @@ class TeacherMemoryProposalsApiTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
             with TestClient(app_mod.app) as client:
-                res = client.get("/teacher/memory/proposals", params={"status": "bad_status"})
+                res = client.get(
+                    "/teacher/memory/proposals",
+                    params={"teacher_id": "teacher", "status": "bad_status"},
+                )
                 self.assertEqual(res.status_code, 400)
 
 

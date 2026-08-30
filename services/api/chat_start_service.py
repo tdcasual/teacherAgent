@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .analysis_target_resolution_service import extract_report_id_from_text
 from .chat_execution_timeline_service import append_chat_execution_timeline
+from .paths import TeacherIdentityError
 from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
@@ -198,6 +199,15 @@ def _validate_start_request(req: Any, deps: ChatStartDeps) -> str:
     return request_id
 
 
+def _start_teacher_id(req: Any, policy: Any, deps: ChatStartDeps) -> str:
+    if policy.role != "teacher":
+        return ""
+    try:
+        return deps.resolve_teacher_id(req.teacher_id)
+    except TeacherIdentityError as exc:
+        raise deps.http_error(400, str(exc) or "teacher_id_required") from exc
+
+
 def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _StartContext:
     role_hint = deps.detect_role_hint(req)
     policy = get_role_runtime_policy(role_hint)
@@ -208,7 +218,7 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         )
     if policy.default_session_id and not session_id:
         session_id = policy.default_session_id
-    teacher_id = deps.resolve_teacher_id(req.teacher_id) if policy.role == "teacher" else ""
+    teacher_id = _start_teacher_id(req, policy, deps)
     lane_id = deps.resolve_chat_lane_id(
         role_hint,
         session_id=session_id,

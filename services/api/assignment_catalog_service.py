@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
+from .assignment.visibility import student_can_read_assignment
+
 _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
 _MAX_LIST_LIMIT = 100
@@ -158,8 +160,18 @@ def _normalize_paging(limit: Any, cursor: Any) -> tuple[int, int]:
     return limit_int, cursor_int
 
 
+def _meta_matches_owner(meta: Dict[str, Any], owner_teacher_id: Optional[str]) -> bool:
+    if not owner_teacher_id:
+        return True
+    return str(meta.get("teacher_id") or "").strip() == owner_teacher_id
+
+
 def list_assignments(
-    *, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps: AssignmentCatalogDeps
+    *,
+    limit: Any = _DEFAULT_LIST_LIMIT,
+    cursor: Any = 0,
+    owner_teacher_id: Optional[str] = None,
+    deps: AssignmentCatalogDeps,
 ) -> Dict[str, Any]:
     limit_int, cursor_int = _normalize_paging(limit, cursor)
     assignments_dir = deps.data_dir / "assignments"
@@ -178,6 +190,8 @@ def list_assignments(
             continue
         assignment_id = folder.name
         meta = deps.load_assignment_meta(folder)
+        if not _meta_matches_owner(meta, owner_teacher_id):
+            continue
         assignment_date = resolve_assignment_date(meta, folder)
         questions_path = folder / "questions.csv"
         count = deps.count_csv_rows(questions_path) if questions_path.exists() else 0
@@ -230,6 +244,8 @@ def find_assignment_for_date(
         if not folder.is_dir():
             continue
         meta = deps.load_assignment_meta(folder)
+        if not student_can_read_assignment(meta, for_today=True, assignment_id=folder.name):
+            continue
         assignment_date = resolve_assignment_date(meta, folder)
         if assignment_date != date_str:
             continue

@@ -137,7 +137,12 @@ def test_student_history_session_success_and_validation() -> None:
 def test_teacher_history_sessions_and_view_state() -> None:
     deps, _ = _make_deps()
 
-    sessions = teacher_history_sessions(None, limit=1, cursor=0, deps=deps)
+    with pytest.raises(SessionHistoryError) as missing:
+        teacher_history_sessions(None, limit=1, cursor=0, deps=deps)
+    assert missing.value.status_code == 400
+    assert missing.value.detail == "teacher_id_required"
+
+    sessions = teacher_history_sessions("tea-1", limit=1, cursor=0, deps=deps)
     assert sessions["ok"] is True
     assert sessions["teacher_id"] == "tea-1"
     assert len(sessions["sessions"]) == 1
@@ -174,7 +179,7 @@ def test_teacher_history_session_success_and_validation() -> None:
     with pytest.raises(SessionHistoryError, match="session_id is required"):
         teacher_history_session("", "tea-1", cursor=0, limit=20, direction="older", deps=deps)
 
-    out = teacher_history_session("sess-9", None, cursor=1, limit=5, direction="older", deps=deps)
+    out = teacher_history_session("sess-9", "tea-1", cursor=1, limit=5, direction="older", deps=deps)
     assert out["ok"] is True
     assert out["teacher_id"] == "tea-1"
     assert out["messages"] == [{"id": 1}, {"id": 2}]

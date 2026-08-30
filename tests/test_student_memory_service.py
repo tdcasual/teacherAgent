@@ -113,6 +113,37 @@ class StudentMemoryServiceTest(unittest.TestCase):
             self.assertTrue(listed_other.get("ok"))
             self.assertEqual(listed_other.get("proposals"), [])
 
+    def test_create_and_list_reject_missing_teacher_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = StudentMemoryDeps(
+                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                teacher_workspace_dir=lambda teacher_id: root / "teacher_workspaces" / str(teacher_id),
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+                assignment_evidence_high_mastery_ratio=0.85,
+                assignment_evidence_low_mastery_ratio=0.45,
+            )
+            created = create_proposal_api(
+                teacher_id=None,
+                student_id="S001",
+                memory_type="learning_preference",
+                content="学生偏好先给结论，再分步讲解。",
+                evidence_refs=["session:main"],
+                source="manual",
+                deps=deps,
+            )
+            self.assertFalse(created.get("ok"))
+            self.assertEqual(created.get("error"), "teacher_id_required")
+            listed = list_proposals_api(
+                teacher_id=None,
+                student_id="S001",
+                status="proposed",
+                limit=20,
+                deps=deps,
+            )
+            self.assertFalse(listed.get("ok"))
+            self.assertEqual(listed.get("error"), "teacher_id_required")
+
     def test_create_rejects_blocked_content(self):
         with TemporaryDirectory() as td:
             root = Path(td)

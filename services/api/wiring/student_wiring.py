@@ -28,11 +28,22 @@ from ..student_submit_service import StudentSubmitDeps
 from . import get_app_core as _app_core
 
 
+def _load_assignment_teacher_id(assignment_id: str, core) -> str | None:
+    try:
+        folder = core.resolve_assignment_dir(assignment_id)
+        meta = core.load_assignment_meta(folder)
+    except Exception:  # policy: allowed-broad-except
+        return None
+    if not isinstance(meta, dict):
+        return None
+    teacher_id = str(meta.get("teacher_id") or "").strip()
+    return teacher_id or None
+
+
 def _student_submit_deps(core=None):
     _ac = _app_core(core)
-    resolve_teacher_id = _ac.resolve_teacher_id
     student_memory_deps = StudentMemoryDeps(
-        resolve_teacher_id=resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
@@ -53,7 +64,7 @@ def _student_submit_deps(core=None):
             evidence=kwargs.get("evidence") if isinstance(kwargs.get("evidence"), dict) else None,
             request_id=(str(kwargs.get("request_id") or "") or None),
         ),
-        resolve_teacher_id=resolve_teacher_id,
+        load_assignment_teacher_id=lambda assignment_id: _load_assignment_teacher_id(assignment_id, _ac),
         diag_log=_ac.diag_log,
         save_upload_file=_ac.save_upload_file,
     )

@@ -87,8 +87,15 @@ def student_history_session(
     return {"ok": True, "student_id": student_id, "session_id": session_id, "messages": messages, "next_cursor": next_cursor}
 
 
+def _history_teacher_id(teacher_id: Optional[str], deps: SessionHistoryDeps) -> str:
+    raw = str(teacher_id or "").strip()
+    if not raw:
+        raise SessionHistoryError(status_code=400, detail="teacher_id_required")
+    return deps.resolve_teacher_id(raw)
+
+
 def teacher_history_sessions(teacher_id: Optional[str], limit: int, cursor: int, *, deps: SessionHistoryDeps) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    teacher_id_final = _history_teacher_id(teacher_id, deps)
     items = deps.load_teacher_sessions_index(teacher_id_final)
     page, next_cursor, total = deps.paginate_session_items(items, cursor, limit)
     return {
@@ -101,14 +108,14 @@ def teacher_history_sessions(teacher_id: Optional[str], limit: int, cursor: int,
 
 
 def teacher_session_view_state(teacher_id: Optional[str], *, deps: SessionHistoryDeps) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    teacher_id_final = _history_teacher_id(teacher_id, deps)
     state = deps.load_teacher_session_view_state(teacher_id_final)
     return {"ok": True, "teacher_id": teacher_id_final, "state": state}
 
 
 def update_teacher_session_view_state(req: Dict[str, Any], *, deps: SessionHistoryDeps) -> Dict[str, Any]:
     teacher_id = str((req or {}).get("teacher_id") or "").strip()
-    teacher_id_final = deps.resolve_teacher_id(teacher_id or None)
+    teacher_id_final = _history_teacher_id(teacher_id or None, deps)
     incoming = deps.normalize_session_view_state_payload((req or {}).get("state") or {})
     current = deps.load_teacher_session_view_state(teacher_id_final)
     if deps.compare_iso_ts(current.get("updated_at"), incoming.get("updated_at")) > 0:
@@ -129,7 +136,7 @@ def teacher_history_session(
     *,
     deps: SessionHistoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    teacher_id_final = _history_teacher_id(teacher_id, deps)
     session_id = (session_id or "").strip()
     if not session_id:
         raise SessionHistoryError(status_code=400, detail="session_id is required")

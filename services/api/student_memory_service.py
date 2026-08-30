@@ -185,6 +185,13 @@ def _build_student_memory_provenance(
         result["upstream"] = provenance
     return result
 
+def _final_teacher_id(teacher_id: Optional[str], deps: StudentMemoryDeps) -> str:
+    raw = str(teacher_id or "").strip()
+    if not raw:
+        raise ValueError("teacher_id_required")
+    return deps.resolve_teacher_id(raw)
+
+
 def create_proposal_api(
     *,
     teacher_id: Optional[str],
@@ -196,7 +203,10 @@ def create_proposal_api(
     provenance: Optional[Dict[str, Any]] = None,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    try:
+        teacher_id_final = _final_teacher_id(teacher_id, deps)
+    except ValueError:
+        return {"ok": False, "error": "teacher_id_required"}
     sid = str(student_id or "").strip()
     if not sid:
         return {"ok": False, "error": "student_id_required"}
@@ -639,7 +649,10 @@ def list_proposals_api(
     limit: int,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    try:
+        teacher_id_final = _final_teacher_id(teacher_id, deps)
+    except ValueError:
+        return {"ok": False, "error": "teacher_id_required"}
     student_filter = str(student_id or "").strip() or None
     status_norm = str(status or "").strip().lower() or None
     if status_norm and status_norm not in _ALLOWED_STATUSES:
@@ -674,7 +687,10 @@ def review_proposal_api(
     approve: bool,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    try:
+        teacher_id_final = _final_teacher_id(teacher_id, deps)
+    except ValueError:
+        return {"ok": False, "error": "teacher_id_required"}
     pid = str(proposal_id or "").strip()
     if not pid:
         return {"ok": False, "error": "proposal_id_required"}
@@ -711,7 +727,10 @@ def delete_proposal_api(
     teacher_id: Optional[str],
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    try:
+        teacher_id_final = _final_teacher_id(teacher_id, deps)
+    except ValueError:
+        return {"ok": False, "error": "teacher_id_required"}
     pid = str(proposal_id or "").strip()
     if not pid:
         return {"ok": False, "error": "proposal_id_required"}
@@ -752,7 +771,10 @@ def insights_api(
     days: int,
     deps: StudentMemoryDeps,
 ) -> Dict[str, Any]:
-    teacher_id_final = deps.resolve_teacher_id(teacher_id)
+    try:
+        teacher_id_final = _final_teacher_id(teacher_id, deps)
+    except ValueError:
+        return {"ok": False, "error": "teacher_id_required"}
     student_filter = str(student_id or "").strip() or None
     span = max(1, min(int(days or 14), 90))
     cutoff = datetime.now() - timedelta(days=span)

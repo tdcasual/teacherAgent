@@ -36,7 +36,16 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
             teacher_dir.mkdir(parents=True, exist_ok=True)
 
             (auto_dir / "meta.json").write_text(
-                json.dumps({"assignment_id": "AUTO_S1_2026-02-08", "source": "auto", "scope": "public"}, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "assignment_id": "AUTO_S1_2026-02-08",
+                        "source": "auto",
+                        "scope": "public",
+                        "teacher_id": "t_auto",
+                        "visibility_status": "published",
+                    },
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             (teacher_dir / "meta.json").write_text(
@@ -47,6 +56,8 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
                         "source": "teacher",
                         "scope": "student",
                         "student_ids": ["S1"],
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "published",
                     },
                     ensure_ascii=False,
                 ),
@@ -62,6 +73,82 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
 
             self.assertIsNotNone(found)
             self.assertEqual(found["meta"].get("assignment_id"), "HW_2026-02-08")
+
+    def test_find_assignment_for_date_hides_meta_without_teacher_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "HW_ORPHAN"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_ORPHAN",
+                        "date": "2026-02-08",
+                        "source": "teacher",
+                        "scope": "public",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            found = find_assignment_for_date(
+                date_str="2026-02-08",
+                student_id="S1",
+                class_name="高二2403班",
+                deps=self._catalog_deps(root),
+            )
+            self.assertIsNone(found)
+
+    def test_find_assignment_for_date_treats_missing_visibility_with_owner_as_published(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "HW_LEGACY"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_LEGACY",
+                        "date": "2026-02-08",
+                        "source": "teacher",
+                        "scope": "public",
+                        "teacher_id": "t_zhang",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            found = find_assignment_for_date(
+                date_str="2026-02-08",
+                student_id="S1",
+                class_name="高二2403班",
+                deps=self._catalog_deps(root),
+            )
+            self.assertIsNotNone(found)
+            self.assertEqual(found["meta"].get("assignment_id"), "HW_LEGACY")
+
+    def test_list_assignments_filters_by_owner_teacher_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            assignments_dir = root / "data" / "assignments"
+            for aid, owner in (("HW_A", "t_zhang"), ("HW_B", "t_li"), ("HW_ORPHAN", "")):
+                folder = assignments_dir / aid
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "meta.json").write_text(
+                    json.dumps(
+                        {
+                            "assignment_id": aid,
+                            "teacher_id": owner,
+                            "generated_at": "2026-02-08T09:00:00",
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+            deps = self._catalog_deps(root)
+            owned = list_assignments(limit=50, cursor=0, owner_teacher_id="t_zhang", deps=deps)
+            ids = [item.get("assignment_id") for item in owned.get("assignments") or []]
+            self.assertEqual(ids, ["HW_A"])
+            self.assertEqual(owned.get("total"), 1)
 
     def test_build_assignment_detail_includes_delivery_and_stem_text(self):
         with TemporaryDirectory() as td:

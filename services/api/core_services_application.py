@@ -444,7 +444,15 @@ def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def list_assignments(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
-    return _list_assignments_impl(limit=limit, cursor=cursor, deps=_assignment_catalog_deps())
+    from .assignment.application import listing_owner_teacher_id
+
+    owner = listing_owner_teacher_id()
+    return _list_assignments_impl(
+        limit=limit,
+        cursor=cursor,
+        owner_teacher_id=owner,
+        deps=_assignment_catalog_deps(),
+    )
 
 
 def parse_list_value(value: Any) -> List[str]:

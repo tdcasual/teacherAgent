@@ -43,6 +43,18 @@ class ChatLaneServiceTest(unittest.TestCase):
         self.assertEqual(teacher, "teacher:Teacher_A:main")
         self.assertTrue(unknown.startswith("unknown:"))
 
+    def test_teacher_lane_without_teacher_id_raises(self):
+        from services.api.paths import TeacherIdentityError, require_teacher_id
+
+        with self.assertRaises(TeacherIdentityError):
+            resolve_chat_lane_id(
+                "teacher",
+                safe_fs_id=_safe_fs_id,
+                resolve_teacher_id=require_teacher_id,
+                session_id="main",
+                teacher_id="",
+            )
+
     def test_resolve_chat_lane_id_from_job_prefers_existing_lane(self):
         lane = resolve_chat_lane_id_from_job(
             {"lane_id": "lane_existing"},

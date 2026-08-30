@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from ..api_models import TeacherMemoryProposalReviewRequest
+from ..paths import TeacherIdentityError, require_teacher_id
 from .teacher_route_helpers import ensure_ok_error_detail, scoped_teacher_id
+
+
+def _required_teacher_id(teacher_id) -> str:
+    raw = str(teacher_id or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="teacher_id_required")
+    try:
+        return require_teacher_id(raw)
+    except TeacherIdentityError as exc:
+        raise HTTPException(status_code=400, detail=str(exc) or "teacher_id_required") from exc
 
 
 def register_memory_routes(router: APIRouter, core: Any) -> None:
@@ -15,7 +26,7 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
         result = core.teacher_memory_list_proposals(
-            core.resolve_teacher_id(teacher_id_scoped),
+            _required_teacher_id(teacher_id_scoped),
             status=status,
             limit=limit,
         )
@@ -25,7 +36,7 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
     @router.get("/teacher/memory/insights")
     def teacher_memory_insights_api(teacher_id: Optional[str] = None, days: int = 14) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        teacher_id_final = core.resolve_teacher_id(teacher_id_scoped)
+        teacher_id_final = _required_teacher_id(teacher_id_scoped)
         return core.teacher_memory_insights(teacher_id_final, days=days)
 
     @router.post("/teacher/memory/proposals/{proposal_id}/review")
@@ -34,7 +45,7 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(req.teacher_id)
         result = core.teacher_memory_apply(
-            core.resolve_teacher_id(teacher_id_scoped),
+            _required_teacher_id(teacher_id_scoped),
             proposal_id=str(proposal_id or "").strip(),
             approve=bool(req.approve),
         )
@@ -48,7 +59,7 @@ def register_memory_routes(router: APIRouter, core: Any) -> None:
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
         result = core.teacher_memory_delete_proposal(
-            core.resolve_teacher_id(teacher_id_scoped),
+            _required_teacher_id(teacher_id_scoped),
             proposal_id=str(proposal_id or "").strip(),
         )
         if result.get("error"):

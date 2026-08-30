@@ -92,15 +92,15 @@ class StudentMemoryAutoTest(unittest.TestCase):
             app_mod.get_core().write_chat_job(record["job_id"], record, overwrite=True)
             app_mod.get_core().process_chat_job(record["job_id"])
 
-            default_teacher = app_mod.get_core().resolve_teacher_id(None)
+            with self.assertRaises(Exception) as ctx:
+                app_mod.get_core().require_teacher_id(None)
+            self.assertIn("teacher_id_required", str(ctx.exception))
             with TestClient(app_mod.app) as client:
                 listed = client.get(
                     "/teacher/student-memory/proposals",
-                    params={"teacher_id": default_teacher, "student_id": student_id, "status": "proposed"},
+                    params={"student_id": student_id, "status": "proposed"},
                 )
-                self.assertEqual(listed.status_code, 200)
-                proposals = listed.json().get("proposals") or []
-                self.assertFalse(any(p.get("source") == "auto_student_infer" for p in proposals))
+                self.assertIn(listed.status_code, {400, 401, 403})
 
     def test_student_turn_auto_respects_daily_quota(self):
         with TemporaryDirectory() as td:

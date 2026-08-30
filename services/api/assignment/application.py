@@ -5,6 +5,7 @@ from typing import Any, Optional
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
 from ..auth_service import AuthError, auth_required, require_principal
 from .deps import AssignmentAccessDeps, AssignmentApplicationDeps
+from .visibility import student_can_read_assignment
 
 
 class AssignmentAccessError(Exception):
@@ -12,6 +13,54 @@ class AssignmentAccessError(Exception):
         super().__init__(detail)
         self.status_code = int(status_code)
         self.detail = str(detail or "assignment_access_error")
+
+
+def listing_owner_teacher_id() -> Optional[str]:
+    try:
+        principal = require_principal(roles=("teacher", "admin", "service"))
+    except AuthError as exc:
+        raise AssignmentAccessError(exc.status_code, exc.detail) from exc
+    if principal is None:
+        return None
+    if principal.role in {"admin", "service"}:
+        return None
+    actor = str(principal.actor_id or "").strip()
+    if not actor:
+        raise AssignmentAccessError(400, "teacher_id_required")
+    return actor
+
+
+def _load_assignment_meta(assignment_id: str, *, deps: AssignmentAccessDeps):
+    try:
+        folder = deps.resolve_assignment_dir(assignment_id)
+    except ValueError as exc:
+        raise AssignmentAccessError(400, str(exc)) from exc
+    if not folder.exists():
+        raise AssignmentAccessError(404, "assignment not found")
+    meta = deps.load_assignment_meta(folder)
+    return meta if isinstance(meta, dict) else {}
+
+
+def _require_teacher_owner(actor_id: str, meta: dict) -> None:
+    owner = str(meta.get("teacher_id") or "").strip()
+    if not owner or owner != actor_id:
+        raise AssignmentAccessError(403, "forbidden_assignment_owner")
+
+
+def _require_student_assignment_access(
+    assignment_id: str, principal: Any, meta: dict, *, deps: AssignmentAccessDeps
+) -> None:
+    if not student_can_read_assignment(meta, assignment_id=assignment_id):
+        raise AssignmentAccessError(403, "forbidden_assignment_scope")
+    class_name = ""
+    try:
+        profile_path = deps.resolve_student_profile_path(principal.actor_id)
+        profile = deps.load_profile_file(profile_path)
+        class_name = str(profile.get("class_name") or "").strip()
+    except Exception:  # policy: allowed-broad-except
+        class_name = ""
+    if int(deps.assignment_specificity(meta, principal.actor_id, class_name)) <= 0:
+        raise AssignmentAccessError(403, "forbidden_assignment_scope")
 
 
 def require_assignment_access(assignment_id: str, *, deps: AssignmentAccessDeps) -> None:
@@ -23,27 +72,16 @@ def require_assignment_access(assignment_id: str, *, deps: AssignmentAccessDeps)
         raise AssignmentAccessError(exc.status_code, exc.detail) from exc
     if principal is None:
         return
-    if principal.role in {"teacher", "admin", "service"}:
+    if principal.role in {"admin", "service"}:
         return
-
-    # Student: same specificity rules as assignment_today selection.
-    try:
-        folder = deps.resolve_assignment_dir(assignment_id)
-    except ValueError as exc:
-        raise AssignmentAccessError(400, str(exc)) from exc
-    if not folder.exists():
-        raise AssignmentAccessError(404, "assignment not found")
-
-    meta = deps.load_assignment_meta(folder)
-    class_name = ""
-    try:
-        profile_path = deps.resolve_student_profile_path(principal.actor_id)
-        profile = deps.load_profile_file(profile_path)
-        class_name = str(profile.get("class_name") or "").strip()
-    except Exception:  # policy: allowed-broad-except
-        class_name = ""
-    if int(deps.assignment_specificity(meta, principal.actor_id, class_name)) <= 0:
-        raise AssignmentAccessError(403, "forbidden_assignment_scope")
+    meta = _load_assignment_meta(assignment_id, deps=deps)
+    if principal.role == "teacher":
+        actor = str(principal.actor_id or "").strip()
+        if not actor:
+            raise AssignmentAccessError(400, "teacher_id_required")
+        _require_teacher_owner(actor, meta)
+        return
+    _require_student_assignment_access(assignment_id, principal, meta, deps=deps)
 
 
 async def list_assignments(
@@ -58,6 +96,7 @@ async def get_teacher_assignment_progress(
     include_students: bool,
     deps: AssignmentApplicationDeps,
 ) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
     return await deps.teacher_assignment_progress(assignment_id, include_students)
 
 

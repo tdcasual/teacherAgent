@@ -103,6 +103,38 @@ class ChatStartServiceTest(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(result['status'], 'queued')
 
+    def test_teacher_missing_teacher_id_is_4xx(self):
+        from services.api.paths import require_teacher_id
+
+        def _http_error(code, msg):
+            return ValueError(f"{code}: {msg}")
+
+        deps, _ = _make_deps(
+            http_error=_http_error,
+            detect_role_hint=lambda req: "teacher",
+            resolve_teacher_id=require_teacher_id,
+        )
+        req = _FakeRequest(role="teacher", teacher_id="", student_id="")
+        with self.assertRaises(ValueError) as ctx:
+            start_chat_orchestration(req, deps=deps)
+        self.assertIn("400", str(ctx.exception))
+        self.assertIn("teacher_id_required", str(ctx.exception))
+
+    def test_student_chat_does_not_require_teacher_id(self):
+        from services.api.paths import require_teacher_id
+
+        called = {"teacher": 0}
+
+        def _require(tid):
+            called["teacher"] += 1
+            return require_teacher_id(tid)
+
+        deps, _ = _make_deps(resolve_teacher_id=_require)
+        req = _FakeRequest(role="student", teacher_id="", student_id="stu-1")
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result["ok"])
+        self.assertEqual(called["teacher"], 0)
+
     def test_enqueue_failure_marks_job_failed(self):
         """When enqueue_chat_job raises, job should be marked failed, not crash."""
         written = {}

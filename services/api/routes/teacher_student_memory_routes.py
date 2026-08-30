@@ -22,7 +22,7 @@ from .teacher_route_helpers import ensure_ok_error_detail, scoped_teacher_id
 
 def _student_memory_deps(core: Any) -> StudentMemoryDeps:
     return StudentMemoryDeps(
-        resolve_teacher_id=core.resolve_teacher_id,
+        resolve_teacher_id=core.require_teacher_id,
         teacher_workspace_dir=core.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         assignment_evidence_high_mastery_ratio=core.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,

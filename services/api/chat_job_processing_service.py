@@ -425,7 +425,10 @@ def _teacher_extra_system(
     teacher_id_override: Optional[str],
     workflow_payload: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    teacher_id = deps.resolve_teacher_id(teacher_id_override or req.teacher_id)
+    raw = str(teacher_id_override or getattr(req, "teacher_id", "") or "").strip()
+    if not raw:
+        return None, None
+    teacher_id = deps.resolve_teacher_id(raw)
     teacher_context = deps.teacher_build_context(
         teacher_id, last_user_text, 6000, str(session_id or "main")
     )

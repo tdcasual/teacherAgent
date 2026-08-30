@@ -20,7 +20,13 @@ def _persist_teacher_history(
     deps: ChatJobProcessDeps,
     status_writer: _ChatJobStatusWriter,
 ) -> tuple[bool, str, str]:
-    teacher_id = str(job.get("teacher_id") or "").strip() or deps.resolve_teacher_id(req.teacher_id)
+    raw = str(job.get("teacher_id") or "").strip() or str(getattr(req, "teacher_id", "") or "").strip()
+    if not raw:
+        status_writer.transition(
+            "failed", {"error": "teacher_id_required", "error_detail": "teacher_id_required"}
+        )
+        return False, "", str(job.get("session_id") or "").strip() or "main"
+    teacher_id = deps.resolve_teacher_id(raw)
     session_id = str(job.get("session_id") or "").strip() or "main"
     try:
         if not user_turn_persisted:

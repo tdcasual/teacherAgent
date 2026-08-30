@@ -30,13 +30,57 @@ def test_require_assignment_access_skips_when_auth_off(monkeypatch, tmp_path):
     require_assignment_access("HW_1", deps=_deps(folder=tmp_path))
 
 
-def test_require_assignment_access_allows_teacher(monkeypatch, tmp_path):
+def test_require_assignment_access_allows_owning_teacher(monkeypatch, tmp_path):
     monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
     monkeypatch.setattr(
         "services.api.assignment.application.require_principal",
         lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
     )
-    require_assignment_access("HW_1", deps=_deps(folder=tmp_path, specificity=0))
+    require_assignment_access(
+        "HW_1",
+        deps=_deps(folder=tmp_path, specificity=0, meta={"teacher_id": "t1"}),
+    )
+
+
+def test_require_assignment_access_forbids_other_teacher(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_OTHER"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_OTHER",
+            deps=_deps(folder=folder, specificity=0, meta={"teacher_id": "t2"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_owner"
+
+
+def test_require_assignment_access_teacher_missing_actor_id_is_4xx(monkeypatch, tmp_path):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_1",
+            deps=_deps(folder=tmp_path, meta={"teacher_id": "t1"}),
+        )
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "teacher_id_required"
+
+
+def test_require_assignment_access_admin_can_read_orphan(monkeypatch, tmp_path):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="admin", role="admin"),
+    )
+    require_assignment_access("HW_1", deps=_deps(folder=tmp_path, specificity=0, meta={}))
 
 
 def test_require_assignment_access_forbids_out_of_scope_student(monkeypatch, tmp_path):
@@ -53,7 +97,7 @@ def test_require_assignment_access_forbids_out_of_scope_student(monkeypatch, tmp
             deps=_deps(
                 folder=folder,
                 specificity=0,
-                meta={"scope": "student", "student_ids": ["student_b"]},
+                meta={"scope": "student", "student_ids": ["student_b"], "teacher_id": "t1"},
             ),
         )
     assert exc.value.status_code == 403
@@ -68,7 +112,74 @@ def test_require_assignment_access_allows_in_scope_student(monkeypatch, tmp_path
         "services.api.assignment.application.require_principal",
         lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
     )
-    require_assignment_access("HW_OK", deps=_deps(folder=folder, specificity=3))
+    require_assignment_access(
+        "HW_OK",
+        deps=_deps(folder=folder, specificity=3, meta={"teacher_id": "t1"}),
+    )
+
+
+def test_require_assignment_access_hides_student_when_meta_has_no_teacher_id(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_ORPHAN"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_ORPHAN",
+            deps=_deps(folder=folder, specificity=3, meta={"scope": "public"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"
+
+
+def test_require_assignment_access_student_missing_visibility_with_owner_is_published(
+    monkeypatch, tmp_path
+):
+    folder = tmp_path / "HW_LEGACY"
+    folder.mkdir()
+    logs: list[tuple[str, dict]] = []
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    monkeypatch.setattr(
+        "services.api.assignment.visibility.log_missing_visibility_owner",
+        lambda **payload: logs.append(("assignment.meta.missing_owner", dict(payload))),
+    )
+    require_assignment_access(
+        "HW_LEGACY",
+        deps=_deps(
+            folder=folder,
+            specificity=3,
+            meta={"teacher_id": "t1", "scope": "public"},
+        ),
+    )
+    assert logs
+    assert logs[0][0] == "assignment.meta.missing_owner"
+
+
+def test_require_assignment_access_student_draft_is_hidden(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_DRAFT"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_DRAFT",
+            deps=_deps(
+                folder=folder,
+                specificity=3,
+                meta={"teacher_id": "t1", "visibility_status": "draft"},
+            ),
+        )
+    assert exc.value.status_code == 403
 
 
 def test_require_assignment_access_missing_assignment_is_404(monkeypatch, tmp_path):

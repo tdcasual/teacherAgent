@@ -44,7 +44,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                     "ok": False,
                     "created": False,
                 },
-                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                load_assignment_teacher_id=lambda _assignment_id: None,
                 diag_log=lambda _event, _payload: None,
                 save_upload_file=_save_upload_file,
             )
@@ -81,7 +81,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                     "ok": False,
                     "created": False,
                 },
-                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                load_assignment_teacher_id=lambda _assignment_id: None,
                 diag_log=lambda _event, _payload: None,
                 save_upload_file=_save_upload_file,
             )
@@ -112,7 +112,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                     "ok": False,
                     "created": False,
                 },
-                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                load_assignment_teacher_id=lambda _assignment_id: None,
                 diag_log=lambda _event, _payload: None,
                 save_upload_file=_save_upload_file,
             )
@@ -141,7 +141,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                     "ok": False,
                     "created": False,
                 },
-                resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+                load_assignment_teacher_id=lambda _assignment_id: None,
                 diag_log=lambda _event, _payload: None,
                 save_upload_file=_save_upload_file,
             )
@@ -196,7 +196,9 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
                 run_script=_run_script,
                 compute_assignment_progress=_compute_assignment_progress,
                 student_memory_auto_propose_from_assignment_evidence=_auto_propose,
-                resolve_teacher_id=lambda value: str(value or "teacher-default"),
+                load_assignment_teacher_id=lambda assignment_id: (
+                    "t_zhang" if assignment_id == "HW_1" else None
+                ),
                 diag_log=lambda _event, _payload: None,
                 save_upload_file=_save_upload_file,
             )
@@ -212,10 +214,53 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result.get("ok"))
             self.assertEqual(captured.get("progress_call"), ("HW_1", True))
             auto_kwargs = captured.get("auto_kwargs") or {}
-            self.assertEqual(auto_kwargs.get("teacher_id"), "teacher-default")
+            self.assertEqual(auto_kwargs.get("teacher_id"), "t_zhang")
             self.assertEqual(auto_kwargs.get("student_id"), "S1")
             self.assertEqual(auto_kwargs.get("assignment_id"), "HW_1")
             self.assertIsInstance(auto_kwargs.get("evidence"), dict)
+
+    async def test_submit_skips_memory_when_assignment_has_no_teacher_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"auto": 0}
+
+            def _auto_propose(**kwargs):
+                captured["auto"] += 1
+                captured["auto_kwargs"] = dict(kwargs)
+                return {"ok": True, "created": True, "proposal_id": "smem_1"}
+
+            deps = StudentSubmitDeps(
+                uploads_dir=root / "uploads",
+                app_root=root / "repo",
+                student_submissions_dir=root / "submissions",
+                run_script=lambda _args: "ok",
+                compute_assignment_progress=lambda _assignment_id, _include_students: {
+                    "ok": True,
+                    "students": [
+                        {
+                            "student_id": "S1",
+                            "evidence": {
+                                "schema": "assignment_progress_evidence/v1",
+                                "signals": {"submitted": True, "best_graded_total": 10, "best_score_earned": 3},
+                            },
+                        }
+                    ],
+                },
+                student_memory_auto_propose_from_assignment_evidence=_auto_propose,
+                load_assignment_teacher_id=lambda _assignment_id: None,
+                diag_log=lambda _event, _payload: None,
+                save_upload_file=_save_upload_file,
+            )
+
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(captured["auto"], 0)
 
 
 class StudentSubmitServiceImportGuardTest(unittest.TestCase):

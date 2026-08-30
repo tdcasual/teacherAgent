@@ -24,7 +24,7 @@ class StudentSubmitDeps:
     run_script: Callable[[List[str]], str]
     compute_assignment_progress: Callable[[str, bool], dict]
     student_memory_auto_propose_from_assignment_evidence: Callable[..., dict]
-    resolve_teacher_id: Callable[[str | None], str]
+    load_assignment_teacher_id: Callable[[str], str | None]
     diag_log: Callable[[str, dict], None]
     sanitize_filename: Callable[[str], str]
 
@@ -64,7 +64,7 @@ async def reproduce_vulnerability():
         run_script=lambda args: "mock output",
         compute_assignment_progress=lambda _assignment_id, _include_students: {"ok": False},
         student_memory_auto_propose_from_assignment_evidence=lambda **_kwargs: {"ok": False, "created": False},
-        resolve_teacher_id=lambda teacher_id=None: str(teacher_id or "teacher"),
+        load_assignment_teacher_id=lambda _assignment_id: None,
         diag_log=lambda _event, _payload: None,
         sanitize_filename=sanitize_filename
     )
