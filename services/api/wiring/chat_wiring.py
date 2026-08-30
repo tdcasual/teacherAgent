@@ -215,6 +215,7 @@ def _chat_start_deps(core: Any | None = None):
         append_teacher_session_message=_ac.append_teacher_session_message,
         update_teacher_session_index=_ac.update_teacher_session_index,
         parse_date_str=_ac.parse_date_str,
+        load_student_sessions_index=_ac.load_student_sessions_index,
         resolve_chat_attachment_context=lambda **kwargs: _resolve_chat_attachment_context_impl(
             deps=attachment_deps,
             **kwargs,

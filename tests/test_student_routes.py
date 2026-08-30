@@ -10,6 +10,7 @@ def _has_route(router, method, path):
 
 def test_student_routes_build_router():
     router = student_routes.build_router(object())
+    assert _has_route(router, "GET", "/student/assignments/history")
     assert _has_route(router, "GET", "/student/history/sessions")
     assert _has_route(router, "GET", "/student/session/view-state")
     assert _has_route(router, "PUT", "/student/session/view-state")

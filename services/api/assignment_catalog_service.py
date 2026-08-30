@@ -9,6 +9,9 @@ from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
 from .assignment.visibility import student_can_read_assignment
+from .assignment_student_list_service import (  # noqa: F401
+    list_assignments_for_student as list_assignments_for_student,
+)
 from .auth.identity_graph_service import ExpectedStudentsError
 
 _log = logging.getLogger(__name__)

@@ -35,6 +35,8 @@ export type WorkflowTabProps =
     progressOnlyIncomplete: boolean
     setProgressOnlyIncomplete: (v: boolean) => void
     progressError: string
+    archiveAssignment?: (assignmentId?: string) => Promise<void>
+    unarchiveAssignment?: (assignmentId?: string) => Promise<void>
     draftLoading: boolean
     draftError: string
     draftSaving: boolean
@@ -246,6 +248,8 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             progressLoading={props.progressLoading}
             fetchAssignmentProgress={props.fetchAssignmentProgress}
             progressError={props.progressError}
+            archiveAssignment={props.archiveAssignment}
+            unarchiveAssignment={props.unarchiveAssignment}
           />
         )}
         <WorkflowTimeline entries={props.executionTimeline} />

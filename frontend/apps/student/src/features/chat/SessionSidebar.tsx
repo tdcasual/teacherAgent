@@ -58,6 +58,7 @@ export default function SessionSidebar(props: SessionSidebarProps) {
           verifyError={props.verifyError}
           verifyInfo={props.verifyInfo}
           todayAssignment={props.todayAssignment}
+          todayAssignments={props.todayAssignments}
           assignmentLoading={props.assignmentLoading}
           assignmentError={props.assignmentError}
           resetVerification={props.resetVerification}

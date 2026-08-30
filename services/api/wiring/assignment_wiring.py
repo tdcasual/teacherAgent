@@ -44,7 +44,6 @@ __all__ = [
     "_assignment_upload_confirm_deps",
 ]
 
-import os
 import shutil
 import time
 import uuid
@@ -73,6 +72,14 @@ from ..assignment_questions_ocr_service import (
     assignment_questions_ocr as _assignment_questions_ocr_impl,
 )
 from ..assignment_requirements_service import AssignmentRequirementsDeps
+from ..assignment_student_list_service import (
+    StudentAssignmentListDeps,
+    student_currently_enrolled,
+    today_lookback_days,
+)
+from ..assignment_student_list_service import (
+    list_assignments_for_student as _list_assignments_for_student_impl,
+)
 from ..assignment_submission_attempt_service import AssignmentSubmissionAttemptDeps
 from ..assignment_today_service import (
     AssignmentTodayDeps,
@@ -330,19 +337,30 @@ def _assignment_upload_parse_deps(core: Any | None = None):
     )
 
 
+def _student_assignment_list_deps(core: Any | None = None) -> StudentAssignmentListDeps:
+    _ac = _app_core(core)
+    data_dir = _ac.DATA_DIR
+    return StudentAssignmentListDeps(
+        data_dir=data_dir,
+        load_assignment_meta=_ac.load_assignment_meta,
+        student_enrolled=lambda sid, tid, sub: student_currently_enrolled(
+            sid, tid, sub, data_dir=data_dir
+        ),
+        list_submission_attempts=_ac.list_submission_attempts,
+        lookback_days=today_lookback_days(),
+    )
+
+
 def _assignment_today_deps(core: Any | None = None):
     _ac = _app_core(core)
+    list_deps = _student_assignment_list_deps(core)
     return AssignmentTodayDeps(
-        data_dir=_ac.DATA_DIR,
         parse_date_str=_ac.parse_date_str,
-        has_llm_key=lambda: bool(os.getenv("OPENAI_API_KEY") or os.getenv("SILICONFLOW_API_KEY")),
-        load_profile_file=_ac.load_profile_file,
-        find_assignment_for_date=_ac.find_assignment_for_date,
-        derive_kp_from_profile=_ac.derive_kp_from_profile,
-        safe_assignment_id=_ac.safe_assignment_id,
-        assignment_generate=_ac.assignment_generate,
-        load_assignment_meta=_ac.load_assignment_meta,
-        build_assignment_detail=_ac.build_assignment_detail,
+        list_student_today=lambda student_id, date_str: _list_assignments_for_student_impl(
+            student_id=student_id,
+            date_str=date_str,
+            deps=list_deps,
+        ),
     )
 
 

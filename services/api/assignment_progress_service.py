@@ -331,6 +331,8 @@ def compute_assignment_progress(
         "date": deps.resolve_assignment_date(meta, folder),
         "scope": meta.get("scope") or "",
         "class_name": meta.get("class_name") or "",
+        "visibility_status": str(meta.get("visibility_status") or "").strip().lower(),
+        "archived_at": meta.get("archived_at"),
         "due_at": due_at or "",
         "expected_count": len(expected_students),
         "counts": {

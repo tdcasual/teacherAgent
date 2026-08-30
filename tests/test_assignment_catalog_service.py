@@ -10,11 +10,19 @@ from services.api.assignment_catalog_service import (
     build_assignment_detail,
     find_assignment_for_date,
     list_assignments,
+    list_assignments_for_student,
     postprocess_assignment_meta,
 )
 
 
 class AssignmentCatalogServiceTest(unittest.TestCase):
+    def test_list_assignments_for_student_is_reexported(self):
+        from services.api.assignment_student_list_service import (
+            list_assignments_for_student as impl,
+        )
+
+        self.assertIs(list_assignments_for_student, impl)
+
     def test_public_specificity_uses_expected_students_snapshot(self):
         meta = {
             "scope": "public",

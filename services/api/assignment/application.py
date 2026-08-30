@@ -5,7 +5,12 @@ from typing import Any, Optional
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
 from ..auth_service import AuthError, auth_required, require_principal
 from .deps import AssignmentAccessDeps, AssignmentApplicationDeps
-from .visibility import student_can_read_assignment
+from .visibility import (
+    assignment_owner_id,
+    effective_visibility_status,
+    snapshot_student_ids,
+    student_can_read_assignment,
+)
 
 
 class AssignmentAccessError(Exception):
@@ -41,14 +46,17 @@ def _require_student_assignment_access(
 ) -> None:
     if not student_can_read_assignment(meta):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
-    class_name = ""
-    try:
-        profile_path = deps.resolve_student_profile_path(principal.actor_id)
-        profile = deps.load_profile_file(profile_path)
-        class_name = str(profile.get("class_name") or "").strip()
-    except Exception:  # policy: allowed-broad-except
-        class_name = ""
-    if int(deps.assignment_specificity(meta, principal.actor_id, class_name)) <= 0:
+    sid = str(getattr(principal, "actor_id", "") or "").strip()
+    if sid not in snapshot_student_ids(meta):
+        raise AssignmentAccessError(403, "forbidden_assignment_scope")
+    vis = effective_visibility_status(meta)
+    if vis == "archived":
+        return
+    teacher_id = assignment_owner_id(meta)
+    subject_id = str(meta.get("subject_id") or "").strip()
+    if not teacher_id or not subject_id:
+        raise AssignmentAccessError(403, "forbidden_assignment_scope")
+    if not deps.student_enrolled(sid, teacher_id, subject_id):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
 
 

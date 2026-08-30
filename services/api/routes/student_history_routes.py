@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException
 
+from ..assignment_data_service import load_assignment_meta
+from ..assignment_student_list_service import (
+    StudentAssignmentListDeps,
+    list_student_assignment_history,
+    student_currently_enrolled,
+    today_lookback_days,
+)
 from ..auth_service import AuthError, resolve_student_scope
 from ..session_history_service import SessionHistoryError
 
@@ -19,7 +27,30 @@ def _scoped_student_id(student_id: str | None) -> str:
     return sid
 
 
+def _student_assignment_list_deps(core: Any) -> StudentAssignmentListDeps:
+    data_dir = Path(getattr(core, "DATA_DIR"))
+    return StudentAssignmentListDeps(
+        data_dir=data_dir,
+        load_assignment_meta=getattr(core, "load_assignment_meta", load_assignment_meta),
+        student_enrolled=lambda sid, tid, sub: student_currently_enrolled(
+            sid, tid, sub, data_dir=data_dir
+        ),
+        list_submission_attempts=core.list_submission_attempts,
+        lookback_days=today_lookback_days(),
+    )
+
+
 def register_student_history_routes(router: APIRouter, core: Any) -> None:
+    @router.get("/student/assignments/history")
+    def student_assignments_history(student_id: str, limit: int = 50, cursor: int = 0) -> Any:
+        sid = _scoped_student_id(student_id)
+        return list_student_assignment_history(
+            student_id=sid,
+            limit=limit,
+            cursor=cursor,
+            deps=_student_assignment_list_deps(core),
+        )
+
     @router.get("/student/history/sessions")
     def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0) -> Any:
         sid = _scoped_student_id(student_id)

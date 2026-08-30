@@ -1,5 +1,5 @@
 import type { Dispatch, FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type { AssignmentDetail, SessionGroup, StudentHistorySession, VerifiedStudent } from '../../appTypes'
+import type { AssignmentDetail, SessionGroup, StudentHistorySession, TodayAssignmentItem, VerifiedStudent } from '../../appTypes'
 import type { StudentAction } from '../../hooks/useStudentState'
 
 export type SessionSidebarProps = {
@@ -42,6 +42,7 @@ export type SessionSidebarProps = {
   verifyError: string
   verifyInfo: string
   todayAssignment: AssignmentDetail | null
+  todayAssignments: TodayAssignmentItem[]
   assignmentLoading: boolean
   assignmentError: string
   resetVerification: () => void

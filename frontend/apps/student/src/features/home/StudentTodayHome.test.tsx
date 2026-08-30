@@ -27,6 +27,17 @@ const buildViewModel = (overrides: Partial<StudentTodayHomeViewModel> = {}): Stu
     { label: '待开始', tone: 'active' },
     { label: '待提交', tone: 'neutral' },
   ],
+  items: [
+    {
+      assignment_id: 'A001',
+      teacher_id: 't_zhang',
+      subject_id: 'physics',
+      title: '牛顿第二定律练习',
+      dueLabel: '2026-03-14 截止',
+      overdue: false,
+      submitted: false,
+    },
+  ],
   ...overrides,
 })
 
@@ -39,14 +50,15 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
     expect(screen.getByText('3月14日 周六')).toBeTruthy()
-    expect(screen.getByText('牛顿第二定律练习')).toBeTruthy()
+    expect(screen.getAllByText('牛顿第二定律练习').length).toBeGreaterThan(0)
     expect(screen.getByText('练习题.pdf')).toBeTruthy()
     expect(screen.getByText('已准备')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '进入任务' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '进入任务' }).length).toBeGreaterThan(0)
     expect(screen.getByTestId('student-today-primary-action')).toBeTruthy()
     expect(screen.queryByText('今日任务')).toBeNull()
     expect(screen.queryByText('历史与补充')).toBeNull()
@@ -60,6 +72,7 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
@@ -87,20 +100,22 @@ describe('StudentTodayHome', () => {
     expect(historyStage.getAttribute('data-home-style')).toBe('inline-links')
   })
 
-  it('shows generate copy for pending_generation', () => {
+  it('shows empty copy when teachers have not assigned work', () => {
     render(
       <StudentTodayHome
         dateLabel="3月14日 周六"
         viewModel={buildViewModel({
-          status: 'pending_generation',
-          title: '今日任务尚未生成',
-          summary: '系统会根据今天安排准备练习内容。',
-          primaryActionLabel: '生成任务',
+          status: 'empty',
+          title: '老师尚未布置',
+          summary: '今天还没有需要处理的作业。',
+          primaryActionLabel: '老师尚未布置',
+          primaryActionDisabled: true,
           estimatedMinutes: null,
-          dueLabel: '生成后开始',
+          dueLabel: '',
           materials: [],
+          items: [],
           progressSteps: [
-            { label: '准备中', tone: 'active' },
+            { label: '未布置', tone: 'neutral' },
             { label: '待开始', tone: 'neutral' },
             { label: '待提交', tone: 'neutral' },
           ],
@@ -108,11 +123,13 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
-    expect(screen.getByRole('button', { name: '生成任务' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '生成任务' })).toHaveLength(1)
+    expect(screen.getAllByText('老师尚未布置').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '生成任务' })).toBeNull()
+    expect(screen.getByRole('button', { name: '作业记录' })).toBeTruthy()
   })
 
   it('shows generating feedback without an active primary action', () => {
@@ -129,6 +146,7 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
@@ -148,6 +166,7 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
@@ -167,6 +186,7 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={() => undefined}
         onOpenHistory={() => undefined}
         onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
       />,
     )
 
@@ -178,6 +198,7 @@ describe('StudentTodayHome', () => {
     const onPrimaryAction = vi.fn()
     const onOpenHistory = vi.fn()
     const onOpenFreeChat = vi.fn()
+    const onOpenAssignmentHistory = vi.fn()
 
     render(
       <StudentTodayHome
@@ -186,15 +207,18 @@ describe('StudentTodayHome', () => {
         onPrimaryAction={onPrimaryAction}
         onOpenHistory={onOpenHistory}
         onOpenFreeChat={onOpenFreeChat}
+        onOpenAssignmentHistory={onOpenAssignmentHistory}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '进入任务' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '进入任务' })[0])
     fireEvent.click(screen.getByRole('button', { name: '历史任务' }))
+    fireEvent.click(screen.getByRole('button', { name: '作业记录' }))
     fireEvent.click(screen.getByRole('button', { name: '自由提问' }))
 
     expect(onPrimaryAction).toHaveBeenCalledTimes(1)
     expect(onOpenHistory).toHaveBeenCalledTimes(1)
+    expect(onOpenAssignmentHistory).toHaveBeenCalledTimes(1)
     expect(onOpenFreeChat).toHaveBeenCalledTimes(1)
   })
 })

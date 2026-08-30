@@ -94,7 +94,33 @@ export const setupBasicStudentApiMocks = async (
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ok: true, assignment: todayAssignment }),
+        body: JSON.stringify({
+          date: todayAssignment?.date || new Date().toISOString().slice(0, 10),
+          assignments: todayAssignment
+            ? [{
+              assignment_id: todayAssignment.assignment_id,
+              teacher_id: 't_zhang',
+              subject_id: 'physics',
+              title: todayAssignment.assignment_id,
+              due_at: todayAssignment.date || '',
+              progress: {
+                submitted: false,
+                overdue: false,
+                official_score: null,
+                process_archive_status: 'none',
+              },
+            }]
+            : [],
+        }),
+      })
+      return
+    }
+
+    if (method === 'GET' && pathname === '/student/assignments/history') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ assignments: [], total: 0, limit: 50, cursor: 0, has_more: false }),
       })
       return
     }

@@ -8,6 +8,7 @@ type TodayTaskCardProps = {
 const statusToneClassMap: Record<StudentTodayHomeViewModel['status'], string> = {
   pending_generation: 'border-border bg-surface-soft text-muted',
   generating: 'border-border bg-surface-soft text-muted',
+  empty: 'border-border bg-surface-soft text-muted',
   ready: 'border-border bg-surface-soft text-muted',
   in_progress: 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
   submitted: 'border-[color:color-mix(in_oklab,var(--color-success)_35%,white)] bg-[color:color-mix(in_oklab,var(--color-success)_14%,white)] text-[color:var(--color-success)]',

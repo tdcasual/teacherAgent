@@ -43,6 +43,7 @@ class ChatStartDeps:
     append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
         lambda _job_id, _event_type, _payload: {}
     )
+    load_student_sessions_index: Callable[..., List[Dict[str, Any]]] = lambda *_a, **_k: []
 
 
 @dataclass(frozen=True)
@@ -464,6 +465,49 @@ def _enqueue_and_finalize_start(
     }
 
 
+def _is_free_ask_session(session_id: Optional[str]) -> bool:
+    sid = str(session_id or "").strip()
+    return sid.startswith("general_") or sid.startswith("free-ask") or sid.startswith("free_ask")
+
+
+def _existing_student_session(
+    student_id: str, session_id: str, deps: ChatStartDeps
+) -> Optional[Dict[str, Any]]:
+    sid = str(student_id or "").strip()
+    wanted = str(session_id or "").strip()
+    if not sid or not wanted:
+        return None
+    try:
+        items = deps.load_student_sessions_index(sid)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("failed to load student session index for assignment binding", exc_info=True)
+        return None
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and str(item.get("session_id") or "").strip() == wanted:
+            return item
+    return None
+
+
+def _student_assignment_unbound(req: Any, context: _StartContext, deps: ChatStartDeps) -> bool:
+    if str(context.role_hint or "").strip() != "student":
+        return False
+    session_id = str(context.session_id or "").strip()
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    if _is_free_ask_session(session_id):
+        return False
+    existing = _existing_student_session(str(getattr(req, "student_id", "") or ""), session_id, deps)
+    if existing is not None:
+        stored = str(existing.get("assignment_id") or "").strip()
+        if stored:
+            return False
+        return True
+    if assignment_id:
+        return False
+    raise deps.http_error(400, "assignment_id_required")
+
+
 def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]:
     request_id = _validate_start_request(req, deps)
 
@@ -472,6 +516,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         return existing_response
 
     context = _resolve_start_context(req, request_id, deps)
+    unbound = _student_assignment_unbound(req, context, deps)
     recent_response = _lookup_recent_dedup(request_id, context, deps)
     if recent_response is not None:
         return recent_response
@@ -491,4 +536,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
     if prewrite_result is not None:
         return prewrite_result
 
-    return _enqueue_and_finalize_start(job_id, context, deps)
+    result = _enqueue_and_finalize_start(job_id, context, deps)
+    if unbound:
+        result["assignment_unbound"] = True
+    return result

@@ -486,15 +486,6 @@ def _student_extra_system(
         folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
         if folder and folder.exists():
             assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
-    elif req.student_id:
-        date_str = deps.parse_date_str(req.assignment_date)
-        found = deps.find_assignment_for_date(
-            date_str, student_id=req.student_id, class_name=class_name
-        )
-        if found:
-            assignment_detail = deps.build_assignment_detail_cached(
-                found["folder"], include_text=False
-            )
     if assignment_detail and not _student_can_attach_assignment(
         assignment_detail, student_id=req.student_id, class_name=class_name
     ):

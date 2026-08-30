@@ -14,6 +14,13 @@ def effective_visibility_status(meta: Optional[Dict[str, Any]]) -> str:
     return str((meta or {}).get("visibility_status") or "").strip().lower()
 
 
+def snapshot_student_ids(meta: Optional[Dict[str, Any]]) -> list[str]:
+    raw = (meta or {}).get("expected_students")
+    if not isinstance(raw, list):
+        return []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
 def student_can_read_assignment(
     meta: Optional[Dict[str, Any]],
     *,

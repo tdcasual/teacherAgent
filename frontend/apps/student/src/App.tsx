@@ -8,6 +8,7 @@ import { useVerification } from './hooks/useVerification'
 import { useSessionManager } from './hooks/useSessionManager'
 import { useChatPolling } from './hooks/useChatPolling'
 import { useAssignment } from './hooks/useAssignment'
+import { useAssignmentHistory } from './hooks/useAssignmentHistory'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
 import StudentTodayHome from './features/home/StudentTodayHome'
@@ -43,6 +44,7 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const [homeOpen, setHomeOpen] = useState(true)
+  const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false)
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning')
   const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false)
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
@@ -140,9 +142,9 @@ export default function App() {
     if (!viewStateSyncReady) return
     if (state.pendingChatJob?.job_id) return
     if (state.activeSessionId) return
-    const next = state.todayAssignment?.assignment_id || `general_${todayDate()}`
+    const next = `general_${todayDate()}`
     setActiveSession(next)
-  }, [state.verifiedStudent?.student_id, state.todayAssignment?.assignment_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
+  }, [state.verifiedStudent?.student_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
 
   // ── Auto-load session messages ──
   useEffect(() => {
@@ -184,7 +186,7 @@ export default function App() {
     dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => prev.map((m) => m.id === id ? { ...m, ...patch } : m) })
   }, [dispatch])
 
-  const attachmentSessionId = state.activeSessionId || state.todayAssignment?.assignment_id || `general_${todayDate()}`
+  const attachmentSessionId = state.activeSessionId || `general_${todayDate()}`
   const {
     attachments,
     addFiles,
@@ -208,7 +210,8 @@ export default function App() {
     input: state.input,
     messages: state.messages,
     activeSessionId: state.activeSessionId,
-    todayAssignment: state.todayAssignment,
+    selectedAssignmentId: state.selectedAssignmentId,
+    sessions: state.sessions,
     verifiedStudent: state.verifiedStudent,
     pendingChatJob: state.pendingChatJob,
     attachments: readyAttachmentRefs,
@@ -234,23 +237,27 @@ export default function App() {
     sending: state.sending,
   }), [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent])
 
+  const assignmentHistory = useAssignmentHistory({
+    apiBase: state.apiBase,
+    studentId: state.verifiedStudent?.student_id || '',
+    enabled: assignmentHistoryOpen,
+  })
+
   const todayHomeViewModel = useMemo(() => buildStudentTodayHomeViewModel({
     verifiedStudent: state.verifiedStudent,
     assignmentLoading: state.assignmentLoading,
     assignmentError: state.assignmentError,
-    todayAssignment: state.todayAssignment,
+    todayAssignments: state.todayAssignments,
     activeSessionId: state.activeSessionId,
     messages: state.messages,
     pendingChatJob: state.pendingChatJob,
-    recentCompletedReplies: state.recentCompletedReplies,
   }), [
     state.activeSessionId,
     state.assignmentError,
     state.assignmentLoading,
     state.messages,
     state.pendingChatJob,
-    state.recentCompletedReplies,
-    state.todayAssignment,
+    state.todayAssignments,
     state.verifiedStudent,
   ])
 
@@ -320,13 +327,27 @@ export default function App() {
       dispatch({ type: 'SET', field: 'verifyOpen', value: true })
       return
     }
-    if (todayHomeViewModel.status === 'pending_generation') {
-      dispatch({ type: 'SET', field: 'assignmentRefreshNonce', value: state.assignmentRefreshNonce + 1 })
+    if (todayHomeViewModel.status === 'empty' || todayHomeViewModel.status === 'generating' || todayHomeViewModel.status === 'pending_generation') return
+    const firstId = todayHomeViewModel.items[0]?.assignment_id || ''
+    if (firstId) dispatch({ type: 'SET', field: 'selectedAssignmentId', value: firstId })
+    if (todayHomeViewModel.status === 'submitted') {
+      setAssignmentHistoryOpen(true)
       return
     }
-    if (todayHomeViewModel.status === 'generating') return
     openExecutionState()
-  }, [dispatch, openExecutionState, state.assignmentRefreshNonce, state.verifiedStudent, todayHomeViewModel.status])
+  }, [dispatch, openExecutionState, state.verifiedStudent, todayHomeViewModel.items, todayHomeViewModel.status])
+
+  const handleOpenAssignment = useCallback((assignmentId: string) => {
+    const aid = assignmentId.trim()
+    if (!aid) return
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
+    setActiveSession(aid)
+    openExecutionState()
+  }, [dispatch, openExecutionState, setActiveSession])
+
+  const handleOpenAssignmentHistory = useCallback(() => {
+    setAssignmentHistoryOpen((open) => !open)
+  }, [])
 
   const handleOpenHistory = useCallback(() => {
     setHomeOpen(false)
@@ -342,8 +363,10 @@ export default function App() {
   }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handleOpenFreeChat = useCallback(() => {
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: '' })
+    setActiveSession(`general_${todayDate()}`)
     openExecutionState()
-  }, [openExecutionState])
+  }, [dispatch, openExecutionState, setActiveSession])
 
   const handleStartNewStudentSession = useCallback(() => {
     openExecutionState()
@@ -403,6 +426,7 @@ export default function App() {
       verifyError={state.verifyError}
       verifyInfo={state.verifyInfo}
       todayAssignment={state.todayAssignment}
+      todayAssignments={state.todayAssignments}
       assignmentLoading={state.assignmentLoading}
       assignmentError={state.assignmentError}
       resetVerification={sessionManager.resetVerification}
@@ -423,8 +447,14 @@ export default function App() {
       dateLabel={heroDateLabel}
       viewModel={todayHomeViewModel}
       onPrimaryAction={handlePrimaryHomeAction}
+      onOpenAssignment={handleOpenAssignment}
       onOpenHistory={handleOpenHistory}
       onOpenFreeChat={handleOpenFreeChat}
+      onOpenAssignmentHistory={handleOpenAssignmentHistory}
+      assignmentHistoryOpen={assignmentHistoryOpen}
+      assignmentHistoryLoading={assignmentHistory.loading}
+      assignmentHistoryError={assignmentHistory.error}
+      assignmentHistoryItems={assignmentHistory.items}
     />
   )
 
@@ -468,6 +498,7 @@ export default function App() {
           verifyError={state.verifyError}
           verifyInfo={state.verifyInfo}
           todayAssignment={state.todayAssignment}
+          todayAssignments={state.todayAssignments}
           assignmentLoading={state.assignmentLoading}
           assignmentError={state.assignmentError}
           resetVerification={sessionManager.resetVerification}

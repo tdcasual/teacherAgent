@@ -5,6 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 
 from ..assignment.application import AssignmentAccessError
+from ..assignment_today_service import AssignmentTodayError
 from ..auth_service import AuthError, resolve_student_scope
 
 
@@ -46,14 +47,17 @@ def register_assignment_delivery_routes(
         per_kp: int = 5,
     ) -> Any:
         sid = _scoped_student_id(student_id)
-        return await assignment_app.get_assignment_today(
-            student_id=sid,
-            date=date,
-            auto_generate=auto_generate,
-            generate=generate,
-            per_kp=per_kp,
-            deps=app_deps,
-        )
+        try:
+            return await assignment_app.get_assignment_today(
+                student_id=sid,
+                date=date,
+                auto_generate=auto_generate,
+                generate=generate,
+                per_kp=per_kp,
+                deps=app_deps,
+            )
+        except AssignmentTodayError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     @router.get("/assignment/{assignment_id}")
     async def assignment_detail(assignment_id: str) -> Any:

@@ -18,6 +18,8 @@ def test_assignment_routes_build_router():
     assert _has_route(router, "GET", "/assignment/{assignment_id}/download")
     assert _has_route(router, "POST", "/assignment/questions/ocr")
     assert _has_route(router, "POST", "/assignment/{assignment_id}/recompute-roster")
+    assert _has_route(router, "POST", "/assignment/{assignment_id}/archive")
+    assert _has_route(router, "POST", "/assignment/{assignment_id}/unarchive")
 
 
 def test_assignment_routes_call_assignment_application_layer(monkeypatch):

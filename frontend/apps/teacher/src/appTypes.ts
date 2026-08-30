@@ -263,6 +263,8 @@ export type AssignmentProgress = {
   date?: string
   scope?: string
   class_name?: string
+  visibility_status?: string
+  archived_at?: string | null
   due_at?: string
   expected_count?: number
   counts?: { expected?: number; discussion_pass?: number; submitted?: number; completed?: number; overdue?: number }

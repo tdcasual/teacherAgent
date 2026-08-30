@@ -110,6 +110,8 @@ interface UseAssignmentWorkflowReturn {
   saveDraft: (draft: UploadDraft) => Promise<void>
   handleConfirmUpload: () => Promise<void>
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
+  archiveAssignment: (assignmentId?: string) => Promise<void>
+  unarchiveAssignment: (assignmentId?: string) => Promise<void>
   refreshWorkflowWorkbench: () => void
   scrollToWorkflowSection: (sectionId: string) => void
   assignmentWorkflowIndicator: WorkflowIndicator
@@ -429,6 +431,39 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       setProgressError,
       setProgressLoading,
     ],
+  )
+
+  const mutateAssignmentVisibility = useCallback(
+    async (path: 'archive' | 'unarchive', assignmentId?: string) => {
+      const aid = (assignmentId || progressAssignmentId || '').trim()
+      if (!aid) {
+        setProgressError('请先填写作业编号')
+        return
+      }
+      setProgressLoading(true)
+      setProgressError('')
+      try {
+        const res = await fetch(`${apiBase}/assignment/${encodeURIComponent(aid)}/${path}`, { method: 'POST' })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        await fetchAssignmentProgress(aid)
+      } catch (err: unknown) {
+        setProgressError(toErrorMessage(err))
+        setProgressLoading(false)
+      }
+    },
+    [apiBase, fetchAssignmentProgress, progressAssignmentId, setProgressError, setProgressLoading],
+  )
+
+  const archiveAssignment = useCallback(
+    (assignmentId?: string) => mutateAssignmentVisibility('archive', assignmentId),
+    [mutateAssignmentVisibility],
+  )
+  const unarchiveAssignment = useCallback(
+    (assignmentId?: string) => mutateAssignmentVisibility('unarchive', assignmentId),
+    [mutateAssignmentVisibility],
   )
 
   // ---- refreshWorkflowWorkbench ----
@@ -834,6 +869,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     saveDraft,
     handleConfirmUpload,
     fetchAssignmentProgress,
+    archiveAssignment,
+    unarchiveAssignment,
     refreshWorkflowWorkbench,
     scrollToWorkflowSection,
     assignmentWorkflowIndicator,

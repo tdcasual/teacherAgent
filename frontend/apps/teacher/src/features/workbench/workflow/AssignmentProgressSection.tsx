@@ -14,6 +14,8 @@ type AssignmentProgressSectionProps = {
   progressLoading: boolean
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
   progressError: string
+  archiveAssignment?: (assignmentId?: string) => Promise<void>
+  unarchiveAssignment?: (assignmentId?: string) => Promise<void>
 }
 
 const extractBestScore = (value: unknown): number | null => {
@@ -29,7 +31,9 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     progressData, progressAssignmentId, setProgressAssignmentId,
     progressOnlyIncomplete, setProgressOnlyIncomplete,
     progressLoading, fetchAssignmentProgress, progressError,
+    archiveAssignment, unarchiveAssignment,
   } = props
+  const visibilityStatus = String(progressData?.visibility_status || '').trim()
 
   return (
     	            <section id="workflow-progress-section" className={`mt-3 bg-surface border border-border rounded-[14px] shadow-sm ${progressPanelCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
@@ -75,6 +79,25 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	                      >
     	                        {progressLoading ? '加载中…' : '刷新'}
     	                      </button>
+                          {visibilityStatus === 'archived' ? (
+                            <button
+                              type="button"
+                              className="border border-border rounded-xl py-[10px] px-[14px] bg-white text-ink cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={progressLoading || !unarchiveAssignment}
+                              onClick={() => void unarchiveAssignment?.()}
+                            >
+                              取消归档
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="border border-border rounded-xl py-[10px] px-[14px] bg-white text-ink cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={progressLoading || !archiveAssignment}
+                              onClick={() => void archiveAssignment?.()}
+                            >
+                              归档
+                            </button>
+                          )}
     	                    </div>
     	                  </div>
 

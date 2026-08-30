@@ -17,13 +17,14 @@ from services.api.assignment.deps import AssignmentAccessDeps
 from services.api.auth_service import AuthError, AuthPrincipal
 
 
-def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None) -> AssignmentAccessDeps:
+def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None, enrolled: bool = True) -> AssignmentAccessDeps:
     return AssignmentAccessDeps(
         resolve_assignment_dir=lambda _assignment_id: folder,
         load_assignment_meta=lambda _folder: dict(meta or {}),
         resolve_student_profile_path=lambda student_id: folder / f"{student_id}.json",
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda _meta, _student_id, _class_name: specificity,
+        student_enrolled=lambda *_args, **_kwargs: enrolled,
     )
 
 
@@ -154,7 +155,12 @@ def test_require_assignment_access_allows_in_scope_student(monkeypatch, tmp_path
         deps=_deps(
             folder=folder,
             specificity=3,
-            meta={"teacher_id": "t1", "visibility_status": "published"},
+            meta={
+                "teacher_id": "t1",
+                "subject_id": "physics",
+                "visibility_status": "published",
+                "expected_students": ["student_b"],
+            },
         ),
     )
 
@@ -247,6 +253,7 @@ def test_require_assignment_access_invalid_id_is_400(monkeypatch, tmp_path):
         resolve_student_profile_path=lambda student_id: tmp_path / f"{student_id}.json",
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda *_args: 3,
+        student_enrolled=lambda *_args, **_kwargs: True,
     )
     with pytest.raises(AssignmentAccessError) as exc:
         require_assignment_access("../escape", deps=deps)

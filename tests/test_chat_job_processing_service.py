@@ -102,6 +102,43 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(last_user, "讲一下牛顿第二定律")
             self.assertEqual(calls["build_assignment_detail"], 0)
 
+    def test_student_extra_system_does_not_fallback_to_find_assignment_for_date(self):
+        from services.api.chat_job_processing_service import _student_extra_system
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            calls = {"find": 0}
+
+            def _find(*_args, **_kwargs):
+                calls["find"] += 1
+                return {"folder": root, "meta": {"assignment_id": "A1"}}
+
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: True,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                find_assignment_for_date=_find,
+                parse_date_str=lambda raw: str(raw or "2026-02-08"),
+                build_assignment_context=lambda *_args, **_kwargs: "ASSIGNMENT",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=lambda *_args, **_kwargs: {"reply": "OK"},
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+            )
+            req = _Req(assignment_id="")
+            extra = _student_extra_system(req, deps=deps, last_user_text="讲一下牛顿第二定律", last_assistant_text="")
+            self.assertEqual(calls["find"], 0)
+            self.assertNotIn("ASSIGNMENT", extra or "")
+
     def test_student_cannot_attach_draft_or_orphan_assignment(self):
         self.assertFalse(
             _student_can_attach_assignment(
