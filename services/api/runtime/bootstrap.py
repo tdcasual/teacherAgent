@@ -14,6 +14,7 @@ from services.api.teacher_provider_registry_service import validate_master_key_p
 from services.api.workers import (
     chat_worker_service,
     exam_worker_service,
+    process_archive_worker_service,
     profile_update_worker_service,
     upload_worker_service,
 )
@@ -47,6 +48,7 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
     upload_deps = core.upload_worker_deps()
     exam_deps = core.exam_worker_deps()
     profile_deps = core.profile_update_worker_deps()
+    process_archive_deps = core.process_archive_worker_deps()
     chat_deps = core.chat_worker_deps()
     survey_deps = core.survey_worker_deps()
     profile_update_async = bool(getattr(core, "PROFILE_UPDATE_ASYNC", False))
@@ -58,6 +60,9 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
         enqueue_exam_job_fn=lambda job_id: exam_worker_service.enqueue_exam_job_inline(job_id, deps=exam_deps),
         enqueue_profile_update_fn=lambda payload: profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
+        ),
+        enqueue_process_archive_fn=lambda payload: process_archive_worker_service.enqueue_process_archive_inline(
+            payload, deps=process_archive_deps
         ),
         enqueue_chat_job_fn=lambda job_id, lane_id=None: chat_worker_service.enqueue_chat_job(
             job_id, deps=chat_deps, lane_id=lane_id
@@ -78,6 +83,7 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
             exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
+            process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
             profile_update_async=profile_update_async,
         ),
@@ -86,6 +92,7 @@ def build_inline_backend_for_app(app_mod: Any) -> Any:
             exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
+            process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
             profile_update_async=profile_update_async,
         ),

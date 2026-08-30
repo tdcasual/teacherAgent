@@ -272,6 +272,13 @@ export type AssignmentProgressStudent = {
     override_score_earned?: number | null
     adopted_coach_excerpts?: Array<{ text?: string }>
   }
+  process_archive_status?: string
+  process_archive?: {
+    status?: string
+    stuck_points?: Array<{ summary?: string }>
+    process_archive_id?: string
+  }
+  has_memory_proposal?: boolean
 }
 
 export type AssignmentProgress = {

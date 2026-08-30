@@ -69,6 +69,12 @@ from .assignment_llm_gate_service import (
 from .assignment_llm_gate_service import (
     parse_json_from_text as _parse_json_from_text_impl,
 )
+from .assignment_process_archive_service import (
+    freeze_process_archive as _freeze_process_archive_impl,
+)
+from .assignment_process_archive_service import (
+    request_process_archive as _request_process_archive_impl,
+)
 from .assignment_progress_service import (
     compute_assignment_progress as _compute_assignment_progress_impl,
 )
@@ -105,6 +111,7 @@ from .assignment_submission_attempt_service import (
 from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
+from .auth_service import get_current_principal
 from .config import DISCUSSION_COMPLETE_MARKER
 from .core_utils import resolve_scope
 from .exam_analysis_charts_service import (
@@ -213,7 +220,12 @@ from .wiring.exam_wiring import (
     _exam_overview_deps,
     _exam_range_deps,
 )
-from .wiring.student_wiring import _student_directory_deps, _student_ops_deps, _student_submit_deps
+from .wiring.student_wiring import (
+    _student_directory_deps,
+    _student_ops_deps,
+    _student_submit_deps,
+    assignment_process_archive_deps,
+)
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
 
@@ -303,6 +315,33 @@ async def student_submit(
         assignment_id=assignment_id,
         auto_assignment=auto_assignment,
         deps=_student_submit_deps(),
+    )
+
+
+def freeze_process_archive(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return _freeze_process_archive_impl(payload, deps=assignment_process_archive_deps())
+
+
+def request_process_archive(
+    assignment_id: str,
+    student_id: str,
+    reason: str = "manual",
+) -> Dict[str, Any]:
+    from services.api.runtime import queue_runtime
+
+    core = _app_core()
+    backend = queue_runtime.app_queue_backend(
+        tenant_id=getattr(core, "TENANT_ID", None) or None,
+        is_pytest=core._settings.is_pytest(),
+        inline_backend_factory=core._inline_backend_factory,
+    )
+    return _request_process_archive_impl(
+        assignment_id=assignment_id,
+        student_id=student_id,
+        reason=reason,
+        principal=get_current_principal(),
+        deps=assignment_process_archive_deps(core),
+        enqueue=lambda payload: queue_runtime.enqueue_process_archive(payload, backend=backend),
     )
 
 

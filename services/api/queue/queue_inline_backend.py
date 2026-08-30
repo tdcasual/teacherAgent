@@ -10,6 +10,7 @@ class InlineQueueBackend:
     enqueue_exam_job_fn: Callable[[str], None]
     enqueue_survey_job_fn: Callable[[str], None]
     enqueue_profile_update_fn: Callable[[Dict[str, Any]], None]
+    enqueue_process_archive_fn: Callable[[Dict[str, Any]], None]
     enqueue_chat_job_fn: Callable[[str, Optional[str]], Dict[str, Any]]
     scan_pending_upload_jobs_fn: Callable[[], int]
     scan_pending_exam_jobs_fn: Callable[[], int]
@@ -30,6 +31,9 @@ class InlineQueueBackend:
 
     def enqueue_profile_update(self, payload: Dict[str, Any]) -> None:
         return self.enqueue_profile_update_fn(payload)
+
+    def enqueue_process_archive(self, payload: Dict[str, Any]) -> None:
+        return self.enqueue_process_archive_fn(payload)
 
     def enqueue_chat_job(self, job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
         return self.enqueue_chat_job_fn(job_id, lane_id)

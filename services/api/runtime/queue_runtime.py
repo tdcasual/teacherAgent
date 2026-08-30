@@ -36,6 +36,10 @@ def enqueue_profile_update(payload: Dict[str, Any], *, backend: QueueBackend) ->
     backend.enqueue_profile_update(payload)
 
 
+def enqueue_process_archive(payload: Dict[str, Any], *, backend: QueueBackend) -> None:
+    backend.enqueue_process_archive(payload)
+
+
 def enqueue_chat_job(
     job_id: str,
     lane_id: Optional[str] = None,

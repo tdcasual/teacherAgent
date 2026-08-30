@@ -48,6 +48,7 @@ class StudentSubmitDeps:
     diag_log: Callable[[str, Dict[str, Any]], None]
     save_upload_file: Callable[[Any, Path], Awaitable[int]]
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
+    trigger_process_archive: Optional[Callable[..., Dict[str, Any]]] = None
 
 
 def _require_assignment_id(assignment_id: Optional[str], auto_assignment: bool) -> str:
@@ -125,6 +126,8 @@ def _submit_payload(
         "attempt_id": str(signals.get("best_attempt_id") or ""),
         "official_score": _official_score(signals) if submitted else None,
         "output": output,
+        "process_archive_id": "",
+        "process_archive_status": "none",
     }
     if not submitted:
         payload["reason"] = _submit_reason(progress, student_id, signals)
@@ -170,6 +173,33 @@ def _maybe_propose_memory(
             "memory_type": str(auto.get("memory_type") or ""),
         },
     )
+
+
+def _attach_process_archive(
+    payload: Dict[str, Any],
+    *,
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+) -> None:
+    trigger = deps.trigger_process_archive
+    if trigger is None:
+        return
+    try:
+        archive = trigger(assignment_id=assignment_id, student_id=student_id, reason="submit")
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "process_archive.trigger.failed",
+            {"assignment_id": assignment_id, "student_id": student_id, "error": str(exc)[:200]},
+        )
+        payload["process_archive_status"] = "pending"
+        payload["process_archive_id"] = ""
+        return
+    if not isinstance(archive, dict):
+        payload["process_archive_status"] = "pending"
+        return
+    payload["process_archive_id"] = str(archive.get("job_id") or archive.get("process_archive_id") or "")
+    payload["process_archive_status"] = str(archive.get("status") or "pending")
 
 
 def _read_progress(deps: StudentSubmitDeps, assignment_id: str, student_id: str) -> Dict[str, Any]:
@@ -224,6 +254,13 @@ async def submit(
     out = deps.run_script(args)
     progress = _read_progress(deps, safe_assignment_id, safe_student_id)
     signals = _progress_signals(progress, safe_student_id)
+    payload = _submit_payload(
+        assignment_id=safe_assignment_id,
+        output=out,
+        progress=progress,
+        student_id=safe_student_id,
+        signals=signals,
+    )
     if bool(signals.get("submitted")):
         _maybe_propose_memory(
             deps=deps,
@@ -231,10 +268,10 @@ async def submit(
             assignment_id=safe_assignment_id,
             progress=progress,
         )
-    return _submit_payload(
-        assignment_id=safe_assignment_id,
-        output=out,
-        progress=progress,
-        student_id=safe_student_id,
-        signals=signals,
-    )
+        _attach_process_archive(
+            payload,
+            deps=deps,
+            assignment_id=safe_assignment_id,
+            student_id=safe_student_id,
+        )
+    return payload

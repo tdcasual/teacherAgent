@@ -95,6 +95,20 @@ def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] 
     _enqueue_retry_job(run_profile_update, payload=payload, tenant_id=tenant_id)
 
 
+PROCESS_ARCHIVE_JOB_TIMEOUT = 60
+
+
+def enqueue_process_archive(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
+    queue = _get_queue()
+    queue.enqueue(
+        run_process_archive,
+        payload=payload,
+        tenant_id=tenant_id,
+        job_timeout=PROCESS_ARCHIVE_JOB_TIMEOUT,
+        result_ttl=RESULT_TTL,
+    )
+
+
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
     mod = load_tenant_module(tenant_id)
     lane_final = str(lane_id or "").strip()
@@ -191,6 +205,14 @@ def run_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
 def run_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     mod.student_profile_update(payload)
+
+
+def run_process_archive(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
+    from services.api.workers.process_archive_worker_service import run_process_archive_job
+
+    mod = load_tenant_module(tenant_id)
+    deps = mod.process_archive_worker_deps()
+    run_process_archive_job(payload if isinstance(payload, dict) else {}, deps=deps)
 
 
 def _chat_job_confirm_pending_active(mod: Any, job_id: str) -> bool:

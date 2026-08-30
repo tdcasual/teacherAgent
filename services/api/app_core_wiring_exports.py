@@ -59,6 +59,7 @@ from .wiring.misc_wiring import (
     upload_text_deps,
 )
 from .wiring.student_wiring import (
+    assignment_process_archive_deps,
     student_directory_deps,
     student_import_deps,
     student_ops_deps,
@@ -78,6 +79,7 @@ from .wiring.teacher_wiring import (
 )
 from .wiring.worker_wiring import (
     exam_worker_deps,
+    process_archive_worker_deps,
     profile_update_worker_deps,
     survey_worker_deps,
     upload_worker_deps,
@@ -134,6 +136,7 @@ __all__ = [
     "tool_dispatch_deps",
     "upload_llm_deps",
     "upload_text_deps",
+    "assignment_process_archive_deps",
     "student_directory_deps",
     "student_import_deps",
     "student_ops_deps",
@@ -145,6 +148,7 @@ __all__ = [
     "exam_worker_deps",
     "survey_worker_deps",
     "profile_update_worker_deps",
+    "process_archive_worker_deps",
     "process_survey_job",
     "survey_get_report",
     "survey_list_reports",

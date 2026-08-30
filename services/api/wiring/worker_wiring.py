@@ -7,6 +7,7 @@ __all__ = [
     "exam_worker_deps",
     "survey_worker_deps",
     "profile_update_worker_deps",
+    "process_archive_worker_deps",
     "_upload_worker_started_get",
     "_upload_worker_started_set",
     "_upload_worker_thread_get",
@@ -27,14 +28,17 @@ import threading
 import time
 from typing import Any
 
+from services.api.assignment_process_archive_service import freeze_process_archive
 from services.api.runtime import queue_runtime
 from services.api.workers.exam_worker_service import ExamWorkerDeps
+from services.api.workers.process_archive_worker_service import ProcessArchiveWorkerDeps
 from services.api.workers.profile_update_worker_service import ProfileUpdateWorkerDeps
 from services.api.workers.survey_worker_service import SurveyWorkerDeps
 from services.api.workers.upload_worker_service import UploadWorkerDeps
 
 from . import CURRENT_CORE
 from . import get_app_core as _app_core
+from .student_wiring import assignment_process_archive_deps
 
 
 def _runtime_backend_is_rq(core: Any | None = None) -> bool:
@@ -213,6 +217,46 @@ def profile_update_worker_deps(core: Any | None = None) -> ProfileUpdateWorkerDe
         worker_thread_set=lambda value: _profile_update_worker_thread_set(_ac, value),
         queue_max=_ac.PROFILE_UPDATE_QUEUE_MAX,
         student_profile_update=_ac.student_profile_update,
+        diag_log=_ac.diag_log,
+        sleep=time.sleep,
+        thread_factory=_thread_factory_for_core(_ac),
+        rq_enabled=lambda: _runtime_backend_is_rq(_ac),
+        monotonic=time.monotonic,
+    )
+
+
+def _process_archive_worker_started_get(core: Any | None = None) -> bool:
+    return bool(_app_core(core)._PROCESS_ARCHIVE_WORKER_STARTED)
+
+
+def _process_archive_worker_started_set(core: Any | None = None, value: bool = False) -> None:
+    _ac = _app_core(core)
+    setattr(_ac, "_PROCESS_ARCHIVE_WORKER_STARTED", bool(value))
+
+
+def _process_archive_worker_thread_get(core: Any | None = None):
+    return _app_core(core)._PROCESS_ARCHIVE_WORKER_THREAD
+
+
+def _process_archive_worker_thread_set(core: Any | None = None, value: Any = None) -> None:
+    _ac = _app_core(core)
+    setattr(_ac, "_PROCESS_ARCHIVE_WORKER_THREAD", value)
+
+
+def process_archive_worker_deps(core: Any | None = None) -> ProcessArchiveWorkerDeps:
+    _ac = _app_core(core)
+    archive_deps = assignment_process_archive_deps(_ac)
+    return ProcessArchiveWorkerDeps(
+        update_queue=_ac._PROCESS_ARCHIVE_QUEUE,
+        update_lock=_ac._PROCESS_ARCHIVE_LOCK,
+        update_event=_ac._PROCESS_ARCHIVE_EVENT,
+        stop_event=_ac._PROCESS_ARCHIVE_STOP_EVENT,
+        worker_started_get=lambda: _process_archive_worker_started_get(_ac),
+        worker_started_set=lambda value: _process_archive_worker_started_set(_ac, value),
+        worker_thread_get=lambda: _process_archive_worker_thread_get(_ac),
+        worker_thread_set=lambda value: _process_archive_worker_thread_set(_ac, value),
+        queue_max=_ac.PROFILE_UPDATE_QUEUE_MAX,
+        freeze_process_archive=lambda payload: freeze_process_archive(payload, deps=archive_deps),
         diag_log=_ac.diag_log,
         sleep=time.sleep,
         thread_factory=_thread_factory_for_core(_ac),

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .assignment_learning_evidence_service import build_assignment_progress_evidence
+from .assignment_process_archive_service import read_process_archive_summary
 from .teacher_grade_service import load_teacher_grade, official_score_from
 
 
@@ -337,6 +338,11 @@ def _student_progress(
     )
     payload: Optional[Dict[str, Any]] = None
     if include_student_payload:
+        archive = read_process_archive_summary(Path(deps.data_dir), assignment_id, student_id)
+        merged_process = dict(process or {})
+        merged_process["status"] = str(archive.get("status") or merged_process.get("status") or "none")
+        if archive.get("stuck_points"):
+            merged_process["stuck_points"] = archive.get("stuck_points")
         payload = _student_payload(
             student_id=student_id,
             profile=profile,
@@ -350,9 +356,11 @@ def _student_progress(
             overdue=overdue,
             submitted=submitted,
             official_score=official_score,
-            process=process,
+            process=merged_process,
             teacher_grade=teacher_grade,
         )
+        payload["process_archive_status"] = str(archive.get("status") or "none")
+        payload["process_archive"] = archive
     return {
         "discussion_pass": discussion_pass,
         "submitted": submitted,

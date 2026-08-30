@@ -74,6 +74,13 @@ def reset_runtime_state(mod: Any, *, create_chat_idempotency_store: Callable[[An
     mod._PROFILE_UPDATE_STOP_EVENT = threading.Event()
     mod._PROFILE_UPDATE_WORKER_THREAD = None
 
+    mod._PROCESS_ARCHIVE_QUEUE = deque()
+    mod._PROCESS_ARCHIVE_LOCK = threading.Lock()
+    mod._PROCESS_ARCHIVE_EVENT = threading.Event()
+    mod._PROCESS_ARCHIVE_WORKER_STARTED = False
+    mod._PROCESS_ARCHIVE_STOP_EVENT = threading.Event()
+    mod._PROCESS_ARCHIVE_WORKER_THREAD = None
+
     mod._TEACHER_SESSION_COMPACT_TS = {}
     mod._TEACHER_SESSION_COMPACT_LOCK = threading.Lock()
     # Delegate compact state reset to extracted module (self-managed state)

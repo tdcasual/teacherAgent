@@ -24,3 +24,4 @@ def test_student_routes_build_router():
     assert _has_route(router, "POST", "/student/import")
     assert _has_route(router, "POST", "/student/verify")
     assert _has_route(router, "POST", "/student/submit")
+    assert _has_route(router, "POST", "/student/assignment/{assignment_id}/process-archive")

@@ -27,6 +27,9 @@ class RqQueueBackend:
     def enqueue_profile_update(self, payload: Dict[str, Any]) -> None:
         _rq_tasks().enqueue_profile_update(payload, tenant_id=self.tenant_id)
 
+    def enqueue_process_archive(self, payload: Dict[str, Any]) -> None:
+        _rq_tasks().enqueue_process_archive(payload, tenant_id=self.tenant_id)
+
     def enqueue_chat_job(self, job_id: str, lane_id: Optional[str] = None) -> Dict[str, Any]:
         return _rq_tasks().enqueue_chat_job(job_id, lane_id=lane_id, tenant_id=self.tenant_id)
 

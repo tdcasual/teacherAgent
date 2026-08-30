@@ -6,15 +6,31 @@ __all__ = [
     "student_import_deps",
     "student_directory_deps",
     "student_ops_deps",
+    "assignment_process_archive_deps",
     "_student_submit_deps",
     "_student_import_deps",
     "_student_directory_deps",
     "_student_ops_deps",
 ]
 
+import json
+import logging
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from datetime import datetime
+from typing import Any, Dict, List
 
+from services.api.runtime import queue_runtime
+
+from ..assignment_process_archive_service import (
+    AssignmentProcessArchiveDeps,
+    trigger_on_submit,
+)
 from ..auth_registry_service import build_auth_registry_store
+from ..paths import student_session_file
+from ..session_store import load_student_sessions_index
 from ..student_directory_service import StudentDirectoryDeps
 from ..student_import_service import StudentImportDeps
 from ..student_memory_service import (
@@ -26,6 +42,8 @@ from ..student_memory_service import (
 from ..student_ops_service import StudentOpsDeps
 from ..student_submit_service import StudentSubmitDeps
 from . import get_app_core as _app_core
+
+_log = logging.getLogger(__name__)
 
 
 def _load_assignment_teacher_id(assignment_id: str, core) -> str | None:
@@ -40,6 +58,85 @@ def _load_assignment_teacher_id(assignment_id: str, core) -> str | None:
     return teacher_id or None
 
 
+def _load_student_sessions(student_id: str, assignment_id: str) -> List[str]:
+    items = load_student_sessions_index(student_id)
+    session_ids: List[str] = []
+    aid = str(assignment_id or "").strip()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("assignment_id") or "").strip() != aid:
+            continue
+        sid = str(item.get("session_id") or "").strip()
+        if sid:
+            session_ids.append(sid)
+    return session_ids
+
+
+def _load_session_turns(student_id: str, session_id: str) -> List[Dict[str, Any]]:
+    path = student_session_file(student_id, session_id)
+    if not path.exists():
+        return []
+    turns: List[Dict[str, Any]] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        _log.debug("failed to read session file %s", path, exc_info=True)
+        return []
+    for line in lines:
+        text = (line or "").strip()
+        if not text:
+            continue
+        try:
+            rec = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict):
+            turns.append(rec)
+    return turns
+
+
+def _call_llm_timed(core: Any, messages: List[Dict[str, Any]], timeout_sec: float = 20.0) -> Dict[str, Any]:
+    timeout = max(0.1, float(timeout_sec or 20.0))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(
+            lambda: core.call_llm(
+                messages,
+                role_hint="teacher",
+                kind="assignment.process_archive",
+            )
+        )
+        try:
+            return fut.result(timeout=timeout)
+        except FuturesTimeout as exc:
+            raise TimeoutError("process_archive llm timeout") from exc
+
+
+def _queue_backend_for_core(core: Any) -> Any:
+    return queue_runtime.app_queue_backend(
+        tenant_id=getattr(core, "TENANT_ID", None) or None,
+        is_pytest=core._settings.is_pytest(),
+        inline_backend_factory=core._inline_backend_factory,
+    )
+
+
+def assignment_process_archive_deps(core=None) -> AssignmentProcessArchiveDeps:
+    _ac = _app_core(core)
+    return AssignmentProcessArchiveDeps(
+        data_dir=_ac.DATA_DIR,
+        load_assignment_meta=_ac.load_assignment_meta,
+        load_student_sessions=_load_student_sessions,
+        load_session_turns=_load_session_turns,
+        call_llm=lambda messages, timeout_sec=20.0, **_kwargs: _call_llm_timed(
+            _ac, messages, timeout_sec=timeout_sec
+        ),
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        diag_log=_ac.diag_log,
+        monotonic=time.monotonic,
+        new_id=lambda: f"parch_{uuid.uuid4().hex[:16]}",
+    )
+
+
 def _student_submit_deps(core=None):
     _ac = _app_core(core)
     student_memory_deps = StudentMemoryDeps(
@@ -49,6 +146,18 @@ def _student_submit_deps(core=None):
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
         assignment_evidence_low_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
+    archive_deps = assignment_process_archive_deps(_ac)
+    backend = _queue_backend_for_core(_ac)
+
+    def _trigger(**kwargs: Any) -> Dict[str, Any]:
+        return trigger_on_submit(
+            assignment_id=str(kwargs.get("assignment_id") or ""),
+            student_id=str(kwargs.get("student_id") or ""),
+            reason=str(kwargs.get("reason") or "submit"),
+            deps=archive_deps,
+            enqueue=lambda payload: queue_runtime.enqueue_process_archive(payload, backend=backend),
+        )
+
     return StudentSubmitDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
@@ -67,6 +176,7 @@ def _student_submit_deps(core=None):
         load_assignment_teacher_id=lambda assignment_id: _load_assignment_teacher_id(assignment_id, _ac),
         diag_log=_ac.diag_log,
         save_upload_file=_ac.save_upload_file,
+        trigger_process_archive=_trigger,
     )
 
 

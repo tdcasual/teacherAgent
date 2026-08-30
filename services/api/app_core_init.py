@@ -13,6 +13,7 @@ def build_inline_backend_factory(
     upload_deps = app_core_wiring_exports_module.upload_worker_deps(current_core)
     exam_deps = app_core_wiring_exports_module.exam_worker_deps(current_core)
     profile_deps = app_core_wiring_exports_module.profile_update_worker_deps(current_core)
+    process_archive_deps = app_core_wiring_exports_module.process_archive_worker_deps(current_core)
     survey_deps = app_core_wiring_exports_module.survey_worker_deps(current_core)
     chat_deps = app_core_wiring_exports_module.chat_worker_deps(current_core)
     return core_service_imports_module.build_inline_backend(
@@ -27,6 +28,9 @@ def build_inline_backend_factory(
         ),
         enqueue_profile_update_fn=lambda payload: core_service_imports_module.profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
+        ),
+        enqueue_process_archive_fn=lambda payload: core_service_imports_module.process_archive_worker_service.enqueue_process_archive_inline(
+            payload, deps=process_archive_deps
         ),
         enqueue_chat_job_fn=lambda job_id, lane_id=None: core_service_imports_module._enqueue_chat_job_impl(
             job_id, deps=chat_deps, lane_id=lane_id
@@ -46,6 +50,7 @@ def build_inline_backend_factory(
             exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
+            process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
             profile_update_async=profile_update_async,
         ),
@@ -54,6 +59,7 @@ def build_inline_backend_factory(
             exam_deps=exam_deps,
             survey_deps=survey_deps,
             profile_deps=profile_deps,
+            process_archive_deps=process_archive_deps,
             chat_deps=chat_deps,
             profile_update_async=profile_update_async,
         ),

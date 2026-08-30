@@ -184,6 +184,14 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                             const stuck = s.process?.stuck_points?.[0]?.summary
                             const processNote = stuck ? ` · ${stuck}` : ''
     	                        const name = [s.class_name, s.student_name].filter(Boolean).join(' ')
+    	                        const archiveStatus = String(s.process_archive_status || s.process_archive?.status || 'none')
+    	                        const processLabel = archiveStatus === 'none' || !archiveStatus ? '无' : archiveStatus
+    	                        const stuck = (s.process_archive?.stuck_points || [])
+    	                          .map((item) => String(item?.summary || '').trim())
+    	                          .filter(Boolean)
+    	                          .slice(0, 2)
+    	                          .join('；')
+    	                        const memory = s.has_memory_proposal ? ' · 有记忆提案' : ''
     	                        return (
     	                          <div
                                 key={s.student_id}
@@ -195,7 +203,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	                              {name ? <span className="text-muted text-[12px]"> {name}</span> : null}
                                   <div className="grid grid-cols-2 gap-2 mt-1 text-[12px] text-muted">
                                     <div>提交{attempts}次 · {official != null ? `官方分${official}` : '无官方分'}{overdue ? ' · 逾期' : ''}</div>
-                                    <div>过程：{processStatusLabel(processStatus)}{processNote}</div>
+                                    <div>过程：{processStatusLabel(processStatus) || processLabel}{processNote}{memory}</div>
                                   </div>
                                   {saveStudentGrade ? (
                                     <form

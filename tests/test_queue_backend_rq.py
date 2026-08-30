@@ -18,6 +18,9 @@ class _FakeTasks:
     def enqueue_profile_update(self, payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
         self.calls.append(("profile", payload, tenant_id))
 
+    def enqueue_process_archive(self, payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
+        self.calls.append(("process_archive", payload, tenant_id))
+
     def enqueue_chat_job(self, job_id: str, lane_id: Optional[str] = None, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         self.calls.append(("chat", job_id, lane_id, tenant_id))
         return {"ok": True, "job_id": job_id, "lane_id": lane_id}
@@ -49,6 +52,7 @@ def test_rq_queue_backend_delegates_all_methods(monkeypatch) -> None:
     backend.enqueue_upload_job("u-1")
     backend.enqueue_exam_job("e-1")
     backend.enqueue_profile_update({"id": "s-1"})
+    backend.enqueue_process_archive({"assignment_id": "HW_1", "student_id": "S1"})
     chat = backend.enqueue_chat_job("c-1", lane_id="lane-a")
     assert chat["ok"] is True
     assert backend.scan_pending_upload_jobs() == 1
@@ -61,6 +65,7 @@ def test_rq_queue_backend_delegates_all_methods(monkeypatch) -> None:
         ("upload", "u-1", "tenant-1"),
         ("exam", "e-1", "tenant-1"),
         ("profile", {"id": "s-1"}, "tenant-1"),
+        ("process_archive", {"assignment_id": "HW_1", "student_id": "S1"}, "tenant-1"),
         ("chat", "c-1", "lane-a", "tenant-1"),
         ("scan_upload", "tenant-1"),
         ("scan_exam", "tenant-1"),
