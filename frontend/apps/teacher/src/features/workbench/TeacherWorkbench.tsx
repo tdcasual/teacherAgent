@@ -26,23 +26,21 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     studentProposalLoading,
     progressLoading,
     uploading,
-    examUploading,
     activeWorkflowIndicator,
-    uploadMode,
     progressData,
     scrollToWorkflowSection,
   } = viewModel
 
   const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
   const guidance = buildTeacherWorkflowGuidance({
-    mode: uploadMode === 'exam' ? 'exam' : 'assignment',
+    mode: 'assignment',
     tone: activeWorkflowIndicator.tone,
     activeStepKey: activeStep?.key,
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
   })
   const workflowTabActive = workbenchTab === 'workflow'
-  const focusLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
+  const focusLabel = activeStep?.label || '上传文件'
 
   const handlePrimaryAction = () => {
     setWorkbenchTab('workflow')
@@ -84,7 +82,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 ? skillsLoading
                 : workbenchTab === 'memory'
                   ? proposalLoading || studentProposalLoading
-                  : progressLoading || uploading || examUploading
+                  : progressLoading || uploading
             }
           >
             刷新

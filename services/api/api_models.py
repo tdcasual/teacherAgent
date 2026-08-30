@@ -93,7 +93,6 @@ class StudentMemoryProposalReviewRequest(BaseModel):
 
 class StudentImportRequest(BaseModel):
     source: Optional[str] = None
-    exam_id: Optional[str] = None
     file_path: Optional[str] = None
     mode: Optional[str] = None
 
@@ -249,20 +248,6 @@ class UploadDraftSaveRequest(BaseModel):
     job_id: str
     requirements: Optional[Dict[str, Any]] = None
     questions: Optional[List[Dict[str, Any]]] = None
-
-
-class ExamUploadConfirmRequest(BaseModel):
-    job_id: str
-    confirm: Optional[bool] = True
-
-
-class ExamUploadDraftSaveRequest(BaseModel):
-    job_id: str
-    meta: Optional[Dict[str, Any]] = None
-    questions: Optional[List[Dict[str, Any]]] = None
-    score_schema: Optional[Dict[str, Any]] = None
-    answer_key_text: Optional[str] = None
-    reparse: Optional[bool] = False
 
 
 class TeacherProviderRegistryCreateRequest(BaseModel):

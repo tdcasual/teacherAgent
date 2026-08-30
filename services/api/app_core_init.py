@@ -19,7 +19,6 @@ def build_inline_backend_factory(
         enqueue_upload_job_fn=lambda job_id: core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(
             job_id, deps=upload_deps
         ),
-        enqueue_exam_job_fn=lambda _job_id: None,
         enqueue_survey_job_fn=lambda job_id: core_service_imports_module.survey_worker_service.enqueue_survey_job_inline(
             job_id, deps=survey_deps
         ),
@@ -35,7 +34,6 @@ def build_inline_backend_factory(
         scan_pending_upload_jobs_fn=lambda: core_service_imports_module.upload_worker_service.scan_pending_upload_jobs_inline(
             deps=upload_deps
         ),
-        scan_pending_exam_jobs_fn=lambda: 0,
         scan_pending_survey_jobs_fn=lambda: core_service_imports_module.survey_worker_service.scan_pending_survey_jobs_inline(
             deps=survey_deps
         ),

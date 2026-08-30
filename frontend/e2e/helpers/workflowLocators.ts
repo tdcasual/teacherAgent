@@ -8,9 +8,6 @@ export const workflowUploadSubmitButton = (page: Page): Locator =>
 export const workflowAssignmentScopeSelect = (page: Page): Locator =>
   workflowUploadSection(page).locator('label:has-text("范围") + select').first()
 
-export const workflowUploadModeButton = (page: Page, mode: '作业' | '考试'): Locator =>
-  workflowUploadSection(page).getByRole('button', { name: mode, exact: true }).first()
-
 export const workflowStatusChip = (page: Page): Locator =>
   page.getByTestId('workflow-summary-status-chip').first()
 

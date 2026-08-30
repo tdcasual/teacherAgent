@@ -48,9 +48,6 @@ class AgentRuntimeDeps:
     max_tool_rounds: int
     max_tool_calls: int
     extract_min_chars_requirement: Callable[[str], Optional[int]]
-    extract_exam_id: Callable[[str], Optional[str]]
-    is_exam_analysis_request: Callable[[str], bool]
-    build_exam_longform_context: Callable[[str], Dict[str, Any]]
     generate_longform_reply: Callable[..., str]
     call_llm: Callable[..., Dict[str, Any]]
     tool_dispatch: Callable[..., Dict[str, Any]]
@@ -138,22 +135,6 @@ def _resolve_runtime_tool_limits(
         if skill_runtime.max_tool_calls is not None:
             max_tool_calls = _clamp_budget(max_tool_calls, skill_runtime.max_tool_calls)
     return allowed, max_tool_rounds, max_tool_calls
-
-
-def _maybe_generate_teacher_longform_reply(
-    *,
-    deps: AgentRuntimeDeps,
-    messages: List[Dict[str, Any]],
-    last_user_text: str,
-    allowed: Set[str],
-    convo: List[Dict[str, Any]],
-    role_hint: Optional[str],
-    skill_id: Optional[str],
-    teacher_id: Optional[str],
-    skill_runtime: Optional[Any],
-) -> Optional[Dict[str, Any]]:
-    del deps, messages, last_user_text, allowed, convo, role_hint, skill_id, teacher_id, skill_runtime
-    return None
 
 
 def _dispatch_tool_safely(
@@ -758,37 +739,19 @@ def _maybe_teacher_runtime_shortcut_reply(
     is_teacher_role: bool,
     messages: List[Dict[str, Any]],
     last_user_text: str,
-    allowed: Set[str],
-    convo: List[Dict[str, Any]],
-    role_hint: Optional[str],
-    skill_id: Optional[str],
     teacher_id: Optional[str],
-    skill_runtime: Optional[Any],
     analysis_target: Optional[Any],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Optional[Dict[str, Any]]:
     if not is_teacher_role:
         return None
-    followup_reply = maybe_route_analysis_followup(
+    return maybe_route_analysis_followup(
         deps,
         messages=messages,
         last_user_text=last_user_text,
         teacher_id=teacher_id,
         analysis_target=analysis_target,
         event_sink=event_sink,
-    )
-    if followup_reply:
-        return followup_reply
-    return _maybe_generate_teacher_longform_reply(
-        deps=deps,
-        messages=messages,
-        last_user_text=last_user_text,
-        allowed=allowed,
-        convo=convo,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
     )
 
 
@@ -872,12 +835,7 @@ def run_agent_runtime(
             is_teacher_role=is_teacher_role,
             messages=messages,
             last_user_text=last_user_text,
-            allowed=allowed,
-            convo=convo,
-            role_hint=role_hint,
-            skill_id=skill_id,
             teacher_id=teacher_id,
-            skill_runtime=skill_runtime,
             analysis_target=analysis_target,
             event_sink=event_sink,
         )

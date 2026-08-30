@@ -41,7 +41,6 @@ const baseParams = {
   progressError: '',
   progressData: null,
   progressOnlyIncomplete: true,
-  examStatusPollNonce: 0,
   setUploadError: noop as (value: string) => void,
   setUploadStatus: noop as (value: string | ((prev: string) => string)) => void,
   setUploadJobId: noop,
@@ -67,7 +66,6 @@ const baseParams = {
   setProgressLoading: noop as (value: boolean) => void,
   setProgressError: noop,
   setProgressData: noop as () => void,
-  setExamStatusPollNonce: noop as () => void,
 }
 
 afterEach(() => {

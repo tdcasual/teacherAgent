@@ -96,26 +96,6 @@ test('assignment student scope requires student ids when file is provided', asyn
   expect(uploadCalls).toBe(0)
 })
 
-test('exam upload validation requires score file after paper file exists', async ({ page }) => {
-  let examUploadCalls = 0
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-    },
-  })
-
-  await page.route('http://localhost:8000/exam/upload/start', async (route) => {
-    examUploadCalls += 1
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, job_id: 'x' }) })
-  })
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await page.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
-  await workflowUploadSubmitButton(page).click()
-
-  await expect(page.getByText('请至少上传一份成绩文件（表格文件或文档/图片）')).toBeVisible()
-  expect(examUploadCalls).toBe(0)
-})
 
 test('assignment confirm stays disabled when requirements are missing', async ({ page }) => {
   const jobId = 'job_assignment_missing_requirements'
@@ -196,30 +176,3 @@ test('assignment confirm stays disabled when requirements are missing', async ({
   expect(confirmCalls).toBe(0)
 })
 
-test('recovers exam workflow mode from teacherActiveUpload local state', async ({ page }) => {
-  const examJobId = 'exam_job_recover_1'
-
-  await setupTeacherState(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: examJobId }),
-    },
-  })
-  await setupBasicTeacherApiMocks(page)
-
-  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        job_id: examJobId,
-        status: 'processing',
-        progress: 52,
-      }),
-    })
-  })
-
-  await page.goto('/')
-  await expect(page.getByRole('button', { name: '考试', exact: true }).first()).toHaveClass(/active/)
-  await expect(page.getByText('上传考试文件（试卷 + 成绩表）')).toBeVisible()
-})

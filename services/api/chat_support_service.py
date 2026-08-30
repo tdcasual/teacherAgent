@@ -344,27 +344,3 @@ def extract_min_chars_requirement(text: str) -> Optional[int]:
         if value > 0:
             return value
     return None
-
-
-_EXAM_ID_RE = re.compile(r"(?<![0-9A-Za-z_-])(EX[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
-
-
-def extract_exam_id(text: str) -> Optional[str]:
-    if not text:
-        return None
-    match = _EXAM_ID_RE.search(text)
-    if match:
-        return match.group(1)
-    match = re.search(r"exam[_\s-]*id\s*=?\s*(EX[0-9A-Za-z_-]+)", text, flags=re.I)
-    if match:
-        return match.group(1)
-    return None
-
-
-def is_exam_analysis_request(text: str) -> bool:
-    text = (text or "").strip()
-    if not text:
-        return False
-    if any(key in text for key in ("考试分析", "分析考试", "exam.analysis", "exam.analysis.get")):
-        return True
-    return ("考试" in text) and ("分析" in text)

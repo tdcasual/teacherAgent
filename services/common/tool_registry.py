@@ -428,7 +428,7 @@ def build_default_registry() -> ToolRegistry:
     tools["student.import"] = ToolDef(
         name="student.import",
         mutating=True,
-        description="Import students from exam responses into student_profiles",
+        description="Import students from scored response CSV into student_profiles",
         parameters=_schema_object(
             {
                 "source": {
@@ -436,7 +436,6 @@ def build_default_registry() -> ToolRegistry:
                     "description": "responses_scored or responses",
                     "default": "responses_scored",
                 },
-                "exam_id": {"type": "string", "description": "exam id to locate manifest"},
                 "file_path": {"type": "string", "description": "override responses csv path"},
                 "mode": {"type": "string", "description": "merge or overwrite", "default": "merge"},
             }

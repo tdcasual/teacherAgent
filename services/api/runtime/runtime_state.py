@@ -21,13 +21,6 @@ def reset_runtime_state(mod: Any, *, create_chat_idempotency_store: Callable[[An
     mod.UPLOAD_JOB_STOP_EVENT = threading.Event()
     mod.UPLOAD_JOB_WORKER_THREAD = None
 
-    mod.EXAM_JOB_QUEUE = deque()
-    mod.EXAM_JOB_LOCK = threading.Lock()
-    mod.EXAM_JOB_EVENT = threading.Event()
-    mod.EXAM_JOB_WORKER_STARTED = False
-    mod.EXAM_JOB_STOP_EVENT = threading.Event()
-    mod.EXAM_JOB_WORKER_THREAD = None
-
     mod.SURVEY_JOB_QUEUE = deque()
     mod.SURVEY_JOB_LOCK = threading.Lock()
     mod.SURVEY_JOB_EVENT = threading.Event()

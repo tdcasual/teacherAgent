@@ -78,19 +78,6 @@ class TestResolveAssignmentDir:
             paths.resolve_assignment_dir("../etc")
 
 
-# ── resolve_exam_dir ────────────────────────────────────────────────────
-
-
-class TestResolveExamDir:
-    def test_valid_id(self):
-        result = paths.resolve_exam_dir("midterm")
-        assert result == (paths.DATA_DIR / "exams" / "midterm").resolve()
-
-    def test_traversal_raises(self):
-        with pytest.raises(ValueError, match="invalid"):
-            paths.resolve_exam_dir("../../passwd")
-
-
 # ── resolve_analysis_dir ────────────────────────────────────────────────
 
 

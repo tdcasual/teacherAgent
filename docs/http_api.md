@@ -13,7 +13,6 @@
 - `services/api/routes/student_routes.py`
 - `services/api/routes/teacher_routes.py`
 - `services/api/routes/skill_routes.py`
-- `services/api/routes/exam_routes.py`
 - `services/api/routes/assignment_routes.py`
 
 ## 架构边界约束（2026-02 更新）
@@ -22,7 +21,7 @@
 
 当前 API 目录遵循以下边界：
 - `routes/*`：仅做 HTTP 协议转换，不做业务编排
-- `exam/application.py`、`assignment/application.py`：承载 context 用例编排
+- `assignment/application.py`：承载 context 用例编排
 - `app.py` + `container.py`：组合根与依赖注入入口
 
 ---
@@ -97,65 +96,11 @@
 ### GET `/skills`
 返回技能列表（从 `skills/*/SKILL.md` 自动扫描）
 
-### GET `/exams`
-返回已有考试列表
-
-## 考试（读取与分析）
-### GET `/exam/{exam_id}`
-返回考试 manifest + 汇总信息（学生数、题目数、总分概览等）。
-
-### GET `/exam/{exam_id}/analysis`
-返回考试分析草稿（若不存在则返回最小总分统计）。
-
-### GET `/exam/{exam_id}/students`
-返回考试学生列表（含总分与排名）。支持 query `limit`。
-
-### GET `/exam/{exam_id}/student/{student_id}`
-返回某个学生在本次考试中的逐题得分明细。
-
-### GET `/exam/{exam_id}/question/{question_id}`
-返回某道题的得分分布与统计（平均分/失分率等）。
-
 ### GET `/assignments`
 返回已有作业列表
 
 ### GET `/lessons`
 返回已有课程列表
-
----
-
-## 考试上传（异步 Job）
-### POST `/exam/upload/start`
-上传考试试卷与成绩表，创建后台解析任务。
-
-**multipart/form-data**
-- `exam_id`（可选，不填会自动生成）
-- `date`（可选，YYYY-MM-DD）
-- `class_name`（可选）
-- `paper_files`（必填，PDF 或图片；可多文件）
-- `score_files`（必填，xls/xlsx 或 PDF/图片；可多文件）
-
-**响应**
-```json
-{ "ok": true, "job_id": "job_xxx", "status": "queued", "message": "..." }
-```
-
-### GET `/exam/upload/status?job_id=...`
-查询解析进度与状态（queued/processing/done/failed/confirmed）。
-
-### GET `/exam/upload/draft?job_id=...`
-获取解析草稿（用于老师审核/修改）。
-
-### POST `/exam/upload/draft/save`
-保存草稿覆盖（例如修改题目满分、日期、班级等）。
-
-**请求**
-```json
-{ "job_id": "job_xxx", "meta": { "date": "2026-02-05" }, "questions": [{ "question_id": "Q1", "max_score": 4 }] }
-```
-
-### POST `/exam/upload/confirm`
-确认创建考试数据与分析草稿（写入 `data/exams/<exam_id>/` 与 `data/analysis/<exam_id>/`）。
 
 ---
 
@@ -199,13 +144,12 @@
 
 ## 学生导入
 ### POST `/student/import`
-从考试数据导入学生名册。
+从成绩 CSV（`file_path` 或 `data/staging` 最新 responses 文件）导入学生名册。
 
 **请求**
 ```json
 {
   "source": "responses_scored",
-  "exam_id": "A2403_2026-02-04",
   "file_path": "",
   "mode": "merge"
 }

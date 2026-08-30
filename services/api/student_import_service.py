@@ -67,7 +67,6 @@ def _latest_staging_responses_file(staging_dir: Path) -> Optional[Path]:
 
 
 def resolve_responses_file(
-    exam_id: Optional[str],
     file_path: Optional[str],
     *,
     deps: StudentImportDeps,
@@ -75,7 +74,6 @@ def resolve_responses_file(
     if file_path:
         return _resolve_direct_file(file_path, deps=deps)
 
-    del exam_id
     return _latest_staging_responses_file(deps.data_dir / "staging")
 
 
@@ -214,12 +212,11 @@ def import_students_from_responses(
 
 def student_import(args: Dict[str, Any], *, deps: StudentImportDeps) -> Dict[str, Any]:
     source = args.get("source") or "responses_scored"
-    exam_id = args.get("exam_id")
     file_path = args.get("file_path")
     mode = args.get("mode") or "merge"
     if source not in {"responses_scored", "responses"}:
         return {"error": f"unsupported source: {source}"}
-    responses_path = resolve_responses_file(exam_id, file_path, deps=deps)
+    responses_path = resolve_responses_file(file_path, deps=deps)
     if not responses_path:
-        return {"error": "responses file not found", "exam_id": exam_id, "file_path": file_path}
+        return {"error": "responses file not found", "file_path": file_path}
     return import_students_from_responses(responses_path, deps=deps, mode=mode)

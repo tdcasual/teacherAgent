@@ -8,8 +8,6 @@ from .api_models import (
     ChatResponse,
     ChatRequest,
     ChatStartRequest,
-    ExamUploadConfirmRequest,
-    ExamUploadDraftSaveRequest,
     StudentImportRequest,
     StudentVerifyRequest,
     TeacherProviderRegistryCreateRequest,
@@ -173,9 +171,7 @@ from .chat_support_service import (
     detect_latex_tokens as _detect_latex_tokens_impl,
     detect_math_delimiters as _detect_math_delimiters_impl,
     detect_student_study_trigger as _detect_student_study_trigger_impl,
-    extract_exam_id as _extract_exam_id_impl,
     extract_min_chars_requirement as _extract_min_chars_requirement_impl,
-    is_exam_analysis_request as _is_exam_analysis_request_impl,
     normalize_math_delimiters as _normalize_math_delimiters_impl,
 )
 from .chart_agent_run_service import (

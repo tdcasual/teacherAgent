@@ -151,27 +151,6 @@ test('workflow assignment confirm button enters confirming state and prevents du
   await expect(confirmBtn).toHaveText('已创建')
 })
 
-test('workflow mode switch keeps assignment and exam draft fields isolated', async ({ page }) => {
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-    },
-  })
-
-  const assignmentInput = page.getByPlaceholder('例如：HW-2026-02-05')
-  await assignmentInput.fill('HW-SWITCH-001')
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  const examInput = page.getByPlaceholder('例如：EX2403_PHY')
-  await expect(examInput).toBeVisible()
-  await examInput.fill('EX-SWITCH-009')
-
-  await page.getByRole('button', { name: '作业', exact: true }).first().click()
-  await expect(assignmentInput).toHaveValue('HW-SWITCH-001')
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await expect(examInput).toHaveValue('EX-SWITCH-009')
-})
 
 test('mobile overlay closes both session sidebar and workbench panels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })

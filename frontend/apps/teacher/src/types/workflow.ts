@@ -2,22 +2,19 @@
  * Shared type definitions for the workflow feature.
  *
  * Centralizes types used across WorkflowTab, UploadSection,
- * AssignmentDraftSection, ExamDraftSection, and WorkflowSummaryCard.
+ * AssignmentDraftSection, and WorkflowSummaryCard.
  */
 import type { FormEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react'
 import type {
   UploadJobStatus,
-  ExamUploadJobStatus,
   AssignmentProgress,
   UploadDraft,
-  ExamUploadDraft,
   WorkflowIndicator,
 } from '../appTypes'
 
 // ── Primitive helpers ──────────────────────────────────────────────────
 
 export type UploadScope = 'public' | 'class' | 'student'
-type UploadMode = 'assignment' | 'exam'
 
 type DifficultyOption = Readonly<{ value: string; label: string }>
 
@@ -33,20 +30,10 @@ export type AssignmentQuestion = {
   question_id?: string
 }
 
-export type ExamQuestion = {
-  question_id?: string
-  question_no?: string
-  max_score?: number | null
-}
-
 // ── Formatter function signatures ──────────────────────────────────────
 
 type FormatUploadJobSummary = (
   job: UploadJobStatus | null,
-  fallbackId?: string,
-) => string
-type FormatExamJobSummary = (
-  job: ExamUploadJobStatus | null,
   fallbackId?: string,
 ) => string
 export type FormatProgressSummary = (
@@ -56,10 +43,6 @@ export type FormatProgressSummary = (
 type FormatDraftSummary = (
   draft: UploadDraft | null,
   jobInfo: UploadJobStatus | null,
-) => string
-type FormatExamDraftSummary = (
-  draft: ExamUploadDraft | null,
-  jobInfo: ExamUploadJobStatus | null,
 ) => string
 type FormatMissingRequirements = (missing?: string[]) => string
 type DifficultyLabel = (value: string | number | undefined) => string
@@ -73,9 +56,6 @@ type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void
 // ── Shared prop groups ─────────────────────────────────────────────────
 
 export type UploadSectionProps = {
-  // Upload mode & state
-  uploadMode: UploadMode
-  setUploadMode: (v: UploadMode) => void
   uploadCardCollapsed: boolean
   setUploadCardCollapsed: Dispatch<SetStateAction<boolean>>
 
@@ -97,32 +77,16 @@ export type UploadSectionProps = {
   setUploadFiles: (v: File[]) => void
   setUploadAnswerFiles: (v: File[]) => void
 
-  // Exam upload fields
-  examId: string
-  setExamId: (v: string) => void
-  examDate: string
-  setExamDate: (v: string) => void
-  examClassName: string
-  setExamClassName: (v: string) => void
-  setExamPaperFiles: (v: File[]) => void
-  setExamAnswerFiles: (v: File[]) => void
-  setExamScoreFiles: (v: File[]) => void
-
   // Job info & status
   uploadJobInfo: UploadJobStatus | null
-  examJobInfo: ExamUploadJobStatus | null
   uploadError: string
   uploadStatus: string
-  examUploadError: string
-  examUploadStatus: string
 
   // Actions
   handleUploadAssignment: (e: FormEvent) => Promise<void>
-  handleUploadExam: (e: FormEvent) => Promise<void>
 
   // Formatters
   formatUploadJobSummary: FormatUploadJobSummary
-  formatExamJobSummary: FormatExamJobSummary
 }
 
 export type AssignmentDraftSectionProps = {
@@ -155,36 +119,10 @@ export type AssignmentDraftSectionProps = {
   stopKeyPropagation: StopKeyPropagation
 }
 
-export type ExamDraftSectionProps = {
-  examDraft: ExamUploadDraft | null
-  examJobInfo: ExamUploadJobStatus | null
-  examDraftPanelCollapsed: boolean
-  setExamDraftPanelCollapsed: Dispatch<SetStateAction<boolean>>
-  examDraftError: string
-  examDraftActionError: string
-  examDraftActionStatus: string
-
-  // Actions
-  saveExamDraft: (draft: ExamUploadDraft) => Promise<void>
-  handleConfirmExamUpload: () => Promise<void>
-  updateExamDraftMeta: (key: string, value: string) => void
-  updateExamQuestionField: (index: number, patch: Record<string, unknown>) => void
-  updateExamAnswerKeyText: (value: string) => void
-  updateExamScoreSchemaSelectedCandidate: (candidateId: string) => void
-
-  // Formatters & utils
-  formatExamDraftSummary: FormatExamDraftSummary
-  stopKeyPropagation: StopKeyPropagation
-}
-
 export type WorkflowSummaryCardProps = {
   activeWorkflowIndicator: WorkflowIndicator
-  uploadMode: UploadMode
-  setUploadMode: (v: UploadMode) => void
   uploadJobInfo: UploadJobStatus | null
   uploadAssignmentId: string
-  examJobInfo: ExamUploadJobStatus | null
-  examId: string
   progressData: AssignmentProgress | null
   progressAssignmentId: string
   progressLoading: boolean
@@ -196,7 +134,6 @@ export type WorkflowSummaryCardProps = {
 
   // Formatters
   formatUploadJobSummary: FormatUploadJobSummary
-  formatExamJobSummary: FormatExamJobSummary
   formatProgressSummary: FormatProgressSummary
 }
 

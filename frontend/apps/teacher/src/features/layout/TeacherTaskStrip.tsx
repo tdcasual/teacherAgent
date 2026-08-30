@@ -1,7 +1,6 @@
 import type { WorkflowIndicatorTone } from '../../appTypes'
 
 type TeacherTaskStripProps = {
-  mode: 'assignment' | 'exam'
   statusLabel: string
   tone: WorkflowIndicatorTone
   summary: string
@@ -19,7 +18,6 @@ const toneClassMap: Record<WorkflowIndicatorTone, string> = {
 }
 
 export default function TeacherTaskStrip({
-  mode,
   statusLabel,
   tone,
   nextStepLabel,
@@ -27,7 +25,7 @@ export default function TeacherTaskStrip({
   onPrimaryAction,
   primaryActionDisabled = false,
 }: TeacherTaskStripProps) {
-  const modeLabel = mode === 'assignment' ? '今日作业' : '今日考试'
+  const modeLabel = '今日作业'
   const displayNextStep = nextStepLabel.replace(/^下一步[:：]\s*/, '')
 
   return (

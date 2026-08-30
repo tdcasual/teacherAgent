@@ -18,9 +18,6 @@ class RqQueueBackend:
     def enqueue_upload_job(self, job_id: str) -> None:
         _rq_tasks().enqueue_upload_job(job_id, tenant_id=self.tenant_id)
 
-    def enqueue_exam_job(self, job_id: str) -> None:
-        _rq_tasks().enqueue_exam_job(job_id, tenant_id=self.tenant_id)
-
     def enqueue_survey_job(self, job_id: str) -> None:
         _rq_tasks().enqueue_survey_job(job_id, tenant_id=self.tenant_id)
 
@@ -35,9 +32,6 @@ class RqQueueBackend:
 
     def scan_pending_upload_jobs(self) -> int:
         return _rq_tasks().scan_pending_upload_jobs(tenant_id=self.tenant_id)
-
-    def scan_pending_exam_jobs(self) -> int:
-        return _rq_tasks().scan_pending_exam_jobs(tenant_id=self.tenant_id)
 
     def scan_pending_survey_jobs(self) -> int:
         return _rq_tasks().scan_pending_survey_jobs(tenant_id=self.tenant_id)

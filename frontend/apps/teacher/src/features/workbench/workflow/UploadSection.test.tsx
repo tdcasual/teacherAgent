@@ -10,18 +10,12 @@ afterEach(() => {
 })
 
 const baseProps = {
-  uploadMode: 'assignment' as const,
-  setUploadMode: vi.fn(),
   uploadCardCollapsed: false,
   setUploadCardCollapsed: vi.fn(),
   formatUploadJobSummary: () => 'upload',
-  formatExamJobSummary: () => 'exam',
   uploadJobInfo: null,
   uploadAssignmentId: 'HW-1',
-  examJobInfo: null,
-  examId: '',
   handleUploadAssignment: vi.fn(),
-  handleUploadExam: vi.fn(),
   setUploadAssignmentId: vi.fn(),
   uploadDate: '',
   setUploadDate: vi.fn(),
@@ -40,16 +34,6 @@ const baseProps = {
   uploading: false,
   uploadError: '',
   uploadStatus: '',
-  setExamId: vi.fn(),
-  examDate: '',
-  setExamDate: vi.fn(),
-  examClassName: '',
-  setExamClassName: vi.fn(),
-  setExamPaperFiles: vi.fn(),
-  setExamAnswerFiles: vi.fn(),
-  setExamScoreFiles: vi.fn(),
-  examUploadError: '',
-  examUploadStatus: '',
 }
 
 describe('UploadSection', () => {
@@ -71,7 +55,7 @@ describe('UploadSection', () => {
       'generic',
     ])
     expect(screen.getByLabelText('截止日期（可选）')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '考试', exact: true })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '考试', exact: true })).toBeNull()
   })
 
   it('uses GET /teacher/roster for subject and class dropdowns', async () => {

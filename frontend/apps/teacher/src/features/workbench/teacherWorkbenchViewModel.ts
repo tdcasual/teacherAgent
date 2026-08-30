@@ -20,7 +20,6 @@ type TeacherWorkbenchChromeProps = {
   studentProposalLoading: boolean
   progressLoading: boolean
   uploading: boolean
-  examUploading: boolean
 }
 
 export type TeacherWorkbenchViewModel = TeacherWorkbenchChromeProps &

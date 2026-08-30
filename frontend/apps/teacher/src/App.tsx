@@ -9,8 +9,8 @@ import { fallbackSkills, TEACHER_GREETING } from './features/chat/catalog'
 import { buildTeacherWorkbenchViewModel } from './features/workbench/teacherWorkbenchViewModel'
 import { useAssignmentUploadStatusPolling } from './features/workbench/useAssignmentUploadStatusPolling'
 import { useTeacherWorkbenchPanelControls } from './features/workbench/useTeacherWorkbenchPanelControls'
-import { formatDraftSummary, formatExamDraftSummary, formatExamJobSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
-import { buildTeacherWorkflowGuidance, buildExamWorkflowIndicator, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
+import { formatDraftSummary, formatProgressSummary, formatUploadJobStatus, formatUploadJobSummary } from './features/workbench/workbenchFormatters'
+import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from './features/workbench/workflowIndicators'
 import { difficultyLabel, difficultyOptions, formatMissingRequirements, normalizeDifficulty, parseCommaList, parseLineList } from './features/workbench/workbenchUtils'
 import { resolveRuntimeApiBase } from '../../shared/apiBase'
 import { readTeacherAnalysisWorkbenchFlag, readTeacherAnalysisWorkbenchShadowFlag } from '../../shared/featureFlags'
@@ -20,7 +20,6 @@ import { safeLocalStorageGetItem } from './utils/storage'
 import { makeId } from './utils/id'
 import { nowTime } from './utils/time'
 import { useTeacherWorkbenchState } from './features/state/useTeacherWorkbenchState'
-import { useDraftMutations } from './features/workbench/hooks/useDraftMutations'
 import { useAnalysisReports } from './features/workbench/hooks/useAnalysisReports'
 import { useWheelScrollZone } from './features/chat/useWheelScrollZone'
 import { useLocalStorageSync } from './features/state/useLocalStorageSync'
@@ -34,7 +33,7 @@ import { useTeacherPendingChatJob } from './features/chat/useTeacherPendingChatJ
 import { useTeacherSessionState } from './features/state/useTeacherSessionState'
 import { readTeacherAuthSubject } from './features/auth/teacherAuth'
 import { useTeacherMobileShell } from './features/layout/useTeacherMobileShell'
-import type { Message, PendingToolRun, Skill, WorkbenchTab, WorkflowIndicator } from './appTypes'
+import type { Message, PendingToolRun, Skill, WorkbenchTab } from './appTypes'
 import { WORKBENCH_DEFAULT_WIDTH, WORKBENCH_MIN_WIDTH, workbenchMaxWidthForViewport } from './teacherAppChrome'
 
 export default function App() {
@@ -63,9 +62,7 @@ export default function App() {
     uploadDraft, draftPanelCollapsed, draftLoading, draftError, questionShowCount, draftSaving, draftActionStatus, draftActionError,
     misconceptionsText, misconceptionsDirty, progressPanelCollapsed, progressAssignmentId, progressLoading, progressError, progressData,
     progressOnlyIncomplete, memoryStatusFilter, studentMemoryStatusFilter, studentMemoryStudentFilter,
-    examId, examDate, examClassName, examPaperFiles, examScoreFiles, examAnswerFiles, examUploading, examUploadError,
-    examJobId, examJobInfo, examStatusPollNonce, examDraft, examDraftPanelCollapsed, examDraftError, examDraftSaving,
-    examDraftActionError, examConfirming, executionTimeline,
+    executionTimeline,
     setUploadMode, setUploadFiles,
     setUploadAnswerFiles, setUploading, setUploadStatus, setUploadError, setUploadCardCollapsed, setUploadJobId, setUploadJobInfo,
     setUploadConfirming, setUploadStatusPollNonce, setUploadDraft, setDraftPanelCollapsed, setDraftLoading, setDraftError,
@@ -73,10 +70,7 @@ export default function App() {
     setProgressPanelCollapsed, setProgressAssignmentId, setProgressLoading, setProgressError, setProgressData,
     setProposalLoading, setProposalError, setProposals, setMemoryInsights, setStudentProposalLoading,
     setStudentProposalError, setStudentProposals, setStudentMemoryInsights,
-    setExamPaperFiles, setExamScoreFiles, setExamAnswerFiles, setExamUploading,
-    setExamUploadStatus, setExamUploadError, setExamJobId, setExamJobInfo, setExamStatusPollNonce, setExamDraft,
-    setExamDraftPanelCollapsed, setExamDraftLoading, setExamDraftError, setExamDraftSaving, setExamDraftActionStatus,
-    setExamDraftActionError, setExamConfirming, setExecutionTimeline,
+    setExecutionTimeline,
   } = workbench
   const {
     historySessions, historyLoading, historyError, historyCursor, historyHasMore, historyQuery, showArchivedSessions,
@@ -171,12 +165,6 @@ export default function App() {
     messages,
     sending,
   })
-  const {
-    updateExamDraftMeta,
-    updateExamQuestionField,
-    updateExamAnswerKeyText,
-    updateExamScoreSchemaSelectedCandidate,
-  } = useDraftMutations({ uploadDraft, setUploadDraft: workbench.setUploadDraft, examDraft, setExamDraft: workbench.setExamDraft })
   const { setWheelScrollZone } = useWheelScrollZone({
     appRef, sessionSidebarOpen, skillsOpen,
   })
@@ -283,9 +271,7 @@ export default function App() {
     inputRef, input,
     composerWarning, setComposerWarning,
     uploadError, uploadCardCollapsed, setUploadCardCollapsed,
-    examUploadError,
     draftError, draftActionError, draftPanelCollapsed, setDraftPanelCollapsed,
-    examDraftError, examDraftActionError, examDraftPanelCollapsed, setExamDraftPanelCollapsed,
     markdownCacheRef,
   })
   const {
@@ -300,14 +286,12 @@ export default function App() {
     uploadDraft, draftPanelCollapsed, draftLoading, draftError, questionShowCount,
     draftSaving, draftActionStatus, draftActionError, misconceptionsText, misconceptionsDirty,
     progressPanelCollapsed, progressAssignmentId, progressLoading, progressError, progressData, progressOnlyIncomplete,
-    examStatusPollNonce,
     setUploadError, setUploadStatus, setUploadJobId, setUploadJobInfo, setUploadDraft,
     setUploadFiles, setUploadAnswerFiles, setUploading, setUploadCardCollapsed, setUploadConfirming,
     setUploadStatusPollNonce, setDraftPanelCollapsed, setDraftLoading, setDraftError,
     setQuestionShowCount, setDraftSaving, setDraftActionStatus, setDraftActionError,
     setMisconceptionsText, setMisconceptionsDirty,
     setProgressPanelCollapsed, setProgressAssignmentId, setProgressLoading, setProgressError, setProgressData,
-    setExamStatusPollNonce,
   })
   useTeacherSessionViewStateSync({
     apiBase,
@@ -333,7 +317,7 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, [setExamJobId, setUploadJobId, setUploadMode])
+  }, [setUploadJobId, setUploadMode])
   useAssignmentUploadStatusPolling({
     apiBase,
     uploadJobId,
@@ -343,33 +327,16 @@ export default function App() {
     setUploadJobInfo,
     setUploadStatus,
   })
-  const examWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
-    return buildExamWorkflowIndicator({
-      examJobId,
-      examJobInfoStatus: examJobInfo?.status,
-      examUploading,
-      examConfirming,
-      examDraft,
-      examUploadError,
-      examDraftError,
-      examDraftActionError,
-    })
-  }, [examConfirming, examDraft, examDraftActionError, examDraftError, examJobId, examJobInfo?.status, examUploadError, examUploading])
-  const activeWorkflowIndicator = uploadMode === 'assignment' ? assignmentWorkflowIndicator : examWorkflowIndicator
+  const activeWorkflowIndicator = assignmentWorkflowIndicator
   const teacherTaskStrip = useMemo(() => {
-    const mode = uploadMode === 'exam' ? 'exam' : 'assignment'
-    const summary = mode === 'assignment'
-      ? (uploadJobInfo || uploadAssignmentId
-        ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId)
-        : progressData
-          ? formatProgressSummary(progressData, progressAssignmentId || uploadAssignmentId)
-          : '未开始解析 · 等待上传今天的作业资料')
-      : (examJobInfo || examId
-        ? formatExamJobSummary(examJobInfo, examId)
-        : '未开始解析 · 等待上传今天的考试资料')
+    const summary = uploadJobInfo || uploadAssignmentId
+      ? formatUploadJobSummary(uploadJobInfo, uploadAssignmentId)
+      : progressData
+        ? formatProgressSummary(progressData, progressAssignmentId || uploadAssignmentId)
+        : '未开始解析 · 等待上传今天的作业资料'
     const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
     const guidance = buildTeacherWorkflowGuidance({
-      mode,
+      mode: 'assignment',
       tone: activeWorkflowIndicator.tone,
       activeStepKey: activeStep?.key,
       hasExecutionTimeline: executionTimeline.length > 0,
@@ -388,7 +355,6 @@ export default function App() {
 
     return (
       <TeacherTaskStrip
-        mode={mode}
         statusLabel={activeWorkflowIndicator.label}
         tone={activeWorkflowIndicator.tone}
         summary={summary}
@@ -399,8 +365,6 @@ export default function App() {
     )
   }, [
     activeWorkflowIndicator,
-    examId,
-    examJobInfo,
     executionTimeline.length,
     progressAssignmentId,
     progressData,
@@ -409,14 +373,10 @@ export default function App() {
     teacherUseMobileShellV2,
     uploadAssignmentId,
     uploadJobInfo,
-    uploadMode,
     setWorkbenchTab,
     setSkillsOpen,
     setMobileTab,
   ])
-  const handleUploadExam = async () => undefined
-  const saveExamDraft = async () => undefined
-  const handleConfirmExamUpload = async () => undefined
   const {
     attachments,
     addFiles,
@@ -539,15 +499,11 @@ export default function App() {
     fetchSkills,
     filteredSkills,
     formatDraftSummary,
-    formatExamDraftSummary,
-    formatExamJobSummary,
     formatMissingRequirements,
     formatProgressSummary,
     formatUploadJobSummary,
-    handleConfirmExamUpload,
     handleConfirmUpload,
     handleUploadAssignment,
-    handleUploadExam,
     insertInvocationTokenAtCursor,
     insertPrompt,
     normalizeDifficulty,
@@ -565,7 +521,6 @@ export default function App() {
       void refreshAnalysisReports()
     },
     saveDraft,
-    saveExamDraft,
     scrollToWorkflowSection,
     setComposerWarning,
     setShowFavoritesOnly,
@@ -580,10 +535,6 @@ export default function App() {
     toggleFavorite,
     updateDraftQuestion,
     updateDraftRequirement,
-    updateExamAnswerKeyText,
-    updateExamDraftMeta,
-    updateExamScoreSchemaSelectedCandidate,
-    updateExamQuestionField,
     analysisFeatureEnabled: teacherAnalysisWorkbenchEnabled,
     videoHomeworkFeatureEnabled: teacherAnalysisWorkbenchEnabled,
     analysisFeatureShadowMode: teacherAnalysisWorkbenchShadowMode,

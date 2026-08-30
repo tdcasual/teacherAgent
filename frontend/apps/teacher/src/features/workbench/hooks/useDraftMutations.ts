@@ -1,18 +1,15 @@
 import { useCallback } from 'react'
-import type { ExamUploadDraft, UploadDraft } from '../../../appTypes'
+import type { UploadDraft } from '../../../appTypes'
 
 type UseDraftMutationsParams = {
   uploadDraft: UploadDraft | null
   setUploadDraft: React.Dispatch<React.SetStateAction<UploadDraft | null>>
-  examDraft: ExamUploadDraft | null
-  setExamDraft: React.Dispatch<React.SetStateAction<ExamUploadDraft | null>>
 }
 
 type UnknownRecord = Record<string, unknown>
 
 export function useDraftMutations({
   setUploadDraft,
-  setExamDraft,
 }: UseDraftMutationsParams) {
   const computeLocalRequirementsMissing = useCallback(
     (req: UnknownRecord): string[] => {
@@ -78,94 +75,9 @@ export function useDraftMutations({
     [setUploadDraft],
   )
 
-  const updateExamDraftMeta = useCallback(
-    (key: string, value: unknown) => {
-      setExamDraft((prev) => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          meta: {
-            ...(prev.meta || {}),
-            [key]: value,
-          },
-        }
-      })
-    },
-    [setExamDraft],
-  )
-
-  const updateExamQuestionField = useCallback(
-    (index: number, patch: UnknownRecord) => {
-      setExamDraft((prev) => {
-        if (!prev) return prev
-        const next = [...(prev.questions || [])]
-        const cur = next[index] || {}
-        next[index] = { ...cur, ...patch }
-        return { ...prev, questions: next }
-      })
-    },
-    [setExamDraft],
-  )
-
-  const updateExamAnswerKeyText = useCallback(
-    (value: string) => {
-      setExamDraft((prev) => {
-        if (!prev) return prev
-        return { ...prev, answer_key_text: value }
-      })
-    },
-    [setExamDraft],
-  )
-
-  const updateExamScoreSchemaSelectedCandidate = useCallback(
-    (candidateId: string) => {
-      const nextCandidateId = String(candidateId || '').trim()
-      setExamDraft((prev) => {
-        if (!prev) return prev
-        const prevSchema = prev.score_schema || {}
-        const prevSubject = prevSchema.subject || {}
-        const selectedAvailable = nextCandidateId
-          ? Array.isArray(prevSubject?.candidate_columns)
-            ? prevSubject.candidate_columns.some(
-                (candidate) =>
-                  String(candidate?.candidate_id || '') === nextCandidateId,
-              )
-            : true
-          : true
-        const selectionError =
-          nextCandidateId && !selectedAvailable
-            ? 'selected_candidate_not_found'
-            : ''
-        const nextNeedsConfirm = !nextCandidateId || !selectedAvailable
-        return {
-          ...prev,
-          needs_confirm: nextNeedsConfirm,
-          score_schema: {
-            ...prevSchema,
-            confirm: Boolean(nextCandidateId && selectedAvailable),
-            needs_confirm: nextNeedsConfirm,
-            subject: {
-              ...prevSubject,
-              selected_candidate_id: nextCandidateId,
-              selected_candidate_available: selectedAvailable,
-              ...(selectionError
-                ? { selection_error: selectionError }
-                : { selection_error: '' }),
-            },
-          },
-        }
-      })
-    },
-    [setExamDraft],
-  )
-
   return {
     computeLocalRequirementsMissing,
     updateDraftRequirement,
     updateDraftQuestion,
-    updateExamDraftMeta,
-    updateExamQuestionField,
-    updateExamAnswerKeyText,
-    updateExamScoreSchemaSelectedCandidate,
   }
 }

@@ -69,9 +69,6 @@ interface UseAssignmentWorkflowParams {
   progressData: AssignmentProgress | null
   progressOnlyIncomplete: boolean
 
-  // Exam poll nonce (needed by refreshWorkflowWorkbench)
-  examStatusPollNonce: number
-
   // Setters
   setUploadError: (value: string) => void
   setUploadStatus: (value: string | ((prev: string) => string)) => void
@@ -98,7 +95,6 @@ interface UseAssignmentWorkflowParams {
   setProgressLoading: (value: boolean) => void
   setProgressError: (value: string) => void
   setProgressData: (value: AssignmentProgress | null) => void
-  setExamStatusPollNonce: (value: number | ((prev: number) => number)) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +180,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     setProgressLoading,
     setProgressError,
     setProgressData,
-    setExamStatusPollNonce,
   } = params
 
   // ---- Workflow indicator (memoised) ----
@@ -525,7 +520,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
 
   const refreshWorkflowWorkbench = useCallback(() => {
     setUploadStatusPollNonce((n) => n + 1)
-    setExamStatusPollNonce((n) => n + 1)
     const assignmentId = (progressAssignmentId || uploadAssignmentId || uploadDraft?.assignment_id || '').trim()
     if (assignmentId) {
       void fetchAssignmentProgress(assignmentId)
@@ -533,7 +527,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   }, [
     fetchAssignmentProgress,
     progressAssignmentId,
-    setExamStatusPollNonce,
     setUploadStatusPollNonce,
     uploadAssignmentId,
     uploadDraft?.assignment_id,

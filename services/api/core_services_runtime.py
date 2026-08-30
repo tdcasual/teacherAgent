@@ -41,13 +41,7 @@ from .chat_support_service import (
     detect_student_study_trigger as _detect_student_study_trigger_impl,
 )
 from .chat_support_service import (
-    extract_exam_id as _extract_exam_id_impl,
-)
-from .chat_support_service import (
     extract_min_chars_requirement as _extract_min_chars_requirement_impl,
-)
-from .chat_support_service import (
-    is_exam_analysis_request as _is_exam_analysis_request_impl,
 )
 from .chat_support_service import (
     normalize_math_delimiters as _normalize_math_delimiters_impl,
@@ -201,9 +195,9 @@ def teacher_provider_registry_probe_models(
 
 
 def resolve_responses_file(
-    exam_id: Optional[str], file_path: Optional[str], core: Any | None = None
+    file_path: Optional[str], core: Any | None = None
 ) -> Optional[Path]:
-    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps(core))
+    return _resolve_responses_file_impl(file_path, deps=_student_import_deps(core))
 
 
 def import_students_from_responses(
@@ -334,14 +328,6 @@ def extract_min_chars_requirement(text: str) -> Optional[int]:
     return _extract_min_chars_requirement_impl(text)
 
 
-def extract_exam_id(text: str) -> Optional[str]:
-    return _extract_exam_id_impl(text)
-
-
-def is_exam_analysis_request(text: str) -> bool:
-    return _is_exam_analysis_request_impl(text)
-
-
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
     from .content_catalog_service import load_kp_catalog as _load_kp_catalog_impl
 
@@ -352,11 +338,6 @@ def load_question_kp_map() -> Dict[str, str]:
     from .content_catalog_service import load_question_kp_map as _load_question_kp_map_impl
 
     return _load_question_kp_map_impl(DATA_DIR)
-
-
-def build_exam_longform_context(exam_id: str, core: Any | None = None) -> Dict[str, Any]:
-    del exam_id, core
-    return {}
 
 
 def run_agent(

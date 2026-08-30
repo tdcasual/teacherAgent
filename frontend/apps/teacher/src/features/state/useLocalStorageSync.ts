@@ -52,15 +52,10 @@ type UseLocalStorageSyncParams = {
   uploadError: string
   uploadCardCollapsed: boolean
   setUploadCardCollapsed: (v: boolean) => void
-  examUploadError: string
   draftError: string
   draftActionError: string
   draftPanelCollapsed: boolean
   setDraftPanelCollapsed: (v: boolean) => void
-  examDraftError: string
-  examDraftActionError: string
-  examDraftPanelCollapsed: boolean
-  setExamDraftPanelCollapsed: (v: boolean) => void
 
   // Markdown cache ref (cleared on apiBase change)
   markdownCacheRef: RefObject<Map<string, { content: string; html: string; apiBase: string }>>
@@ -103,15 +98,10 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
     uploadError,
     uploadCardCollapsed,
     setUploadCardCollapsed,
-    examUploadError,
     draftError,
     draftActionError,
     draftPanelCollapsed,
     setDraftPanelCollapsed,
-    examDraftError,
-    examDraftActionError,
-    examDraftPanelCollapsed,
-    setExamDraftPanelCollapsed,
     markdownCacheRef,
   } = params
 
@@ -267,14 +257,6 @@ export function useLocalStorageSync(params: UseLocalStorageSyncParams): void {
   }, [uploadError, uploadCardCollapsed, setUploadCardCollapsed])
 
   useEffect(() => {
-    if (examUploadError && uploadCardCollapsed) setUploadCardCollapsed(false)
-  }, [examUploadError, uploadCardCollapsed, setUploadCardCollapsed])
-
-  useEffect(() => {
     if ((draftError || draftActionError) && draftPanelCollapsed) setDraftPanelCollapsed(false)
   }, [draftError, draftActionError, draftPanelCollapsed, setDraftPanelCollapsed])
-
-  useEffect(() => {
-    if ((examDraftError || examDraftActionError) && examDraftPanelCollapsed) setExamDraftPanelCollapsed(false)
-  }, [examDraftError, examDraftActionError, examDraftPanelCollapsed, setExamDraftPanelCollapsed])
 }

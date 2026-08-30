@@ -42,9 +42,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -80,21 +77,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "total",
-                    "totals_summary": {
-                        "avg_total": 371.714,
-                        "median_total": 366.5,
-                        "max_total_observed": 511.5,
-                        "min_total_observed": 289.5,
-                    },
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -129,15 +111,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "subject",
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -171,16 +144,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "total",
-                    "meta": {"subject": "physics"},
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -218,16 +181,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "subject",
-                    "score_mode_source": "subject_from_scores_file",
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -263,9 +216,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=call_llm,
             tool_dispatch=tool_dispatch or (lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True}),

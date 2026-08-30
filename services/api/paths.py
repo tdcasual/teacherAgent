@@ -12,7 +12,6 @@ from . import settings as _settings
 from .config import (
     APP_ROOT,
     DATA_DIR,
-    EXAM_UPLOAD_JOB_DIR,
     STUDENT_SESSIONS_DIR,
     TEACHER_SESSIONS_DIR,
     TEACHER_WORKSPACES_DIR,
@@ -93,7 +92,7 @@ def safe_fs_id(value: str, prefix: str = "id") -> str:
 
 
 # ---------------------------------------------------------------------------
-# Upload / exam job paths
+# Upload job paths
 # ---------------------------------------------------------------------------
 
 
@@ -104,15 +103,6 @@ def upload_job_path(job_id: str, core: Any | None = None) -> Path:
         safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
     upload_job_dir = _path_from_core(core, "UPLOAD_JOB_DIR", UPLOAD_JOB_DIR)
     return upload_job_dir / safe
-
-
-def exam_job_path(job_id: str, core: Any | None = None) -> Path:
-    raw = str(job_id or "")
-    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
-    if not safe:
-        safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
-    exam_upload_job_dir = _path_from_core(core, "EXAM_UPLOAD_JOB_DIR", EXAM_UPLOAD_JOB_DIR)
-    return exam_upload_job_dir / safe
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +283,7 @@ def teacher_session_file(teacher_id: str, session_id: str, core: Any | None = No
 
 
 # ---------------------------------------------------------------------------
-# Assignment / exam / analysis / student-profile directory paths
+# Assignment / analysis / student-profile directory paths
 # ---------------------------------------------------------------------------
 
 
@@ -306,18 +296,6 @@ def resolve_assignment_dir(assignment_id: str, core: Any | None = None) -> Path:
     folder = (assignments_root / aid).resolve()
     if folder != assignments_root and assignments_root not in folder.parents:
         raise ValueError("invalid assignment_id")
-    return folder
-
-
-def resolve_exam_dir(exam_id: str, core: Any | None = None) -> Path:
-    data_dir = _path_from_core(core, "DATA_DIR", DATA_DIR)
-    exams_root = (data_dir / "exams").resolve()
-    eid = str(exam_id or "").strip()
-    if not eid:
-        raise ValueError("exam_id is required")
-    folder = (exams_root / eid).resolve()
-    if folder != exams_root and exams_root not in folder.parents:
-        raise ValueError("invalid exam_id")
     return folder
 
 

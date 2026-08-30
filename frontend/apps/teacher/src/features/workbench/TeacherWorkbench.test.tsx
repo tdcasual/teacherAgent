@@ -43,7 +43,6 @@ const buildViewModel = (): TeacherWorkbenchViewModel => {
     studentProposalLoading: false,
     progressLoading: false,
     uploading: false,
-    examUploading: false,
     activeWorkflowIndicator: {
       label: '待审核',
       tone: 'active',
@@ -57,14 +56,11 @@ const buildViewModel = (): TeacherWorkbenchViewModel => {
     uploadMode: 'assignment',
     uploadJobInfo: null,
     uploadAssignmentId: 'HW-20260314',
-    examJobInfo: null,
-    examId: '',
     progressData: null,
     progressAssignmentId: '',
     scrollToWorkflowSection,
     fetchAssignmentProgress: async () => undefined,
     formatUploadJobSummary: () => '状态：解析完成（待确认） · 作业编号：HW-20260314',
-    formatExamJobSummary: () => '状态：未开始',
     formatProgressSummary: () => '暂无完成情况',
   } as unknown as TeacherWorkbenchViewModel
 }

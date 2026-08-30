@@ -2,7 +2,6 @@ import { expect, test } from '@playwright/test'
 import { openTeacherApp, setupBasicTeacherApiMocks, setupTeacherState } from './helpers/teacherHarness'
 import {
   workflowAssignmentScopeSelect,
-  workflowStatusChip,
   workflowUploadSubmitButton,
 } from './helpers/workflowLocators'
 
@@ -10,12 +9,6 @@ const fakePdfFile = {
   name: 'sample.pdf',
   mimeType: 'application/pdf',
   buffer: Buffer.from('%PDF-1.4 sample'),
-}
-
-const fakeXlsxFile = {
-  name: 'scores.xlsx',
-  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  buffer: Buffer.from('xlsx-sample'),
 }
 
 test('assignment upload success writes teacherActiveUpload and displays status message', async ({ page }) => {
@@ -54,42 +47,6 @@ test('assignment upload success writes teacherActiveUpload and displays status m
   expect(uploadCalls).toBe(1)
 })
 
-test('exam upload success writes teacherActiveUpload and displays status message', async ({ page }) => {
-  let examUploadCalls = 0
-
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-    },
-  })
-
-  await page.route('http://localhost:8000/exam/upload/start', async (route) => {
-    examUploadCalls += 1
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        ok: true,
-        job_id: 'job_upload_exam_1',
-        message: '考试解析任务已创建。',
-      }),
-    })
-  })
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await page.locator('#workflow-upload-section input[type="file"]').nth(0).setInputFiles(fakePdfFile)
-  await page.locator('#workflow-upload-section input[type="file"]').nth(2).setInputFiles(fakeXlsxFile)
-  await workflowUploadSubmitButton(page).click()
-
-  await expect.poll(async () =>
-    page.evaluate(() => {
-      const raw = localStorage.getItem('teacherActiveUpload')
-      if (!raw) return null
-      return JSON.parse(raw)
-    }),
-  ).toEqual({ type: 'exam', job_id: 'job_upload_exam_1' })
-  expect(examUploadCalls).toBe(1)
-})
 
 test('assignment active upload marker is cleared when status becomes confirmed', async ({ page }) => {
   const assignmentJobId = 'job_assignment_confirmed_1'
@@ -151,59 +108,7 @@ test('assignment active upload marker is cleared when status becomes confirmed',
   await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
 })
 
-test('exam active upload marker is cleared when status becomes failed', async ({ page }) => {
-  const examJobId = 'job_exam_failed_1'
 
-  await setupTeacherState(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-      teacherActiveUpload: JSON.stringify({ type: 'exam', job_id: examJobId }),
-    },
-  })
-  await setupBasicTeacherApiMocks(page)
-
-  await page.route('http://localhost:8000/exam/upload/status**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        job_id: examJobId,
-        status: 'failed',
-        error: '解析失败',
-      }),
-    })
-  })
-
-  await page.goto('/')
-
-  await expect(workflowStatusChip(page)).toHaveText('解析失败')
-  await expect.poll(async () => page.evaluate(() => localStorage.getItem('teacherActiveUpload'))).toBeNull()
-})
-
-test('exam upload validation requires paper file before start request', async ({ page }) => {
-  let examUploadCalls = 0
-
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-    },
-  })
-
-  await page.route('http://localhost:8000/exam/upload/start', async (route) => {
-    examUploadCalls += 1
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ ok: true, job_id: 'unused' }),
-    })
-  })
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await workflowUploadSubmitButton(page).click()
-
-  await expect(page.getByText('请至少上传一份试卷文件（文档或图片）')).toBeVisible()
-  expect(examUploadCalls).toBe(0)
-})
 
 test('assignment class scope with complete fields sends exactly one upload request', async ({ page }) => {
   let uploadCalls = 0

@@ -16,7 +16,7 @@ This document describes the MCP server interface exposed by this project.
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
 - `MCP_BOUND_TEACHER_ID` (optional): when set, registers mutating assignment/student/lesson/core_example tools and filters `assignment.list` / `assignment.render` to that teacher. When empty, those tools are unregistered.
-- `exam.*` and `assignment.generate` are not MCP tools. Generate via HTTP or teacher chat. Exam HTTP remains until a later PR.
+- `exam.*` and `assignment.generate` are not MCP tools. Generate assignments via HTTP or teacher chat. Exam HTTP/MCP surfaces have been removed.
 
 ---
 
@@ -121,77 +121,6 @@ Invoke a tool.
 
 **Result**
 - stdout from `update_profile.py`
-
----
-
-### exam.list
-**Purpose**: List available exams (from `data/exams/*/manifest.json`).
-
-**Arguments**: none
-
-**Result**
-- `{ ok, exams: [{ exam_id, generated_at, students, responses }] }`
-
----
-
-### exam.get
-**Purpose**: Get exam manifest + totals summary.
-
-**Arguments**
-- `exam_id` (string, required)
-
-**Result**
-- `{ ok, exam_id, generated_at, counts, totals_summary, files, ... }`
-
----
-
-### exam.analysis.get
-**Purpose**: Get precomputed analysis draft; fallback to minimal totals if missing.
-
-**Arguments**
-- `exam_id` (string, required)
-
-**Result**
-- `{ ok, exam_id, analysis, source }`
-
----
-
-### exam.students.list
-**Purpose**: List students in exam with total score + rank.
-
-**Arguments**
-- `exam_id` (string, required)
-- `limit` (integer, optional)
-
-**Result**
-- `{ ok, exam_id, total_students, students: [...] }`
-
----
-
-### exam.student.get
-**Purpose**: Get one student's per-question breakdown within an exam.
-
-**Arguments**
-- `exam_id` (string, required)
-- `student_id` (string, optional)
-- `student_name` (string, optional)
-- `class_name` (string, optional)
-
-**Result**
-- `{ ok, exam_id, student, question_scores }`
-
----
-
-### exam.question.get
-**Purpose**: Get one question's score distribution within an exam.
-
-**Arguments**
-- `exam_id` (string, required)
-- `question_id` (string, optional)
-- `question_no` (string, optional)
-
-**Result**
-- `{ ok, exam_id, question, stats, distribution, top_students, bottom_students }`
 
 ---
 

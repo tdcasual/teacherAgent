@@ -157,7 +157,6 @@ def test_enqueue_basic_jobs_use_queue(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
 
     rq_tasks.enqueue_upload_job("up-1", tenant_id="t1")
-    rq_tasks.enqueue_exam_job("exam-1", tenant_id="t2")
     rq_tasks.enqueue_profile_update({"uid": "u-1"}, tenant_id="t3")
 
     assert queue.calls[0]["func"] is rq_tasks.run_upload_job
@@ -238,20 +237,6 @@ def test_scan_pending_upload_jobs_enqueues_valid_only(tmp_path: Path, monkeypatc
     assert called == ["u-1", "u-2"]
 
 
-def test_scan_pending_exam_jobs_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    job_dir = tmp_path / "exam_jobs"
-    mod = SimpleNamespace(EXAM_UPLOAD_JOB_DIR=job_dir)
-    monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
-
-    called: List[str] = []
-    monkeypatch.setattr(rq_tasks, "enqueue_exam_job", lambda job_id, *, tenant_id=None: called.append(job_id))
-
-    _write_job(job_dir / "a" / "job.json", '{"status":"queued","job_id":"e-1"}')
-    _write_job(job_dir / "b" / "job.json", '{"status":"processing","job_id":"e-2"}')
-
-    assert rq_tasks.scan_pending_exam_jobs(tenant_id="t") == 0
-    assert called == []
-
 
 def test_scan_pending_chat_jobs_resolves_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     job_dir = tmp_path / "chat_jobs"
@@ -285,13 +270,11 @@ def test_run_handlers_dispatch_to_tenant_module(monkeypatch: pytest.MonkeyPatch)
 
     mod = SimpleNamespace(
         process_upload_job=lambda job_id: called.__setitem__("upload", job_id),
-        process_exam_upload_job=lambda job_id: called.__setitem__("exam", job_id),
         student_profile_update=lambda payload: called.__setitem__("profile", payload),
     )
     monkeypatch.setattr(rq_tasks, "load_tenant_module", lambda tenant_id: mod)
 
     rq_tasks.run_upload_job("u-10", tenant_id="t")
-    rq_tasks.run_exam_job("e-10", tenant_id="t")
     rq_tasks.run_profile_update({"id": "s-1"}, tenant_id="t")
 
     assert called == {
@@ -392,7 +375,6 @@ def test_enqueue_upload_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
 
     rq_tasks.enqueue_upload_job("up-1", tenant_id="t1")
-    rq_tasks.enqueue_exam_job("exam-1", tenant_id="t2")
     rq_tasks.enqueue_survey_job("survey-1", tenant_id="t3")
     rq_tasks.enqueue_profile_update({"uid": "u-1"}, tenant_id="t4")
 

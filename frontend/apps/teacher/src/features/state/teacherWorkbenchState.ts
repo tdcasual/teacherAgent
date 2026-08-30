@@ -1,8 +1,5 @@
-import { safeLocalStorageGetItem } from '../../utils/storage'
 import type {
   AssignmentProgress,
-  ExamUploadDraft,
-  ExamUploadJobStatus,
   StudentMemoryInsightsResponse,
   StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
@@ -13,7 +10,7 @@ import type {
 } from '../../appTypes'
 
 export type TeacherWorkbenchState = {
-  uploadMode: 'assignment' | 'exam'
+  uploadMode: 'assignment'
 
   uploadAssignmentId: string
   uploadDate: string
@@ -62,26 +59,6 @@ export type TeacherWorkbenchState = {
   studentMemoryStudentFilter: string
   studentMemoryInsights: StudentMemoryInsightsResponse | null
 
-  examId: string
-  examDate: string
-  examClassName: string
-  examPaperFiles: File[]
-  examScoreFiles: File[]
-  examAnswerFiles: File[]
-  examUploading: boolean
-  examUploadStatus: string
-  examUploadError: string
-  examJobId: string
-  examJobInfo: ExamUploadJobStatus | null
-  examStatusPollNonce: number
-  examDraft: ExamUploadDraft | null
-  examDraftPanelCollapsed: boolean
-  examDraftLoading: boolean
-  examDraftError: string
-  examDraftSaving: boolean
-  examDraftActionStatus: string
-  examDraftActionError: string
-  examConfirming: boolean
   executionTimeline: ExecutionTimelineEntry[]
 }
 
@@ -90,11 +67,8 @@ type TeacherWorkbenchAction =
   | { type: 'update'; update: (prev: TeacherWorkbenchState) => TeacherWorkbenchState }
 
 export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
-  const raw = safeLocalStorageGetItem('teacherUploadMode')
-  const uploadMode = raw === 'exam' ? 'exam' : 'assignment'
-
   return {
-    uploadMode,
+    uploadMode: 'assignment',
 
     uploadAssignmentId: '',
     uploadDate: '',
@@ -143,26 +117,6 @@ export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
     studentMemoryStudentFilter: '',
     studentMemoryInsights: null,
 
-    examId: '',
-    examDate: '',
-    examClassName: '',
-    examPaperFiles: [],
-    examScoreFiles: [],
-    examAnswerFiles: [],
-    examUploading: false,
-    examUploadStatus: '',
-    examUploadError: '',
-    examJobId: '',
-    examJobInfo: null,
-    examStatusPollNonce: 0,
-    examDraft: null,
-    examDraftPanelCollapsed: false,
-    examDraftLoading: false,
-    examDraftError: '',
-    examDraftSaving: false,
-    examDraftActionStatus: '',
-    examDraftActionError: '',
-    examConfirming: false,
     executionTimeline: [],
   }
 }
