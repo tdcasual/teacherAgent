@@ -222,6 +222,12 @@ class AdminRenameClassRequest(BaseModel):
     new_class_name: str
 
 
+class AdminAssignmentClaimRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    visibility_status: Optional[str] = "draft"
+
+
 class UploadConfirmRequest(BaseModel):
     job_id: str
     requirements_override: Optional[Dict[str, Any]] = None

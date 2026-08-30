@@ -5,6 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 
 from ..api_models import (
+    AdminAssignmentClaimRequest,
     AdminBulkMoveRequest,
     AdminEnrollClassRequest,
     AdminEnrollRequest,
@@ -12,6 +13,11 @@ from ..api_models import (
     AdminRosterRequest,
     AdminSubjectAddRequest,
     AdminUnenrollRequest,
+)
+from ..assignment_meta_ownership_migrate_service import (
+    AssignmentClaimError,
+    claim_assignment,
+    list_orphan_assignments,
 )
 from ..auth.identity_graph_service import conflict_status
 from ..auth_registry_service import build_auth_registry_store
@@ -42,6 +48,29 @@ def _raise_identity_result(result: dict[str, Any]) -> dict[str, Any]:
         return result
     error = str(result.get("error") or "invalid_request")
     raise HTTPException(status_code=conflict_status(error), detail=error)
+
+
+def _register_assignment_orphan_routes(router: APIRouter, core: Any) -> None:
+    @router.get("/auth/admin/assignments/orphans")
+    def auth_admin_assignment_orphans() -> Any:
+        _require_admin_principal()
+        return list_orphan_assignments(core.DATA_DIR)
+
+    @router.post("/auth/admin/assignments/{assignment_id}/claim")
+    def auth_admin_assignment_claim(assignment_id: str, req: AdminAssignmentClaimRequest) -> Any:
+        principal = _require_admin_principal()
+        try:
+            return claim_assignment(
+                assignment_id,
+                teacher_id=req.teacher_id,
+                subject_id=req.subject_id,
+                visibility_status=str(req.visibility_status or "draft"),
+                data_dir=core.DATA_DIR,
+                principal_actor_id=principal.actor_id,
+                principal_role=principal.role,
+            )
+        except AssignmentClaimError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def register_identity_admin_routes(router: APIRouter, core: Any) -> None:
@@ -162,3 +191,5 @@ def register_identity_admin_routes(router: APIRouter, core: Any) -> None:
                 new_class_name=req.new_class_name,
             )
         )
+
+    _register_assignment_orphan_routes(router, core)
