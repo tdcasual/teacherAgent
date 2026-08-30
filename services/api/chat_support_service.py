@@ -11,7 +11,7 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ChatSupportDeps:
-    compile_system_prompt: Callable[[Optional[str]], Any]
+    compile_system_prompt: Callable[..., Any]
     diag_log: Callable[..., None]
     getenv: Callable[[str, Optional[str]], Optional[str]]
 
@@ -239,9 +239,14 @@ def normalize_math_delimiters(text: str) -> str:
     )
 
 
-def build_system_prompt(role_hint: Optional[str], *, deps: ChatSupportDeps) -> str:
+def build_system_prompt(
+    role_hint: Optional[str],
+    *,
+    deps: ChatSupportDeps,
+    overlay: Optional[str] = None,
+) -> str:
     try:
-        prompt, modules = deps.compile_system_prompt(role_hint)
+        prompt, modules = deps.compile_system_prompt(role_hint, overlay=overlay)
         deps.diag_log(
             "prompt.compiled",
             {

@@ -1,0 +1,7 @@
+subject_id: physics
+display_name: 物理
+schema_version: 1
+grader: none
+prompts:
+  student_overlay: prompts/student_overlay.md
+  teacher_overlay: prompts/teacher_overlay.md

@@ -113,6 +113,7 @@ from ..student_memory_service import (
 from ..student_memory_service import (
     student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
 )
+from ..subject_pack_service import bind_fallback_logger, overlay_for_role
 from ..teacher_assignment_preflight_service import teacher_workflow_preflight_reply
 from ..teacher_model_config_service import (
     resolve_teacher_model_config as _resolve_teacher_model_config_impl,
@@ -427,6 +428,7 @@ def _chat_job_process_deps(core: Any | None = None):
 
 def _compute_chat_reply_deps(core: Any | None = None):
     _ac = _app_core(core)
+    bind_fallback_logger(_ac.diag_log)
     return ComputeChatReplyDeps(
         detect_role=_ac.detect_role,
         diag_log=_ac.diag_log,
@@ -471,6 +473,7 @@ def _compute_chat_reply_deps(core: Any | None = None):
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
         ),
+        subject_prompt_overlay=overlay_for_role,
     )
 
 def _chat_support_deps(core: Any | None = None):

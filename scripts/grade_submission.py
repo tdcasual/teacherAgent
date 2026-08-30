@@ -293,6 +293,122 @@ def get_expected_answer(row: dict) -> str:
     return ""
 
 
+def resolve_assignment_pack_id(assignment_id: str, assignments_root: Path) -> str:
+    try:
+        meta_path = resolve_under(assignments_root, assignment_id, "meta.json")
+    except SystemExit:
+        return ""
+    if not meta_path.exists():
+        return ""
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("pack_id") or data.get("subject_id") or "").strip()
+
+
+def load_grade_adapter(pack_id: str):
+    try:
+        from services.api.subject_pack_service import grade_adapter
+        return grade_adapter(pack_id)
+    except Exception:
+        return None
+
+
+def apply_grade_adapter(adapter, *, question: dict, student_text: str) -> Optional[Dict[str, Any]]:
+    if adapter is None:
+        return None
+    try:
+        raw = adapter.score_item(question=question, student_text=student_text)
+    except Exception:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    score = float(raw.get("score") or 0.0)
+    confidence = float(raw.get("confidence") or 0.0)
+    status = str(raw.get("status") or "").strip()
+    if not status:
+        status = "matched" if score > 0 else "missed"
+    reason = str(raw.get("reason") or "adapter")
+    return {
+        "matched": status == "matched",
+        "student_answer": str(raw.get("student_answer") or ""),
+        "reason": reason,
+        "status": status,
+        "score": score,
+        "confidence": round(confidence, 3),
+        "matched_steps": list(raw.get("matched_steps") or []),
+        "missing_steps": list(raw.get("missing_steps") or []),
+    }
+
+
+def evaluate_question(
+    *,
+    question: dict,
+    block_text: str,
+    adapter,
+    llm_grade: bool,
+    llm_confidence_threshold: float,
+) -> Dict[str, Any]:
+    adapter_item = apply_grade_adapter(adapter, question=question, student_text=block_text)
+    if adapter_item is not None:
+        return adapter_item
+
+    expected = get_expected_answer(question)
+    matched = False
+    student_answer = ""
+    reason = "missing_expected"
+    status = "ungraded"
+    confidence = 0.0
+    earned_score = 0.0
+    matched_steps: List[str] = []
+    missing_steps: List[str] = []
+
+    if expected:
+        matched, student_answer, reason = score_objective_answer(expected, block_text)
+        status = "matched" if matched else "missed"
+        confidence = 1.0 if matched or reason.startswith("numeric_") or reason.startswith("mcq_") else 0.5
+        earned_score = 1.0 if matched else 0.0
+    else:
+        rubric_ref = question.get("rubric_ref") or question.get("rubric") or ""
+        rubric_path = Path(rubric_ref) if rubric_ref else None
+        rubric = load_rubric(rubric_path) if rubric_path else None
+        if rubric:
+            rubric_result = score_rubric(block_text, rubric)
+            earned_score = float(rubric_result.get("score", 0.0))
+            total_score = float(rubric_result.get("total_score", 0.0))
+            confidence = float(rubric_result.get("confidence", 0.0))
+            matched_steps = list(rubric_result.get("matched_steps", []))
+            missing_steps = list(rubric_result.get("missing_steps", []))
+            matched = subjective_pass(earned_score, total_score, confidence)
+            status = "matched" if matched else "missed"
+            reason = "rubric"
+            if llm_grade and confidence < llm_confidence_threshold:
+                llm_result = llm_grade_subjective(question.get("question_id") or "", expected, rubric, block_text)
+                if llm_result:
+                    earned_score = float(llm_result.get("score") or earned_score)
+                    total_score = float(llm_result.get("total_score") or total_score)
+                    confidence = float(llm_result.get("confidence") or confidence)
+                    matched_steps = list(llm_result.get("matched_steps", matched_steps))
+                    missing_steps = list(llm_result.get("missing_steps", missing_steps))
+                    matched = subjective_pass(earned_score, total_score, confidence)
+                    status = "matched" if matched else "missed"
+                    reason = "llm_rubric"
+
+    return {
+        "matched": matched,
+        "student_answer": student_answer if expected else "",
+        "reason": reason,
+        "status": status,
+        "score": earned_score,
+        "confidence": round(confidence, 3),
+        "matched_steps": matched_steps,
+        "missing_steps": missing_steps,
+    }
+
+
 def load_rubric(path: Optional[Path]) -> Optional[Dict[str, Any]]:
     if not path or not path.exists():
         return None
@@ -493,14 +609,16 @@ def main():
     assignment_id = require_safe_id(assignment_id, "assignment_id")
 
     # resolve assignment questions path
+    assignments_root = (ROOT / "data" / "assignments").resolve()
     if args.assignment_questions:
         questions_path = Path(args.assignment_questions).resolve()
     else:
-        assignments_root = (ROOT / "data" / "assignments").resolve()
         questions_path = resolve_under(assignments_root, assignment_id, "questions.csv")
     if not questions_path.exists():
         raise SystemExit(f"Assignment questions not found: {questions_path}")
     questions = read_assignment_questions(questions_path)
+    pack_id = resolve_assignment_pack_id(assignment_id, assignments_root)
+    adapter = load_grade_adapter(pack_id)
 
     # move submission into assignment bucket as well
     assignment_bucket = resolve_under(out_root, assignment_id, safe_student_id, f"submission_{timestamp}")
@@ -537,51 +655,26 @@ def main():
         qid = q.get("question_id")
         kp_id = q.get("kp_id") or "uncategorized"
         expected = get_expected_answer(q)
-        rubric_ref = q.get("rubric_ref") or q.get("rubric") or ""
-        rubric_path = Path(rubric_ref) if rubric_ref else None
-        rubric = load_rubric(rubric_path) if rubric_path else None
         block_text = question_blocks.get(qid) if qid else None
         if not block_text:
             block_text = ocr_text
 
-        matched = False
-        student_answer = ""
-        reason = "missing_expected"
-        status = "ungraded"
-        confidence = 0.0
-        earned_score = 0.0
-        matched_steps: List[str] = []
-        missing_steps: List[str] = []
-
-        if expected:
-            matched, student_answer, reason = score_objective_answer(expected, block_text)
-            status = "matched" if matched else "missed"
-            confidence = 1.0 if matched or reason.startswith("numeric_") or reason.startswith("mcq_") else 0.5
-            earned_score = 1.0 if matched else 0.0
-        elif rubric:
-            rubric_result = score_rubric(block_text, rubric)
-            earned_score = float(rubric_result.get("score", 0.0))
-            total_score = float(rubric_result.get("total_score", 0.0))
-            confidence = float(rubric_result.get("confidence", 0.0))
-            matched_steps = list(rubric_result.get("matched_steps", []))
-            missing_steps = list(rubric_result.get("missing_steps", []))
-            matched = subjective_pass(earned_score, total_score, confidence)
-            status = "matched" if matched else "missed"
-            reason = "rubric"
-            llm_enabled = args.llm_grade or os.getenv("LLM_GRADE", "").lower() in {"1", "true", "yes"}
-            if llm_enabled and confidence < args.llm_confidence_threshold:
-                llm_result = llm_grade_subjective(qid or "", expected, rubric, block_text)
-                if llm_result:
-                    earned_score = float(llm_result.get("score") or earned_score)
-                    total_score = float(llm_result.get("total_score") or total_score)
-                    confidence = float(llm_result.get("confidence") or confidence)
-                    matched_steps = list(llm_result.get("matched_steps", matched_steps))
-                    missing_steps = list(llm_result.get("missing_steps", missing_steps))
-                    matched = subjective_pass(earned_score, total_score, confidence)
-                    status = "matched" if matched else "missed"
-                    reason = "llm_rubric"
-        else:
-            pass
+        llm_enabled = args.llm_grade or os.getenv("LLM_GRADE", "").lower() in {"1", "true", "yes"}
+        graded = evaluate_question(
+            question=q,
+            block_text=block_text,
+            adapter=adapter,
+            llm_grade=llm_enabled,
+            llm_confidence_threshold=args.llm_confidence_threshold,
+        )
+        matched = bool(graded["matched"])
+        student_answer = graded["student_answer"]
+        reason = graded["reason"]
+        status = graded["status"]
+        confidence = float(graded["confidence"])
+        earned_score = float(graded["score"])
+        matched_steps = list(graded["matched_steps"])
+        missing_steps = list(graded["missing_steps"])
 
         results.append({
             "question_id": qid,

@@ -49,6 +49,30 @@ class TestPromptBuilder(unittest.TestCase):
         prompt, _ = compile_system_prompt("teacher", version="v1", debug=False)
         self.assertTrue(prompt.endswith("\n"))
 
+    def test_optional_overlay_is_appended(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        overlay = "【学科 overlay：通用】中性陪练，无学科公式包。"
+        prompt, modules = compile_system_prompt(
+            "student", version="v1", debug=False, overlay=overlay
+        )
+        self.assertIn(overlay, prompt)
+        self.assertIn("subject_overlay", modules)
+        self.assertTrue(prompt.endswith("\n"))
+
+        base, base_modules = compile_system_prompt("student", version="v1", debug=False)
+        self.assertNotIn(overlay, base)
+        self.assertNotIn("subject_overlay", base_modules)
+
+    def test_optional_overlay_blank_is_ignored(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        prompt, modules = compile_system_prompt(
+            "student", version="v1", debug=False, overlay="  \n"
+        )
+        self.assertNotIn("subject_overlay", modules)
+        self.assertTrue(prompt.endswith("\n"))
+
 
 if __name__ == "__main__":
     unittest.main()

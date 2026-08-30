@@ -8,6 +8,7 @@ from services.api.chat_job_processing_service import (
     _student_can_attach_assignment,
     compute_chat_reply_sync,
 )
+from services.api.subject_pack_service import overlay_for_role
 
 
 class _Msg:
@@ -587,6 +588,124 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertEqual(role_hint, "teacher")
             self.assertIn("teacher-context", str(captured["extra_system"] or ""))
             self.assertIn("工作流步骤", str(captured["extra_system"] or ""))
+
+
+class SubjectPackOverlayInjectionTest(unittest.TestCase):
+    def _deps(self, root: Path, *, run_agent, **overrides):
+        values = dict(
+            detect_role=lambda _text: "student",
+            diag_log=lambda *_args, **_kwargs: None,
+            teacher_assignment_preflight=lambda _req: None,
+            resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+            teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
+            detect_student_study_trigger=lambda _text: False,
+            load_profile_file=lambda _path: {"student_id": "S001"},
+            data_dir=root / "data",
+            build_verified_student_context=lambda _sid, _profile: "verified",
+            build_assignment_detail_cached=lambda _folder, include_text=False: {
+                "assignment_id": "A1",
+                "meta": {"subject_id": "math", "pack_id": "math"},
+            },
+            find_assignment_for_date=lambda *_args, **_kwargs: None,
+            parse_date_str=lambda raw: str(raw or ""),
+            build_assignment_context=lambda *_args, **_kwargs: "",
+            chat_extra_system_max_chars=6000,
+            trim_messages=lambda msgs, role_hint=None: msgs,
+            student_inflight=_student_inflight,
+            run_agent=run_agent,
+            normalize_math_delimiters=lambda text: text,
+            resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+            subject_prompt_overlay=lambda subject_id, role_hint=None: (
+                f"OVERLAY:{subject_id or 'generic'}:{role_hint or 'unknown'}"
+            ),
+        )
+        values.update(overrides)
+        return ComputeChatReplyDeps(**values)
+
+    def test_assignment_subject_overlay_injected_into_extra_system(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(root, run_agent=_run_agent)
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:math:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_free_ask_uses_generic_overlay_never_physics(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(root, run_agent=_run_agent)
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id=""), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_missing_subject_pack_uses_real_generic_overlay_not_physics(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                subject_prompt_overlay=overlay_for_role,
+            )
+            reply, _role, _last = compute_chat_reply_sync(_Req(assignment_id="A1"), deps=deps)
+            self.assertEqual(reply, "OK")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("【学科 overlay：通用】", extra)
+            self.assertNotIn("【学科 overlay：物理】", extra)
+
+    def test_teacher_free_ask_uses_generic_overlay(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                detect_role=lambda _text: "teacher",
+            )
+            reply, role_hint, _last = compute_chat_reply_sync(_TeacherReq("随便问一下"), deps=deps)
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "teacher")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:teacher", extra)
+            self.assertIn("teacher-context", extra)
 
 
 if __name__ == "__main__":

@@ -46,6 +46,14 @@ def _default_resolve_teacher_workflow(
     return {}
 
 
+def _default_subject_prompt_overlay(
+    subject_id: Optional[str], role_hint: Optional[str] = None
+) -> str:
+    from .subject_pack_service import overlay_for_role
+
+    return overlay_for_role(subject_id, role_hint)
+
+
 @dataclass(frozen=True)
 class ComputeChatReplyDeps:
     detect_role: Callable[[str], Optional[str]]
@@ -73,6 +81,7 @@ class ComputeChatReplyDeps:
     resolve_teacher_workflow: Callable[[Any, str, str, str], Dict[str, Any]] = (
         _default_resolve_teacher_workflow
     )
+    subject_prompt_overlay: Callable[..., str] = _default_subject_prompt_overlay
 
 
 def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
@@ -514,6 +523,51 @@ def _cap_extra_system(text: Optional[str], *, max_chars: int) -> Optional[str]:
     return text
 
 
+def _join_extra_system(*blocks: Optional[str]) -> Optional[str]:
+    parts = [str(block).strip() for block in blocks if str(block or "").strip()]
+    return "\n\n".join(parts) or None
+
+
+def _subject_id_from_assignment_detail(detail: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(detail, dict):
+        return None
+    meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else {}
+    for key in ("subject_id", "pack_id"):
+        value = str(meta.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _resolve_chat_subject_id(
+    req: Any,
+    *,
+    deps: ComputeChatReplyDeps,
+    role_hint: Optional[str],
+) -> Optional[str]:
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    if assignment_id:
+        folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+        if folder and folder.exists():
+            detail = deps.build_assignment_detail_cached(folder, include_text=False)
+            return _subject_id_from_assignment_detail(detail)
+        return None
+    if role_hint != "student" or not getattr(req, "student_id", None):
+        return None
+    profile: Dict[str, Any] = {}
+    profile_path = _resolve_student_profile_path(deps.data_dir, str(req.student_id or ""))
+    if profile_path is not None:
+        profile = deps.load_profile_file(profile_path)
+    date_str = deps.parse_date_str(getattr(req, "assignment_date", None))
+    found = deps.find_assignment_for_date(
+        date_str, student_id=req.student_id, class_name=profile.get("class_name")
+    )
+    if not found:
+        return None
+    detail = deps.build_assignment_detail_cached(found["folder"], include_text=False)
+    return _subject_id_from_assignment_detail(detail)
+
+
 def _missing_student_attachment_reply(
     role_hint: Optional[str],
     attachment_context: str,
@@ -594,6 +648,14 @@ def _build_chat_extra_system(
             last_user_text=last_user_text,
             last_assistant_text=last_assistant_text,
         )
+    overlay = str(
+        deps.subject_prompt_overlay(
+            _resolve_chat_subject_id(req, deps=deps, role_hint=role_hint),
+            role_hint,
+        )
+        or ""
+    ).strip()
+    extra_system = _join_extra_system(overlay, extra_system)
     extra_system = _with_attachment_context(extra_system, attachment_context)
     return (
         _cap_extra_system(
