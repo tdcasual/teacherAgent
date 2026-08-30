@@ -121,11 +121,11 @@
 
 **multipart/form-data**
 - `assignment_id`（必填）
+- `subject_id`（必填；空值 → 400 `subject_id_required`。写入 `meta.json` 并决定 pack overlay）
 - `date`（可选，`YYYY-MM-DD`）
 - `due_at`（可选）
-- `subject_id`（可选；写入 `meta.json`，并决定 pack overlay）
 - `scope`（public/class/student）
-- `class_name` / `student_ids`（按 scope 填写）
+- `class_name` / `student_ids`（按 scope 填写，可选）
 - `files`（必填，PDF 或图片；可多文件）
 - `answer_files`（可选，PDF 或图片；可多文件）
 - `ocr_mode` / `language`（可选）
@@ -294,11 +294,12 @@ packs/subjects/<id>/
 ### POST `/assignment/generate`
 **表单字段**
 - `assignment_id`（必填）
+- `subject_id`（必填；空值 → 400 `subject_id_required`）
 - `kp`（必填，逗号分隔）
 - `per_kp`（默认 5）
 - `core_examples`（可选）
 - `generate`（布尔，可选）
-- `subject_id` / `date` / `due_at` / `class_name` / `student_ids`（可选）
+- `date` / `due_at` / `class_name` / `student_ids`（可选）
 
 MCP **不**注册 `assignment.generate`。需要生成时走本接口或老师聊天。
 
