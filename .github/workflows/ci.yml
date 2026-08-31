@@ -142,82 +142,14 @@ jobs:
             tests/test_observability_store.py \
             tests/test_operability_evidence.py
 
-      - name: Run analysis rollout guardrails
+      - name: Run assignment-only product guardrails
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          mkdir -p analysis-artifacts
-          python scripts/quality/check_analysis_policy.py \
-            --output analysis-artifacts/analysis-policy.json
-          python scripts/quality/check_analysis_preflight.py \
-            --fixtures tests/fixtures \
-            --review-feedback tests/fixtures/analysis_preflight/review_feedback.jsonl \
-            --metrics tests/fixtures/analysis_preflight/metrics.json \
-            --baseline-dir tests/fixtures/analysis_preflight/baseline \
-            --candidate-dir tests/fixtures/analysis_preflight/candidate \
-            --output analysis-artifacts/analysis-preflight.json
-          python scripts/check_analysis_domain_contract.py --json
-          python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only
           python -m pytest -q \
-            tests/test_analysis_strategy_eval.py \
+            tests/test_app_routes_registration.py \
             tests/test_docs_architecture_presence.py \
-            tests/test_ci_backend_hardening_workflow.py \
-            tests/test_analysis_preflight_ci_fixtures.py
-
-      - name: Build analysis rollout decision artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_rollout_decision.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-decision.json
-
-      - name: Build analysis rollout brief artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_rollout_brief.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-brief.md
-
-      - name: Build analysis go-live summary artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_go_live_summary.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-go-live-summary.md
-
-      - name: Build analysis release notes artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_release_notes.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-release-notes.md
-
-      - name: Build analysis artifact manifest
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_artifact_manifest.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-artifact-manifest.json
-
-      - name: Check analysis artifact integrity
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/check_analysis_artifact_integrity.py             --manifest analysis-artifacts/analysis-artifact-manifest.json             --output analysis-artifacts/analysis-artifact-integrity.json
-
-      - name: Summarize analysis rollout artifacts
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/render_analysis_rollout_summary.py --artifact-dir analysis-artifacts >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload analysis rollout artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: analysis-rollout-artifacts
-          path: analysis-artifacts
-          if-no-files-found: warn
+            tests/test_ci_backend_hardening_workflow.py
 
   frontend-quality:
     runs-on: ubuntu-latest

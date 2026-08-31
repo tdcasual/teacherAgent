@@ -164,14 +164,10 @@ def test_handlers_do_not_call_enqueue_inline_directly() -> None:
 def test_queue_backends_expose_enqueue_process_archive() -> None:
     backend = InlineQueueBackend(
         enqueue_upload_job_fn=lambda _job_id: None,
-        enqueue_exam_job_fn=lambda _job_id: None,
-        enqueue_survey_job_fn=lambda _job_id: None,
         enqueue_profile_update_fn=lambda _payload: None,
         enqueue_process_archive_fn=lambda _payload: None,
         enqueue_chat_job_fn=lambda _job_id, _lane_id=None: {},
         scan_pending_upload_jobs_fn=lambda: 0,
-        scan_pending_exam_jobs_fn=lambda: 0,
-        scan_pending_survey_jobs_fn=lambda: 0,
         scan_pending_chat_jobs_fn=lambda: 0,
         start_fn=lambda: None,
         stop_fn=lambda: None,
@@ -181,6 +177,10 @@ def test_queue_backends_expose_enqueue_process_archive() -> None:
     enqueue_process_archive({"assignment_id": "HW_1", "student_id": "S1"}, backend=backend)
     assert captured == [{"assignment_id": "HW_1", "student_id": "S1"}]
     assert hasattr(RqQueueBackend, "enqueue_process_archive")
+    assert not hasattr(backend, "enqueue_exam_job")
+    assert not hasattr(backend, "enqueue_survey_job")
+    assert not hasattr(RqQueueBackend, "enqueue_exam_job")
+    assert not hasattr(RqQueueBackend, "enqueue_survey_job")
 
 
 def test_submit_writes_pending_and_enqueues() -> None:

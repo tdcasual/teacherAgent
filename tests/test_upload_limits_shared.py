@@ -73,13 +73,6 @@ class _SizedUpload:
         return self.file.read(int(size))
 
 
-class _ExamUpload:
-    def __init__(self, filename: str, payload: bytes, content_type: str = ""):
-        self.filename = filename
-        self.payload = payload
-        self.content_type = content_type
-
-
 async def _save_upload_file(upload: object, dest: Path) -> int:
     dest.parent.mkdir(parents=True, exist_ok=True)
     payload = getattr(upload, "content", None)

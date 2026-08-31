@@ -141,13 +141,13 @@ def assignment_specificity(
         expected = meta.get("expected_students") or []
         if expected:
             return 1 if student_id and student_id in expected else 0
-        return 1
+        return 0
 
     if student_ids:
         return 3 if student_id and student_id in student_ids else 0
     if class_name and class_meta and class_name == class_meta:
         return 2
-    return 1
+    return 0
 
 
 def parse_iso_timestamp(value: Optional[str]) -> float:

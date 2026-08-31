@@ -29,7 +29,7 @@ def _teacher_provider_registry_deps(core=None):
     _ac = _app_core(core)
     return TeacherProviderRegistryDeps(
         model_registry=_ac.LLM_GATEWAY.registry,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         atomic_write_json=_atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
@@ -43,7 +43,7 @@ def _teacher_model_config_deps(core=None):
         resolve_model_registry=lambda teacher_id: _merged_model_registry_impl(
             teacher_id, deps=_teacher_provider_registry_deps(core)
         ),
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         atomic_write_json=_atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),

@@ -4,8 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .assignment.visibility import student_can_read_assignment
-from .assignment_catalog_service import assignment_specificity
+from .assignment.visibility import snapshot_student_ids, student_can_read_assignment
 from .chat_job_processing.compute import _compute_reply_with_runtime_events
 from .chat_job_processing.confirm import _persist_confirmation_pause
 from .chat_job_processing.history import (
@@ -66,8 +65,6 @@ class ComputeChatReplyDeps:
     data_dir: Any
     build_verified_student_context: Callable[[str, Dict[str, Any]], str]
     build_assignment_detail_cached: Callable[..., Dict[str, Any]]
-    find_assignment_for_date: Callable[..., Optional[Dict[str, Any]]]
-    parse_date_str: Callable[[Optional[str]], str]
     build_assignment_context: Callable[..., str]
     chat_extra_system_max_chars: int
     trim_messages: Callable[..., List[Dict[str, Any]]]
@@ -451,14 +448,18 @@ def _teacher_extra_system(
 
 
 def _student_can_attach_assignment(
-    detail: Optional[Dict[str, Any]], *, student_id: Optional[str], class_name: Optional[str]
+    detail: Optional[Dict[str, Any]], *, student_id: Optional[str], class_name: Optional[str] = None
 ) -> bool:
+    del class_name
     if not isinstance(detail, dict):
         return False
     meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else detail
     if not student_can_read_assignment(meta):
         return False
-    return int(assignment_specificity(meta or {}, student_id, class_name)) > 0
+    sid = str(student_id or "").strip()
+    if not sid:
+        return False
+    return sid in snapshot_student_ids(meta)
 
 
 def _student_extra_system(
@@ -481,13 +482,12 @@ def _student_extra_system(
             profile = deps.load_profile_file(profile_path)
         extra_parts.append(deps.build_verified_student_context(req.student_id, profile))
 
-    class_name = str(profile.get("class_name") or "").strip() or None
     if req.assignment_id:
         folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
         if folder and folder.exists():
             assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
     if assignment_detail and not _student_can_attach_assignment(
-        assignment_detail, student_id=req.student_id, class_name=class_name
+        assignment_detail, student_id=req.student_id
     ):
         assignment_detail = None
 

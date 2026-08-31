@@ -70,7 +70,7 @@ const setTeacherWorkflowState = async (page: Page) => {
   }, { base: apiBase })
 }
 
-const readActiveUploadJobId = async (page: Page, expectedType: 'assignment' | 'exam') => {
+const readActiveUploadJobId = async (page: Page, expectedType: 'assignment') => {
   return page.evaluate((type) => {
     const raw = localStorage.getItem('teacherActiveUpload')
     if (!raw) return ''

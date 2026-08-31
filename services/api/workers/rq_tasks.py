@@ -83,11 +83,6 @@ def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     _enqueue_retry_job(run_upload_job, job_id, tenant_id=tenant_id)
 
 
-def enqueue_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    del job_id, tenant_id
-    return
-
-
 def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
     _enqueue_retry_job(run_profile_update, payload=payload, tenant_id=tenant_id)
 
@@ -166,19 +161,9 @@ def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
     )
 
 
-def scan_pending_survey_jobs(*, tenant_id: Optional[str] = None) -> int:
-    del tenant_id
-    return 0
-
-
 def run_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     mod.process_upload_job(job_id)
-
-
-def run_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    del job_id, tenant_id
-    return
 
 
 def run_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:

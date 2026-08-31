@@ -1,9 +1,10 @@
 # 文档总览
 
 ## 产品定位
-- 本仓库是教学 workflow 产品，不是通用 agent 平台
+- 本仓库是**单校作业产品**（老师布置 / 学生今日列表 / 显式提交 / 评分），不是考试产品，也不是通用 agent 平台
+- 当前权威产品设计：`docs/plans/2026-08-28-assignment-core-product-design.md`
 - 先看运行时契约：`docs/reference/agent-runtime-contract.md`
-- 老师端以“教学能力 / workflow 入口”为主要交互，不暴露第三方能力扩展叙事
+- 老师端以作业工作流为主要交互；考试 HTTP/MCP 与 survey/class_report 主 UI 已卸载
 
 ## 我现在要做什么
 - 老师日常教学闭环：`docs/how-to/teacher-daily-workflow.md`
@@ -21,7 +22,6 @@
 
 ## 运行时与边界
 - 运行时契约：`docs/reference/agent-runtime-contract.md`
-- 分析运行时契约：`docs/reference/analysis-runtime-contract.md`
 - 模型策略：`docs/reference/model-policy.md`
 - 模块边界：`docs/architecture/module-boundaries.md`
 
@@ -33,9 +33,6 @@
 - 责任归属：`docs/architecture/ownership-map.md`
 - 可观测性与 SLO：`docs/operations/slo-and-observability.md`
 - 变更治理与发布门禁：`docs/operations/change-management-and-governance.md`
-- 多域分析发布清单：`docs/operations/multi-domain-analysis-rollout-checklist.md`
-- 多域分析发布说明：`docs/operations/2026-03-07-multi-domain-analysis-release-notes.md`
-- 多域分析 go-live 摘要：`docs/operations/2026-03-07-multi-domain-analysis-go-live-summary.md`
 - 安全事件响应 runbook：`docs/operations/security-incident-response-runbook.md`
 - 贡献规范：`CONTRIBUTING.md`
 - PR 变更模板：`.github/pull_request_template.md`
@@ -54,11 +51,10 @@
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
 
 ## 设计与演进
+- **当前权威产品设计（作业内核 / 删除考试）**：`docs/plans/2026-08-28-assignment-core-product-design.md`
 - **当前权威修复方案（2026-08-26 审计）**：`docs/plans/2026-08-26-audit-remediation-design.md`
-- `docs/plans/` 是历史设计与实施稿，**不是**运行时契约。稳定结论以 `docs/reference/`、`docs/explain/`、`docs/operations/` 为准；提炼状态见 `docs/reference/plan-migration-map.md`。
+- `docs/plans/` 其余文件是历史设计与实施稿，**不是**运行时契约。稳定结论以 `docs/reference/`、`docs/explain/`、`docs/operations/` 为准；提炼状态见 `docs/reference/plan-migration-map.md`。
 - 历史设计与实现文档：`docs/plans/`
-- 问卷多 Agent 设计：`docs/plans/2026-03-06-survey-multi-agent-design.md`
-- 问卷多 Agent 实施计划：`docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md`
 
 - B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`
 - Agent 系统优先级优化计划：`docs/plans/2026-03-07-agent-system-priority-optimization-plan.md`

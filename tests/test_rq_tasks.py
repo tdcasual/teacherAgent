@@ -375,8 +375,9 @@ def test_enqueue_upload_job_passes_retry_and_timeout(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(rq_tasks, "_get_queue", lambda: queue)
 
     rq_tasks.enqueue_upload_job("up-1", tenant_id="t1")
-    rq_tasks.enqueue_survey_job("survey-1", tenant_id="t3")
     rq_tasks.enqueue_profile_update({"uid": "u-1"}, tenant_id="t4")
+    assert not hasattr(rq_tasks, "enqueue_survey_job")
+    assert not hasattr(rq_tasks, "run_survey_job")
 
     assert [call["func"] for call in queue.calls] == [
         rq_tasks.run_upload_job,

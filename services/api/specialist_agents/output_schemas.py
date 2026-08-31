@@ -83,8 +83,6 @@ class ReviewerCritiqueArtifact(BaseModel):
 
 
 _SCHEMA_BY_TYPE: dict[str, type[BaseModel]] = {
-    'survey.analysis_artifact': SurveyAnalysisArtifact,
-    'class_report.analysis_artifact': ClassReportAnalysisArtifact,
     'video_homework.analysis_artifact': VideoHomeworkAnalysisArtifact,
     'reviewer_critique': ReviewerCritiqueArtifact,
     'reviewer_critique_v2': ReviewerCritiqueArtifact,

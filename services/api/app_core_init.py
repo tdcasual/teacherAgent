@@ -18,7 +18,6 @@ def build_inline_backend_factory(
         enqueue_upload_job_fn=lambda job_id: core_service_imports_module.upload_worker_service.enqueue_upload_job_inline(
             job_id, deps=upload_deps
         ),
-        enqueue_survey_job_fn=lambda _job_id: None,
         enqueue_profile_update_fn=lambda payload: core_service_imports_module.profile_update_worker_service.enqueue_profile_update_inline(
             payload, deps=profile_deps
         ),
@@ -31,7 +30,6 @@ def build_inline_backend_factory(
         scan_pending_upload_jobs_fn=lambda: core_service_imports_module.upload_worker_service.scan_pending_upload_jobs_inline(
             deps=upload_deps
         ),
-        scan_pending_survey_jobs_fn=lambda: 0,
         scan_pending_chat_jobs_fn=lambda: core_service_imports_module._scan_pending_chat_jobs_impl(deps=chat_deps),
         start_fn=lambda: core_service_imports_module.start_inline_workers(
             upload_deps=upload_deps,

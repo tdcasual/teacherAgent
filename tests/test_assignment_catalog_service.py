@@ -33,7 +33,9 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
         self.assertEqual(assignment_specificity(meta, "S001", "高二2403班"), 1)
         self.assertEqual(assignment_specificity(meta, "S999", "高二2404班"), 0)
         legacy = {"scope": "public"}
-        self.assertEqual(assignment_specificity(legacy, "S999", ""), 1)
+        self.assertEqual(assignment_specificity(legacy, "S999", ""), 0)
+        unmatched = {"scope": "class", "class_name": "高二2403班"}
+        self.assertEqual(assignment_specificity(unmatched, "S001", "高二2404班"), 0)
 
     def _catalog_deps(self, root: Path):
         return AssignmentCatalogDeps(

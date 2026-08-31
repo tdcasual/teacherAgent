@@ -49,8 +49,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -85,8 +83,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                     {"build_assignment_detail": calls["build_assignment_detail"] + 1}
                 )
                 or {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -103,16 +99,15 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(calls["build_assignment_detail"], 0)
 
     def test_student_extra_system_does_not_fallback_to_find_assignment_for_date(self):
+        from services.api import chat_job_processing_service as mod
         from services.api.chat_job_processing_service import _student_extra_system
+
+        source = Path(mod.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("find_assignment_for_date", source)
+        self.assertNotIn("find_assignment_for_date", ComputeChatReplyDeps.__dataclass_fields__)
 
         with TemporaryDirectory() as td:
             root = Path(td)
-            calls = {"find": 0}
-
-            def _find(*_args, **_kwargs):
-                calls["find"] += 1
-                return {"folder": root, "meta": {"assignment_id": "A1"}}
-
             deps = ComputeChatReplyDeps(
                 detect_role=lambda _text: "student",
                 diag_log=lambda *_args, **_kwargs: None,
@@ -124,8 +119,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=_find,
-                parse_date_str=lambda raw: str(raw or "2026-02-08"),
                 build_assignment_context=lambda *_args, **_kwargs: "ASSIGNMENT",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -136,7 +129,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             )
             req = _Req(assignment_id="")
             extra = _student_extra_system(req, deps=deps, last_user_text="讲一下牛顿第二定律", last_assistant_text="")
-            self.assertEqual(calls["find"], 0)
             self.assertNotIn("ASSIGNMENT", extra or "")
 
     def test_student_cannot_attach_draft_or_orphan_assignment(self):
@@ -154,7 +146,7 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 class_name="c",
             )
         )
-        self.assertTrue(
+        self.assertFalse(
             _student_can_attach_assignment(
                 {
                     "meta": {
@@ -165,6 +157,34 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 },
                 student_id="S1",
                 class_name="c",
+            )
+        )
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "class",
+                        "class_name": "c",
+                    }
+                },
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertTrue(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "public",
+                        "expected_students": ["S1"],
+                    }
+                },
+                student_id="S1",
+                class_name="other-class",
             )
         )
 
@@ -183,8 +203,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -220,8 +238,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -259,8 +275,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -305,8 +319,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -345,8 +357,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -412,8 +422,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -475,8 +483,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -532,8 +538,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -597,8 +601,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -643,8 +645,6 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
                 "assignment_id": "A1",
                 "meta": {"subject_id": "math", "pack_id": "math"},
             },
-            find_assignment_for_date=lambda *_args, **_kwargs: None,
-            parse_date_str=lambda raw: str(raw or ""),
             build_assignment_context=lambda *_args, **_kwargs: "",
             chat_extra_system_max_chars=6000,
             trim_messages=lambda msgs, role_hint=None: msgs,
@@ -743,9 +743,6 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
                 build_assignment_detail_cached=lambda _folder, include_text=False: {
                     "assignment_id": "PHYS1",
                     "meta": {"subject_id": "physics", "pack_id": "physics"},
-                },
-                find_assignment_for_date=lambda *_args, **_kwargs: {
-                    "folder": root / "data" / "assignments" / "PHYS1"
                 },
             )
             reply, role_hint, _last = compute_chat_reply_sync(

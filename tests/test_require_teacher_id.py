@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from services.api.paths import (
@@ -28,3 +30,9 @@ def test_resolve_teacher_id_none_still_bootstraps_default() -> None:
     # Bootstrap / auth_registry seed path stays on the legacy fallback.
     assert resolve_teacher_id(None)
     assert resolve_teacher_id("")
+
+
+def test_teacher_config_wiring_uses_require_teacher_id() -> None:
+    source = Path("services/api/wiring/teacher_wiring.py").read_text(encoding="utf-8")
+    assert "require_teacher_id" in source
+    assert "resolve_teacher_id=_ac.resolve_teacher_id" not in source

@@ -56,7 +56,6 @@ class ChatRequest(BaseModel):
     student_id: Optional[str] = None
     assignment_id: Optional[str] = None
     assignment_date: Optional[str] = None
-    auto_generate_assignment: Optional[bool] = None
     attachments: Optional[List[ChatAttachmentRef]] = None
     attachment_context: Optional[str] = None
     analysis_target: Optional[ChatAnalysisTarget] = None

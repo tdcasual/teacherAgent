@@ -44,6 +44,8 @@ def test_register_routes_does_not_mount_survey_class_report_or_analysis_report()
     app_routes.register_routes(app, DummyCore())
     paths = {getattr(route, "path", "") for route in app.router.routes}
     forbidden_prefixes = (
+        "/exam",
+        "/exams",
         "/teacher/analysis",
         "/teacher/surveys",
         "/webhooks/surveys",

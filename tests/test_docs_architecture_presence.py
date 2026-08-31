@@ -2,38 +2,27 @@ from pathlib import Path
 
 
 def test_architecture_docs_exist() -> None:
-    assert Path('docs/architecture/module-boundaries.md').exists()
-    assert Path('docs/architecture/ownership-map.md').exists()
+    assert Path("docs/architecture/module-boundaries.md").exists()
+    assert Path("docs/architecture/ownership-map.md").exists()
 
 
-def test_survey_docs_are_indexed() -> None:
-    text = Path('docs/INDEX.md').read_text(encoding='utf-8')
-    assert 'docs/plans/2026-03-06-survey-multi-agent-design.md' in text
-    assert 'docs/plans/2026-03-06-survey-multi-agent-implementation-plan.md' in text
+def test_assignment_core_docs_are_indexed() -> None:
+    text = Path("docs/INDEX.md").read_text(encoding="utf-8")
+    assert "docs/plans/2026-08-28-assignment-core-product-design.md" in text
+    assert "docs/how-to/student-login-and-submit.md" in text
+    assert "docs/how-to/teacher-daily-workflow.md" in text
+    assert "docs/http_api.md" in text
 
 
-def test_multi_domain_analysis_docs_are_indexed_and_actionable() -> None:
-    index_text = Path('docs/INDEX.md').read_text(encoding='utf-8')
-    assert 'docs/reference/analysis-runtime-contract.md' in index_text
-    assert 'docs/operations/multi-domain-analysis-rollout-checklist.md' in index_text
-    assert 'docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md' in index_text
-    assert 'docs/reference/analysis-domain-onboarding-contract.md' in index_text
-    assert 'docs/plans/templates/analysis-domain-extension-template.md' in index_text
+def test_product_docs_are_assignment_only() -> None:
+    index_text = Path("docs/INDEX.md").read_text(encoding="utf-8")
+    assert "问卷多 Agent 设计" not in index_text
+    assert "多域分析发布清单" not in index_text
 
-    runtime_text = Path('docs/reference/analysis-runtime-contract.md').read_text(encoding='utf-8')
-    assert 'target resolver' in runtime_text.lower()
-    assert 'artifact adapter' in runtime_text.lower()
-    assert 'strategy selector' in runtime_text.lower()
-    assert 'specialist runtime' in runtime_text.lower()
-    assert 'review queue' in runtime_text.lower()
-    assert 'survey' in runtime_text
-    assert 'class_report' in runtime_text
-    assert 'video_homework' in runtime_text
-    assert 'analysis-domain-onboarding-contract.md' in runtime_text
+    http_text = Path("docs/http_api.md").read_text(encoding="utf-8")
+    assert "/exam/" not in http_text or "Exam HTTP 面已卸载" in http_text
+    assert "/teacher/surveys" not in http_text
 
-    checklist_text = Path('docs/operations/multi-domain-analysis-rollout-checklist.md').read_text(encoding='utf-8')
-    assert '## 5. Shadow 发布清单' in checklist_text
-    assert '## 6. Beta 放量清单' in checklist_text
-    assert '## 7. 正式放量清单' in checklist_text
-    assert '## 8. 回滚清单' in checklist_text
-    assert 'scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only' in checklist_text
+    mcp_text = Path("docs/mcp_api.md").read_text(encoding="utf-8")
+    assert "exam.*" in mcp_text
+    assert "removed" in mcp_text.lower() or "已" in mcp_text

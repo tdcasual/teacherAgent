@@ -235,7 +235,6 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "student_id": req.student_id,
         "assignment_id": req.assignment_id,
         "assignment_date": req.assignment_date,
-        "auto_generate_assignment": req.auto_generate_assignment,
     }
     analysis_target = _normalize_analysis_target_payload(getattr(req, 'analysis_target', None))
     if analysis_target is not None:

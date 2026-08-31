@@ -1,6 +1,6 @@
 # HTTP API
 
-本文档描述项目提供的 HTTP 接口（FastAPI）。产品主线是**作业**（upload → confirm → progress），不是考试。Exam HTTP 面已卸载：不要调用 `/exam/*`、`/exams` 或任何 exam 编排接口。
+本文档描述项目提供的 HTTP 接口（FastAPI）。产品主线是**作业**（upload → confirm → 学生今日列表 → 显式提交 → progress），不是考试，也不是问卷/班级报告工作台。Exam HTTP 面已卸载：不要调用 `/exam/*`、`/exams` 或任何 exam 编排接口。Survey / class_report / analysis_report 路由同样不注册。
 
 ## 基础信息
 - Base URL：`http://localhost:8000`
