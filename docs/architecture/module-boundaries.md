@@ -46,19 +46,15 @@
 - 约束：
   - 新依赖通过容器挂载到 `app.state.container`
   - 禁止新增模块级全局依赖入口作为默认路径
-  - analysis domain 的 specialist runtime 优先通过 `services/api/domains/runtime_builder.py` 组装；`services/api/wiring/*` 只保留薄封装或兼容入口
-  - runtime / report 的 binding 优先由 manifest 元信息声明，并通过统一 resolver 与共享 binding registry 解析；避免在多个中心模块继续扩张 domain 专属 lookup 逻辑
-  - analysis report plane 的 domain provider 优先由 manifest 元信息驱动装配，不再在应用层维护一份独立的按域硬编码真相表
-  - strategy 元数据若引用不存在的 specialist 或 artifact，必须在装配期直接失败，而不是等运行时静默退化
-  - 新增 analysis domain 前，先按 `docs/reference/analysis-domain-onboarding-template.md` 设计 manifest / strategy / report plane / review queue，再进入实现
+  - 全员产品面 skill 以 `services/api/skills/product.py` 的 allow-list 为准（作业运营 / 作业生成 / 学生教练）
+  - 学科 pack 的 `skill_affiliates` 只对**任教该学科**的老师开放（例如物理老师才看到 `physics-*`）；学生与未任教老师看不到
+  - 布置作业走 `subject_id` + 作业工作流，不要求附属 skill
+  - 不要在 `create_app()` 装配已卸载的 analysis/survey HTTP 子系统
+  - `services/api/wiring/*` 只保留薄封装；作业编排走 `assignment/application.py`
 
-
-
-### Analysis Ops Context
-- 在线聚合层：`services/api/analysis_ops_service.py` 只读取持久化 metrics、review feedback 与报告 lineage 元数据，不在 HTTP 请求内做重放 diff。
-- 在线写入层：`services/api/review_queue_service.py` 在 review queue 终态迁移时追加 `data/analysis/review_feedback.jsonl`；这属于 ops telemetry，不反向进入 memory 治理链路。
-- HTTP 边界：`services/api/routes/analysis_report_routes.py` 仅暴露 `/teacher/analysis/ops` 的协议转换，不承载 compare 编排。
-- 离线分析层：`scripts/export_analysis_ops_snapshot.py` 与 `scripts/compare_analysis_runs.py` 负责导出候选与显式 diff，属于 operator tooling，不应被 request path 直接调用。
+### Leftover analysis / survey
+- 考试、问卷、class_report 的 HTTP 路由已卸载，不是现行产品面。
+- 仓库里仍可能残留 analysis 脚本、离线门禁与历史文档（`docs/plans/`、`docs/reference/analysis-*`），它们不是运行时契约，不要按现行入口实现。
 
 ## Frontend Boundaries (Student App)
 

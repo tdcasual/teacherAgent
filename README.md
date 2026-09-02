@@ -1,13 +1,14 @@
 # Teaching Workflow Product
 [![Teacher E2E](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml/badge.svg?branch=main)](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml)
 
-面向老师、学生与管理员的教学 workflow 产品。
-目标是把“考试分析、学生诊断、作业生成、课堂材料采集、账号管理”等高频动作，收敛成可解释、可回归、可运维的闭环，而不是继续扩展通用 agent 平台。
+面向老师、学生与管理员的单校作业产品。
+目标是把“布置作业、今日任务、显式提交、进度与账号管理”收敛成可解释、可回归、可运维的闭环，而不是考试分析平台或通用 agent 平台。
 
 ## 产品真相
-- 产品定位：教学 workflow 产品，不是插件市场或通用 agent 平台
-- 运行时主链路：`role -> workflow(skill) -> prompt stack -> tool policy -> chat job -> memory side effects -> history persistence`
-- 老师端核心价值：自动推荐教学能力，但保留显式 workflow 入口与可解释路由结果
+- 产品定位：单校作业产品，不是插件市场、考试分析或通用 agent 平台
+- 老师主线：上传材料 → 审核草稿并创建 → 查看完成进度
+- 学生主线：今日任务 → 陪练（侧信道）→ 显式提交
+- 老师端默认能力：`teacher-assignment-ops`；全员产品面是作业三件套（作业运营 / 作业生成 / 学生教练）。任教某学科的老师额外看到该 pack 的 `skill_affiliates`（如物理老师的课堂采集）
 - 运行时契约：`docs/reference/agent-runtime-contract.md`
 
 ## 30 秒定位

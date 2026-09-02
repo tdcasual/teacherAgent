@@ -42,13 +42,8 @@
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
-- 分析域 onboarding 模板：`docs/reference/analysis-domain-onboarding-template.md`
-- 分析域 onboarding contract：`docs/reference/analysis-domain-onboarding-contract.md`
-- 分析域接入 checklist：`docs/reference/analysis-domain-checklist.md`
-- 分析域能力矩阵：`docs/reference/analysis-domain-capability-matrix.md`
-- 历史分析域扩展模板：`docs/reference/analysis-domain-extension-template.md`
-- 分析域实施计划模板：`docs/plans/templates/analysis-domain-extension-template.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
+- 历史分析域文档（非现行产品入口）：`docs/reference/analysis-domain-onboarding-template.md` 等 `docs/reference/analysis-*`
 
 ## 设计与演进
 - **当前权威产品设计（作业内核 / 删除考试）**：`docs/plans/2026-08-28-assignment-core-product-design.md`

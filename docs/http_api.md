@@ -77,7 +77,7 @@
 ### POST `/teacher/provider-registry/providers`
 新增私有 Provider（OpenAI-Compatible，支持自定义 `base_url`）。
 - 请求字段：
-  - `teacher_id`（可选，默认 `teacher`）
+  - `teacher_id`（必填；未认证或空值返回 `teacher_id_required`）
   - `provider_id`（可选，未填自动生成；不可与共享 provider 同名）
   - `display_name`（可选）
   - `base_url`（必填，例如 `https://proxy.example.com/v1`）
@@ -103,7 +103,7 @@
 
 ## 技能与列表查询
 ### GET `/skills`
-返回技能列表（从 `skills/*/SKILL.md` 自动扫描）
+需要登录。返回当前身份可见的技能：全员作业三件套（`teacher-assignment-ops` / `homework-generator` / `student-coach`），加上该老师名册学科 pack 的 `skill_affiliates`。未任教物理的老师不会看到 `physics-*`。学生没有附属 skill。
 
 ### GET `/assignments`
 返回当前老师可见的作业列表（分页：`limit`、`cursor`）
@@ -255,6 +255,7 @@ packs/subjects/<id>/
 - 内置示例：`packs/subjects/generic/`、`packs/subjects/physics/`。
 - **找不到或损坏的 subject 一律回退 `generic`，永不回退物理。** `generic` pack 缺失则失败（`SubjectPackError`），没有第二默认学科。
 - 作业 `meta.pack_id` 优先于 `meta.subject_id`。认领孤儿作业时 `pack_id` 取该学科在 identity graph 里登记的值，缺省则等于 `subject_id`。
+- `pack.yaml` 的 `skill_affiliates` 只给任教该 `subject_id` 的老师并入 `GET /skills` 与聊天自动路由。布置作业不依赖附属 skill，只依赖 `subject_id` 与 overlay。
 - 聊天 overlay 与提交评分读同一套 pack；不要在 HTTP 里再发明 `/packs` 接口。
 
 装载实现：`services/api/subject_pack_service.py`。
