@@ -48,9 +48,8 @@ class SkillsPolicyConsistencyTest(unittest.TestCase):
         loaded = load_skills(Path(APP_ROOT) / "skills")
         expected = {
             "teacher-assignment-ops": (3, 8),
-            "physics-student-focus": (3, 7),
             "homework-generator": (3, 6),
-            "physics-lesson-capture": (3, 6),
+            "student-coach": (4, 10),
         }
         for skill_id, (max_rounds, max_calls) in expected.items():
             spec = loaded.skills[skill_id]

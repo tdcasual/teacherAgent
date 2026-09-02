@@ -12,7 +12,6 @@ from services.api.upload_llm_service import (
     UploadLlmDeps,
     llm_autofill_requirements,
     llm_parse_assignment_payload,
-    llm_parse_exam_scores,
     parse_llm_json,
     truncate_text,
     xls_to_table_preview,
@@ -239,8 +238,4 @@ def test_xls_to_table_preview_success_and_exception(monkeypatch: pytest.MonkeyPa
     assert xls_to_table_preview(tmp_path / "x.xls", deps=deps) == ""
 
 
-def test_llm_parse_exam_scores_parse_failed() -> None:
-    deps, _ = _deps(call_llm=lambda *_args, **_kwargs: {"choices": [{"message": {"content": "not json"}}]})
-    out = llm_parse_exam_scores("row\tscore", deps=deps)
-    assert out["error"] == "llm_parse_failed"
-    assert "raw" in out
+

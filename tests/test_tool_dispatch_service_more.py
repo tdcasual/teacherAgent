@@ -59,6 +59,7 @@ def _deps(tools: set[str]):
         teacher_memory_apply=lambda teacher_id, proposal_id, approve=True: _remember(
             "teacher.memory.apply", (teacher_id, proposal_id, approve)
         ),
+        assignment_owner_id=lambda assignment_id: "t_zhang" if str(assignment_id or "").strip() else None,
     )
     return deps, calls
 
@@ -85,10 +86,10 @@ def test_tool_dispatch_covers_core_assignment_and_student_paths():
     assert tool_dispatch("student.search", {"query": "abc", "limit": 3}, role="teacher", deps=deps)["tool"] == "student.search"
     assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"
     assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "student.profile.update"
-    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.generate"
+    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.generate"
     generate_denied = tool_dispatch("assignment.generate", {"topic": "t"}, role="student", deps=deps, confirmed=True)
     assert generate_denied.get("error") == "permission denied"
-    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.render"
+    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 
     assert calls["student.search"] == ("abc", 3)
@@ -111,6 +112,7 @@ def test_tool_dispatch_assignment_requirements_save_uses_parser():
         "assignment.requirements.save",
         {"assignment_id": "a1", "requirements": {"x": 1}, "date": "2026-02-12"},
         role="teacher",
+        teacher_id="t_zhang",
         deps=deps,
         confirmed=True,
     )

@@ -10,30 +10,17 @@ class SkillsFirstClassTest(unittest.TestCase):
         from services.api.skills.runtime import compile_skill_runtime
 
         loaded = load_skills(Path(APP_ROOT) / "skills")
-        self.assertIn("physics-core-examples", loaded.skills)
+        self.assertIn("homework-generator", loaded.skills)
         self.assertIn("teacher-assignment-ops", loaded.skills)
 
         role_allowed = set(allowed_tools("teacher"))
 
-        core = loaded.skills["physics-core-examples"]
-        core_rt = compile_skill_runtime(core)
-        self.assertEqual(core_rt.max_tool_calls, 10)
-        self.assertEqual(core_rt.max_tool_rounds, 4)
-        filtered = core_rt.apply_tool_policy(role_allowed)
-        self.assertEqual(
-            filtered,
-            {"core_example.search", "core_example.register", "core_example.render", "chart.agent.run", "chart.exec"},
-        )
-        self.assertIn("激活技能：physics-core-examples", core_rt.system_prompt)
-        self.assertIn("核心例题库", core_rt.system_prompt)
-        core_model_targets = core_rt.resolve_model_targets(
-            role_hint="teacher",
-            kind="chat.agent_no_tools",
-            needs_tools=False,
-            needs_json=False,
-        )
-        self.assertTrue(core_model_targets)
-        self.assertEqual((core_model_targets[0] or {}).get("route_id"), "core_summary")
+        homework = loaded.skills["homework-generator"]
+        homework_rt = compile_skill_runtime(homework)
+        filtered = homework_rt.apply_tool_policy(role_allowed)
+        self.assertIn("assignment.generate", filtered)
+        self.assertIn("assignment.publish", filtered)
+        self.assertNotIn("exam.get", filtered)
 
         teacher_ops = loaded.skills["teacher-assignment-ops"]
         ops_rt = compile_skill_runtime(teacher_ops)
@@ -63,10 +50,14 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertIsNotNone(sel.skill)
         self.assertEqual(sel.skill.skill_id, "teacher-assignment-ops")
 
-        # Student cannot select teacher-only skills; should fall back to student default.
+        # Physics leftover ids are not on the product surface; fall back to the role default.
         sel2 = resolve_skill(loaded, requested_skill_id="physics-core-examples", role_hint="student")
         self.assertIsNotNone(sel2.skill)
         self.assertEqual(sel2.skill.skill_id, "student-coach")
+
+        sel3 = resolve_skill(loaded, requested_skill_id="physics-core-examples", role_hint="teacher")
+        self.assertIsNotNone(sel3.skill)
+        self.assertEqual(sel3.skill.skill_id, "teacher-assignment-ops")
 
         aliased = resolve_skill(loaded, requested_skill_id="physics-teacher-ops", role_hint="teacher")
         self.assertIsNotNone(aliased.skill)
@@ -78,9 +69,10 @@ class SkillsFirstClassTest(unittest.TestCase):
         self.assertEqual(aliased_hw.skill.skill_id, "homework-generator")
         self.assertEqual(aliased_hw.warning, "skill_id_aliased")
 
-    def test_remaining_physics_skill_ids_are_pack_affiliates_not_defaults(self):
+    def test_remaining_physics_skill_ids_are_pack_affiliates_not_product_surface(self):
         from services.api.config import APP_ROOT
         from services.api.skills.loader import load_skills
+        from services.api.skills.product import PRODUCT_SKILL_IDS
         from services.api.skills.router import default_skill_id_for_role
         from services.api.subject_pack_service import load_pack
 
@@ -96,6 +88,7 @@ class SkillsFirstClassTest(unittest.TestCase):
             },
         )
         self.assertEqual(physics_ids, affiliates)
+        self.assertTrue(physics_ids.isdisjoint(PRODUCT_SKILL_IDS))
         self.assertNotIn(default_skill_id_for_role("teacher"), physics_ids)
         self.assertNotIn(default_skill_id_for_role("student"), physics_ids)
         self.assertTrue((Path(APP_ROOT) / "skills" / "physics-lesson-capture" / "skill.yaml").is_file())

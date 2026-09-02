@@ -26,11 +26,6 @@ agent:
     allow:
       - assignment.my_today
       - assignment.my_result
-      - student.search
-      - student.profile.get
-      - student.profile.update
-      - chart.agent.run
-      - chart.exec
   budgets:
     max_tool_rounds: 4
     max_tool_calls: 10
@@ -76,7 +71,7 @@ agent:
           temperature: 0.3
 ui:
   prompts:
-    - 查看学生画像 高二2403班_武熙语。
+    - 开始今天作业。
   examples:
-    - 查看学生画像 武熙语
     - 开始今天作业
+    - 查看我的作业结果

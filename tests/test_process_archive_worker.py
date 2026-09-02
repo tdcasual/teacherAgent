@@ -658,6 +658,24 @@ def test_request_process_archive_rejects_unpublished_student() -> None:
         assert not _archive_path(root).exists()
 
 
+def test_request_process_archive_anonymous_is_401() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        archive_deps = _archive_deps(root)
+        with pytest.raises(ProcessArchiveError) as ctx:
+            request_process_archive(
+                assignment_id="HW_1",
+                student_id="S1",
+                reason="manual",
+                principal=None,
+                deps=archive_deps,
+                enqueue=lambda _payload: None,
+            )
+        assert ctx.value.status_code == 401
+        assert ctx.value.detail == "missing_authorization"
+        assert not _archive_path(root).exists()
+
+
 def test_request_process_archive_allows_owner_teacher() -> None:
     with TemporaryDirectory() as td:
         root = Path(td)

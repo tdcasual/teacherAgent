@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Iterable, Optional, Tuple
 
 from .loader import LoadedSkills
+from .product import is_visible_skill
 from .spec import SkillSpec
 
 _SKILL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,80}$")
@@ -40,6 +41,7 @@ def resolve_skill(
     loaded: LoadedSkills,
     requested_skill_id: Optional[str],
     role_hint: Optional[str],
+    extra_skill_ids: Iterable[str] = (),
 ) -> SkillSelection:
     warning = ""
     skill_id = (requested_skill_id or "").strip()
@@ -56,6 +58,8 @@ def resolve_skill(
         skill_id = default_skill_id_for_role(role_hint)
 
     skill = loaded.skills.get(skill_id)
+    if skill is not None and not is_visible_skill(skill.skill_id, extra_skill_ids=extra_skill_ids):
+        skill = None
     if not skill:
         fallback = default_skill_id_for_role(role_hint)
         skill = loaded.skills.get(fallback)

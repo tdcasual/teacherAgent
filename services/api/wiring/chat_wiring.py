@@ -104,6 +104,7 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..skills.affiliates import extra_skill_ids_for_role as _extra_skill_ids_for_role
 from ..student_memory_service import (
     StudentMemoryDeps,
 )
@@ -471,6 +472,7 @@ def _compute_chat_reply_deps(core: Any | None = None):
             requested_skill_id=requested_skill_id,
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
         ),
         subject_prompt_overlay=overlay_for_role,
     )

@@ -11,7 +11,6 @@ from fastapi.responses import PlainTextResponse
 
 from .analysis_metrics_service import AnalysisMetricsService
 from .analysis_metrics_store import AnalysisMetricsStore
-from .analysis_ops_service import AnalysisOpsService
 from .app_routes import register_routes
 from .auth_service import auth_required, require_principal
 from .container import build_app_container, resolve_observability
@@ -117,20 +116,10 @@ def create_app(settings: AppSettings) -> FastAPI:
     if getattr(core, 'analysis_metrics_service', None) is None:
         metrics_store = AnalysisMetricsStore(data_dir / 'analysis' / 'metrics_snapshot.json')
         setattr(core, 'analysis_metrics_service', AnalysisMetricsService(store=metrics_store))
-    if getattr(core, 'analysis_ops_service', None) is None:
-        setattr(
-            core,
-            'analysis_ops_service',
-            AnalysisOpsService(
-                metrics_service=getattr(core, 'analysis_metrics_service', None),
-                review_feedback_path=data_dir / 'analysis' / 'review_feedback.jsonl',
-                data_dir=data_dir,
-            ),
-        )
     set_default_core(core)
     docs_enabled = _docs_enabled()
     app_obj = FastAPI(
-        title="Physics Agent API",
+        title="TeacherAgent API",
         version="0.2.0",
         lifespan=app_lifespan,
         docs_url="/docs" if docs_enabled else None,

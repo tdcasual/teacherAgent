@@ -4,7 +4,9 @@ import csv
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Iterable
+
+from .skills.product import is_visible_skill
 
 
 @dataclass(frozen=True)
@@ -40,10 +42,16 @@ def list_lessons(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
     return {"lessons": items}
 
 
-def list_skills(*, deps: ContentCatalogDeps) -> Dict[str, Any]:
+def list_skills(*, deps: ContentCatalogDeps, extra_skill_ids: Iterable[str] = ()) -> Dict[str, Any]:
     skills_dir = deps.app_root / "skills"
     loaded = deps.load_skills(skills_dir)
-    items = [spec.as_public_dict() for spec in loaded.skills.values()]
+    items = []
+    for spec in loaded.skills.values():
+        public = spec.as_public_dict()
+        skill_id = str(public.get("id") or getattr(spec, "skill_id", "") or "")
+        if not is_visible_skill(skill_id, extra_skill_ids=extra_skill_ids):
+            continue
+        items.append(public)
     items.sort(key=lambda x: x.get("id") or "")
     payload: Dict[str, Any] = {"skills": items}
     if loaded.errors:

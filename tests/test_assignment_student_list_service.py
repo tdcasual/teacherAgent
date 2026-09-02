@@ -40,7 +40,7 @@ def _deps(
     return StudentAssignmentListDeps(
         data_dir=root / "data",
         load_assignment_meta=lambda folder: json.loads((folder / "meta.json").read_text(encoding="utf-8")),
-        student_enrolled=lambda sid, tid, sub: (sid, tid, sub) in enrolled_set,
+        student_enrolled=lambda sid, tid, sub, class_name="": (sid, tid, sub) in enrolled_set,
         list_submission_attempts=lambda aid, sid: list(attempt_map.get((aid, sid), [])),
         lookback_days=lookback_days,
     )

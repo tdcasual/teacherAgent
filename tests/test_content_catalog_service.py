@@ -116,8 +116,12 @@ def test_load_question_kp_map_missing(tmp_path: Path):
 # -- list_skills ---------------------------------------------------------------
 
 def test_list_skills_delegates(tmp_path: Path):
-    fake_spec = SimpleNamespace(as_public_dict=lambda: {"id": "sk1", "name": "Skill 1"})
-    fake_loaded = SimpleNamespace(skills={"sk1": fake_spec}, errors=[])
+    fake_spec = SimpleNamespace(as_public_dict=lambda: {"id": "teacher-assignment-ops", "name": "作业运营"})
+    leftover = SimpleNamespace(as_public_dict=lambda: {"id": "physics-core-examples", "name": "核心例题"})
+    fake_loaded = SimpleNamespace(
+        skills={"teacher-assignment-ops": fake_spec, "physics-core-examples": leftover},
+        errors=[],
+    )
     called_with: list = []
 
     def mock_load(skills_dir):
@@ -126,5 +130,5 @@ def test_list_skills_delegates(tmp_path: Path):
 
     deps = _make_deps(tmp_path, load_skills=mock_load)
     result = list_skills(deps=deps)
-    assert result == {"skills": [{"id": "sk1", "name": "Skill 1"}]}
+    assert result == {"skills": [{"id": "teacher-assignment-ops", "name": "作业运营"}]}
     assert called_with[0] == tmp_path / "skills"

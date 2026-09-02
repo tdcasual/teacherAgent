@@ -33,8 +33,13 @@ class SkillsEndpointTest(unittest.TestCase):
             self.assertGreaterEqual(len(skills), 1)
 
             by_id = {s.get("id"): s for s in skills}
-            self.assertIn("physics-core-examples", by_id)
-            core = by_id["physics-core-examples"]
+            self.assertIn("teacher-assignment-ops", by_id)
+            self.assertIn("homework-generator", by_id)
+            self.assertIn("student-coach", by_id)
+            self.assertNotIn("physics-core-examples", by_id)
+            self.assertNotIn("physics-lesson-capture", by_id)
+            self.assertNotIn("physics-student-focus", by_id)
+            core = by_id["teacher-assignment-ops"]
             self.assertEqual(core.get("schema_version"), 2)
             self.assertIn("agent", core)
             self.assertIn("routing", core)

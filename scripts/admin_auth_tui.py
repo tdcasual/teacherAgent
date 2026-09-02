@@ -680,7 +680,7 @@ Compatibility aliases:
                     "teacher_id": teacher_id,
                     "subject_id": subject_id,
                     "class_name": class_name,
-                    "allow_empty": True,
+                    "allow_empty": False,
                 },
             )
             self._print_identity_result(result, action="roster add")

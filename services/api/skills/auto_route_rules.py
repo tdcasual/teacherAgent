@@ -60,58 +60,6 @@ def _score_homework_generator(
     return score, hits
 
 
-def _score_lesson_capture(text: str) -> Tuple[int, List[str]]:
-    score = 0
-    hits: List[str] = []
-    has_lesson = _contains_unnegated(text, "课堂") or _contains_unnegated(text, "lesson")
-    has_capture = any(
-        _contains_unnegated(text, key)
-        for key in ("采集", "ocr", "识别", "抽取", "板书", "课件", "课堂材料")
-    )
-    if has_lesson and has_capture:
-        score += 7
-        hits.append("lesson_capture_combo")
-    keyword_score, keyword_hits = _append_keyword_hits(
-        text,
-        (
-            ("课堂采集", 4),
-            ("采集课堂", 4),
-            ("lesson.capture", 4),
-            ("ocr", 2),
-            ("课堂材料", 2),
-        ),
-    )
-    return score + keyword_score, hits + keyword_hits
-
-
-def _score_core_examples(text: str) -> Tuple[int, List[str]]:
-    return _append_keyword_hits(
-        text,
-        (
-            ("核心例题", 5),
-            ("变式题", 4),
-            ("例题库", 3),
-            ("登记例题", 3),
-            ("标准解法", 2),
-            ("core_example", 2),
-        ),
-    )
-
-
-def _score_student_focus(text: str) -> Tuple[int, List[str]]:
-    score = 0
-    hits: List[str] = []
-    has_student = _contains_unnegated(text, "学生") or _contains_unnegated(text, "同学")
-    has_focus = any(
-        _contains_unnegated(text, key)
-        for key in ("画像", "诊断", "最近作业", "薄弱", "个体", "个人", "针对")
-    )
-    if has_student and has_focus:
-        score += 7
-        hits.append("student_focus_combo")
-    return score, hits
-
-
 def _score_student_coach_teacher(text: str) -> Tuple[int, List[str]]:
     return _append_keyword_hits(
         text,
@@ -141,9 +89,6 @@ def _score_teacher_ops(text: str) -> Tuple[int, List[str]]:
 
 
 _TEACHER_SCORERS: dict[str, Callable[[str], Tuple[int, List[str]]]] = {
-    "physics-lesson-capture": _score_lesson_capture,
-    "physics-core-examples": _score_core_examples,
-    "physics-student-focus": _score_student_focus,
     "student-coach": _score_student_coach_teacher,
     "teacher-assignment-ops": _score_teacher_ops,
 }

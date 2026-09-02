@@ -49,6 +49,37 @@ class StudentSubmitDeps:
     save_upload_file: Callable[[Any, Path], Awaitable[int]]
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
     trigger_process_archive: Optional[Callable[..., Dict[str, Any]]] = None
+    authorize_student_submit: Optional[Callable[[str, str], None]] = None
+
+
+def authorize_student_submit_assignment(
+    assignment_id: str,
+    student_id: str,
+    *,
+    load_meta: Callable[[str], Optional[Dict[str, Any]]],
+    student_enrolled: Callable[..., bool],
+) -> None:
+    from .assignment.visibility import (
+        assignment_owner_id,
+        effective_visibility_status,
+        snapshot_student_ids,
+    )
+
+    meta = load_meta(assignment_id)
+    if not isinstance(meta, dict) or not meta:
+        raise StudentSubmitError(404, "assignment not found")
+    if effective_visibility_status(meta) != "published":
+        raise StudentSubmitError(403, "forbidden_assignment_scope")
+    if student_id not in snapshot_student_ids(meta):
+        raise StudentSubmitError(403, "forbidden_assignment_scope")
+    teacher_id = assignment_owner_id(meta)
+    subject_id = str(meta.get("subject_id") or "").strip()
+    if not teacher_id or not subject_id:
+        raise StudentSubmitError(403, "forbidden_assignment_scope")
+    scope = str(meta.get("scope") or "").strip().lower()
+    class_name = str(meta.get("class_name") or "").strip() if scope == "class" else ""
+    if not student_enrolled(student_id, teacher_id, subject_id, class_name):
+        raise StudentSubmitError(403, "forbidden_assignment_scope")
 
 
 def _require_assignment_id(assignment_id: Optional[str], auto_assignment: bool) -> str:
@@ -225,6 +256,8 @@ async def submit(
     deps.uploads_dir.mkdir(parents=True, exist_ok=True)
     safe_student_id = _require_safe_id(student_id, "student_id")
     safe_assignment_id = _require_assignment_id(assignment_id, auto_assignment)
+    if deps.authorize_student_submit is not None:
+        deps.authorize_student_submit(safe_assignment_id, safe_student_id)
 
     try:
         saved = await save_capped_uploads(

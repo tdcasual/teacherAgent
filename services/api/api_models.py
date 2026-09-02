@@ -194,7 +194,7 @@ class AdminRosterRequest(BaseModel):
     teacher_id: str
     subject_id: str
     class_name: str
-    allow_empty: bool = True
+    allow_empty: bool = False
 
 
 class AdminEnrollClassRequest(BaseModel):

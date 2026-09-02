@@ -68,6 +68,7 @@ from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
 from ..core_utils import _is_safe_tool_id, _resolve_app_path, _safe_int_arg, normalize_excel_cell
 from ..lesson_core_tool_service import LessonCaptureDeps
+from ..skills.affiliates import extra_skill_ids_for_role as _extra_skill_ids_for_role
 from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
@@ -202,7 +203,7 @@ def _tool_dispatch_deps(core: Any | None = None):
         core_example_render=_ac.core_example_render,
         chart_agent_run=_ac.chart_agent_run,
         chart_exec=_ac.chart_exec,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         ensure_teacher_workspace=_ac.ensure_teacher_workspace,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         teacher_workspace_file=_ac.teacher_workspace_file,
@@ -211,7 +212,12 @@ def _tool_dispatch_deps(core: Any | None = None):
         teacher_memory_search=_ac.teacher_memory_search,
         teacher_memory_propose=_ac.teacher_memory_propose,
         teacher_memory_apply=_ac.teacher_memory_apply,
-        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(
+            _ac.APP_ROOT,
+            role_hint,
+            skill_id,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
+        ),
         allowed_tools=_ac.allowed_tools,
         assignment_progress=lambda assignment_id: _ac.compute_assignment_progress(
             assignment_id, include_students=True
@@ -326,7 +332,12 @@ def _agent_runtime_deps(core: Any | None = None):
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
         diag_log=_ac.diag_log,
-        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(
+            _ac.APP_ROOT,
+            role_hint,
+            skill_id,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
+        ),
         allowed_tools=_ac.allowed_tools,
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,

@@ -873,13 +873,14 @@ def default_load_skill_runtime(
     app_root: Path,
     role_hint: Optional[str],
     skill_id: Optional[str],
+    extra_skill_ids: Any = (),
 ) -> Tuple[Optional[Any], Optional[str]]:
     from .skills.loader import load_skills
     from .skills.router import resolve_skill
     from .skills.runtime import compile_skill_runtime
 
     loaded = load_skills(app_root / "skills")
-    selection = resolve_skill(loaded, skill_id, role_hint)
+    selection = resolve_skill(loaded, skill_id, role_hint, extra_skill_ids=extra_skill_ids or ())
     warning = selection.warning
     runtime = None
     if selection.skill:

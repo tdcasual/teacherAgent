@@ -51,7 +51,7 @@ class AssignmentProcessArchiveDeps:
     diag_log: Callable[[str, Dict[str, Any]], None]
     monotonic: Callable[[], float]
     new_id: Callable[[], str]
-    student_enrolled: Optional[Callable[[str, str, str], bool]] = None
+    student_enrolled: Optional[Callable[..., bool]] = None
 
 
 def _require_id(value: str, field: str) -> str:
@@ -590,7 +590,9 @@ def _authorize_student(
     if not teacher_id or not subject_id:
         raise ProcessArchiveError(403, "forbidden_assignment_scope")
     enrolled = deps.student_enrolled
-    if enrolled is not None and not enrolled(student_id, teacher_id, subject_id):
+    scope = str(meta.get("scope") or "").strip().lower()
+    class_name = str(meta.get("class_name") or "").strip() if scope == "class" else ""
+    if enrolled is not None and not enrolled(student_id, teacher_id, subject_id, class_name):
         raise ProcessArchiveError(403, "forbidden_assignment_scope")
 
 
@@ -603,7 +605,7 @@ def _authorize(
 ) -> None:
     meta = _load_existing_meta(assignment_id, deps)
     if principal is None:
-        return
+        raise ProcessArchiveError(401, "missing_authorization")
     role = str(principal.role or "").strip().lower()
     actor = str(principal.actor_id or "").strip()
     if role == "admin":

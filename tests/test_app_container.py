@@ -42,3 +42,5 @@ def test_create_app_uses_fresh_core_runtime(tmp_path) -> None:
     assert app_a.state.core is not app_b.state.core
     assert app_a.state.core.DATA_DIR == tmp_path / "data_a"
     assert app_b.state.core.DATA_DIR == tmp_path / "data_b"
+    assert getattr(app_a.state.core, "analysis_ops_service", None) is None
+    assert getattr(app_b.state.core, "analysis_ops_service", None) is None

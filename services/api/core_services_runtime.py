@@ -144,8 +144,8 @@ def list_lessons(core: Any | None = None) -> Dict[str, Any]:
     return _list_lessons_impl(deps=_content_catalog_deps(core))
 
 
-def list_skills(core: Any | None = None) -> Dict[str, Any]:
-    return _list_skills_impl(deps=_content_catalog_deps(core))
+def list_skills(core: Any | None = None, extra_skill_ids: Any = ()) -> Dict[str, Any]:
+    return _list_skills_impl(deps=_content_catalog_deps(core), extra_skill_ids=extra_skill_ids)
 
 
 async def chat(req: ChatRequest, core: Any | None = None) -> Any:

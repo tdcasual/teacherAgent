@@ -23,7 +23,7 @@ _PROCESS_STATUSES = frozenset({"none", "pending", "frozen", "partial"})
 class StudentAssignmentListDeps:
     data_dir: Path
     load_assignment_meta: Callable[[Path], Dict[str, Any]]
-    student_enrolled: Callable[[str, str, str], bool]
+    student_enrolled: Callable[..., bool]
     list_submission_attempts: Callable[[str, str], List[Dict[str, Any]]]
     lookback_days: int = 14
 
@@ -42,6 +42,7 @@ def student_currently_enrolled(
     subject_id: str,
     *,
     data_dir: Optional[Path] = None,
+    class_name: str = "",
 ) -> bool:
     try:
         store = build_auth_registry_store(data_dir=data_dir)
@@ -50,6 +51,7 @@ def student_currently_enrolled(
             student_id=student_id,
             teacher_id=teacher_id,
             subject_id=subject_id,
+            class_name=class_name,
         )
     except Exception:  # policy: allowed-broad-except
         _log.warning("enrollment lookup failed", exc_info=True)
@@ -151,7 +153,9 @@ def _on_live_roster(meta: Dict[str, Any], student_id: str, deps: StudentAssignme
     teacher_id, subject_id = _owner_and_subject(meta)
     if not teacher_id or not subject_id:
         return False
-    return bool(deps.student_enrolled(student_id, teacher_id, subject_id))
+    scope = str(meta.get("scope") or "").strip().lower()
+    class_name = str(meta.get("class_name") or "").strip() if scope == "class" else ""
+    return bool(deps.student_enrolled(student_id, teacher_id, subject_id, class_name))
 
 
 def _today_visible(

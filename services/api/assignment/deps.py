@@ -12,11 +12,15 @@ from ..wiring.assignment_wiring import (
 )
 
 
-def _student_enrolled_for_core(core: Any, student_id: str, teacher_id: str, subject_id: str) -> bool:
+def _student_enrolled_for_core(
+    core: Any, student_id: str, teacher_id: str, subject_id: str, class_name: str = ""
+) -> bool:
     from ..assignment_student_list_service import student_currently_enrolled
 
     data_dir = getattr(core, "DATA_DIR", None)
-    return student_currently_enrolled(student_id, teacher_id, subject_id, data_dir=data_dir)
+    return student_currently_enrolled(
+        student_id, teacher_id, subject_id, data_dir=data_dir, class_name=class_name
+    )
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ class AssignmentAccessDeps:
     resolve_student_profile_path: Callable[[str], Path]
     load_profile_file: Callable[[Path], Dict[str, Any]]
     assignment_specificity: Callable[[Dict[str, Any], Optional[str], Optional[str]], int]
-    student_enrolled: Callable[[str, str, str], bool]
+    student_enrolled: Callable[..., bool]
 
 
 @dataclass(frozen=True)
@@ -69,8 +73,8 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         assignment_specificity=lambda meta, student_id, class_name: core.assignment_specificity(
             meta, student_id, class_name
         ),
-        student_enrolled=lambda student_id, teacher_id, subject_id: (
-            _student_enrolled_for_core(core, student_id, teacher_id, subject_id)
+        student_enrolled=lambda student_id, teacher_id, subject_id, class_name="": (
+            _student_enrolled_for_core(core, student_id, teacher_id, subject_id, class_name)
         ),
         list_assignments=lambda limit, cursor, owner_teacher_id=None: (
             core.assignment_handlers.assignments(

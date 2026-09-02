@@ -3,7 +3,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.student_submit_service import StudentSubmitDeps, StudentSubmitError, submit
+from services.api.student_submit_service import (
+    StudentSubmitDeps,
+    StudentSubmitError,
+    authorize_student_submit_assignment,
+    submit,
+)
 
 
 async def _save_upload_file(upload, dest: Path) -> int:
@@ -65,6 +70,77 @@ def _progress(*, submitted: bool, score: float = 0.0, attempt_id: str = "submiss
 
 
 class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_submit_rejects_unpublished_assignment(self):
+        with TemporaryDirectory() as td:
+            captured = {}
+
+            def _deny(assignment_id: str, student_id: str) -> None:
+                raise StudentSubmitError(403, "forbidden_assignment_scope")
+
+            deps = _deps(
+                Path(td),
+                run_script=lambda args: captured.setdefault("args", list(args)) or "ok",
+                authorize_student_submit=_deny,
+            )
+            with self.assertRaises(StudentSubmitError) as ctx:
+                await submit(
+                    student_id="S1",
+                    files=[_Upload(filename="a1.pdf", content=b"1")],
+                    assignment_id="HW_DRAFT",
+                    auto_assignment=False,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 403)
+            self.assertNotIn("args", captured)
+
+    def test_authorize_student_submit_requires_published_roster_and_enrollment(self):
+        def _load_meta(assignment_id: str):
+            if assignment_id == "missing":
+                return None
+            if assignment_id == "draft":
+                return {
+                    "teacher_id": "t1",
+                    "subject_id": "physics",
+                    "visibility_status": "draft",
+                    "expected_students": ["S1"],
+                }
+            return {
+                "teacher_id": "t1",
+                "subject_id": "physics",
+                "visibility_status": "published",
+                "scope": "class",
+                "class_name": "高二2403班",
+                "expected_students": ["S1"],
+            }
+
+        with self.assertRaises(StudentSubmitError) as missing:
+            authorize_student_submit_assignment(
+                "missing", "S1", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: True
+            )
+        self.assertEqual(missing.exception.status_code, 404)
+
+        with self.assertRaises(StudentSubmitError) as draft:
+            authorize_student_submit_assignment(
+                "draft", "S1", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: True
+            )
+        self.assertEqual(draft.exception.detail, "forbidden_assignment_scope")
+
+        with self.assertRaises(StudentSubmitError) as other:
+            authorize_student_submit_assignment(
+                "HW_1", "S2", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: True
+            )
+        self.assertEqual(other.exception.detail, "forbidden_assignment_scope")
+
+        with self.assertRaises(StudentSubmitError) as unenrolled:
+            authorize_student_submit_assignment(
+                "HW_1", "S1", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: False
+            )
+        self.assertEqual(unenrolled.exception.detail, "forbidden_assignment_scope")
+
+        authorize_student_submit_assignment(
+            "HW_1", "S1", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: True
+        )
+
     async def test_submit_requires_assignment_id(self):
         with TemporaryDirectory() as td:
             captured = {}

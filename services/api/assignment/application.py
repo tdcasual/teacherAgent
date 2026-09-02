@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..api_models import AssignmentRequirementsRequest, UploadConfirmRequest, UploadDraftSaveRequest
-from ..auth_service import AuthError, auth_required, require_principal
+from ..auth_service import AuthError, auth_required, get_current_principal, require_principal
 from .deps import AssignmentAccessDeps, AssignmentApplicationDeps
 from .visibility import (
     assignment_owner_id,
     effective_visibility_status,
+    public_student_assignment_detail,
     snapshot_student_ids,
     student_can_read_assignment,
 )
@@ -56,7 +57,9 @@ def _require_student_assignment_access(
     subject_id = str(meta.get("subject_id") or "").strip()
     if not teacher_id or not subject_id:
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
-    if not deps.student_enrolled(sid, teacher_id, subject_id):
+    scope = str(meta.get("scope") or "").strip().lower()
+    class_name = str(meta.get("class_name") or "").strip() if scope == "class" else ""
+    if not deps.student_enrolled(sid, teacher_id, subject_id, class_name):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
 
 
@@ -78,10 +81,12 @@ def _missing_folder_access(principal: Any, *, allow_missing: bool) -> None:
 def require_assignment_access(
     assignment_id: str, *, deps: AssignmentAccessDeps, allow_missing: bool = False
 ) -> None:
-    if not auth_required():
-        return
     principal = _assignment_principal()
-    if principal is None or principal.role in {"admin", "service"}:
+    if principal is None:
+        if not auth_required():
+            return
+        raise AssignmentAccessError(401, "missing_authorization")
+    if principal.role in {"admin", "service"}:
         return
     try:
         folder = deps.resolve_assignment_dir(assignment_id)
@@ -142,7 +147,11 @@ async def get_assignment_requirements(
 
 async def get_assignment_detail(assignment_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     require_assignment_access(assignment_id, deps=deps)
-    return await deps.assignment_detail(assignment_id)
+    payload = await deps.assignment_detail(assignment_id)
+    principal = get_current_principal()
+    if principal is not None and str(principal.role or "").strip().lower() == "student":
+        return public_student_assignment_detail(payload)
+    return payload
 
 
 async def upload_assignment_start(

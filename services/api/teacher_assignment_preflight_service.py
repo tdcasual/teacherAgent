@@ -32,9 +32,6 @@ class TeacherAssignmentPreflightDeps:
     assignment_generate: Callable[[Dict[str, Any]], Dict[str, Any]]
 
 
-_LESSON_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(L[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
-
-
 def _looks_like_full_template_prompt(prompt: str) -> bool:
     text = str(prompt or "").strip()
     if not text:
@@ -55,6 +52,9 @@ def _build_incremental_missing_prompt(missing: List[str]) -> str:
         lines.append(f"{idx}. {item}")
     lines.append("补充后我将继续生成作业。")
     return "\n".join(lines)
+
+
+_LESSON_ID_FALLBACK_RE = re.compile(r"(?<![0-9A-Za-z_-])(L[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
 
 
 def _extract_lesson_id_from_messages(req: Any) -> Optional[str]:
@@ -141,7 +141,13 @@ def _allowed_assignment_tools(
         from .skills.router import resolve_skill
 
         loaded = load_skills(deps.app_root / "skills")
-        selection = resolve_skill(loaded, req.skill_id, "teacher")
+        requested = str(getattr(req, "skill_id", "") or "").strip()
+        selection = resolve_skill(
+            loaded,
+            requested,
+            "teacher",
+            extra_skill_ids=(requested,) if requested else (),
+        )
         spec = selection.skill
         if spec:
             if spec.agent.tools.allow is not None:

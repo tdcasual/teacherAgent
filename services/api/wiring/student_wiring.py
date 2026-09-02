@@ -39,7 +39,7 @@ from ..student_memory_service import (
     student_memory_auto_propose_from_assignment_evidence_api as _student_memory_auto_propose_from_assignment_evidence_api,
 )
 from ..student_ops_service import StudentOpsDeps
-from ..student_submit_service import StudentSubmitDeps
+from ..student_submit_service import StudentSubmitDeps, authorize_student_submit_assignment
 from . import get_app_core as _app_core
 
 _log = logging.getLogger(__name__)
@@ -119,8 +119,8 @@ def assignment_process_archive_deps(core=None) -> AssignmentProcessArchiveDeps:
         diag_log=_ac.diag_log,
         monotonic=time.monotonic,
         new_id=lambda: f"parch_{uuid.uuid4().hex[:16]}",
-        student_enrolled=lambda sid, tid, sub: student_currently_enrolled(
-            sid, tid, sub, data_dir=_ac.DATA_DIR
+        student_enrolled=lambda sid, tid, sub, class_name="": student_currently_enrolled(
+            sid, tid, sub, data_dir=_ac.DATA_DIR, class_name=class_name
         ),
     )
 
@@ -146,6 +146,13 @@ def _student_submit_deps(core=None):
             enqueue=lambda payload: queue_runtime.enqueue_process_archive(payload, backend=backend),
         )
 
+    def _load_submit_meta(assignment_id: str) -> dict | None:
+        folder = _ac.resolve_assignment_dir(assignment_id)
+        if not folder.exists():
+            return None
+        meta = _ac.load_assignment_meta(folder)
+        return meta if isinstance(meta, dict) else None
+
     return StudentSubmitDeps(
         uploads_dir=_ac.UPLOADS_DIR,
         app_root=_ac.APP_ROOT,
@@ -165,6 +172,14 @@ def _student_submit_deps(core=None):
         diag_log=_ac.diag_log,
         save_upload_file=_ac.save_upload_file,
         trigger_process_archive=_trigger,
+        authorize_student_submit=lambda assignment_id, student_id: authorize_student_submit_assignment(
+            assignment_id,
+            student_id,
+            load_meta=_load_submit_meta,
+            student_enrolled=lambda sid, tid, sub, class_name="": student_currently_enrolled(
+                sid, tid, sub, data_dir=_ac.DATA_DIR, class_name=class_name
+            ),
+        ),
     )
 
 

@@ -45,22 +45,15 @@ def test_removed_routing_skill_returns_zero():
     assert hits == []
 
 
-def test_lesson_capture_matches():
-    score, hits = score_role_skill("teacher", "physics-lesson-capture", "课堂采集材料", **_KW)
-    assert score > 0
-    assert "lesson_capture_combo" in hits
-
-
-def test_core_examples_matches():
-    score, hits = score_role_skill("teacher", "physics-core-examples", "请查看 CE123 核心例题", **_KW)
-    assert score > 0
-    assert "核心例题" in hits
-
-
-def test_student_focus_matches():
-    score, hits = score_role_skill("teacher", "physics-student-focus", "该学生画像诊断", **_KW)
-    assert score > 0
-    assert "student_focus_combo" in hits
+def test_physics_leftover_skills_score_zero():
+    for skill_id in (
+        "physics-lesson-capture",
+        "physics-core-examples",
+        "physics-student-focus",
+    ):
+        score, hits = score_role_skill("teacher", skill_id, "课堂采集核心例题学生画像", **_KW)
+        assert score == 0
+        assert hits == []
 
 
 def test_student_coach_teacher():

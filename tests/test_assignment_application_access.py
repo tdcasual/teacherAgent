@@ -65,7 +65,30 @@ def test_list_assignments_passes_owner_from_principal(monkeypatch):
 
 def test_require_assignment_access_skips_when_auth_off(monkeypatch, tmp_path):
     monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: False)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: None,
+    )
     require_assignment_access("HW_1", deps=_deps(folder=tmp_path))
+
+
+def test_require_assignment_access_auth_off_with_token_still_forbids_foreign_assignment(
+    monkeypatch, tmp_path
+):
+    folder = tmp_path / "HW_OTHER"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: False)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_OTHER",
+            deps=_deps(folder=folder, meta={"teacher_id": "t2"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_owner"
 
 
 def test_require_assignment_access_allows_owning_teacher(monkeypatch, tmp_path):
@@ -312,3 +335,34 @@ def test_get_assignment_detail_enforces_access(monkeypatch):
         assert exc.value.status_code == 403
 
     asyncio.run(_run())
+
+
+def test_get_assignment_detail_strips_roster_ids_for_students(monkeypatch):
+    monkeypatch.setattr("services.api.assignment.application.require_assignment_access", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "services.api.assignment.application.get_current_principal",
+        lambda: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+
+    class _Deps:
+        async def assignment_detail(self, _assignment_id: str):
+            return {
+                "assignment_id": "HW_OK",
+                "meta": {
+                    "teacher_id": "t1",
+                    "subject_id": "physics",
+                    "expected_students": ["student_b", "student_c"],
+                    "student_ids": ["student_b"],
+                    "due_at": "2026-09-02",
+                },
+            }
+
+    deps = _Deps()
+
+    async def _run() -> dict:
+        return await get_assignment_detail("HW_OK", deps=deps)
+
+    payload = asyncio.run(_run())
+    assert payload["meta"]["due_at"] == "2026-09-02"
+    assert "expected_students" not in payload["meta"]
+    assert "student_ids" not in payload["meta"]

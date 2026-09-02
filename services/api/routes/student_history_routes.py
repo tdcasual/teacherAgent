@@ -32,8 +32,8 @@ def _student_assignment_list_deps(core: Any) -> StudentAssignmentListDeps:
     return StudentAssignmentListDeps(
         data_dir=data_dir,
         load_assignment_meta=getattr(core, "load_assignment_meta", load_assignment_meta),
-        student_enrolled=lambda sid, tid, sub: student_currently_enrolled(
-            sid, tid, sub, data_dir=data_dir
+        student_enrolled=lambda sid, tid, sub, class_name="": student_currently_enrolled(
+            sid, tid, sub, data_dir=data_dir, class_name=class_name
         ),
         list_submission_attempts=core.list_submission_attempts,
         lookback_days=today_lookback_days(),

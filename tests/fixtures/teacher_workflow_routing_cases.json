@@ -19,37 +19,38 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "student_diagnosis_request",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "分析一下张三这次考试的薄弱点，给我学生诊断",
-      "expected_skill_id": "physics-student-focus",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.44,
-      "first_candidate_skill_id": "physics-student-focus"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "lesson_capture_from_board_and_oral_notes",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "把这节课的板书和口述内容做课堂材料采集整理",
-      "expected_skill_id": "physics-lesson-capture",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-lesson-capture"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "core_examples_by_ce_ids",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "帮我整理 CE102 和 CE103 的变式题讲解",
-      "expected_skill_id": "physics-core-examples",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-core-examples"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "generic_teaching_schedule_defaults",
@@ -59,7 +60,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "explicit_homework_selection_stays_pinned",
@@ -69,7 +71,8 @@
       "expected_skill_id": "homework-generator",
       "expected_reason": "explicit",
       "min_confidence": 1.0,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "teacher_model_config_query_defaults",
@@ -79,7 +82,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "provider_registry_query_defaults",
@@ -89,17 +93,18 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "lesson_capture_from_ocr_board",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "课堂 OCR 采集一下这份板书",
-      "expected_skill_id": "physics-lesson-capture",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-lesson-capture"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "homework_related_but_threshold_blocked",
@@ -109,17 +114,18 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "core_examples_by_variants",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "给我一套匀变速直线运动的例题和变式题",
-      "expected_skill_id": "physics-core-examples",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-core-examples"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "exam_analysis_from_attachment_scoresheet",
@@ -129,17 +135,18 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "lesson_capture_from_classroom_photos",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "帮我采集课堂拍照内容并输出知识点",
-      "expected_skill_id": "physics-lesson-capture",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.52,
-      "first_candidate_skill_id": "physics-lesson-capture"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "tiered_homework_generation",
@@ -156,20 +163,20 @@
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "做一个学生重点分析，看看王五最近哪里掉分",
-      "expected_skill_id": "physics-student-focus",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.52,
-      "first_candidate_skill_id": "physics-student-focus"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "core_examples_lecture_card",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "CE201 这个核心例题给我做成课堂讲解卡片",
-      "expected_skill_id": "physics-core-examples",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-core-examples"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "teacher_prep_request",
@@ -179,7 +186,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "exam_review_request",
@@ -189,27 +197,28 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "lesson_capture_board_summary",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "根据课堂图片 OCR 结果生成板书纪要",
-      "expected_skill_id": "physics-lesson-capture",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-lesson-capture"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "student_focus_recent_class_state",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "这个学生最近上课状态怎么样",
-      "expected_skill_id": "physics-student-focus",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.52,
-      "first_candidate_skill_id": "physics-student-focus"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "ambiguous_analysis_defaults",
@@ -219,7 +228,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "negated_homework_generation_keeps_exam_analysis",
@@ -228,17 +238,18 @@
       "last_user_text": "根据 EX20260312 的成绩单做考试分析，不要生成作业",
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "auto_threshold_blocked_default",
-      "min_confidence": 0.28
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "homework-generator"
     },
     {
       "name": "negated_exam_analysis_prefers_core_examples",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "我想找一套例题，不要做考试分析",
-      "expected_skill_id": "physics-core-examples",
-      "expected_reason": "auto_rule",
-      "min_confidence": 0.7,
-      "first_candidate_skill_id": "physics-core-examples"
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "model_routing_query_does_not_trigger_homework_generation",
@@ -248,7 +259,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "negated_homework_falls_back_to_teacher_ops",
@@ -257,27 +269,28 @@
       "last_user_text": "不要生成作业，先做考试分析和讲评提纲。",
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "auto_threshold_blocked_default",
-      "min_confidence": 0.28
+      "min_confidence": 0.28,
+      "first_candidate_skill_id": "homework-generator"
     },
     {
       "name": "ce_id_routes_to_core_examples",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "登记核心例题 CE042，并补两道变式题。",
-      "expected_skill_id": "physics-core-examples",
-      "expected_reason": "auto_rule",
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "first_candidate_skill_id": "physics-core-examples"
+      "first_candidate_skill_id": ""
     },
     {
       "name": "single_student_profile_routes_to_student_focus",
       "role_hint": "teacher",
       "requested_skill_id": "",
       "last_user_text": "帮我看某个学生的画像和最近作业表现。",
-      "expected_skill_id": "physics-student-focus",
-      "expected_reason": "auto_rule",
+      "expected_skill_id": "teacher-assignment-ops",
+      "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "first_candidate_skill_id": "physics-student-focus"
+      "first_candidate_skill_id": ""
     },
     {
       "name": "generic_analysis_keeps_default_fallback",
@@ -287,7 +300,8 @@
       "expected_skill_id": "teacher-assignment-ops",
       "expected_reason": "role_default",
       "min_confidence": 0.28,
-      "expect_candidates_empty": true
+      "expect_candidates_empty": true,
+      "first_candidate_skill_id": ""
     },
     {
       "name": "assignment_ops_missing_students",

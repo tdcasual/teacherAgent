@@ -796,16 +796,25 @@ def list_roster_class_names(
 
 
 def student_enrolled(
-    store: Any, *, student_id: str, teacher_id: str, subject_id: str = ""
+    store: Any,
+    *,
+    student_id: str,
+    teacher_id: str,
+    subject_id: str = "",
+    class_name: str = "",
 ) -> bool:
     sid = _text(student_id)
     tid = _text(teacher_id)
     subject = _text(subject_id)
+    class_text = _text(class_name)
     sql = "SELECT 1 FROM student_enrollments WHERE student_id = ? AND teacher_id = ?"
     params: List[str] = [sid, tid]
     if subject:
         sql += " AND subject_id = ?"
         params.append(subject)
+    if class_text:
+        sql += " AND class_name = ?"
+        params.append(class_text)
     with store._connect() as conn:
         row = conn.execute(sql, params).fetchone()
     return row is not None

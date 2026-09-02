@@ -82,6 +82,60 @@ def test_unique_owner_conflict_is_class_already_owned(tmp_path: Path) -> None:
     assert same.get("created") is False
 
 
+def test_student_enrolled_class_scope_drops_after_bulk_move(tmp_path: Path) -> None:
+    from services.api.auth.identity_graph_service import student_enrolled
+
+    store = _store(tmp_path)
+    _add_teacher(store)
+    _add_student(store, "S001", "高二2403班")
+    store.add_roster(teacher_id="t_zhang", subject_id="physics", class_name="高二2403班")
+    store.add_roster(teacher_id="t_zhang", subject_id="physics", class_name="高二2404班")
+    store.enroll(
+        student_id="S001",
+        subject_id="physics",
+        class_name="高二2403班",
+        teacher_id="t_zhang",
+    )
+    assert student_enrolled(
+        store,
+        student_id="S001",
+        teacher_id="t_zhang",
+        subject_id="physics",
+        class_name="高二2403班",
+    )
+    store.unenroll(
+        student_id="S001",
+        subject_id="physics",
+        class_name="高二2403班",
+    )
+    store.enroll(
+        student_id="S001",
+        subject_id="physics",
+        class_name="高二2404班",
+        teacher_id="t_zhang",
+    )
+    assert not student_enrolled(
+        store,
+        student_id="S001",
+        teacher_id="t_zhang",
+        subject_id="physics",
+        class_name="高二2403班",
+    )
+    assert student_enrolled(
+        store,
+        student_id="S001",
+        teacher_id="t_zhang",
+        subject_id="physics",
+        class_name="高二2404班",
+    )
+    assert student_enrolled(
+        store,
+        student_id="S001",
+        teacher_id="t_zhang",
+        subject_id="physics",
+    )
+
+
 def test_empty_class_roster_add_is_warning_not_400(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _add_teacher(store)

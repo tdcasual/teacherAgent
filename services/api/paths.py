@@ -106,39 +106,6 @@ def upload_job_path(job_id: str, core: Any | None = None) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Survey job / report paths
-# ---------------------------------------------------------------------------
-
-
-def survey_job_path(job_id: str, core: Any | None = None) -> Path:
-    raw = str(job_id or "")
-    safe = re.sub(r"[^\w-]+", "_", raw).strip("_")
-    if not safe:
-        safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
-    uploads_dir = _path_from_core(core, "UPLOADS_DIR", UPLOADS_DIR)
-    return uploads_dir / "survey_jobs" / safe
-
-
-def survey_raw_payload_dir(job_id: str, core: Any | None = None) -> Path:
-    return survey_job_path(job_id, core=core) / "raw_payloads"
-
-
-def survey_bundle_path(job_id: str, core: Any | None = None) -> Path:
-    return survey_job_path(job_id, core=core) / "bundle.json"
-
-
-def survey_report_path(report_id: str, core: Any | None = None) -> Path:
-    data_dir = _path_from_core(core, "DATA_DIR", DATA_DIR)
-    safe = safe_fs_id(report_id, prefix="report")
-    return data_dir / "survey_reports" / f"{safe}.json"
-
-
-def survey_review_queue_path(core: Any | None = None) -> Path:
-    data_dir = _path_from_core(core, "DATA_DIR", DATA_DIR)
-    return data_dir / "survey_review_queue.jsonl"
-
-
-# ---------------------------------------------------------------------------
 # Multimodal submission paths
 # ---------------------------------------------------------------------------
 

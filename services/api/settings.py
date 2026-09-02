@@ -434,7 +434,7 @@ def analysis_strategy_enabled(strategy_id: str) -> bool:
 
 
 def multimodal_enabled() -> bool:
-    return env_bool("MULTIMODAL_ENABLED", "1")
+    return env_bool("MULTIMODAL_ENABLED", "0")
 
 
 

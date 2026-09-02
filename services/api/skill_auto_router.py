@@ -4,10 +4,11 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .skills.auto_route_rules import score_role_skill
 from .skills.loader import load_skills
+from .skills.product import is_visible_skill
 from .skills.router import canonicalize_skill_id, default_skill_id_for_role
 
 _log = logging.getLogger(__name__)
@@ -437,14 +438,22 @@ def resolve_effective_skill(
     requested_skill_id: Optional[str],
     last_user_text: str,
     detect_assignment_intent: Optional[Callable[[str], bool]] = None,
+    extra_skill_ids: Optional[Iterable[str]] = None,
 ) -> Dict[str, Any]:
     loaded = load_skills(app_root / "skills")
     skills = dict(loaded.skills or {})
     role = str(role_hint or "").strip()
     text = str(last_user_text or "").strip().lower()
     load_errors = len(loaded.errors or [])
+    extra_ids = extra_skill_ids or ()
 
-    available_ids = sorted([skill_id for skill_id, spec in skills.items() if _role_allowed(spec, role)])
+    available_ids = sorted(
+        [
+            skill_id
+            for skill_id, spec in skills.items()
+            if is_visible_skill(skill_id, extra_skill_ids=extra_ids) and _role_allowed(spec, role)
+        ]
+    )
     default_skill_id = _default_from_available(role, available_ids)
 
     raw_requested = str(requested_skill_id or "").strip()

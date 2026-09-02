@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
+from .paths import TeacherIdentityError
 from .tool_confirm_service import maybe_confirmation_required, tool_is_mutating
 
 
@@ -184,22 +185,88 @@ def _require_assignment_owner(
     deps: ToolDispatchDeps,
     role: Optional[str],
     teacher_id: Optional[str],
+    allow_missing: bool = False,
 ) -> Optional[Dict[str, Any]]:
     role_norm = str(role or "").strip().lower()
     if role_norm in {"admin", "service"}:
         return None
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        if allow_missing:
+            return None
+        return {"error": "assignment_id is required"}
     owner = str(teacher_id or "").strip()
     if not owner:
         return {"error": "teacher_id_required"}
-    aid = str(assignment_id or "").strip()
-    if not aid:
-        return {"error": "assignment_id is required"}
     meta_owner = deps.assignment_owner_id(aid)
     if meta_owner is None:
+        if allow_missing:
+            return None
         return {"error": "assignment_not_found", "assignment_id": aid}
     if str(meta_owner).strip() != owner:
         return {"error": "forbidden_assignment_owner"}
     return None
+
+
+def _owned_assignment_generate(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+        allow_missing=True,
+    )
+    if denied:
+        return denied
+    return deps.assignment_generate(args)
+
+
+def _owned_assignment_render(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+    )
+    if denied:
+        return denied
+    return deps.assignment_render(args)
+
+
+def _owned_assignment_requirements_save(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+        allow_missing=True,
+    )
+    if denied:
+        return denied
+    return deps.save_assignment_requirements(
+        str(args.get("assignment_id", "")),
+        args.get("requirements") or {},
+        deps.parse_date_str(args.get("date")),
+        created_by="teacher",
+    )
 
 
 def _owned_assignment_progress(
@@ -451,14 +518,23 @@ def _build_handlers(
         "assignment.generate": _teacher_only_handler(
             role=role,
             detail="assignment.generate requires teacher role",
-            fn=lambda args: deps.assignment_generate(args),
+            fn=lambda args: _owned_assignment_generate(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
         ),
-        "assignment.render": lambda args: deps.assignment_render(args),
-        "assignment.requirements.save": lambda args: deps.save_assignment_requirements(
-            str(args.get("assignment_id", "")),
-            args.get("requirements") or {},
-            deps.parse_date_str(args.get("date")),
-            created_by="teacher",
+        "assignment.render": _teacher_only_handler(
+            role=role,
+            detail="assignment.render requires teacher role",
+            fn=lambda args: _owned_assignment_render(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
+        ),
+        "assignment.requirements.save": _teacher_only_handler(
+            role=role,
+            detail="assignment.requirements.save requires teacher role",
+            fn=lambda args: _owned_assignment_requirements_save(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
         ),
         "core_example.search": lambda args: deps.core_example_search(args),
         "core_example.register": lambda args: deps.core_example_register(args),
@@ -473,11 +549,21 @@ def _build_handlers(
             detail="chart.exec requires teacher role",
             fn=lambda args: _chart_exec_handler(args, deps=deps, role=role, teacher_id=teacher_id),
         ),
-        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(args, deps=deps),
-        "teacher.memory.get": lambda args: _teacher_memory_get(args, deps),
-        "teacher.memory.search": lambda args: _teacher_memory_search_handler(args, deps=deps),
-        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(args, deps=deps),
-        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(args, deps=deps),
+        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.get": lambda args: _teacher_memory_get(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps
+        ),
+        "teacher.memory.search": lambda args: _teacher_memory_search_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
     }
 
 
@@ -566,4 +652,7 @@ def tool_dispatch(
     )
     if mutating_denied is not None:
         return mutating_denied
-    return handler(args)
+    try:
+        return handler(args)
+    except TeacherIdentityError as exc:
+        return {"error": str(exc.detail or "teacher_id_required"), "status_code": int(exc.status_code)}

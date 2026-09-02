@@ -17,7 +17,6 @@ class RuntimePaths:
     OCR_UTILS_DIR: Path
     DIAG_LOG_PATH: Path
     UPLOAD_JOB_DIR: Path
-    SURVEY_JOB_DIR: Path
     CHAT_JOB_DIR: Path
     STUDENT_SESSIONS_DIR: Path
     TEACHER_WORKSPACES_DIR: Path
@@ -39,7 +38,6 @@ class ConfigValues:
     DIAG_LOG_ENABLED: bool
     DIAG_LOG_PATH: Path
     UPLOAD_JOB_DIR: Path
-    SURVEY_JOB_DIR: Path
     CHAT_JOB_DIR: Path
     CHAT_WORKER_POOL_SIZE: int
     CHAT_LANE_MAX_QUEUE: int
@@ -130,7 +128,6 @@ def build_paths(
         OCR_UTILS_DIR=ocr_utils_dir,
         DIAG_LOG_PATH=diag_log_path,
         UPLOAD_JOB_DIR=uploads_dir / "assignment_jobs",
-        SURVEY_JOB_DIR=uploads_dir / "survey_jobs",
         CHAT_JOB_DIR=uploads_dir / "chat_jobs",
         STUDENT_SESSIONS_DIR=data_dir / "student_chat_sessions",
         TEACHER_WORKSPACES_DIR=data_dir / "teacher_workspaces",
@@ -158,7 +155,6 @@ def build_config(
         DIAG_LOG_ENABLED=settings.diag_log_enabled,
         DIAG_LOG_PATH=paths.DIAG_LOG_PATH,
         UPLOAD_JOB_DIR=paths.UPLOAD_JOB_DIR,
-        SURVEY_JOB_DIR=paths.SURVEY_JOB_DIR,
         CHAT_JOB_DIR=paths.CHAT_JOB_DIR,
         CHAT_WORKER_POOL_SIZE=settings.chat_worker_pool_size,
         CHAT_LANE_MAX_QUEUE=settings.chat_lane_max_queue,

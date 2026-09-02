@@ -31,3 +31,16 @@ def student_can_read_assignment(
     vis = effective_visibility_status(meta)
     allowed = _STUDENT_TODAY if for_today else _STUDENT_READABLE
     return vis in allowed
+
+
+_STUDENT_META_OMIT = frozenset({"expected_students", "student_ids"})
+
+
+def public_student_assignment_detail(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+    out = dict(payload)
+    meta = out.get("meta")
+    if isinstance(meta, dict):
+        out["meta"] = {key: value for key, value in meta.items() if key not in _STUDENT_META_OMIT}
+    return out
