@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls, renderStreamingPlainText } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
 import type { Message, RenderedMessage } from './appTypes'
@@ -11,10 +11,7 @@ import { useAssignment } from './hooks/useAssignment'
 import { useAssignmentHistory } from './hooks/useAssignmentHistory'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
-import StudentTodayHome from './features/home/StudentTodayHome'
 import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState'
-import StudentAssignmentHistoryPage from './features/history/StudentAssignmentHistoryPage'
-import StudentSubmitPanel from './features/submit/StudentSubmitPanel'
 import { matchReadyChatFiles } from './features/submit/studentSubmit'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
@@ -33,13 +30,17 @@ import {
 } from '../../shared/mobile/tabIcons'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
-import ChatPanel from './features/chat/ChatPanel'
 import SessionSidebar from './features/chat/SessionSidebar'
 import SessionSidebarDialogs from './features/chat/SessionSidebarDialogs'
 import SessionSidebarHistorySection from './features/chat/SessionSidebarHistorySection'
 import SessionSidebarLearningSection from './features/chat/SessionSidebarLearningSection'
 
 const DESKTOP_BREAKPOINT = 900
+const StudentTodayHome = lazy(() => import('./features/home/StudentTodayHome'))
+const StudentAssignmentHistoryPage = lazy(() => import('./features/history/StudentAssignmentHistoryPage'))
+const StudentSubmitPanel = lazy(() => import('./features/submit/StudentSubmitPanel'))
+const ChatPanel = lazy(() => import('./features/chat/ChatPanel'))
+const pageFallback = <div className="flex-1 min-h-0 bg-app-bg" aria-busy="true" />
 
 export default function App() {
   const { state, dispatch, refs, setActiveSession } = useStudentState()
@@ -564,9 +565,14 @@ export default function App() {
     />
   )
 
-  const learningContent = submitPanel || (assignmentHistoryOpen ? historyPage : todayHomeContent)
+  const learningContent = (
+    <Suspense fallback={pageFallback}>
+      {submitPanel || (assignmentHistoryOpen ? historyPage : todayHomeContent)}
+    </Suspense>
+  )
 
   const chatContent = (
+    <Suspense fallback={pageFallback}>
     <ChatPanel
       renderedMessages={renderedMessages}
       sending={state.sending}
@@ -589,6 +595,7 @@ export default function App() {
       onRemoveAttachment={handleRemoveAttachment}
       onOpenSubmit={state.selectedAssignmentId ? () => handleOpenSubmit(state.selectedAssignmentId) : undefined}
     />
+    </Suspense>
   )
 
   const mobileLearningContent = state.verifyOpen || !state.verifiedStudent ? (

@@ -511,7 +511,9 @@ export function useTeacherChatApi(params: UseTeacherChatApiParams) {
     setSkillsLoading(true)
     setSkillsError('')
     try {
-      const res = await fetch(`${apiBase}/skills`)
+      const res = await fetch(`${apiBase}/skills`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
       if (!res.ok) throw new Error(`状态码 ${res.status}`)
       const data = (await res.json()) as SkillResponse
       const raw = Array.isArray(data.skills) ? data.skills : []

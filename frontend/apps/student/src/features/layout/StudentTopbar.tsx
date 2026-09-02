@@ -40,12 +40,12 @@ export default function StudentTopbar({
     refs: quickActionsLayerRefs,
   })
 
-  const titleText = compactMobile ? '物理学习助手' : '物理学习助手 · 学生端'
+  const titleText = compactMobile ? '学习助手' : '学习助手 · 学生端'
   const sidebarLabel = compactMobile ? (sidebarOpen ? '会话开' : '会话') : (sidebarOpen ? '收起会话' : '展开会话')
   const todayHomeLabel = '今日任务'
 
   return (
-    <header className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-white/94 border-b border-border backdrop-blur-[8px] backdrop-saturate-[180%] sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
+    <header className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-surface border-b border-border sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
       <div className={`flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className="flex items-center gap-2 min-w-0">
           {!compactMobile ? (

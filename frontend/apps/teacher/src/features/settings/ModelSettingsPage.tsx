@@ -471,7 +471,7 @@ export default function ModelSettingsPage({ apiBase, onApiBaseChange }: Props) {
         </div>
       </section>
 
-      {error ? <div className="text-[12px] text-[#b91c1c]">{error}</div> : null}
+      {error ? <div className="text-[12px] text-danger">{error}</div> : null}
       {message ? <div className="text-[12px] text-success">{message}</div> : null}
     </div>
   )

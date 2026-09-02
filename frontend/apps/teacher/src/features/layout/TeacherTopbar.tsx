@@ -73,8 +73,7 @@ export default function TeacherTopbar({
   return (
     <header
       ref={topbarRef}
-      className={`mobile-topbar flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25] ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
-      style={{ backdropFilter: 'saturate(180%) blur(8px)' }}
+      className={`mobile-topbar flex justify-between items-center gap-[12px] px-4 py-[10px] bg-surface border-b border-border sticky top-0 z-[25] ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
     >
       <div className={`flex items-center gap-[10px] flex-wrap ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className="flex items-center gap-2 min-w-0">
@@ -87,7 +86,7 @@ export default function TeacherTopbar({
             />
           ) : null}
           <div className={`mobile-topbar-title font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
-            {compactMobile ? '物理教学助手' : '物理教学助手 · 老师端'}
+            {compactMobile ? '教学助手' : '教学助手 · 老师端'}
           </div>
         </div>
         <button className="ghost" type="button" onClick={onToggleSessionSidebar}>
@@ -103,7 +102,7 @@ export default function TeacherTopbar({
             className="ghost"
             type="button"
             onClick={toggleAuthPanel}
-            aria-haspopup="dialog"
+            aria-haspopup="true"
             aria-expanded={authOpen}
           >
             {authActionLabel}
@@ -124,7 +123,7 @@ export default function TeacherTopbar({
               {skillsOpen ? '收起工作台' : '打开工作台'}
             </button>
             <button
-              className="ghost border-none bg-transparent cursor-pointer p-[6px] rounded-lg text-[#6b7280] transition-[background] duration-150 ease-in-out hover:bg-surface-soft [&_svg]:block"
+              className="ghost border-none bg-transparent cursor-pointer min-h-[44px] min-w-[44px] p-2 rounded-lg text-muted transition-[background] duration-150 ease-in-out hover:bg-surface-soft [&_svg]:block"
               onClick={onToggleSettingsPanel}
               aria-label="设置"
             >

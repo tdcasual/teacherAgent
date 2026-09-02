@@ -208,9 +208,9 @@ export default function SessionSidebar({
                 return (
                   <div
                     key={sid}
-                    className={`session-item border border-border bg-white px-2.5 py-2 rounded-[12px] relative transition-all duration-150 ease-in-out hover:border-[color:color-mix(in_oklab,var(--color-border-strong)_68%,white)] hover:bg-[color:color-mix(in_oklab,var(--color-surface-soft)_82%,white)] ${
+                    className={`session-item border border-border bg-white px-2.5 py-2 rounded-[12px] relative transition-all duration-150 ease-in-out hover:border-[color:color-mix(in_oklab,var(--color-border-strong)_68%,var(--color-surface))] hover:bg-[color:color-mix(in_oklab,var(--color-surface-soft)_82%,var(--color-surface))] ${
                       isActive
-                        ? 'active border-[color:color-mix(in_oklab,var(--color-accent)_24%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_44%,white)]'
+                        ? 'active border-[color:color-mix(in_oklab,var(--color-accent)_24%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_44%,var(--color-surface))]'
                         : ''
                     }`}
                   >

@@ -70,8 +70,8 @@ describe('AssignmentProgressSection', () => {
 
     const submittedRow = screen.getByTestId('progress-row-S1')
     const discussionOnlyRow = screen.getByTestId('progress-row-S2')
-    expect(submittedRow.className).toContain('bg-[#f3fbfa]')
-    expect(discussionOnlyRow.className).toContain('bg-[#fff8f8]')
+    expect(submittedRow.className).toContain('bg-[color:var(--color-success-soft)]')
+    expect(discussionOnlyRow.className).toContain('bg-[color:var(--color-danger-soft)]')
   })
 
   it('saves teacher grade override comment and adopted excerpts', () => {

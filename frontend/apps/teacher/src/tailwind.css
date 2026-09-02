@@ -10,7 +10,7 @@
   --color-surface-soft: #F4F5F7;
   --color-surface-hover: #EBECF0;
   --color-ink: #172B4D;
-  --color-muted: #6B778C;
+  --color-muted: #44546F;
   --color-accent: #0052CC;
   --color-accent-soft: #DEEBFF;
   --color-border: #DFE1E6;
@@ -30,10 +30,39 @@
 
 /* ── Chat layout custom properties ── */
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --chat-content-max-width: 720px;
   --chat-bubble-max-width: 520px;
   --chat-assistant-bubble-max-width: 680px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-app-bg: #16181d;
+    --color-rail: #1c1f26;
+    --color-panel: #22262e;
+    --color-bg: #16181d;
+    --color-surface: #22262e;
+    --color-surface-soft: #2a2f38;
+    --color-surface-hover: #323844;
+    --color-ink: #e8edf4;
+    --color-muted: #a8b3c4;
+    --color-accent: #4c9aff;
+    --color-accent-soft: #1b3a6b;
+    --color-border: #3b414c;
+    --color-border-strong: #5a6270;
+    --color-warning: #ffab00;
+    --color-warning-soft: #3d2e10;
+    --color-success: #7ab8c9;
+    --color-success-soft: #16343c;
+    --color-danger: #f87171;
+    --color-danger-soft: #3f1d1c;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
+  }
+  .bg-white {
+    background-color: var(--color-surface);
+  }
 }
 
 /* ── Global resets ── */
@@ -94,7 +123,7 @@ body {
   select
 ):focus {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, white);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, var(--color-surface));
 }
 
 /* ── Shared component classes ── */
@@ -112,7 +141,7 @@ body {
     text-align: center;
     white-space: nowrap;
     cursor: pointer;
-    color: color-mix(in oklab, var(--color-ink) 78%, white);
+    color: color-mix(in oklab, var(--color-ink) 78%, var(--color-surface));
     font-size: 12px;
     transition: background 0.15s ease, border-color 0.15s ease;
   }
@@ -166,7 +195,7 @@ body {
     font-size: 12px;
     background: var(--color-accent-soft);
     color: var(--color-accent);
-    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, white);
+    border: 1px solid color-mix(in oklab, var(--color-accent) 18%, var(--color-surface));
   }
 
   .toggle {
@@ -203,12 +232,12 @@ body {
   .secondary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .teacher-rail-cta {
-    background: color-mix(in oklab, var(--color-accent) 90%, white);
+    background: color-mix(in oklab, var(--color-accent) 90%, var(--color-surface));
     box-shadow: 0 10px 20px rgba(0, 82, 204, 0.16);
     transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
   .teacher-rail-cta:hover {
-    background: color-mix(in oklab, var(--color-accent) 94%, white);
+    background: color-mix(in oklab, var(--color-accent) 94%, var(--color-surface));
     transform: translateY(-1px);
     box-shadow: 0 14px 24px rgba(0, 82, 204, 0.22);
   }
@@ -216,19 +245,19 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 34px;
-    border: 1px solid color-mix(in oklab, var(--color-border) 78%, white);
+    min-height: 44px;
+    border: 1px solid color-mix(in oklab, var(--color-border) 78%, var(--color-surface));
     border-radius: 10px;
-    background: color-mix(in oklab, var(--color-surface) 90%, white);
-    color: color-mix(in oklab, var(--color-ink) 84%, white);
+    background: color-mix(in oklab, var(--color-surface) 90%, var(--color-surface));
+    color: color-mix(in oklab, var(--color-ink) 84%, var(--color-surface));
     padding: 7px 12px;
     font-size: 12px;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   }
   .teacher-drawer-link:hover {
-    background: color-mix(in oklab, var(--color-surface-soft) 94%, white);
-    border-color: color-mix(in oklab, var(--color-border-strong) 76%, white);
+    background: color-mix(in oklab, var(--color-surface-soft) 94%, var(--color-surface));
+    border-color: color-mix(in oklab, var(--color-border-strong) 76%, var(--color-surface));
     transform: translateY(-1px);
   }
 }
@@ -240,12 +269,12 @@ body {
   padding: 0;
   background: var(--color-surface);
   overflow: hidden;
-  border-left: 3px solid color-mix(in oklab, var(--color-accent-soft) 80%, white);
+  border-left: 3px solid color-mix(in oklab, var(--color-accent-soft) 80%, var(--color-surface));
   box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .rule-card.rule-disabled {
-  border-left-color: color-mix(in oklab, var(--color-border) 84%, white);
+  border-left-color: color-mix(in oklab, var(--color-border) 84%, var(--color-surface));
   opacity: 0.7;
 }
 .rule-card details { border-top: 1px solid var(--color-border); }
@@ -269,7 +298,7 @@ body {
 .provider-row:hover { box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); }
 .provider-row[open] {
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.1);
-  border-color: color-mix(in oklab, var(--color-accent) 18%, white);
+  border-color: color-mix(in oklab, var(--color-accent) 18%, var(--color-surface));
 }
 
 /* ── Markdown rich text ── */
@@ -286,12 +315,12 @@ body {
 }
 .markdown code {
   font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
-  background: color-mix(in oklab, var(--color-accent-soft) 34%, white);
+  background: color-mix(in oklab, var(--color-accent-soft) 34%, var(--color-surface));
   padding: 2px 6px;
   border-radius: 6px;
 }
 .markdown pre {
-  background: color-mix(in oklab, var(--color-accent-soft) 38%, white);
+  background: color-mix(in oklab, var(--color-accent-soft) 38%, var(--color-surface));
   padding: 8px;
   border-radius: 10px;
   overflow-x: auto;

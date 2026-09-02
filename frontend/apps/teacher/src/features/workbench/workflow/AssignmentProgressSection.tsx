@@ -105,14 +105,13 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	              {progressPanelCollapsed ? null : (
     	                <>
     	                  <div className="flex items-end justify-between gap-3 flex-wrap mb-[10px]">
-    	                    <div className="grid gap-1.5 min-w-[240px]">
-    	                      <label>作业编号</label>
+    	                    <LabeledField label="作业编号" className="grid gap-1.5 min-w-[240px]">
     	                      <input
     	                        value={progressAssignmentId}
     	                        onChange={(e) => setProgressAssignmentId(e.target.value)}
     	                        placeholder="例如：A2403_2026-02-04"
     	                      />
-    	                    </div>
+    	                    </LabeledField>
     	                    <div className="flex items-center gap-3 flex-wrap">
     	                      <label className="toggle">
     	                        <input
@@ -181,22 +180,23 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	                        const official = officialScoreOf(s)
     	                        const overdue = Boolean(s.result?.overdue ?? s.overdue)
                             const processStatus = s.process?.status || 'none'
-                            const stuck = s.process?.stuck_points?.[0]?.summary
-                            const processNote = stuck ? ` · ${stuck}` : ''
+                            const liveStuck = String(s.process?.stuck_points?.[0]?.summary || '').trim()
+                            const archiveStuck = (s.process_archive?.stuck_points || [])
+                              .map((item) => String(item?.summary || '').trim())
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .join('；')
+                            const stuckNote = liveStuck || archiveStuck
+                            const processNote = stuckNote ? ` · ${stuckNote}` : ''
     	                        const name = [s.class_name, s.student_name].filter(Boolean).join(' ')
     	                        const archiveStatus = String(s.process_archive_status || s.process_archive?.status || 'none')
     	                        const processLabel = archiveStatus === 'none' || !archiveStatus ? '无' : archiveStatus
-    	                        const stuck = (s.process_archive?.stuck_points || [])
-    	                          .map((item) => String(item?.summary || '').trim())
-    	                          .filter(Boolean)
-    	                          .slice(0, 2)
-    	                          .join('；')
     	                        const memory = s.has_memory_proposal ? ' · 有记忆提案' : ''
     	                        return (
     	                          <div
                                 key={s.student_id}
                                 data-testid={`progress-row-${s.student_id}`}
-                                className={`progress-row border rounded-[14px] py-[10px] px-3 bg-white flex justify-between gap-3 items-start ${s.complete ? 'border-[#b8d8d6] bg-[#f3fbfa]' : 'border-[#e2b6b6] bg-[#fff8f8]'}`}
+                                className={`progress-row border rounded-[14px] py-[10px] px-3 flex justify-between gap-3 items-start ${s.complete ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)]' : 'border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)]'}`}
                               >
     	                            <div className="text-[13px] min-w-0 flex-1">
     	                              <strong>{s.student_id}</strong>

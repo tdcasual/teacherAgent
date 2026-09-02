@@ -105,6 +105,7 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const confirmRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <DialogFrame
@@ -112,10 +113,10 @@ export function ConfirmDialog({
       title={title}
       description={description}
       onCancel={onCancel}
-      initialFocusRef={confirmRef}
+      initialFocusRef={confirmTone === 'danger' ? cancelRef : confirmRef}
     >
       <div className="app-dialog-actions">
-        <button type="button" className="app-dialog-btn" onClick={onCancel}>
+        <button type="button" ref={cancelRef} className="app-dialog-btn" onClick={onCancel}>
           {cancelText}
         </button>
         <button

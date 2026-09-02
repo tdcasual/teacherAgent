@@ -97,7 +97,7 @@ describe('mobile shared style guardrails', () => {
     expect(iconBlock).toContain('width: 16px;');
     expect(iconBlock).toContain('height: 16px;');
     expect(iconBlock).toContain('justify-content: center;');
-    expect(buttonBlock).toContain('color: color-mix(in oklab, var(--color-ink) 74%, white);');
+    expect(buttonBlock).toContain('color: color-mix(in oklab, var(--color-ink) 74%, var(--color-surface));');
     expect(buttonBlock).toContain(
       'background: color-mix(in oklab, var(--mobile-sheet-surface) 88%, var(--color-surface-soft, white));',
     );

@@ -47,12 +47,15 @@ export default function SkillsTab(props: SkillsTabProps) {
     <>
       <div className="flex items-center justify-between gap-[8px] flex-wrap mb-[12px]">
         <div className="flex-[1_1_180px] min-w-0">
-          <input
-            className="w-full"
-            value={skillQuery}
-            onChange={(event) => setSkillQuery(event.target.value)}
-            placeholder="搜索教学能力"
-          />
+          <label className="grid gap-1 min-w-0 flex-[1_1_180px]">
+            <span className="text-[12px] text-muted">搜索教学能力</span>
+            <input
+              className="w-full"
+              value={skillQuery}
+              onChange={(event) => setSkillQuery(event.target.value)}
+              placeholder="搜索教学能力"
+            />
+          </label>
         </div>
         <div className="inline-flex items-center gap-[8px] flex-wrap">
           <button
@@ -80,15 +83,15 @@ export default function SkillsTab(props: SkillsTabProps) {
       <div className="mb-[10px] text-[12px] text-muted">当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。</div>
 
       {skillsLoading ? <div className="text-[12px] text-muted mb-[8px]">正在加载能力...</div> : null}
-      {skillsError ? <div className="text-[12px] text-[#8a1f1f] mb-[8px]">{skillsError}</div> : null}
+      {skillsError ? <div className="text-[12px] text-danger mb-[8px]">{skillsError}</div> : null}
 
       <div className="skills-body grid gap-0 overflow-y-auto flex-1 min-h-0 pr-[2px]" style={{ overscrollBehavior: 'contain' }}>
         {filteredSkills.map((skill) => (
           <div
             key={skill.id}
             className={`skill-card grid gap-3 px-3 py-3 ${skillPinned && skill.id === activeSkillId
-              ? 'rounded-[18px] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_48%,white)] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-accent)_22%,white)]'
-              : 'border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] last:border-b-0'}`}
+              ? 'rounded-[18px] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_48%,var(--color-surface))] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface))]'
+              : 'border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] last:border-b-0'}`}
           >
             <div className="flex justify-between items-baseline gap-[8px] mb-[6px]">
               <div>
@@ -137,7 +140,7 @@ export default function SkillsTab(props: SkillsTabProps) {
                 <button
                   key={prompt}
                   type="button"
-                  className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-accent)_20%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_62%,white)] py-[6px] px-[10px] text-[12px] text-accent cursor-pointer"
+                  className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-accent)_20%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_62%,var(--color-surface))] py-[6px] px-[10px] text-[12px] text-accent cursor-pointer"
                   onClick={() => {
                     chooseSkill(skill.id, true)
                     insertPrompt(prompt)
@@ -153,7 +156,7 @@ export default function SkillsTab(props: SkillsTabProps) {
                 <button
                   key={example}
                   type="button"
-                  className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,white)] py-[6px] px-[10px] text-[12px] text-muted cursor-pointer"
+                  className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,var(--color-surface))] py-[6px] px-[10px] text-[12px] text-muted cursor-pointer"
                   onClick={() => {
                     chooseSkill(skill.id, true)
                     insertPrompt(example)

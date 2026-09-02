@@ -54,6 +54,8 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByRole('button', { name: '打开工作台' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '管理' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '设置' }).className).toContain('min-h-[44px]')
+    expect(screen.getByRole('button', { name: '设置' }).className).toContain('min-w-[44px]')
     expect(screen.queryByRole('button', { name: '模型设置' })).toBeNull()
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
@@ -75,7 +77,7 @@ describe('TeacherTopbar desktop AI entry logo', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
 
-    expect(screen.getByRole('dialog', { name: '教师管理面板' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: '教师管理面板' })).toBeTruthy()
     expect(screen.getByText('工具抽屉')).toBeTruthy()
   })
 
@@ -87,7 +89,7 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.change(screen.getByPlaceholderText('例如：张老师'), { target: { value: '李老师' } })
     fireEvent.click(screen.getByRole('button', { name: '收起' }))
 
-    expect(screen.queryByRole('dialog', { name: '教师管理面板' })).toBeNull()
+    expect(screen.queryByRole('region', { name: '教师管理面板' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect((screen.getByPlaceholderText('例如：张老师') as HTMLInputElement).value).toBe('李老师')

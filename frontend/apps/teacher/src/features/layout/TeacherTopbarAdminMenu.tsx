@@ -502,7 +502,7 @@ export default function TeacherTopbarAdminMenu({
           </button>
         </form>
       </section>
-      <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+      <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
         <div className="grid gap-1">
           <div className="text-sm font-semibold">密码设置</div>
           <div className="text-xs text-muted">设置或更新当前账号密码。</div>
@@ -531,7 +531,7 @@ export default function TeacherTopbarAdminMenu({
       </section>
 
       {authed ? (
-        <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+        <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
           <div className="grid gap-1">
             <div className="text-sm font-semibold">学生密码管理</div>
             <div className="text-xs text-muted">

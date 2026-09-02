@@ -60,8 +60,7 @@ describe('StudentTodayHome', () => {
     expect(screen.getByText('练习题.pdf')).toBeTruthy()
     expect(screen.getByText('已准备')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: '进入任务' }).length).toBeGreaterThan(0)
-    expect(screen.getByTestId('student-today-primary-action')).toBeTruthy()
-    expect(screen.queryByText('今日任务')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: '今日任务' })).toBeTruthy()
     expect(screen.queryByText('历史与补充')).toBeNull()
   })
 
@@ -86,7 +85,7 @@ describe('StudentTodayHome', () => {
 
     expect(primaryStage.textContent).toContain('牛顿第二定律练习')
     expect(primaryStage.textContent).toContain('进入任务')
-    expect(primaryStage.textContent).not.toContain('今日任务')
+    expect(primaryStage.textContent).toContain('今日任务')
     expect(primaryStage.textContent).not.toContain('开始练习')
     expect(primaryStage.textContent).not.toContain('今日主线')
     expect(primaryStage.textContent).not.toContain('TODAY FIRST')
@@ -175,7 +174,7 @@ describe('StudentTodayHome', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: '继续任务' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '进入任务' })).toBeTruthy()
   })
 
   it('shows submitted copy and still keeps one primary action', () => {

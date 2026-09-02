@@ -47,10 +47,10 @@ export default function ChatComposer({
 
   return (
     <form
-      className="relative z-[2] px-4 pt-[10px] pb-[14px] border-t border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[linear-gradient(180deg,transparent_0%,color-mix(in_oklab,var(--color-surface)_96%,white)_18%,color-mix(in_oklab,var(--color-surface)_100%,white)_100%)]"
+      className="relative z-[2] px-4 pt-[10px] pb-[14px] border-t border-[color:color-mix(in_oklab,var(--color-border)_74%,var(--color-surface))] bg-[linear-gradient(180deg,transparent_0%,color-mix(in_oklab,var(--color-surface)_96%,var(--color-surface))_18%,color-mix(in_oklab,var(--color-surface)_100%,var(--color-surface))_100%)]"
       onSubmit={onSubmit}
     >
-      <div className="w-full max-w-[var(--chat-content-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,white)] px-3 py-[10px] shadow-[0_8px_18px_rgba(15,23,42,0.05)] grid gap-[10px]">
+      <div className="w-full max-w-[var(--chat-content-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,var(--color-surface))] px-3 py-[10px] shadow-[0_8px_18px_rgba(15,23,42,0.05)] grid gap-[10px]">
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center rounded-lg border border-border px-2 py-[2px] text-[11px] text-muted bg-surface-soft">
             {skillPinned ? `当前路由: $${activeSkillId || 'teacher-assignment-ops'}` : '当前路由: 自动编排'}

@@ -7,7 +7,6 @@
   justify-content: center;
   padding: 18px;
   background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: saturate(180%) blur(8px);
 }
 
 .app-dialog {
@@ -51,7 +50,7 @@
   border-radius: 10px;
   font-size: 13px;
   border: 1px solid var(--color-border, #e5e7eb);
-  background: #fff;
+  background: var(--color-surface, #FAFBFC);
 }
 
 .app-dialog-actions {
@@ -63,11 +62,11 @@
 
 .app-dialog-btn {
   border: 1px solid var(--color-border, #e5e7eb);
-  background: #fff;
+  background: var(--color-surface, #FAFBFC);
   padding: 8px 12px;
   border-radius: 999px;
   cursor: pointer;
-  color: #3f4551;
+  color: var(--color-ink, #172B4D);
   font-size: 12px;
   transition:
     background 0.15s ease,
@@ -94,21 +93,21 @@
 .app-dialog-btn.primary {
   background: var(--color-accent, #0052cc);
   border-color: var(--color-accent, #0052cc);
-  color: #fff;
+  color: var(--color-surface, #FAFBFC);
 }
 
 .app-dialog-btn.primary:hover {
-  background: color-mix(in srgb, var(--color-accent, #0052cc) 88%, #000);
-  border-color: color-mix(in srgb, var(--color-accent, #0052cc) 88%, #000);
+  background: color-mix(in srgb, var(--color-accent, #0052cc) 88%, var(--color-ink, #172B4D));
+  border-color: color-mix(in srgb, var(--color-accent, #0052cc) 88%, var(--color-ink, #172B4D));
 }
 
 .app-dialog-btn.danger {
-  background: #ef4444;
-  border-color: #ef4444;
-  color: #fff;
+  background: var(--color-danger, #C9372C);
+  border-color: var(--color-danger, #C9372C);
+  color: var(--color-surface, #FAFBFC);
 }
 
 .app-dialog-btn.danger:hover {
-  background: color-mix(in srgb, #ef4444 88%, #000);
-  border-color: color-mix(in srgb, #ef4444 88%, #000);
+  background: color-mix(in srgb, var(--color-danger, #C9372C) 88%, var(--color-ink, #172B4D));
+  border-color: color-mix(in srgb, var(--color-danger, #C9372C) 88%, var(--color-ink, #172B4D));
 }

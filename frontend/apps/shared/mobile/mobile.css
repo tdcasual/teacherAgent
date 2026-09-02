@@ -151,10 +151,10 @@
 .mobile-tabbar-button {
   width: 100%;
   min-height: 44px;
-  border: 1px solid color-mix(in oklab, var(--color-border, #e5e7eb) 88%, white);
+  border: 1px solid color-mix(in oklab, var(--color-border, #e5e7eb) 88%, var(--color-surface));
   border-radius: 10px;
   background: color-mix(in oklab, var(--mobile-sheet-surface) 88%, var(--color-surface-soft, white));
-  color: color-mix(in oklab, var(--color-ink) 74%, white);
+  color: color-mix(in oklab, var(--color-ink) 74%, var(--color-surface));
   display: flex;
   flex-direction: column;
   align-items: center;

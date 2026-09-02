@@ -126,19 +126,19 @@ export default function StudentSubmitPanel({
               提交作业
             </button>
           )}
-          {error ? <div className="text-[13px] text-[color:var(--color-danger)]">{error}</div> : null}
+          {error ? <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">{error}</div> : null}
           {result?.submitted ? (
-            <div className="rounded-[14px] border border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-success">
+            <div className="rounded-[14px] border border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-success" role="status">
               <span data-testid="student-submit-result">{result.message}</span>
             </div>
           ) : null}
           {result && !result.submitted && result.ok ? (
-            <div className="rounded-[14px] border border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-not-counted">
+            <div className="rounded-[14px] border border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-not-counted" role="alert">
               <span data-testid="student-submit-result">{result.message}</span>
             </div>
           ) : null}
           {result && !result.ok ? (
-            <div className="text-[13px] text-[color:var(--color-danger)]">{result.message}</div>
+            <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">{result.message}</div>
           ) : null}
         </section>
       </div>

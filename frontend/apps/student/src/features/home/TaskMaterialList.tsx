@@ -7,7 +7,7 @@ type TaskMaterialListProps = {
 export default function TaskMaterialList({ materials }: TaskMaterialListProps) {
   return (
     <section
-      className="grid gap-2.5 rounded-[20px] bg-[color:color-mix(in_oklab,var(--color-note)_44%,white)] p-3.5"
+      className="grid gap-2.5 rounded-[20px] bg-[color:color-mix(in_oklab,var(--color-note)_44%,var(--color-surface))] p-3.5"
       aria-labelledby="student-home-materials-title"
       data-testid="student-home-materials-stage"
       data-home-tier="supporting"
@@ -21,7 +21,7 @@ export default function TaskMaterialList({ materials }: TaskMaterialListProps) {
           {materials.map((item) => (
             <li
               key={`${item.label}-${item.url || ''}`}
-              className="rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,white)] bg-[color:color-mix(in_oklab,var(--color-surface)_88%,white)] px-3 py-2.5"
+              className="rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-surface)_88%,var(--color-surface))] px-3 py-2.5"
             >
               {item.url ? (
                 <a className="text-[14px] font-medium text-ink no-underline" href={item.url}>

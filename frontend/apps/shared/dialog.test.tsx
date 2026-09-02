@@ -44,6 +44,22 @@ describe('ConfirmDialog', () => {
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(confirmButton);
   });
+
+  it('focuses cancel first for destructive confirms', async () => {
+    render(
+      <ConfirmDialog
+        open
+        title="归档会话"
+        confirmText="归档"
+        confirmTone="danger"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    const cancelButton = screen.getByRole('button', { name: '取消' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.activeElement).toBe(cancelButton);
+  });
 });
 
 describe('PromptDialog', () => {

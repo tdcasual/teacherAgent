@@ -109,7 +109,7 @@ describe('WorkflowTab', () => {
   it('groups workflow content into current action and supplementary sections', () => {
     render(<WorkflowTab {...buildProps()} />)
 
-    expect(screen.getByText('主线先做，补充后看。')).toBeTruthy()
+    expect(screen.getByText('先完成必做动作，再展开补充参考。')).toBeTruthy()
     expect(screen.getByText('workflow-summary-card')).toBeTruthy()
     expect(screen.getByText('工作流编辑')).toBeTruthy()
     expect(screen.getByText('先完成必做动作，再展开补充参考。')).toBeTruthy()

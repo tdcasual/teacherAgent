@@ -208,11 +208,11 @@ export default function TeacherAppLayout({
             {teacherUseMobileShellV2 ? null : (
               <>
                 <Separator
-                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)] ${isWorkbenchResizing ? 'bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
+                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,var(--color-surface))] ${isWorkbenchResizing ? 'bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,var(--color-surface))]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
                   onPointerDown={startWorkbenchResize}
                   onDoubleClick={onWorkbenchResizeReset}
                 >
-                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-accent' : 'bg-[#d1d5db] group-hover:bg-accent'}`} />
+                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-accent' : 'bg-border-strong group-hover:bg-accent'}`} />
                 </Separator>
                 <Panel
                   panelRef={workbenchPanelRef}
