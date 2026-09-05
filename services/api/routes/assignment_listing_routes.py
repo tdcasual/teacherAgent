@@ -17,7 +17,7 @@ from ..assignment_recompute_roster_service import (
     AssignmentRecomputeRosterError,
     recompute_assignment_roster,
 )
-from ..auth_service import AuthError, require_principal
+from ..auth_service import AuthError, get_current_principal, require_principal
 from ..teacher_grade_service import TeacherGradeError, save_teacher_grade_from_request
 
 
@@ -40,6 +40,12 @@ def _owner_principal() -> Any:
     if principal is None:
         raise HTTPException(status_code=401, detail="missing_authorization")
     return principal
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
 
 
 def _register_progress_routes(
@@ -101,6 +107,7 @@ def _register_grade_routes(
 def _register_archive_routes(router: APIRouter, *, data_dir: Any) -> None:
     @router.post("/assignment/{assignment_id}/archive")
     def assignment_archive(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return archive_assignment(assignment_id, principal=principal, data_dir=data_dir)

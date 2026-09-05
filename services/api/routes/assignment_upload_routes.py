@@ -6,7 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
 from ..assignment.application import AssignmentAccessError
-from ..auth_service import AuthError, require_principal
+from ..auth_service import AuthError, get_current_principal, require_principal
 
 
 def _require_teacher_or_admin() -> None:
@@ -14,6 +14,12 @@ def _require_teacher_or_admin() -> None:
         require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
 
 
 def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
@@ -37,6 +43,7 @@ def register_assignment_upload_routes(
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.upload_assignment_start(
@@ -73,5 +80,6 @@ def register_assignment_upload_routes(
 
     @router.post("/assignment/upload/confirm")
     async def assignment_upload_confirm(req: UploadConfirmRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         return await assignment_app.confirm_assignment_upload(req, deps=app_deps)

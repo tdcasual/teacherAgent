@@ -30,6 +30,7 @@ from .auth.password_reset_service import (
     handle_reset_student_passwords,
     handle_reset_teacher_password,
 )
+from .auth.teacher_provision_service import handle_create_teacher
 from .config import DATA_DIR as CONFIG_DATA_DIR
 from .core_utils import normalize
 from .paths import resolve_teacher_id
@@ -590,6 +591,20 @@ class AuthRegistryStore(IdentityGraphMixin):
             hash_password=_hash_password,
             utc_now=_utc_now,
             iso=_iso,
+        )
+
+    def create_teacher(self, **kwargs: Any) -> Dict[str, Any]:
+        return handle_create_teacher(
+            self,
+            generate_bootstrap_password=_generate_bootstrap_password,
+            validate_password_strength=validate_password_strength,
+            hash_password=_hash_password,
+            generate_token=_generate_token,
+            hash_token=_hash_token,
+            token_hint=_token_hint,
+            utc_now=_utc_now,
+            iso=_iso,
+            **kwargs,
         )
 
     def reset_student_passwords(

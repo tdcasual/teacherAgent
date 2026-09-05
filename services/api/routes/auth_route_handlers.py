@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..api_models import (
     AdminLoginRequest,
+    AdminTeacherCreateRequest,
     AdminTeacherResetPasswordRequest,
     AdminTeacherSetDisabledRequest,
     AuthExportTokensRequest,
@@ -20,7 +21,7 @@ from ..api_models import (
 )
 from ..auth_registry_service import build_auth_registry_store
 from ..auth_service import AuthError, access_token_ttl_sec, mint_access_token, require_principal
-from .auth_identity_route_handlers import register_identity_admin_routes
+from .auth_identity_route_handlers import _require_admin_principal, register_identity_admin_routes
 
 
 def _mask_login_failure(payload: dict[str, Any]) -> dict[str, Any]:
@@ -36,16 +37,6 @@ def _mask_login_failure(payload: dict[str, Any]) -> dict[str, Any]:
     }:
         return payload
     return {"ok": False, "error": "invalid_credential"}
-
-
-def _admin_actor() -> tuple[str, str]:
-    try:
-        principal = require_principal(roles=("admin",))
-    except AuthError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    if principal is None:
-        return "admin_local", "admin"
-    return principal.actor_id, principal.role
 
 
 def _teacher_or_admin_actor() -> tuple[str, str]:
@@ -182,32 +173,53 @@ def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
         return _raise_student_reset_result(result)
 
 
+def _raise_admin_teacher_create_result(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("ok"):
+        return result
+    error = str(result.get("error") or "invalid_request")
+    if error in {"teacher_id_taken", "email_taken"}:
+        raise HTTPException(status_code=409, detail=error)
+    raise HTTPException(status_code=400, detail=error)
+
+
 def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
+    @router.post("/auth/admin/teacher/create", status_code=201)
+    def auth_admin_teacher_create(req: AdminTeacherCreateRequest) -> Any:
+        principal = _require_admin_principal()
+        result = _build_store(core).create_teacher(
+            teacher_name=req.teacher_name,
+            email=req.email,
+            teacher_id=req.teacher_id,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
+        )
+        return _raise_admin_teacher_create_result(result)
+
     @router.get("/auth/admin/teacher/list")
     def auth_admin_teacher_list() -> Any:
-        _admin_actor()
+        _require_admin_principal()
         return _build_store(core).list_teacher_auth_status()
 
     @router.post("/auth/admin/teacher/set-disabled")
     def auth_admin_teacher_set_disabled(req: AdminTeacherSetDisabledRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         result = _build_store(core).set_teacher_disabled(
             target_id=req.target_id,
             is_disabled=req.is_disabled,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
         _raise_not_found(result)
         return result
 
     @router.post("/auth/admin/teacher/reset-password")
     def auth_admin_teacher_reset_password(req: AdminTeacherResetPasswordRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         result = _build_store(core).reset_teacher_password(
             target_id=req.target_id,
             new_password=req.new_password,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
         _raise_not_found(result)
         return result
@@ -216,46 +228,46 @@ def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
 def _register_admin_token_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/admin/student/reset-token")
     def auth_admin_student_reset_token(req: AuthResetTokenRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         result = _build_store(core).reset_token(
             role="student",
             target_id=req.target_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
         _raise_not_found(result)
         return result
 
     @router.post("/auth/admin/teacher/reset-token")
     def auth_admin_teacher_reset_token(req: AuthResetTokenRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         result = _build_store(core).reset_token(
             role="teacher",
             target_id=req.target_id,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
         _raise_not_found(result)
         return result
 
     @router.post("/auth/admin/student/export-tokens")
     def auth_admin_student_export_tokens(req: AuthExportTokensRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         return _build_store(core).export_tokens(
             role="student",
             ids=req.ids,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
 
     @router.post("/auth/admin/teacher/export-tokens")
     def auth_admin_teacher_export_tokens(req: AuthExportTokensRequest) -> Any:
-        actor_id, actor_role = _admin_actor()
+        principal = _require_admin_principal()
         return _build_store(core).export_tokens(
             role="teacher",
             ids=req.ids,
-            actor_id=actor_id,
-            actor_role=actor_role,
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
         )
 
 

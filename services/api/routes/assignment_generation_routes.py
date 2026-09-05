@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..assignment.application import AssignmentAccessError
-from ..auth_service import AuthError, require_principal
+from ..auth_service import AuthError, get_current_principal, require_principal
 
 
 def _require_teacher_or_admin() -> None:
@@ -13,6 +13,12 @@ def _require_teacher_or_admin() -> None:
         require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
 
 
 def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
@@ -39,6 +45,7 @@ def register_assignment_generation_routes(
         source: Optional[str] = Form(""),
         requirements_json: Optional[str] = Form(""),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.post_generate_assignment(

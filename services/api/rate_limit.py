@@ -3,6 +3,7 @@
 Environment variables:
     RATE_LIMIT_RPM – max requests per minute per client IP (default: 120, 0 = disabled)
     RATE_LIMIT_LOGIN_RPM – max login requests per minute per client IP (default: 10, 0 = disabled)
+    RATE_LIMIT_ADMIN_PROVISION_RPM – max admin provision requests per minute per client IP (default: 10, 0 = disabled)
     RATE_LIMIT_MAX_BUCKETS – max distinct client buckets retained in memory (default: 4096)
     RATE_LIMIT_TRUST_X_FORWARDED_FOR – whether to trust X-Forwarded-For (default: false)
     RATE_LIMIT_TRUSTED_PROXY_IPS – comma-separated proxy IP allowlist when trusting XFF.
@@ -27,9 +28,14 @@ _LOGIN_PATHS = {
     "/auth/teacher/login",
     "/auth/admin/login",
 }
+_PROVISION_PATHS = {
+    "/auth/admin/teacher/create",
+    "/auth/admin/students/import",
+}
 
 _rpm = int(os.getenv("RATE_LIMIT_RPM", "120") or "0")
 _login_rpm = int(os.getenv("RATE_LIMIT_LOGIN_RPM", "10") or "0")
+_provision_rpm = int(os.getenv("RATE_LIMIT_ADMIN_PROVISION_RPM", "10") or "0")
 _window_sec = 60.0
 _buckets: dict[str, deque[float]] = defaultdict(deque)
 _bucket_last_seen: dict[str, float] = {}
@@ -68,10 +74,16 @@ def _is_login_path(path: str) -> bool:
     return path.rstrip("/") in _LOGIN_PATHS
 
 
+def _is_provision_path(path: str) -> bool:
+    return path.rstrip("/") in _PROVISION_PATHS
+
+
 def _limit_and_key(request: Request) -> tuple[int, str]:
     client = _client_key(request)
     if _is_login_path(request.url.path) and _login_rpm > 0:
         return _login_rpm, f"login:{client}"
+    if _is_provision_path(request.url.path) and _provision_rpm > 0:
+        return _provision_rpm, f"provision:{client}"
     return _rpm, client
 
 
