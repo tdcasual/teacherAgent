@@ -55,7 +55,7 @@ describe('UploadSection', () => {
       'generic',
     ])
     expect(screen.getByLabelText('截止日期（可选）')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '考试', exact: true })).toBeNull()
+    expect(screen.queryByRole('button', { name: '考试' })).toBeNull()
   })
 
   it('uses GET /teacher/roster for subject and class dropdowns', async () => {

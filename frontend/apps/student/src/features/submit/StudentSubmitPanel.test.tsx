@@ -38,9 +38,9 @@ describe('StudentSubmitPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '提交作业' }))
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    const [url, init] = fetchMock.mock.calls[0]
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(String(url)).toBe('http://localhost:8000/student/submit')
-    const body = init?.body as FormData
+    const body = init.body as FormData
     expect(body.get('assignment_id')).toBe('HW_1')
     expect(body.get('student_id')).toBe('S1')
     expect(body.get('auto_assignment')).toBeNull()
@@ -78,7 +78,7 @@ describe('StudentSubmitPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '确认提交' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    const body = fetchMock.mock.calls[0][1]?.body as FormData
+    const body = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData
     expect((body.get('files') as File).name).toBe('hw.pdf')
   })
 

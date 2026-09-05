@@ -102,7 +102,7 @@ describe('TeacherTopbarAdminMenu password reset scope', () => {
       })
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(JSON.parse(String(init.body))).toEqual({
       username: 'principal_admin',
       password: 'AdminPass1',
