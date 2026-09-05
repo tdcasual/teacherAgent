@@ -1,0 +1,29 @@
+# Growing CI mypy allowlist.
+# Invoked as: mypy --ignore-missing-imports --follow-imports=skip
+# Gate is 0 errors. Do not use --strict. Only add files; do not remove.
+services/api/settings.py
+services/api/config.py
+services/api/paths.py
+services/api/auth_service.py
+services/api/rate_limit.py
+services/api/chat_job_state_machine.py
+services/api/chat_status_service.py
+services/api/chat_idempotency_service.py
+services/api/chat_redis_lane_store.py
+services/api/chat_lock_service.py
+services/api/chat_lane_repository.py
+services/api/job_repository.py
+services/api/session_store.py
+services/api/profile_service.py
+services/api/global_limits.py
+services/api/observability.py
+services/api/request_context.py
+services/api/fs_atomic.py
+services/api/runtime/runtime_manager.py
+services/api/teacher_model_config_service.py
+services/api/teacher_provider_registry_service.py
+services/api/chart_executor.py
+services/api/chart_sandbox.py
+services/api/core_utils.py
+services/api/assignment/visibility.py
+services/api/subject_pack_service.py

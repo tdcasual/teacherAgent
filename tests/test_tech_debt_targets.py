@@ -3,20 +3,15 @@
 from pathlib import Path
 
 _STUDENT_APP_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "frontend"
-    / "apps"
-    / "student"
-    / "src"
-    / "App.tsx"
+    Path(__file__).resolve().parent.parent / "frontend" / "apps" / "student" / "src" / "App.tsx"
 )
 
 
 def test_student_app_line_budget() -> None:
     lines = _STUDENT_APP_PATH.read_text(encoding="utf-8").splitlines()
     line_count = len(lines)
-    assert line_count < 1200, (
-        f"student App.tsx is {line_count} lines (limit 1200). "
+    assert line_count < 800, (
+        f"student App.tsx is {line_count} lines (limit 800). "
         "Continue extracting send flow/session sidebar state hooks."
     )
 
