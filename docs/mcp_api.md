@@ -1,6 +1,8 @@
 # MCP Interface
 
-This document describes the MCP server interface exposed by this project. The product surface is **assignment-only**. Exam HTTP/MCP tools (`exam.*`) have been removed; do not call them.
+This document describes the MCP sidecar interface. The product surface is **student + bound assignment.list/render only**.
+
+`lesson.*` and `core_example.*` are **not** MCP tools. HTTP and teacher-chat physics affiliates are unchanged.
 
 ## Endpoint
 - **URL**: `/mcp`
@@ -15,14 +17,21 @@ This document describes the MCP server interface exposed by this project. The pr
 
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
-- `MCP_BOUND_TEACHER_ID` (optional): when set, registers mutating assignment/student/lesson/core_example tools and filters `assignment.list` / `assignment.render` to that teacher. When empty, those tools are unregistered.
-- `exam.*` is not an MCP tool. Exam HTTP/MCP surfaces have been removed.
-- `assignment.generate` is not an MCP tool. Generate assignments via HTTP `POST /assignment/generate` or teacher chat.
-- Subject packs live on disk at `packs/subjects/<id>/` (see `docs/http_api.md`); MCP does not expose a pack loader tool.
+- `MCP_BOUND_TEACHER_ID` (optional): when set, `tools/list` also includes mutating student/assignment tools and `assignment.list` / `assignment.render` are scoped to that teacher.
+- This wave reads assignment `meta.json` and `data/student_profiles/*.json` from disk. MCP does not SQL-gate these tools.
+- Script allowlist is explicit:
+  - `skills/physics-student-coach/scripts/update_profile.py`
+  - `scripts/render_assignment_pdf.py`
 
-Registered when unbound: `student.search`, `student.profile.get`, `lesson.list`, `core_example.search`.
+### Tool table
 
-Registered only when `MCP_BOUND_TEACHER_ID` is set: `student.profile.update`, `assignment.list`, `assignment.render`, `lesson.capture`, `core_example.register`, `core_example.render`.
+| Tool | Unbound (`MCP_BOUND_TEACHER_ID` empty) | Bound |
+| --- | --- | --- |
+| `student.search` | listed + callable | listed + callable |
+| `student.profile.get` | listed + callable | listed + callable |
+| `student.profile.update` | not listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed + callable |
+| `assignment.list` | not listed; `tools/call` → result `{"error":"mcp_teacher_unbound"}` | listed; folders whose `meta.json` `teacher_id` equals the bound teacher |
+| `assignment.render` | not listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed; owner mismatch → JSON-RPC `403` `forbidden_assignment_owner` |
 
 ---
 
@@ -42,7 +51,7 @@ Return server info and capabilities.
 ```
 
 ### 1) tools/list
-Return the list of available tools.
+Return the list of available tools for the current bind state.
 
 **Request**
 ```json
@@ -115,7 +124,7 @@ Invoke a tool.
 ---
 
 ### student.profile.update
-**Purpose**: Update derived student profile fields. Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
+**Purpose**: Update derived student profile fields. Mutating; listed only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `student_id` (string, required)
@@ -128,87 +137,26 @@ Invoke a tool.
 **Result**
 - stdout from `update_profile.py`
 
+**Unbound**
+- JSON-RPC error `{ "code": 403, "message": "mcp_teacher_unbound" }`
+
 ---
 
 ### assignment.list
-**Purpose**: List assignments owned by `MCP_BOUND_TEACHER_ID`. Unregistered when that env var is empty. Orphan drafts (`visibility_status=orphan_draft`) are not owned until an admin claims them via `POST /auth/admin/assignments/{id}/claim`.
-
-**Arguments**: none (`teacher_id` in args is ignored)
-
-**Result**
-- `{ ok, assignments: ["A2403_2026-02-04", ...] }` filtered to the bound teacher
-
----
-
-### lesson.list
-**Purpose**: List lesson folders under `data/lessons/`. Always registered.
+**Purpose**: List assignment folder names under `data/assignments/` whose `meta.json` `teacher_id` equals `MCP_BOUND_TEACHER_ID`.
 
 **Arguments**: none
 
 **Result**
-- `{ ok, lessons: ["...", ...] }`
+- `{ ok, assignments: ["A2403_2026-02-04", ...] }` filtered to the bound teacher
 
----
-
-### lesson.capture
-**Purpose**: OCR and extract lesson materials. Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
-
-**Arguments**
-- `lesson_id` (string, required)
-- `topic` (string, required)
-- `sources` (array, required; list of file paths)
-- `discussion_notes` (string path, optional)
-- `lesson_plan` (string path, optional)
-- `force_ocr` (boolean, optional)
-- `ocr_mode` (string, optional)
-- `language` (string, optional)
-- `out_base` (string, optional)
-
-**Result**
-- stdout from `lesson_capture.py`
-
----
-
-### core_example.search
-**Purpose**: Query core examples.
-
-**Arguments**
-- `kp_id` (string, optional)
-- `example_id` (string, optional)
-
-**Result**
-- Rows from `data/core_examples/examples.csv`
-
----
-
-### core_example.register
-**Purpose**: Register a core example (writes to `data/core_examples/` + appends `examples.csv`). Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
-
-**Arguments**
-- `example_id` (string, required)
-- `kp_id` (string, required)
-- `core_model` (string, required)
-- plus optional fields matching `register_core_example.py` flags
-
-**Result**
-- stdout from `register_core_example.py`
-
----
-
-### core_example.render
-**Purpose**: Render a core example into PDF.
-
-**Arguments**
-- `example_id` (string, required)
-- `out` (string path, optional)
-
-**Result**
-- stdout from `render_core_example_pdf.py`
+**Unbound**
+- result `{ "error": "mcp_teacher_unbound" }` (JSON-RPC success envelope)
 
 ---
 
 ### assignment.render
-**Purpose**: Render assignment PDF (requires `reportlab`). Mutating; registered only when `MCP_BOUND_TEACHER_ID` is set.
+**Purpose**: Render assignment PDF (requires `reportlab`). Mutating; listed only when `MCP_BOUND_TEACHER_ID` is set.
 
 **Arguments**
 - `assignment_id` (string, required)
@@ -218,14 +166,22 @@ Invoke a tool.
 **Result**
 - stdout from `render_assignment_pdf.py`
 
+**Unbound**
+- JSON-RPC error `{ "code": 403, "message": "mcp_teacher_unbound" }`
+
+**Owner mismatch**
+- JSON-RPC error `{ "code": 403, "message": "forbidden_assignment_owner" }`
+
 ---
 
-## Not MCP tools
+## Removed from MCP
 
-- `exam.*` — removed with the exam HTTP surface. Use assignment upload / progress instead.
-- `assignment.generate` — generate via HTTP `POST /assignment/generate` or teacher chat. MCP no longer registers this name.
-- Orphan claim — admin HTTP only: `POST /auth/admin/assignments/{assignment_id}/claim`.
-- Subject pack load — filesystem `packs/subjects/<id>/`, not an MCP tool.
+These names are not registered and `tools/call` returns unknown tool. HTTP / teacher-chat surfaces are unchanged.
+
+- `lesson.*` — lesson capture remains an HTTP/chat physics affiliate, not MCP.
+- `core_example.*` — core-example register/search/render remain HTTP/chat affiliates, not MCP.
+- `exam.*` — not an MCP tool.
+- `assignment.generate` — generate via HTTP `POST /assignment/generate` or teacher chat.
 
 ---
 

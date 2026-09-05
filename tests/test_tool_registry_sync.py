@@ -128,7 +128,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
 
             from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(mcp_mod.MCP_TOOL_NAMES)  # type: ignore[attr-defined]
+            names = mcp_mod.MCP_TOOL_NAMES() if callable(mcp_mod.MCP_TOOL_NAMES) else mcp_mod.MCP_TOOL_NAMES
+            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(names)  # type: ignore[attr-defined]
             self.assertEqual(returned, expected)
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import hmac
 import json
 import logging
@@ -22,22 +21,6 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.getenv("DATA_DIR", APP_ROOT / "data"))
 UPLOADS_DIR = Path(os.getenv("UPLOADS_DIR", APP_ROOT / "uploads"))
 API_KEY = os.getenv("MCP_API_KEY", "")
-_USER_PATH_ARG_KEYS = frozenset(
-    {
-        "sources",
-        "discussion_notes",
-        "lesson_plan",
-        "out_base",
-        "out",
-        "stem_file",
-        "solution_file",
-        "model_file",
-        "figure_file",
-        "discussion_file",
-        "variant_file",
-        "assignment_questions",
-    }
-)
 SCRIPT_TIMEOUT_ENV = os.getenv("MCP_SCRIPT_TIMEOUT_SEC", "600").strip()
 SCRIPT_TIMEOUT_SEC: Optional[float]
 if not SCRIPT_TIMEOUT_ENV or SCRIPT_TIMEOUT_ENV.lower() in {"0", "none", "null", "inf", "infinite"}:
@@ -48,6 +31,19 @@ else:
     except Exception:
         _log.debug("numeric conversion failed", exc_info=True)
         SCRIPT_TIMEOUT_SEC = 600.0
+
+MCP_UNBOUND_TOOL_NAMES = [
+    "student.search",
+    "student.profile.get",
+]
+MCP_BOUND_EXTRA_TOOL_NAMES = [
+    "student.profile.update",
+    "assignment.list",
+    "assignment.render",
+]
+# Bound extras stay callable when unbound so tools/call can return mcp_teacher_unbound.
+MCP_CALLABLE_TOOL_NAMES = MCP_UNBOUND_TOOL_NAMES + MCP_BOUND_EXTRA_TOOL_NAMES
+
 
 def _docs_enabled() -> bool:
     # Sidecar schema is still scrapeable on loopback; unmount with API docs policy.
@@ -75,39 +71,30 @@ class JsonRpcRequest(BaseModel):
     method: str
     params: Dict[str, Any] = Field(default_factory=dict)
 
+
 def _mcp_bound_teacher_id() -> str:
     return str(os.getenv("MCP_BOUND_TEACHER_ID") or "").strip()
 
 
 def mcp_tool_names() -> List[str]:
-    names = [
-        "student.search",
-        "student.profile.get",
-        "lesson.list",
-        "core_example.search",
-    ]
+    names = list(MCP_UNBOUND_TOOL_NAMES)
     if _mcp_bound_teacher_id():
-        names.extend(
-            [
-                "student.profile.update",
-                "assignment.list",
-                "assignment.render",
-                "lesson.capture",
-                "core_example.register",
-                "core_example.render",
-            ]
-        )
+        names.extend(MCP_BOUND_EXTRA_TOOL_NAMES)
     return names
 
 
-MCP_TOOL_NAMES = mcp_tool_names()
+MCP_TOOL_NAMES = mcp_tool_names
 
 
 def _mcp_tools() -> List[Dict[str, Any]]:
     return [DEFAULT_TOOL_REGISTRY.require(name).to_mcp() for name in mcp_tool_names()]
 
-
-TOOLS = _mcp_tools()
+_ALLOWED_SCRIPTS = frozenset(
+    {
+        (APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py").resolve(),
+        (APP_ROOT / "scripts" / "render_assignment_pdf.py").resolve(),
+    }
+)
 
 
 @app.get("/health")
@@ -156,11 +143,7 @@ def _require_allowed_script(script_value: Any) -> Path:
     if not path.is_absolute():
         path = APP_ROOT / path
     resolved = path.resolve()
-    allowed_render = (APP_ROOT / "scripts" / "render_assignment_pdf.py").resolve()
-    if resolved == allowed_render:
-        return resolved
-    skills_root = (APP_ROOT / "skills").resolve()
-    if not _is_under_root(resolved, skills_root) or resolved.suffix != ".py" or resolved.parent.name != "scripts":
+    if resolved not in _ALLOWED_SCRIPTS:
         raise HTTPException(status_code=400, detail="script_not_allowed")
     return resolved
 
@@ -196,14 +179,11 @@ def _require_safe_id(value: Any, field: str) -> str:
     return text
 
 
-def _resolve_manifest_path(path_value: Any) -> Optional[Path]:
-    raw = str(path_value or "").strip()
-    if not raw:
-        return None
-    path = Path(raw)
-    if not path.is_absolute():
-        path = (APP_ROOT / path).resolve()
-    return path
+def _unbound_tool_response(request_id: Optional[Union[str, int]], name: str) -> Dict[str, Any]:
+    # assignment.list historically returns a result error dict; mutating tools use JSON-RPC 403.
+    if name == "assignment.list":
+        return _jsonrpc_ok(request_id, {"error": "mcp_teacher_unbound"})
+    return _jsonrpc_error(request_id, 403, "mcp_teacher_unbound")
 
 
 def _load_assignment_meta(assignment_id: str) -> Dict[str, Any]:
@@ -237,18 +217,6 @@ def _tool_assignment_list() -> Dict[str, Any]:
     return {"ok": True, "assignments": items}
 
 
-def _tool_lesson_list() -> Dict[str, Any]:
-    base = DATA_DIR / "lessons"
-    if not base.exists():
-        return {"ok": True, "lessons": []}
-    items = []
-    for folder in base.iterdir():
-        if folder.is_dir():
-            items.append(folder.name)
-    items.sort(reverse=True)
-    return {"ok": True, "lessons": items}
-
-
 def _tool_student_search(args: Dict[str, Any]) -> Dict[str, Any]:
     query = str(args.get("query") or "").strip()
     limit = max(1, min(int(args.get("limit", 5) or 5), 50))
@@ -277,6 +245,7 @@ def _tool_student_search(args: Dict[str, Any]) -> Dict[str, Any]:
             if len(results) >= limit:
                 break
     return {"ok": True, "query": query, "students": results[:limit]}
+
 
 def run_script(args: list[str]) -> str:
     if len(args) < 2:
@@ -311,13 +280,15 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
         if not isinstance(name, str) or not name.strip():
             return _jsonrpc_error(req.id, -32602, "missing required field: name")
         name = name.strip()
-        if name not in mcp_tool_names():
+        if name not in MCP_CALLABLE_TOOL_NAMES:
             return _jsonrpc_error(req.id, -32601, f"Unknown tool: {name}")
         if not isinstance(args, dict):
             args = {}
         issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, args)
         if issues:
             return _jsonrpc_error(req.id, -32602, "invalid arguments", {"tool": name, "issues": issues[:20]})
+        if name in MCP_BOUND_EXTRA_TOOL_NAMES and not _mcp_bound_teacher_id():
+            return _unbound_tool_response(req.id, name)
         try:
             if name == "student.search":
                 return _jsonrpc_ok(req.id, _tool_student_search(args))
@@ -331,7 +302,7 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
 
             if name == "student.profile.update":
                 student_id = _require_safe_id(args.get("student_id"), "student_id")
-                script = APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
+                script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
                 cmd = ["python3", str(script), "--student-id", student_id]
                 for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note"):
                     if args.get(key) is not None:
@@ -341,108 +312,16 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
 
             if name == "assignment.list":
                 return _jsonrpc_ok(req.id, _tool_assignment_list())
-            if name == "lesson.list":
-                return _jsonrpc_ok(req.id, _tool_lesson_list())
-
-            if name == "lesson.capture":
-                lesson_id = _require_safe_id(args.get("lesson_id"), "lesson_id")
-                topic = str(args.get("topic") or "").strip()
-                if not topic:
-                    raise ValueError("missing required field: topic")
-                sources = args.get("sources")
-                if not isinstance(sources, list) or not sources:
-                    raise ValueError("sources must be a non-empty array of file paths")
-                resolved_sources = [_require_contained_path(s, "sources") for s in sources]
-                script = APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
-                cmd = ["python3", str(script), "--lesson-id", lesson_id, "--topic", topic, "--sources", *resolved_sources]
-                if args.get("class_name"):
-                    cmd += ["--class-name", str(args.get("class_name"))]
-                discussion_notes = _optional_contained_arg(args, "discussion_notes")
-                if discussion_notes:
-                    cmd += ["--discussion-notes", discussion_notes]
-                lesson_plan = _optional_contained_arg(args, "lesson_plan")
-                if lesson_plan:
-                    cmd += ["--lesson-plan", lesson_plan]
-                if args.get("force_ocr"):
-                    cmd += ["--force-ocr"]
-                if args.get("ocr_mode"):
-                    cmd += ["--ocr-mode", str(args.get("ocr_mode"))]
-                if args.get("language"):
-                    cmd += ["--language", str(args.get("language"))]
-                out_base = _optional_contained_arg(args, "out_base")
-                if out_base:
-                    cmd += ["--out-base", out_base]
-                out = run_script(cmd)
-                return _jsonrpc_ok(req.id, out)
-
-            if name == "core_example.search":
-                csv_path = DATA_DIR / "core_examples" / "examples.csv"
-                if not csv_path.exists():
-                    return _jsonrpc_ok(req.id, [])
-                results = []
-                with csv_path.open(encoding="utf-8") as f:
-                    for row in csv.DictReader(f):
-                        if args.get("kp_id") and row.get("kp_id") != args.get("kp_id"):
-                            continue
-                        if args.get("example_id") and row.get("example_id") != args.get("example_id"):
-                            continue
-                        results.append(row)
-                return _jsonrpc_ok(req.id, results)
-
-            if name == "core_example.register":
-                example_id = _require_safe_id(args.get("example_id"), "example_id")
-                kp_id = _require_safe_id(args.get("kp_id"), "kp_id")
-                core_model = str(args.get("core_model") or "").strip()
-                if not core_model:
-                    raise ValueError("missing required field: core_model")
-                script = APP_ROOT / "skills" / "physics-core-examples" / "scripts" / "register_core_example.py"
-                cmd = ["python3", str(script), "--example-id", example_id, "--kp-id", kp_id, "--core-model", core_model]
-                for key in (
-                    "difficulty",
-                    "source_ref",
-                    "tags",
-                    "stem_file",
-                    "solution_file",
-                    "model_file",
-                    "figure_file",
-                    "discussion_file",
-                    "variant_file",
-                    "from_lesson",
-                    "lesson_example_id",
-                    "lesson_figure",
-                ):
-                    if not args.get(key):
-                        continue
-                    value = str(args.get(key))
-                    if key in _USER_PATH_ARG_KEYS:
-                        value = _require_contained_path(value, key)
-                    elif key in {"from_lesson", "lesson_figure"}:
-                        value = _require_safe_id(value, key)
-                    cmd += [f"--{key.replace('_','-')}", value]
-                out = run_script(cmd)
-                return _jsonrpc_ok(req.id, out)
-
-            if name == "core_example.render":
-                example_id = _require_safe_id(args.get("example_id"), "example_id")
-                script = APP_ROOT / "skills" / "physics-core-examples" / "scripts" / "render_core_example_pdf.py"
-                cmd = ["python3", str(script), "--example-id", example_id]
-                out_path = _optional_contained_arg(args, "out")
-                if out_path:
-                    cmd += ["--out", out_path]
-                out = run_script(cmd)
-                return _jsonrpc_ok(req.id, out)
 
             if name == "assignment.render":
                 assignment_id = _require_safe_id(args.get("assignment_id"), "assignment_id")
                 bound = _mcp_bound_teacher_id()
-                if not bound:
-                    return _jsonrpc_error(req.id, 403, "mcp_teacher_unbound")
                 meta = _load_assignment_meta(assignment_id)
                 owner = str(meta.get("teacher_id") or "").strip()
                 if not meta:
                     return _jsonrpc_error(req.id, 404, "assignment not found", {"assignment_id": assignment_id})
                 if owner != bound:
-                    return _jsonrpc_error(req.id, 403, "forbidden_assignment_owner", {"assignment_id": assignment_id})
+                    return _jsonrpc_error(req.id, 403, "forbidden_assignment_owner")
                 script = APP_ROOT / "scripts" / "render_assignment_pdf.py"
                 cmd = ["python3", str(script), "--assignment-id", assignment_id]
                 assignment_questions = _optional_contained_arg(args, "assignment_questions")
