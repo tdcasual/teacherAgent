@@ -250,7 +250,7 @@ def teacher_session_file(teacher_id: str, session_id: str, core: Any | None = No
 
 
 # ---------------------------------------------------------------------------
-# Assignment / analysis / student-profile directory paths
+# Assignment / student-profile directory paths
 # ---------------------------------------------------------------------------
 
 
@@ -263,18 +263,6 @@ def resolve_assignment_dir(assignment_id: str, core: Any | None = None) -> Path:
     folder = (assignments_root / aid).resolve()
     if folder != assignments_root and assignments_root not in folder.parents:
         raise ValueError("invalid assignment_id")
-    return folder
-
-
-def resolve_analysis_dir(exam_id: str, core: Any | None = None) -> Path:
-    data_dir = _path_from_core(core, "DATA_DIR", DATA_DIR)
-    analysis_root = (data_dir / "analysis").resolve()
-    eid = str(exam_id or "").strip()
-    if not eid:
-        raise ValueError("exam_id is required")
-    folder = (analysis_root / eid).resolve()
-    if folder != analysis_root and analysis_root not in folder.parents:
-        raise ValueError("invalid exam_id")
     return folder
 
 

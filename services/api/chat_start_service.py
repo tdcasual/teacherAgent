@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from .analysis_target_resolution_service import extract_report_id_from_text
 from .chat_execution_timeline_service import append_chat_execution_timeline
 from .paths import TeacherIdentityError
 from .role_runtime_policy import get_role_runtime_policy
@@ -75,88 +74,6 @@ def _extract_attachment_ids(req: Any) -> List[str]:
         ids.append(value)
         seen.add(value)
     return ids
-
-def _extract_recent_analysis_target_id(messages: Any) -> str:
-    if not isinstance(messages, list):
-        return ''
-    history = messages[:-1] if messages else []
-    for item in reversed(history):
-        if not isinstance(item, dict):
-            continue
-        target_id = extract_report_id_from_text(item.get('content'))
-        if target_id:
-            return target_id
-    return ''
-
-
-_ANALYSIS_TARGET_KEYS = (
-    'target_type',
-    'target_id',
-    'report_id',
-    'source_domain',
-    'domain',
-    'artifact_type',
-    'teacher_id',
-    'strategy_id',
-)
-
-
-def _analysis_target_raw_payload(raw_target: Any) -> Dict[str, Any]:
-    if isinstance(raw_target, dict):
-        return dict(raw_target)
-    model_dump = getattr(raw_target, 'model_dump', None)
-    if callable(model_dump):
-        dumped = model_dump(exclude_none=True)
-        return dict(dumped) if isinstance(dumped, dict) else {}
-    return {
-        key: getattr(raw_target, key, None)
-        for key in _ANALYSIS_TARGET_KEYS
-        if getattr(raw_target, key, None) is not None
-    }
-
-
-def _first_non_empty_value(raw: Dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = str(raw.get(key) or '').strip()
-        if value:
-            return value
-    return ''
-
-
-def _set_optional_analysis_field(
-    normalized: Dict[str, Any],
-    raw: Dict[str, Any],
-    target_key: str,
-    *source_keys: str,
-) -> None:
-    value = _first_non_empty_value(raw, *source_keys)
-    if value:
-        normalized[target_key] = value
-
-
-def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, Any]]:
-    if raw_target is None:
-        return None
-    raw = _analysis_target_raw_payload(raw_target)
-    target_id = _first_non_empty_value(raw, 'target_id', 'report_id')
-    if not target_id:
-        return None
-    target_type = _first_non_empty_value(raw, 'target_type') or 'report'
-    report_id = _first_non_empty_value(raw, 'report_id')
-    if target_type == 'report' and not report_id:
-        report_id = target_id
-
-    normalized: Dict[str, Any] = {
-        'target_type': target_type,
-        'target_id': target_id,
-    }
-    _set_optional_analysis_field(normalized, raw, 'source_domain', 'source_domain', 'domain')
-    _set_optional_analysis_field(normalized, raw, 'artifact_type', 'artifact_type')
-    if report_id:
-        normalized['report_id'] = report_id
-    _set_optional_analysis_field(normalized, raw, 'strategy_id', 'strategy_id')
-    _set_optional_analysis_field(normalized, raw, 'teacher_id', 'teacher_id')
-    return normalized
 
 
 def _persist_execution_timeline(job_id: str, event: Dict[str, Any], deps: ChatStartDeps) -> None:
@@ -236,11 +153,6 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "assignment_id": req.assignment_id,
         "assignment_date": req.assignment_date,
     }
-    analysis_target = _normalize_analysis_target_payload(getattr(req, 'analysis_target', None))
-    if analysis_target is not None:
-        if policy.role == 'teacher' and teacher_id and not str(analysis_target.get('teacher_id') or '').strip():
-            analysis_target['teacher_id'] = teacher_id
-        req_payload['analysis_target'] = analysis_target
     attachment_ids = _extract_attachment_ids(req)
     attachment_payload = deps.resolve_chat_attachment_context(
         role=role_hint,
@@ -258,15 +170,11 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     req_payload["attachments"] = [{"attachment_id": aid} for aid in attachment_ids]
     req_payload["attachment_context"] = attachment_context
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
-    analysis_target_id = str((analysis_target or {}).get('target_id') or '').strip()
-    if not analysis_target_id:
-        analysis_target_id = _extract_recent_analysis_target_id(req_payload.get('messages'))
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
             str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
-            str(analysis_target_id or ''),
             ",".join(attachment_ids),
         ]
     )

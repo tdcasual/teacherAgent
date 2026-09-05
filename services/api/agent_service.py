@@ -723,7 +723,6 @@ def _maybe_teacher_runtime_shortcut_reply(
     messages: List[Dict[str, Any]],
     last_user_text: str,
     teacher_id: Optional[str],
-    analysis_target: Optional[Any],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Optional[Dict[str, Any]]:
     if not is_teacher_role:
@@ -784,7 +783,6 @@ def run_agent_runtime(
     extra_system: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
-    analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     job_id: Optional[str] = None,
     lane_id: Optional[str] = None,
@@ -812,7 +810,6 @@ def run_agent_runtime(
             messages=messages,
             last_user_text=last_user_text,
             teacher_id=teacher_id,
-            analysis_target=analysis_target,
             event_sink=event_sink,
         )
         if shortcut_reply:

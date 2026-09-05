@@ -9,8 +9,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
-from .analysis_metrics_service import AnalysisMetricsService
-from .analysis_metrics_store import AnalysisMetricsStore
 from .app_routes import register_routes
 from .auth_service import auth_required, require_principal
 from .container import build_app_container, resolve_observability
@@ -61,24 +59,8 @@ def _attach_request_id_filter_once() -> None:
     root.addFilter(RequestIdFilter())
 
 
-def _core_from_app(app_obj: FastAPI) -> Any:
-    container = getattr(getattr(app_obj, "state", None), "container", None)
-    core = getattr(container, "core", None) if container is not None else None
-    if core is not None:
-        return core
-    return getattr(getattr(app_obj, "state", None), "core", None)
-
-
 def _ops_metrics_payload(app_obj: FastAPI) -> dict[str, Any]:
-    metrics = dict(resolve_observability(app_obj).snapshot())
-    core = _core_from_app(app_obj)
-    analysis_metrics = getattr(core, "analysis_metrics_service", None)
-    analysis_snapshot = getattr(analysis_metrics, "snapshot", None)
-    if callable(analysis_snapshot):
-        metrics["analysis_runtime"] = analysis_snapshot()
-    else:
-        metrics["analysis_runtime"] = AnalysisMetricsService().snapshot()
-    return metrics
+    return dict(resolve_observability(app_obj).snapshot())
 
 
 def _register_ops_routes(app_obj: FastAPI) -> None:
@@ -112,10 +94,6 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
 
 def create_app(settings: AppSettings) -> FastAPI:
     core = build_core_runtime(settings=settings)
-    data_dir = Path(getattr(core, 'DATA_DIR', '.'))
-    if getattr(core, 'analysis_metrics_service', None) is None:
-        metrics_store = AnalysisMetricsStore(data_dir / 'analysis' / 'metrics_snapshot.json')
-        setattr(core, 'analysis_metrics_service', AnalysisMetricsService(store=metrics_store))
     set_default_core(core)
     docs_enabled = _docs_enabled()
     app_obj = FastAPI(

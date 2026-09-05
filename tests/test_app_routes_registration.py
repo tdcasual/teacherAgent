@@ -57,9 +57,8 @@ def test_register_routes_does_not_mount_survey_class_report_or_analysis_report()
     assert not any(path.startswith("/teacher/multimodal") for path in paths)
 
 
-def test_register_routes_mounts_multimodal_only_when_enabled(monkeypatch) -> None:
-    monkeypatch.setattr("services.api.app_routes.multimodal_enabled", lambda: True)
+def test_register_routes_never_mounts_multimodal() -> None:
     app = FastAPI()
     app_routes.register_routes(app, DummyCore())
     paths = {getattr(route, "path", "") for route in app.router.routes}
-    assert any(path.startswith("/teacher/multimodal") for path in paths)
+    assert not any(path.startswith("/teacher/multimodal") for path in paths)

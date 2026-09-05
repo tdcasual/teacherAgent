@@ -58,6 +58,7 @@ class ChatRequest(BaseModel):
     assignment_date: Optional[str] = None
     attachments: Optional[List[ChatAttachmentRef]] = None
     attachment_context: Optional[str] = None
+    # Deprecated: accepted so extra=forbid clients still 200; ignored by runtime.
     analysis_target: Optional[ChatAnalysisTarget] = None
 
 

@@ -243,7 +243,7 @@ class ChatStartServiceTest(unittest.TestCase):
         self.assertEqual(captured.get('role_hint'), 'teacher')
         self.assertEqual(captured.get('session_id'), 'main')
 
-    def test_request_payload_carries_explicit_analysis_target_contract(self):
+    def test_request_payload_ignores_deprecated_analysis_target(self):
         writes: list[tuple[bool, dict[str, object]]] = []
 
         def track_write(jid, data, overwrite):
@@ -267,9 +267,7 @@ class ChatStartServiceTest(unittest.TestCase):
         start_chat_orchestration(req, deps=deps)
         initial_record = next(data for overwrite, data in writes if overwrite and 'request' in data)
         request_payload = initial_record['request']
-        self.assertEqual(request_payload['analysis_target']['target_id'], 'submission_7')
-        self.assertEqual(request_payload['analysis_target']['target_type'], 'submission')
-        self.assertEqual(request_payload['analysis_target']['source_domain'], 'video_homework')
+        self.assertNotIn('analysis_target', request_payload)
 
     def test_fingerprint_seed_excludes_removed_persona_field(self):
         captured_seed: dict[str, str] = {}
@@ -283,7 +281,7 @@ class ChatStartServiceTest(unittest.TestCase):
         start_chat_orchestration(req, deps=deps)
         self.assertNotIn('persona_lin_dai_yu', captured_seed.get('value', ''))
 
-    def test_fingerprint_seed_includes_explicit_analysis_target_contract(self):
+    def test_fingerprint_seed_excludes_deprecated_analysis_target(self):
         captured_seed: dict[str, str] = {}
 
         def _capture_seed(seed: str) -> str:
@@ -302,9 +300,11 @@ class ChatStartServiceTest(unittest.TestCase):
             messages=[_FakeMsg('user', '请继续深入分析')],
         )
         start_chat_orchestration(req, deps=deps)
-        self.assertIn('submission_7', captured_seed.get('value', ''))
+        seed = captured_seed.get('value', '')
+        self.assertNotIn('submission_7', seed)
+        self.assertEqual(seed, '|'.join(['', '', '请继续深入分析', '']))
 
-    def test_fingerprint_seed_includes_explicit_analysis_target_marker(self):
+    def test_fingerprint_seed_excludes_analysis_target_marker_in_history(self):
         captured_seed: dict[str, str] = {}
 
         def _capture_seed(seed: str) -> str:
@@ -321,7 +321,9 @@ class ChatStartServiceTest(unittest.TestCase):
             ],
         )
         start_chat_orchestration(req, deps=deps)
-        self.assertIn('report_9', captured_seed.get('value', ''))
+        seed = captured_seed.get('value', '')
+        self.assertNotIn('report_9', seed)
+        self.assertEqual(seed, '|'.join(['', '', '请继续深入分析', '']))
 
     def test_new_student_session_requires_assignment_id(self):
         deps, _ = _make_deps()

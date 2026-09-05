@@ -507,10 +507,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertIn("考试编号", reply)
             self.assertEqual(calls["run_agent"], 0)
 
-    def test_compute_chat_reply_passes_explicit_analysis_target_to_run_agent(self):
+    def test_compute_chat_reply_does_not_pass_analysis_target_to_run_agent(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            captured = {"analysis_target": None}
+            captured = {"kwargs": None}
 
             def _run_agent(
                 messages,
@@ -519,12 +519,11 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 extra_system=None,
                 skill_id=None,
                 teacher_id=None,
-                analysis_target=None,
                 event_sink=None,
-                **_kwargs,
+                **kwargs,
             ):
                 del messages, role_hint, extra_system, skill_id, teacher_id, event_sink
-                captured["analysis_target"] = analysis_target
+                captured["kwargs"] = kwargs
                 return {"reply": "OK"}
 
             deps = ComputeChatReplyDeps(
@@ -567,8 +566,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
 
             self.assertEqual(reply, "OK")
             self.assertEqual(role_hint, "teacher")
-            self.assertIsNotNone(captured["analysis_target"])
-            self.assertEqual(captured["analysis_target"]["target_id"], "report_9")
+            self.assertNotIn("analysis_target", captured["kwargs"] or {})
 
 
     def test_compute_chat_reply_merges_teacher_workflow_extra_system(self):

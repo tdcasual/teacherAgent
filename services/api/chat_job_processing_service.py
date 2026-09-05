@@ -659,9 +659,6 @@ def _build_run_agent_kwargs(
         "teacher_id": effective_teacher_id or req.teacher_id,
         "event_sink": event_sink,
     }
-    analysis_target = getattr(req, "analysis_target", None)
-    if analysis_target is not None:
-        run_agent_kwargs["analysis_target"] = analysis_target
     if job_id:
         run_agent_kwargs["job_id"] = job_id
     if lane_id:
