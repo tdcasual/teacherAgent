@@ -265,16 +265,40 @@ def _grade_script_error_text(exc: Exception) -> str:
     return str(exc)[:500]
 
 
+def _copy_saved_uploads(attempt_dir: Path, file_paths: list[str]) -> list[str]:
+    files_dir = attempt_dir / "files"
+    linked: list[str] = []
+    for index, raw in enumerate(file_paths):
+        src = Path(str(raw or ""))
+        if not src.is_file():
+            if str(raw or "").strip():
+                linked.append(str(src))
+            continue
+        files_dir.mkdir(parents=True, exist_ok=True)
+        dest = files_dir / (src.name or f"upload_{index}")
+        if dest.exists():
+            dest = files_dir / f"{src.stem}_{index}{src.suffix}"
+        try:
+            dest.write_bytes(src.read_bytes())
+        except OSError:
+            linked.append(str(src))
+            continue
+        linked.append(str(dest))
+    return linked
+
+
 def _write_ungraded_grading_report(
     *,
     deps: StudentSubmitDeps,
     assignment_id: str,
     student_id: str,
     error: str,
+    file_paths: list[str],
 ) -> str:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     attempt_dir = deps.student_submissions_dir / assignment_id / student_id / f"submission_{timestamp}"
     attempt_dir.mkdir(parents=True, exist_ok=True)
+    linked = _copy_saved_uploads(attempt_dir, file_paths)
     report = {
         "student_id": student_id,
         "assignment_id": assignment_id,
@@ -282,6 +306,7 @@ def _write_ungraded_grading_report(
         "ungraded": 1,
         "correct": 0,
         "error": error,
+        "files": linked,
         "items": [
             {
                 "status": "ungraded",
@@ -303,6 +328,7 @@ def _record_ungraded_grade(
     assignment_id: str,
     student_id: str,
     exc: Exception,
+    file_paths: list[str],
 ) -> str:
     error = _grade_script_error_text(exc)
     deps.diag_log(
@@ -314,6 +340,7 @@ def _record_ungraded_grade(
         assignment_id=assignment_id,
         student_id=student_id,
         error=error,
+        file_paths=file_paths,
     )
 
 
@@ -323,15 +350,16 @@ def _run_grade_script(
     *,
     assignment_id: str,
     student_id: str,
+    file_paths: list[str],
 ) -> str:
     try:
         return deps.run_script(args)
     except TimeoutExpired as exc:
-        return _record_ungraded_grade(deps, assignment_id, student_id, exc)
+        return _record_ungraded_grade(deps, assignment_id, student_id, exc, file_paths)
     except Exception as exc:  # policy: allowed-broad-except
         if not _is_grade_script_http_failure(exc):
             raise
-        return _record_ungraded_grade(deps, assignment_id, student_id, exc)
+        return _record_ungraded_grade(deps, assignment_id, student_id, exc, file_paths)
 
 
 async def submit(
@@ -378,6 +406,7 @@ async def submit(
         args,
         assignment_id=safe_assignment_id,
         student_id=safe_student_id,
+        file_paths=file_paths,
     )
     progress = _read_progress(deps, safe_assignment_id, safe_student_id)
     signals = _progress_signals(progress, safe_student_id)
