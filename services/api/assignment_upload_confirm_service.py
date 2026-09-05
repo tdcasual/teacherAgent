@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .assignment.store import connect as assignment_connect
+from .assignment.store import ensure as assignment_ensure
+from .assignment.store import get_assignment as assignment_get
+from .assignment.store import upsert_assignment
 from .auth.identity_graph_service import ExpectedStudentsError
 from .auth_service import get_current_principal
 from .paths import InvalidAssignmentDate
@@ -189,9 +194,6 @@ def _resolve_output_target(
         raise
 
     meta_path = out_dir / "meta.json"
-    if meta_path.exists():
-        deps.write_upload_job(job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
-        raise AssignmentUploadConfirmError(409, "assignment already exists")
     out_dir.mkdir(parents=True, exist_ok=True)
     return assignment_id, out_dir, meta_path
 
@@ -268,6 +270,7 @@ def _compute_confirm_expected_students(
     teacher_id: str,
     subject_id: str,
     job_id: str,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> List[str]:
     try:
         return deps.compute_expected_students(
@@ -276,6 +279,7 @@ def _compute_confirm_expected_students(
             student_ids,
             teacher_id=teacher_id,
             subject_id=subject_id,
+            conn=conn,
         )
     except ExpectedStudentsError as exc:
         _mark_confirm_failed(job_id, deps, exc.error)
@@ -315,6 +319,7 @@ def _build_assignment_meta(
     teacher_id: str,
     subject_id: str,
     deps: AssignmentUploadConfirmDeps,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
     return {
         "assignment_id": assignment_id,
@@ -339,6 +344,7 @@ def _build_assignment_meta(
             teacher_id=teacher_id,
             subject_id=subject_id,
             job_id=job_id,
+            conn=conn,
         ),
         "expected_students_generated_at": deps.now_iso(),
         "completion_policy": {
@@ -372,6 +378,112 @@ def _mark_confirmed(job_id: str, deps: AssignmentUploadConfirmDeps) -> None:
     )
 
 
+def _rollback_quiet(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("ROLLBACK")
+    except sqlite3.Error:
+        _log.debug("rollback skipped; no open transaction", exc_info=True)
+
+
+def _conflict_already_exists(job_id: str, deps: AssignmentUploadConfirmDeps) -> None:
+    deps.write_upload_job(job_id, {"status": "confirmed", "step": "confirmed", "progress": 100})
+    raise AssignmentUploadConfirmError(409, "assignment already exists")
+
+
+def _ok_payload(
+    assignment_id: str, question_count: int, missing: List[str], warnings: List[str]
+) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "assignment_id": assignment_id,
+        "question_count": question_count,
+        "requirements_missing": missing,
+        "warnings": warnings,
+        "status": "confirmed",
+    }
+
+
+def _read_existing_meta(meta_path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _log.warning("failed to parse existing assignment meta %s", meta_path, exc_info=True)
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _open_assignment_conn(data_dir: Path) -> sqlite3.Connection:
+    conn = assignment_connect(data_dir)
+    assignment_ensure(conn, data_dir=data_dir)
+    return conn
+
+
+def _try_heal_existing_meta(
+    job_id: str,
+    *,
+    assignment_id: str,
+    teacher_id: str,
+    meta_path: Path,
+    deps: AssignmentUploadConfirmDeps,
+) -> Optional[Dict[str, Any]]:
+    if not meta_path.exists():
+        return None
+    existing = _read_existing_meta(meta_path)
+    if existing is None or str(existing.get("teacher_id") or "").strip() != teacher_id:
+        _conflict_already_exists(job_id, deps)
+    assert existing is not None
+    conn = _open_assignment_conn(deps.data_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if assignment_get(conn, assignment_id) is not None:
+                raise AssignmentUploadConfirmError(409, "assignment already exists")
+            upsert_assignment(conn, existing, now_iso=deps.now_iso())
+            conn.execute("COMMIT")
+        except AssignmentUploadConfirmError as exc:
+            _rollback_quiet(conn)
+            if exc.status_code == 409:
+                _conflict_already_exists(job_id, deps)
+            raise
+        except Exception as exc:
+            _rollback_quiet(conn)
+            raise AssignmentUploadConfirmError(500, "assignment_persist_failed") from exc
+    finally:
+        conn.close()
+    _mark_confirmed(job_id, deps)
+    question_ids = existing.get("question_ids") if isinstance(existing.get("question_ids"), list) else []
+    return _ok_payload(assignment_id, len(question_ids), list(existing.get("requirements_missing") or []), [])
+
+
+def _persist_new_assignment(
+    job_id: str,
+    *,
+    assignment_id: str,
+    meta_path: Path,
+    build_meta: Callable[[sqlite3.Connection], Dict[str, Any]],
+    deps: AssignmentUploadConfirmDeps,
+) -> Dict[str, Any]:
+    conn = _open_assignment_conn(deps.data_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if assignment_get(conn, assignment_id) is not None:
+                raise AssignmentUploadConfirmError(409, "assignment already exists")
+            meta = build_meta(conn)
+            upsert_assignment(conn, meta, now_iso=deps.now_iso())
+            deps.atomic_write_json(meta_path, meta)
+            conn.execute("COMMIT")
+        except AssignmentUploadConfirmError:
+            _rollback_quiet(conn)
+            raise
+        except Exception as exc:
+            _rollback_quiet(conn)
+            raise AssignmentUploadConfirmError(500, "assignment_persist_failed") from exc
+    finally:
+        conn.close()
+    return meta
+
+
 def confirm_assignment_upload(
     job_id: str,
     job: Dict[str, Any],
@@ -398,8 +510,16 @@ def confirm_assignment_upload(
         deps=deps,
     )
     teacher_id, subject_id = _require_meta_owner(job, job_id=job_id, deps=deps)
-
     assignment_id, out_dir, meta_path = _resolve_output_target(job_id, job, deps)
+    healed = _try_heal_existing_meta(
+        job_id,
+        assignment_id=assignment_id,
+        teacher_id=teacher_id,
+        meta_path=meta_path,
+        deps=deps,
+    )
+    if healed is not None:
+        return healed
     _copy_uploaded_files(job_id, job, job_dir, out_dir, deps)
     rows, date_str = _write_questions_and_requirements(
         job_id,
@@ -411,27 +531,34 @@ def confirm_assignment_upload(
         deps=deps,
     )
     student_ids_list, scope_val = _resolve_students_scope(job, deps)
-    meta = _build_assignment_meta(
-        job_id,
-        job=job,
-        assignment_id=assignment_id,
-        date_str=date_str,
-        rows=rows,
-        prepared=prepared,
-        student_ids_list=student_ids_list,
-        scope_val=scope_val,
-        teacher_id=teacher_id,
-        subject_id=subject_id,
-        deps=deps,
-    )
-    deps.atomic_write_json(meta_path, meta)
-    _mark_confirmed(job_id, deps)
 
-    return {
-        "ok": True,
-        "assignment_id": assignment_id,
-        "question_count": len(rows),
-        "requirements_missing": prepared.missing,
-        "warnings": prepared.warnings,
-        "status": "confirmed",
-    }
+    def _build_meta(conn: sqlite3.Connection) -> Dict[str, Any]:
+        return _build_assignment_meta(
+            job_id,
+            job=job,
+            assignment_id=assignment_id,
+            date_str=date_str,
+            rows=rows,
+            prepared=prepared,
+            student_ids_list=student_ids_list,
+            scope_val=scope_val,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            deps=deps,
+            conn=conn,
+        )
+
+    try:
+        _persist_new_assignment(
+            job_id,
+            assignment_id=assignment_id,
+            meta_path=meta_path,
+            build_meta=_build_meta,
+            deps=deps,
+        )
+    except AssignmentUploadConfirmError as exc:
+        if exc.status_code == 409:
+            _conflict_already_exists(job_id, deps)
+        raise
+    _mark_confirmed(job_id, deps)
+    return _ok_payload(assignment_id, len(rows), prepared.missing, prepared.warnings)
