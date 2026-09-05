@@ -1,9 +1,16 @@
+import re
 from pathlib import Path
+
+# Honest floor(TOTAL) after leftover analysis/multimodal delete (2026-09-05 A4).
+COVERAGE_FLOOR_N = 85
 
 
 def test_ci_sets_backend_coverage_floor() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "--cov-fail-under=84" in text
+    match = re.search(r"--cov-fail-under=(\d+)", text)
+    assert match is not None, "ci.yml must set --cov-fail-under"
+    assert int(match.group(1)) == COVERAGE_FLOOR_N
+    assert f"--cov-fail-under={COVERAGE_FLOOR_N}" in text
 
 
 def test_ci_expands_backend_static_checks_to_additional_runtime_modules() -> None:

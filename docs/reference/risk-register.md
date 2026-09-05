@@ -105,6 +105,14 @@
 - 下次复审日期：2026-12-01
 - 退出条件：名册无物理任教时产品面无 `physics-*`；有物理任教时可显式/自动选用附属 skill。
 
+### RISK-COV-REBASELINE-20260905
+- 风险描述：删除 leftover analysis/multimodal 后 coverage 分母变化，原 84% 地板不再是诚实测量。
+- 状态：已关闭
+- 关闭说明：2026-09-05 plan A4 将 CI `--cov-fail-under` 重基到实测 TOTAL 的 floor 85%；禁止 omit 保 84。
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：CI floor 等于删除后实测 `floor(TOTAL)`。
+
 ## 已接受风险
 ### AR-L1
 - 风险描述：`docs/plans/` 含审计修复方案在内的历史计划稿存量大，本轮不删除、不全部归档。

@@ -16,7 +16,6 @@ from .config import (
     TEACHER_SESSIONS_DIR,
     TEACHER_WORKSPACES_DIR,
     UPLOAD_JOB_DIR,
-    UPLOADS_DIR,
 )
 
 _log = logging.getLogger(__name__)
@@ -103,33 +102,6 @@ def upload_job_path(job_id: str, core: Any | None = None) -> Path:
         safe = f"job_{hashlib.sha1(raw.encode('utf-8', errors='ignore')).hexdigest()[:12]}"
     upload_job_dir = _path_from_core(core, "UPLOAD_JOB_DIR", UPLOAD_JOB_DIR)
     return upload_job_dir / safe
-
-
-# ---------------------------------------------------------------------------
-# Multimodal submission paths
-# ---------------------------------------------------------------------------
-
-
-def multimodal_submission_path(submission_id: str, core: Any | None = None) -> Path:
-    uploads_dir = _path_from_core(core, "UPLOADS_DIR", UPLOADS_DIR)
-    safe = safe_fs_id(submission_id, prefix="submission")
-    return uploads_dir / "multimodal_submissions" / safe
-
-
-def multimodal_submission_meta_path(submission_id: str, core: Any | None = None) -> Path:
-    return multimodal_submission_path(submission_id, core=core) / "submission.json"
-
-
-def multimodal_submission_media_dir(submission_id: str, core: Any | None = None) -> Path:
-    return multimodal_submission_path(submission_id, core=core) / "media"
-
-
-def multimodal_submission_derived_dir(submission_id: str, core: Any | None = None) -> Path:
-    return multimodal_submission_path(submission_id, core=core) / "derived"
-
-
-def multimodal_extraction_path(submission_id: str, core: Any | None = None) -> Path:
-    return multimodal_submission_derived_dir(submission_id, core=core) / "extraction.json"
 
 
 # ---------------------------------------------------------------------------

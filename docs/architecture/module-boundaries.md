@@ -53,8 +53,8 @@
   - `services/api/wiring/*` 只保留薄封装；作业编排走 `assignment/application.py`
 
 ### Leftover analysis / survey
-- 考试、问卷、class_report 的 HTTP 路由已卸载，不是现行产品面。
-- 仓库里仍可能残留 analysis 脚本、离线门禁与历史文档（`docs/plans/`、`docs/reference/analysis-*`），它们不是运行时契约，不要按现行入口实现。
+- 考试、问卷、class_report、multimodal/analysis runtime 已从产品面删除，不是现行产品面。
+- `docs/reference/analysis-*` 与 `docs/plans/` 中的分析域文档可作历史留存，不是运行时契约，也不是 CI 要求的产品身份。
 
 ## Frontend Boundaries (Student App)
 

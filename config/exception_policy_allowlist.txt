@@ -2,12 +2,9 @@
 # Format: relative/path.py:*: detail (or an exact relative/path.py:line: detail entry)
 services/api/agent_runtime_guards.py:*: broad-except without policy marker
 services/api/agent_service.py:*: broad-except without policy marker
-services/api/analysis_metrics_service.py:*: broad-except without policy marker
-services/api/analysis_ops_service.py:*: broad-except without policy marker
 services/api/app.py:*: broad-except without policy marker
 services/api/app_core.py:*: broad-except without policy marker
 services/api/app_core.py:*: empty-pass without policy marker
-services/api/artifacts/registry.py:*: empty-pass without policy marker
 services/api/assignment_catalog_service.py:*: broad-except without policy marker
 services/api/assignment_data_service.py:*: broad-except without policy marker
 services/api/assignment_generate_cli_service.py:*: broad-except without policy marker
@@ -44,7 +41,6 @@ services/api/content_catalog_service.py:*: broad-except without policy marker
 services/api/core_services_application.py:*: broad-except without policy marker
 services/api/core_utils.py:*: broad-except without policy marker
 services/api/core_utils.py:*: empty-pass without policy marker
-services/api/domains/manifest_registry.py:*: empty-pass without policy marker
 services/api/fs_atomic.py:*: broad-except without policy marker
 services/api/fs_atomic.py:*: empty-pass without policy marker
 services/api/global_limits.py:*: broad-except without policy marker
@@ -52,16 +48,11 @@ services/api/handlers/chat_handlers.py:*: broad-except without policy marker
 services/api/job_repository.py:*: broad-except without policy marker
 services/api/job_repository.py:*: empty-pass without policy marker
 services/api/llm_agent_tooling_service.py:*: broad-except without policy marker
-services/api/media_extract_service.py:*: broad-except without policy marker
 services/api/mem0_adapter.py:*: broad-except without policy marker
-services/api/multimodal_orchestrator_service.py:*: broad-except without policy marker
-services/api/multimodal_report_service.py:*: broad-except without policy marker
 services/api/paths.py:*: broad-except without policy marker
 services/api/profile_service.py:*: broad-except without policy marker
-services/api/review_queue_service.py:*: broad-except without policy marker
 services/api/routes/chat_route_handlers.py:*: broad-except without policy marker
 services/api/routes/misc_health_routes.py:*: broad-except without policy marker
-services/api/routes/multimodal_routes.py:*: broad-except without policy marker
 services/api/runtime/bootstrap.py:*: broad-except without policy marker
 services/api/runtime/bootstrap.py:*: empty-pass without policy marker
 services/api/runtime/lifecycle.py:*: broad-except without policy marker
@@ -73,11 +64,8 @@ services/api/settings.py:*: broad-except without policy marker
 services/api/skill_auto_router.py:*: broad-except without policy marker
 services/api/skill_registry.py:*: broad-except without policy marker
 services/api/skills/loader_parse_helpers.py:*: broad-except without policy marker
+services/api/skills/product.py:*: broad-except without policy marker
 services/api/skills/spec.py:*: broad-except without policy marker
-services/api/specialist_agents/governor.py:*: broad-except without policy marker
-services/api/specialist_agents/output_schemas.py:*: empty-pass without policy marker
-services/api/specialist_agents/registry.py:*: empty-pass without policy marker
-services/api/specialist_agents/video_homework_analyst.py:*: broad-except without policy marker
 services/api/student_import_service.py:*: broad-except without policy marker
 services/api/student_memory_service.py:*: broad-except without policy marker
 services/api/teacher_assignment_preflight_service.py:*: broad-except without policy marker
