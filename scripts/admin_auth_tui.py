@@ -4,6 +4,7 @@ import argparse
 import getpass
 import json
 import os
+import secrets
 import shlex
 import sys
 import urllib.error
@@ -66,6 +67,63 @@ def _parse_bool_or_any(raw: str) -> Optional[bool]:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     raise ValueError("expected one of: true/false/any")
+
+
+def _encode_multipart(
+    fields: Dict[str, str],
+    files: Dict[str, Tuple[str, bytes]],
+) -> Tuple[bytes, str]:
+    boundary = "----AdminTuiBoundary" + secrets.token_hex(16)
+    chunks: List[bytes] = []
+    for name, value in fields.items():
+        chunks.append(
+            (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                f"{value}\r\n"
+            ).encode("utf-8")
+        )
+    for name, (filename, content) in files.items():
+        header = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+            f"Content-Type: text/csv\r\n\r\n"
+        ).encode("utf-8")
+        chunks.append(header + content + b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def _request_multipart(
+    *,
+    url: str,
+    fields: Dict[str, str],
+    files: Dict[str, Tuple[str, bytes]],
+    bearer_token: Optional[str] = None,
+    timeout_sec: int = 30,
+) -> Tuple[int, Dict[str, Any]]:
+    body, content_type = _encode_multipart(fields, files)
+    headers = {"Accept": "application/json", "Content-Type": content_type}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = urllib.request.Request(url=url, method="POST", data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            status = int(getattr(resp, "status", 200) or 200)
+            data = json.loads(raw) if raw else {}
+            return status, data if isinstance(data, dict) else {"raw": data}
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="ignore")
+        try:
+            data = json.loads(raw) if raw else {}
+        except Exception:
+            data = {"detail": raw}
+        if not isinstance(data, dict):
+            data = {"raw": data}
+        return int(exc.code), data
+    except urllib.error.URLError as exc:
+        return 0, {"detail": f"network_error: {exc.reason}"}
 
 
 def _request_json(
@@ -436,6 +494,8 @@ Commands:
   bulk-move <subject_id> <from> <to> [student_id…]
   rename-class <subject_id> <old> <new>
   enrollments list <subject_id> <class_name>
+  teacher add <teacher_name> [email] [teacher_id]
+  students import <csv_path> [--reset-passwords]
 
 Compatibility aliases:
   1(list) 2(disable prompt) 3(enable prompt) 4(reset auto prompt) 5(reset manual prompt)
@@ -553,6 +613,12 @@ Compatibility aliases:
         }:
             self._cmd_identity(head, tail)
             return True
+        if head == "teacher":
+            self._cmd_teacher_add(tail)
+            return True
+        if head == "students":
+            self._cmd_students_import(tail)
+            return True
 
         print("Unknown command. Type 'h' for help.")
         return True
@@ -622,6 +688,86 @@ Compatibility aliases:
             self._cmd_enrollments(tail)
             return
         print("Unknown identity command. Type 'h' for help.")
+
+    def _cmd_teacher_add(self, tail: List[str]) -> None:
+        action = _normalize_text(tail[0]) if tail else ""
+        if action != "add" or len(tail) < 2:
+            print("Usage: teacher add <teacher_name> [email] [teacher_id]")
+            return
+        teacher_name = tail[1]
+        email = tail[2] if len(tail) >= 3 else ""
+        teacher_id = tail[3] if len(tail) >= 4 else ""
+        payload: Dict[str, Any] = {"teacher_name": teacher_name}
+        if email:
+            payload["email"] = email
+        if teacher_id:
+            payload["teacher_id"] = teacher_id
+        if self.trusted_local:
+            result = self._local_store.create_teacher(
+                teacher_name=teacher_name,
+                email=email or None,
+                teacher_id=teacher_id or None,
+                actor_id=self.local_actor_id,
+                actor_role="admin",
+            )
+        else:
+            status, body = _request_json(
+                method="POST",
+                url=f"{self.base_url}/auth/admin/teacher/create",
+                payload=payload,
+                bearer_token=self.access_token,
+            )
+            result = body if status in {200, 201} else {"ok": False, "error": body.get("detail") or body.get("error") or f"http_{status}"}
+        if result.get("ok") is True:
+            print(f"teacher add ok. teacher_id={result.get('teacher_id')}")
+            temp_password = str(result.get("temp_password") or "")
+            if temp_password:
+                print(f"temp_password={temp_password}")
+            self._refresh_teachers(show_message=False)
+            return
+        print(f"teacher add failed: {result.get('error')}")
+
+    def _cmd_students_import(self, tail: List[str]) -> None:
+        reset = "--reset-passwords" in tail
+        args = [item for item in tail if item != "--reset-passwords"]
+        if not args or _normalize_text(args[0]) != "import" or len(args) < 2:
+            print("Usage: students import <csv_path> [--reset-passwords]")
+            return
+        csv_path = Path(args[1]).expanduser()
+        if not csv_path.is_file():
+            print(f"students import failed: file not found: {csv_path}")
+            return
+        raw = csv_path.read_bytes()
+        if self.trusted_local:
+            from services.api.auth.student_provision_service import import_students
+
+            result = import_students(
+                self._local_store,
+                raw_csv=raw,
+                reset_passwords=reset,
+                actor_id=self.local_actor_id,
+                actor_role="admin",
+            )
+        else:
+            status, body = _request_multipart(
+                url=f"{self.base_url}/auth/admin/students/import",
+                fields={"reset_passwords": "true" if reset else "false"},
+                files={"file": (csv_path.name, raw)},
+                bearer_token=self.access_token,
+            )
+            result = body if status in {200, 201} else {"ok": False, "error": body.get("detail") or body.get("error") or f"http_{status}"}
+        if result.get("ok") is True:
+            print(
+                f"students import ok. created={result.get('created')} updated={result.get('updated')} "
+                "(student_auth only; enroll with roster + enroll-class)"
+            )
+            for item in result.get("items") or []:
+                sid = item.get("student_id")
+                temp_password = item.get("temp_password") or ""
+                extra = f" temp_password={temp_password}" if temp_password else ""
+                print(f"- {sid} {item.get('student_name')} {item.get('class_name')}{extra}")
+            return
+        print(f"students import failed: {result.get('error')}")
 
     def _cmd_subject(self, tail: List[str]) -> None:
         action = _normalize_text(tail[0]) if tail else ""

@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
-from ..api_models import StudentImportRequest, StudentVerifyRequest
+from ..api_models import StudentVerifyRequest
 from ..assignment_process_archive_service import ProcessArchiveError
 from ..auth_service import (
     AuthError,
@@ -36,12 +36,8 @@ def _require_teacher_or_admin() -> None:
 
 def register_student_ops_routes(router: APIRouter, core: Any) -> None:
     @router.post("/student/import")
-    def import_students(req: StudentImportRequest) -> Any:
-        _require_teacher_or_admin()
-        result = core.student_import(req.model_dump())
-        if result.get("error"):
-            raise HTTPException(status_code=400, detail=result["error"])
-        return result
+    def import_students() -> Any:
+        raise HTTPException(status_code=410, detail="gone")
 
     @router.post("/student/verify")
     def verify_student(req: StudentVerifyRequest) -> Any:

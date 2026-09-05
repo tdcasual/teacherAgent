@@ -210,13 +210,6 @@ def import_students_from_responses(
     }
 
 
-def student_import(args: Dict[str, Any], *, deps: StudentImportDeps) -> Dict[str, Any]:
-    source = args.get("source") or "responses_scored"
-    file_path = args.get("file_path")
-    mode = args.get("mode") or "merge"
-    if source not in {"responses_scored", "responses"}:
-        return {"error": f"unsupported source: {source}"}
-    responses_path = resolve_responses_file(file_path, deps=deps)
-    if not responses_path:
-        return {"error": "responses file not found", "file_path": file_path}
-    return import_students_from_responses(responses_path, deps=deps, mode=mode)
+def student_import(_args: Dict[str, Any], *, deps: StudentImportDeps) -> Dict[str, Any]:
+    _ = deps
+    return {"ok": False, "error": "gone"}

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import (
     AdminLoginRequest,
@@ -19,6 +19,7 @@ from ..api_models import (
     TeacherSetPasswordRequest,
     TeacherStudentPasswordResetRequest,
 )
+from ..auth.student_provision_service import MAX_CSV_BYTES, import_students
 from ..auth_registry_service import build_auth_registry_store
 from ..auth_service import AuthError, access_token_ttl_sec, mint_access_token, require_principal
 from .auth_identity_route_handlers import _require_admin_principal, register_identity_admin_routes
@@ -182,6 +183,19 @@ def _raise_admin_teacher_create_result(result: dict[str, Any]) -> dict[str, Any]
     raise HTTPException(status_code=400, detail=error)
 
 
+def _raise_admin_students_import_result(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("ok"):
+        return result
+    error = str(result.get("error") or "invalid_request")
+    raise HTTPException(status_code=400, detail=error)
+
+
+def _truthy_form_flag(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
     @router.post("/auth/admin/teacher/create", status_code=201)
     def auth_admin_teacher_create(req: AdminTeacherCreateRequest) -> Any:
@@ -223,6 +237,22 @@ def _register_admin_teacher_routes(router: APIRouter, core: Any) -> None:
         )
         _raise_not_found(result)
         return result
+
+    @router.post("/auth/admin/students/import")
+    async def auth_admin_students_import(
+        file: UploadFile = File(...),
+        reset_passwords: str = Form("false"),
+    ) -> Any:
+        principal = _require_admin_principal()
+        raw = await file.read(MAX_CSV_BYTES + 1)
+        result = import_students(
+            _build_store(core),
+            raw_csv=raw or b"",
+            reset_passwords=_truthy_form_flag(reset_passwords),
+            actor_id=principal.actor_id,
+            actor_role=principal.role,
+        )
+        return _raise_admin_students_import_result(result)
 
 
 def _register_admin_token_routes(router: APIRouter, core: Any) -> None:

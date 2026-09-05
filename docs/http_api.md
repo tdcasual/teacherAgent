@@ -275,17 +275,17 @@ packs/subjects/<id>/
 ---
 
 ## 学生导入
-### POST `/student/import`
-从成绩 CSV（`file_path` 或 `data/staging` 最新 responses 文件）导入学生名册。
+### POST `/auth/admin/students/import`
+管理员导入名册 CSV，**只写 `student_auth`，不 enroll**。`multipart` 一个文件，上限 2000 行 / 256KB，UTF-8（允许 BOM）。
 
-**请求**
-```json
-{
-  "source": "responses_scored",
-  "file_path": "",
-  "mode": "merge"
-}
-```
+- 表头白名单：必填 `student_name,class_name`；可选 `student_id`；多余列 → 400 `unknown_column`
+- 省略 `student_id` 时生成 `s_` + sha1(normalize(class_name)+'|'+normalize(student_name))[:12]
+- 重导默认不轮换密码；表单字段 `reset_passwords=true` 才会重置
+- 需要管理员 Bearer；`AUTH_REQUIRED=0` 且无 Bearer 仍 401
+- 编班走已有 `POST /auth/admin/roster` 与 `POST /auth/admin/enrollments/enroll-class`
+
+### POST `/student/import`
+已停用（原 exam responses 导入）。一律 **410** `gone`。
 
 ---
 

@@ -23,6 +23,7 @@ def test_misc_routes_build_router():
     assert _has_route(router, "POST", "/auth/teacher/student/reset-passwords")
     assert _has_route(router, "POST", "/auth/admin/login")
     assert _has_route(router, "POST", "/auth/admin/teacher/create")
+    assert _has_route(router, "POST", "/auth/admin/students/import")
     assert _has_route(router, "GET", "/auth/admin/teacher/list")
     assert _has_route(router, "POST", "/auth/admin/teacher/set-disabled")
     assert _has_route(router, "POST", "/auth/admin/teacher/reset-password")

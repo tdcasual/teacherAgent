@@ -370,6 +370,18 @@ class TestRateLimitMiddleware(unittest.TestCase):
         self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
         self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
 
+    def test_admin_provision_import_shares_create_bucket(self):
+        rl_mod._rpm = 100
+        rl_mod._login_rpm = 100
+        rl_mod._provision_rpm = 1
+        call_next = AsyncMock(return_value=_ok_response())
+        create = _make_request(path="/auth/admin/teacher/create", client_host="10.0.0.13")
+        imported = _make_request(path="/auth/admin/students/import", client_host="10.0.0.13")
+
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(imported, call_next)).status_code, 429)
+        self.assertIn("provision:10.0.0.13", rl_mod._buckets)
+
 
 if __name__ == "__main__":
     unittest.main()

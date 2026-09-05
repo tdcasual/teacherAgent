@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react'
 
 import { resolveRuntimeApiBase } from '../../../../shared/apiBase'
-import { readTeacherAccessToken } from '../auth/teacherAuth'
 import { safeLocalStorageGetItem } from '../../utils/storage'
+import AdminEnrollClaimSection from './AdminEnrollClaimSection'
+import AdminStudentImportSection from './AdminStudentImportSection'
+import AdminTempPasswordOnce from './AdminTempPasswordOnce'
+import { adminJsonHeaders, errorDetail, toText } from './adminSchoolApi'
 
 type TeacherAuthItem = {
   teacher_id?: string
@@ -17,6 +20,7 @@ type CreateTeacherResponse = {
   message?: string
   teacher_id?: string
   temp_password?: string
+  detail?: string
 }
 
 type ResetPasswordResponse = {
@@ -24,35 +28,7 @@ type ResetPasswordResponse = {
   error?: string
   message?: string
   temp_password?: string
-}
-
-const toText = (value: unknown): string => String(value ?? '').trim()
-
-function TempPasswordOnce({ password, onCopied }: { password: string; onCopied?: () => void }) {
-  const [copied, setCopied] = useState(false)
-  if (!password) return null
-  return (
-    <div className="grid gap-1.5 rounded-lg border border-border bg-white p-3">
-      <div className="text-xs text-muted">一次性临时密码，请立即复制发给教师。</div>
-      <div className="font-mono text-sm break-all">{password}</div>
-      {copied ? (
-        <div className="text-xs text-muted">已复制</div>
-      ) : (
-        <button
-          type="button"
-          className="ghost justify-start w-fit"
-          onClick={() => {
-            void navigator.clipboard.writeText(password).then(() => {
-              setCopied(true)
-              onCopied?.()
-            })
-          }}
-        >
-          复制一次
-        </button>
-      )}
-    </div>
-  )
+  detail?: string
 }
 
 export default function AdminSchoolPanel() {
@@ -72,18 +48,10 @@ export default function AdminSchoolPanel() {
 
   const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
 
-  const authHeaders = useCallback((): HeadersInit => {
-    const token = readTeacherAccessToken()
-    return {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }
-  }, [])
-
   const refreshList = useCallback(async () => {
     setLoadingList(true)
     try {
-      const res = await fetch(`${apiBase}/auth/admin/teacher/list`, { headers: authHeaders() })
+      const res = await fetch(`${apiBase}/auth/admin/teacher/list`, { headers: adminJsonHeaders() })
       const data = (await res.json()) as { ok?: boolean; items?: TeacherAuthItem[]; detail?: string }
       if (!res.ok) {
         setError(toText(data.detail) || `状态码 ${res.status}`)
@@ -95,7 +63,7 @@ export default function AdminSchoolPanel() {
     } finally {
       setLoadingList(false)
     }
-  }, [apiBase, authHeaders])
+  }, [apiBase])
 
   useEffect(() => {
     void refreshList()
@@ -120,10 +88,10 @@ export default function AdminSchoolPanel() {
       if (teacherId) payload.teacher_id = teacherId
       const res = await fetch(`${apiBase}/auth/admin/teacher/create`, {
         method: 'POST',
-        headers: authHeaders(),
+        headers: adminJsonHeaders(),
         body: JSON.stringify(payload),
       })
-      const data = (await res.json()) as CreateTeacherResponse & { detail?: string }
+      const data = (await res.json()) as CreateTeacherResponse
       if (!res.ok || !data.ok) {
         const code = toText(data.detail || data.error)
         const messages: Record<string, string> = {
@@ -153,7 +121,7 @@ export default function AdminSchoolPanel() {
     setInfo('')
     const res = await fetch(`${apiBase}/auth/admin/teacher/set-disabled`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: adminJsonHeaders(),
       body: JSON.stringify({ target_id: teacherId, is_disabled: isDisabled }),
     })
     const data = (await res.json()) as { ok?: boolean; detail?: string }
@@ -171,12 +139,12 @@ export default function AdminSchoolPanel() {
     setTempPassword('')
     const res = await fetch(`${apiBase}/auth/admin/teacher/reset-password`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: adminJsonHeaders(),
       body: JSON.stringify({ target_id: teacherId }),
     })
-    const data = (await res.json()) as ResetPasswordResponse & { detail?: string }
+    const data = (await res.json()) as ResetPasswordResponse
     if (!res.ok || !data.ok) {
-      setError(toText(data.detail || data.error) || '重置密码失败。')
+      setError(errorDetail(data, '重置密码失败。'))
       return
     }
     setTempPassword(toText(data.temp_password))
@@ -192,7 +160,7 @@ export default function AdminSchoolPanel() {
       <div className="grid gap-6 max-w-[960px]">
         <div className="grid gap-1">
           <div className="text-lg font-semibold">学校管理</div>
-          <div className="text-sm text-muted">创建、列出、禁用教师，并重置临时密码。作业上传仍由教师账号完成。</div>
+          <div className="text-sm text-muted">创建教师、导入学生名册（只建账号），再按教师+学科+班级 enroll。作业上传仍由教师账号完成。</div>
         </div>
 
         <form className="grid gap-3 rounded-2xl border border-border p-4" onSubmit={handleCreate}>
@@ -220,7 +188,7 @@ export default function AdminSchoolPanel() {
           </button>
         </form>
 
-        {tempPassword ? <TempPasswordOnce password={tempPassword} /> : null}
+        {tempPassword ? <AdminTempPasswordOnce password={tempPassword} /> : null}
         {error ? <div className="status err">{error}</div> : null}
         {info ? <div className="status ok">{info}</div> : null}
 
@@ -262,6 +230,9 @@ export default function AdminSchoolPanel() {
             <div className="text-xs text-muted">{loadingList ? '加载中…' : '暂无教师。'}</div>
           )}
         </div>
+
+        <AdminStudentImportSection apiBase={apiBase} />
+        <AdminEnrollClaimSection apiBase={apiBase} teachers={items} />
       </div>
     </section>
   )

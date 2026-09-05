@@ -56,7 +56,9 @@
 ## 管理员能力
 - 重置学生/教师 token。
 - 导出学生/教师 token。
-- 管理教师账号状态（启用/禁用、重置密码）。
+- 管理教师账号状态（启用/禁用、重置密码、创建教师）。
+- 名册 CSV：`POST /auth/admin/students/import` 只写 `student_auth`，不自动 enroll。
+- 编班走 `POST /auth/admin/roster` 与 `POST /auth/admin/enrollments/enroll-class`。
 - TUI 管理入口：`admin_manager`（容器 trusted-local 模式）。
 
 ## 失效与轮换
