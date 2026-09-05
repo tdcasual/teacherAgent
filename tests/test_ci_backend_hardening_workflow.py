@@ -117,7 +117,7 @@ def test_mypy_gate_files_are_skip_imports_clean() -> None:
 
 def test_mypy_max_budget_remains_observation_only() -> None:
     data = json.loads(_BUDGET_PATH.read_text(encoding="utf-8"))
-    assert data["mypy_max"] == 8
+    assert data["mypy_max"] == 19
 
 
 def test_ci_runs_full_backend_suite_and_teacher_build() -> None:

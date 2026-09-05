@@ -7,6 +7,7 @@ import { resolve } from 'path'
 export default defineConfig({
   root: 'apps/student',
   publicDir: '../../public',
+  cacheDir: 'node_modules/.vite-student',
   plugins: [
     tailwindcss(),
     react(),
