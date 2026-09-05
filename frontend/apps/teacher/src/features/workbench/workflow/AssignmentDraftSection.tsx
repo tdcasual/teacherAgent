@@ -26,6 +26,10 @@ export default function AssignmentDraftSection(props: Props) {
     uploadJobInfo && uploadJobInfo.status !== 'done' && uploadJobInfo.status !== 'failed' && !alreadyCreated,
   )
   const missingRequirements = (uploadDraft?.requirements_missing?.length || 0) > 0
+  const hasStemmedQuestion = (uploadDraft?.questions || []).some(
+    (q: AssignmentQuestion) => String(q.stem || '').trim().length > 0,
+  )
+  const missingStem = parseFailed && !hasStemmedQuestion
 
   return (
                 <section id="workflow-assignment-draft-section" className={`mt-3 bg-surface border border-border rounded-[14px] shadow-sm ${draftPanelCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
@@ -96,7 +100,8 @@ export default function AssignmentDraftSection(props: Props) {
                             uploadConfirming ||
                             alreadyCreated ||
                             parseIncomplete ||
-                            missingRequirements
+                            missingRequirements ||
+                            missingStem
                           }
                           title={
                             alreadyCreated
@@ -105,9 +110,11 @@ export default function AssignmentDraftSection(props: Props) {
                                 ? '解析未完成，暂不可创建'
                                 : missingRequirements
                                   ? `请先补全：${formatMissingRequirements(uploadDraft.requirements_missing)}`
-                                  : parseFailed
-                                    ? '解析失败，可手动录入后创建'
-                                    : ''
+                                  : missingStem
+                                    ? '请先录入至少一道题目'
+                                    : parseFailed
+                                      ? '解析失败，可手动录入后创建'
+                                      : ''
                           }
                         >
                           {uploadConfirming

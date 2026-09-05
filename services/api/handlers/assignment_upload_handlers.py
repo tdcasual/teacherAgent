@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from fastapi import HTTPException, UploadFile
@@ -22,7 +23,7 @@ class AssignmentUploadHandlerDeps:
     assignment_upload_draft: Callable[[str], Any]
     assignment_upload_draft_save: Callable[..., Any]
     load_upload_job: Callable[[str], Any]
-    ensure_assignment_upload_confirm_ready: Callable[[Any], Any]
+    ensure_assignment_upload_confirm_ready: Callable[..., Any]
     confirm_assignment_upload: Callable[..., Any]
     upload_job_path: Callable[[str], Any]
 
@@ -106,15 +107,16 @@ async def assignment_upload_confirm(req: UploadConfirmRequest, *, deps: Assignme
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
+    job_dir = deps.upload_job_path(req.job_id)
+    parsed_exists = (Path(job_dir) / "parsed.json").exists()
     try:
-        ready = deps.ensure_assignment_upload_confirm_ready(job)
+        ready = deps.ensure_assignment_upload_confirm_ready(job, parsed_exists=parsed_exists)
     except AssignmentUploadConfirmGateError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     if ready is not None:
         return ready
 
     strict = True if req.strict_requirements is None else bool(req.strict_requirements)
-    job_dir = deps.upload_job_path(req.job_id)
     try:
         return await _maybe_await(
             deps.confirm_assignment_upload(

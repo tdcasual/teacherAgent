@@ -5,20 +5,9 @@ import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
-_log = logging.getLogger(__name__)
+from .fs_atomic import atomic_write_json
 
-BLANK_ASSIGNMENT_REQUIREMENTS: Dict[str, Any] = {
-    "subject": "",
-    "topic": "",
-    "grade_level": "",
-    "class_level": "",
-    "core_concepts": [],
-    "typical_problem": "",
-    "misconceptions": [],
-    "duration_minutes": 0,
-    "preferences": [],
-    "extra_constraints": "",
-}
+_log = logging.getLogger(__name__)
 
 BLANK_ASSIGNMENT_REQUIREMENTS_MISSING = [
     "subject",
@@ -33,6 +22,21 @@ BLANK_ASSIGNMENT_REQUIREMENTS_MISSING = [
 ]
 
 
+def _blank_assignment_requirements() -> Dict[str, Any]:
+    return {
+        "subject": "",
+        "topic": "",
+        "grade_level": "",
+        "class_level": "",
+        "core_concepts": [],
+        "typical_problem": "",
+        "misconceptions": [],
+        "duration_minutes": 0,
+        "preferences": [],
+        "extra_constraints": "",
+    }
+
+
 def build_blank_assignment_parsed(
     *,
     delivery_mode: str = "image",
@@ -40,7 +44,7 @@ def build_blank_assignment_parsed(
 ) -> Dict[str, Any]:
     return {
         "questions": [],
-        "requirements": dict(BLANK_ASSIGNMENT_REQUIREMENTS),
+        "requirements": _blank_assignment_requirements(),
         "missing": list(BLANK_ASSIGNMENT_REQUIREMENTS_MISSING),
         "warnings": [],
         "delivery_mode": delivery_mode or "image",
@@ -58,10 +62,15 @@ def load_or_materialize_assignment_parsed(
 ) -> Dict[str, Any]:
     parsed_path = job_dir / "parsed.json"
     if parsed_path.exists():
-        payload = json.loads(parsed_path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
+        try:
+            payload = json.loads(parsed_path.read_text(encoding="utf-8"))
+        except Exception:
+            _log.warning("corrupt parsed.json in %s", job_dir, exc_info=True)
+            payload = None
+        if isinstance(payload, dict):
+            return payload
     parsed = build_blank_assignment_parsed(delivery_mode=delivery_mode, now_iso=now_iso)
-    parsed_path.write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(parsed_path, parsed)
     return parsed
 
 

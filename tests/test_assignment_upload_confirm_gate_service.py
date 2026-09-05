@@ -27,6 +27,20 @@ class AssignmentUploadConfirmGateServiceTest(unittest.TestCase):
         payload = ensure_assignment_upload_confirm_ready({"status": "done", "assignment_id": "HW_2"})
         self.assertIsNone(payload)
 
+    def test_failed_without_parsed_raises_job_not_ready(self):
+        with self.assertRaises(AssignmentUploadConfirmGateError) as cm:
+            ensure_assignment_upload_confirm_ready({"status": "failed", "error": "no questions parsed"})
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertEqual(cm.exception.detail.get("error"), "job_not_ready")
+        self.assertEqual(cm.exception.detail.get("status"), "failed")
+
+    def test_failed_with_parsed_returns_none(self):
+        payload = ensure_assignment_upload_confirm_ready(
+            {"status": "failed", "error": "no questions parsed"},
+            parsed_exists=True,
+        )
+        self.assertIsNone(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

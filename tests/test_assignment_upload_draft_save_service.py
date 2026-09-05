@@ -131,8 +131,9 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             self.assertNotIn("extra_constraints", parsed.get("missing") or [])
             override = json.loads((job_dir / "draft_override.json").read_text(encoding="utf-8"))
             self.assertEqual(override.get("questions"), [{"stem": "手动题"}])
-            self.assertEqual(writes[-1][1].get("status"), "done")
-            self.assertEqual(writes[-1][1].get("draft_saved"), True)
+            self.assertNotEqual(writes[-1][1].get("status"), "done")
+            self.assertTrue(writes[-1][1].get("draft_saved"))
+            self.assertTrue(writes[-1][1].get("recovered_from_parse_failure"))
 
     def test_existing_parsed_json_is_not_wiped(self):
         with TemporaryDirectory() as td:

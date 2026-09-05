@@ -111,6 +111,49 @@ class AssignmentUploadQueryServiceTest(unittest.TestCase):
             self.assertEqual(result.get("draft", {}).get("assignment_id"), "HW_3")
             self.assertEqual(result.get("draft", {}).get("question_count"), 1)
 
+    def test_failed_draft_without_parsed_raises_not_ready(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            job_dir = root / "uploads" / "assignment_jobs" / "job-4"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps({"job_id": "job-4", "status": "failed", "error": "no questions parsed"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            deps = self._deps(root)
+            with self.assertRaises(AssignmentUploadQueryError) as cm:
+                get_assignment_upload_draft("job-4", deps=deps)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail.get("error"), "job_not_ready")
+
+    def test_failed_draft_with_parsed_returns_draft(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            job_dir = root / "uploads" / "assignment_jobs" / "job-5"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "job_id": "job-5",
+                        "assignment_id": "HW_5",
+                        "status": "failed",
+                        "error": "no questions parsed",
+                        "scope": "public",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "parsed.json").write_text(
+                json.dumps({"questions": [{"stem": "manual"}], "requirements": {"subject": "物理"}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            deps = self._deps(root)
+            result = get_assignment_upload_draft("job-5", deps=deps)
+            self.assertEqual(result.get("ok"), True)
+            self.assertEqual(result.get("draft", {}).get("assignment_id"), "HW_5")
+            self.assertEqual(result.get("draft", {}).get("questions"), [{"stem": "manual"}])
+
 
 if __name__ == "__main__":
     unittest.main()

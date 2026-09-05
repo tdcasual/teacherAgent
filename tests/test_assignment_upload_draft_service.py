@@ -109,6 +109,9 @@ class AssignmentUploadDraftServiceTest(unittest.TestCase):
         self.assertEqual(parsed.get("requirements", {}).get("extra_constraints"), "")
         self.assertEqual(parsed.get("missing"), BLANK_ASSIGNMENT_REQUIREMENTS_MISSING)
         self.assertNotIn("extra_constraints", parsed.get("missing") or [])
+        parsed["requirements"]["core_concepts"].append("mutated")
+        again = build_blank_assignment_parsed(delivery_mode="pdf", now_iso=lambda: "2026-09-05T00:00:01")
+        self.assertEqual(again.get("requirements", {}).get("core_concepts"), [])
 
     def test_load_or_materialize_writes_template_then_keeps_existing(self):
         with TemporaryDirectory() as td:

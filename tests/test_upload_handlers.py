@@ -53,7 +53,7 @@ def _assignment_deps(tmp_path, **overrides):
     def load_upload_job(_job_id):
         return {"job_id": _job_id, "status": "done"}
 
-    def ensure_assignment_upload_confirm_ready(_job):
+    def ensure_assignment_upload_confirm_ready(_job, **_kwargs):
         return None
 
     def confirm_assignment_upload(*_args, **_kwargs):
@@ -133,7 +133,7 @@ async def test_assignment_upload_confirm_not_found(tmp_path):
 
 @pytest.mark.anyio
 async def test_assignment_upload_confirm_returns_ready(tmp_path):
-    def ensure_assignment_upload_confirm_ready(_job):
+    def ensure_assignment_upload_confirm_ready(_job, **_kwargs):
         return {"ok": True}
 
     deps = _assignment_deps(tmp_path, ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready)

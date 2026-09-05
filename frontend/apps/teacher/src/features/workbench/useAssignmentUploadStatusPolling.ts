@@ -111,7 +111,8 @@ export function useAssignmentUploadStatusPolling({
           return data
         })
 
-        if (data.status === 'failed' || data.status === 'confirmed' || data.status === 'created') clearActiveUpload()
+        if (data.status === 'confirmed' || data.status === 'created') clearActiveUpload()
+        if (data.status === 'failed' && !data.draft_saved) clearActiveUpload()
 
         if (['done', 'failed', 'confirmed', 'created'].includes(data.status)) return 'stop' as const
 

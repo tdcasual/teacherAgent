@@ -227,6 +227,19 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     setExamStatusPollNonce,
   } = params
 
+  const uploadAssignmentIdRef = useRef(uploadAssignmentId)
+  const uploadDateRef = useRef(uploadDate)
+  const uploadScopeRef = useRef(uploadScope)
+  const uploadClassNameRef = useRef(uploadClassName)
+  const uploadStudentIdsRef = useRef(uploadStudentIds)
+  const uploadJobInfoRef = useRef(uploadJobInfo)
+  uploadAssignmentIdRef.current = uploadAssignmentId
+  uploadDateRef.current = uploadDate
+  uploadScopeRef.current = uploadScope
+  uploadClassNameRef.current = uploadClassName
+  uploadStudentIdsRef.current = uploadStudentIds
+  uploadJobInfoRef.current = uploadJobInfo
+
   // ---- Workflow indicator (memoised) ----
 
   const assignmentWorkflowIndicator = useMemo<WorkflowIndicator>(() => {
@@ -330,25 +343,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   useEffect(() => {
     const uploadJobStatus = uploadJobInfo?.status
     if (!uploadJobId) return
-    if (uploadJobStatus === 'failed') {
-      setDraftError('')
-      setDraftLoading(false)
-      setUploadDraft((prev) => {
-        if (prev && prev.job_id === uploadJobId) return prev
-        return buildBlankManualAssignmentDraft({
-          jobId: uploadJobId,
-          assignmentId: String(uploadJobInfo?.assignment_id || uploadAssignmentId || ''),
-          date: uploadDate,
-          scope: uploadScope,
-          className: uploadClassName,
-          studentIdsText: uploadStudentIds,
-          deliveryMode: uploadJobInfo?.delivery_mode,
-        })
-      })
-      setDraftPanelCollapsed(false)
-      setQuestionShowCount(20)
-      return
-    }
     if (uploadJobStatus !== 'done' && uploadJobStatus !== 'confirmed') return
     let active = true
     const loadDraft = async () => {
@@ -386,15 +380,84 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     setDraftPanelCollapsed,
     setQuestionShowCount,
     setUploadDraft,
-    uploadAssignmentId,
-    uploadClassName,
-    uploadDate,
     uploadJobId,
-    uploadJobInfo?.assignment_id,
-    uploadJobInfo?.delivery_mode,
     uploadJobInfo?.status,
-    uploadScope,
-    uploadStudentIds,
+  ])
+
+  // ---- Seed or reload draft after a failed parse (form fields read from refs) ----
+
+  useEffect(() => {
+    const uploadJobStatus = uploadJobInfo?.status
+    if (!uploadJobId) return
+    if (uploadJobStatus !== 'failed') return
+    let active = true
+    const seedFailedDraft = async () => {
+      setDraftError('')
+      setDraftLoading(true)
+      try {
+        const res = await fetch(`${apiBase}/assignment/upload/draft?job_id=${encodeURIComponent(uploadJobId)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (!active) return
+          const draft = data?.draft as UploadDraft
+          if (draft && draft.questions) {
+            setUploadDraft(draft)
+            setDraftPanelCollapsed(false)
+            setQuestionShowCount(20)
+            return
+          }
+        }
+        if (!active) return
+        const jobInfo = uploadJobInfoRef.current
+        setUploadDraft((prev) => {
+          if (prev && prev.job_id === uploadJobId) return prev
+          return buildBlankManualAssignmentDraft({
+            jobId: uploadJobId,
+            assignmentId: String(jobInfo?.assignment_id || uploadAssignmentIdRef.current || ''),
+            date: uploadDateRef.current,
+            scope: uploadScopeRef.current,
+            className: uploadClassNameRef.current,
+            studentIdsText: uploadStudentIdsRef.current,
+            deliveryMode: jobInfo?.delivery_mode,
+          })
+        })
+        setDraftPanelCollapsed(false)
+        setQuestionShowCount(20)
+      } catch {
+        if (!active) return
+        const jobInfo = uploadJobInfoRef.current
+        setUploadDraft((prev) => {
+          if (prev && prev.job_id === uploadJobId) return prev
+          return buildBlankManualAssignmentDraft({
+            jobId: uploadJobId,
+            assignmentId: String(jobInfo?.assignment_id || uploadAssignmentIdRef.current || ''),
+            date: uploadDateRef.current,
+            scope: uploadScopeRef.current,
+            className: uploadClassNameRef.current,
+            studentIdsText: uploadStudentIdsRef.current,
+            deliveryMode: jobInfo?.delivery_mode,
+          })
+        })
+        setDraftPanelCollapsed(false)
+        setQuestionShowCount(20)
+      } finally {
+        if (!active) return
+        setDraftLoading(false)
+      }
+    }
+    void seedFailedDraft()
+    return () => {
+      active = false
+    }
+  }, [
+    apiBase,
+    setDraftError,
+    setDraftLoading,
+    setDraftPanelCollapsed,
+    setQuestionShowCount,
+    setUploadDraft,
+    uploadJobId,
+    uploadJobInfo?.status,
   ])
 
   // ---- Sync misconceptions text from draft ----
@@ -585,11 +648,15 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
               : prev,
           )
         }
-        setUploadJobInfo((prev) => {
-          if (!prev) return prev
-          if (prev.status !== 'failed') return { ...prev, draft_saved: true }
-          return { ...prev, status: 'done', step: 'done', progress: 100, draft_saved: true }
-        })
+        setUploadJobInfo((prev) => (prev ? { ...prev, draft_saved: true } : prev))
+        try {
+          safeLocalStorageSetItem(
+            'teacherActiveUpload',
+            JSON.stringify({ type: 'assignment', job_id: draft.job_id }),
+          )
+        } catch {
+          // ignore
+        }
         const msg = data?.message || '草稿已保存。'
         setDraftActionStatus(msg)
         setUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}${msg}`)

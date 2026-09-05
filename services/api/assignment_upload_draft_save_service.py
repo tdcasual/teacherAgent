@@ -89,10 +89,7 @@ def save_assignment_upload_draft(
         "draft_saved": True,
     }
     if job.get("status") == "failed":
-        # Recover failed OCR/LLM parse so confirm can apply the 8-point gate.
-        job_updates["status"] = "done"
-        job_updates["step"] = "done"
-        job_updates["progress"] = 100
+        job_updates["recovered_from_parse_failure"] = True
     deps.write_upload_job(job_id, job_updates)
 
     return {

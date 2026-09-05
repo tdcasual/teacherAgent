@@ -49,14 +49,16 @@ def get_assignment_upload_draft(job_id: str, *, deps: AssignmentUploadQueryDeps)
     except AuthError as exc:
         raise AssignmentUploadQueryError(exc.status_code, exc.detail)
 
-    if job.get("status") not in {"done", "confirmed"}:
+    job_dir = deps.upload_job_path(job_id)
+    parsed_path = job_dir / "parsed.json"
+    status = job.get("status")
+    recovered_failed = status == "failed" and parsed_path.exists()
+    if status not in {"done", "confirmed"} and not recovered_failed:
         raise AssignmentUploadQueryError(
             400,
             deps.assignment_upload_not_ready_detail(job, "解析尚未完成，暂无法打开草稿。"),
         )
 
-    job_dir = deps.upload_job_path(job_id)
-    parsed_path = job_dir / "parsed.json"
     if not parsed_path.exists():
         raise AssignmentUploadQueryError(400, "parsed result missing")
     parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
