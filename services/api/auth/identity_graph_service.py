@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 from ..config import APP_ROOT
 from ..core_utils import normalize
@@ -28,6 +29,20 @@ def _now_iso() -> str:
 
 def _text(value: Any) -> str:
     return str(value or "").strip()
+
+
+@contextmanager
+def _borrow_conn(
+    store: Any, conn: Optional[sqlite3.Connection] = None
+) -> Iterator[sqlite3.Connection]:
+    if conn is not None:
+        yield conn
+        return
+    owned = store._connect()
+    try:
+        yield owned
+    finally:
+        owned.close()
 
 
 def _fail(error: str, **extra: Any) -> Dict[str, Any]:
@@ -761,6 +776,7 @@ def list_enrollment_student_ids(
     teacher_id: str,
     subject_id: str,
     class_name: Optional[str] = None,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> List[str]:
     tid = _text(teacher_id)
     sid = _text(subject_id)
@@ -774,18 +790,22 @@ def list_enrollment_student_ids(
         sql += " AND class_name = ?"
         params.append(class_text)
     sql += " ORDER BY student_id"
-    with store._connect() as conn:
-        rows = conn.execute(sql, params).fetchall()
+    with _borrow_conn(store, conn) as used:
+        rows = used.execute(sql, params).fetchall()
     return [_text(row["student_id"]) for row in rows if _text(row["student_id"])]
 
 
 def list_roster_class_names(
-    store: Any, *, teacher_id: str, subject_id: str
+    store: Any,
+    *,
+    teacher_id: str,
+    subject_id: str,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> List[str]:
     tid = _text(teacher_id)
     sid = _text(subject_id)
-    with store._connect() as conn:
-        rows = conn.execute(
+    with _borrow_conn(store, conn) as used:
+        rows = used.execute(
             (
                 "SELECT class_name FROM teacher_roster "
                 "WHERE teacher_id = ? AND subject_id = ? ORDER BY class_name"
@@ -802,6 +822,7 @@ def student_enrolled(
     teacher_id: str,
     subject_id: str = "",
     class_name: str = "",
+    conn: Optional[sqlite3.Connection] = None,
 ) -> bool:
     sid = _text(student_id)
     tid = _text(teacher_id)
@@ -815,8 +836,8 @@ def student_enrolled(
     if class_text:
         sql += " AND class_name = ?"
         params.append(class_text)
-    with store._connect() as conn:
-        row = conn.execute(sql, params).fetchone()
+    with _borrow_conn(store, conn) as used:
+        row = used.execute(sql, params).fetchone()
     return row is not None
 
 
@@ -828,6 +849,7 @@ def resolve_expected_students(
     student_ids: Iterable[str],
     teacher_id: str,
     subject_id: str,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
     tid = _text(teacher_id)
     sid = _text(subject_id)
@@ -838,21 +860,29 @@ def resolve_expected_students(
         return _fail("roster_required")
     if scope_val == "student":
         return _resolve_student_scope(
-            store, teacher_id=tid, subject_id=sid, student_ids=requested
+            store, teacher_id=tid, subject_id=sid, student_ids=requested, conn=conn
         )
     if scope_val == "class":
         return _resolve_class_scope(
-            store, teacher_id=tid, subject_id=sid, class_name=class_text
+            store, teacher_id=tid, subject_id=sid, class_name=class_text, conn=conn
         )
-    return _resolve_public_scope(store, teacher_id=tid, subject_id=sid)
+    return _resolve_public_scope(store, teacher_id=tid, subject_id=sid, conn=conn)
 
 
-def _resolve_public_scope(store: Any, *, teacher_id: str, subject_id: str) -> Dict[str, Any]:
-    classes = list_roster_class_names(store, teacher_id=teacher_id, subject_id=subject_id)
+def _resolve_public_scope(
+    store: Any,
+    *,
+    teacher_id: str,
+    subject_id: str,
+    conn: Optional[sqlite3.Connection] = None,
+) -> Dict[str, Any]:
+    classes = list_roster_class_names(
+        store, teacher_id=teacher_id, subject_id=subject_id, conn=conn
+    )
     if not classes:
         return _fail("roster_required")
     items = list_enrollment_student_ids(
-        store, teacher_id=teacher_id, subject_id=subject_id
+        store, teacher_id=teacher_id, subject_id=subject_id, conn=conn
     )
     if not items:
         return _fail("enrollment_empty")
@@ -860,18 +890,27 @@ def _resolve_public_scope(store: Any, *, teacher_id: str, subject_id: str) -> Di
 
 
 def _resolve_class_scope(
-    store: Any, *, teacher_id: str, subject_id: str, class_name: str
+    store: Any,
+    *,
+    teacher_id: str,
+    subject_id: str,
+    class_name: str,
+    conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
     if not class_name:
         return _fail("missing_class_name")
-    with store._connect() as conn:
+    with _borrow_conn(store, conn) as used:
         owner_error = _require_owner(
-            conn, teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+            used, teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
         )
         if owner_error:
             return _fail(owner_error)
     items = list_enrollment_student_ids(
-        store, teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+        store,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+        class_name=class_name,
+        conn=conn,
     )
     if not items:
         return _fail("enrollment_empty")
@@ -879,9 +918,16 @@ def _resolve_class_scope(
 
 
 def _resolve_student_scope(
-    store: Any, *, teacher_id: str, subject_id: str, student_ids: Sequence[str]
+    store: Any,
+    *,
+    teacher_id: str,
+    subject_id: str,
+    student_ids: Sequence[str],
+    conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
-    classes = list_roster_class_names(store, teacher_id=teacher_id, subject_id=subject_id)
+    classes = list_roster_class_names(
+        store, teacher_id=teacher_id, subject_id=subject_id, conn=conn
+    )
     if not classes:
         return _fail("roster_required")
     if not student_ids:
@@ -890,7 +936,11 @@ def _resolve_student_scope(
         sid
         for sid in student_ids
         if not student_enrolled(
-            store, student_id=sid, teacher_id=teacher_id, subject_id=subject_id
+            store,
+            student_id=sid,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            conn=conn,
         )
     ]
     if missing:
@@ -1083,6 +1133,7 @@ class IdentityGraphMixin:
         student_ids: Sequence[str],
         teacher_id: str,
         subject_id: str,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> Dict[str, Any]:
         return resolve_expected_students(
             self,
@@ -1091,6 +1142,7 @@ class IdentityGraphMixin:
             student_ids=student_ids,
             teacher_id=teacher_id,
             subject_id=subject_id,
+            conn=conn,
         )
 
 

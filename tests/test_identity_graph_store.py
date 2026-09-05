@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -352,3 +353,39 @@ def test_bulk_move_and_rename_class(tmp_path: Path) -> None:
     }
     assert "高三2501班" in roster_classes
     assert "高二2404班" not in roster_classes
+
+
+def test_resolve_expected_students_reuses_provided_conn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from services.api.auth.identity_graph_service import resolve_expected_students
+
+    store = _store(tmp_path)
+    _add_teacher(store)
+    _add_student(store, "S001", "高二2403班")
+    store.add_roster(teacher_id="t_zhang", subject_id="physics", class_name="高二2403班")
+    store.enroll_class(teacher_id="t_zhang", subject_id="physics", class_name="高二2403班")
+    calls = {"n": 0}
+    original = AuthRegistryStore._connect
+
+    def _counting(self: AuthRegistryStore) -> sqlite3.Connection:
+        calls["n"] += 1
+        return original(self)
+
+    monkeypatch.setattr(AuthRegistryStore, "_connect", _counting)
+    conn = store._connect()
+    try:
+        result = resolve_expected_students(
+            store,
+            scope="class",
+            class_name="高二2403班",
+            student_ids=[],
+            teacher_id="t_zhang",
+            subject_id="physics",
+            conn=conn,
+        )
+    finally:
+        conn.close()
+    assert result.get("ok") is True
+    assert result.get("items") == ["S001"]
+    assert calls["n"] == 1

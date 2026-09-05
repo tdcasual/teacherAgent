@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from services.api.assignment.application import AssignmentAccessError, require_assignment_access
 from services.api.assignment.deps import AssignmentAccessDeps
+from services.api.assignment.store import connect, ensure, get_assignment
 from services.api.assignment.visibility import (
     effective_visibility_status,
     student_can_read_assignment,
 )
+from services.api.assignment_student_list_service import (
+    StudentAssignmentListDeps,
+    list_assignments_for_student,
+)
+from services.api.assignment_upload_confirm_service import (
+    AssignmentUploadConfirmDeps,
+    confirm_assignment_upload,
+)
 from services.api.auth_service import AuthPrincipal
+from services.api.settings import default_teacher_id
 
 _MISSING_VIS_META = {"teacher_id": "t_zhang", "scope": "public"}
 
@@ -161,3 +172,165 @@ def test_student_cannot_read_draft_even_on_snapshot(monkeypatch, tmp_path) -> No
             ),
         )
     assert exc.value.status_code == 403
+
+
+_TODAY = "2026-08-28"
+
+
+def _write_assignment_meta(data_dir: Path, assignment_id: str, meta: dict) -> Path:
+    folder = data_dir / "assignments" / assignment_id
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = {"assignment_id": assignment_id, **meta}
+    (folder / "meta.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return folder
+
+
+def _published_meta(**overrides: object) -> dict:
+    payload: dict = {
+        "teacher_id": "t_zhang",
+        "subject_id": "physics",
+        "pack_id": "physics",
+        "visibility_status": "published",
+        "scope": "public",
+        "class_name": "",
+        "expected_students": ["S1"],
+        "date": _TODAY,
+        "due_at": "2026-08-29T23:59:59",
+        "completion_policy": {"version": 2, "requires_submission": True},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _list_today(data_dir: Path, student_id: str = "S1") -> list[dict]:
+    deps = StudentAssignmentListDeps(
+        data_dir=data_dir,
+        load_assignment_meta=lambda folder: json.loads((folder / "meta.json").read_text(encoding="utf-8")),
+        student_enrolled=lambda *_args, **_kwargs: True,
+        list_submission_attempts=lambda *_args, **_kwargs: [],
+        lookback_days=14,
+    )
+    return list_assignments_for_student(student_id=student_id, date_str=_TODAY, deps=deps)
+
+
+def _confirm_deps(data_dir: Path) -> AssignmentUploadConfirmDeps:
+    def _write_json(path: Path, payload: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    return AssignmentUploadConfirmDeps(
+        data_dir=data_dir,
+        now_iso=lambda: "2026-08-28T12:00:00",
+        discussion_complete_marker="[[discussion_complete]]",
+        write_upload_job=lambda _job_id, updates: updates,
+        merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
+        compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+        write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
+        optional_assignment_date=lambda value: str(value).strip() if str(value or "").strip() else None,
+        save_assignment_requirements=lambda *_args, **_kwargs: None,
+        parse_ids_value=lambda value: value if isinstance(value, list) else [],
+        resolve_scope=lambda scope, _student_ids, _class_name: str(scope or "") or "public",
+        normalize_due_at=lambda value: str(value or ""),
+        compute_expected_students=lambda *_args, **_kwargs: ["S1"],
+        atomic_write_json=_write_json,
+        copy2=lambda src, dst: dst.write_bytes(src.read_bytes()) if src.exists() else None,
+    )
+
+
+def _prepare_confirm_job(root: Path, job_id: str = "job-heal") -> Path:
+    job_dir = root / "uploads" / "assignment_jobs" / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "parsed.json").write_text(
+        json.dumps(
+            {
+                "questions": [{"stem": "x"}],
+                "requirements": {"subject": "物理"},
+                "missing": [],
+                "warnings": [],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return job_dir
+
+
+def test_json_only_published_is_visible_after_one_shot_migrate(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    _write_assignment_meta(data_dir, "HW_LEGACY", _published_meta(title="遗产作业"))
+    items = _list_today(data_dir)
+    assert [item["assignment_id"] for item in items] == ["HW_LEGACY"]
+
+
+def test_crash_orphan_sql_miss_stays_hidden_after_ensure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEFAULT_TEACHER_ID", "teacher")
+    data_dir = tmp_path / "data"
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+    finally:
+        conn.close()
+    _write_assignment_meta(data_dir, "HW_CRASH", _published_meta(title="COMMIT失败孤儿"))
+    assert _list_today(data_dir) == []
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+        row = get_assignment(conn, "HW_CRASH")
+    finally:
+        conn.close()
+    assert row is None
+    assert _list_today(data_dir) == []
+
+
+def test_heal_upsert_makes_crash_orphan_visible_to_students(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+    finally:
+        conn.close()
+    _write_assignment_meta(data_dir, "HW_CRASH", _published_meta(title="待heal"))
+    assert _list_today(data_dir) == []
+    job_dir = _prepare_confirm_job(tmp_path)
+    result = confirm_assignment_upload(
+        "job-heal",
+        {
+            "assignment_id": "HW_CRASH",
+            "status": "done",
+            "teacher_id": "t_zhang",
+            "subject_id": "physics",
+            "scope": "public",
+        },
+        job_dir,
+        requirements_override=None,
+        strict_requirements=True,
+        deps=_confirm_deps(data_dir),
+    )
+    assert result.get("ok") is True
+    assert result.get("status") == "confirmed"
+    items = _list_today(data_dir)
+    assert [item["assignment_id"] for item in items] == ["HW_CRASH"]
+
+
+def test_missing_teacher_id_migrates_to_orphan_draft_not_default_teacher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEFAULT_TEACHER_ID", "teacher")
+    data_dir = tmp_path / "data"
+    _write_assignment_meta(
+        data_dir,
+        "HW_ORPHAN",
+        _published_meta(teacher_id="", title="无教师"),
+    )
+    assert _list_today(data_dir) == []
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+        row = get_assignment(conn, "HW_ORPHAN")
+    finally:
+        conn.close()
+    assert row is not None
+    assert str(row["visibility_status"]) == "orphan_draft"
+    assert str(row["teacher_id"] or "") == ""
+    assert str(row["teacher_id"] or "") != default_teacher_id()
+    assert str(row["teacher_id"] or "") != "teacher"

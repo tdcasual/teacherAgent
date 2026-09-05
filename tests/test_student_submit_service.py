@@ -141,6 +141,24 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             "HW_1", "S1", load_meta=_load_meta, student_enrolled=lambda *_a, **_k: True
         )
 
+        with self.assertRaises(StudentSubmitError) as sql_miss:
+            authorize_student_submit_assignment(
+                "HW_1",
+                "S1",
+                load_meta=_load_meta,
+                student_enrolled=lambda *_a, **_k: True,
+                is_sql_published=lambda _aid: False,
+            )
+        self.assertEqual(sql_miss.exception.detail, "forbidden_assignment_scope")
+
+        authorize_student_submit_assignment(
+            "HW_1",
+            "S1",
+            load_meta=_load_meta,
+            student_enrolled=lambda *_a, **_k: True,
+            is_sql_published=lambda _aid: True,
+        )
+
     async def test_submit_requires_assignment_id(self):
         with TemporaryDirectory() as td:
             captured = {}

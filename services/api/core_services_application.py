@@ -221,6 +221,7 @@ def compute_expected_students(
     teacher_id: str = "",
     subject_id: str = "",
     data_dir: Optional[Path] = None,
+    conn: Any = None,
 ) -> List[str]:
     from .auth.identity_graph_service import ExpectedStudentsError
     from .auth_registry_service import build_auth_registry_store
@@ -233,6 +234,7 @@ def compute_expected_students(
         student_ids=student_ids,
         teacher_id=teacher_id,
         subject_id=subject_id,
+        conn=conn,
     )
     if not result.get("ok"):
         raise ExpectedStudentsError(str(result.get("error") or "roster_required"))

@@ -18,10 +18,12 @@ import logging
 import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 from services.api.runtime import queue_runtime
 
+from ..assignment.store import assignment_is_sql_published
 from ..assignment_process_archive_service import (
     AssignmentProcessArchiveDeps,
     trigger_on_submit,
@@ -43,6 +45,10 @@ from ..student_submit_service import StudentSubmitDeps, authorize_student_submit
 from . import get_app_core as _app_core
 
 _log = logging.getLogger(__name__)
+
+
+def _assignment_is_sql_published(assignment_id: str, data_dir: Path) -> bool:
+    return assignment_is_sql_published(data_dir, assignment_id)
 
 
 def _load_assignment_teacher_id(assignment_id: str, core) -> str | None:
@@ -179,6 +185,7 @@ def _student_submit_deps(core=None):
             student_enrolled=lambda sid, tid, sub, class_name="": student_currently_enrolled(
                 sid, tid, sub, data_dir=_ac.DATA_DIR, class_name=class_name
             ),
+            is_sql_published=lambda aid: _assignment_is_sql_published(aid, _ac.DATA_DIR),
         ),
     )
 

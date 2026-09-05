@@ -58,6 +58,7 @@ def authorize_student_submit_assignment(
     *,
     load_meta: Callable[[str], Optional[Dict[str, Any]]],
     student_enrolled: Callable[..., bool],
+    is_sql_published: Optional[Callable[[str], bool]] = None,
 ) -> None:
     from .assignment.visibility import (
         assignment_owner_id,
@@ -68,7 +69,12 @@ def authorize_student_submit_assignment(
     meta = load_meta(assignment_id)
     if not isinstance(meta, dict) or not meta:
         raise StudentSubmitError(404, "assignment not found")
-    if effective_visibility_status(meta) != "published":
+    published = (
+        bool(is_sql_published(assignment_id))
+        if is_sql_published is not None
+        else effective_visibility_status(meta) == "published"
+    )
+    if not published:
         raise StudentSubmitError(403, "forbidden_assignment_scope")
     if student_id not in snapshot_student_ids(meta):
         raise StudentSubmitError(403, "forbidden_assignment_scope")

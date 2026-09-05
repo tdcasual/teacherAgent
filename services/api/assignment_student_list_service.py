@@ -7,6 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
+from .assignment.store import load_published_ids
 from .assignment.visibility import assignment_owner_id, effective_visibility_status
 from .auth.identity_graph_service import student_enrolled as _student_enrolled
 from .auth_registry_service import build_auth_registry_store
@@ -198,7 +199,11 @@ def _today_item(
     student_id: str,
     today: date,
     deps: StudentAssignmentListDeps,
+    published_ids: set[str],
 ) -> Optional[Dict[str, Any]]:
+    assignment_id = str(meta.get("assignment_id") or folder.name)
+    if assignment_id not in published_ids:
+        return None
     vis = effective_visibility_status(meta)
     teacher_id, subject_id = _owner_and_subject(meta)
     if vis != "published" or not teacher_id or not subject_id:
@@ -221,7 +226,6 @@ def _today_item(
         lookback_days=int(deps.lookback_days),
     ):
         return None
-    assignment_id = str(meta.get("assignment_id") or folder.name)
     return {
         "assignment_id": assignment_id,
         "teacher_id": teacher_id,
@@ -253,6 +257,7 @@ def list_assignments_for_student(
     sid = str(student_id or "").strip()
     if not sid:
         return []
+    published_ids = load_published_ids(deps.data_dir)
     for folder in _iter_assignment_folders(deps.data_dir):
         try:
             meta = deps.load_assignment_meta(folder)
@@ -261,7 +266,14 @@ def list_assignments_for_student(
             continue
         if not isinstance(meta, dict):
             continue
-        item = _today_item(folder, meta, student_id=sid, today=today, deps=deps)
+        item = _today_item(
+            folder,
+            meta,
+            student_id=sid,
+            today=today,
+            deps=deps,
+            published_ids=published_ids,
+        )
         if item is not None:
             items.append(item)
     items.sort(key=_today_sort_key)

@@ -294,6 +294,7 @@ def _bound_compute_expected_students(core: Any) -> Any:
         student_ids: list[str],
         teacher_id: str = "",
         subject_id: str = "",
+        conn: Any = None,
     ) -> list[str]:
         return core.compute_expected_students(
             scope,
@@ -302,6 +303,7 @@ def _bound_compute_expected_students(core: Any) -> Any:
             teacher_id=teacher_id,
             subject_id=subject_id,
             data_dir=core.DATA_DIR,
+            conn=conn,
         )
 
     return _compute
