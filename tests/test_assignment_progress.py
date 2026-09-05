@@ -730,8 +730,9 @@ class AssignmentProgressTest(unittest.TestCase):
             tmp = Path(td)
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
-                self.assertEqual(client.get("/assignment/%2e%2e").status_code, 404)
-                self.assertEqual(client.get("/assignment/%2e%2e/progress").status_code, 404)
+                # Fail-closed auth may 401 before the path is treated as missing.
+                self.assertIn(client.get("/assignment/%2e%2e").status_code, (401, 404))
+                self.assertIn(client.get("/assignment/%2e%2e/progress").status_code, (401, 404))
 
 
 if __name__ == "__main__":
