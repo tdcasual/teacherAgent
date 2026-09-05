@@ -3,9 +3,10 @@
 - 适用角色：管理员
 - 前置条件：可进入教师 SPA 管理员登录，或进入 API 容器 shell
 - 最后验证日期：2026-09-05
+- 主路径：Web「学校管理」（`AdminSchoolPanel`）；TUI 是逃生舱
 
 ## 教师 SPA 学校管理
-管理员用 `POST /auth/admin/login` 进入教师端后打开「学校管理」宽面板（不是 344px 教师抽屉）：
+管理员用 `POST /auth/admin/login` 进入教师端后打开「学校管理」宽面板（`AdminSchoolPanel`，不是 344px 教师抽屉）：
 
 1. 创建教师，复制一次性临时密码发给老师。
 2. 上传名册 CSV（`student_name,class_name`，可选 `student_id`）。这只创建/更新 `student_auth`，**不会自动 enroll**。

@@ -40,6 +40,7 @@
 - 认证与令牌模型：`docs/reference/auth-and-token-model.md`
 - 风险与接受清单：`docs/reference/risk-register.md`
 - 历史 plan 迁移映射：`docs/reference/plan-migration-map.md`
+- 历史 plan 归档索引：`docs/plans/ARCHIVE.md`
 - 质量加固演进说明：`docs/explain/backend-quality-hardening-overview.md`
 - 上传与资源限额基线：`docs/reference/upload-resource-guardrails.md`
 - 锁与幂等处理说明：`docs/explain/locking-and-idempotency-rationale.md`
@@ -47,11 +48,5 @@
 
 ## 设计与演进
 - **当前权威产品设计（作业内核 / 删除考试）**：`docs/plans/2026-08-28-assignment-core-product-design.md`
-- **当前权威修复方案（2026-08-26 审计）**：`docs/plans/2026-08-26-audit-remediation-design.md`
-- `docs/plans/` 其余文件是历史设计与实施稿，**不是**运行时契约。稳定结论以 `docs/reference/`、`docs/explain/`、`docs/operations/` 为准；提炼状态见 `docs/reference/plan-migration-map.md`。
-- 历史设计与实现文档：`docs/plans/`
-
-- B/C 演进实施计划：`docs/plans/2026-03-07-agent-system-bc-evolution-implementation-plan.md`
-- Agent 系统优先级优化计划：`docs/plans/2026-03-07-agent-system-priority-optimization-plan.md`
-- Agent 设计评审：`docs/plans/2026-03-08-agent-design-review-and-optimization-design.md`
-- Agent 优化实施计划：`docs/plans/2026-03-08-agent-design-optimization-implementation-plan.md`
+- **审计修复方案（2026-08-26，历史权威）**：`docs/plans/2026-08-26-audit-remediation-design.md`
+- **当前下一阶段计划（2026-09-05 审计后）**：`docs/plans/2026-09-05-next-phase-after-audit-design.md`
