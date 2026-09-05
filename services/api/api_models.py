@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class ChatMessage(BaseModel):
@@ -285,102 +285,4 @@ class TeacherModelConfigUpdateRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
-
-
-class SurveyWebhookAckResponse(BaseModel):
-    ok: bool = True
-    job_id: str
-    status: str
-    accepted_at: Optional[str] = None
-
-
-class SurveyReportSummary(BaseModel):
-    report_id: str
-    teacher_id: str
-    class_name: Optional[str] = None
-    status: str
-    confidence: Optional[float] = None
-    summary: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-
-class SurveyReportDetail(BaseModel):
-    report: SurveyReportSummary
-    analysis_artifact: Dict[str, Any]
-    bundle_meta: Dict[str, Any]
-    review_required: bool = False
-
-
-class SurveyReportRerunRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class AnalysisReportRerunRequest(BaseModel):
-    teacher_id: str
-    domain: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class AnalysisReportBulkRerunRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    teacher_id: str
-    report_ids: List[str]
-    domain: Optional[str] = None
-    reason: Optional[str] = None
-
-    @field_validator('report_ids')
-    @classmethod
-    def _normalize_report_ids(cls, value: List[str]) -> List[str]:
-        normalized = [str(item or '').strip() for item in value if str(item or '').strip()]
-        if not normalized:
-            raise ValueError('report_ids must not be empty')
-        if len(normalized) > 20:
-            raise ValueError('report_ids must not exceed 20 items')
-        deduped: List[str] = []
-        seen: set[str] = set()
-        for item in normalized:
-            if item in seen:
-                continue
-            seen.add(item)
-            deduped.append(item)
-        return deduped
-
-
-class AnalysisReviewQueueActionRequest(BaseModel):
-    teacher_id: str
-    domain: Optional[str] = None
-    action: str
-    reviewer_id: Optional[str] = None
-    operator_note: Optional[str] = None
-
-
-class SurveyReviewQueueItemSummary(BaseModel):
-    report_id: str
-    teacher_id: str
-    reason: str
-    confidence: Optional[float] = None
-    created_at: Optional[str] = None
-
-
-class AnalysisOpsSummaryResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    top_failure_reason: Optional[str] = None
-    top_review_reason: Optional[str] = None
-    needs_attention: bool = False
-
-
-class AnalysisOpsSnapshotResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    generated_at: Optional[str] = None
-    window_sec: int
-    workflow_routing: Dict[str, Any] = Field(default_factory=dict)
-    runtime_metrics: Dict[str, Any] = Field(default_factory=dict)
-    review_feedback: Dict[str, Any] = Field(default_factory=dict)
-    replay_compare: Dict[str, Any] = Field(default_factory=dict)
-    ops_summary: AnalysisOpsSummaryResponse = Field(default_factory=AnalysisOpsSummaryResponse)
 

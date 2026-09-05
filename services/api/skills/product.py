@@ -44,7 +44,7 @@ def affiliate_skill_ids_for_subjects(
             continue
         try:
             pack = load_pack(sid)
-        except Exception:
+        except Exception:  # policy: allowed-broad-except
             continue
         for skill_id in getattr(pack, "skill_affiliates", ()) or ():
             text = str(skill_id or "").strip()
@@ -64,7 +64,7 @@ def extra_skill_ids_for_teacher(
         return frozenset()
     try:
         payload = list_roster(teacher_id=tid) or {}
-    except Exception:
+    except Exception:  # policy: allowed-broad-except
         return frozenset()
     items = payload.get("items") if isinstance(payload, dict) else None
     subjects = [

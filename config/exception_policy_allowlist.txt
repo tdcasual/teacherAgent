@@ -64,7 +64,6 @@ services/api/settings.py:*: broad-except without policy marker
 services/api/skill_auto_router.py:*: broad-except without policy marker
 services/api/skill_registry.py:*: broad-except without policy marker
 services/api/skills/loader_parse_helpers.py:*: broad-except without policy marker
-services/api/skills/product.py:*: broad-except without policy marker
 services/api/skills/spec.py:*: broad-except without policy marker
 services/api/student_import_service.py:*: broad-except without policy marker
 services/api/student_memory_service.py:*: broad-except without policy marker

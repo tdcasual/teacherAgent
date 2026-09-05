@@ -9,7 +9,7 @@
 | 产品 | 单校作业产品（teacher / student / admin）；考试另立项目 |
 | 仓库 | `/home/tdcasual/codework/teacherAgent` |
 | 权威副本 | `docs/plans/2026-08-28-assignment-core-product-design.md` |
-| 治理约束 | `CONTRIBUTING.md` L/M/H；M/H 必须 TDD；`pytest --cov=services/api --cov-fail-under=84` 只棘轮不降 |
+| 治理约束 | `CONTRIBUTING.md` L/M/H；M/H 必须 TDD；`pytest --cov=services/api --cov-fail-under=85`（2026-09-05 plan A4 将数字地板从 84 重基为诚实 N=85；只棘轮不降） |
 | 既有约束（沿用） | fail-closed；Bearer not Cookie；MCP sidecar 保留但剥掉 exam tools；禁止 git filter-repo；prod backup profile 默认关（`docker-compose.yml` `profiles: ["backup"]`）；本波不迁 AES-GCM |
 
 ---
@@ -56,7 +56,7 @@ Owner 已锁定：本仓库只做作业产品；考试未来另立项目。继�
 4. 学生今日是 **按 subject/teacher 的列表**，空态文案「老师尚未布置」，永不「生成任务」。
 5. 完成默认 = 已提交；官方成绩 = `grade_submission.py` 路径 + 老师覆盖；聊天评语须老师「采纳为评语」才进入成绩记录。
 6. 学科以 plugin pack 接入；缺失 pack 用 **generic**，禁止静默 physics fallback。
-7. 覆盖率地板 84%；M/H 变更 TDD；fail-closed；Bearer。
+7. 覆盖率地板 85%（2026-09-05 plan A4 重基，见 D10）；M/H 变更 TDD；fail-closed；Bearer。
 
 ### Non-Goals（本波明确不做）
 

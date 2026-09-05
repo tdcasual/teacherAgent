@@ -75,6 +75,26 @@ def test_create_app_does_not_boot_analysis_ops() -> None:
     assert "analysis_runtime" not in text
 
 
+def test_api_models_drop_unused_analysis_survey_review_types() -> None:
+    text = Path("services/api/api_models.py").read_text(encoding="utf-8")
+    leftover = (
+        "SurveyWebhookAckResponse",
+        "SurveyReportSummary",
+        "SurveyReportDetail",
+        "SurveyReportRerunRequest",
+        "AnalysisReportRerunRequest",
+        "AnalysisReportBulkRerunRequest",
+        "AnalysisReviewQueueActionRequest",
+        "SurveyReviewQueueItemSummary",
+        "AnalysisOpsSummaryResponse",
+        "AnalysisOpsSnapshotResponse",
+    )
+    present = [name for name in leftover if f"class {name}" in text]
+    assert present == []
+    assert "class ChatAnalysisTarget" in text
+    assert "analysis_target" in text
+
+
 def test_student_app_lazy_loads_page_chunks() -> None:
     text = Path("frontend/apps/student/src/App.tsx").read_text(encoding="utf-8")
     assert "lazy(() => import('./features/home/StudentTodayHome'))" in text
