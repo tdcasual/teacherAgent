@@ -21,6 +21,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -125,7 +126,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
 
             from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(mcp_mod.MCP_TOOL_NAMES)  # type: ignore[attr-defined]
+            names = mcp_mod.MCP_TOOL_NAMES() if callable(mcp_mod.MCP_TOOL_NAMES) else mcp_mod.MCP_TOOL_NAMES
+            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(names)  # type: ignore[attr-defined]
             self.assertEqual(returned, expected)
 
 

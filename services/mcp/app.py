@@ -83,14 +83,11 @@ def mcp_tool_names() -> List[str]:
     return names
 
 
-MCP_TOOL_NAMES = mcp_tool_names()
+MCP_TOOL_NAMES = mcp_tool_names
 
 
 def _mcp_tools() -> List[Dict[str, Any]]:
     return [DEFAULT_TOOL_REGISTRY.require(name).to_mcp() for name in mcp_tool_names()]
-
-
-TOOLS = _mcp_tools()
 
 _ALLOWED_SCRIPTS = frozenset(
     {
@@ -319,8 +316,6 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
             if name == "assignment.render":
                 assignment_id = _require_safe_id(args.get("assignment_id"), "assignment_id")
                 bound = _mcp_bound_teacher_id()
-                if not bound:
-                    return _jsonrpc_error(req.id, 403, "mcp_teacher_unbound")
                 meta = _load_assignment_meta(assignment_id)
                 owner = str(meta.get("teacher_id") or "").strip()
                 if not meta:
