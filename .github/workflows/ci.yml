@@ -292,9 +292,10 @@ jobs:
 
       - name: Initialize smoke Playwright artifact directories
         run: |
-          mkdir -p test-results/teacher test-results/student
+          mkdir -p test-results/teacher test-results/student test-results/assignment
           : > test-results/teacher/.artifact-placeholder
           : > test-results/student/.artifact-placeholder
+          : > test-results/assignment/.artifact-placeholder
 
       - name: Run parallel Playwright isolation check
         run: |
@@ -324,7 +325,7 @@ jobs:
           set -euo pipefail
           missing=0
 
-          for dir in test-results/teacher test-results/student; do
+          for dir in test-results/teacher test-results/student test-results/assignment; do
             if [ ! -d "$dir" ]; then
               echo "Missing required Playwright artifact directory: $dir"
               missing=1
@@ -360,6 +361,7 @@ jobs:
           path: |
             frontend/test-results/teacher
             frontend/test-results/student
+            frontend/test-results/assignment
           if-no-files-found: ignore
           retention-days: 14
 

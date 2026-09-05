@@ -5,12 +5,20 @@ on:
     paths:
       - ".github/workflows/teacher-e2e.yml"
       - "frontend/**"
+      - "services/api/assignment*"
+      - "services/api/assignment/**"
+      - "services/api/routes/assignment*"
+      - "tests/test_assignment*"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/teacher-e2e.yml"
       - "frontend/**"
+      - "services/api/assignment*"
+      - "services/api/assignment/**"
+      - "services/api/routes/assignment*"
+      - "tests/test_assignment*"
 
 permissions:
   contents: read

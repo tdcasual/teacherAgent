@@ -77,6 +77,7 @@ export default function StudentSubmitPanel({
             <input
               type="file"
               multiple
+              data-testid="student-submit-file"
               aria-label="选择提交文件"
               accept="application/pdf,image/*,.txt,.md,.csv"
               onChange={(event) => {

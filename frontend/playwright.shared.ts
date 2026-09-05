@@ -4,6 +4,11 @@ import path from 'node:path'
 
 const configDir = path.dirname(fileURLToPath(import.meta.url))
 
+type ExtraWebServer = {
+  command: string
+  url: string
+}
+
 type AppPlaywrightConfigOptions = {
   testMatch?: string[]
   testIgnore?: string[]
@@ -12,6 +17,13 @@ type AppPlaywrightConfigOptions = {
   viewport: { width: number; height: number }
   webServerCommand: string
   webServerUrl: string
+  extraWebServers?: ExtraWebServer[]
+}
+
+const webServerOptions = {
+  cwd: configDir,
+  reuseExistingServer: !process.env.CI,
+  timeout: 120_000,
 }
 
 export function createAppPlaywrightConfig({
@@ -22,7 +34,18 @@ export function createAppPlaywrightConfig({
   viewport,
   webServerCommand,
   webServerUrl,
+  extraWebServers,
 }: AppPlaywrightConfigOptions) {
+  const primaryServer = {
+    command: webServerCommand,
+    url: webServerUrl,
+    ...webServerOptions,
+  }
+  const webServer =
+    extraWebServers && extraWebServers.length > 0
+      ? [primaryServer, ...extraWebServers.map((server) => ({ ...server, ...webServerOptions }))]
+      : primaryServer
+
   return defineConfig({
     testDir: './e2e',
     ...(testMatch ? { testMatch } : {}),
@@ -43,12 +66,6 @@ export function createAppPlaywrightConfig({
       trace: 'retain-on-failure',
       video: 'retain-on-failure',
     },
-    webServer: {
-      command: webServerCommand,
-      cwd: configDir,
-      url: webServerUrl,
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-    },
+    webServer,
   })
 }

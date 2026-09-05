@@ -80,6 +80,7 @@ export default function AssignmentDraftSection(props: Props) {
                         </button>
                         <button
                           type="button"
+                          data-testid="assignment-confirm-button"
                           className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           onClick={handleConfirmUpload}
                           disabled={
