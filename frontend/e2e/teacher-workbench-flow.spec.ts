@@ -470,8 +470,8 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
   C010: async ({ page }) => {
     await openTeacherApp(page)
-    const workflowTab = page.getByRole('button', { name: '工作流', exact: true }).first()
-    const skillTab = page.getByRole('button', { name: '能力', exact: true }).first()
+    const workflowTab = page.getByRole('tab', { name: '工作流', exact: true }).first()
+    const skillTab = page.getByRole('tab', { name: '能力', exact: true }).first()
 
     await workflowTab.click()
     await expect(workflowTab).toHaveClass(/active/)

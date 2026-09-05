@@ -6,7 +6,7 @@ test('desktop dragging workbench separator changes workbench width', async ({ pa
   await openTeacherApp(page)
 
   const separator = page.locator('[data-separator]').first()
-  const workbenchPanel = page.locator('[data-panel]').filter({ has: page.getByRole('heading', { name: '工作台' }) }).first()
+  const workbenchPanel = page.locator('[data-panel]').filter({ has: page.getByTestId('teacher-workbench-shell') }).first()
 
   await expect(separator).toBeVisible()
   await expect(workbenchPanel).toBeVisible()

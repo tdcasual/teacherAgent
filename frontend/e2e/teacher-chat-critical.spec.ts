@@ -465,7 +465,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       el.setSelectionRange(6, 6)
     })
     await composer.type('$')
-    await expect(page.getByText('技能建议（↑↓ 选择 / 回车插入）')).toBeVisible()
+    await expect(page.getByText('能力建议（↑↓ 选择 / 回车插入）')).toBeVisible()
     await composer.press('Enter')
 
     await expect(composer).toHaveValue(/alpha \$[A-Za-z0-9_-]+ beta/)

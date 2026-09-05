@@ -292,7 +292,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page.reload()
     await expect.poll(() => statusCalls).toBeGreaterThan(1)
-    await expect(page.getByRole('button', { name: '工作流' })).toHaveClass(/active/)
+    await expect(page.getByRole('tab', { name: '工作流' })).toHaveClass(/active/)
   },
 
   G006: async ({ page }) => {
@@ -409,7 +409,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     await workflowUploadSubmitButton(page).click()
 
     await expect.poll(() => startCalls).toBe(1)
-    await expect(page.getByRole('heading', { name: '工作台' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '教学编辑台' })).toBeVisible()
   },
 
   G009: async ({ page }) => {
