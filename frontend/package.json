@@ -54,12 +54,16 @@
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
-    "vite": "^7.3.1",
+    "vite": "7.3.6",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.0.18"
   },
   "overrides": {
     "rollup": "^4.59.0",
-    "serialize-javascript": "^7.0.4"
+    "serialize-javascript": "^7.0.4",
+    "esbuild": "0.28.2",
+    "postcss": "8.5.28",
+    "nanoid": "3.3.18",
+    "picomatch": "4.0.7"
   }
 }

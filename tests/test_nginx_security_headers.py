@@ -44,10 +44,8 @@ def test_student_and_teacher_dockerfiles_replace_api_origin() -> None:
 
 
 def test_katex_css_and_woff2_are_same_origin() -> None:
-    student = (ROOT / "frontend" / "apps" / "student" / "src" / "App.tsx").read_text(encoding="utf-8")
-    teacher = (ROOT / "frontend" / "apps" / "teacher" / "src" / "App.tsx").read_text(encoding="utf-8")
-    assert "katex/dist/katex.min.css" in student
-    assert "katex/dist/katex.min.css" in teacher
+    markdown = (ROOT / "frontend" / "apps" / "shared" / "markdown.ts").read_text(encoding="utf-8")
+    assert "katex/dist/katex.min.css" in markdown
 
     css_path = next((path for path in KATEX_CSS_CANDIDATES if path.is_file()), None)
     assert css_path is not None, "katex.min.css missing from node_modules and tests/fixtures"

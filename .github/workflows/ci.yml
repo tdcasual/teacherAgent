@@ -23,6 +23,8 @@ jobs:
 
       - name: Check merge conflict markers
         run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ripgrep
           rg -n "^(<<<<<<< .+|=======|>>>>>>> .+)$" services frontend tests docs .github
 
       - name: Setup Python
@@ -482,5 +484,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: false
+          build-args: |
+            VITE_API_URL=http://127.0.0.1:8000
           cache-from: type=gha
           cache-to: type=gha,mode=max
