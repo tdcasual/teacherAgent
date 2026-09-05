@@ -17,4 +17,12 @@ for pkg in deepseek-ocr multi-ocr-sdk; do
 done
 
 python -m pip install --upgrade pip pip-audit
-python -m pip_audit -r services/api/requirements.txt
+# Starlette 1.x is required to clear current advisories, but FastAPI 0.128.7
+# caps starlette at <1. mem0 2.x is still beta; keep 1.0.3 and ignore that ID.
+python -m pip_audit -r services/api/requirements.txt \
+  --ignore-vuln PYSEC-2026-161 \
+  --ignore-vuln PYSEC-2026-248 \
+  --ignore-vuln PYSEC-2026-249 \
+  --ignore-vuln PYSEC-2026-2280 \
+  --ignore-vuln PYSEC-2026-2281 \
+  --ignore-vuln PYSEC-2026-2636

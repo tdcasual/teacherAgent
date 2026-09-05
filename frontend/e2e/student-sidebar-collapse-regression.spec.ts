@@ -122,7 +122,7 @@ test('desktop sidebar collapsed state persists after reload', async ({ page }) =
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
   await page.goto('/')
-  await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
 
   await page.getByRole('button', { name: '收起会话' }).click()
   await page.waitForTimeout(240)
@@ -307,14 +307,16 @@ test('pending and active-session transitions remain isolated after switching ses
   })
 
   await page.goto('/')
-  await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
   await expect(page.getByRole('button', { name: '展开会话' })).toBeVisible()
+  await page.getByRole('button', { name: '展开会话' }).click()
+  await page.locator('.session-item .session-select').filter({ hasText: 'main' }).first().click()
+  await expect(page.locator('.message.assistant .text').filter({ hasText: 'history-main' }).first()).toBeVisible()
 
   await page.locator('textarea').fill('待处理问题')
   await page.locator('textarea').press('Enter')
   await expect(page.locator('.composer-hint')).toContainText('正在生成回复，请稍候')
 
-  await page.getByRole('button', { name: '展开会话' }).click()
   const sessionS2 = page.locator('.session-item .session-select').filter({ hasText: 's2' }).first()
   await sessionS2.click()
 

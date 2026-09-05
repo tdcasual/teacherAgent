@@ -319,7 +319,9 @@ jobs:
           fi
 
       - name: Run smoke E2E
-        run: npm run e2e:smoke
+        run: |
+          rm -rf node_modules/.vite
+          npm run e2e:smoke
 
       - name: Validate smoke Playwright artifact layout on failure
         if: failure()
