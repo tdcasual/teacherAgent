@@ -7,6 +7,63 @@ from typing import Any, Callable, Dict, List
 
 _log = logging.getLogger(__name__)
 
+BLANK_ASSIGNMENT_REQUIREMENTS: Dict[str, Any] = {
+    "subject": "",
+    "topic": "",
+    "grade_level": "",
+    "class_level": "",
+    "core_concepts": [],
+    "typical_problem": "",
+    "misconceptions": [],
+    "duration_minutes": 0,
+    "preferences": [],
+    "extra_constraints": "",
+}
+
+BLANK_ASSIGNMENT_REQUIREMENTS_MISSING = [
+    "subject",
+    "topic",
+    "grade_level",
+    "class_level",
+    "core_concepts",
+    "typical_problem",
+    "misconceptions",
+    "duration_minutes",
+    "preferences",
+]
+
+
+def build_blank_assignment_parsed(
+    *,
+    delivery_mode: str = "image",
+    now_iso: Callable[[], str],
+) -> Dict[str, Any]:
+    return {
+        "questions": [],
+        "requirements": dict(BLANK_ASSIGNMENT_REQUIREMENTS),
+        "missing": list(BLANK_ASSIGNMENT_REQUIREMENTS_MISSING),
+        "warnings": [],
+        "delivery_mode": delivery_mode or "image",
+        "question_count": 0,
+        "autofilled": False,
+        "generated_at": now_iso(),
+    }
+
+
+def load_or_materialize_assignment_parsed(
+    job_dir: Path,
+    *,
+    delivery_mode: str = "image",
+    now_iso: Callable[[], str],
+) -> Dict[str, Any]:
+    parsed_path = job_dir / "parsed.json"
+    if parsed_path.exists():
+        payload = json.loads(parsed_path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    parsed = build_blank_assignment_parsed(delivery_mode=delivery_mode, now_iso=now_iso)
+    parsed_path.write_text(json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
+    return parsed
+
 
 def assignment_upload_not_ready_detail(job: Dict[str, Any], message: str) -> Dict[str, Any]:
     return {

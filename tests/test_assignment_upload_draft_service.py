@@ -3,10 +3,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from services.api.assignment_upload_draft_service import (
+    BLANK_ASSIGNMENT_REQUIREMENTS_MISSING,
     assignment_upload_not_ready_detail,
     build_assignment_upload_draft,
+    build_blank_assignment_parsed,
     clean_assignment_draft_questions,
     load_assignment_draft_override,
+    load_or_materialize_assignment_parsed,
     save_assignment_draft_override,
 )
 
@@ -97,6 +100,37 @@ class AssignmentUploadDraftServiceTest(unittest.TestCase):
         self.assertEqual(draft.get("requirements", {}).get("topic"), "欧姆定律")
         self.assertIn("extra_flag", draft.get("requirements_missing", []))
         self.assertEqual(draft.get("draft_version"), 2)
+
+    def test_blank_parsed_template_has_empty_questions_and_eight_point_missing(self):
+        parsed = build_blank_assignment_parsed(delivery_mode="pdf", now_iso=lambda: "2026-09-05T00:00:00")
+        self.assertEqual(parsed.get("questions"), [])
+        self.assertEqual(parsed.get("question_count"), 0)
+        self.assertEqual(parsed.get("delivery_mode"), "pdf")
+        self.assertEqual(parsed.get("requirements", {}).get("extra_constraints"), "")
+        self.assertEqual(parsed.get("missing"), BLANK_ASSIGNMENT_REQUIREMENTS_MISSING)
+        self.assertNotIn("extra_constraints", parsed.get("missing") or [])
+
+    def test_load_or_materialize_writes_template_then_keeps_existing(self):
+        with TemporaryDirectory() as td:
+            job_dir = Path(td)
+            first = load_or_materialize_assignment_parsed(
+                job_dir,
+                delivery_mode="image",
+                now_iso=lambda: "2026-09-05T00:00:00",
+            )
+            self.assertTrue((job_dir / "parsed.json").exists())
+            self.assertEqual(first.get("questions"), [])
+            (job_dir / "parsed.json").write_text(
+                '{"questions": [{"stem": "keep-me"}], "requirements": {"subject": "物理"}}',
+                encoding="utf-8",
+            )
+            second = load_or_materialize_assignment_parsed(
+                job_dir,
+                delivery_mode="image",
+                now_iso=lambda: "2026-09-05T01:00:00",
+            )
+            self.assertEqual(second.get("questions"), [{"stem": "keep-me"}])
+            self.assertEqual(second.get("requirements", {}).get("subject"), "物理")
 
     def test_clean_questions_strips_stem_and_skips_non_dict(self):
         cleaned = clean_assignment_draft_questions(

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
+from .assignment_upload_draft_service import load_or_materialize_assignment_parsed
 from .auth_service import AuthError, enforce_upload_job_access
+
+_DRAFT_SAVE_READY_STATUSES = {"done", "confirmed", "failed"}
 
 
 class AssignmentUploadDraftSaveError(Exception):
@@ -44,17 +46,18 @@ def save_assignment_upload_draft(
     except AuthError as exc:
         raise AssignmentUploadDraftSaveError(exc.status_code, exc.detail)
 
-    if job.get("status") not in {"done", "confirmed"}:
+    if job.get("status") not in _DRAFT_SAVE_READY_STATUSES:
         raise AssignmentUploadDraftSaveError(
             400,
             deps.assignment_upload_not_ready_detail(job, "解析尚未完成，暂无法保存草稿。"),
         )
 
     job_dir = deps.upload_job_path(job_id)
-    parsed_path = job_dir / "parsed.json"
-    if not parsed_path.exists():
-        raise AssignmentUploadDraftSaveError(400, "parsed result missing")
-    parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
+    parsed = load_or_materialize_assignment_parsed(
+        job_dir,
+        delivery_mode=str(job.get("delivery_mode") or "image"),
+        now_iso=deps.now_iso,
+    )
 
     override: Dict[str, Any] = {}
     if requirements is not None:
@@ -79,15 +82,18 @@ def save_assignment_upload_draft(
         now_iso=deps.now_iso,
     )
 
-    deps.write_upload_job(
-        job_id,
-        {
-            "requirements": merged_requirements,
-            "requirements_missing": missing,
-            "question_count": len(override.get("questions") or parsed.get("questions") or []),
-            "draft_saved": True,
-        },
-    )
+    job_updates: Dict[str, Any] = {
+        "requirements": merged_requirements,
+        "requirements_missing": missing,
+        "question_count": len(override.get("questions") or parsed.get("questions") or []),
+        "draft_saved": True,
+    }
+    if job.get("status") == "failed":
+        # Recover failed OCR/LLM parse so confirm can apply the 8-point gate.
+        job_updates["status"] = "done"
+        job_updates["step"] = "done"
+        job_updates["progress"] = 100
+    deps.write_upload_job(job_id, job_updates)
 
     return {
         "ok": True,

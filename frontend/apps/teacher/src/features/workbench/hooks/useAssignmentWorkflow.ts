@@ -20,8 +20,62 @@ import type {
 
 type UnknownRecord = Record<string, unknown>
 
+const BLANK_ASSIGNMENT_REQUIREMENTS_MISSING = [
+  'subject',
+  'topic',
+  'grade_level',
+  'class_level',
+  'core_concepts',
+  'typical_problem',
+  'misconceptions',
+  'duration_minutes',
+  'preferences',
+] as const
+
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
   return toUserFacingErrorMessage(error, fallback)
+}
+
+function buildBlankManualAssignmentDraft(args: {
+  jobId: string
+  assignmentId: string
+  date: string
+  scope: UploadDraft['scope'] | string
+  className: string
+  studentIdsText: string
+  deliveryMode?: string
+}): UploadDraft {
+  const scope = args.scope === 'class' || args.scope === 'student' ? args.scope : 'public'
+  const studentIds = args.studentIdsText
+    .split(/[,，\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return {
+    job_id: args.jobId,
+    assignment_id: String(args.assignmentId || ''),
+    date: args.date,
+    scope,
+    class_name: args.className,
+    student_ids: studentIds,
+    delivery_mode: args.deliveryMode || 'image',
+    questions: [{ stem: '', answer: '', score: 0 }],
+    requirements: {
+      subject: '',
+      topic: '',
+      grade_level: '',
+      class_level: '',
+      core_concepts: [],
+      typical_problem: '',
+      misconceptions: [],
+      duration_minutes: 0,
+      preferences: [],
+      extra_constraints: '',
+    },
+    requirements_missing: [...BLANK_ASSIGNMENT_REQUIREMENTS_MISSING],
+    warnings: [],
+    draft_saved: false,
+    question_count: 1,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +277,11 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     switch (assignmentWorkflowAutoState) {
       case 'uploading':
       case 'parsing':
+        setUploadCardCollapsed(false)
+        break
       case 'parse-error':
         setUploadCardCollapsed(false)
+        setDraftPanelCollapsed(false)
         break
       case 'review':
       case 'confirming':
@@ -273,6 +330,25 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   useEffect(() => {
     const uploadJobStatus = uploadJobInfo?.status
     if (!uploadJobId) return
+    if (uploadJobStatus === 'failed') {
+      setDraftError('')
+      setDraftLoading(false)
+      setUploadDraft((prev) => {
+        if (prev && prev.job_id === uploadJobId) return prev
+        return buildBlankManualAssignmentDraft({
+          jobId: uploadJobId,
+          assignmentId: String(uploadJobInfo?.assignment_id || uploadAssignmentId || ''),
+          date: uploadDate,
+          scope: uploadScope,
+          className: uploadClassName,
+          studentIdsText: uploadStudentIds,
+          deliveryMode: uploadJobInfo?.delivery_mode,
+        })
+      })
+      setDraftPanelCollapsed(false)
+      setQuestionShowCount(20)
+      return
+    }
     if (uploadJobStatus !== 'done' && uploadJobStatus !== 'confirmed') return
     let active = true
     const loadDraft = async () => {
@@ -310,8 +386,15 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     setDraftPanelCollapsed,
     setQuestionShowCount,
     setUploadDraft,
+    uploadAssignmentId,
+    uploadClassName,
+    uploadDate,
     uploadJobId,
+    uploadJobInfo?.assignment_id,
+    uploadJobInfo?.delivery_mode,
     uploadJobInfo?.status,
+    uploadScope,
+    uploadStudentIds,
   ])
 
   // ---- Sync misconceptions text from draft ----
@@ -502,6 +585,11 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
               : prev,
           )
         }
+        setUploadJobInfo((prev) => {
+          if (!prev) return prev
+          if (prev.status !== 'failed') return { ...prev, draft_saved: true }
+          return { ...prev, status: 'done', step: 'done', progress: 100, draft_saved: true }
+        })
         const msg = data?.message || '草稿已保存。'
         setDraftActionStatus(msg)
         setUploadStatus((prev) => `${prev ? prev + '\n\n' : ''}${msg}`)
@@ -523,6 +611,7 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       setMisconceptionsDirty,
       setUploadDraft,
       setUploadError,
+      setUploadJobInfo,
       setUploadStatus,
     ],
   )
@@ -688,7 +777,13 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       setUploadConfirming(true)
       try {
         // If parsing is still running, don't attempt to confirm.
-        if (uploadJobInfo && uploadJobInfo.status !== 'done' && uploadJobInfo.status !== 'confirmed' && uploadJobInfo.status !== 'created') {
+        if (
+          uploadJobInfo &&
+          uploadJobInfo.status !== 'done' &&
+          uploadJobInfo.status !== 'confirmed' &&
+          uploadJobInfo.status !== 'created' &&
+          uploadJobInfo.status !== 'failed'
+        ) {
           const message = '解析尚未完成，请等待解析完成后再创建作业。'
           setUploadError(message)
           setDraftActionError(message)

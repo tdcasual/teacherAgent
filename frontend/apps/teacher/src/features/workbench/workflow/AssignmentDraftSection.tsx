@@ -20,10 +20,17 @@ export default function AssignmentDraftSection(props: Props) {
     stopKeyPropagation,
   } = props
 
+  const parseFailed = uploadJobInfo?.status === 'failed'
+  const alreadyCreated = uploadJobInfo?.status === 'confirmed' || uploadJobInfo?.status === 'created'
+  const parseIncomplete = Boolean(
+    uploadJobInfo && uploadJobInfo.status !== 'done' && uploadJobInfo.status !== 'failed' && !alreadyCreated,
+  )
+  const missingRequirements = (uploadDraft?.requirements_missing?.length || 0) > 0
+
   return (
                 <section id="workflow-assignment-draft-section" className={`mt-3 bg-surface border border-border rounded-[14px] shadow-sm ${draftPanelCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
                   <div className={`flex items-start gap-2 flex-wrap ${draftPanelCollapsed ? 'mb-0' : 'mb-2'}`}>
-                    <h3 className="m-0 whitespace-nowrap shrink-0">解析结果（审核/修改）</h3>
+                    <h3 className="m-0 whitespace-nowrap shrink-0">{parseFailed ? '手动录入题目' : '解析结果（审核/修改）'}</h3>
                     {draftPanelCollapsed ? (
                       <div className="flex-1 min-w-0 text-muted text-[12px] whitespace-nowrap overflow-hidden text-ellipsis" title={formatDraftSummary(uploadDraft, uploadJobInfo)}>
                         {formatDraftSummary(uploadDraft, uploadJobInfo)}
@@ -38,6 +45,9 @@ export default function AssignmentDraftSection(props: Props) {
                   ) : (
                     <>
                       <div className="text-[13px] text-muted grid gap-1">
+                        {parseFailed ? (
+                          <div>解析失败，请手动录入题目与 8 点要求后保存。额外限制可留空。</div>
+                        ) : null}
                         <div>作业编号：{uploadDraft.assignment_id}</div>
                         <div>日期：{uploadDraft.date}</div>
                         <div>
@@ -84,17 +94,20 @@ export default function AssignmentDraftSection(props: Props) {
                           onClick={handleConfirmUpload}
                           disabled={
                             uploadConfirming ||
-                            (uploadJobInfo ? uploadJobInfo.status !== 'done' : false) ||
-                            ((uploadDraft.requirements_missing?.length || 0) > 0)
+                            alreadyCreated ||
+                            parseIncomplete ||
+                            missingRequirements
                           }
                           title={
-                            uploadJobInfo && uploadJobInfo.status !== 'done'
-                              ? uploadJobInfo.status === 'confirmed' || uploadJobInfo.status === 'created'
-                                ? '作业已创建，无需重复创建'
-                                : '解析未完成，暂不可创建'
-                              : uploadDraft.requirements_missing && uploadDraft.requirements_missing.length
-                                ? `请先补全：${formatMissingRequirements(uploadDraft.requirements_missing)}`
-                                : ''
+                            alreadyCreated
+                              ? '作业已创建，无需重复创建'
+                              : parseIncomplete
+                                ? '解析未完成，暂不可创建'
+                                : missingRequirements
+                                  ? `请先补全：${formatMissingRequirements(uploadDraft.requirements_missing)}`
+                                  : parseFailed
+                                    ? '解析失败，可手动录入后创建'
+                                    : ''
                           }
                         >
                           {uploadConfirming
@@ -183,6 +196,15 @@ export default function AssignmentDraftSection(props: Props) {
                     <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                       <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
                       <div className="text-muted text-[12px] mb-[10px]">题目较多时可先修改关键题，点击"保存草稿"后再创建。</div>
+                      <div className="mb-[10px] flex gap-[10px] justify-end flex-wrap">
+                        <button
+                          type="button"
+                          className="border border-border rounded-xl py-[8px] px-[12px] bg-white text-ink cursor-pointer"
+                          onClick={() => updateDraftQuestion(uploadDraft.questions?.length || 0, { stem: '', answer: '', score: 0 })}
+                        >
+                          添加题目
+                        </button>
+                      </div>
 	                      {(uploadDraft.questions || []).slice(0, questionShowCount).map((q: AssignmentQuestion, idx: number) => (
                         <details key={idx} className="border border-border rounded-[14px] py-2 px-[10px] mb-[10px] bg-[#fbfaf7]" open={idx < 1}>
                           <summary>

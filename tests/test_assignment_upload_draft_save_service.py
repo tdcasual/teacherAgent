@@ -103,6 +103,68 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             self.assertEqual(override.get("questions"), [{"stem": "edited", "score": 5}])
             self.assertEqual(writes[-1][1].get("draft_saved"), True)
 
+    def test_failed_job_missing_parsed_materializes_template(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_id = "job-failed"
+            job_dir = root / "uploads" / "assignment_jobs" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps({"job_id": job_id, "status": "failed", "error": "no questions parsed"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=writes)
+            result = save_assignment_upload_draft(
+                job_id,
+                {"subject": "物理"},
+                [{"stem": "手动题"}],
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            parsed_path = job_dir / "parsed.json"
+            self.assertTrue(parsed_path.exists())
+            parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
+            self.assertEqual(parsed.get("questions"), [])
+            self.assertEqual(parsed.get("requirements", {}).get("extra_constraints"), "")
+            self.assertIn("topic", parsed.get("missing") or [])
+            self.assertNotIn("extra_constraints", parsed.get("missing") or [])
+            override = json.loads((job_dir / "draft_override.json").read_text(encoding="utf-8"))
+            self.assertEqual(override.get("questions"), [{"stem": "手动题"}])
+            self.assertEqual(writes[-1][1].get("status"), "done")
+            self.assertEqual(writes[-1][1].get("draft_saved"), True)
+
+    def test_existing_parsed_json_is_not_wiped(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_id = "job-keep"
+            job_dir = root / "uploads" / "assignment_jobs" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps({"job_id": job_id, "status": "failed"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            original = {
+                "questions": [{"stem": "keep-original"}],
+                "requirements": {"subject": "物理", "topic": "原主题"},
+                "missing": [],
+            }
+            (job_dir / "parsed.json").write_text(json.dumps(original, ensure_ascii=False), encoding="utf-8")
+            deps = self._deps(root, writes=writes)
+            save_assignment_upload_draft(
+                job_id,
+                {"subject": "化学"},
+                [{"stem": "老师改写"}],
+                deps=deps,
+            )
+            parsed = json.loads((job_dir / "parsed.json").read_text(encoding="utf-8"))
+            self.assertEqual(parsed.get("questions"), [{"stem": "keep-original"}])
+            self.assertEqual(parsed.get("requirements", {}).get("topic"), "原主题")
+            override = json.loads((job_dir / "draft_override.json").read_text(encoding="utf-8"))
+            self.assertEqual(override.get("questions"), [{"stem": "老师改写"}])
+            self.assertEqual(override.get("requirements", {}).get("subject"), "化学")
+
 
 if __name__ == "__main__":
     unittest.main()

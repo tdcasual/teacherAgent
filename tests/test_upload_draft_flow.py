@@ -181,6 +181,68 @@ class UploadDraftFlowTest(unittest.TestCase):
             meta_path = Path(os.environ["DATA_DIR"]) / "assignments" / assignment_id / "meta.json"
             self.assertTrue(meta_path.exists())
 
+    def test_failed_parse_save_materializes_template_confirm_still_requires_requirements(self):
+        with TemporaryDirectory() as td:
+            tmp_dir = Path(td)
+            app_mod = load_app(tmp_dir)
+            client = TestClient(app_mod.app)
+
+            job_id = "job_failed_parse_001"
+            assignment_id = "HW_FAIL_2026-09-05"
+            job_dir = Path(os.environ["UPLOADS_DIR"]) / "assignment_jobs" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "job_id": job_id,
+                        "assignment_id": assignment_id,
+                        "date": "2026-09-05",
+                        "scope": "public",
+                        "class_name": "",
+                        "student_ids": [],
+                        "source_files": ["paper.pdf"],
+                        "answer_files": [],
+                        "delivery_mode": "pdf",
+                        "status": "failed",
+                        "error": "no questions parsed",
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            res = client.get("/assignment/upload/draft", params={"job_id": job_id})
+            self.assertEqual(res.status_code, 400)
+            self.assertFalse((job_dir / "parsed.json").exists())
+
+            res = client.post(
+                "/assignment/upload/draft/save",
+                json={"job_id": job_id, "requirements": {"subject": "物理"}, "questions": [{"stem": "手动录入"}]},
+            )
+            self.assertEqual(res.status_code, 200)
+            parsed_path = job_dir / "parsed.json"
+            self.assertTrue(parsed_path.exists())
+            parsed = json.loads(parsed_path.read_text(encoding="utf-8"))
+            self.assertEqual(parsed.get("questions"), [])
+            self.assertEqual(parsed.get("requirements", {}).get("extra_constraints"), "")
+            self.assertTrue(parsed.get("missing"))
+            self.assertNotIn("extra_constraints", parsed.get("missing") or [])
+            snapshot = parsed_path.read_text(encoding="utf-8")
+
+            res = client.post(
+                "/assignment/upload/draft/save",
+                json={"job_id": job_id, "requirements": {"subject": "化学"}, "questions": [{"stem": "第二版"}]},
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(parsed_path.read_text(encoding="utf-8"), snapshot)
+
+            res = client.post("/assignment/upload/confirm", json={"job_id": job_id, "strict_requirements": True})
+            self.assertEqual(res.status_code, 400)
+            detail = res.json()["detail"]
+            self.assertEqual(detail["error"], "requirements_missing")
+            self.assertTrue(detail.get("missing"))
+
 
 if __name__ == "__main__":
     unittest.main()
