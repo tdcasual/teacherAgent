@@ -23,7 +23,16 @@ def _student_enrolled_for_core(
     )
 
 
-@dataclass(frozen=True)
+def _sql_visibility_for_core(core: Any, assignment_id: str) -> str:
+    from .store import assignment_sql_visibility
+
+    data_dir = getattr(core, "DATA_DIR", None)
+    if data_dir is None:
+        return ""
+    return assignment_sql_visibility(Path(data_dir), assignment_id)
+
+
+@dataclass(frozen=True, kw_only=True)
 class AssignmentAccessDeps:
     resolve_assignment_dir: Callable[[str], Path]
     load_assignment_meta: Callable[[Path], Dict[str, Any]]
@@ -31,9 +40,10 @@ class AssignmentAccessDeps:
     load_profile_file: Callable[[Path], Dict[str, Any]]
     assignment_specificity: Callable[[Dict[str, Any], Optional[str], Optional[str]], int]
     student_enrolled: Callable[..., bool]
+    sql_visibility: Optional[Callable[[str], str]] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AssignmentApplicationDeps(AssignmentAccessDeps):
     list_assignments: Callable[..., Awaitable[Dict[str, Any]]]
     teacher_assignment_progress: Callable[[str, bool], Awaitable[Dict[str, Any]]]
@@ -76,6 +86,7 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         student_enrolled=lambda student_id, teacher_id, subject_id, class_name="": (
             _student_enrolled_for_core(core, student_id, teacher_id, subject_id, class_name)
         ),
+        sql_visibility=lambda assignment_id: _sql_visibility_for_core(core, assignment_id),
         list_assignments=lambda limit, cursor, owner_teacher_id=None: (
             core.assignment_handlers.assignments(
                 limit=limit,

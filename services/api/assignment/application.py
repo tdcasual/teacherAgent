@@ -43,14 +43,18 @@ def _require_teacher_owner(actor_id: str, meta: dict) -> None:
 
 
 def _require_student_assignment_access(
-    principal: Any, meta: dict, *, deps: AssignmentAccessDeps
+    principal: Any, meta: dict, *, deps: AssignmentAccessDeps, assignment_id: str
 ) -> None:
-    if not student_can_read_assignment(meta):
+    vis = effective_visibility_status(meta)
+    if deps.sql_visibility is not None:
+        vis = str(deps.sql_visibility(assignment_id) or "").strip().lower()
+        if vis not in {"published", "archived"}:
+            raise AssignmentAccessError(403, "forbidden_assignment_scope")
+    elif not student_can_read_assignment(meta):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
     sid = str(getattr(principal, "actor_id", "") or "").strip()
     if sid not in snapshot_student_ids(meta):
         raise AssignmentAccessError(403, "forbidden_assignment_scope")
-    vis = effective_visibility_status(meta)
     if vis == "archived":
         return
     teacher_id = assignment_owner_id(meta)
@@ -104,7 +108,9 @@ def require_assignment_access(
             raise AssignmentAccessError(400, "teacher_id_required")
         _require_teacher_owner(actor, meta)
         return
-    _require_student_assignment_access(principal, meta, deps=deps)
+    _require_student_assignment_access(
+        principal, meta, deps=deps, assignment_id=assignment_id
+    )
 
 
 async def list_assignments(

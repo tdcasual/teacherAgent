@@ -7,14 +7,21 @@ import pytest
 
 from services.api.assignment.application import AssignmentAccessError, require_assignment_access
 from services.api.assignment.deps import AssignmentAccessDeps
-from services.api.assignment.store import connect, ensure, get_assignment
+from services.api.assignment.store import (
+    assignment_is_sql_published,
+    connect,
+    ensure,
+    get_assignment,
+)
 from services.api.assignment.visibility import (
     effective_visibility_status,
     student_can_read_assignment,
 )
+from services.api.assignment_archive_service import archive_assignment
 from services.api.assignment_student_list_service import (
     StudentAssignmentListDeps,
     list_assignments_for_student,
+    list_student_assignment_history,
 )
 from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
@@ -22,11 +29,22 @@ from services.api.assignment_upload_confirm_service import (
 )
 from services.api.auth_service import AuthPrincipal
 from services.api.settings import default_teacher_id
+from services.api.student_submit_service import (
+    StudentSubmitError,
+    authorize_student_submit_assignment,
+)
 
 _MISSING_VIS_META = {"teacher_id": "t_zhang", "scope": "public"}
 
 
-def _deps(*, folder: Path, specificity: int = 3, meta: dict | None = None, enrolled: bool = True) -> AssignmentAccessDeps:
+def _deps(
+    *,
+    folder: Path,
+    specificity: int = 3,
+    meta: dict | None = None,
+    enrolled: bool = True,
+    sql_visibility=None,
+) -> AssignmentAccessDeps:
     return AssignmentAccessDeps(
         resolve_assignment_dir=lambda _assignment_id: folder,
         load_assignment_meta=lambda _folder: dict(meta or {}),
@@ -34,6 +52,7 @@ def _deps(*, folder: Path, specificity: int = 3, meta: dict | None = None, enrol
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda _meta, _student_id, _class_name: specificity,
         student_enrolled=lambda *_args, **_kwargs: enrolled,
+        sql_visibility=sql_visibility,
     )
 
 
@@ -334,3 +353,73 @@ def test_missing_teacher_id_migrates_to_orphan_draft_not_default_teacher(
     assert str(row["teacher_id"] or "") == ""
     assert str(row["teacher_id"] or "") != default_teacher_id()
     assert str(row["teacher_id"] or "") != "teacher"
+
+
+def _history(data_dir: Path, student_id: str = "S1") -> dict:
+    deps = StudentAssignmentListDeps(
+        data_dir=data_dir,
+        load_assignment_meta=lambda folder: json.loads((folder / "meta.json").read_text(encoding="utf-8")),
+        student_enrolled=lambda *_args, **_kwargs: True,
+        list_submission_attempts=lambda *_args, **_kwargs: [],
+        lookback_days=14,
+    )
+    return list_student_assignment_history(student_id=student_id, deps=deps)
+
+
+def test_archive_hides_from_student_today_and_submit(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    _write_assignment_meta(data_dir, "HW_1", _published_meta(title="待归档"))
+    assert [item["assignment_id"] for item in _list_today(data_dir)] == ["HW_1"]
+    archive_assignment(
+        "HW_1",
+        principal=AuthPrincipal(actor_id="t_zhang", role="teacher"),
+        data_dir=data_dir,
+    )
+    assert _list_today(data_dir) == []
+    with pytest.raises(StudentSubmitError) as exc:
+        authorize_student_submit_assignment(
+            "HW_1",
+            "S1",
+            load_meta=lambda _aid: json.loads(
+                (data_dir / "assignments" / "HW_1" / "meta.json").read_text(encoding="utf-8")
+            ),
+            student_enrolled=lambda *_args, **_kwargs: True,
+            is_sql_published=lambda aid: assignment_is_sql_published(data_dir, aid),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"
+    conn = connect(data_dir)
+    try:
+        row = get_assignment(conn, "HW_1")
+    finally:
+        conn.close()
+    assert row is not None
+    assert str(row["visibility_status"]) == "archived"
+
+
+def test_history_and_detail_hide_crash_orphan(monkeypatch, tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+    finally:
+        conn.close()
+    folder = _write_assignment_meta(data_dir, "HW_CRASH", _published_meta(title="孤儿详情"))
+    history_ids = [item["assignment_id"] for item in _history(data_dir)["assignments"]]
+    assert "HW_CRASH" not in history_ids
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="S1", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_CRASH",
+            deps=_deps(
+                folder=folder,
+                meta=_published_meta(expected_students=["S1"]),
+                sql_visibility=lambda _aid: "",
+            ),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"

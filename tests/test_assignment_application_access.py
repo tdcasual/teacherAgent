@@ -25,6 +25,7 @@ def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None, enrol
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda _meta, _student_id, _class_name: specificity,
         student_enrolled=lambda *_args, **_kwargs: enrolled,
+        sql_visibility=None,
     )
 
 

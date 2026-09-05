@@ -7,7 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
-from .assignment.store import load_published_ids
+from .assignment.store import load_published_ids, load_visibility_map
 from .assignment.visibility import assignment_owner_id, effective_visibility_status
 from .auth.identity_graph_service import student_enrolled as _student_enrolled
 from .auth_registry_service import build_auth_registry_store
@@ -300,8 +300,10 @@ def _history_item(
     *,
     student_id: str,
     deps: StudentAssignmentListDeps,
+    sql_visibility: Dict[str, str],
 ) -> Optional[Dict[str, Any]]:
-    vis = effective_visibility_status(meta)
+    assignment_id = str(meta.get("assignment_id") or folder.name)
+    vis = str(sql_visibility.get(assignment_id) or "").strip().lower()
     teacher_id, subject_id = _owner_and_subject(meta)
     if vis not in {"published", "archived"} or not teacher_id or not subject_id:
         return None
@@ -309,7 +311,6 @@ def _history_item(
         return None
     if vis == "published" and not _on_live_roster(meta, student_id, deps):
         return None
-    assignment_id = str(meta.get("assignment_id") or folder.name)
     attempts = deps.list_submission_attempts(assignment_id, student_id)
     best = _qualifying_attempt(attempts)
     return {
@@ -347,6 +348,7 @@ def list_student_assignment_history(
     limit_int, cursor_int = _normalize_paging(limit, cursor)
     sid = str(student_id or "").strip()
     items: List[Dict[str, Any]] = []
+    sql_visibility = load_visibility_map(deps.data_dir) if sid else {}
     if sid:
         for folder in _iter_assignment_folders(deps.data_dir):
             try:
@@ -356,7 +358,9 @@ def list_student_assignment_history(
                 continue
             if not isinstance(meta, dict):
                 continue
-            item = _history_item(folder, meta, student_id=sid, deps=deps)
+            item = _history_item(
+                folder, meta, student_id=sid, deps=deps, sql_visibility=sql_visibility
+            )
             if item is not None:
                 items.append(item)
     items.sort(key=_history_sort_key, reverse=True)

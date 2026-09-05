@@ -453,12 +453,49 @@ def load_published_ids(data_dir: Path) -> Set[str]:
 
 
 def assignment_is_sql_published(data_dir: Path, assignment_id: str) -> bool:
+    return assignment_sql_visibility(data_dir, assignment_id) == "published"
+
+
+def visibility_map(conn: sqlite3.Connection) -> Dict[str, str]:
+    rows = conn.execute(
+        "SELECT assignment_id, visibility_status FROM assignments"
+    ).fetchall()
+    return {
+        _text(row["assignment_id"]): _text(row["visibility_status"])
+        for row in rows
+        if _text(row["assignment_id"])
+    }
+
+
+def load_visibility_map(data_dir: Path) -> Dict[str, str]:
     conn = connect(data_dir)
     try:
         ensure(conn, data_dir=data_dir)
-        return is_published(conn, assignment_id)
+        return visibility_map(conn)
     except sqlite3.Error:
-        _log.warning("assignment sql published check failed", exc_info=True)
-        return False
+        _log.warning("assignment sql visibility map failed", exc_info=True)
+        return {}
+    finally:
+        conn.close()
+
+
+def assignment_sql_visibility(data_dir: Path, assignment_id: str) -> str:
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+        row = get_assignment(conn, assignment_id)
+    except sqlite3.Error:
+        _log.warning("assignment sql visibility check failed", exc_info=True)
+        return ""
+    finally:
+        conn.close()
+    return _text(row["visibility_status"]) if row is not None else ""
+
+
+def sync_assignment_row(data_dir: Path, meta: Dict[str, Any]) -> None:
+    conn = connect(data_dir)
+    try:
+        ensure(conn, data_dir=data_dir)
+        upsert_assignment(conn, meta, now_iso=_now_iso())
     finally:
         conn.close()

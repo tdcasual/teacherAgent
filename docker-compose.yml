@@ -22,7 +22,6 @@ services:
       - PROFILE_UPDATE_ASYNC=${PROFILE_UPDATE_ASYNC:-1}
       - PROFILE_CACHE_TTL_SEC=${PROFILE_CACHE_TTL_SEC:-10}
       - ASSIGNMENT_DETAIL_CACHE_TTL_SEC=${ASSIGNMENT_DETAIL_CACHE_TTL_SEC:-10}
-      - ASSIGNMENT_STORE=dual
       - DEFAULT_TEACHER_ID=${DEFAULT_TEACHER_ID:-teacher}
       - AUTH_REQUIRED=${AUTH_REQUIRED:-1}
       - AUTH_TOKEN_SECRET_FILE=${AUTH_TOKEN_SECRET_FILE:-/app/config/auth_token_secret}
@@ -86,7 +85,6 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
       - RQ_SCAN_PENDING_ON_START=${RQ_SCAN_PENDING_ON_START:-1}
       - RQ_HEARTBEAT_PATH=/tmp/rq_worker_heartbeat
-      - ASSIGNMENT_STORE=dual
     volumes:
       - ./data:/app/data
       - ./.qdrant:/app/.qdrant

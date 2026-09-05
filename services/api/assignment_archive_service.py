@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .assignment.store import sync_assignment_row
 from .assignment.visibility import assignment_owner_id, effective_visibility_status
 from .auth_service import AuthPrincipal
 from .fs_atomic import atomic_write_json
@@ -70,6 +72,15 @@ def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _persist_meta(folder: Path, meta: Dict[str, Any], data_dir: Path) -> None:
+    # SQL first so student vis fail-closes even if JSON write fails after.
+    try:
+        sync_assignment_row(data_dir, meta)
+    except sqlite3.Error as exc:
+        raise AssignmentArchiveError(500, "assignment_persist_failed") from exc
+    atomic_write_json(folder / "meta.json", meta)
+
+
 def publish_assignment(
     assignment_id: str,
     *,
@@ -87,7 +98,7 @@ def publish_assignment(
         raise AssignmentArchiveError(409, "invalid_visibility_status")
     meta["visibility_status"] = "published"
     meta["published_at"] = _now_iso()
-    atomic_write_json(folder / "meta.json", meta)
+    _persist_meta(folder, meta, resolved)
     return {
         "ok": True,
         "assignment_id": str(meta.get("assignment_id") or assignment_id),
@@ -115,7 +126,7 @@ def archive_assignment(
     meta["archived_at"] = _now_iso()
     meta.pop("auto_archive_exempt", None)
     meta.pop("auto_archive_exempt_until", None)
-    atomic_write_json(folder / "meta.json", meta)
+    _persist_meta(folder, meta, resolved)
     return {
         "ok": True,
         "assignment_id": str(meta.get("assignment_id") or assignment_id),
@@ -143,7 +154,7 @@ def unarchive_assignment(
     today = date.fromisoformat(_today_iso())
     meta["auto_archive_exempt_until"] = (today + timedelta(days=1)).isoformat()
     meta.pop("auto_archive_exempt", None)
-    atomic_write_json(folder / "meta.json", meta)
+    _persist_meta(folder, meta, resolved)
     return {
         "ok": True,
         "assignment_id": str(meta.get("assignment_id") or assignment_id),
@@ -227,7 +238,7 @@ def _maybe_auto_archive_inner(
     meta["archived_at"] = _now_iso()
     meta.pop("auto_archive_exempt", None)
     meta.pop("auto_archive_exempt_until", None)
-    atomic_write_json(folder / "meta.json", meta)
+    _persist_meta(folder, meta, data_dir)
     return True
 
 
