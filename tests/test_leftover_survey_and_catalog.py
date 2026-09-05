@@ -70,6 +70,9 @@ def test_create_app_does_not_boot_analysis_ops() -> None:
     text = Path("services/api/app.py").read_text(encoding="utf-8")
     assert "AnalysisOpsService" not in text
     assert "analysis_ops_service" not in text
+    assert "from .analysis_" not in text
+    assert "from services.api.analysis_" not in text
+    assert "analysis_runtime" not in text
 
 
 def test_student_app_lazy_loads_page_chunks() -> None:
