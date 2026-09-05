@@ -116,6 +116,7 @@ export default function UploadSection(props: Props) {
             <div className="grid gap-[10px] grid-cols-1">
               <LabeledField label="作业编号">
                 <input
+                  data-testid="workflow-upload-assignment-id"
                   value={uploadAssignmentId}
                   onChange={(e) => setUploadAssignmentId(e.target.value)}
                   placeholder="例如：HW-2026-02-05"
@@ -166,6 +167,7 @@ export default function UploadSection(props: Props) {
               </LabeledField>
               <LabeledField label="作业文件（文档/图片）">
                 <input
+                  data-testid="workflow-upload-file"
                   type="file"
                   multiple
                   accept="application/pdf,image/*,.md,.markdown,.tex"
@@ -181,7 +183,12 @@ export default function UploadSection(props: Props) {
                 />
               </LabeledField>
             </div>
-            <button type="submit" className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11" disabled={uploading}>
+            <button
+              type="submit"
+              data-testid="workflow-upload-submit"
+              className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11"
+              disabled={uploading}
+            >
               {uploading ? '上传中…' : '上传并开始解析'}
             </button>
           </form>

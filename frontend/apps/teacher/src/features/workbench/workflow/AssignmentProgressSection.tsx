@@ -87,7 +87,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
   const visibilityStatus = String(progressData?.visibility_status || '').trim()
 
   return (
-    	            <section id="workflow-progress-section" className={`mt-3 bg-surface border border-border rounded-[14px] shadow-sm ${progressPanelCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
+    	            <section id="workflow-progress-section" data-testid="workflow-progress-section" className={`mt-3 bg-surface border border-border rounded-[14px] shadow-sm ${progressPanelCollapsed ? 'py-[10px] px-3' : 'p-[10px]'}`}>
     	              <div className={`flex items-start gap-2 flex-wrap ${progressPanelCollapsed ? 'mb-0' : 'mb-2'}`}>
     	                <h3 className="m-0 whitespace-nowrap shrink-0">作业完成情况</h3>
     	                {progressPanelCollapsed ? (
@@ -123,6 +123,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     	                      </label>
     	                      <button
     	                        type="button"
+    	                        data-testid="progress-refresh"
     	                        className="border border-border rounded-xl py-[10px] px-[14px] bg-white text-ink cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
     	                        disabled={progressLoading}
     	                        onClick={() => void fetchAssignmentProgress()}

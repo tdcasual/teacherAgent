@@ -64,6 +64,7 @@ def test_playwright_configs_use_shared_base_factory() -> None:
 
     assert "createAppPlaywrightConfig" in teacher_source
     assert "createAppPlaywrightConfig" in student_source
+    assert "**/assignment-core-loop.spec.ts" in teacher_source
     assert assignment_config.exists()
     assert "createAppPlaywrightConfig" in assignment_source
     assert "assignment-core-loop.spec.ts" in assignment_source

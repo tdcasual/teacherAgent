@@ -134,16 +134,14 @@ const mockTeacherAssignmentApis = async (page: Page, submittedCount: { value: nu
   }
 }
 
-test('mocked assignment how-to loop covers upload confirm today submit and progress', async ({ browser }) => {
+test('mocked assignment how-to loop covers upload confirm today submit and progress', async ({ page, browser }) => {
   const submittedCount = { value: 0 }
-  const teacherPage = await browser.newPage({
-    baseURL: 'http://127.0.0.1:4174',
-    viewport: { width: 1280, height: 800 },
-  })
-  const studentPage = await browser.newPage({
+  const teacherPage = page
+  const studentContext = await browser.newContext({
     baseURL: STUDENT_BASE_URL,
     viewport: { width: 1280, height: 800 },
   })
+  const studentPage = await studentContext.newPage()
 
   try {
     await openTeacherApp(teacherPage, {
@@ -153,8 +151,8 @@ test('mocked assignment how-to loop covers upload confirm today submit and progr
     })
     const teacherMocks = await mockTeacherAssignmentApis(teacherPage, submittedCount)
 
-    await teacherPage.getByPlaceholder('例如：HW-2026-02-05').fill(ASSIGNMENT_ID)
-    await teacherPage.locator('#workflow-upload-section input[type="file"]').first().setInputFiles(fakePdfFile)
+    await teacherPage.getByTestId('workflow-upload-assignment-id').fill(ASSIGNMENT_ID)
+    await teacherPage.getByTestId('workflow-upload-file').setInputFiles(fakePdfFile)
     await workflowUploadSubmitButton(teacherPage).click()
 
     await expect
@@ -175,7 +173,7 @@ test('mocked assignment how-to loop covers upload confirm today submit and progr
     await confirmBtn.click()
     await expect.poll(() => teacherMocks.getConfirmCalls()).toBe(1)
 
-    const progressSection = teacherPage.locator('#workflow-progress-section')
+    const progressSection = teacherPage.getByTestId('workflow-progress-section')
     await expect(progressSection).toContainText('已提交：0')
     await expect(progressSection.getByTestId('progress-row-S001')).toBeVisible()
 
@@ -209,15 +207,14 @@ test('mocked assignment how-to loop covers upload confirm today submit and progr
 
     await studentPage.getByTestId('student-today-assignment-list').getByRole('button', { name: '提交作业' }).click()
     await expect(studentPage.getByTestId('student-submit-panel')).toBeVisible()
-    await studentPage.getByLabel('选择提交文件').setInputFiles(fakePdfFile)
+    await studentPage.getByTestId('student-submit-file').setInputFiles(fakePdfFile)
     await studentPage.getByRole('button', { name: '提交作业' }).click()
     await expect(studentPage.getByTestId('student-submit-success')).toBeVisible()
     await expect(studentPage.getByTestId('student-submit-result')).toContainText('已提交')
 
-    await progressSection.getByRole('button', { name: '刷新' }).click()
+    await teacherPage.getByTestId('progress-refresh').click()
     await expect(progressSection).toContainText('已提交：1')
   } finally {
-    await studentPage.close()
-    await teacherPage.close()
+    await studentContext.close()
   }
 })
