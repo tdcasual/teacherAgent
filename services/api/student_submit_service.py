@@ -5,19 +5,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-
-class StudentSubmitError(Exception):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(detail)
-        self.status_code = int(status_code)
-        self.detail = str(detail or "student_submit_error")
-
 from .student_ops_service import (
     STUDENT_ALLOWED_SUFFIXES,
     UploadLimitError,
     raise_upload_limit_http,
     save_capped_uploads,
 )
+
+
+class StudentSubmitError(Exception):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = int(status_code)
+        self.detail = str(detail or "student_submit_error")
 
 
 def _default_sanitize_filename(name: str) -> str:

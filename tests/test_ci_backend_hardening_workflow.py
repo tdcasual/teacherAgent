@@ -13,11 +13,17 @@ def test_ci_sets_backend_coverage_floor() -> None:
     assert f"--cov-fail-under={COVERAGE_FLOOR_N}" in text
 
 
-def test_ci_expands_backend_static_checks_to_additional_runtime_modules() -> None:
+def test_ci_ruff_and_mypy_gates_are_executed() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "services/api/config.py" in text
-    assert "services/api/chat_job_state_machine.py" in text
-    assert "services/api/fs_atomic.py" in text
+    start = text.find("python -m ruff check")
+    assert start != -1
+    end = text.find("\n      - name:", start)
+    blob = text[start:] if end == -1 else text[start:end]
+    tokens = blob.replace("\\", " ").split()
+    assert tokens[:4] == ["python", "-m", "ruff", "check"]
+    assert "services/api" in tokens[4:]
+    assert "python -m mypy" in text
+    assert "--follow-imports=skip" in text
 
 
 def test_ci_runs_full_backend_suite_and_teacher_build() -> None:

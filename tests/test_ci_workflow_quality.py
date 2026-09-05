@@ -18,6 +18,21 @@ def _ci_ruff_step(text: str) -> str:
     return text[name_start:] if end == -1 else text[name_start:end]
 
 
+def _ruff_paths(step: str) -> list[str]:
+    start = step.find("python -m ruff check")
+    assert start != -1
+    tokens = step[start:].replace("\\", " ").split()
+    assert tokens[:4] == ["python", "-m", "ruff", "check"]
+    return tokens[4:]
+
+
+def _ruff_covers(step: str, path: str) -> bool:
+    for arg in _ruff_paths(step):
+        if path == arg or path.startswith(arg.rstrip("/") + "/"):
+            return True
+    return False
+
+
 def test_ci_contains_quality_jobs() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "backend-quality" in text
@@ -64,13 +79,12 @@ def test_frontend_quality_runs_unit_tests() -> None:
     assert "npm run test:unit" in job
 
 
-def test_ci_ruff_gate_is_scoped_and_covers_security_critical_files() -> None:
+def test_ci_ruff_gate_covers_services_api_and_security_critical_files() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     step = _ci_ruff_step(text)
-    header = step.splitlines()[0]
-    assert "scoped" in header.lower()
+    assert "services/api" in _ruff_paths(step)
     for path in _SECURITY_CRITICAL_RUFF_PATHS:
-        assert path in step
+        assert _ruff_covers(step, path), path
 
 
 def test_frontend_jobs_emit_dependency_install_metrics_summary() -> None:
