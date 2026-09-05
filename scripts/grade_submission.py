@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Objective matcher used by POST /student/submit. Teachers record official
+# scores in the assignment progress panel; this CLI is debug/subprocess only.
 import argparse
 import csv
 import json

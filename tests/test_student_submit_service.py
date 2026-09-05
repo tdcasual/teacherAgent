@@ -1,8 +1,19 @@
+import json
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from subprocess import TimeoutExpired
 from tempfile import TemporaryDirectory
 
+from fastapi import HTTPException
+
+from services.api.assignment_submission_attempt_service import (
+    AssignmentSubmissionAttemptDeps,
+    best_submission_attempt,
+    compute_submission_attempt,
+    counted_grade_item,
+    list_submission_attempts,
+)
 from services.api.student_submit_service import (
     StudentSubmitDeps,
     StudentSubmitError,
@@ -46,6 +57,38 @@ def _deps(root: Path, **overrides) -> StudentSubmitDeps:
     )
     fields.update(overrides)
     return StudentSubmitDeps(**fields)
+
+
+def _attempt_deps(root: Path) -> AssignmentSubmissionAttemptDeps:
+    return AssignmentSubmissionAttemptDeps(
+        student_submissions_dir=root / "submissions",
+        grade_count_conf_threshold=0.6,
+    )
+
+
+def _progress_from_disk(root: Path, assignment_id: str, _include_students: bool) -> dict:
+    deps = _attempt_deps(root)
+    attempts = list_submission_attempts(assignment_id, "S1", deps=deps)
+    best = best_submission_attempt(attempts)
+    submitted = bool(best)
+    return {
+        "ok": True,
+        "students": [
+            {
+                "student_id": "S1",
+                "evidence": {
+                    "schema": "assignment_progress_evidence/v1",
+                    "signals": {
+                        "submitted": submitted,
+                        "best_graded_total": int((best or {}).get("graded_total") or 0),
+                        "best_score_earned": (best or {}).get("score_earned"),
+                        "best_attempt_id": str((best or {}).get("attempt_id") or ""),
+                        "min_graded_total": 1,
+                    },
+                },
+            }
+        ],
+    }
 
 
 def _progress(*, submitted: bool, score: float = 0.0, attempt_id: str = "submission_1") -> dict:
@@ -371,6 +414,90 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertTrue(result.get("ok"))
             self.assertEqual(captured["auto"], 0)
+
+    def _assert_ungraded_report_consumed(self, root: Path, *, error_substr: str) -> dict:
+        self.assertTrue(list((root / "uploads").glob("*")))
+        reports = list((root / "submissions").glob("HW_1/S1/submission_*/grading_report.json"))
+        self.assertEqual(len(reports), 1)
+        report_path = reports[0]
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertIn(error_substr, str(report.get("error") or ""))
+        items = report.get("items") or []
+        self.assertTrue(items)
+        self.assertEqual(items[0].get("status"), "ungraded")
+
+        copied = list((report_path.parent / "files").glob("*"))
+        self.assertEqual(len(copied), 1)
+        self.assertEqual(copied[0].read_bytes(), b"1")
+        report_files = report.get("files") or []
+        self.assertEqual(len(report_files), 1)
+        self.assertEqual(Path(report_files[0]).resolve(), copied[0].resolve())
+
+        deps = _attempt_deps(root)
+        self.assertFalse(counted_grade_item(items[0], deps=deps))
+        attempt = compute_submission_attempt(report_path.parent, deps=deps)
+        self.assertIsNotNone(attempt)
+        assert attempt is not None
+        self.assertFalse(attempt["valid_submission"])
+        self.assertEqual(attempt["graded_total"], 0)
+        attempts = list_submission_attempts("HW_1", "S1", deps=deps)
+        self.assertEqual(len(attempts), 1)
+        self.assertIsNone(best_submission_attempt(attempts))
+        return report
+
+    async def test_submit_catches_run_script_http_500_as_ungraded_200(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            def _boom(_args):
+                raise HTTPException(status_code=500, detail="ocr_utils not available")
+
+            deps = _deps(
+                root,
+                run_script=_boom,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress_from_disk(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertEqual(result.get("reason"), "min_graded_total")
+            self._assert_ungraded_report_consumed(root, error_substr="ocr_utils not available")
+
+    async def test_submit_catches_run_script_timeout_as_ungraded_200(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            def _timeout(_args):
+                raise TimeoutExpired(cmd=["python3"], timeout=1)
+
+            deps = _deps(
+                root,
+                run_script=_timeout,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress_from_disk(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertEqual(result.get("reason"), "min_graded_total")
+            self._assert_ungraded_report_consumed(root, error_substr="grade_script_timeout")
 
 
 class StudentSubmitServiceImportGuardTest(unittest.TestCase):
