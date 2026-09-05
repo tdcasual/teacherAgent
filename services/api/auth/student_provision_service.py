@@ -14,7 +14,8 @@ MAX_CSV_BYTES = 256 * 1024
 MAX_CSV_ROWS = 2000
 ALLOWED_COLUMNS = frozenset({"student_name", "class_name", "student_id"})
 REQUIRED_COLUMNS = frozenset({"student_name", "class_name"})
-_STUDENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+# Min 6 chars so stored ids match safe_fs_id (short slugs remap).
+_STUDENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{5,63}$")
 
 
 def _fail(error: str) -> Dict[str, Any]:

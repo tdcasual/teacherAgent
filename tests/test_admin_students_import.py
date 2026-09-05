@@ -85,9 +85,11 @@ def test_allocate_student_id_stable_hash_and_provided() -> None:
     generated, err = allocate_student_id(student_name="张三", class_name="高二1班", student_id="")
     assert err is None
     assert generated == _expected_student_id("张三", "高二1班")
-    provided, err = allocate_student_id(student_name="张三", class_name="高二1班", student_id="S001")
+    provided, err = allocate_student_id(student_name="张三", class_name="高二1班", student_id="S00100")
     assert err is None
-    assert provided == "S001"
+    assert provided == "S00100"
+    _, too_short = allocate_student_id(student_name="张三", class_name="高二1班", student_id="S001")
+    assert too_short == "invalid_student_id"
     _, invalid = allocate_student_id(student_name="张三", class_name="高二1班", student_id="../escape")
     assert invalid == "invalid_student_id"
 
@@ -179,7 +181,7 @@ def test_reimport_does_not_rotate_password_unless_flagged(tmp_path: Path) -> Non
     app_mod = _auth_on_app(tmp_path)
     client = TestClient(app_mod.app)
     headers = _admin_headers()
-    csv_text = "student_name,class_name,student_id\n张三,高二1班,S001\n"
+    csv_text = "student_name,class_name,student_id\n张三,高二1班,S00100\n"
     first = client.post("/auth/admin/students/import", headers=headers, files=_csv_file(csv_text))
     assert first.status_code == 200
     original = str((first.json().get("items") or [{}])[0].get("temp_password") or "")
@@ -194,7 +196,7 @@ def test_reimport_does_not_rotate_password_unless_flagged(tmp_path: Path) -> Non
 
     still_works = client.post(
         "/auth/student/login",
-        json={"candidate_id": "S001", "credential_type": "password", "credential": original},
+        json={"candidate_id": "S00100", "credential_type": "password", "credential": original},
     )
     assert still_works.json().get("ok") is True
 
@@ -210,12 +212,12 @@ def test_reimport_does_not_rotate_password_unless_flagged(tmp_path: Path) -> Non
     assert new_password != original
     old_denied = client.post(
         "/auth/student/login",
-        json={"candidate_id": "S001", "credential_type": "password", "credential": original},
+        json={"candidate_id": "S00100", "credential_type": "password", "credential": original},
     )
     assert old_denied.json().get("ok") is not True
     new_ok = client.post(
         "/auth/student/login",
-        json={"candidate_id": "S001", "credential_type": "password", "credential": new_password},
+        json={"candidate_id": "S00100", "credential_type": "password", "credential": new_password},
     )
     assert new_ok.json().get("ok") is True
 
@@ -280,3 +282,71 @@ def test_import_then_enroll_class_is_separate(tmp_path: Path) -> None:
     assert enroll.json().get("ok") is True
     with _connect_auth(tmp_path) as conn:
         assert conn.execute("SELECT COUNT(*) AS n FROM student_enrollments").fetchone()["n"] == 1
+
+
+def test_import_then_identify_by_name_then_password_login(tmp_path: Path) -> None:
+    app_mod = _auth_on_app(tmp_path)
+    client = TestClient(app_mod.app)
+    headers = _admin_headers()
+    imported = client.post(
+        "/auth/admin/students/import",
+        headers=headers,
+        files=_csv_file("student_name,class_name\n张三,高二1班\n"),
+    )
+    assert imported.status_code == 200
+    temp_password = str((imported.json().get("items") or [{}])[0].get("temp_password") or "")
+    assert temp_password
+    assert not (tmp_path / "data" / "student_profiles").exists() or not any(
+        (tmp_path / "data" / "student_profiles").glob("*.json")
+    )
+
+    identified = client.post("/auth/student/identify", json={"name": "张三", "class_name": "高二1班"})
+    assert identified.status_code == 200
+    body = identified.json()
+    assert body.get("ok") is True
+    candidate_id = str(body.get("candidate_id") or "")
+    assert candidate_id.startswith("cid_")
+    assert "student_id" not in body
+    assert "student_id" not in (body.get("student") or {})
+
+    login = client.post(
+        "/auth/student/login",
+        json={"candidate_id": candidate_id, "credential_type": "password", "credential": temp_password},
+    )
+    assert login.status_code == 200
+    assert login.json().get("ok") is True
+    assert login.json().get("role") == "student"
+
+
+def test_import_rejects_too_many_rows_and_oversize_file(tmp_path: Path) -> None:
+    from services.api.auth.student_provision_service import MAX_CSV_BYTES, MAX_CSV_ROWS
+
+    rows = "\n".join(["student_name,class_name", *[f"n{i},c{i}" for i in range(MAX_CSV_ROWS)]])
+    parsed_ok = parse_roster_csv(rows + "\n")
+    assert parsed_ok.get("ok") is True
+    assert len(parsed_ok.get("rows") or []) == MAX_CSV_ROWS
+
+    too_many = parse_roster_csv(rows + f"\nn{MAX_CSV_ROWS},c{MAX_CSV_ROWS}\n")
+    assert too_many.get("ok") is False
+    assert too_many.get("error") == "too_many_rows"
+
+    app_mod = _auth_on_app(tmp_path)
+    client = TestClient(app_mod.app)
+    headers = _admin_headers()
+    oversize = client.post(
+        "/auth/admin/students/import",
+        headers=headers,
+        files={"file": ("roster.csv", b"a" * (MAX_CSV_BYTES + 1), "text/csv")},
+    )
+    assert oversize.status_code == 400
+    assert oversize.json().get("detail") == "file_too_large"
+    http_too_many = client.post(
+        "/auth/admin/students/import",
+        headers=headers,
+        files=_csv_file(rows + f"\nn{MAX_CSV_ROWS},c{MAX_CSV_ROWS}\n"),
+    )
+    assert http_too_many.status_code == 400
+    assert http_too_many.json().get("detail") == "too_many_rows"
+    with _connect_auth(tmp_path) as conn:
+        assert conn.execute("SELECT COUNT(*) AS n FROM student_auth").fetchone()["n"] == 0
+        assert conn.execute("SELECT COUNT(*) AS n FROM student_enrollments").fetchone()["n"] == 0

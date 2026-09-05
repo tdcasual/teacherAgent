@@ -97,9 +97,10 @@ def handle_identify_teacher(
 def _match_student_profiles(store: Any, *, name: str, class_name: str) -> List[Dict[str, str]]:
     name_norm = normalize(name)
     class_norm = normalize(class_name)
+    # Roster CSV writes student_auth only; profiles JSON is not the login source.
     profiles = [
         item
-        for item in store._list_student_profiles()
+        for item in store._list_student_identities()
         if normalize(item.get("student_name", "")) == name_norm
     ]
     if class_norm:
