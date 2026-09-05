@@ -300,6 +300,7 @@ def app_env() -> str:
 def is_production() -> bool:
     return app_env() in {"prod", "production"}
 
+
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
 

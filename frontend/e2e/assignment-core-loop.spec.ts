@@ -5,7 +5,7 @@ import { assignmentConfirmButton, workflowUploadSubmitButton } from './helpers/w
 
 const ASSIGNMENT_ID = 'HW-LOOP-001'
 const JOB_ID = 'job_loop_1'
-const STUDENT_BASE_URL = 'http://127.0.0.1:4175'
+const STUDENT_BASE_URL = 'http://127.0.0.1:4275'
 
 const fakePdfFile = {
   name: 'assignment-loop.pdf',
