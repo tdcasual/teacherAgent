@@ -73,7 +73,7 @@ def _register_ops_routes(app_obj: FastAPI) -> None:
     async def ops_metrics_prom():
         require_principal(roles=("service", "admin"))
         return PlainTextResponse(
-            content=OBSERVABILITY.prometheus_text(),
+            content=resolve_observability(app_obj).prometheus_text(),
             media_type="text/plain; version=0.0.4; charset=utf-8",
         )
 

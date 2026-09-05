@@ -11,9 +11,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-from .agent_context_resolution_service import (
-    find_last_user_text as _find_last_user_text,
-)
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .role_runtime_policy import get_role_runtime_policy
 from .tool_confirm_service import (
@@ -716,20 +713,6 @@ def _build_runtime_conversation(
     return convo
 
 
-def _maybe_teacher_runtime_shortcut_reply(
-    *,
-    deps: AgentRuntimeDeps,
-    is_teacher_role: bool,
-    messages: List[Dict[str, Any]],
-    last_user_text: str,
-    teacher_id: Optional[str],
-    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
-) -> Optional[Dict[str, Any]]:
-    if not is_teacher_role:
-        return None
-    return None
-
-
 def _runtime_tools_for_role(
     *,
     deps: AgentRuntimeDeps,
@@ -790,7 +773,6 @@ def run_agent_runtime(
     initial_convo: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
-    last_user_text = _find_last_user_text(messages)
     allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
     role_policy = get_role_runtime_policy(role_hint)
     is_teacher_role = role_policy.role == "teacher"
@@ -804,16 +786,6 @@ def run_agent_runtime(
             skill_runtime=skill_runtime,
             extra_system=extra_system,
         )
-        shortcut_reply = _maybe_teacher_runtime_shortcut_reply(
-            deps=deps,
-            is_teacher_role=is_teacher_role,
-            messages=messages,
-            last_user_text=last_user_text,
-            teacher_id=teacher_id,
-            event_sink=event_sink,
-        )
-        if shortcut_reply:
-            return shortcut_reply
 
     tools = _runtime_tools_for_role(
         deps=deps,

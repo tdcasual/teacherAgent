@@ -82,6 +82,21 @@ def test_ops_metrics_exposes_observability_snapshot() -> None:
                 assert response.headers.get("x-request-id")
 
 
+def test_ops_metrics_prom_exports_observability_text() -> None:
+    with _env_guard():
+        with TemporaryDirectory() as td:
+            app_mod = _load_app(Path(td), auth_required="0")
+            with TestClient(app_mod.app) as client:
+                assert client.get("/health").status_code == 200
+
+                response = client.get("/ops/metrics.prom")
+                assert response.status_code == 200
+                content_type = (response.headers.get("content-type") or "").lower()
+                assert content_type.startswith("text/plain")
+                assert "http_requests_total" in response.text
+                assert "analysis_runtime" not in response.text
+
+
 def test_ops_slo_includes_core_projection_fields() -> None:
     with _env_guard():
         with TemporaryDirectory() as td:
