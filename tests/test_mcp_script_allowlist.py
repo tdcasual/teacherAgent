@@ -63,12 +63,22 @@ def test_run_script_allows_skill_and_render_scripts(monkeypatch):
             return _Proc()
 
         monkeypatch.setattr(mcp_mod.subprocess, "run", _fake_run)
-        skill = mcp_mod.APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
+        lesson = mcp_mod.APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
+        core = mcp_mod.APP_ROOT / "skills" / "physics-core-examples" / "scripts" / "register_core_example.py"
+        coach = mcp_mod.APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
         render = mcp_mod.APP_ROOT / "scripts" / "render_assignment_pdf.py"
-        assert mcp_mod.run_script(["python3", str(skill)]) == "ok"
+
+        with pytest.raises(HTTPException) as lesson_exc:
+            mcp_mod.run_script(["python3", str(lesson)])
+        assert lesson_exc.value.status_code == 400
+        with pytest.raises(HTTPException) as core_exc:
+            mcp_mod.run_script(["python3", str(core)])
+        assert core_exc.value.status_code == 400
+
+        assert mcp_mod.run_script(["python3", str(coach)]) == "ok"
         assert mcp_mod.run_script(["python3", str(render)]) == "ok"
         cmds = captured.get("cmds") or []
-        assert any(Path(cmd[1]).name == "lesson_capture.py" for cmd in cmds)
+        assert any(Path(cmd[1]).name == "update_profile.py" for cmd in cmds)
         assert any(Path(cmd[1]).name == "render_assignment_pdf.py" for cmd in cmds)
 
 

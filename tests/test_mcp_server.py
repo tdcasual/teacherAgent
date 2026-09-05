@@ -10,15 +10,59 @@ from tempfile import TemporaryDirectory
 from fastapi.testclient import TestClient
 
 
-def load_mcp(tmp_dir: Path, api_key: str = "test-key"):
+UNBOUND_TOOL_NAMES = {"student.search", "student.profile.get"}
+BOUND_EXTRA_TOOL_NAMES = {"student.profile.update", "assignment.list", "assignment.render"}
+BOUND_TOOL_NAMES = UNBOUND_TOOL_NAMES | BOUND_EXTRA_TOOL_NAMES
+FORBIDDEN_TOOL_PREFIXES = ("lesson.", "core_example.", "exam.")
+
+
+def load_mcp(tmp_dir: Path, api_key: str = "test-key", bound_teacher_id: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    if bound_teacher_id:
+        os.environ["MCP_BOUND_TEACHER_ID"] = bound_teacher_id
+    else:
+        os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
     return mcp_mod
+
+
+def _tool_names(client: TestClient, api_key: str) -> set:
+    res = client.post(
+        "/mcp",
+        headers={"X-API-Key": api_key},
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert "result" in payload
+    return {t.get("name") for t in payload["result"]}
+
+
+def _call_tool(client: TestClient, api_key: str, name: str, arguments: dict, rpc_id: int = 1):
+    return client.post(
+        "/mcp",
+        headers={"X-API-Key": api_key},
+        json={
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+    )
+
+
+def _seed_assignment(data_dir: Path, assignment_id: str, teacher_id: str) -> None:
+    folder = data_dir / "assignments" / assignment_id
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "meta.json").write_text(
+        json.dumps({"assignment_id": assignment_id, "teacher_id": teacher_id}, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 class MCPServerTest(unittest.TestCase):
@@ -198,6 +242,71 @@ class MCPServerTest(unittest.TestCase):
             )
             self.assertEqual(ok.status_code, 200)
             self.assertIn("result", ok.json())
+
+    def test_unbound_tools_list_is_student_read_only(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            names = _tool_names(TestClient(mcp_mod.app), "secret")
+            forbidden = {n for n in names if n.startswith(FORBIDDEN_TOOL_PREFIXES) or n == "assignment.generate"}
+            self.assertEqual(forbidden, set())
+            self.assertEqual(names, UNBOUND_TOOL_NAMES)
+
+    def test_bound_tools_list_adds_only_student_update_and_assignment_io(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret", bound_teacher_id="t_bound")
+            names = _tool_names(TestClient(mcp_mod.app), "secret")
+            forbidden = {n for n in names if n.startswith(FORBIDDEN_TOOL_PREFIXES) or n == "assignment.generate"}
+            self.assertEqual(forbidden, set())
+            self.assertEqual(names, BOUND_TOOL_NAMES)
+
+    def test_assignment_list_unbound_returns_mcp_teacher_unbound(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            res = _call_tool(TestClient(mcp_mod.app), "secret", "assignment.list", {})
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json().get("result"), {"error": "mcp_teacher_unbound"})
+
+    def test_assignment_render_unbound_jsonrpc_403_mcp_teacher_unbound(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "assignment.render",
+                {"assignment_id": "A1"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "mcp_teacher_unbound")
+
+    def test_assignment_render_owner_mismatch_forbidden(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            _seed_assignment(Path(os.environ["DATA_DIR"]), "HW_OTHER", "t_other")
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "assignment.render",
+                {"assignment_id": "HW_OTHER"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "forbidden_assignment_owner")
+
+    def test_assignment_list_bound_filters_owner(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            data_dir = Path(os.environ["DATA_DIR"])
+            _seed_assignment(data_dir, "HW_MINE", "t_bound")
+            _seed_assignment(data_dir, "HW_OTHER", "t_other")
+            res = _call_tool(TestClient(mcp_mod.app), "secret", "assignment.list", {}, rpc_id=2)
+            self.assertEqual(res.status_code, 200)
+            names = res.json()["result"]["assignments"]
+            self.assertEqual(names, ["HW_MINE"])
 
 
 if __name__ == "__main__":
