@@ -160,7 +160,18 @@ class StudentImportServiceTest(unittest.TestCase):
             now_iso=lambda: "2026-02-07T10:00:00",
         )
         result = student_import({"source": "unknown"}, deps=deps)
-        self.assertEqual(result.get("error"), "unsupported source: unknown")
+        self.assertEqual(result.get("error"), "gone")
+
+    def test_student_import_exam_responses_is_gone(self):
+        deps = StudentImportDeps(
+            app_root=Path("/tmp/app"),
+            data_dir=Path("/tmp/data"),
+            load_profile_file=_load_profile_file,
+            now_iso=lambda: "2026-02-07T10:00:00",
+        )
+        result = student_import({"source": "responses_scored"}, deps=deps)
+        self.assertEqual(result.get("error"), "gone")
+        self.assertFalse(result.get("ok"))
 
     def test_import_skips_invalid_student_id_path(self):
         with TemporaryDirectory() as td:

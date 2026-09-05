@@ -478,8 +478,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 headers=student_headers,
                 json={"source": "responses"},
             )
-            self.assertEqual(denied.status_code, 403)
-            self.assertEqual(denied.json().get("detail"), "forbidden")
+            self.assertEqual(denied.status_code, 410)
+            self.assertEqual(denied.json().get("detail"), "gone")
 
     def test_student_import_rejects_outside_file_path(self):
         with TemporaryDirectory() as td:
@@ -499,8 +499,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 headers=teacher_headers,
                 json={"source": "responses", "file_path": str(outside)},
             )
-            self.assertEqual(blocked.status_code, 400)
-            self.assertEqual(blocked.json().get("detail"), "responses file not found")
+            self.assertEqual(blocked.status_code, 410)
+            self.assertEqual(blocked.json().get("detail"), "gone")
 
     def test_removed_teacher_skills_routes_return_not_found(self):
         with TemporaryDirectory() as td:

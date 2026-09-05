@@ -71,6 +71,22 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
 
+  it('labels the shell as admin and hides workbench controls after admin login', () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('admin-token')
+    vi.spyOn(teacherAuth, 'readTeacherAuthRole').mockReturnValue('admin')
+    vi.spyOn(teacherAuth, 'readTeacherAuthSubject').mockReturnValue({
+      teacher_id: 'principal_admin',
+      teacher_name: 'principal_admin',
+      role: 'admin',
+    })
+    render(<TeacherTopbar {...buildProps()} />)
+
+    expect(screen.getByText('身份：管理员')).toBeTruthy()
+    expect(screen.queryByText('身份：老师')).toBeNull()
+    expect(screen.queryByRole('button', { name: '打开工作台' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '展开会话' })).toBeNull()
+  })
+
   it('opens admin panel from desktop management button', () => {
     const props = buildProps()
     render(<TeacherTopbar {...props} />)

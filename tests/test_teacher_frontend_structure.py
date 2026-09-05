@@ -13,6 +13,10 @@ _TOPBAR_PATH = (
 )
 _TOPBAR_OVERFLOW_PATH = _TOPBAR_PATH.with_name("TeacherTopbarOverflowMenu.tsx")
 _TOPBAR_ADMIN_MENU_PATH = _TOPBAR_PATH.with_name("TeacherTopbarAdminMenu.tsx")
+_ADMIN_SCHOOL_PANEL_PATH = (
+    _ROOT / "frontend" / "apps" / "teacher" / "src" / "features" / "admin" / "AdminSchoolPanel.tsx"
+)
+_TEACHER_ADMIN_PANEL_PATH = _TOPBAR_PATH.with_name("TeacherAdminPanel.tsx")
 _CHROME_PATH = _ROOT / "frontend" / "apps" / "teacher" / "src" / "teacherAppChrome.tsx"
 _MARKDOWN_PATH = _ROOT / "frontend" / "apps" / "shared" / "markdown.ts"
 _STUDENT_APP_PATH = _ROOT / "frontend" / "apps" / "student" / "src" / "App.tsx"
@@ -51,6 +55,22 @@ def test_teacher_topbar_line_budget() -> None:
         f"TeacherTopbar.tsx is {line_count} lines (limit 400). "
         "Keep menu/overflow sections extracted."
     )
+
+
+def test_admin_school_panel_is_extracted_wide_and_budgeted() -> None:
+    assert _ADMIN_SCHOOL_PANEL_PATH.exists()
+    source = _ADMIN_SCHOOL_PANEL_PATH.read_text(encoding="utf-8")
+    drawer = _TEACHER_ADMIN_PANEL_PATH.read_text(encoding="utf-8")
+    layout = _LAYOUT_PATH.read_text(encoding="utf-8")
+    line_count = len(source.splitlines())
+    assert line_count < 500, (
+        f"AdminSchoolPanel.tsx is {line_count} lines (limit 500). "
+        "Keep school admin UI out of the 344px teacher drawer."
+    )
+    assert "720px" in source
+    assert "AdminSchoolPanel" in layout
+    assert "AdminSchoolPanel" not in drawer
+    assert "w-[min(344px" in drawer
 
 
 def test_teacher_topbar_menu_overflow_modules_exist() -> None:

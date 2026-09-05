@@ -9,7 +9,7 @@
 ## 我现在要做什么
 - 老师日常教学闭环：`docs/how-to/teacher-daily-workflow.md`
 - 学生登录与提交作业：`docs/how-to/student-login-and-submit.md`
-- 管理员管理教师账号（TUI）：`docs/how-to/admin-manage-teachers-tui.md`
+- 管理员管理教师与学生名册：`docs/how-to/admin-manage-teachers-tui.md`
 - 账号与认证问题排查：`docs/how-to/auth-and-account-troubleshooting.md`
 
 ## 角色入口

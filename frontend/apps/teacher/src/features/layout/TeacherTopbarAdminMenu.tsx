@@ -123,7 +123,12 @@ export default function TeacherTopbarAdminMenu({
   const [studentResetError, setStudentResetError] = useState('')
   const [studentResetInfo, setStudentResetInfo] = useState('')
   const [studentResetItems, setStudentResetItems] = useState<StudentPasswordResetItem[]>([])
+  const [adminUsernameInput, setAdminUsernameInput] = useState('')
+  const [adminPasswordInput, setAdminPasswordInput] = useState('')
+  const [adminSubmitting, setAdminSubmitting] = useState(false)
   const formId = useId()
+  const adminUsernameInputId = `${formId}-admin-username`
+  const adminPasswordInputId = `${formId}-admin-password`
   const nameInputId = `${formId}-name`
   const emailInputId = `${formId}-email`
   const credentialInputId = `${formId}-credential`
@@ -134,6 +139,59 @@ export default function TeacherTopbarAdminMenu({
   const studentResetPasswordInputId = `${formId}-student-reset-password`
   const confirmResetAllId = `${formId}-confirm-reset-all`
   const isAdmin = readTeacherAuthRole() === 'admin'
+
+  const handleAdminLogin = async (event: FormEvent) => {
+    event.preventDefault()
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
+    const username = adminUsernameInput.trim()
+    const password = adminPasswordInput.trim()
+    setAuthError('')
+    setAuthInfo('')
+    if (!username) {
+      setAuthError('请输入管理员用户名。')
+      return
+    }
+    if (!password) {
+      setAuthError('请输入管理员密码。')
+      return
+    }
+    setAdminSubmitting(true)
+    try {
+      const loginRes = await fetch(`${apiBase}/auth/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      if (!loginRes.ok) {
+        const text = await loginRes.text()
+        throw new Error(text || `状态码 ${loginRes.status}`)
+      }
+      const loginData = (await loginRes.json()) as TeacherLoginResponse
+      if (!loginData.ok || !loginData.access_token) {
+        const reason = toText(loginData.error)
+        let message = loginData.message || '管理员认证失败。'
+        if (reason === 'invalid_credential') message = '管理员用户名或密码不正确。'
+        else if (reason === 'locked') message = '尝试次数过多，请稍后再试。'
+        setAuthError(message)
+        return
+      }
+      const subjectId = toText(loginData.subject_id) || username
+      writeTeacherAuthSession({
+        accessToken: loginData.access_token,
+        teacherId: subjectId,
+        teacherName: username,
+        role: toText(loginData.role) || 'admin',
+      })
+      setAdminPasswordInput('')
+      setAuthInfo('管理员认证成功。')
+      onClose()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || '管理员认证失败')
+      setAuthError(message)
+    } finally {
+      setAdminSubmitting(false)
+    }
+  }
 
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -440,6 +498,42 @@ export default function TeacherTopbarAdminMenu({
       onOpenModelSettingsPanel={onOpenModelSettingsPanel}
       onClose={onClose}
     >
+      {!authed ? (
+        <section className="grid gap-2.5">
+          <div className="grid gap-1">
+            <div className="text-sm font-semibold">管理员登录</div>
+            <div className="text-xs text-muted">学校教务使用管理员账号，不走教师 identify。</div>
+          </div>
+          <form className="grid gap-2" onSubmit={handleAdminLogin}>
+            <div className="grid gap-1">
+              <label className="text-xs text-muted" htmlFor={adminUsernameInputId}>管理员用户名</label>
+              <input
+                id={adminUsernameInputId}
+                value={adminUsernameInput}
+                onChange={(event) => setAdminUsernameInput(event.target.value)}
+                autoComplete="username"
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs text-muted" htmlFor={adminPasswordInputId}>管理员密码</label>
+              <input
+                id={adminPasswordInputId}
+                type="password"
+                value={adminPasswordInput}
+                onChange={(event) => setAdminPasswordInput(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            <button
+              type="submit"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              disabled={adminSubmitting}
+            >
+              {adminSubmitting ? '登录中…' : '管理员登录'}
+            </button>
+          </form>
+        </section>
+      ) : null}
       <section className="grid gap-2.5">
         <div className="grid gap-1">
           <div className="text-sm font-semibold">身份验证</div>

@@ -17,7 +17,7 @@ from ..assignment_recompute_roster_service import (
     AssignmentRecomputeRosterError,
     recompute_assignment_roster,
 )
-from ..auth_service import AuthError, require_principal
+from ..auth_service import AuthError, get_current_principal, require_principal
 from ..teacher_grade_service import TeacherGradeError, save_teacher_grade_from_request
 
 
@@ -40,6 +40,12 @@ def _owner_principal() -> Any:
     if principal is None:
         raise HTTPException(status_code=401, detail="missing_authorization")
     return principal
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
 
 
 def _register_progress_routes(
@@ -81,6 +87,7 @@ def _register_grade_routes(
     def teacher_student_grade(
         assignment_id: str, student_id: str, req: TeacherGradeRequest
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             assignment_app.require_assignment_access(assignment_id, deps=app_deps)
@@ -101,6 +108,7 @@ def _register_grade_routes(
 def _register_archive_routes(router: APIRouter, *, data_dir: Any) -> None:
     @router.post("/assignment/{assignment_id}/archive")
     def assignment_archive(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return archive_assignment(assignment_id, principal=principal, data_dir=data_dir)
@@ -109,6 +117,7 @@ def _register_archive_routes(router: APIRouter, *, data_dir: Any) -> None:
 
     @router.post("/assignment/{assignment_id}/unarchive")
     def assignment_unarchive(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return unarchive_assignment(assignment_id, principal=principal, data_dir=data_dir)
@@ -136,6 +145,7 @@ def register_assignment_listing_routes(
 
     @router.post("/assignment/requirements")
     async def assignment_requirements(req: AssignmentRequirementsRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.post_assignment_requirements(req, deps=app_deps)
@@ -152,6 +162,7 @@ def register_assignment_listing_routes(
 
     @router.post("/assignment/{assignment_id}/recompute-roster")
     def assignment_recompute_roster(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return recompute_assignment_roster(

@@ -168,6 +168,12 @@ class AuthExportTokensRequest(BaseModel):
     ids: Optional[List[str]] = None
 
 
+class AdminTeacherCreateRequest(BaseModel):
+    teacher_name: str
+    email: Optional[str] = None
+    teacher_id: Optional[str] = None
+
+
 class AdminTeacherSetDisabledRequest(BaseModel):
     target_id: str
     is_disabled: bool

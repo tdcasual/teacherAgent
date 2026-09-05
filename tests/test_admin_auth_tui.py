@@ -17,6 +17,15 @@ def _load_module():
     return module
 
 
+def test_help_includes_students_import_and_teacher_add() -> None:
+    mod = _load_module()
+    source = Path("scripts/admin_auth_tui.py").read_text(encoding="utf-8")
+    assert "students import <csv_path>" in source
+    assert "teacher add <teacher_name>" in source
+    assert "def _cmd_students_import(" in source
+    assert hasattr(mod, "_encode_multipart")
+
+
 def test_parse_bool_or_any() -> None:
     mod = _load_module()
     assert mod._parse_bool_or_any("true") is True
