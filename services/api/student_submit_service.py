@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 
@@ -245,6 +248,92 @@ def _read_progress(deps: StudentSubmitDeps, assignment_id: str, student_id: str)
     return progress if isinstance(progress, dict) else {}
 
 
+def _is_grade_script_http_failure(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None)
+    try:
+        return int(status) >= 500
+    except (TypeError, ValueError):
+        return False
+
+
+def _grade_script_error_text(exc: Exception) -> str:
+    if isinstance(exc, TimeoutExpired):
+        return "grade_script_timeout"
+    detail = getattr(exc, "detail", None)
+    if detail:
+        return str(detail)[:500]
+    return str(exc)[:500]
+
+
+def _write_ungraded_grading_report(
+    *,
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+    error: str,
+) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    attempt_dir = deps.student_submissions_dir / assignment_id / student_id / f"submission_{timestamp}"
+    attempt_dir.mkdir(parents=True, exist_ok=True)
+    report = {
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "graded_total": 0,
+        "ungraded": 1,
+        "correct": 0,
+        "error": error,
+        "items": [
+            {
+                "status": "ungraded",
+                "confidence": 0.0,
+                "score": 0.0,
+                "reason": "auto_grade_failed",
+            }
+        ],
+    }
+    (attempt_dir / "grading_report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return f"ungraded: {error}"
+
+
+def _record_ungraded_grade(
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+    exc: Exception,
+) -> str:
+    error = _grade_script_error_text(exc)
+    deps.diag_log(
+        "student.submit.grade_script.failed",
+        {"student_id": student_id, "assignment_id": assignment_id, "error": error[:200]},
+    )
+    return _write_ungraded_grading_report(
+        deps=deps,
+        assignment_id=assignment_id,
+        student_id=student_id,
+        error=error,
+    )
+
+
+def _run_grade_script(
+    deps: StudentSubmitDeps,
+    args: list[str],
+    *,
+    assignment_id: str,
+    student_id: str,
+) -> str:
+    try:
+        return deps.run_script(args)
+    except TimeoutExpired as exc:
+        return _record_ungraded_grade(deps, assignment_id, student_id, exc)
+    except Exception as exc:  # policy: allowed-broad-except
+        if not _is_grade_script_http_failure(exc):
+            raise
+        return _record_ungraded_grade(deps, assignment_id, student_id, exc)
+
+
 async def submit(
     *,
     student_id: str,
@@ -284,7 +373,12 @@ async def submit(
         "--assignment-id",
         safe_assignment_id,
     ]
-    out = deps.run_script(args)
+    out = _run_grade_script(
+        deps,
+        args,
+        assignment_id=safe_assignment_id,
+        student_id=safe_student_id,
+    )
     progress = _read_progress(deps, safe_assignment_id, safe_student_id)
     signals = _progress_signals(progress, safe_student_id)
     payload = _submit_payload(

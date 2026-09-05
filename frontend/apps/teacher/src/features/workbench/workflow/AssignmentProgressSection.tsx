@@ -205,6 +205,9 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                                     <div>提交{attempts}次 · {official != null ? `官方分${official}` : '无官方分'}{overdue ? ' · 逾期' : ''}</div>
                                     <div>过程：{processStatusLabel(processStatus) || processLabel}{processNote}{memory}</div>
                                   </div>
+                                  {attempts > 0 && official == null ? (
+                                    <div className="text-[12px] text-muted mt-1">未自动出分，请老师覆盖</div>
+                                  ) : null}
                                   {saveStudentGrade ? (
                                     <form
                                       className="mt-2 grid gap-1.5"

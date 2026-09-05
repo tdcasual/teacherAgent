@@ -1,7 +1,11 @@
+import json
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from subprocess import TimeoutExpired
 from tempfile import TemporaryDirectory
+
+from fastapi import HTTPException
 
 from services.api.student_submit_service import (
     StudentSubmitDeps,
@@ -371,6 +375,60 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             )
             self.assertTrue(result.get("ok"))
             self.assertEqual(captured["auto"], 0)
+
+    async def test_submit_catches_run_script_http_500_as_ungraded_200(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            def _boom(_args):
+                raise HTTPException(status_code=500, detail="ocr_utils not available")
+
+            deps = _deps(root, run_script=_boom)
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertTrue(list((root / "uploads").glob("*")))
+            reports = list((root / "submissions").glob("HW_1/S1/submission_*/grading_report.json"))
+            self.assertEqual(len(reports), 1)
+            report = json.loads(reports[0].read_text(encoding="utf-8"))
+            self.assertIn("ocr_utils not available", str(report.get("error") or ""))
+            items = report.get("items") or []
+            self.assertTrue(items)
+            self.assertEqual(items[0].get("status"), "ungraded")
+
+    async def test_submit_catches_run_script_timeout_as_ungraded_200(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+
+            def _timeout(_args):
+                raise TimeoutExpired(cmd=["python3"], timeout=1)
+
+            deps = _deps(root, run_script=_timeout)
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            self.assertTrue(list((root / "uploads").glob("*")))
+            reports = list((root / "submissions").glob("HW_1/S1/submission_*/grading_report.json"))
+            self.assertEqual(len(reports), 1)
+            report = json.loads(reports[0].read_text(encoding="utf-8"))
+            self.assertEqual(report.get("error"), "grade_script_timeout")
+            items = report.get("items") or []
+            self.assertTrue(items)
+            self.assertEqual(items[0].get("status"), "ungraded")
 
 
 class StudentSubmitServiceImportGuardTest(unittest.TestCase):

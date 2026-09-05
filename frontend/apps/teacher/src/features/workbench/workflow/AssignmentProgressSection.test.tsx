@@ -136,4 +136,31 @@ describe('AssignmentProgressSection', () => {
     fireEvent.click(screen.getByRole('button', { name: '恢复自动分' }))
     expect(saveStudentGrade).toHaveBeenCalledWith('S1', { override_score: null })
   })
+
+  it('prompts teacher override when auto-grade left no official score', () => {
+    const saveStudentGrade = vi.fn(async () => undefined)
+    render(
+      <AssignmentProgressSection
+        {...baseProps}
+        saveStudentGrade={saveStudentGrade}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          students: [
+            {
+              student_id: 'S1',
+              complete: false,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: false },
+              process: { status: 'none' },
+            },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('未自动出分，请老师覆盖')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '保存成绩' })).toBeTruthy()
+  })
 })
