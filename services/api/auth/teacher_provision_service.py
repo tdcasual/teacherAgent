@@ -8,7 +8,8 @@ from typing import Any, Callable, Dict, Optional
 
 from ..core_utils import normalize
 
-_TEACHER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+# Min 6 chars so stored ids match resolve_teacher_id/safe_fs_id (short slugs remap).
+_TEACHER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{5,63}$")
 _RESERVED_TEACHER_IDS = {"teacher"}
 
 

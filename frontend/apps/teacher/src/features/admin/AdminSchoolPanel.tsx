@@ -129,7 +129,7 @@ export default function AdminSchoolPanel() {
         const messages: Record<string, string> = {
           teacher_id_taken: '教师 ID 已被占用。',
           email_taken: '该邮箱已被占用。',
-          invalid_teacher_id: '教师 ID 不合法，且不能为 teacher。',
+          invalid_teacher_id: '教师 ID 需 6–64 位字母数字、下划线或连字符，且不能为 teacher。',
           missing_teacher_name: '请填写教师姓名。',
         }
         setError(messages[code] || data.message || code || '创建教师失败。')
@@ -211,7 +211,7 @@ export default function AdminSchoolPanel() {
               id={teacherIdField}
               value={teacherIdInput}
               onChange={(event) => setTeacherIdInput(event.target.value)}
-              placeholder="省略则自动生成"
+              placeholder="至少 6 位；省略则自动生成"
               autoComplete="off"
             />
           </div>

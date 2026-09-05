@@ -70,6 +70,7 @@ def register_assignment_generation_routes(
 
     @router.post("/assignment/render")
     async def render_assignment(assignment_id: str = Form(...)) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.post_render_assignment(assignment_id, deps=app_deps)
@@ -86,6 +87,7 @@ def register_assignment_generation_routes(
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.post_assignment_questions_ocr(

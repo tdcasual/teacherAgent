@@ -163,6 +163,14 @@ def test_create_teacher_rejects_reserved_and_invalid_ids(tmp_path: Path) -> None
     assert invalid.status_code == 400
     assert invalid.json().get("detail") == "invalid_teacher_id"
 
+    too_short = client.post(
+        "/auth/admin/teacher/create",
+        headers=headers,
+        json={"teacher_name": "系统老师", "teacher_id": "T01"},
+    )
+    assert too_short.status_code == 400
+    assert too_short.json().get("detail") == "invalid_teacher_id"
+
 
 def test_create_teacher_conflict_on_id_and_email(tmp_path: Path) -> None:
     app_mod = _auth_on_app(tmp_path)

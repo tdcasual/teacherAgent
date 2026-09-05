@@ -75,6 +75,7 @@ def register_assignment_upload_routes(
 
     @router.post("/assignment/upload/draft/save")
     async def assignment_upload_draft_save(req: UploadDraftSaveRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         return await assignment_app.save_assignment_upload_draft(req, deps=app_deps)
 

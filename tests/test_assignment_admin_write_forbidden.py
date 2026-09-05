@@ -81,3 +81,27 @@ def test_admin_bearer_is_403_on_assignment_write_paths() -> None:
             archive = client.post("/assignment/HW1/archive", headers=headers)
             assert archive.status_code == 403
             assert archive.json().get("detail") == "forbidden"
+
+            unarchive = client.post("/assignment/HW1/unarchive", headers=headers)
+            assert unarchive.status_code == 403
+            assert unarchive.json().get("detail") == "forbidden"
+
+            grade = client.post(
+                "/teacher/assignment/HW1/student/S001/grade",
+                headers=headers,
+                json={"comment": "nope"},
+            )
+            assert grade.status_code == 403
+            assert grade.json().get("detail") == "forbidden"
+
+            recompute = client.post("/assignment/HW1/recompute-roster", headers=headers)
+            assert recompute.status_code == 403
+            assert recompute.json().get("detail") == "forbidden"
+
+            draft_save = client.post(
+                "/assignment/upload/draft/save",
+                headers=headers,
+                json={"job_id": "job-1"},
+            )
+            assert draft_save.status_code == 403
+            assert draft_save.json().get("detail") == "forbidden"

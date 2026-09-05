@@ -87,6 +87,7 @@ def _register_grade_routes(
     def teacher_student_grade(
         assignment_id: str, student_id: str, req: TeacherGradeRequest
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             assignment_app.require_assignment_access(assignment_id, deps=app_deps)
@@ -116,6 +117,7 @@ def _register_archive_routes(router: APIRouter, *, data_dir: Any) -> None:
 
     @router.post("/assignment/{assignment_id}/unarchive")
     def assignment_unarchive(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return unarchive_assignment(assignment_id, principal=principal, data_dir=data_dir)
@@ -143,6 +145,7 @@ def register_assignment_listing_routes(
 
     @router.post("/assignment/requirements")
     async def assignment_requirements(req: AssignmentRequirementsRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         try:
             return await assignment_app.post_assignment_requirements(req, deps=app_deps)
@@ -159,6 +162,7 @@ def register_assignment_listing_routes(
 
     @router.post("/assignment/{assignment_id}/recompute-roster")
     def assignment_recompute_roster(assignment_id: str) -> Any:
+        _forbid_admin_assignment_write()
         principal = _owner_principal()
         try:
             return recompute_assignment_roster(
