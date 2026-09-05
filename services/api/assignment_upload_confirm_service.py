@@ -138,16 +138,18 @@ def _prepare_confirm_data(
 def _ensure_requirements_ready(
     job_id: str,
     *,
+    job: Dict[str, Any],
     strict_requirements: bool,
     missing: List[str],
     deps: AssignmentUploadConfirmDeps,
 ) -> None:
     if not (strict_requirements and missing):
         return
+    recovered = job.get("status") == "failed" or bool(job.get("recovered_from_parse_failure"))
     deps.write_upload_job(
         job_id,
         {
-            "status": "done",
+            "status": "failed" if recovered else "done",
             "step": "await_requirements",
             "progress": 100,
             "requirements_missing": missing,
@@ -326,6 +328,7 @@ def confirm_assignment_upload(
     )
     _ensure_requirements_ready(
         job_id,
+        job=job,
         strict_requirements=strict_requirements,
         missing=prepared.missing,
         deps=deps,

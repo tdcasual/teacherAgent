@@ -250,6 +250,9 @@ class UploadDraftFlowTest(unittest.TestCase):
             detail = res.json()["detail"]
             self.assertEqual(detail["error"], "requirements_missing")
             self.assertTrue(detail.get("missing"))
+            job_after_confirm = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+            self.assertEqual(job_after_confirm.get("status"), "failed")
+            self.assertEqual(job_after_confirm.get("error"), "no questions parsed")
 
     def test_failed_parse_complete_requirements_confirm_succeeds(self):
         with TemporaryDirectory() as td:

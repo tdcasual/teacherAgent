@@ -74,6 +74,35 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual(ctx.exception.detail.get("error"), "requirements_missing")
+            self.assertEqual(writes[-1][1].get("status"), "done")
+
+    def test_recovered_failed_missing_requirements_keeps_failed_status(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            parsed = {"questions": [{"stem": "x"}], "requirements": {}, "missing": ["subject"], "warnings": []}
+            (job_dir / "parsed.json").write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
+            deps = self._deps(root, writes)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "A1",
+                        "status": "failed",
+                        "error": "no questions parsed",
+                        "recovered_from_parse_failure": True,
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail.get("error"), "requirements_missing")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+            self.assertEqual(writes[-1][1].get("step"), "await_requirements")
 
     def test_success_writes_meta_and_returns_ok(self):
         with TemporaryDirectory() as td:
