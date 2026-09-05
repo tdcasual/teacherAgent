@@ -714,7 +714,8 @@ class AssignmentProgressTest(unittest.TestCase):
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
                 res = client.get("/assignment/%2e%2e/download", params={"file": "q1.png"})
-                self.assertEqual(res.status_code, 400)
+                # Fail-closed: unauthenticated download is 401 before path validation.
+                self.assertEqual(res.status_code, 401)
 
     def test_student_profile_rejects_invalid_student_id_path(self):
         with TemporaryDirectory() as td:
