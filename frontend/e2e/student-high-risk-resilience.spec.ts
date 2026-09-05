@@ -138,6 +138,8 @@ test('stale pending chat job is discarded so student can start today assignment 
   })
 
   await page.goto('/')
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
+  await page.getByRole('button', { name: '自由提问' }).click()
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
   await expect(page.locator('.message.assistant .text').filter({ hasText: '正在恢复上一条回复' })).toHaveCount(0)
 
