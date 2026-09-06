@@ -285,7 +285,9 @@ def _owned_assignment_progress(
     return deps.assignment_progress(assignment_id)
 
 
-def _filter_progress_students(progress: Dict[str, Any], *, predicate) -> Dict[str, Any]:
+def _filter_progress_students(
+    progress: Dict[str, Any], *, predicate: Callable[[Dict[str, Any]], bool]
+) -> Dict[str, Any]:
     if not isinstance(progress, dict) or progress.get("error"):
         return progress
     students = [item for item in (progress.get("students") or []) if isinstance(item, dict) and predicate(item)]
@@ -296,7 +298,8 @@ def _filter_progress_students(progress: Dict[str, Any], *, predicate) -> Dict[st
 
 
 def _is_unsubmitted(student: Dict[str, Any]) -> bool:
-    submission = student.get("submission") if isinstance(student.get("submission"), dict) else {}
+    raw = student.get("submission")
+    submission = raw if isinstance(raw, dict) else {}
     return not bool(submission.get("best"))
 
 
