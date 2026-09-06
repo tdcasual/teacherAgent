@@ -202,6 +202,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 payload = {
                     "request_id": "req_test_001",
                     "role": "teacher",
+                    "teacher_id": "T001",
                     "messages": [
                         {
                             "role": "user",
