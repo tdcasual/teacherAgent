@@ -572,7 +572,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             start = client.post(
                 "/assignment/upload/start",
                 headers=teacher_a,
-                data={"assignment_id": "HW_SEC_1"},
+                data={"assignment_id": "HW_SEC_1", "subject_id": "generic"},
                 files=[("files", ("paper.txt", b"q1", "text/plain"))],
             )
             self.assertEqual(start.status_code, 200)
