@@ -16,6 +16,7 @@ AUTH_GUARD_MARKERS = (
     "require_principal(",
     "resolve_student_scope(",
     "resolve_teacher_scope(",
+    "resolve_confirm_actor_id(",
     "scoped_teacher_id(",
     "scoped_payload_teacher_id(",
     "_scoped_student_id(",
