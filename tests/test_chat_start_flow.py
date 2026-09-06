@@ -40,6 +40,7 @@ class ChatStartFlowTest(unittest.TestCase):
                         json={
                             "request_id": "req_chat_start_001",
                             "role": "teacher",
+                            "teacher_id": "T001",
                             "messages": [{"role": "user", "content": "hello"}],
                         },
                     )

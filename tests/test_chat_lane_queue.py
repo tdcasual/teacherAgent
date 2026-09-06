@@ -32,11 +32,13 @@ class ChatLaneQueueTest(unittest.TestCase):
             payload1 = {
                 "request_id": "req_lane_001",
                 "role": "teacher",
+                "teacher_id": "T001",
                 "messages": [{"role": "user", "content": "请帮我列出今天计划"}],
             }
             payload2 = {
                 "request_id": "req_lane_002",
                 "role": "teacher",
+                "teacher_id": "T001",
                 "messages": [{"role": "user", "content": "请帮我列出今天计划"}],
             }
 
