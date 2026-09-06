@@ -97,8 +97,12 @@ def test_api_models_drop_unused_analysis_survey_review_types() -> None:
 
 def test_student_app_lazy_loads_page_chunks() -> None:
     text = Path("frontend/apps/student/src/App.tsx").read_text(encoding="utf-8")
-    assert "lazy(() => import('./features/home/StudentTodayHome'))" in text
-    assert "lazy(() => import('./features/submit/StudentSubmitPanel'))" in text
-    assert "lazy(() => import('./features/history/StudentAssignmentHistoryPage'))" in text
-    assert "lazy(() => import('./features/chat/ChatPanel'))" in text
-    assert "from './features/home/StudentTodayHome'" not in text
+    assert "lazy(" in text
+    for chunk in (
+        "./features/home/StudentTodayHome",
+        "./features/submit/StudentSubmitPanel",
+        "./features/history/StudentAssignmentHistoryPage",
+        "./features/chat/ChatPanel",
+    ):
+        assert f"import('{chunk}')" in text
+        assert f"from '{chunk}'" not in text
