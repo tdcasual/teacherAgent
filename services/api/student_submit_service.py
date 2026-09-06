@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -285,7 +286,7 @@ def _copy_saved_uploads(attempt_dir: Path, file_paths: list[str]) -> list[str]:
         if dest.exists():
             dest = files_dir / f"{src.stem}_{index}{src.suffix}"
         try:
-            dest.write_bytes(src.read_bytes())
+            shutil.copy2(src, dest)
         except OSError:
             linked.append(str(src))
             continue

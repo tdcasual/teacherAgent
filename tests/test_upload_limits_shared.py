@@ -100,6 +100,7 @@ def _ops_deps(root: Path) -> StudentOpsDeps:
         student_candidates_by_name=lambda _name: [],
         normalize=lambda value: str(value),
         diag_log=lambda _event, _payload=None: None,
+        issue_student_candidate_id=lambda sid: f"cid_{sid}",
     )
 
 

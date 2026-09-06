@@ -270,7 +270,6 @@ def _compute_confirm_expected_students(
     teacher_id: str,
     subject_id: str,
     job_id: str,
-    conn: Optional[sqlite3.Connection] = None,
 ) -> List[str]:
     try:
         return deps.compute_expected_students(
@@ -279,7 +278,6 @@ def _compute_confirm_expected_students(
             student_ids,
             teacher_id=teacher_id,
             subject_id=subject_id,
-            conn=conn,
         )
     except ExpectedStudentsError as exc:
         _mark_confirm_failed(job_id, deps, exc.error)
@@ -318,8 +316,8 @@ def _build_assignment_meta(
     scope_val: str,
     teacher_id: str,
     subject_id: str,
+    expected_students: List[str],
     deps: AssignmentUploadConfirmDeps,
-    conn: Optional[sqlite3.Connection] = None,
 ) -> Dict[str, Any]:
     return {
         "assignment_id": assignment_id,
@@ -336,16 +334,7 @@ def _build_assignment_meta(
         "class_name": job.get("class_name") or "",
         "student_ids": student_ids_list,
         "scope": scope_val,
-        "expected_students": _compute_confirm_expected_students(
-            deps,
-            scope_val=scope_val,
-            class_name=str(job.get("class_name") or ""),
-            student_ids=student_ids_list,
-            teacher_id=teacher_id,
-            subject_id=subject_id,
-            job_id=job_id,
-            conn=conn,
-        ),
+        "expected_students": list(expected_students),
         "expected_students_generated_at": deps.now_iso(),
         "completion_policy": {
             "requires_discussion": False,
@@ -531,8 +520,20 @@ def confirm_assignment_upload(
         deps=deps,
     )
     student_ids_list, scope_val = _resolve_students_scope(job, deps)
+    # Roster lives in the same sqlite file as assignments. Snapshot students
+    # before BEGIN IMMEDIATE so confirm does not open a second connection
+    # against a locked auth_registry.sqlite3.
+    expected_students = _compute_confirm_expected_students(
+        deps,
+        scope_val=scope_val,
+        class_name=str(job.get("class_name") or ""),
+        student_ids=student_ids_list,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+        job_id=job_id,
+    )
 
-    def _build_meta(conn: sqlite3.Connection) -> Dict[str, Any]:
+    def _build_meta(_conn: sqlite3.Connection) -> Dict[str, Any]:
         return _build_assignment_meta(
             job_id,
             job=job,
@@ -544,8 +545,8 @@ def confirm_assignment_upload(
             scope_val=scope_val,
             teacher_id=teacher_id,
             subject_id=subject_id,
+            expected_students=expected_students,
             deps=deps,
-            conn=conn,
         )
 
     try:

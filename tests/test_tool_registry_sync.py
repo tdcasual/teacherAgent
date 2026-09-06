@@ -80,12 +80,23 @@ class ToolRegistrySyncTest(unittest.TestCase):
             result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
-                skill_id="physics-core-examples",
+                skill_id="homework-generator",
             )
             self.assertEqual(result.get("reply"), "ok")
             self.assertEqual(
                 set(captured.get("tool_names") or []),
-                {"core_example.search", "core_example.register", "core_example.render", "chart.agent.run", "chart.exec"},
+                {
+                    "assignment.list",
+                    "assignment.generate",
+                    "assignment.requirements.save",
+                    "assignment.render",
+                    "assignment.publish",
+                    "lesson.list",
+                    "student.search",
+                    "student.profile.get",
+                    "chart.agent.run",
+                    "chart.exec",
+                },
             )
 
     def test_run_agent_default_skill_keeps_teacher_tools(self):

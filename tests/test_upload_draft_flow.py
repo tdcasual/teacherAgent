@@ -13,6 +13,26 @@ def load_app(tmp_dir: Path):
     return create_test_app(tmp_dir, reset_modules=True)
 
 
+def seed_owner_roster(*, teacher_id: str = "t_zhang", subject_id: str = "physics", class_name: str = "高二2403班") -> None:
+    from services.api.auth_registry_service import build_auth_registry_store
+
+    store = build_auth_registry_store()
+    store._ensure_teacher_auth(
+        teacher_id=teacher_id,
+        teacher_name=teacher_id,
+        email=None,
+        regenerate_token=False,
+    )
+    store._ensure_student_auth(
+        student_id="S001",
+        student_name="S001",
+        class_name=class_name,
+        regenerate_token=False,
+    )
+    store.add_roster(teacher_id=teacher_id, subject_id=subject_id, class_name=class_name)
+    store.enroll_class(teacher_id=teacher_id, subject_id=subject_id, class_name=class_name)
+
+
 def make_valid_requirements():
     return {
         "subject": "物理",
@@ -34,6 +54,7 @@ class UploadDraftFlowTest(unittest.TestCase):
             tmp_dir = Path(td)
             app_mod = load_app(tmp_dir)
             client = TestClient(app_mod.app)
+            seed_owner_roster()
 
             job_id = "job_test_001"
             assignment_id = "HW_TEST_2026-02-05"
@@ -47,6 +68,8 @@ class UploadDraftFlowTest(unittest.TestCase):
                 "scope": "public",
                 "class_name": "高二2403班",
                 "student_ids": [],
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
                 "source_files": ["paper.pdf"],
                 "answer_files": ["ans.pdf"],
                 "delivery_mode": "pdf",
@@ -125,6 +148,7 @@ class UploadDraftFlowTest(unittest.TestCase):
             tmp_dir = Path(td)
             app_mod = load_app(tmp_dir)
             client = TestClient(app_mod.app)
+            seed_owner_roster()
 
             job_id = "job_test_002"
             assignment_id = "HW_TEST2_2026-02-05"
@@ -138,6 +162,8 @@ class UploadDraftFlowTest(unittest.TestCase):
                 "scope": "public",
                 "class_name": "高二2403班",
                 "student_ids": [],
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
                 "source_files": [],
                 "answer_files": [],
                 "delivery_mode": "image",
