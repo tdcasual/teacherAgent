@@ -453,7 +453,7 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
     return {"ok": True, "teacher_id": actor, "provider": _public_provider(record)}
 
 
-def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProviderRegistryDeps) -> Dict[str, Any]:
+def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProviderRegistryDeps) -> Dict[str, Any]:  # noqa: C901
     actor = deps.resolve_teacher_id(args.get("teacher_id"))
     provider_id = _normalize_provider_id(args.get("provider_id") or args.get("id"))
     if not provider_id:
