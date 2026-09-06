@@ -175,7 +175,9 @@ def _attempt_teacher_route(
 ) -> tuple[Optional[Any], ChatRuntimeRouteState]:
     try:
         actor = require_teacher_id(teacher_id)
-    except TeacherIdentityError:
+    except Exception as exc:
+        if type(exc).__name__ != "TeacherIdentityError":
+            raise
         return None, ChatRuntimeRouteState(reason="teacher_id_required")
     state = ChatRuntimeRouteState(actor=actor)
     config_payload = _load_teacher_model_config(state.actor, deps=deps, state=state)
