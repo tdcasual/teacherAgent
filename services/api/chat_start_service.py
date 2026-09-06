@@ -122,7 +122,7 @@ def _start_teacher_id(req: Any, policy: Any, deps: ChatStartDeps) -> str:
         return ""
     try:
         return deps.resolve_teacher_id(req.teacher_id)
-    except TeacherIdentityError as exc:
+    except (TeacherIdentityError, ValueError) as exc:
         raise deps.http_error(400, str(exc) or "teacher_id_required") from exc
 
 
