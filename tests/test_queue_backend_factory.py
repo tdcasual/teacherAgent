@@ -12,8 +12,6 @@ class DummyBackend:
     def enqueue_upload_job(self, job_id: str) -> None:
         return None
 
-    def enqueue_exam_job(self, job_id: str) -> None:
-        return None
 
     def enqueue_profile_update(self, payload: dict) -> None:
         return None
@@ -24,8 +22,6 @@ class DummyBackend:
     def scan_pending_upload_jobs(self) -> int:
         return 0
 
-    def scan_pending_exam_jobs(self) -> int:
-        return 0
 
     def scan_pending_chat_jobs(self) -> int:
         return 0

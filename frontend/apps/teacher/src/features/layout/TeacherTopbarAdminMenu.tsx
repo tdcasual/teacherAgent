@@ -5,6 +5,7 @@ import { safeLocalStorageGetItem } from '../../utils/storage'
 import {
   clearTeacherAuthSession,
   readTeacherAccessToken,
+  readTeacherAuthRole,
   writeTeacherAuthSession,
 } from '../auth/teacherAuth'
 import TeacherAdminPanel from './TeacherAdminPanel'
@@ -39,6 +40,7 @@ type TeacherLoginResponse = {
   message?: string
   access_token?: string
   subject_id?: string
+  role?: string
   teacher?: {
     teacher_id?: string
     teacher_name?: string
@@ -121,7 +123,12 @@ export default function TeacherTopbarAdminMenu({
   const [studentResetError, setStudentResetError] = useState('')
   const [studentResetInfo, setStudentResetInfo] = useState('')
   const [studentResetItems, setStudentResetItems] = useState<StudentPasswordResetItem[]>([])
+  const [adminUsernameInput, setAdminUsernameInput] = useState('')
+  const [adminPasswordInput, setAdminPasswordInput] = useState('')
+  const [adminSubmitting, setAdminSubmitting] = useState(false)
   const formId = useId()
+  const adminUsernameInputId = `${formId}-admin-username`
+  const adminPasswordInputId = `${formId}-admin-password`
   const nameInputId = `${formId}-name`
   const emailInputId = `${formId}-email`
   const credentialInputId = `${formId}-credential`
@@ -131,6 +138,60 @@ export default function TeacherTopbarAdminMenu({
   const targetClassInputId = `${formId}-target-class`
   const studentResetPasswordInputId = `${formId}-student-reset-password`
   const confirmResetAllId = `${formId}-confirm-reset-all`
+  const isAdmin = readTeacherAuthRole() === 'admin'
+
+  const handleAdminLogin = async (event: FormEvent) => {
+    event.preventDefault()
+    const apiBase = resolveRuntimeApiBase(safeLocalStorageGetItem('apiBaseTeacher'))
+    const username = adminUsernameInput.trim()
+    const password = adminPasswordInput.trim()
+    setAuthError('')
+    setAuthInfo('')
+    if (!username) {
+      setAuthError('请输入管理员用户名。')
+      return
+    }
+    if (!password) {
+      setAuthError('请输入管理员密码。')
+      return
+    }
+    setAdminSubmitting(true)
+    try {
+      const loginRes = await fetch(`${apiBase}/auth/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      if (!loginRes.ok) {
+        const text = await loginRes.text()
+        throw new Error(text || `状态码 ${loginRes.status}`)
+      }
+      const loginData = (await loginRes.json()) as TeacherLoginResponse
+      if (!loginData.ok || !loginData.access_token) {
+        const reason = toText(loginData.error)
+        let message = loginData.message || '管理员认证失败。'
+        if (reason === 'invalid_credential') message = '管理员用户名或密码不正确。'
+        else if (reason === 'locked') message = '尝试次数过多，请稍后再试。'
+        setAuthError(message)
+        return
+      }
+      const subjectId = toText(loginData.subject_id) || username
+      writeTeacherAuthSession({
+        accessToken: loginData.access_token,
+        teacherId: subjectId,
+        teacherName: username,
+        role: toText(loginData.role) || 'admin',
+      })
+      setAdminPasswordInput('')
+      setAuthInfo('管理员认证成功。')
+      onClose()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || '管理员认证失败')
+      setAuthError(message)
+    } finally {
+      setAdminSubmitting(false)
+    }
+  }
 
   const handleAuthSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -206,6 +267,7 @@ export default function TeacherTopbarAdminMenu({
         accessToken: loginData.access_token,
         teacherId,
         teacherName,
+        role: toText(loginData.role) || 'teacher',
         ...(teacherEmail ? { email: teacherEmail } : {}),
       })
 
@@ -358,9 +420,15 @@ export default function TeacherTopbarAdminMenu({
           return
         }
         payload.class_name = className
-      } else if (!confirmResetAll) {
-        setStudentResetError('请勾选“确认重置全部学生密码”。')
-        return
+      } else if (studentResetScope === 'all') {
+        if (!isAdmin) {
+          setStudentResetError('仅管理员可以重置全部学生密码。')
+          return
+        }
+        if (!confirmResetAll) {
+          setStudentResetError('请勾选“确认重置全部学生密码”。')
+          return
+        }
       }
 
       const resetRes = await fetch(`${apiBase}/auth/teacher/student/reset-passwords`, {
@@ -430,6 +498,42 @@ export default function TeacherTopbarAdminMenu({
       onOpenModelSettingsPanel={onOpenModelSettingsPanel}
       onClose={onClose}
     >
+      {!authed ? (
+        <section className="grid gap-2.5">
+          <div className="grid gap-1">
+            <div className="text-sm font-semibold">管理员登录</div>
+            <div className="text-xs text-muted">学校教务使用管理员账号，不走教师 identify。</div>
+          </div>
+          <form className="grid gap-2" onSubmit={handleAdminLogin}>
+            <div className="grid gap-1">
+              <label className="text-xs text-muted" htmlFor={adminUsernameInputId}>管理员用户名</label>
+              <input
+                id={adminUsernameInputId}
+                value={adminUsernameInput}
+                onChange={(event) => setAdminUsernameInput(event.target.value)}
+                autoComplete="username"
+              />
+            </div>
+            <div className="grid gap-1">
+              <label className="text-xs text-muted" htmlFor={adminPasswordInputId}>管理员密码</label>
+              <input
+                id={adminPasswordInputId}
+                type="password"
+                value={adminPasswordInput}
+                onChange={(event) => setAdminPasswordInput(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            <button
+              type="submit"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              disabled={adminSubmitting}
+            >
+              {adminSubmitting ? '登录中…' : '管理员登录'}
+            </button>
+          </form>
+        </section>
+      ) : null}
       <section className="grid gap-2.5">
         <div className="grid gap-1">
           <div className="text-sm font-semibold">身份验证</div>
@@ -492,7 +596,7 @@ export default function TeacherTopbarAdminMenu({
           </button>
         </form>
       </section>
-      <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+      <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
         <div className="grid gap-1">
           <div className="text-sm font-semibold">密码设置</div>
           <div className="text-xs text-muted">设置或更新当前账号密码。</div>
@@ -521,10 +625,12 @@ export default function TeacherTopbarAdminMenu({
       </section>
 
       {authed ? (
-        <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+        <section className="grid gap-2.5 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
           <div className="grid gap-1">
             <div className="text-sm font-semibold">学生密码管理</div>
-            <div className="text-xs text-muted">按学生、班级或全部学生重置密码。</div>
+            <div className="text-xs text-muted">
+              {isAdmin ? '按学生、班级或全部学生重置密码。' : '按学生或班级重置密码。'}
+            </div>
           </div>
           <form className="grid gap-2" onSubmit={handleStudentPasswordReset}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -542,13 +648,15 @@ export default function TeacherTopbarAdminMenu({
               >
                 按班级
               </button>
-              <button
-                type="button"
-                className={`ghost ${studentResetScope === 'all' ? 'font-semibold' : ''}`}
-                onClick={() => setStudentResetScope('all')}
-              >
-                全部学生
-              </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className={`ghost ${studentResetScope === 'all' ? 'font-semibold' : ''}`}
+                  onClick={() => setStudentResetScope('all')}
+                >
+                  全部学生
+                </button>
+              ) : null}
             </div>
             {studentResetScope === 'student' ? (
               <>
@@ -586,7 +694,7 @@ export default function TeacherTopbarAdminMenu({
                 />
               </div>
             ) : null}
-            {studentResetScope === 'all' ? (
+            {isAdmin && studentResetScope === 'all' ? (
               <label className="text-xs text-muted flex items-center gap-2" htmlFor={confirmResetAllId}>
                 <input
                   id={confirmResetAllId}

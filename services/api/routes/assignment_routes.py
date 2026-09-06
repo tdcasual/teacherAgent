@@ -16,7 +16,10 @@ def build_router(core: Any) -> APIRouter:
     router = APIRouter()
     app_deps = assignment_deps.build_assignment_application_deps(core)
     register_assignment_listing_routes(
-        router, app_deps=app_deps, assignment_app=assignment_application
+        router,
+        app_deps=app_deps,
+        assignment_app=assignment_application,
+        data_dir=getattr(core, "DATA_DIR", None),
     )
     register_assignment_upload_routes(
         router, app_deps=app_deps, assignment_app=assignment_application

@@ -23,7 +23,9 @@ jobs:
 
       - name: Check merge conflict markers
         run: |
-          rg -n "^(<<<<<<< .+|=======|>>>>>>> .+)$" services frontend tests docs .github
+          sudo apt-get update -y
+          sudo apt-get install -y ripgrep
+          ! rg -n "^(<<<<<<< .+|=======|>>>>>>> .+)$" services frontend tests docs .github
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -72,34 +74,16 @@ jobs:
 
       - name: Mypy (backend quality gate)
         run: |
+          set -euo pipefail
+          mapfile -t mypy_gate_files < <(grep -vE '^\s*(#|$)' config/mypy_gate_files.txt)
+          if [ "${#mypy_gate_files[@]}" -eq 0 ]; then
+            echo "config/mypy_gate_files.txt has no files" >&2
+            exit 1
+          fi
           python -m mypy \
             --ignore-missing-imports \
             --follow-imports=skip \
-            services/api/settings.py \
-            services/api/config.py \
-            services/api/paths.py \
-            services/api/auth_service.py \
-            services/api/rate_limit.py \
-            services/api/chat_job_state_machine.py \
-            services/api/chat_status_service.py \
-            services/api/chat_idempotency_service.py \
-            services/api/chat_redis_lane_store.py \
-            services/api/chat_lock_service.py \
-            services/api/chat_lane_repository.py \
-            services/api/job_repository.py \
-            services/api/session_store.py \
-            services/api/profile_service.py \
-            services/api/global_limits.py \
-            services/api/observability.py \
-            services/api/request_context.py \
-            services/api/fs_atomic.py \
-            services/api/runtime/runtime_manager.py \
-            services/api/teacher_model_config_service.py \
-            services/api/teacher_provider_registry_service.py \
-            services/api/chart_executor.py \
-            services/api/chart_sandbox.py \
-            services/api/exam_utils.py \
-            services/api/core_utils.py
+            "${mypy_gate_files[@]}"
 
       - name: Check backend quality budget
         run: |
@@ -118,7 +102,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m pytest tests/ -x -q -m "not stress" \
-            --cov=services/api --cov-report=term-missing --cov-fail-under=84
+            --cov=services/api --cov-report=term-missing --cov-fail-under=85
 
       - name: Run maintainability guardrails
         env:
@@ -130,7 +114,6 @@ jobs:
             tests/test_assignment_wiring_structure.py \
             tests/test_chat_wiring_structure.py \
             tests/test_chat_workers_signature_fallback_guard.py \
-            tests/test_exam_wiring_structure.py \
             tests/test_misc_wiring_structure.py \
             tests/test_no_duplicate_route_files.py \
             tests/test_no_star_imports_guardrail.py \
@@ -144,82 +127,14 @@ jobs:
             tests/test_observability_store.py \
             tests/test_operability_evidence.py
 
-      - name: Run analysis rollout guardrails
+      - name: Run assignment-only product guardrails
         env:
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          mkdir -p analysis-artifacts
-          python scripts/quality/check_analysis_policy.py \
-            --output analysis-artifacts/analysis-policy.json
-          python scripts/quality/check_analysis_preflight.py \
-            --fixtures tests/fixtures \
-            --review-feedback tests/fixtures/analysis_preflight/review_feedback.jsonl \
-            --metrics tests/fixtures/analysis_preflight/metrics.json \
-            --baseline-dir tests/fixtures/analysis_preflight/baseline \
-            --candidate-dir tests/fixtures/analysis_preflight/candidate \
-            --output analysis-artifacts/analysis-preflight.json
-          python scripts/check_analysis_domain_contract.py --json
-          python scripts/analysis_strategy_eval.py --fixtures tests/fixtures --json --summary-only
           python -m pytest -q \
-            tests/test_analysis_strategy_eval.py \
+            tests/test_app_routes_registration.py \
             tests/test_docs_architecture_presence.py \
-            tests/test_ci_backend_hardening_workflow.py \
-            tests/test_analysis_preflight_ci_fixtures.py
-
-      - name: Build analysis rollout decision artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_rollout_decision.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-decision.json
-
-      - name: Build analysis rollout brief artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_rollout_brief.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-rollout-brief.md
-
-      - name: Build analysis go-live summary artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_go_live_summary.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-go-live-summary.md
-
-      - name: Build analysis release notes artifact
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_release_notes.py             --artifact-dir analysis-artifacts             --date "$(date -u +%F)"             --release-ref "main@${GITHUB_SHA}"             --output analysis-artifacts/analysis-release-notes.md
-
-      - name: Build analysis artifact manifest
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/build_analysis_artifact_manifest.py             --artifact-dir analysis-artifacts             --output analysis-artifacts/analysis-artifact-manifest.json
-
-      - name: Check analysis artifact integrity
-        if: always()
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/check_analysis_artifact_integrity.py             --manifest analysis-artifacts/analysis-artifact-manifest.json             --output analysis-artifacts/analysis-artifact-integrity.json
-
-      - name: Summarize analysis rollout artifacts
-        env:
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
-          python scripts/quality/render_analysis_rollout_summary.py --artifact-dir analysis-artifacts >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload analysis rollout artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: analysis-rollout-artifacts
-          path: analysis-artifacts
-          if-no-files-found: warn
+            tests/test_ci_backend_hardening_workflow.py
 
   frontend-quality:
     runs-on: ubuntu-latest
@@ -379,9 +294,10 @@ jobs:
 
       - name: Initialize smoke Playwright artifact directories
         run: |
-          mkdir -p test-results/teacher test-results/student
+          mkdir -p test-results/teacher test-results/student test-results/assignment
           : > test-results/teacher/.artifact-placeholder
           : > test-results/student/.artifact-placeholder
+          : > test-results/assignment/.artifact-placeholder
 
       - name: Run parallel Playwright isolation check
         run: |
@@ -403,7 +319,9 @@ jobs:
           fi
 
       - name: Run smoke E2E
-        run: npm run e2e:smoke
+        run: |
+          rm -rf node_modules/.vite
+          npm run e2e:smoke
 
       - name: Validate smoke Playwright artifact layout on failure
         if: failure()
@@ -411,7 +329,7 @@ jobs:
           set -euo pipefail
           missing=0
 
-          for dir in test-results/teacher test-results/student; do
+          for dir in test-results/teacher test-results/student test-results/assignment; do
             if [ ! -d "$dir" ]; then
               echo "Missing required Playwright artifact directory: $dir"
               missing=1
@@ -447,6 +365,7 @@ jobs:
           path: |
             frontend/test-results/teacher
             frontend/test-results/student
+            frontend/test-results/assignment
           if-no-files-found: ignore
           retention-days: 14
 
@@ -567,5 +486,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: false
+          build-args: |
+            VITE_API_URL=http://127.0.0.1:8000
           cache-from: type=gha
           cache-to: type=gha,mode=max

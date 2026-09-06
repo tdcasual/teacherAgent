@@ -41,13 +41,7 @@ from .chat_support_service import (
     detect_student_study_trigger as _detect_student_study_trigger_impl,
 )
 from .chat_support_service import (
-    extract_exam_id as _extract_exam_id_impl,
-)
-from .chat_support_service import (
     extract_min_chars_requirement as _extract_min_chars_requirement_impl,
-)
-from .chat_support_service import (
-    is_exam_analysis_request as _is_exam_analysis_request_impl,
 )
 from .chat_support_service import (
     normalize_math_delimiters as _normalize_math_delimiters_impl,
@@ -66,12 +60,6 @@ from .core_example_tool_service import (
 )
 from .core_example_tool_service import (
     core_example_search as _core_example_search_impl,
-)
-from .exam_longform_service import (
-    build_exam_longform_context as _build_exam_longform_context_impl,
-)
-from .exam_longform_service import (
-    summarize_exam_students as _summarize_exam_students_impl,
 )
 from .handlers import chat_handlers as _chat_handlers_module
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
@@ -116,7 +104,6 @@ from .wiring.chat_wiring import (
     _chat_support_deps,
     _compute_chat_reply_deps,
 )
-from .wiring.exam_wiring import _exam_longform_deps
 from .wiring.misc_wiring import (
     _agent_runtime_deps,
     _chart_agent_run_deps,
@@ -157,8 +144,8 @@ def list_lessons(core: Any | None = None) -> Dict[str, Any]:
     return _list_lessons_impl(deps=_content_catalog_deps(core))
 
 
-def list_skills(core: Any | None = None) -> Dict[str, Any]:
-    return _list_skills_impl(deps=_content_catalog_deps(core))
+def list_skills(core: Any | None = None, extra_skill_ids: Any = ()) -> Dict[str, Any]:
+    return _list_skills_impl(deps=_content_catalog_deps(core), extra_skill_ids=extra_skill_ids)
 
 
 async def chat(req: ChatRequest, core: Any | None = None) -> Any:
@@ -208,9 +195,9 @@ def teacher_provider_registry_probe_models(
 
 
 def resolve_responses_file(
-    exam_id: Optional[str], file_path: Optional[str], core: Any | None = None
+    file_path: Optional[str], core: Any | None = None
 ) -> Optional[Path]:
-    return _resolve_responses_file_impl(exam_id, file_path, deps=_student_import_deps(core))
+    return _resolve_responses_file_impl(file_path, deps=_student_import_deps(core))
 
 
 def import_students_from_responses(
@@ -341,20 +328,6 @@ def extract_min_chars_requirement(text: str) -> Optional[int]:
     return _extract_min_chars_requirement_impl(text)
 
 
-def extract_exam_id(text: str) -> Optional[str]:
-    return _extract_exam_id_impl(text)
-
-
-def is_exam_analysis_request(text: str) -> bool:
-    return _is_exam_analysis_request_impl(text)
-
-
-def summarize_exam_students(
-    exam_id: str, max_total: Optional[float], core: Any | None = None
-) -> Dict[str, Any]:
-    return _summarize_exam_students_impl(exam_id, max_total, deps=_exam_longform_deps(core))
-
-
 def load_kp_catalog() -> Dict[str, Dict[str, str]]:
     from .content_catalog_service import load_kp_catalog as _load_kp_catalog_impl
 
@@ -367,17 +340,12 @@ def load_question_kp_map() -> Dict[str, str]:
     return _load_question_kp_map_impl(DATA_DIR)
 
 
-def build_exam_longform_context(exam_id: str, core: Any | None = None) -> Dict[str, Any]:
-    return _build_exam_longform_context_impl(exam_id, deps=_exam_longform_deps(core))
-
-
 def run_agent(
     messages: List[Dict[str, Any]],
     role_hint: Optional[str],
     extra_system: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
-    analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     job_id: Optional[str] = None,
     lane_id: Optional[str] = None,
@@ -392,7 +360,6 @@ def run_agent(
         extra_system=extra_system,
         skill_id=skill_id,
         teacher_id=teacher_id,
-        analysis_target=analysis_target,
         event_sink=event_sink,
         job_id=job_id,
         lane_id=lane_id,

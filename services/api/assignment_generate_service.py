@@ -6,11 +6,15 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
 from .assignment_generate_cli_service import (
+    DRAFT_VISIBILITY_STATUS,
     append_assignment_generate_flag,
     append_assignment_generate_options,
     assignment_generate_script,
+    generated_assignment_completion_policy,
     try_postprocess_assignment_meta,
 )
+from .auth_service import get_current_principal
+from .paths import InvalidAssignmentDate
 
 
 class AssignmentGenerateError(Exception):
@@ -23,8 +27,10 @@ class AssignmentGenerateError(Exception):
 @dataclass(frozen=True)
 class AssignmentGenerateDeps:
     app_root: Path
-    parse_date_str: Callable[[Optional[str]], str]
-    ensure_requirements_for_assignment: Callable[[str, str, Optional[Dict[str, Any]], str], Optional[Dict[str, Any]]]
+    optional_assignment_date: Callable[[Optional[str]], Optional[str]]
+    ensure_requirements_for_assignment: Callable[
+        [str, str, Optional[Dict[str, Any]], str], Optional[Dict[str, Any]]
+    ]
     run_script: Callable[[list[str]], str]
     postprocess_assignment_meta: Callable[..., Any]
     diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
@@ -37,6 +43,23 @@ def _parse_requirements_json(requirements_json: Optional[str]) -> Optional[Dict[
         return json.loads(requirements_json)
     except Exception:
         raise AssignmentGenerateError(400, "requirements_json is not valid JSON")
+
+
+def _require_generate_owner(*, subject_id: Optional[str]) -> tuple[str, str]:
+    teacher_id = str(getattr(get_current_principal(), "actor_id", "") or "").strip()
+    subject_val = str(subject_id or "").strip()
+    if not teacher_id:
+        raise AssignmentGenerateError(400, "teacher_id_required")
+    if not subject_val:
+        raise AssignmentGenerateError(400, "subject_id_required")
+    return teacher_id, subject_val
+
+
+def _generate_assignment_date(date: Optional[str], deps: AssignmentGenerateDeps) -> str:
+    try:
+        return str(deps.optional_assignment_date(date) or "")
+    except InvalidAssignmentDate as exc:
+        raise AssignmentGenerateError(400, "invalid_assignment_date") from exc
 
 
 def _ensure_assignment_requirements(
@@ -72,10 +95,12 @@ def generate_assignment(
     student_ids: Optional[str],
     source: Optional[str],
     requirements_json: Optional[str],
+    subject_id: Optional[str] = None,
     deps: AssignmentGenerateDeps,
 ) -> Dict[str, Any]:
     requirements_payload = _parse_requirements_json(requirements_json)
-    date_str = deps.parse_date_str(date)
+    teacher_id, subject_val = _require_generate_owner(subject_id=subject_id)
+    date_str = _generate_assignment_date(date, deps)
     _ensure_assignment_requirements(
         assignment_id=assignment_id,
         date_str=date_str,
@@ -98,11 +123,15 @@ def generate_assignment(
             ("--kp", kp),
             ("--question-ids", question_ids),
             ("--mode", mode),
-            ("--date", date),
+            ("--date", date_str),
             ("--class-name", class_name),
             ("--student-ids", student_ids),
             ("--source", source),
             ("--core-examples", core_examples),
+            ("--teacher-id", teacher_id),
+            ("--subject-id", subject_val),
+            ("--due-at", due_at),
+            ("--visibility-status", DRAFT_VISIBILITY_STATUS),
         ),
     )
     append_assignment_generate_flag(args, flag="--generate", enabled=generate)
@@ -113,6 +142,10 @@ def generate_assignment(
         due_at=due_at,
         postprocess_assignment_meta=deps.postprocess_assignment_meta,
         diag_log=deps.diag_log,
+        visibility_status=DRAFT_VISIBILITY_STATUS,
+        teacher_id=teacher_id,
+        subject_id=subject_val,
+        completion_policy=generated_assignment_completion_policy(),
     )
 
     return {"ok": True, "output": out}

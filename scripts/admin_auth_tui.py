@@ -4,9 +4,11 @@ import argparse
 import getpass
 import json
 import os
+import secrets
 import shlex
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -65,6 +67,63 @@ def _parse_bool_or_any(raw: str) -> Optional[bool]:
     if text in {"0", "false", "no", "n", "off"}:
         return False
     raise ValueError("expected one of: true/false/any")
+
+
+def _encode_multipart(
+    fields: Dict[str, str],
+    files: Dict[str, Tuple[str, bytes]],
+) -> Tuple[bytes, str]:
+    boundary = "----AdminTuiBoundary" + secrets.token_hex(16)
+    chunks: List[bytes] = []
+    for name, value in fields.items():
+        chunks.append(
+            (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+                f"{value}\r\n"
+            ).encode("utf-8")
+        )
+    for name, (filename, content) in files.items():
+        header = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'
+            f"Content-Type: text/csv\r\n\r\n"
+        ).encode("utf-8")
+        chunks.append(header + content + b"\r\n")
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
+
+
+def _request_multipart(
+    *,
+    url: str,
+    fields: Dict[str, str],
+    files: Dict[str, Tuple[str, bytes]],
+    bearer_token: Optional[str] = None,
+    timeout_sec: int = 30,
+) -> Tuple[int, Dict[str, Any]]:
+    body, content_type = _encode_multipart(fields, files)
+    headers = {"Accept": "application/json", "Content-Type": content_type}
+    if bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    req = urllib.request.Request(url=url, method="POST", data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            status = int(getattr(resp, "status", 200) or 200)
+            data = json.loads(raw) if raw else {}
+            return status, data if isinstance(data, dict) else {"raw": data}
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="ignore")
+        try:
+            data = json.loads(raw) if raw else {}
+        except Exception:
+            data = {"detail": raw}
+        if not isinstance(data, dict):
+            data = {"raw": data}
+        return int(exc.code), data
+    except urllib.error.URLError as exc:
+        return 0, {"detail": f"network_error: {exc.reason}"}
 
 
 def _request_json(
@@ -423,6 +482,21 @@ Commands:
   reset <teacher_id> auto       Reset password (auto)
   reset <teacher_id> manual     Reset password (manual)
 
+  subject list                  List subjects
+  subject add <id> <display> [pack_id]
+  subject seed                  Seed generic+physics and pack-sync
+  roster add <teacher_id> <subject_id> <class_name>
+  roster remove <teacher_id> <subject_id> <class_name>
+  roster list [teacher_id]
+  enroll-class <teacher_id> <subject_id> <class_name> [--resync]
+  enroll <student_id> <subject_id> <class_name>
+  unenroll <student_id> <subject_id> <class_name>
+  bulk-move <subject_id> <from> <to> [student_id…]
+  rename-class <subject_id> <old> <new>
+  enrollments list <subject_id> <class_name>
+  teacher add <teacher_name> [email] [teacher_id]
+  students import <csv_path> [--reset-passwords]
+
 Compatibility aliases:
   1(list) 2(disable prompt) 3(enable prompt) 4(reset auto prompt) 5(reset manual prompt)
 """.strip()
@@ -527,9 +601,367 @@ Compatibility aliases:
                 return True
             self._single_reset_password(target_id=tail[0], auto_generate=(mode == "auto"))
             return True
+        if head in {
+            "subject",
+            "roster",
+            "enroll-class",
+            "enroll",
+            "unenroll",
+            "bulk-move",
+            "rename-class",
+            "enrollments",
+        }:
+            self._cmd_identity(head, tail)
+            return True
+        if head == "teacher":
+            self._cmd_teacher_add(tail)
+            return True
+        if head == "students":
+            self._cmd_students_import(tail)
+            return True
 
         print("Unknown command. Type 'h' for help.")
         return True
+
+    def _identity_call(
+        self,
+        *,
+        local_fn: Any,
+        method: str,
+        path: str,
+        payload: Optional[Dict[str, Any]] = None,
+        query: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        if self.trusted_local:
+            return local_fn()
+        url = f"{self.base_url}{path}"
+        if query:
+            url = f"{url}?{urllib.parse.urlencode(query)}"
+        status, body = _request_json(
+            method=method,
+            url=url,
+            payload=payload,
+            bearer_token=self.access_token,
+        )
+        if status in {200, 201}:
+            return body if isinstance(body, dict) else {"ok": True, "raw": body}
+        detail = body.get("error") or body.get("detail") or f"http_{status}"
+        if isinstance(detail, dict):
+            detail = detail.get("error") or detail.get("detail") or str(detail)
+        return {"ok": False, "error": str(detail)}
+
+    def _print_identity_result(self, result: Dict[str, Any], *, action: str) -> None:
+        if result.get("ok") is True:
+            warning = str(result.get("warning") or "")
+            extra = f" warning={warning}" if warning else ""
+            print(f"{action} ok.{extra}")
+            items = result.get("items")
+            if isinstance(items, list) and items:
+                for item in items:
+                    print(f"- {item}")
+            return
+        print(f"{action} failed: {result.get('error')}")
+
+    def _cmd_identity(self, head: str, tail: List[str]) -> None:
+        if head == "subject":
+            self._cmd_subject(tail)
+            return
+        if head == "roster":
+            self._cmd_roster(tail)
+            return
+        if head == "enroll-class":
+            self._cmd_enroll_class(tail)
+            return
+        if head == "enroll":
+            self._cmd_enroll(tail)
+            return
+        if head == "unenroll":
+            self._cmd_unenroll(tail)
+            return
+        if head == "bulk-move":
+            self._cmd_bulk_move(tail)
+            return
+        if head == "rename-class":
+            self._cmd_rename_class(tail)
+            return
+        if head == "enrollments":
+            self._cmd_enrollments(tail)
+            return
+        print("Unknown identity command. Type 'h' for help.")
+
+    def _cmd_teacher_add(self, tail: List[str]) -> None:
+        action = _normalize_text(tail[0]) if tail else ""
+        if action != "add" or len(tail) < 2:
+            print("Usage: teacher add <teacher_name> [email] [teacher_id]")
+            return
+        teacher_name = tail[1]
+        email = tail[2] if len(tail) >= 3 else ""
+        teacher_id = tail[3] if len(tail) >= 4 else ""
+        payload: Dict[str, Any] = {"teacher_name": teacher_name}
+        if email:
+            payload["email"] = email
+        if teacher_id:
+            payload["teacher_id"] = teacher_id
+        if self.trusted_local:
+            result = self._local_store.create_teacher(
+                teacher_name=teacher_name,
+                email=email or None,
+                teacher_id=teacher_id or None,
+                actor_id=self.local_actor_id,
+                actor_role="admin",
+            )
+        else:
+            status, body = _request_json(
+                method="POST",
+                url=f"{self.base_url}/auth/admin/teacher/create",
+                payload=payload,
+                bearer_token=self.access_token,
+            )
+            result = body if status in {200, 201} else {"ok": False, "error": body.get("detail") or body.get("error") or f"http_{status}"}
+        if result.get("ok") is True:
+            print(f"teacher add ok. teacher_id={result.get('teacher_id')}")
+            temp_password = str(result.get("temp_password") or "")
+            if temp_password:
+                print(f"temp_password={temp_password}")
+            self._refresh_teachers(show_message=False)
+            return
+        print(f"teacher add failed: {result.get('error')}")
+
+    def _cmd_students_import(self, tail: List[str]) -> None:
+        reset = "--reset-passwords" in tail
+        args = [item for item in tail if item != "--reset-passwords"]
+        if not args or _normalize_text(args[0]) != "import" or len(args) < 2:
+            print("Usage: students import <csv_path> [--reset-passwords]")
+            return
+        csv_path = Path(args[1]).expanduser()
+        if not csv_path.is_file():
+            print(f"students import failed: file not found: {csv_path}")
+            return
+        raw = csv_path.read_bytes()
+        if self.trusted_local:
+            from services.api.auth.student_provision_service import import_students
+
+            result = import_students(
+                self._local_store,
+                raw_csv=raw,
+                reset_passwords=reset,
+                actor_id=self.local_actor_id,
+                actor_role="admin",
+            )
+        else:
+            status, body = _request_multipart(
+                url=f"{self.base_url}/auth/admin/students/import",
+                fields={"reset_passwords": "true" if reset else "false"},
+                files={"file": (csv_path.name, raw)},
+                bearer_token=self.access_token,
+            )
+            result = body if status in {200, 201} else {"ok": False, "error": body.get("detail") or body.get("error") or f"http_{status}"}
+        if result.get("ok") is True:
+            print(
+                f"students import ok. created={result.get('created')} updated={result.get('updated')} "
+                "(student_auth only; enroll with roster + enroll-class)"
+            )
+            for item in result.get("items") or []:
+                sid = item.get("student_id")
+                temp_password = item.get("temp_password") or ""
+                extra = f" temp_password={temp_password}" if temp_password else ""
+                print(f"- {sid} {item.get('student_name')} {item.get('class_name')}{extra}")
+            return
+        print(f"students import failed: {result.get('error')}")
+
+    def _cmd_subject(self, tail: List[str]) -> None:
+        action = _normalize_text(tail[0]) if tail else ""
+        if action in {"list", "ls"}:
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.list_subjects(),
+                method="GET",
+                path="/auth/admin/subjects",
+            )
+            self._print_identity_result(result, action="subject list")
+            return
+        if action == "seed":
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.seed_subjects(),
+                method="POST",
+                path="/auth/admin/subjects/seed",
+            )
+            self._print_identity_result(result, action="subject seed")
+            return
+        if action == "add" and len(tail) >= 3:
+            subject_id, display_name = tail[1], tail[2]
+            pack_id = tail[3] if len(tail) >= 4 else "generic"
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.add_subject(
+                    subject_id=subject_id, display_name=display_name, pack_id=pack_id
+                ),
+                method="POST",
+                path="/auth/admin/subjects",
+                payload={"subject_id": subject_id, "display_name": display_name, "pack_id": pack_id},
+            )
+            self._print_identity_result(result, action="subject add")
+            return
+        print("Usage: subject list | subject seed | subject add <id> <display> [pack_id]")
+
+    def _cmd_roster(self, tail: List[str]) -> None:
+        action = _normalize_text(tail[0]) if tail else ""
+        if action in {"list", "ls"}:
+            teacher_id = tail[1] if len(tail) >= 2 else ""
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.list_roster(teacher_id=teacher_id or None),
+                method="GET",
+                path="/auth/admin/roster",
+                query={"teacher_id": teacher_id} if teacher_id else None,
+            )
+            self._print_identity_result(result, action="roster list")
+            return
+        if action == "add" and len(tail) >= 4:
+            teacher_id, subject_id, class_name = tail[1], tail[2], tail[3]
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.add_roster(
+                    teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+                ),
+                method="POST",
+                path="/auth/admin/roster",
+                payload={
+                    "teacher_id": teacher_id,
+                    "subject_id": subject_id,
+                    "class_name": class_name,
+                    "allow_empty": False,
+                },
+            )
+            self._print_identity_result(result, action="roster add")
+            return
+        if action in {"remove", "rm", "delete"} and len(tail) >= 4:
+            teacher_id, subject_id, class_name = tail[1], tail[2], tail[3]
+            result = self._identity_call(
+                local_fn=lambda: self._local_store.remove_roster(
+                    teacher_id=teacher_id, subject_id=subject_id, class_name=class_name
+                ),
+                method="DELETE",
+                path="/auth/admin/roster",
+                query={
+                    "teacher_id": teacher_id,
+                    "subject_id": subject_id,
+                    "class_name": class_name,
+                },
+            )
+            self._print_identity_result(result, action="roster remove")
+            return
+        print("Usage: roster list [teacher_id] | roster add <teacher_id> <subject_id> <class_name> | roster remove <teacher_id> <subject_id> <class_name>")
+
+    def _cmd_enroll_class(self, tail: List[str]) -> None:
+        resync = "--resync" in tail
+        args = [item for item in tail if item != "--resync"]
+        if len(args) < 3:
+            print("Usage: enroll-class <teacher_id> <subject_id> <class_name> [--resync]")
+            return
+        teacher_id, subject_id, class_name = args[0], args[1], args[2]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.enroll_class(
+                teacher_id=teacher_id,
+                subject_id=subject_id,
+                class_name=class_name,
+                resync=resync,
+            ),
+            method="POST",
+            path="/auth/admin/enrollments/enroll-class",
+            payload={
+                "teacher_id": teacher_id,
+                "subject_id": subject_id,
+                "class_name": class_name,
+                "resync": resync,
+            },
+        )
+        self._print_identity_result(result, action="enroll-class")
+
+    def _cmd_enroll(self, tail: List[str]) -> None:
+        if len(tail) < 3:
+            print("Usage: enroll <student_id> <subject_id> <class_name>")
+            return
+        student_id, subject_id, class_name = tail[0], tail[1], tail[2]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.enroll(
+                student_id=student_id, subject_id=subject_id, class_name=class_name
+            ),
+            method="POST",
+            path="/auth/admin/enrollments/enroll",
+            payload={"student_id": student_id, "subject_id": subject_id, "class_name": class_name},
+        )
+        self._print_identity_result(result, action="enroll")
+
+    def _cmd_unenroll(self, tail: List[str]) -> None:
+        if len(tail) < 3:
+            print("Usage: unenroll <student_id> <subject_id> <class_name>")
+            return
+        student_id, subject_id, class_name = tail[0], tail[1], tail[2]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.unenroll(
+                student_id=student_id, subject_id=subject_id, class_name=class_name
+            ),
+            method="POST",
+            path="/auth/admin/enrollments/unenroll",
+            payload={"student_id": student_id, "subject_id": subject_id, "class_name": class_name},
+        )
+        self._print_identity_result(result, action="unenroll")
+
+    def _cmd_bulk_move(self, tail: List[str]) -> None:
+        if len(tail) < 3:
+            print("Usage: bulk-move <subject_id> <from_class> <to_class> [student_id…]")
+            return
+        subject_id, from_class, to_class = tail[0], tail[1], tail[2]
+        student_ids = tail[3:]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.bulk_move_enrollments(
+                subject_id=subject_id,
+                from_class=from_class,
+                to_class=to_class,
+                student_ids=student_ids or None,
+            ),
+            method="POST",
+            path="/auth/admin/enrollments/bulk-move",
+            payload={
+                "subject_id": subject_id,
+                "from_class": from_class,
+                "to_class": to_class,
+                "student_ids": student_ids or None,
+            },
+        )
+        self._print_identity_result(result, action="bulk-move")
+
+    def _cmd_rename_class(self, tail: List[str]) -> None:
+        if len(tail) < 3:
+            print("Usage: rename-class <subject_id> <old> <new>")
+            return
+        subject_id, old_name, new_name = tail[0], tail[1], tail[2]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.rename_class(
+                subject_id=subject_id, old_class_name=old_name, new_class_name=new_name
+            ),
+            method="POST",
+            path="/auth/admin/enrollments/rename-class",
+            payload={
+                "subject_id": subject_id,
+                "old_class_name": old_name,
+                "new_class_name": new_name,
+            },
+        )
+        self._print_identity_result(result, action="rename-class")
+
+    def _cmd_enrollments(self, tail: List[str]) -> None:
+        action = _normalize_text(tail[0]) if tail else ""
+        if action not in {"list", "ls"} or len(tail) < 3:
+            print("Usage: enrollments list <subject_id> <class_name>")
+            return
+        subject_id, class_name = tail[1], tail[2]
+        result = self._identity_call(
+            local_fn=lambda: self._local_store.list_enrollments(
+                subject_id=subject_id, class_name=class_name
+            ),
+            method="GET",
+            path="/auth/admin/enrollments",
+            query={"subject_id": subject_id, "class_name": class_name},
+        )
+        self._print_identity_result(result, action="enrollments list")
 
     def _cmd_page(self, tail: List[str]) -> None:
         try:

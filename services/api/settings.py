@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 from typing import Any, Mapping
 
 _log = logging.getLogger(__name__)
@@ -301,6 +300,7 @@ def app_env() -> str:
 def is_production() -> bool:
     return app_env() in {"prod", "production"}
 
+
 def is_pytest() -> bool:
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
 
@@ -309,144 +309,3 @@ def load_app_settings(env: Mapping[str, str] | None = None) -> Any:
     from .runtime_settings import load_settings
 
     return load_settings(env)
-
-
-def survey_analysis_enabled() -> bool:
-    return env_bool("SURVEY_ANALYSIS_ENABLED", "0")
-
-
-
-def survey_webhook_secret() -> str:
-    return env_str("SURVEY_WEBHOOK_SECRET", "")
-
-
-
-def survey_webhook_allow_insecure() -> bool:
-    return env_bool("SURVEY_WEBHOOK_ALLOW_INSECURE", "0")
-
-
-
-def survey_webhook_secret_required() -> bool:
-    if is_production():
-        return True
-    return env_bool("AUTH_REQUIRED", "0")
-
-
-
-def survey_shadow_mode() -> bool:
-    return env_bool("SURVEY_SHADOW_MODE", "1")
-
-
-
-def survey_max_attachment_bytes() -> int:
-    return max(1024, env_int("SURVEY_MAX_ATTACHMENT_BYTES", 10 * 1024 * 1024))
-
-
-
-def survey_review_confidence_floor() -> float:
-    return min(1.0, max(0.0, env_float("SURVEY_REVIEW_CONFIDENCE_FLOOR", 0.65)))
-
-
-
-def survey_beta_teacher_allowlist_raw() -> str:
-    return env_str("SURVEY_BETA_TEACHER_ALLOWLIST", "")
-
-
-
-def _env_list(name: str) -> list[str]:
-    raw = env_str(name, "")
-    if not raw.strip():
-        return []
-    items: list[str] = []
-    seen: set[str] = set()
-    for token in re.split(r"[\s,]+", raw):
-        value = str(token or "").strip().lower()
-        if not value or value in seen:
-            continue
-        seen.add(value)
-        items.append(value)
-    return items
-
-
-
-def _env_is_configured(name: str) -> bool:
-    return name in os.environ
-
-
-
-def survey_beta_teacher_allowlist() -> list[str]:
-    raw = survey_beta_teacher_allowlist_raw()
-    if not raw.strip():
-        return []
-    items: list[str] = []
-    seen: set[str] = set()
-    for token in re.split(r"[\s,]+", raw):
-        value = str(token or "").strip()
-        if not value or value in seen:
-            continue
-        seen.add(value)
-        items.append(value)
-    return items
-
-
-
-def analysis_disabled_domains() -> list[str]:
-    return _env_list("ANALYSIS_DISABLED_DOMAINS")
-
-
-
-def analysis_review_only_domains() -> list[str]:
-    return _env_list("ANALYSIS_REVIEW_ONLY_DOMAINS")
-
-
-
-def analysis_disabled_strategies() -> list[str]:
-    return _env_list("ANALYSIS_DISABLED_STRATEGIES")
-
-
-
-def analysis_domain_enabled(domain: str) -> bool:
-    domain_final = str(domain or '').strip().lower()
-    if not domain_final:
-        return False
-    if domain_final in analysis_disabled_domains():
-        return False
-    if domain_final == 'survey' and _env_is_configured('SURVEY_ANALYSIS_ENABLED'):
-        return survey_analysis_enabled()
-    if domain_final == 'video_homework':
-        return multimodal_enabled()
-    return True
-
-
-
-def analysis_domain_review_only(domain: str) -> bool:
-    domain_final = str(domain or '').strip().lower()
-    if not domain_final or not analysis_domain_enabled(domain_final):
-        return False
-    return domain_final in analysis_review_only_domains()
-
-
-
-def analysis_strategy_enabled(strategy_id: str) -> bool:
-    strategy_final = str(strategy_id or '').strip().lower()
-    return bool(strategy_final) and strategy_final not in analysis_disabled_strategies()
-
-
-
-def multimodal_enabled() -> bool:
-    return env_bool("MULTIMODAL_ENABLED", "1")
-
-
-
-def multimodal_max_upload_bytes() -> int:
-    return max(1024 * 1024, env_int("MULTIMODAL_MAX_UPLOAD_BYTES", 200 * 1024 * 1024))
-
-
-
-def multimodal_max_duration_sec() -> int:
-    return max(10, env_int("MULTIMODAL_MAX_DURATION_SEC", 15 * 60))
-
-
-
-def multimodal_extract_timeout_sec() -> int:
-    return max(5, env_int("MULTIMODAL_EXTRACT_TIMEOUT_SEC", 90))

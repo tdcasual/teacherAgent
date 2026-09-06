@@ -69,6 +69,12 @@ from .assignment_llm_gate_service import (
 from .assignment_llm_gate_service import (
     parse_json_from_text as _parse_json_from_text_impl,
 )
+from .assignment_process_archive_service import (
+    freeze_process_archive as _freeze_process_archive_impl,
+)
+from .assignment_process_archive_service import (
+    request_process_archive as _request_process_archive_impl,
+)
 from .assignment_progress_service import (
     compute_assignment_progress as _compute_assignment_progress_impl,
 )
@@ -105,36 +111,9 @@ from .assignment_submission_attempt_service import (
 from .assignment_submission_attempt_service import (
     list_submission_attempts as _list_submission_attempts_impl,
 )
+from .auth_service import get_current_principal
 from .config import DISCUSSION_COMPLETE_MARKER
 from .core_utils import resolve_scope
-from .exam_analysis_charts_service import (
-    exam_analysis_charts_generate as _exam_analysis_charts_generate_impl,
-)
-from .exam_catalog_service import list_exams as _list_exams_impl
-from .exam_detail_service import (
-    exam_question_detail as _exam_question_detail_impl,
-)
-from .exam_detail_service import (
-    exam_student_detail as _exam_student_detail_impl,
-)
-from .exam_overview_service import (
-    exam_analysis_get as _exam_analysis_get_impl,
-)
-from .exam_overview_service import (
-    exam_get as _exam_get_impl,
-)
-from .exam_overview_service import (
-    exam_students_list as _exam_students_list_impl,
-)
-from .exam_range_service import (
-    exam_question_batch_detail as _exam_question_batch_detail_impl,
-)
-from .exam_range_service import (
-    exam_range_summary_batch as _exam_range_summary_batch_impl,
-)
-from .exam_range_service import (
-    exam_range_top_students as _exam_range_top_students_impl,
-)
 from .session_discussion_service import (
     SessionDiscussionDeps,
 )
@@ -206,14 +185,12 @@ from .wiring.assignment_wiring import (
     _assignment_submission_attempt_deps,
 )
 from .wiring.chat_wiring import _session_history_deps
-from .wiring.exam_wiring import (
-    _exam_analysis_charts_deps,
-    _exam_catalog_deps,
-    _exam_detail_deps,
-    _exam_overview_deps,
-    _exam_range_deps,
+from .wiring.student_wiring import (
+    _student_directory_deps,
+    _student_ops_deps,
+    _student_submit_deps,
+    assignment_process_archive_deps,
 )
-from .wiring.student_wiring import _student_directory_deps, _student_ops_deps, _student_submit_deps
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
 
@@ -237,13 +214,31 @@ def list_student_ids_by_class(class_name: str) -> List[str]:
     return _list_student_ids_by_class_impl(class_name, _student_directory_deps())
 
 
-def compute_expected_students(scope: str, class_name: str, student_ids: List[str]) -> List[str]:
+def compute_expected_students(
+    scope: str,
+    class_name: str,
+    student_ids: List[str],
+    teacher_id: str = "",
+    subject_id: str = "",
+    data_dir: Optional[Path] = None,
+    conn: Any = None,
+) -> List[str]:
+    from .auth.identity_graph_service import ExpectedStudentsError
+    from .auth_registry_service import build_auth_registry_store
+
     scope_val = resolve_scope(scope, student_ids, class_name)
-    if scope_val == "student":
-        return sorted(list(dict.fromkeys([s for s in student_ids if s])))
-    if scope_val == "class":
-        return list_student_ids_by_class(class_name)
-    return list_all_student_ids()
+    store = build_auth_registry_store(data_dir=data_dir)
+    result = store.resolve_expected_students(
+        scope=scope_val,
+        class_name=class_name,
+        student_ids=student_ids,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+        conn=conn,
+    )
+    if not result.get("ok"):
+        raise ExpectedStudentsError(str(result.get("error") or "roster_required"))
+    return list(result.get("items") or [])
 
 
 async def upload_files(files: List[Any]) -> Dict[str, Any]:
@@ -290,6 +285,33 @@ async def student_submit(
     )
 
 
+def freeze_process_archive(payload: Dict[str, Any]) -> Dict[str, Any]:
+    return _freeze_process_archive_impl(payload, deps=assignment_process_archive_deps())
+
+
+def request_process_archive(
+    assignment_id: str,
+    student_id: str,
+    reason: str = "manual",
+) -> Dict[str, Any]:
+    from services.api.runtime import queue_runtime
+
+    core = _app_core()
+    backend = queue_runtime.app_queue_backend(
+        tenant_id=getattr(core, "TENANT_ID", None) or None,
+        is_pytest=core._settings.is_pytest(),
+        inline_backend_factory=core._inline_backend_factory,
+    )
+    return _request_process_archive_impl(
+        assignment_id=assignment_id,
+        student_id=student_id,
+        reason=reason,
+        principal=get_current_principal(),
+        deps=assignment_process_archive_deps(core),
+        enqueue=lambda payload: queue_runtime.enqueue_process_archive(payload, backend=backend),
+    )
+
+
 def student_history_sessions(student_id: str, limit: int = 20, cursor: int = 0) -> Dict[str, Any]:
     return _student_history_sessions_impl(
         student_id,
@@ -324,7 +346,9 @@ def student_history_session(
     )
 
 
-def teacher_history_sessions(teacher_id: Optional[str], limit: int = 20, cursor: int = 0) -> Dict[str, Any]:
+def teacher_history_sessions(
+    teacher_id: Optional[str], limit: int = 20, cursor: int = 0
+) -> Dict[str, Any]:
     return _teacher_history_sessions_impl(
         teacher_id,
         limit=limit,
@@ -358,91 +382,17 @@ def teacher_history_session(
     )
 
 
-def list_exams(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
-    return _list_exams_impl(limit=limit, cursor=cursor, deps=_exam_catalog_deps())
-
-
-def exam_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_get_impl(exam_id, _exam_overview_deps())
-
-
-def exam_analysis_get(exam_id: str) -> Dict[str, Any]:
-    return _exam_analysis_get_impl(exam_id, _exam_overview_deps())
-
-
-def exam_students_list(exam_id: str, limit: int = 50) -> Dict[str, Any]:
-    return _exam_students_list_impl(exam_id, limit, _exam_overview_deps())
-
-
-def exam_student_detail(
-    exam_id: str,
-    student_id: Optional[str] = None,
-    student_name: Optional[str] = None,
-    class_name: Optional[str] = None,
+def list_assignments(
+    limit: int = 50,
+    cursor: int = 0,
+    owner_teacher_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    return _exam_student_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        student_id=student_id,
-        student_name=student_name,
-        class_name=class_name,
+    return _list_assignments_impl(
+        limit=limit,
+        cursor=cursor,
+        owner_teacher_id=owner_teacher_id,
+        deps=_assignment_catalog_deps(),
     )
-
-
-def exam_question_detail(
-    exam_id: str,
-    question_id: Optional[str] = None,
-    question_no: Optional[str] = None,
-    top_n: int = 5,
-) -> Dict[str, Any]:
-    return _exam_question_detail_impl(
-        exam_id,
-        deps=_exam_detail_deps(),
-        question_id=question_id,
-        question_no=question_no,
-        top_n=top_n,
-    )
-
-
-def exam_range_top_students(
-    exam_id: str,
-    start_question_no: Any,
-    end_question_no: Any,
-    top_n: int = 10,
-) -> Dict[str, Any]:
-    return _exam_range_top_students_impl(
-        exam_id,
-        start_question_no,
-        end_question_no,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_range_summary_batch(exam_id: str, ranges: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_range_summary_batch_impl(
-        exam_id,
-        ranges,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_question_batch_detail(exam_id: str, question_nos: Any, top_n: int = 5) -> Dict[str, Any]:
-    return _exam_question_batch_detail_impl(
-        exam_id,
-        question_nos,
-        top_n=top_n,
-        deps=_exam_range_deps(),
-    )
-
-
-def exam_analysis_charts_generate(args: Dict[str, Any]) -> Dict[str, Any]:
-    return _exam_analysis_charts_generate_impl(args, deps=_exam_analysis_charts_deps())
-
-
-def list_assignments(limit: int = 50, cursor: int = 0) -> Dict[str, Any]:
-    return _list_assignments_impl(limit=limit, cursor=cursor, deps=_assignment_catalog_deps())
 
 
 def parse_list_value(value: Any) -> List[str]:
@@ -501,7 +451,9 @@ def ensure_requirements_for_assignment(
     )
 
 
-def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
+def format_requirements_prompt(
+    errors: Optional[List[str]] = None, include_assignment_id: bool = False
+) -> str:
     return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
 
 
@@ -565,7 +517,9 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
     return _resolve_assignment_date_impl(meta, folder)
 
 
-def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
+def assignment_specificity(
+    meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]
+) -> int:
     return _assignment_specificity_impl(meta, student_id, class_name)
 
 
@@ -604,12 +558,18 @@ def postprocess_assignment_meta(
     due_at: Optional[str] = None,
     expected_students: Optional[List[str]] = None,
     completion_policy: Optional[Dict[str, Any]] = None,
+    visibility_status: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
 ) -> None:
     return _postprocess_assignment_meta_impl(
         assignment_id=assignment_id,
         due_at=due_at,
         expected_students=expected_students,
         completion_policy=completion_policy,
+        visibility_status=visibility_status,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
         deps=_assignment_meta_postprocess_deps(),
     )
 
@@ -624,6 +584,7 @@ def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, An
         session_file_fn = getattr(core, "student_session_file", session_file_fn)
         index_path_fn = getattr(core, "student_sessions_index_path", None)
         if callable(index_path_fn):
+
             def _load_index_with_core(student_id_value: str) -> List[Dict[str, Any]]:
                 try:
                     path = index_path_fn(student_id_value)
@@ -649,14 +610,18 @@ def session_discussion_pass(student_id: str, assignment_id: str) -> Dict[str, An
 
 
 def list_submission_attempts(assignment_id: str, student_id: str) -> List[Dict[str, Any]]:
-    return _list_submission_attempts_impl(assignment_id, student_id, deps=_assignment_submission_attempt_deps())
+    return _list_submission_attempts_impl(
+        assignment_id, student_id, deps=_assignment_submission_attempt_deps()
+    )
 
 
 def best_submission_attempt(attempts: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return _best_submission_attempt_impl(attempts)
 
 
-def compute_assignment_progress(assignment_id: str, include_students: bool = True) -> Dict[str, Any]:
+def compute_assignment_progress(
+    assignment_id: str, include_students: bool = True
+) -> Dict[str, Any]:
     return _compute_assignment_progress_impl(
         assignment_id,
         deps=_assignment_progress_deps(),
@@ -664,7 +629,9 @@ def compute_assignment_progress(assignment_id: str, include_students: bool = Tru
     )
 
 
-def build_assignment_context(detail: Optional[Dict[str, Any]], study_mode: bool = False) -> Optional[str]:
+def build_assignment_context(
+    detail: Optional[Dict[str, Any]], study_mode: bool = False
+) -> Optional[str]:
     return _build_assignment_context_impl(
         detail,
         study_mode=study_mode,

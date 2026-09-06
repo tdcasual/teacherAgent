@@ -33,6 +33,8 @@ __all__ = [
     "_SAFE_TOOL_ID_RE",
     "_is_safe_tool_id",
     "_resolve_app_path",
+    "_safe_int_arg",
+    "normalize_excel_cell",
 ]
 
 
@@ -154,3 +156,25 @@ def _resolve_app_path(path_value: Any, must_exist: bool = True) -> Optional[Path
     if must_exist and not p.exists():
         return None
     return p
+
+
+def _safe_int_arg(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        out = int(value)
+    except Exception:
+        _log.debug("numeric conversion failed", exc_info=True)
+        out = default
+    if out < minimum:
+        return minimum
+    if out > maximum:
+        return maximum
+    return out
+
+
+def normalize_excel_cell(value: Any) -> str:
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if re.fullmatch(r"\d+\.0", s):
+        s = s[:-2]
+    return s

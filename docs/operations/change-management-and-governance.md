@@ -1,6 +1,6 @@
 # Change Management And Governance
 
-Last updated: 2026-02-15
+Last updated: 2026-09-05
 
 ## 目标
 

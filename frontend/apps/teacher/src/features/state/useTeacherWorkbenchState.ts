@@ -6,8 +6,6 @@ import {
 } from './teacherWorkbenchState'
 import type {
   AssignmentProgress,
-  ExamUploadDraft,
-  ExamUploadJobStatus,
   StudentMemoryInsightsResponse,
   StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
@@ -50,13 +48,6 @@ export function useTeacherWorkbenchState() {
     [update],
   )
 
-  const setExamJobInfo = useCallback(
-    (value: StateSetterValue<ExamUploadJobStatus | null>) => {
-      update((prev) => ({ ...prev, examJobInfo: resolveStateSetter(value, prev.examJobInfo) }))
-    },
-    [update],
-  )
-
   const setUploadError = useCallback((value: string) => setField('uploadError', value), [setField])
 
   const setUploadStatus = useCallback(
@@ -66,18 +57,11 @@ export function useTeacherWorkbenchState() {
     [update],
   )
 
-  const setExamUploadError = useCallback((value: string) => setField('examUploadError', value), [setField])
-
-  const setExamUploadStatus = useCallback(
-    (value: StateSetterValue<string>) => {
-      update((prev) => ({ ...prev, examUploadStatus: resolveStateSetter(value, prev.examUploadStatus) }))
-    },
-    [update],
-  )
-
-  const setUploadMode = useCallback((value: 'assignment' | 'exam') => setField('uploadMode', value), [setField])
+  const setUploadMode = useCallback((value: 'assignment') => setField('uploadMode', value), [setField])
   const setUploadAssignmentId = useCallback((value: string) => setField('uploadAssignmentId', value), [setField])
   const setUploadDate = useCallback((value: string) => setField('uploadDate', value), [setField])
+  const setUploadDueAt = useCallback((value: string) => setField('uploadDueAt', value), [setField])
+  const setUploadSubjectId = useCallback((value: string) => setField('uploadSubjectId', value), [setField])
   const setUploadScope = useCallback((value: 'public' | 'class' | 'student') => setField('uploadScope', value), [setField])
   const setUploadClassName = useCallback((value: string) => setField('uploadClassName', value), [setField])
   const setUploadStudentIds = useCallback((value: string) => setField('uploadStudentIds', value), [setField])
@@ -154,38 +138,6 @@ export function useTeacherWorkbenchState() {
     [setField],
   )
 
-  const setExamId = useCallback((value: string) => setField('examId', value), [setField])
-  const setExamDate = useCallback((value: string) => setField('examDate', value), [setField])
-  const setExamClassName = useCallback((value: string) => setField('examClassName', value), [setField])
-  const setExamPaperFiles = useCallback((value: File[]) => setField('examPaperFiles', value), [setField])
-  const setExamScoreFiles = useCallback((value: File[]) => setField('examScoreFiles', value), [setField])
-  const setExamAnswerFiles = useCallback((value: File[]) => setField('examAnswerFiles', value), [setField])
-  const setExamUploading = useCallback((value: boolean) => setField('examUploading', value), [setField])
-  const setExamJobId = useCallback((value: string) => setField('examJobId', value), [setField])
-  const setExamStatusPollNonce = useCallback(
-    (value: StateSetterValue<number>) => {
-      update((prev) => ({ ...prev, examStatusPollNonce: resolveStateSetter(value, prev.examStatusPollNonce) }))
-    },
-    [update],
-  )
-  const setExamDraft = useCallback(
-    (value: StateSetterValue<ExamUploadDraft | null>) => {
-      update((prev) => ({ ...prev, examDraft: resolveStateSetter(value, prev.examDraft) }))
-    },
-    [update],
-  )
-  const setExamDraftPanelCollapsed = useCallback(
-    (value: StateSetterValue<boolean>) => {
-      update((prev) => ({ ...prev, examDraftPanelCollapsed: resolveStateSetter(value, prev.examDraftPanelCollapsed) }))
-    },
-    [update],
-  )
-  const setExamDraftLoading = useCallback((value: boolean) => setField('examDraftLoading', value), [setField])
-  const setExamDraftError = useCallback((value: string) => setField('examDraftError', value), [setField])
-  const setExamDraftSaving = useCallback((value: boolean) => setField('examDraftSaving', value), [setField])
-  const setExamDraftActionStatus = useCallback((value: string) => setField('examDraftActionStatus', value), [setField])
-  const setExamDraftActionError = useCallback((value: string) => setField('examDraftActionError', value), [setField])
-  const setExamConfirming = useCallback((value: boolean) => setField('examConfirming', value), [setField])
   const setExecutionTimeline = useCallback(
     (value: ExecutionTimelineEntry[] | ((prev: ExecutionTimelineEntry[]) => ExecutionTimelineEntry[])) => {
       update((prev) => ({ ...prev, executionTimeline: resolveStateSetter(value, prev.executionTimeline) }))
@@ -198,6 +150,8 @@ export function useTeacherWorkbenchState() {
     setUploadMode,
     setUploadAssignmentId,
     setUploadDate,
+    setUploadDueAt,
+    setUploadSubjectId,
     setUploadScope,
     setUploadClassName,
     setUploadStudentIds,
@@ -238,26 +192,6 @@ export function useTeacherWorkbenchState() {
     setStudentMemoryStatusFilter,
     setStudentMemoryStudentFilter,
     setStudentMemoryInsights,
-    setExamId,
-    setExamDate,
-    setExamClassName,
-    setExamPaperFiles,
-    setExamScoreFiles,
-    setExamAnswerFiles,
-    setExamUploading,
-    setExamUploadStatus,
-    setExamUploadError,
-    setExamJobId,
-    setExamJobInfo,
-    setExamStatusPollNonce,
-    setExamDraft,
-    setExamDraftPanelCollapsed,
-    setExamDraftLoading,
-    setExamDraftError,
-    setExamDraftSaving,
-    setExamDraftActionStatus,
-    setExamDraftActionError,
-    setExamConfirming,
     setExecutionTimeline,
   }
 }

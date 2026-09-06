@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AssignmentDetail, PendingChatJob, RecentCompletedReply, VerifiedStudent } from '../../appTypes'
+import type { PendingChatJob, TodayAssignmentItem, VerifiedStudent } from '../../appTypes'
 import { buildStudentTodayHomeViewModel } from './studentTodayHomeState'
 
 type HomeInput = Parameters<typeof buildStudentTodayHomeViewModel>[0]
@@ -11,45 +11,39 @@ const verifiedStudent: VerifiedStudent = {
   class_name: '高二1班',
 }
 
-const todayAssignment: AssignmentDetail = {
-  assignment_id: 'A001',
-  date: '2026-03-14',
-  question_count: 8,
-  meta: { target_kp: ['力学'] },
-  delivery: {
-    mode: 'files',
-    files: [
-      { name: '练习题.pdf', url: 'http://localhost:8000/files/assignment.pdf' },
-      { name: '讲义.pdf', url: 'http://localhost:8000/files/note.pdf' },
-    ],
+const todayAssignments: TodayAssignmentItem[] = [
+  {
+    assignment_id: 'A001',
+    teacher_id: 't_zhang',
+    subject_id: 'physics',
+    title: '牛顿第二定律练习',
+    due_at: '2026-03-14T23:59:59',
+    progress: {
+      submitted: false,
+      overdue: false,
+      official_score: null,
+      process_archive_status: 'none',
+    },
   },
-}
+]
 
 const pendingChatJob: PendingChatJob = {
   job_id: 'job-1',
   request_id: 'req-1',
   placeholder_id: 'placeholder-1',
   user_text: '开始今天作业',
-  session_id: 'A001',
+  session_id: 'sess-1',
   created_at: Date.now(),
-}
-
-const completedReply: RecentCompletedReply = {
-  session_id: 'A001',
-  user_text: '我做完了',
-  reply_text: '已收到本次提交',
-  completed_at: Date.now(),
 }
 
 const buildInput = (overrides: Partial<HomeInput> = {}): HomeInput => ({
   verifiedStudent,
   assignmentLoading: false,
   assignmentError: '',
-  todayAssignment,
+  todayAssignments,
   activeSessionId: '',
   messages: [],
   pendingChatJob: null,
-  recentCompletedReplies: [],
   onOpenExecutionLabel: '继续任务',
   ...overrides,
 })
@@ -59,11 +53,12 @@ describe('buildStudentTodayHomeViewModel', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
         verifiedStudent: null,
-        todayAssignment: null,
+        todayAssignments: [],
       }),
     )
 
     expect(viewModel.status).toBe('pending_generation')
+    expect(viewModel.title).toBe('老师尚未布置')
     expect(viewModel.primaryActionLabel).toBe('先完成身份验证')
     expect(viewModel.primaryActionDisabled).toBe(true)
   })
@@ -76,21 +71,22 @@ describe('buildStudentTodayHomeViewModel', () => {
     )
 
     expect(viewModel.status).toBe('generating')
-    expect(viewModel.title).toBe('正在准备今天的任务')
+    expect(viewModel.title).toBe('正在加载今天的任务')
     expect(viewModel.primaryActionLabel).toBe('稍后查看')
     expect(viewModel.primaryActionDisabled).toBe(true)
   })
 
-  it('returns pending_generation when no assignment is ready yet', () => {
+  it('returns empty copy when no assignment is ready yet', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
-        todayAssignment: null,
+        todayAssignments: [],
       }),
     )
 
-    expect(viewModel.status).toBe('pending_generation')
-    expect(viewModel.title).toBe('今日任务尚未生成')
-    expect(viewModel.primaryActionLabel).toBe('生成任务')
+    expect(viewModel.status).toBe('empty')
+    expect(viewModel.title).toBe('老师尚未布置')
+    expect(viewModel.primaryActionLabel).toBe('老师尚未布置')
+    expect(viewModel.primaryActionDisabled).toBe(true)
   })
 
   it('returns ready when the assignment exists but the student has not started', () => {
@@ -98,14 +94,15 @@ describe('buildStudentTodayHomeViewModel', () => {
 
     expect(viewModel.status).toBe('ready')
     expect(viewModel.primaryActionLabel).toBe('进入任务')
+    expect(viewModel.items).toHaveLength(1)
+    expect(viewModel.items[0].submitted).toBe(false)
     expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '待开始', '待提交'])
-    expect(viewModel.materials).toHaveLength(2)
   })
 
   it('returns in_progress when there is a pending chat job', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
-        activeSessionId: 'A001',
+        activeSessionId: 'sess-1',
         pendingChatJob,
       }),
     )
@@ -119,7 +116,7 @@ describe('buildStudentTodayHomeViewModel', () => {
   it('returns in_progress when the active session already contains user work', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
-        activeSessionId: 'A001',
+        activeSessionId: 'sess-1',
         messages: [
           { id: 'assistant-1', role: 'assistant', content: '请开始答题', time: '09:00' },
           { id: 'user-1', role: 'user', content: '这是我的第一题答案', time: '09:01' },
@@ -131,17 +128,21 @@ describe('buildStudentTodayHomeViewModel', () => {
     expect(viewModel.primaryActionLabel).toBe('继续任务')
   })
 
-  it('returns submitted when a recent completed reply exists for today', () => {
+  it('uses progress.submitted instead of recent chat completion', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
-        activeSessionId: 'A001',
-        recentCompletedReplies: [completedReply],
+        todayAssignments: [
+          {
+            ...todayAssignments[0],
+            progress: { ...todayAssignments[0].progress, submitted: true },
+          },
+        ],
       }),
     )
 
     expect(viewModel.status).toBe('submitted')
-    expect(viewModel.title).toBe('今天的任务已提交')
-    expect(viewModel.primaryActionLabel).toBe('查看提交')
+    expect(viewModel.items[0].submitted).toBe(true)
+    expect(viewModel.primaryActionLabel).toBe('查看作业记录')
     expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '已完成', '已提交'])
   })
 })

@@ -41,7 +41,7 @@ export type MockSkill = {
 
 export const defaultMockSkills: MockSkill[] = [
   {
-    id: 'physics-teacher-ops',
+    id: 'teacher-assignment-ops',
     title: '教学运营',
     desc: '老师运营流程',
     prompts: ['请总结班级学习情况'],
@@ -49,7 +49,7 @@ export const defaultMockSkills: MockSkill[] = [
     allowed_roles: ['teacher'],
   },
   {
-    id: 'physics-homework-generator',
+    id: 'homework-generator',
     title: '作业生成',
     desc: '生成分层作业',
     prompts: ['生成静电场作业'],
@@ -64,7 +64,7 @@ const defaultLocalStorageState: LocalStorageState = {
   teacherSkillsOpen: 'true',
   teacherWorkbenchTab: 'skills',
   teacherSkillPinned: 'false',
-  teacherActiveSkillId: 'physics-teacher-ops',
+  teacherActiveSkillId: 'teacher-assignment-ops',
   apiBaseTeacher: 'http://localhost:8000',
   teacherAuthAccessToken: 'e2e-teacher-token',
   teacherAuthSubject: JSON.stringify({

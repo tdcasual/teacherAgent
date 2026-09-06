@@ -35,6 +35,7 @@ class ChatRouteFlowTest(unittest.TestCase):
                     "/chat",
                     json={
                         "role": "teacher",
+                        "teacher_id": "T001",
                         "messages": [{"role": "user", "content": "请帮我布置作业"}],
                     },
                 )

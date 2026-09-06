@@ -9,6 +9,13 @@ if TYPE_CHECKING:
     from ..chat_job_processing_service import ChatJobProcessDeps
 
 
+def _job_actor_id(job: Dict[str, Any]) -> Optional[str]:
+    role = str(job.get("role") or "").strip().lower()
+    if role == "student":
+        return str(job.get("student_id") or "").strip() or None
+    return str(job.get("teacher_id") or "").strip() or None
+
+
 def _call_compute_chat_reply_sync(
     *,
     deps: ChatJobProcessDeps,
@@ -73,7 +80,7 @@ def _compute_reply_with_runtime_events(
             extra_out=extra_out,
             job_id=job_id,
             lane_id=str(job.get("lane_id") or "").strip() or None,
-            actor_id=str(job.get("teacher_id") or "").strip() or None,
+            actor_id=_job_actor_id(job),
             initial_convo=initial_convo,
         )
     finally:

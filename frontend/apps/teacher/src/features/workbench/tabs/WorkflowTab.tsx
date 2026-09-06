@@ -2,32 +2,22 @@ import type { Dispatch, SetStateAction } from 'react'
 import type {
   UploadSectionProps,
   AssignmentDraftSectionProps,
-  ExamDraftSectionProps,
   WorkflowSummaryCardProps,
-  AnalysisReportSectionProps,
-  VideoHomeworkAnalysisSectionProps,
 } from '../../../types/workflow'
 import type { ExecutionTimelineEntry } from '../../../appTypes'
 
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
 import UploadSection from '../workflow/UploadSection'
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
-import ExamDraftSection from '../workflow/ExamDraftSection'
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
-import AnalysisReportSection from '../workflow/AnalysisReportSection'
-import VideoHomeworkAnalysisSection from '../workflow/VideoHomeworkAnalysisSection'
 import WorkflowTimeline from '../workflow/WorkflowTimeline'
 import { findActiveWorkflowStep } from '../workflowIndicators'
 
 export type WorkflowTabProps =
   WorkflowSummaryCardProps &
   UploadSectionProps &
-  AssignmentDraftSectionProps &
-  ExamDraftSectionProps &
-  AnalysisReportSectionProps &
-  VideoHomeworkAnalysisSectionProps & {
+  AssignmentDraftSectionProps & {
     uploading: boolean
-    examUploading: boolean
     progressPanelCollapsed: boolean
     setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
     progressAssignmentId: string
@@ -35,43 +25,42 @@ export type WorkflowTabProps =
     progressOnlyIncomplete: boolean
     setProgressOnlyIncomplete: (v: boolean) => void
     progressError: string
+    archiveAssignment?: (assignmentId?: string) => Promise<void>
+    unarchiveAssignment?: (assignmentId?: string) => Promise<void>
+    saveStudentGrade?: (
+      studentId: string,
+      payload: {
+        override_score?: number | null
+        comment?: string
+        adopted_coach_excerpts?: Array<{ text: string }>
+      },
+    ) => Promise<void>
     draftLoading: boolean
     draftError: string
     draftSaving: boolean
     uploadConfirming: boolean
-    examDraftLoading: boolean
-    examDraftSaving: boolean
-    examConfirming: boolean
     executionTimeline: ExecutionTimelineEntry[]
   }
 
 export default function WorkflowTab(props: WorkflowTabProps) {
   const {
-    uploadMode, draftLoading, draftError, uploadDraft,
-    examDraftLoading, examDraftError, examDraft,
+    draftLoading, draftError, uploadDraft,
   } = props
-  const isAssignmentMode = uploadMode === 'assignment'
   const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator)
-  const focusLabel = activeStep?.label || (isAssignmentMode ? '上传文件' : '上传考试材料')
+  const focusLabel = activeStep?.label || '上传文件'
 
   return (
     <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
-      <div className="grid gap-1 pb-1 border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,white)]">
+      <div className="grid gap-1 pb-1 border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))]">
         <strong>工作流编辑</strong>
-        <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">主线先做，补充后看。</div>
         <div className="text-[12px] text-muted">先完成必做动作，再展开补充参考。</div>
       </div>
       <WorkflowSummaryCard
-        uploadMode={props.uploadMode}
-        setUploadMode={props.setUploadMode}
         activeWorkflowIndicator={props.activeWorkflowIndicator}
         formatUploadJobSummary={props.formatUploadJobSummary}
-        formatExamJobSummary={props.formatExamJobSummary}
         formatProgressSummary={props.formatProgressSummary}
         uploadJobInfo={props.uploadJobInfo}
         uploadAssignmentId={props.uploadAssignmentId}
-        examJobInfo={props.examJobInfo}
-        examId={props.examId}
         scrollToWorkflowSection={props.scrollToWorkflowSection}
         refreshWorkflowWorkbench={props.refreshWorkflowWorkbench}
         progressData={props.progressData}
@@ -80,7 +69,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         fetchAssignmentProgress={props.fetchAssignmentProgress}
       />
       <section
-        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,white)] p-[12px] shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_74%,white)]"
+        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,var(--color-surface))] p-[12px] shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_74%,var(--color-surface))]"
         data-testid="teacher-workflow-primary-stage"
         data-workflow-tier="primary"
       >
@@ -96,21 +85,19 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           <div className="text-[12px] text-muted">当前焦点：{focusLabel}</div>
         </div>
         <UploadSection
-          uploadMode={props.uploadMode}
-          setUploadMode={props.setUploadMode}
           uploadCardCollapsed={props.uploadCardCollapsed}
           setUploadCardCollapsed={props.setUploadCardCollapsed}
           formatUploadJobSummary={props.formatUploadJobSummary}
-          formatExamJobSummary={props.formatExamJobSummary}
           uploadJobInfo={props.uploadJobInfo}
           uploadAssignmentId={props.uploadAssignmentId}
-          examJobInfo={props.examJobInfo}
-          examId={props.examId}
           handleUploadAssignment={props.handleUploadAssignment}
-          handleUploadExam={props.handleUploadExam}
           setUploadAssignmentId={props.setUploadAssignmentId}
           uploadDate={props.uploadDate}
           setUploadDate={props.setUploadDate}
+          uploadDueAt={props.uploadDueAt}
+          setUploadDueAt={props.setUploadDueAt}
+          uploadSubjectId={props.uploadSubjectId}
+          setUploadSubjectId={props.setUploadSubjectId}
           uploadScope={props.uploadScope}
           setUploadScope={props.setUploadScope}
           uploadClassName={props.uploadClassName}
@@ -122,65 +109,20 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           uploading={props.uploading}
           uploadError={props.uploadError}
           uploadStatus={props.uploadStatus}
-          setExamId={props.setExamId}
-          examDate={props.examDate}
-          setExamDate={props.setExamDate}
-          examClassName={props.examClassName}
-          setExamClassName={props.setExamClassName}
-          setExamPaperFiles={props.setExamPaperFiles}
-          setExamAnswerFiles={props.setExamAnswerFiles}
-          setExamScoreFiles={props.setExamScoreFiles}
-          examUploading={props.examUploading}
-          examUploadError={props.examUploadError}
-          examUploadStatus={props.examUploadStatus}
         />
-        {uploadMode === 'exam' && examDraftLoading && (
-          <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
-            <h3>考试解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
-          </section>
-        )}
-        {uploadMode === 'exam' && examDraftError && (
-          <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
-            <h3>考试解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-danger-soft text-danger">{examDraftError}</div>
-          </section>
-        )}
-        {uploadMode === 'exam' && examDraft && (
-          <ExamDraftSection
-            examDraft={props.examDraft}
-            examDraftLoading={props.examDraftLoading}
-            examDraftError={props.examDraftError}
-            examDraftPanelCollapsed={props.examDraftPanelCollapsed}
-            setExamDraftPanelCollapsed={props.setExamDraftPanelCollapsed}
-            examDraftSaving={props.examDraftSaving}
-            examDraftActionError={props.examDraftActionError}
-            examDraftActionStatus={props.examDraftActionStatus}
-            examConfirming={props.examConfirming}
-            examJobInfo={props.examJobInfo}
-            formatExamDraftSummary={props.formatExamDraftSummary}
-            saveExamDraft={props.saveExamDraft}
-            handleConfirmExamUpload={props.handleConfirmExamUpload}
-            updateExamDraftMeta={props.updateExamDraftMeta}
-            updateExamQuestionField={props.updateExamQuestionField}
-            updateExamAnswerKeyText={props.updateExamAnswerKeyText}
-            updateExamScoreSchemaSelectedCandidate={props.updateExamScoreSchemaSelectedCandidate}
-            stopKeyPropagation={props.stopKeyPropagation}
-          />
-        )}
-        {uploadMode === 'assignment' && draftLoading && (
+        {draftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
             <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
           </section>
         )}
-        {uploadMode === 'assignment' && draftError && (
+        {draftError && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
             <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-danger-soft text-danger">{draftError}</div>
           </section>
         )}
-        {uploadMode === 'assignment' && uploadDraft && (
+        {uploadDraft && (
           <AssignmentDraftSection
             uploadDraft={props.uploadDraft}
             uploadJobInfo={props.uploadJobInfo}
@@ -211,7 +153,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         )}
       </section>
       <section
-        className="grid gap-3 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3"
+        className="grid gap-3 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3"
         data-testid="teacher-workflow-secondary-stage"
         data-workflow-tier="supporting"
       >
@@ -224,57 +166,26 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           </div>
           <strong>补充参考</strong>
           <div className="text-[12px] text-muted">
-            {isAssignmentMode
-              ? '完成情况、执行记录与分析结果放在这里，主线处理完成后再看。'
-              : '执行记录与分析结果会补充在这里。'}
+            完成情况与执行记录放在这里，主线处理完成后再看。
           </div>
         </div>
-        {isAssignmentMode && (
-          <AssignmentProgressSection
-            progressPanelCollapsed={props.progressPanelCollapsed}
-            setProgressPanelCollapsed={props.setProgressPanelCollapsed}
-            formatProgressSummary={props.formatProgressSummary}
-            progressData={props.progressData}
-            progressAssignmentId={props.progressAssignmentId}
-            setProgressAssignmentId={props.setProgressAssignmentId}
-            progressOnlyIncomplete={props.progressOnlyIncomplete}
-            setProgressOnlyIncomplete={props.setProgressOnlyIncomplete}
-            progressLoading={props.progressLoading}
-            fetchAssignmentProgress={props.fetchAssignmentProgress}
-            progressError={props.progressError}
-          />
-        )}
+        <AssignmentProgressSection
+          progressPanelCollapsed={props.progressPanelCollapsed}
+          setProgressPanelCollapsed={props.setProgressPanelCollapsed}
+          formatProgressSummary={props.formatProgressSummary}
+          progressData={props.progressData}
+          progressAssignmentId={props.progressAssignmentId}
+          setProgressAssignmentId={props.setProgressAssignmentId}
+          progressOnlyIncomplete={props.progressOnlyIncomplete}
+          setProgressOnlyIncomplete={props.setProgressOnlyIncomplete}
+          progressLoading={props.progressLoading}
+          fetchAssignmentProgress={props.fetchAssignmentProgress}
+          progressError={props.progressError}
+          archiveAssignment={props.archiveAssignment}
+          unarchiveAssignment={props.unarchiveAssignment}
+          saveStudentGrade={props.saveStudentGrade}
+        />
         <WorkflowTimeline entries={props.executionTimeline} />
-        <AnalysisReportSection
-          analysisFeatureEnabled={props.analysisFeatureEnabled}
-          analysisFeatureShadowMode={props.analysisFeatureShadowMode}
-          analysisReportsLoading={props.analysisReportsLoading}
-          analysisReportsError={props.analysisReportsError}
-          analysisReports={props.analysisReports}
-          selectedAnalysisReportId={props.selectedAnalysisReportId}
-          selectedAnalysisReport={props.selectedAnalysisReport}
-          analysisReviewQueue={props.analysisReviewQueue}
-          analysisReportsSummary={props.analysisReportsSummary}
-          analysisReviewSummary={props.analysisReviewSummary}
-          analysisOpsSnapshot={props.analysisOpsSnapshot}
-          analysisDomainFilter={props.analysisDomainFilter}
-          analysisStatusFilter={props.analysisStatusFilter}
-          analysisStrategyFilter={props.analysisStrategyFilter}
-          analysisTargetTypeFilter={props.analysisTargetTypeFilter}
-          setAnalysisDomainFilter={props.setAnalysisDomainFilter}
-          setAnalysisStatusFilter={props.setAnalysisStatusFilter}
-          setAnalysisStrategyFilter={props.setAnalysisStrategyFilter}
-          setAnalysisTargetTypeFilter={props.setAnalysisTargetTypeFilter}
-          refreshAnalysisReports={props.refreshAnalysisReports}
-          selectAnalysisReport={props.selectAnalysisReport}
-          rerunAnalysisReport={props.rerunAnalysisReport}
-          rerunAnalysisReportsBulk={props.rerunAnalysisReportsBulk}
-        />
-        <VideoHomeworkAnalysisSection
-          videoHomeworkFeatureEnabled={props.videoHomeworkFeatureEnabled}
-          analysisReports={props.analysisReports}
-          selectedAnalysisReport={props.selectedAnalysisReport}
-        />
       </section>
     </section>
   )

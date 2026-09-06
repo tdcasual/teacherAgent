@@ -1,6 +1,6 @@
 # Profile Update
 
-Use `skills/physics-student-coach/scripts/update_profile.py` to write derived fields.
+Use `skills/student-coach/scripts/update_profile.py` to write derived fields.
 
 Fields updated:
 - recent_weak_kp, recent_strong_kp, recent_medium_kp

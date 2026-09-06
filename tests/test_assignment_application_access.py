@@ -9,34 +9,140 @@ from services.api.assignment.application import (
     AssignmentAccessError,
     download_assignment_file,
     get_assignment_detail,
+    list_assignments,
+    listing_owner_teacher_id,
     require_assignment_access,
 )
 from services.api.assignment.deps import AssignmentAccessDeps
 from services.api.auth_service import AuthError, AuthPrincipal
 
 
-def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None) -> AssignmentAccessDeps:
+def _deps(*, folder: Path, specificity: int = 0, meta: dict | None = None, enrolled: bool = True) -> AssignmentAccessDeps:
     return AssignmentAccessDeps(
         resolve_assignment_dir=lambda _assignment_id: folder,
         load_assignment_meta=lambda _folder: dict(meta or {}),
         resolve_student_profile_path=lambda student_id: folder / f"{student_id}.json",
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda _meta, _student_id, _class_name: specificity,
+        student_enrolled=lambda *_args, **_kwargs: enrolled,
+        sql_visibility=None,
     )
+
+
+def test_listing_owner_teacher_id_empty_actor_is_400(monkeypatch):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        listing_owner_teacher_id()
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "teacher_id_required"
+
+
+def test_list_assignments_passes_owner_from_principal(monkeypatch):
+    captured: dict = {}
+
+    async def _list(limit, cursor, owner=None):
+        captured["limit"] = limit
+        captured["cursor"] = cursor
+        captured["owner"] = owner
+        return {"assignments": []}
+
+    monkeypatch.setattr(
+        "services.api.assignment.application.listing_owner_teacher_id",
+        lambda: "t_zhang",
+    )
+    deps = type("Deps", (), {})()
+    deps.list_assignments = _list
+
+    async def _run() -> None:
+        await list_assignments(limit=20, cursor=2, deps=deps)
+
+    asyncio.run(_run())
+    assert captured == {"limit": 20, "cursor": 2, "owner": "t_zhang"}
 
 
 def test_require_assignment_access_skips_when_auth_off(monkeypatch, tmp_path):
     monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: False)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: None,
+    )
     require_assignment_access("HW_1", deps=_deps(folder=tmp_path))
 
 
-def test_require_assignment_access_allows_teacher(monkeypatch, tmp_path):
+def test_require_assignment_access_auth_off_with_token_still_forbids_foreign_assignment(
+    monkeypatch, tmp_path
+):
+    folder = tmp_path / "HW_OTHER"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: False)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_OTHER",
+            deps=_deps(folder=folder, meta={"teacher_id": "t2"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_owner"
+
+
+def test_require_assignment_access_allows_owning_teacher(monkeypatch, tmp_path):
     monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
     monkeypatch.setattr(
         "services.api.assignment.application.require_principal",
         lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
     )
-    require_assignment_access("HW_1", deps=_deps(folder=tmp_path, specificity=0))
+    require_assignment_access(
+        "HW_1",
+        deps=_deps(folder=tmp_path, specificity=0, meta={"teacher_id": "t1"}),
+    )
+
+
+def test_require_assignment_access_forbids_other_teacher(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_OTHER"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="t1", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_OTHER",
+            deps=_deps(folder=folder, specificity=0, meta={"teacher_id": "t2"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_owner"
+
+
+def test_require_assignment_access_teacher_missing_actor_id_is_4xx(monkeypatch, tmp_path):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="", role="teacher"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_1",
+            deps=_deps(folder=tmp_path, meta={"teacher_id": "t1"}),
+        )
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "teacher_id_required"
+
+
+def test_require_assignment_access_admin_can_read_orphan(monkeypatch, tmp_path):
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="admin", role="admin"),
+    )
+    require_assignment_access("HW_1", deps=_deps(folder=tmp_path, specificity=0, meta={}))
 
 
 def test_require_assignment_access_forbids_out_of_scope_student(monkeypatch, tmp_path):
@@ -53,7 +159,7 @@ def test_require_assignment_access_forbids_out_of_scope_student(monkeypatch, tmp
             deps=_deps(
                 folder=folder,
                 specificity=0,
-                meta={"scope": "student", "student_ids": ["student_b"]},
+                meta={"scope": "student", "student_ids": ["student_b"], "teacher_id": "t1"},
             ),
         )
     assert exc.value.status_code == 403
@@ -68,7 +174,79 @@ def test_require_assignment_access_allows_in_scope_student(monkeypatch, tmp_path
         "services.api.assignment.application.require_principal",
         lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
     )
-    require_assignment_access("HW_OK", deps=_deps(folder=folder, specificity=3))
+    require_assignment_access(
+        "HW_OK",
+        deps=_deps(
+            folder=folder,
+            specificity=3,
+            meta={
+                "teacher_id": "t1",
+                "subject_id": "physics",
+                "visibility_status": "published",
+                "expected_students": ["student_b"],
+            },
+        ),
+    )
+
+
+def test_require_assignment_access_hides_student_when_meta_has_no_teacher_id(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_ORPHAN"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_ORPHAN",
+            deps=_deps(folder=folder, specificity=3, meta={"scope": "public"}),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"
+
+
+def test_require_assignment_access_student_missing_visibility_with_owner_is_hidden(
+    monkeypatch, tmp_path
+):
+    folder = tmp_path / "HW_LEGACY"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_LEGACY",
+            deps=_deps(
+                folder=folder,
+                specificity=3,
+                meta={"teacher_id": "t1", "scope": "public"},
+            ),
+        )
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "forbidden_assignment_scope"
+
+
+def test_require_assignment_access_student_draft_is_hidden(monkeypatch, tmp_path):
+    folder = tmp_path / "HW_DRAFT"
+    folder.mkdir()
+    monkeypatch.setattr("services.api.assignment.application.auth_required", lambda: True)
+    monkeypatch.setattr(
+        "services.api.assignment.application.require_principal",
+        lambda **_kwargs: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+    with pytest.raises(AssignmentAccessError) as exc:
+        require_assignment_access(
+            "HW_DRAFT",
+            deps=_deps(
+                folder=folder,
+                specificity=3,
+                meta={"teacher_id": "t1", "visibility_status": "draft"},
+            ),
+        )
+    assert exc.value.status_code == 403
 
 
 def test_require_assignment_access_missing_assignment_is_404(monkeypatch, tmp_path):
@@ -99,6 +277,7 @@ def test_require_assignment_access_invalid_id_is_400(monkeypatch, tmp_path):
         resolve_student_profile_path=lambda student_id: tmp_path / f"{student_id}.json",
         load_profile_file=lambda _path: {},
         assignment_specificity=lambda *_args: 3,
+        student_enrolled=lambda *_args, **_kwargs: True,
     )
     with pytest.raises(AssignmentAccessError) as exc:
         require_assignment_access("../escape", deps=deps)
@@ -157,3 +336,34 @@ def test_get_assignment_detail_enforces_access(monkeypatch):
         assert exc.value.status_code == 403
 
     asyncio.run(_run())
+
+
+def test_get_assignment_detail_strips_roster_ids_for_students(monkeypatch):
+    monkeypatch.setattr("services.api.assignment.application.require_assignment_access", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "services.api.assignment.application.get_current_principal",
+        lambda: AuthPrincipal(actor_id="student_b", role="student"),
+    )
+
+    class _Deps:
+        async def assignment_detail(self, _assignment_id: str):
+            return {
+                "assignment_id": "HW_OK",
+                "meta": {
+                    "teacher_id": "t1",
+                    "subject_id": "physics",
+                    "expected_students": ["student_b", "student_c"],
+                    "student_ids": ["student_b"],
+                    "due_at": "2026-09-02",
+                },
+            }
+
+    deps = _Deps()
+
+    async def _run() -> dict:
+        return await get_assignment_detail("HW_OK", deps=deps)
+
+    payload = asyncio.run(_run())
+    assert payload["meta"]["due_at"] == "2026-09-02"
+    assert "expected_students" not in payload["meta"]
+    assert "student_ids" not in payload["meta"]

@@ -28,17 +28,6 @@ def _path_allowed(path: Path, *, deps: StudentImportDeps) -> bool:
     return _path_within_root(path, deps.data_dir) or _path_within_root(path, deps.app_root)
 
 
-def _resolve_exam_manifest_path(data_dir: Path, exam_id: str) -> Optional[Path]:
-    root = (data_dir / "exams").resolve()
-    eid = str(exam_id or "").strip()
-    if not eid:
-        return None
-    exam_dir = (root / eid).resolve()
-    if exam_dir != root and root not in exam_dir.parents:
-        return None
-    return exam_dir / "manifest.json"
-
-
 def _resolve_profile_path(profiles_dir: Path, student_id: str) -> Optional[Path]:
     root = profiles_dir.resolve()
     sid = str(student_id or "").strip()
@@ -67,25 +56,6 @@ def _resolve_direct_file(file_path: str, *, deps: StudentImportDeps) -> Optional
     return _resolve_existing_allowed_file(candidate, deps=deps)
 
 
-def _resolve_manifest_file_candidate(resp_path: Any, *, deps: StudentImportDeps) -> Optional[Path]:
-    if not resp_path:
-        return None
-    candidate = Path(str(resp_path))
-    if not candidate.is_absolute():
-        candidate = deps.app_root / candidate if str(resp_path).startswith("data/") else deps.data_dir / candidate
-    return _resolve_existing_allowed_file(candidate, deps=deps)
-
-
-def _resolve_from_exam_manifest(exam_id: str, *, deps: StudentImportDeps) -> Optional[Path]:
-    manifest_path = _resolve_exam_manifest_path(deps.data_dir, exam_id)
-    if manifest_path is None or not manifest_path.exists():
-        return None
-    manifest = deps.load_profile_file(manifest_path)
-    files = manifest.get("files", {})
-    resp_path = files.get("responses") or files.get("responses_scored") or files.get("responses_csv")
-    return _resolve_manifest_file_candidate(resp_path, deps=deps)
-
-
 def _latest_staging_responses_file(staging_dir: Path) -> Optional[Path]:
     if not staging_dir.exists():
         return None
@@ -97,18 +67,12 @@ def _latest_staging_responses_file(staging_dir: Path) -> Optional[Path]:
 
 
 def resolve_responses_file(
-    exam_id: Optional[str],
     file_path: Optional[str],
     *,
     deps: StudentImportDeps,
 ) -> Optional[Path]:
     if file_path:
         return _resolve_direct_file(file_path, deps=deps)
-
-    if exam_id:
-        from_manifest = _resolve_from_exam_manifest(str(exam_id or ""), deps=deps)
-        if from_manifest is not None:
-            return from_manifest
 
     return _latest_staging_responses_file(deps.data_dir / "staging")
 
@@ -246,14 +210,6 @@ def import_students_from_responses(
     }
 
 
-def student_import(args: Dict[str, Any], *, deps: StudentImportDeps) -> Dict[str, Any]:
-    source = args.get("source") or "responses_scored"
-    exam_id = args.get("exam_id")
-    file_path = args.get("file_path")
-    mode = args.get("mode") or "merge"
-    if source not in {"responses_scored", "responses"}:
-        return {"error": f"unsupported source: {source}"}
-    responses_path = resolve_responses_file(exam_id, file_path, deps=deps)
-    if not responses_path:
-        return {"error": "responses file not found", "exam_id": exam_id, "file_path": file_path}
-    return import_students_from_responses(responses_path, deps=deps, mode=mode)
+def student_import(_args: Dict[str, Any], *, deps: StudentImportDeps) -> Dict[str, Any]:
+    _ = deps
+    return {"ok": False, "error": "gone"}

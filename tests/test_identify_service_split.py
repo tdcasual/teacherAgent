@@ -38,7 +38,7 @@ class _StudentStore:
         self._profiles = profiles
         self.issued: list[tuple[str, str]] = []
 
-    def _list_student_profiles(self) -> list[dict[str, str]]:
+    def _list_student_identities(self) -> list[dict[str, str]]:
         return list(self._profiles)
 
     def _ensure_student_auth(self, **kwargs: Any) -> dict[str, Any] | None:

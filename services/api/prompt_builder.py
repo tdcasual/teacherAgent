@@ -50,11 +50,11 @@ def _read_module(version: str, relpath: str) -> str:
 
 
 @lru_cache(maxsize=64)
-def compile_system_prompt(
+def _compile_system_prompt_base(
     role_hint: Optional[str],
-    version: Optional[str] = None,
-    debug: Optional[bool] = None,
-) -> Tuple[str, List[str]]:
+    version: Optional[str],
+    debug: Optional[bool],
+) -> Tuple[str, Tuple[str, ...]]:
     version_final = version or DEFAULT_PROMPT_VERSION
     debug_final = PROMPT_DEBUG if debug is None else debug
     manifest = load_manifest(version_final)
@@ -78,5 +78,23 @@ def compile_system_prompt(
     prompt = "\n\n".join(parts).strip()
     if prompt:
         prompt += "\n"
+    return prompt, tuple(used)
+
+
+def compile_system_prompt(
+    role_hint: Optional[str],
+    version: Optional[str] = None,
+    debug: Optional[bool] = None,
+    overlay: Optional[str] = None,
+) -> Tuple[str, List[str]]:
+    prompt, used_tuple = _compile_system_prompt_base(role_hint, version, debug)
+    used = list(used_tuple)
+    overlay_text = str(overlay or "").strip()
+    if not overlay_text:
+        return prompt, used
+    if prompt and not prompt.endswith("\n"):
+        prompt += "\n"
+    prompt += overlay_text + "\n"
+    used.append("subject_overlay")
     return prompt, used
 

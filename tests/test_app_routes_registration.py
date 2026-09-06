@@ -37,3 +37,28 @@ def test_register_routes_rejects_missing_core() -> None:
     app = FastAPI()
     with pytest.raises(ValueError, match="core must not be None"):
         app_routes.register_routes(app, None)
+
+
+def test_register_routes_does_not_mount_survey_class_report_or_analysis_report() -> None:
+    app = FastAPI()
+    app_routes.register_routes(app, DummyCore())
+    paths = {getattr(route, "path", "") for route in app.router.routes}
+    forbidden_prefixes = (
+        "/exam",
+        "/exams",
+        "/teacher/analysis",
+        "/teacher/surveys",
+        "/webhooks/surveys",
+        "/teacher/class-reports",
+    )
+    mounted = {path for path in paths if any(path.startswith(prefix) for prefix in forbidden_prefixes)}
+    assert not mounted
+    assert any("/assignment" in path for path in paths)
+    assert not any(path.startswith("/teacher/multimodal") for path in paths)
+
+
+def test_register_routes_never_mounts_multimodal() -> None:
+    app = FastAPI()
+    app_routes.register_routes(app, DummyCore())
+    paths = {getattr(route, "path", "") for route in app.router.routes}
+    assert not any(path.startswith("/teacher/multimodal") for path in paths)

@@ -87,7 +87,7 @@ def main():
         summary = call_llm_extract(transcript)
 
     # build update_profile.py call
-    updater = PROJECT_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
+    updater = PROJECT_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
     cmd = [
         sys.executable,
         str(updater),

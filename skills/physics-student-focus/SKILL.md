@@ -21,7 +21,7 @@ Use this skill when a teacher wants to **manually focus on a specific student**.
    - OCR using DeepSeek-OCR (SiliconFlow).
    - Save OCR output under `data/teacher_focus/<student_id>/<timestamp>/`.
 3. Summarize weak/strong KP from teacher notes or OCR evidence.
-4. Update profile using `skills/physics-student-coach/scripts/update_profile.py`.
+4. Update profile using `skills/student-coach/scripts/update_profile.py`.
    - If teacher discusses recent homework performance, pass `--discussion-notes` or `--recent-assignments`.
 5. Confirm with teacher if they want to write a brief mem0 summary (optional).
 

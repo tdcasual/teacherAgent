@@ -1,0 +1,87 @@
+id: homework-generator
+schema_version: 2
+title: 作业生成
+desc: 基于课堂讨论生成课后诊断与作业
+allowed_roles: [teacher]
+routing:
+  intents: [assignment, assignment_generate]
+  keywords:
+    - 生成作业
+    - 布置作业
+    - 分层作业
+    - 作业id
+    - 作业 id
+    - 渲染作业
+    - 每个知识点
+    - 题量
+  negative_keywords:
+    - 模型路由
+    - 路由回滚
+    - 不要生成作业
+    - 不是生成作业
+  keyword_weights:
+    生成作业: 6
+    布置作业: 6
+    分层作业: 6
+    作业id: 6
+    作业 id: 6
+    渲染作业: 4
+  regex_keywords:
+    '作业\s*id': 6
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
+agent:
+  prompt_modules:
+    - teacher/skills/homework_generator.md
+  tools:
+    allow:
+      - assignment.list
+      - assignment.generate
+      - assignment.requirements.save
+      - assignment.render
+      - assignment.publish
+      - lesson.list
+      - student.search
+      - student.profile.get
+      - chart.agent.run
+      - chart.exec
+  budgets:
+    max_tool_rounds: 3
+    max_tool_calls: 6
+  model_policy:
+    enabled: true
+    default:
+      provider: siliconflow
+      mode: openai-chat
+      model: deepseek-ai/DeepSeek-V3.2
+      temperature: 0.2
+    routes:
+      - id: assignment_parse
+        priority: 220
+        match:
+          kinds: [upload.assignment_parse, upload.assignment_confirm]
+          needs_json: true
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.1
+          max_tokens: 4096
+      - id: homework_agent_tools
+        priority: 180
+        match:
+          kinds: [chat.agent]
+          needs_tools: true
+        target:
+          provider: siliconflow
+          mode: openai-chat
+          model: deepseek-ai/DeepSeek-V3.2
+          temperature: 0.2
+ui:
+  prompts:
+    - 生成作业 A2403_2026-02-04，知识点 KP-M01,KP-E04，每个 5 题。
+  examples:
+    - 生成作业 A2403_2026-02-04
+    - 渲染作业文档

@@ -5,6 +5,7 @@ from services.api.assignment_generate_tool_service import (
     AssignmentGenerateToolDeps,
     assignment_generate,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class AssignmentGenerateToolServiceTest(unittest.TestCase):
@@ -17,7 +18,9 @@ class AssignmentGenerateToolServiceTest(unittest.TestCase):
 
         deps = AssignmentGenerateToolDeps(
             app_root=Path("/repo"),
-            parse_date_str=lambda value: str(value or "2026-02-08"),
+            optional_assignment_date=lambda value: (
+                str(value).strip() if str(value or "").strip() else None
+            ),
             ensure_requirements_for_assignment=lambda *_args: {"ok": True},
             run_script=_run_script,
             postprocess_assignment_meta=lambda *_args, **_kwargs: None,
@@ -30,7 +33,9 @@ class AssignmentGenerateToolServiceTest(unittest.TestCase):
         deps = AssignmentGenerateToolDeps(
             **{
                 **deps.__dict__,
-                "ensure_requirements_for_assignment": lambda *_args: {"error": "missing_requirements"},
+                "ensure_requirements_for_assignment": lambda *_args: {
+                    "error": "missing_requirements"
+                },
             }
         )
 
@@ -43,26 +48,33 @@ class AssignmentGenerateToolServiceTest(unittest.TestCase):
         deps = AssignmentGenerateToolDeps(
             **{
                 **deps.__dict__,
-                "postprocess_assignment_meta": lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+                "postprocess_assignment_meta": lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    RuntimeError("boom")
+                ),
             }
         )
 
-        result = assignment_generate(
-            {
-                "assignment_id": "HW_1",
-                "kp": "力学",
-                "question_ids": "Q1,Q2",
-                "mode": "auto",
-                "date": "2026-02-08",
-                "class_name": "高二2403班",
-                "student_ids": "S1",
-                "source": "teacher",
-                "per_kp": 3,
-                "core_examples": "EX_A",
-                "generate": True,
-            },
-            deps=deps,
-        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            result = assignment_generate(
+                {
+                    "assignment_id": "HW_1",
+                    "kp": "力学",
+                    "question_ids": "Q1,Q2",
+                    "mode": "auto",
+                    "date": "2026-02-08",
+                    "class_name": "高二2403班",
+                    "student_ids": "S1",
+                    "source": "teacher",
+                    "per_kp": 3,
+                    "core_examples": "EX_A",
+                    "generate": True,
+                    "subject_id": "physics",
+                },
+                deps=deps,
+            )
+        finally:
+            reset_current_principal(token)
 
         self.assertEqual(result.get("ok"), True)
         cmd = captured["cmd"]

@@ -15,7 +15,7 @@ def test_append_chat_execution_timeline_normalizes_key_events() -> None:
     timeline = []
     timeline = append_chat_execution_timeline(timeline, _event('job.queued', {'lane_queue_position': 2}, '2026-03-12T09:00:00Z'))
     timeline = append_chat_execution_timeline(timeline, _event('job.processing', {}, '2026-03-12T09:00:01Z'))
-    timeline = append_chat_execution_timeline(timeline, _event('workflow.resolved', {'effective_skill_id': 'physics-homework-generator'}, '2026-03-12T09:00:02Z'))
+    timeline = append_chat_execution_timeline(timeline, _event('workflow.resolved', {'effective_skill_id': 'homework-generator'}, '2026-03-12T09:00:02Z'))
     timeline = append_chat_execution_timeline(timeline, _event('tool.start', {'tool_name': 'exam.get'}, '2026-03-12T09:00:03Z'))
     timeline = append_chat_execution_timeline(timeline, _event('tool.finish', {'tool_name': 'exam.get', 'ok': True}, '2026-03-12T09:00:04Z'))
     timeline = append_chat_execution_timeline(timeline, _event('assistant.done', {'text': '完成'}, '2026-03-12T09:00:05Z'))
@@ -31,7 +31,7 @@ def test_append_chat_execution_timeline_normalizes_key_events() -> None:
         'job.done',
     ]
     assert timeline[0]['summary'] == '排队中（前方 2）'
-    assert timeline[2]['summary'] == '工作流已解析：physics-homework-generator'
+    assert timeline[2]['summary'] == '工作流已解析：homework-generator'
     assert timeline[4]['summary'] == '工具完成：exam.get'
     assert timeline[-1]['summary'] == '任务完成'
 

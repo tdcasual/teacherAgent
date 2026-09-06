@@ -11,9 +11,7 @@ from services.api.chat_support_service import (
     detect_math_delimiters,
     detect_student_study_trigger,
     extract_diagnostic_signals,
-    extract_exam_id,
     extract_min_chars_requirement,
-    is_exam_analysis_request,
     normalize_math_delimiters,
 )
 
@@ -136,10 +134,12 @@ class TestAllowedTools:
     def test_teacher(self):
         tools = allowed_tools("teacher")
         assert len(tools) > 0
-        assert "exam.list" in tools
+        assert "exam.list" not in tools
+        assert "assignment.list" in tools
+        assert "assignment.publish" in tools
 
     def test_student(self):
-        assert allowed_tools("student") == set()
+        assert allowed_tools("student") == {"assignment.my_today", "assignment.my_result"}
 
     def test_none(self):
         assert allowed_tools(None) == set()
@@ -159,32 +159,3 @@ class TestExtractMinCharsRequirement:
 
     def test_empty(self):
         assert extract_min_chars_requirement("") is None
-
-
-# ── extract_exam_id ─────────────────────────────────────────────────────
-
-class TestExtractExamId:
-    def test_found(self):
-        assert extract_exam_id("请分析EX001的成绩") == "EX001"
-
-    def test_no_match(self):
-        assert extract_exam_id("没有考试编号") is None
-
-    def test_empty(self):
-        assert extract_exam_id("") is None
-
-
-# ── is_exam_analysis_request ────────────────────────────────────────────
-
-class TestIsExamAnalysisRequest:
-    def test_direct_keyword(self):
-        assert is_exam_analysis_request("请做考试分析") is True
-
-    def test_split_keywords(self):
-        assert is_exam_analysis_request("帮我分析一下这次考试") is True
-
-    def test_unrelated(self):
-        assert is_exam_analysis_request("今天天气不错") is False
-
-    def test_empty(self):
-        assert is_exam_analysis_request("") is False

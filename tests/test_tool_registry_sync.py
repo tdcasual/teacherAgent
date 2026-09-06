@@ -21,6 +21,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -51,11 +52,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
         from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
         for name in (
-            "exam.get",
-            "exam.students.list",
-            "exam.range.top_students",
-            "exam.range.summary.batch",
-            "exam.question.batch.get",
+            "assignment.list",
+            "assignment.progress",
             "assignment.generate",
             "lesson.capture",
             "core_example.register",
@@ -82,12 +80,23 @@ class ToolRegistrySyncTest(unittest.TestCase):
             result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
-                skill_id="physics-core-examples",
+                skill_id="homework-generator",
             )
             self.assertEqual(result.get("reply"), "ok")
             self.assertEqual(
                 set(captured.get("tool_names") or []),
-                {"core_example.search", "core_example.register", "core_example.render", "chart.agent.run", "chart.exec"},
+                {
+                    "assignment.list",
+                    "assignment.generate",
+                    "assignment.requirements.save",
+                    "assignment.render",
+                    "assignment.publish",
+                    "lesson.list",
+                    "student.search",
+                    "student.profile.get",
+                    "chart.agent.run",
+                    "chart.exec",
+                },
             )
 
     def test_run_agent_default_skill_keeps_teacher_tools(self):
@@ -108,10 +117,15 @@ class ToolRegistrySyncTest(unittest.TestCase):
             result = app_mod.get_core().run_agent(
                 messages=[{"role": "user", "content": "hello"}],
                 role_hint="teacher",
-                skill_id="physics-teacher-ops",
+                skill_id="teacher-assignment-ops",
             )
             self.assertEqual(result.get("reply"), "ok")
-            self.assertEqual(set(captured.get("tool_names") or []), set(allowed_tools("teacher")))
+            names = set(captured.get("tool_names") or [])
+            self.assertIn("assignment.progress", names)
+            self.assertIn("assignment.missing", names)
+            self.assertNotIn("assignment.generate", names)
+            self.assertNotIn("exam.get", names)
+            self.assertTrue(names.issubset(set(allowed_tools("teacher"))))
 
     def test_mcp_tools_list_matches_registry(self):
         with TemporaryDirectory() as td:
@@ -125,7 +139,8 @@ class ToolRegistrySyncTest(unittest.TestCase):
 
             from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(mcp_mod.MCP_TOOL_NAMES)  # type: ignore[attr-defined]
+            names = mcp_mod.MCP_TOOL_NAMES() if callable(mcp_mod.MCP_TOOL_NAMES) else mcp_mod.MCP_TOOL_NAMES
+            expected = DEFAULT_TOOL_REGISTRY.mcp_tools(names)  # type: ignore[attr-defined]
             self.assertEqual(returned, expected)
 
 

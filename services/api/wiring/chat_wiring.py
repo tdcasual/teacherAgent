@@ -104,6 +104,7 @@ from ..session_view_state import (
     normalize_session_view_state_payload as _normalize_session_view_state_payload_impl,
 )
 from ..skill_auto_router import resolve_effective_skill as _resolve_effective_skill_impl
+from ..skills.affiliates import extra_skill_ids_for_role as _extra_skill_ids_for_role
 from ..student_memory_service import (
     StudentMemoryDeps,
 )
@@ -113,6 +114,7 @@ from ..student_memory_service import (
 from ..student_memory_service import (
     student_memory_auto_propose_from_turn_api as _student_memory_auto_propose_from_turn_api,
 )
+from ..subject_pack_service import bind_fallback_logger, overlay_for_role
 from ..teacher_assignment_preflight_service import teacher_workflow_preflight_reply
 from ..teacher_model_config_service import (
     resolve_teacher_model_config as _resolve_teacher_model_config_impl,
@@ -194,7 +196,7 @@ def _chat_start_deps(core: Any | None = None):
         load_chat_job=_ac.load_chat_job,
         detect_role_hint=_detect_role_hint_nonnull,
         resolve_student_session_id=_ac.resolve_student_session_id,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         resolve_chat_lane_id=resolve_chat_lane_id,
         chat_last_user_text=_chat_last_user_text,
         chat_text_fingerprint=_chat_text_fingerprint,
@@ -214,6 +216,7 @@ def _chat_start_deps(core: Any | None = None):
         append_teacher_session_message=_ac.append_teacher_session_message,
         update_teacher_session_index=_ac.update_teacher_session_index,
         parse_date_str=_ac.parse_date_str,
+        load_student_sessions_index=_ac.load_student_sessions_index,
         resolve_chat_attachment_context=lambda **kwargs: _resolve_chat_attachment_context_impl(
             deps=attachment_deps,
             **kwargs,
@@ -271,7 +274,7 @@ def _chat_runtime_deps(core: Any | None = None):
             GLOBAL_LLM_SEMAPHORE,
             GLOBAL_LLM_SEMAPHORE_TEACHER,
         ),
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         resolve_teacher_model_config=lambda teacher_id: _resolve_teacher_model_config_impl(
             teacher_id,
             deps=_teacher_model_config_deps(core),
@@ -343,15 +346,12 @@ def _chat_job_process_deps(core: Any | None = None):
     _ac = _app_core(core)
     backend = _queue_backend_for_app_core(_ac)
     student_memory_deps = StudentMemoryDeps(
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         assignment_evidence_high_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_HIGH_MASTERY_RATIO,
         assignment_evidence_low_mastery_ratio=_ac.STUDENT_MEMORY_ASSIGNMENT_EVIDENCE_LOW_MASTERY_RATIO,
     )
-    metrics_service = getattr(_ac, 'analysis_metrics_service', None)
-    record_workflow_resolution = getattr(metrics_service, 'record_workflow_resolution', None)
-    record_workflow_outcome = getattr(metrics_service, 'record_workflow_outcome', None)
     return ChatJobProcessDeps(
         chat_job_claim_path=lambda job_id: _chat_job_path_impl(job_id, deps=_chat_job_repo_deps(core))
         / "claim.lock",
@@ -383,7 +383,7 @@ def _chat_job_process_deps(core: Any | None = None):
         append_student_session_message=_ac.append_student_session_message,
         update_student_session_index=_ac.update_student_session_index,
         parse_date_str=_ac.parse_date_str,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         ensure_teacher_workspace=_ac.ensure_teacher_workspace,
         append_teacher_session_message=_ac.append_teacher_session_message,
         update_teacher_session_index=_ac.update_teacher_session_index,
@@ -416,22 +416,17 @@ def _chat_job_process_deps(core: Any | None = None):
             payload,
             deps=_chat_event_stream_deps(core),
         ),
-        record_workflow_resolution=(
-            lambda payload: record_workflow_resolution(**payload) if callable(record_workflow_resolution) else None
-        ),
-        record_workflow_outcome=(
-            lambda payload: record_workflow_outcome(**payload) if callable(record_workflow_outcome) else None
-        ),
     )
 
 
 def _compute_chat_reply_deps(core: Any | None = None):
     _ac = _app_core(core)
+    bind_fallback_logger(_ac.diag_log)
     return ComputeChatReplyDeps(
         detect_role=_ac.detect_role,
         diag_log=_ac.diag_log,
         teacher_assignment_preflight=_ac.teacher_assignment_preflight,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         teacher_build_context=lambda teacher_id, query, max_chars, session_id: _ac.teacher_build_context(
             teacher_id,
             query=query,
@@ -443,8 +438,6 @@ def _compute_chat_reply_deps(core: Any | None = None):
         data_dir=_ac.DATA_DIR,
         build_verified_student_context=_ac.build_verified_student_context,
         build_assignment_detail_cached=_ac.build_assignment_detail_cached,
-        find_assignment_for_date=_ac.find_assignment_for_date,
-        parse_date_str=_ac.parse_date_str,
         build_assignment_context=_ac.build_assignment_context,
         chat_extra_system_max_chars=_ac.CHAT_EXTRA_SYSTEM_MAX_CHARS,
         trim_messages=_ac._trim_messages,
@@ -470,7 +463,9 @@ def _compute_chat_reply_deps(core: Any | None = None):
             requested_skill_id=requested_skill_id,
             last_user_text=last_user_text,
             detect_assignment_intent=_ac.detect_assignment_intent,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
         ),
+        subject_prompt_overlay=overlay_for_role,
     )
 
 def _chat_support_deps(core: Any | None = None):
@@ -498,7 +493,7 @@ def _session_history_deps(core: Any | None = None):
         student_session_file=_ac.student_session_file,
         teacher_session_file=_ac.teacher_session_file,
         load_session_messages=_load_session_messages_impl,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
     )
 
 

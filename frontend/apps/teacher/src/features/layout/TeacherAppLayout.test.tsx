@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import TeacherAppLayout, { type TeacherAppLayoutProps } from './TeacherAppLayout'
 import type { TeacherWorkbenchViewModel } from '../workbench/teacherWorkbenchViewModel'
+import * as teacherAuth from '../auth/teacherAuth'
 
 vi.mock('./TeacherTopbar', () => ({
   default: () => <header data-testid="teacher-topbar">topbar</header>,
@@ -27,6 +28,10 @@ vi.mock('../chat/TeacherChatMainContent', () => ({
 
 vi.mock('../workbench/TeacherWorkbench', () => ({
   default: () => <div data-testid="teacher-workbench">workbench</div>,
+}))
+
+vi.mock('../admin/AdminSchoolPanel', () => ({
+  default: () => <div data-testid="admin-school-panel">school</div>,
 }))
 
 vi.mock('../../../../shared/dialog', () => ({
@@ -113,7 +118,7 @@ const buildChat = (): TeacherAppLayoutProps['chat'] => ({
   onMessagesScroll: noop,
   showScrollToBottom: false,
   onScrollToBottom: noop,
-  activeSkillId: 'physics-teacher-ops',
+  activeSkillId: 'teacher-assignment-ops',
   skillPinned: false,
   input: '',
   chatQueueHint: '',
@@ -265,6 +270,16 @@ describe('TeacherAppLayout', () => {
 
     expect(screen.getByTestId('bottom-sheet-工作台')).toBeTruthy()
     expect((await screen.findAllByTestId('teacher-workbench')).length).toBeGreaterThan(0)
+  })
+
+  it('opens AdminSchoolPanel instead of chat and workbench for admin role', async () => {
+    vi.spyOn(teacherAuth, 'readTeacherAuthRole').mockReturnValue('admin')
+    render(<TeacherAppLayout {...buildProps()} />)
+
+    expect(await screen.findByTestId('admin-school-panel')).toBeTruthy()
+    expect(screen.queryByTestId('teacher-chat')).toBeNull()
+    expect(screen.queryByTestId('teacher-workbench')).toBeNull()
+    expect(screen.queryByTestId('teacher-session-rail')).toBeNull()
   })
 
   it('opens session rename and archive dialogs from session ids', () => {

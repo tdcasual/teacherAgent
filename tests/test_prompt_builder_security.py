@@ -23,7 +23,8 @@ class TestPromptBuilderSecurity(unittest.TestCase):
         mod = importlib.import_module("services.api.prompt_builder")
         importlib.reload(mod)
         prompt, _ = mod.compile_system_prompt("student", version=None, debug=False)
-        self.assertIn("学生端物理学习助手", prompt)
+        self.assertIn("学生端学习助手", prompt)
+        self.assertNotIn("物理学习助手", prompt)
 
 
 if __name__ == "__main__":

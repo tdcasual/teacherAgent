@@ -18,6 +18,7 @@ COPY skills /app/skills
 COPY config /app/config
 COPY scripts /app/scripts
 COPY prompts /app/prompts
+COPY packs /app/packs
 COPY llm_gateway.py /app/llm_gateway.py
 COPY mem0_config.py /app/mem0_config.py
 

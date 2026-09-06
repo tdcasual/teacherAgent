@@ -34,21 +34,6 @@ from ..agent_service import (
 from ..agent_service import (
     default_teacher_tools_to_openai as _default_teacher_tools_to_openai_impl,
 )
-from ..analysis_report_service import (
-    build_analysis_report_deps as _build_analysis_report_deps,
-)
-from ..analysis_report_service import (
-    get_analysis_report as _get_analysis_report_impl,
-)
-from ..analysis_report_service import (
-    list_analysis_reports as _list_analysis_reports_impl,
-)
-from ..analysis_report_service import (
-    list_analysis_review_queue as _list_analysis_review_queue_impl,
-)
-from ..analysis_report_service import (
-    rerun_analysis_report as _rerun_analysis_report_impl,
-)
 from ..assignment_requirements_service import (
     compute_requirements_missing as _compute_requirements_missing_impl,
 )
@@ -81,88 +66,127 @@ from ..chart_agent_run_service import (
 )
 from ..content_catalog_service import ContentCatalogDeps
 from ..core_example_tool_service import CoreExampleToolDeps
-from ..core_utils import _is_safe_tool_id, _resolve_app_path
-from ..exam_longform_service import generate_longform_reply as _generate_longform_reply_impl
-from ..exam_score_processing_service import normalize_excel_cell as _normalize_excel_cell_impl
-from ..exam_utils import _safe_int_arg
+from ..core_utils import _is_safe_tool_id, _resolve_app_path, _safe_int_arg, normalize_excel_cell
 from ..lesson_core_tool_service import LessonCaptureDeps
+from ..skills.affiliates import extra_skill_ids_for_role as _extra_skill_ids_for_role
 from ..tool_dispatch_service import ToolDispatchDeps
 from ..upload_llm_service import UploadLlmDeps
 from ..upload_text_service import UploadTextDeps
 from . import get_app_core as _app_core
-from .exam_wiring import _exam_longform_deps
-from .survey_wiring import build_survey_specialist_runtime
 
 
 def _tool_dispatch_deps(core: Any | None = None):
     _ac = _app_core(core)
 
-    def analysis_report_list(
-        teacher_id: str,
-        domain: str | None = None,
-        status: str | None = None,
-        strategy_id: str | None = None,
-        target_type: str | None = None,
-    ) -> dict[str, Any]:
-        return _list_analysis_reports_impl(
-            teacher_id=teacher_id,
-            domain=domain,
-            status=status,
-            strategy_id=strategy_id,
-            target_type=target_type,
-            deps=_build_analysis_report_deps(core),
-        )
+    def _assignment_publish(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, publish_assignment
+        from ..auth_service import get_current_principal
 
-    def analysis_report_get(
-        report_id: str,
-        teacher_id: str,
-        domain: str | None = None,
-    ) -> dict[str, Any]:
-        return _get_analysis_report_impl(
-            report_id=report_id,
-            teacher_id=teacher_id,
-            domain=domain,
-            deps=_build_analysis_report_deps(core),
-        )
+        try:
+            return publish_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
 
-    def analysis_report_rerun(
-        report_id: str,
-        teacher_id: str,
-        domain: str | None = None,
-        reason: str | None = None,
-    ) -> dict[str, Any]:
-        return _rerun_analysis_report_impl(
-            report_id=report_id,
-            teacher_id=teacher_id,
-            domain=domain,
-            reason=reason,
-            deps=_build_analysis_report_deps(core),
-        )
+    def _assignment_archive(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, archive_assignment
+        from ..auth_service import get_current_principal
 
-    def analysis_review_list(
-        teacher_id: str,
-        domain: str | None = None,
-        status: str | None = None,
-    ) -> dict[str, Any]:
-        return _list_analysis_review_queue_impl(
-            teacher_id=teacher_id,
-            domain=domain,
-            status=status,
-            deps=_build_analysis_report_deps(core),
+        try:
+            return archive_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_unarchive(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_archive_service import AssignmentArchiveError, unarchive_assignment
+        from ..auth_service import get_current_principal
+
+        try:
+            return unarchive_assignment(assignment_id, principal=get_current_principal())
+        except AssignmentArchiveError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_recompute_roster(assignment_id: str) -> dict[str, Any]:
+        from ..assignment_recompute_roster_service import (
+            AssignmentRecomputeRosterError,
+            recompute_assignment_roster,
         )
+        from ..auth_service import get_current_principal
+
+        try:
+            return recompute_assignment_roster(assignment_id, principal=get_current_principal())
+        except AssignmentRecomputeRosterError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_my_today(student_id: str, date: str | None = None) -> dict[str, Any]:
+        from ..assignment_today_service import AssignmentTodayError, assignment_today
+        from .assignment_wiring import assignment_today_deps
+
+        try:
+            return assignment_today(
+                student_id=student_id,
+                date=date,
+                auto_generate=False,
+                generate=False,
+                per_kp=5,
+                deps=assignment_today_deps(_ac),
+            )
+        except AssignmentTodayError as exc:
+            return {"error": exc.detail, "status_code": exc.status_code}
+
+    def _assignment_owner_id(assignment_id: str) -> str | None:
+        aid = str(assignment_id or "").strip()
+        if not aid:
+            return None
+        folder = _ac.DATA_DIR / "assignments" / aid
+        if not folder.exists():
+            return None
+        from ..assignment.visibility import assignment_owner_id
+        from ..assignment_data_service import load_assignment_meta
+
+        try:
+            meta = load_assignment_meta(folder)
+        except Exception:  # policy: allowed-broad-except
+            return None
+        return str(assignment_owner_id(meta) if isinstance(meta, dict) else "").strip()
+
+    def _assignment_my_result(assignment_id: str, student_id: str) -> dict[str, Any]:
+        from ..assignment.visibility import snapshot_student_ids, student_can_read_assignment
+
+        sid = str(student_id or "").strip()
+        aid = str(assignment_id or "").strip()
+        if not sid:
+            return {"error": "student_id_required"}
+        if not aid:
+            return {"error": "assignment_id is required"}
+        folder = _ac.DATA_DIR / "assignments" / aid
+        if not folder.exists():
+            return {"error": "assignment_not_found", "assignment_id": aid}
+        from ..assignment_data_service import load_assignment_meta
+
+        try:
+            meta = load_assignment_meta(folder)
+        except Exception:  # policy: allowed-broad-except
+            return {"error": "assignment_not_found", "assignment_id": aid}
+        if not isinstance(meta, dict):
+            meta = {}
+        if not student_can_read_assignment(meta) or sid not in snapshot_student_ids(meta):
+            return {"error": "forbidden_assignment_scope", "assignment_id": aid}
+        attempts = _ac.list_submission_attempts(aid, sid)
+        best = _ac.best_submission_attempt(attempts)
+        official = None
+        if isinstance(best, dict):
+            official = best.get("score_earned")
+        return {
+            "ok": True,
+            "assignment_id": aid,
+            "student_id": sid,
+            "submitted": bool(best),
+            "official_score": official,
+            "best": best,
+        }
 
     return ToolDispatchDeps(
         tool_registry=DEFAULT_TOOL_REGISTRY,
-        list_exams=_ac.list_exams,
-        exam_get=_ac.exam_get,
-        exam_analysis_get=_ac.exam_analysis_get,
-        exam_analysis_charts_generate=_ac.exam_analysis_charts_generate,
-        exam_students_list=_ac.exam_students_list,
-        exam_student_detail=_ac.exam_student_detail,
-        exam_question_detail=_ac.exam_question_detail,
-        exam_range_top_students=_ac.exam_range_top_students,
-        exam_range_summary_batch=_ac.exam_range_summary_batch,
-        exam_question_batch_detail=_ac.exam_question_batch_detail,
         list_assignments=_ac.list_assignments,
         list_lessons=_ac.list_lessons,
         lesson_capture=_ac.lesson_capture,
@@ -179,7 +203,7 @@ def _tool_dispatch_deps(core: Any | None = None):
         core_example_render=_ac.core_example_render,
         chart_agent_run=_ac.chart_agent_run,
         chart_exec=_ac.chart_exec,
-        resolve_teacher_id=_ac.resolve_teacher_id,
+        resolve_teacher_id=_ac.require_teacher_id,
         ensure_teacher_workspace=_ac.ensure_teacher_workspace,
         teacher_workspace_dir=_ac.teacher_workspace_dir,
         teacher_workspace_file=_ac.teacher_workspace_file,
@@ -188,15 +212,23 @@ def _tool_dispatch_deps(core: Any | None = None):
         teacher_memory_search=_ac.teacher_memory_search,
         teacher_memory_propose=_ac.teacher_memory_propose,
         teacher_memory_apply=_ac.teacher_memory_apply,
-        survey_report_list=_ac.survey_list_reports,
-        survey_report_get=_ac.survey_get_report,
-        survey_report_rerun=_ac.survey_rerun_report,
-        analysis_report_list=analysis_report_list,
-        analysis_report_get=analysis_report_get,
-        analysis_report_rerun=analysis_report_rerun,
-        analysis_review_list=analysis_review_list,
-        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(
+            _ac.APP_ROOT,
+            role_hint,
+            skill_id,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
+        ),
         allowed_tools=_ac.allowed_tools,
+        assignment_progress=lambda assignment_id: _ac.compute_assignment_progress(
+            assignment_id, include_students=True
+        ),
+        assignment_publish=_assignment_publish,
+        assignment_archive=_assignment_archive,
+        assignment_unarchive=_assignment_unarchive,
+        assignment_recompute_roster=_assignment_recompute_roster,
+        assignment_my_today=_assignment_my_today,
+        assignment_my_result=_assignment_my_result,
+        assignment_owner_id=_assignment_owner_id,
     )
 
 
@@ -209,7 +241,7 @@ def _upload_llm_deps(core: Any | None = None):
         parse_list_value=_ac.parse_list_value,
         compute_requirements_missing=_compute_requirements_missing_impl,
         merge_requirements=_merge_requirements_impl,
-        normalize_excel_cell=_normalize_excel_cell_impl,
+        normalize_excel_cell=normalize_excel_cell,
     )
 
 
@@ -300,30 +332,20 @@ def _agent_runtime_deps(core: Any | None = None):
         app_root=_ac.APP_ROOT,
         build_system_prompt=_ac.build_system_prompt,
         diag_log=_ac.diag_log,
-        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(_ac.APP_ROOT, role_hint, skill_id),
+        load_skill_runtime=lambda role_hint, skill_id: _default_load_skill_runtime_impl(
+            _ac.APP_ROOT,
+            role_hint,
+            skill_id,
+            extra_skill_ids=_extra_skill_ids_for_role(_ac, role_hint),
+        ),
         allowed_tools=_ac.allowed_tools,
         max_tool_rounds=_ac.CHAT_MAX_TOOL_ROUNDS,
         max_tool_calls=_ac.CHAT_MAX_TOOL_CALLS,
         extract_min_chars_requirement=_ac.extract_min_chars_requirement,
-        extract_exam_id=_ac.extract_exam_id,
-        is_exam_analysis_request=_ac.is_exam_analysis_request,
-        build_exam_longform_context=_ac.build_exam_longform_context,
-        generate_longform_reply=lambda convo, min_chars, role_hint, skill_id=None, teacher_id=None, skill_runtime=None: _generate_longform_reply_impl(
-            convo,
-            min_chars,
-            role_hint,
-            skill_id,
-            teacher_id,
-            skill_runtime,
-            deps=_exam_longform_deps(core),
-        ),
+        generate_longform_reply=lambda *args, **kwargs: "",
         call_llm=_ac.call_llm,
         tool_dispatch=_ac.tool_dispatch,
         teacher_tools_to_openai=_default_teacher_tools_to_openai_impl,
-        survey_list_reports=_ac.survey_list_reports,
-        survey_get_report=_ac.survey_get_report,
-        load_survey_bundle=_ac.survey_load_bundle,
-        survey_specialist_runtime=build_survey_specialist_runtime(_ac),
     )
 
 

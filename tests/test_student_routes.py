@@ -10,6 +10,7 @@ def _has_route(router, method, path):
 
 def test_student_routes_build_router():
     router = student_routes.build_router(object())
+    assert _has_route(router, "GET", "/student/assignments/history")
     assert _has_route(router, "GET", "/student/history/sessions")
     assert _has_route(router, "GET", "/student/session/view-state")
     assert _has_route(router, "PUT", "/student/session/view-state")
@@ -23,3 +24,4 @@ def test_student_routes_build_router():
     assert _has_route(router, "POST", "/student/import")
     assert _has_route(router, "POST", "/student/verify")
     assert _has_route(router, "POST", "/student/submit")
+    assert _has_route(router, "POST", "/student/assignment/{assignment_id}/process-archive")

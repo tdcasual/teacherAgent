@@ -37,8 +37,8 @@ describe('StudentTopbar compact mobile mode', () => {
     render(<StudentTopbar {...props} compactMobile />);
     const header = screen.getByRole('banner');
 
-    expect(screen.getByText('物理学习助手')).toBeTruthy();
-    expect(screen.queryByText('物理学习助手 · 学生端')).toBeNull();
+    expect(screen.getByText('学习助手')).toBeTruthy();
+    expect(screen.queryByText('学习助手 · 学生端')).toBeNull();
     expect(screen.queryByRole('button', { name: '会话' })).toBeNull();
     expect(screen.queryByRole('button', { name: '今日任务' })).toBeNull();
     expect(screen.queryByRole('button', { name: '新建' })).toBeNull();

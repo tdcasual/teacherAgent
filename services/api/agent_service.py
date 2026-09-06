@@ -11,19 +11,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
 
-from .agent_context_resolution_service import (
-    build_longform_context_prompt as _build_longform_context_prompt,
-)
-from .agent_context_resolution_service import (
-    find_exam_id_for_longform as _find_exam_id_for_longform,
-)
-from .agent_context_resolution_service import (
-    find_last_user_text as _find_last_user_text,
-)
-from .agent_runtime_guards import (
-    maybe_guard_teacher_subject_total as _maybe_guard_teacher_subject_total,
-)
-from .analysis_followup_router import maybe_route_analysis_followup
 from .llm_agent_tooling_service import parse_tool_json_safe
 from .role_runtime_policy import get_role_runtime_policy
 from .tool_confirm_service import (
@@ -33,18 +20,6 @@ from .tool_confirm_service import (
 )
 
 _log = logging.getLogger(__name__)
-
-
-def _default_survey_list_reports(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
-    return {"items": []}
-
-
-def _default_survey_get_report(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
-    return {}
-
-
-def _default_load_survey_bundle(_job_id: str) -> Dict[str, Any]:
-    return {}
 
 
 @dataclass(frozen=True)
@@ -57,17 +32,10 @@ class AgentRuntimeDeps:
     max_tool_rounds: int
     max_tool_calls: int
     extract_min_chars_requirement: Callable[[str], Optional[int]]
-    extract_exam_id: Callable[[str], Optional[str]]
-    is_exam_analysis_request: Callable[[str], bool]
-    build_exam_longform_context: Callable[[str], Dict[str, Any]]
     generate_longform_reply: Callable[..., str]
     call_llm: Callable[..., Dict[str, Any]]
     tool_dispatch: Callable[..., Dict[str, Any]]
     teacher_tools_to_openai: Callable[..., List[Dict[str, Any]]]
-    survey_list_reports: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_list_reports
-    survey_get_report: Callable[[str, str], Dict[str, Any]] = _default_survey_get_report
-    load_survey_bundle: Callable[[str], Dict[str, Any]] = _default_load_survey_bundle
-    survey_specialist_runtime: Any = None
 
 
 def parse_tool_json(content: str) -> Optional[Dict[str, Any]]:
@@ -149,47 +117,6 @@ def _resolve_runtime_tool_limits(
     return allowed, max_tool_rounds, max_tool_calls
 
 
-def _maybe_generate_teacher_longform_reply(
-    *,
-    deps: AgentRuntimeDeps,
-    messages: List[Dict[str, Any]],
-    last_user_text: str,
-    allowed: Set[str],
-    convo: List[Dict[str, Any]],
-    role_hint: Optional[str],
-    skill_id: Optional[str],
-    teacher_id: Optional[str],
-    skill_runtime: Optional[Any],
-) -> Optional[Dict[str, Any]]:
-    min_chars = deps.extract_min_chars_requirement(last_user_text)
-    if not min_chars:
-        return None
-    required_exam_tools = {"exam.get", "exam.analysis.get", "exam.students.list"}
-    if not required_exam_tools.issubset(set(allowed)):
-        deps.diag_log("exam.longform.skip", {"reason": "skill_policy_denied"})
-        return None
-    exam_id = _find_exam_id_for_longform(
-        last_user_text,
-        messages,
-        extract_exam_id=deps.extract_exam_id,
-    )
-    if not exam_id or not deps.is_exam_analysis_request(last_user_text):
-        return None
-    context = deps.build_exam_longform_context(exam_id)
-    if not context.get("exam_analysis", {}).get("ok"):
-        return None
-    convo.append({"role": "system", "content": _build_longform_context_prompt(min_chars, context)})
-    reply = deps.generate_longform_reply(
-        convo,
-        min_chars=min_chars,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-    )
-    return {"reply": reply}
-
-
 def _dispatch_tool_safely(
     deps: AgentRuntimeDeps,
     name: str,
@@ -197,6 +124,7 @@ def _dispatch_tool_safely(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     try:
         return deps.tool_dispatch(
@@ -205,6 +133,7 @@ def _dispatch_tool_safely(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     except Exception as exc:
         _log.debug("operation failed", exc_info=True)
@@ -337,6 +266,7 @@ def _process_structured_tool_call(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
 ) -> Tuple[bool, Optional[Dict[str, Any]]]:
     name = call["function"]["name"]
@@ -367,6 +297,7 @@ def _process_structured_tool_call(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     finally:
         reset_tool_confirm_context(token)
@@ -405,6 +336,7 @@ def _handle_structured_tool_calls(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -427,6 +359,7 @@ def _handle_structured_tool_calls(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             event_sink=event_sink,
         )
         if counted:
@@ -452,6 +385,7 @@ def _handle_json_tool_request(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -487,6 +421,7 @@ def _handle_json_tool_request(
             role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
         )
     finally:
         reset_tool_confirm_context(token)
@@ -567,6 +502,7 @@ def _handle_tool_round_outcome(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     max_tool_calls: int,
     tool_calls_total: int,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
@@ -585,6 +521,7 @@ def _handle_tool_round_outcome(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -607,6 +544,7 @@ def _handle_tool_round_outcome(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -638,6 +576,7 @@ def _run_tool_loop(
     role_hint: Optional[str],
     skill_id: Optional[str],
     teacher_id: Optional[str],
+    actor_id: Optional[str],
     skill_runtime: Optional[Any],
     allowed: Set[str],
     max_tool_rounds: int,
@@ -677,6 +616,7 @@ def _run_tool_loop(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             max_tool_calls=max_tool_calls,
             tool_calls_total=tool_calls_total,
             event_sink=event_sink,
@@ -773,53 +713,6 @@ def _build_runtime_conversation(
     return convo
 
 
-def _maybe_teacher_runtime_shortcut_reply(
-    *,
-    deps: AgentRuntimeDeps,
-    is_teacher_role: bool,
-    messages: List[Dict[str, Any]],
-    last_user_text: str,
-    allowed: Set[str],
-    convo: List[Dict[str, Any]],
-    role_hint: Optional[str],
-    skill_id: Optional[str],
-    teacher_id: Optional[str],
-    skill_runtime: Optional[Any],
-    analysis_target: Optional[Any],
-    event_sink: Optional[Callable[[str, Dict[str, Any]], None]],
-) -> Optional[Dict[str, Any]]:
-    if not is_teacher_role:
-        return None
-    followup_reply = maybe_route_analysis_followup(
-        deps,
-        messages=messages,
-        last_user_text=last_user_text,
-        teacher_id=teacher_id,
-        analysis_target=analysis_target,
-        event_sink=event_sink,
-    )
-    if followup_reply:
-        return followup_reply
-    guarded_reply = _maybe_guard_teacher_subject_total(
-        deps,
-        messages=messages,
-        last_user_text=last_user_text,
-    )
-    if guarded_reply:
-        return guarded_reply
-    return _maybe_generate_teacher_longform_reply(
-        deps=deps,
-        messages=messages,
-        last_user_text=last_user_text,
-        allowed=allowed,
-        convo=convo,
-        role_hint=role_hint,
-        skill_id=skill_id,
-        teacher_id=teacher_id,
-        skill_runtime=skill_runtime,
-    )
-
-
 def _runtime_tools_for_role(
     *,
     deps: AgentRuntimeDeps,
@@ -873,7 +766,6 @@ def run_agent_runtime(
     extra_system: Optional[str] = None,
     skill_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
-    analysis_target: Optional[Any] = None,
     event_sink: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     job_id: Optional[str] = None,
     lane_id: Optional[str] = None,
@@ -881,7 +773,6 @@ def run_agent_runtime(
     initial_convo: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     skill_runtime = _load_skill_runtime_with_logging(deps, role_hint, skill_id)
-    last_user_text = _find_last_user_text(messages)
     allowed, max_tool_rounds, max_tool_calls = _resolve_runtime_tool_limits(deps, role_hint, skill_runtime)
     role_policy = get_role_runtime_policy(role_hint)
     is_teacher_role = role_policy.role == "teacher"
@@ -895,22 +786,6 @@ def run_agent_runtime(
             skill_runtime=skill_runtime,
             extra_system=extra_system,
         )
-        shortcut_reply = _maybe_teacher_runtime_shortcut_reply(
-            deps=deps,
-            is_teacher_role=is_teacher_role,
-            messages=messages,
-            last_user_text=last_user_text,
-            allowed=allowed,
-            convo=convo,
-            role_hint=role_hint,
-            skill_id=skill_id,
-            teacher_id=teacher_id,
-            skill_runtime=skill_runtime,
-            analysis_target=analysis_target,
-            event_sink=event_sink,
-        )
-        if shortcut_reply:
-            return shortcut_reply
 
     tools = _runtime_tools_for_role(
         deps=deps,
@@ -934,6 +809,7 @@ def run_agent_runtime(
             role_hint=role_hint,
             skill_id=skill_id,
             teacher_id=teacher_id,
+            actor_id=actor_id,
             skill_runtime=skill_runtime,
             allowed=allowed,
             max_tool_rounds=max_tool_rounds,
@@ -966,13 +842,14 @@ def default_load_skill_runtime(
     app_root: Path,
     role_hint: Optional[str],
     skill_id: Optional[str],
+    extra_skill_ids: Any = (),
 ) -> Tuple[Optional[Any], Optional[str]]:
     from .skills.loader import load_skills
     from .skills.router import resolve_skill
     from .skills.runtime import compile_skill_runtime
 
     loaded = load_skills(app_root / "skills")
-    selection = resolve_skill(loaded, skill_id, role_hint)
+    selection = resolve_skill(loaded, skill_id, role_hint, extra_skill_ids=extra_skill_ids or ())
     warning = selection.warning
     runtime = None
     if selection.skill:

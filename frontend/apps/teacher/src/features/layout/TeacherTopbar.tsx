@@ -5,6 +5,7 @@ import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
 import {
   TEACHER_AUTH_EVENT,
   readTeacherAccessToken,
+  readTeacherAuthRole,
   readTeacherAuthSubject,
 } from '../auth/teacherAuth'
 import TeacherTopbarAdminMenu from './TeacherTopbarAdminMenu'
@@ -35,6 +36,7 @@ export default function TeacherTopbar({
   const authPanelRef = useRef<HTMLDivElement | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
   const [authed, setAuthed] = useState(() => Boolean(readTeacherAccessToken()))
+  const [isAdmin, setIsAdmin] = useState(() => readTeacherAuthRole() === 'admin')
   const [authSubjectLabel, setAuthSubjectLabel] = useState(() => {
     const subject = readTeacherAuthSubject()
     return subject?.teacher_name || subject?.teacher_id || ''
@@ -50,6 +52,7 @@ export default function TeacherTopbar({
     const sync = () => {
       const hasToken = Boolean(readTeacherAccessToken())
       setAuthed(hasToken)
+      setIsAdmin(readTeacherAuthRole() === 'admin')
       const subject = readTeacherAuthSubject()
       setAuthSubjectLabel(subject?.teacher_name || subject?.teacher_id || '')
     }
@@ -73,8 +76,7 @@ export default function TeacherTopbar({
   return (
     <header
       ref={topbarRef}
-      className={`mobile-topbar flex justify-between items-center gap-[12px] px-4 py-[10px] bg-white/[0.94] border-b border-border sticky top-0 z-[25] ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
-      style={{ backdropFilter: 'saturate(180%) blur(8px)' }}
+      className={`mobile-topbar flex justify-between items-center gap-[12px] px-4 py-[10px] bg-surface border-b border-border sticky top-0 z-[25] ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
     >
       <div className={`flex items-center gap-[10px] flex-wrap ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
         <div className="flex items-center gap-2 min-w-0">
@@ -87,15 +89,17 @@ export default function TeacherTopbar({
             />
           ) : null}
           <div className={`mobile-topbar-title font-bold text-[16px] tracking-[0.2px] ${compactMobile ? 'max-[900px]:text-[14px] max-[900px]:truncate' : ''}`.trim()}>
-            {compactMobile ? '物理教学助手' : '物理教学助手 · 老师端'}
+            {compactMobile ? '教学助手' : '教学助手 · 老师端'}
           </div>
         </div>
+        {isAdmin ? null : (
         <button className="ghost" type="button" onClick={onToggleSessionSidebar}>
           {compactMobile ? (sessionSidebarOpen ? '会话开' : '会话') : sessionSidebarOpen ? '收起会话' : '展开会话'}
         </button>
+        )}
       </div>
       <div className={`flex gap-[10px] items-center flex-wrap relative ${compactMobile ? 'max-[900px]:gap-2 max-[900px]:flex-nowrap' : ''}`.trim()}>
-        <div className={`role-badge teacher ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>身份：老师</div>
+        <div className={`role-badge teacher ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>{isAdmin ? '身份：管理员' : '身份：老师'}</div>
         {authed ? <span className={`text-xs text-muted ${compactMobile ? 'max-[900px]:hidden' : ''}`.trim()}>已认证：{authSubjectLabel || '教师'}</span> : null}
         {!compactMobile ? (
           <button
@@ -103,7 +107,7 @@ export default function TeacherTopbar({
             className="ghost"
             type="button"
             onClick={toggleAuthPanel}
-            aria-haspopup="dialog"
+            aria-haspopup="true"
             aria-expanded={authOpen}
           >
             {authActionLabel}
@@ -120,11 +124,13 @@ export default function TeacherTopbar({
           />
         ) : (
           <>
+            {isAdmin ? null : (
             <button className="ghost" type="button" onClick={onToggleSkillsWorkbench}>
               {skillsOpen ? '收起工作台' : '打开工作台'}
             </button>
+            )}
             <button
-              className="ghost border-none bg-transparent cursor-pointer p-[6px] rounded-lg text-[#6b7280] transition-[background] duration-150 ease-in-out hover:bg-surface-soft [&_svg]:block"
+              className="ghost border-none bg-transparent cursor-pointer min-h-[44px] min-w-[44px] p-2 rounded-lg text-muted transition-[background] duration-150 ease-in-out hover:bg-surface-soft [&_svg]:block"
               onClick={onToggleSettingsPanel}
               aria-label="设置"
             >

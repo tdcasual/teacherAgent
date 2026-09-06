@@ -1,7 +1,7 @@
 import { createAppPlaywrightConfig } from './playwright.shared'
 
 export default createAppPlaywrightConfig({
-  testIgnore: ['**/student-*.spec.ts'],
+  testIgnore: ['**/student-*.spec.ts', '**/assignment-core-loop.spec.ts'],
   outputDir: './test-results/teacher',
   baseURL: 'http://127.0.0.1:4174',
   viewport: { width: 1280, height: 800 },

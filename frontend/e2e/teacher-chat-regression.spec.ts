@@ -14,7 +14,7 @@ type SetupOptions = {
 
 const mockSkills = [
   {
-    id: 'physics-teacher-ops',
+    id: 'teacher-assignment-ops',
     title: '教学运营',
     desc: '老师运营流程',
     prompts: ['请总结班级学习情况'],
@@ -22,7 +22,7 @@ const mockSkills = [
     allowed_roles: ['teacher'],
   },
   {
-    id: 'physics-homework-generator',
+    id: 'homework-generator',
     title: '作业生成',
     desc: '生成分层作业',
     prompts: ['生成静电场作业'],
@@ -39,7 +39,7 @@ const setupTeacherState = async (page: Page) => {
     localStorage.setItem('teacherSkillsOpen', 'true')
     localStorage.setItem('teacherWorkbenchTab', 'skills')
     localStorage.setItem('teacherSkillPinned', 'false')
-    localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
+    localStorage.setItem('teacherActiveSkillId', 'teacher-assignment-ops')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
     localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
     localStorage.setItem(
@@ -180,15 +180,15 @@ test('uses $skill tokens and sends cleaned payload', async ({ page }) => {
   await composer.click()
   await composer.fill('$')
   await expect(page.locator('.mention-panel')).toBeVisible()
-  await page.getByRole('button', { name: /\$physics-homework-generator/ }).first().click()
-  await expect(composer).toHaveValue(/\$physics-homework-generator/)
+  await page.getByRole('button', { name: /\$homework-generator/ }).first().click()
+  await expect(composer).toHaveValue(/\$homework-generator/)
 
   await composer.type(' 生成作业')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
   const payload = chatStartCalls[0]
-  expect(payload.skill_id).toBe('physics-homework-generator')
+  expect(payload.skill_id).toBe('homework-generator')
   expect(payload.messages?.[payload.messages.length - 1]?.content).toBe('生成作业')
 
   await expect(page.getByText('回执：生成作业')).toBeVisible()
@@ -408,11 +408,11 @@ test('manual skill pin sends skill_id and auto route toggle clears it', async ({
   await expect(homeworkSkillCard).toBeVisible()
   await homeworkSkillCard.getByRole('button', { name: '设为当前' }).click()
 
-  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
+  await expect(page.getByText('当前路由: $homework-generator')).toBeVisible()
   await composer.fill('固定技能请求')
   await sendBtn.click()
   await expect.poll(() => chatStartCalls.length).toBe(1)
-  expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  expect(chatStartCalls[0].skill_id).toBe('homework-generator')
 
   await page.getByRole('button', { name: '切回自动推荐' }).click()
   await expect(page.getByText('当前路由: 自动编排')).toBeVisible()
@@ -1237,7 +1237,7 @@ test('keeps draft session in sidebar after page reload before server persists it
     localStorage.setItem('teacherSkillsOpen', 'true')
     localStorage.setItem('teacherWorkbenchTab', 'skills')
     localStorage.setItem('teacherSkillPinned', 'false')
-    localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
+    localStorage.setItem('teacherActiveSkillId', 'teacher-assignment-ops')
     localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
     localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
     localStorage.setItem(

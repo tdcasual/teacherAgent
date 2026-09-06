@@ -4,14 +4,25 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from ..auth_service import AuthError, require_principal
+from ..assignment.application import AssignmentAccessError
+from ..auth_service import AuthError, get_current_principal, require_principal
 
 
 def _require_teacher_or_admin() -> None:
     try:
-        require_principal(roles=("teacher", "admin"))
+        require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
+
+
+def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def register_assignment_generation_routes(
@@ -28,33 +39,43 @@ def register_assignment_generation_routes(
         mode: Optional[str] = Form(""),
         date: Optional[str] = Form(""),
         due_at: Optional[str] = Form(""),
+        subject_id: Optional[str] = Form(""),
         class_name: Optional[str] = Form(""),
         student_ids: Optional[str] = Form(""),
         source: Optional[str] = Form(""),
         requirements_json: Optional[str] = Form(""),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
-        return await assignment_app.post_generate_assignment(
-            assignment_id=assignment_id,
-            kp=kp,
-            question_ids=question_ids,
-            per_kp=per_kp,
-            core_examples=core_examples,
-            generate=generate,
-            mode=mode,
-            date=date,
-            due_at=due_at,
-            class_name=class_name,
-            student_ids=student_ids,
-            source=source,
-            requirements_json=requirements_json,
-            deps=app_deps,
-        )
+        try:
+            return await assignment_app.post_generate_assignment(
+                assignment_id=assignment_id,
+                kp=kp,
+                question_ids=question_ids,
+                per_kp=per_kp,
+                core_examples=core_examples,
+                generate=generate,
+                mode=mode,
+                date=date,
+                due_at=due_at,
+                subject_id=subject_id,
+                class_name=class_name,
+                student_ids=student_ids,
+                source=source,
+                requirements_json=requirements_json,
+                deps=app_deps,
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
 
     @router.post("/assignment/render")
     async def render_assignment(assignment_id: str = Form(...)) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
-        return await assignment_app.post_render_assignment(assignment_id, deps=app_deps)
+        try:
+            return await assignment_app.post_render_assignment(assignment_id, deps=app_deps)
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
 
     @router.post("/assignment/questions/ocr")
     async def assignment_questions_ocr(
@@ -66,14 +87,18 @@ def register_assignment_generation_routes(
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
-        return await assignment_app.post_assignment_questions_ocr(
-            assignment_id=assignment_id,
-            files=files,
-            kp_id=kp_id,
-            difficulty=difficulty,
-            tags=tags,
-            ocr_mode=ocr_mode,
-            language=language,
-            deps=app_deps,
-        )
+        try:
+            return await assignment_app.post_assignment_questions_ocr(
+                assignment_id=assignment_id,
+                files=files,
+                kp_id=kp_id,
+                difficulty=difficulty,
+                tags=tags,
+                ocr_mode=ocr_mode,
+                language=language,
+                deps=app_deps,
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc

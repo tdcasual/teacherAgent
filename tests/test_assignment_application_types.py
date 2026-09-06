@@ -6,7 +6,6 @@ from pathlib import Path
 
 _APPLICATION_MODULES = [
     "services/api/assignment/application.py",
-    "services/api/exam/application.py",
     "services/api/student_submit_service.py",
 ]
 

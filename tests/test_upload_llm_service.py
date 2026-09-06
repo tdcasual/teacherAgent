@@ -5,7 +5,6 @@ from services.api.upload_llm_service import (
     UploadLlmDeps,
     llm_autofill_requirements,
     llm_parse_assignment_payload,
-    llm_parse_exam_scores,
     parse_llm_json,
     summarize_questions_for_prompt,
 )
@@ -66,15 +65,6 @@ class UploadLlmServiceTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(merged.get("subject"), "physics")
         self.assertIn("topic", missing)
-
-    def test_llm_parse_exam_scores_extracts_json(self):
-        deps, _logs = self._deps(
-            call_llm=lambda *_args, **_kwargs: {
-                "choices": [{"message": {"content": "{\"mode\":\"total\",\"students\":[]}"}}]
-            },
-        )
-        result = llm_parse_exam_scores("row\tscore", deps=deps)
-        self.assertEqual(result.get("mode"), "total")
 
 
 if __name__ == "__main__":

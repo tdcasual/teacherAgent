@@ -253,8 +253,32 @@ export type AssignmentProgressStudent = {
   class_name?: string
   complete?: boolean
   overdue?: boolean
+  official_score?: number | null
   discussion?: { status?: string; pass?: boolean; message_count?: number; last_ts?: string }
   submission?: { attempts?: number; best?: unknown }
+  result?: {
+    attempts?: number
+    official_score?: number | null
+    overdue?: boolean
+    submitted?: boolean
+  }
+  process?: {
+    status?: string
+    stuck_points?: Array<{ summary?: string }>
+    has_memory_proposal?: boolean
+  }
+  teacher_grade?: {
+    comment?: string
+    override_score_earned?: number | null
+    adopted_coach_excerpts?: Array<{ text?: string }>
+  }
+  process_archive_status?: string
+  process_archive?: {
+    status?: string
+    stuck_points?: Array<{ summary?: string }>
+    process_archive_id?: string
+  }
+  has_memory_proposal?: boolean
 }
 
 export type AssignmentProgress = {
@@ -263,162 +287,13 @@ export type AssignmentProgress = {
   date?: string
   scope?: string
   class_name?: string
+  visibility_status?: string
+  archived_at?: string | null
   due_at?: string
   expected_count?: number
   counts?: { expected?: number; discussion_pass?: number; submitted?: number; completed?: number; overdue?: number }
   students?: AssignmentProgressStudent[]
   updated_at?: string
-}
-
-export type ExamScoreSchemaSubjectCandidate = {
-  candidate_id: string
-  type?: string
-  file?: string
-  subject_col?: number | null
-  subject_header?: string
-  score_col?: number | null
-  score_header?: string
-  rows_considered?: number
-  rows_parsed?: number
-  rows_invalid?: number
-  selected?: boolean
-  sample_rows?: Array<{
-    student_id?: string
-    student_name?: string
-    class_name?: string
-    raw_value?: string
-    score?: number
-    status?: string
-  }>
-}
-
-export type ExamScoreSchemaSubjectCandidateSummary = {
-  candidate_id: string
-  rows_considered?: number
-  rows_parsed?: number
-  rows_invalid?: number
-  parsed_rate?: number
-  source_rank?: number
-  files?: string[]
-  types?: string[]
-  quality_score?: number
-}
-
-type ExamScoreSchemaSubject = {
-  target?: string
-  question_id?: string
-  selected_candidate_id?: string
-  suggested_selected_candidate_id?: string
-  requested_candidate_id?: string
-  selected_candidate_available?: boolean
-  recommended_candidate_id?: string
-  recommended_candidate_reason?: string
-  selection_error?: string
-  coverage?: number
-  data_rows?: number
-  parsed_rows?: number
-  unresolved_students?: string[]
-  candidate_columns?: ExamScoreSchemaSubjectCandidate[]
-  candidate_summaries?: ExamScoreSchemaSubjectCandidateSummary[]
-  thresholds?: { coverage?: number; confidence?: number }
-}
-
-type ExamScoreSchema = {
-  mode?: string
-  confidence?: number
-  needs_confirm?: boolean
-  confirm?: boolean
-  selected_candidate_id?: string
-  sources?: Array<Record<string, unknown>>
-  subject?: ExamScoreSchemaSubject
-}
-
-type ExamCounts = {
-  students?: number
-  responses?: number
-  questions?: number
-  [k: string]: unknown
-}
-
-type ExamCountsScored = {
-  students?: number
-  responses?: number
-  [k: string]: unknown
-}
-
-type ExamTotalsSummary = {
-  avg_total?: number
-  median_total?: number
-  max_total_observed?: number
-  [k: string]: unknown
-}
-
-type ExamScoringSummary = {
-  status?: string
-  responses_total?: number
-  responses_scored?: number
-  students_total?: number
-  students_scored?: number
-  default_max_score_qids?: string[]
-  [k: string]: unknown
-}
-
-type ExamDraftMeta = {
-  date?: string
-  class_name?: string
-  [k: string]: unknown
-}
-
-type ExamAnswerKeySummary = {
-  count?: number
-  source?: string
-  warnings?: string[]
-  [k: string]: unknown
-}
-
-export type ExamUploadJobStatus = {
-  job_id: string
-  status: 'queued' | 'processing' | 'done' | 'failed' | 'confirmed' | 'confirming' | 'cancelled'
-  progress?: number
-  step?: string
-  updated_at?: string
-  updatedAt?: string
-  error?: string
-  error_detail?: string
-  hints?: string[]
-  exam_id?: string
-  counts?: ExamCounts
-  counts_scored?: ExamCountsScored
-  totals_summary?: ExamTotalsSummary
-  scoring?: ExamScoringSummary
-  answer_key?: ExamAnswerKeySummary
-  warnings?: string[]
-  score_schema?: ExamScoreSchema
-  needs_confirm?: boolean
-}
-
-export type ExamUploadDraft = {
-  job_id: string
-  exam_id: string
-  date?: string
-  class_name?: string
-  paper_files?: string[]
-  score_files?: string[]
-  answer_files?: string[]
-  counts?: ExamCounts
-  counts_scored?: ExamCountsScored
-  totals_summary?: ExamTotalsSummary
-  scoring?: ExamScoringSummary
-  meta: ExamDraftMeta
-  questions: Array<Record<string, unknown>>
-  score_schema?: ExamScoreSchema
-  answer_key?: ExamAnswerKeySummary
-  answer_key_text?: string
-  answer_text_excerpt?: string
-  warnings?: string[]
-  needs_confirm?: boolean
-  draft_version?: string | number
-  draft_saved?: boolean
 }
 
 export type Skill = {

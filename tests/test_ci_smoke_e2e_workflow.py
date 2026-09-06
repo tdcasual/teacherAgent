@@ -24,6 +24,7 @@ def test_ci_validates_playwright_artifact_layout_on_failure() -> None:
     assert "Validate smoke Playwright artifact layout on failure" in text
     assert "frontend/test-results/teacher" in text
     assert "frontend/test-results/student" in text
+    assert "frontend/test-results/assignment" in text
     assert "find test-results -maxdepth 2 -type f | sort" in text
 
     assert "Initialize student critical Playwright artifact directories" in text

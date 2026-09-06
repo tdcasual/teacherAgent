@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { renderMarkdown, absolutizeChartImageUrls, renderStreamingPlainText } from '../../shared/markdown'
 import { useSmartAutoScroll, useScrollPositionLock, evictOldestEntries } from '../../shared/useSmartAutoScroll'
 import type { Message, RenderedMessage } from './appTypes'
@@ -8,10 +8,11 @@ import { useVerification } from './hooks/useVerification'
 import { useSessionManager } from './hooks/useSessionManager'
 import { useChatPolling } from './hooks/useChatPolling'
 import { useAssignment } from './hooks/useAssignment'
+import { useAssignmentHistory } from './hooks/useAssignmentHistory'
 import { useStudentSendFlow } from './features/chat/useStudentSendFlow'
 import { selectComposerHint } from './features/chat/studentUiSelectors'
-import StudentTodayHome from './features/home/StudentTodayHome'
 import { buildStudentTodayHomeViewModel } from './features/home/studentTodayHomeState'
+import { matchReadyChatFiles } from './features/submit/studentSubmit'
 import { useStudentSessionSidebarState } from './features/session/useStudentSessionSidebarState'
 import { useStudentSessionViewStateSync } from './features/session/useStudentSessionViewStateSync'
 import {
@@ -29,13 +30,17 @@ import {
 } from '../../shared/mobile/tabIcons'
 import StudentTopbar from './features/layout/StudentTopbar'
 import StudentLayout from './features/layout/StudentLayout'
-import ChatPanel from './features/chat/ChatPanel'
 import SessionSidebar from './features/chat/SessionSidebar'
 import SessionSidebarDialogs from './features/chat/SessionSidebarDialogs'
 import SessionSidebarHistorySection from './features/chat/SessionSidebarHistorySection'
 import SessionSidebarLearningSection from './features/chat/SessionSidebarLearningSection'
 
 const DESKTOP_BREAKPOINT = 900
+const StudentTodayHome = lazy(() => import('./features/home/StudentTodayHome'))
+const StudentAssignmentHistoryPage = lazy(() => import('./features/history/StudentAssignmentHistoryPage'))
+const StudentSubmitPanel = lazy(() => import('./features/submit/StudentSubmitPanel'))
+const ChatPanel = lazy(() => import('./features/chat/ChatPanel'))
+const pageFallback = <div className="flex-1 min-h-0 bg-app-bg" aria-busy="true" />
 
 export default function App() {
   const { state, dispatch, refs, setActiveSession } = useStudentState()
@@ -43,6 +48,9 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const [homeOpen, setHomeOpen] = useState(true)
+  const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false)
+  const [submitAssignmentId, setSubmitAssignmentId] = useState('')
+  const [chatPickedFiles, setChatPickedFiles] = useState<File[]>([])
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning')
   const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false)
   const { messagesRef, endRef, isNearBottom, scrollToBottom, autoScroll } = useSmartAutoScroll()
@@ -140,9 +148,9 @@ export default function App() {
     if (!viewStateSyncReady) return
     if (state.pendingChatJob?.job_id) return
     if (state.activeSessionId) return
-    const next = state.todayAssignment?.assignment_id || `general_${todayDate()}`
+    const next = `general_${todayDate()}`
     setActiveSession(next)
-  }, [state.verifiedStudent?.student_id, state.todayAssignment?.assignment_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
+  }, [state.verifiedStudent?.student_id, state.pendingChatJob?.job_id, state.activeSessionId, viewStateSyncReady, setActiveSession])
 
   // ── Auto-load session messages ──
   useEffect(() => {
@@ -184,7 +192,7 @@ export default function App() {
     dispatch({ type: 'UPDATE_MESSAGES', updater: (prev) => prev.map((m) => m.id === id ? { ...m, ...patch } : m) })
   }, [dispatch])
 
-  const attachmentSessionId = state.activeSessionId || state.todayAssignment?.assignment_id || `general_${todayDate()}`
+  const attachmentSessionId = state.activeSessionId || `general_${todayDate()}`
   const {
     attachments,
     addFiles,
@@ -202,13 +210,50 @@ export default function App() {
       : '',
   })
   const keepReadyAttachmentsOnSend = useCallback(() => {}, [])
+  const handlePickFiles = useCallback(async (files: File[]) => {
+    if (files.length) setChatPickedFiles((prev) => [...prev, ...files])
+    await addFiles(files)
+  }, [addFiles])
+  const handleRemoveAttachment = useCallback(async (localId: string) => {
+    const target = attachments.find((item) => item.localId === localId)
+    if (target?.fileName) {
+      setChatPickedFiles((prev) => {
+        const index = prev.findIndex((file) => file.name === target.fileName)
+        if (index < 0) return prev
+        return prev.filter((_, itemIndex) => itemIndex !== index)
+      })
+    }
+    await removeAttachment(localId)
+  }, [attachments, removeAttachment])
+
+  useEffect(() => {
+    setChatPickedFiles([])
+  }, [attachmentSessionId])
+
+  useEffect(() => {
+    const keepNames = attachments
+      .filter((item) => item.status === 'ready' || item.status === 'uploading')
+      .map((item) => item.fileName)
+    setChatPickedFiles((prev) => {
+      const remaining = [...keepNames]
+      const next = prev.filter((file) => {
+        const index = remaining.indexOf(file.name)
+        if (index < 0) return false
+        remaining.splice(index, 1)
+        return true
+      })
+      if (next.length === prev.length && next.every((file, index) => file === prev[index])) return prev
+      return next
+    })
+  }, [attachments])
 
   const { handleSend } = useStudentSendFlow({
     apiBase: state.apiBase,
     input: state.input,
     messages: state.messages,
     activeSessionId: state.activeSessionId,
-    todayAssignment: state.todayAssignment,
+    selectedAssignmentId: state.selectedAssignmentId,
+    sessions: state.sessions,
     verifiedStudent: state.verifiedStudent,
     pendingChatJob: state.pendingChatJob,
     attachments: readyAttachmentRefs,
@@ -234,23 +279,27 @@ export default function App() {
     sending: state.sending,
   }), [state.pendingChatJob?.job_id, state.sending, state.verifiedStudent])
 
+  const assignmentHistory = useAssignmentHistory({
+    apiBase: state.apiBase,
+    studentId: state.verifiedStudent?.student_id || '',
+    enabled: assignmentHistoryOpen,
+  })
+
   const todayHomeViewModel = useMemo(() => buildStudentTodayHomeViewModel({
     verifiedStudent: state.verifiedStudent,
     assignmentLoading: state.assignmentLoading,
     assignmentError: state.assignmentError,
-    todayAssignment: state.todayAssignment,
+    todayAssignments: state.todayAssignments,
     activeSessionId: state.activeSessionId,
     messages: state.messages,
     pendingChatJob: state.pendingChatJob,
-    recentCompletedReplies: state.recentCompletedReplies,
   }), [
     state.activeSessionId,
     state.assignmentError,
     state.assignmentLoading,
     state.messages,
     state.pendingChatJob,
-    state.recentCompletedReplies,
-    state.todayAssignment,
+    state.todayAssignments,
     state.verifiedStudent,
   ])
 
@@ -297,6 +346,8 @@ export default function App() {
 
   const openTodayHome = useCallback(() => {
     setHomeOpen(true)
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(false)
     if (!studentUseMobileShellV2) return
     setMobileTab('learning')
     setMobileSessionListOpen(false)
@@ -315,18 +366,58 @@ export default function App() {
     }
   }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
+  const handleOpenAssignment = useCallback((assignmentId: string) => {
+    const aid = assignmentId.trim()
+    if (!aid) return
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
+    setSubmitAssignmentId('')
+    setActiveSession(aid)
+    openExecutionState()
+  }, [dispatch, openExecutionState, setActiveSession])
+
+  const handleOpenSubmit = useCallback((assignmentId: string) => {
+    const aid = assignmentId.trim()
+    if (!aid) return
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid })
+    setSubmitAssignmentId(aid)
+    if (!studentUseMobileShellV2) return
+    setHomeOpen(true)
+    setMobileTab('learning')
+    setMobileSessionListOpen(false)
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
+
   const handlePrimaryHomeAction = useCallback(() => {
     if (!state.verifiedStudent) {
       dispatch({ type: 'SET', field: 'verifyOpen', value: true })
       return
     }
-    if (todayHomeViewModel.status === 'pending_generation') {
-      dispatch({ type: 'SET', field: 'assignmentRefreshNonce', value: state.assignmentRefreshNonce + 1 })
+    if (todayHomeViewModel.status === 'empty' || todayHomeViewModel.status === 'generating' || todayHomeViewModel.status === 'pending_generation') return
+    if (todayHomeViewModel.status === 'submitted') {
+      setAssignmentHistoryOpen(true)
       return
     }
-    if (todayHomeViewModel.status === 'generating') return
+    const firstId = todayHomeViewModel.items[0]?.assignment_id || ''
+    if (firstId) {
+      handleOpenAssignment(firstId)
+      return
+    }
     openExecutionState()
-  }, [dispatch, openExecutionState, state.assignmentRefreshNonce, state.verifiedStudent, todayHomeViewModel.status])
+  }, [dispatch, handleOpenAssignment, openExecutionState, state.verifiedStudent, todayHomeViewModel.items, todayHomeViewModel.status])
+
+  const handleOpenAssignmentHistory = useCallback(() => {
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(true)
+    setHomeOpen(true)
+    if (!studentUseMobileShellV2) return
+    setMobileTab('learning')
+    setMobileSessionListOpen(false)
+    if (state.sidebarOpen) {
+      dispatch({ type: 'SET', field: 'sidebarOpen', value: false })
+    }
+  }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handleOpenHistory = useCallback(() => {
     setHomeOpen(false)
@@ -342,8 +433,12 @@ export default function App() {
   }, [dispatch, state.sidebarOpen, studentUseMobileShellV2])
 
   const handleOpenFreeChat = useCallback(() => {
+    dispatch({ type: 'SET', field: 'selectedAssignmentId', value: '' })
+    setSubmitAssignmentId('')
+    setAssignmentHistoryOpen(false)
+    setActiveSession(`general_${todayDate()}`)
     openExecutionState()
-  }, [openExecutionState])
+  }, [dispatch, openExecutionState, setActiveSession])
 
   const handleStartNewStudentSession = useCallback(() => {
     openExecutionState()
@@ -403,6 +498,7 @@ export default function App() {
       verifyError={state.verifyError}
       verifyInfo={state.verifyInfo}
       todayAssignment={state.todayAssignment}
+      todayAssignments={state.todayAssignments}
       assignmentLoading={state.assignmentLoading}
       assignmentError={state.assignmentError}
       resetVerification={sessionManager.resetVerification}
@@ -418,17 +514,65 @@ export default function App() {
     />
   )
 
+  const submitTitle = useMemo(() => {
+    const fromToday = state.todayAssignments.find((item) => item.assignment_id === submitAssignmentId)
+    if (fromToday?.title) return fromToday.title
+    const fromHistory = assignmentHistory.items.find((item) => item.assignment_id === submitAssignmentId)
+    return fromHistory?.title || submitAssignmentId
+  }, [assignmentHistory.items, state.todayAssignments, submitAssignmentId])
+
+  const handleSubmitCompleted = useCallback(() => {
+    dispatch({ type: 'SET', field: 'assignmentRefreshNonce', value: state.assignmentRefreshNonce + 1 })
+    void assignmentHistory.reload()
+  }, [assignmentHistory, dispatch, state.assignmentRefreshNonce])
+
+  const submitPanel = submitAssignmentId ? (
+    <StudentSubmitPanel
+      apiBase={state.apiBase}
+      studentId={state.verifiedStudent?.student_id || ''}
+      assignmentId={submitAssignmentId}
+      assignmentTitle={submitTitle}
+      chatFiles={matchReadyChatFiles(
+        attachments.filter((item) => item.status === 'ready'),
+        chatPickedFiles,
+      )}
+      onClose={() => setSubmitAssignmentId('')}
+      onSubmitted={handleSubmitCompleted}
+    />
+  ) : null
+
+  const historyPage = (
+    <StudentAssignmentHistoryPage
+      items={assignmentHistory.items}
+      loading={assignmentHistory.loading}
+      error={assignmentHistory.error}
+      onBack={() => setAssignmentHistoryOpen(false)}
+      onSubmit={handleOpenSubmit}
+      onOpenAssignment={handleOpenAssignment}
+    />
+  )
+
   const todayHomeContent = (
     <StudentTodayHome
       dateLabel={heroDateLabel}
       viewModel={todayHomeViewModel}
       onPrimaryAction={handlePrimaryHomeAction}
+      onOpenAssignment={handleOpenAssignment}
       onOpenHistory={handleOpenHistory}
       onOpenFreeChat={handleOpenFreeChat}
+      onOpenAssignmentHistory={handleOpenAssignmentHistory}
+      onOpenSubmit={handleOpenSubmit}
     />
   )
 
+  const learningContent = (
+    <Suspense fallback={pageFallback}>
+      {submitPanel || (assignmentHistoryOpen ? historyPage : todayHomeContent)}
+    </Suspense>
+  )
+
   const chatContent = (
+    <Suspense fallback={pageFallback}>
     <ChatPanel
       renderedMessages={renderedMessages}
       sending={state.sending}
@@ -447,9 +591,11 @@ export default function App() {
       attachments={attachments}
       uploadingAttachments={uploadingAttachments}
       hasSendableAttachments={hasSendableAttachments}
-      onPickFiles={addFiles}
-      onRemoveAttachment={removeAttachment}
+      onPickFiles={handlePickFiles}
+      onRemoveAttachment={handleRemoveAttachment}
+      onOpenSubmit={state.selectedAssignmentId ? () => handleOpenSubmit(state.selectedAssignmentId) : undefined}
     />
+    </Suspense>
   )
 
   const mobileLearningContent = state.verifyOpen || !state.verifiedStudent ? (
@@ -468,13 +614,14 @@ export default function App() {
           verifyError={state.verifyError}
           verifyInfo={state.verifyInfo}
           todayAssignment={state.todayAssignment}
+          todayAssignments={state.todayAssignments}
           assignmentLoading={state.assignmentLoading}
           assignmentError={state.assignmentError}
           resetVerification={sessionManager.resetVerification}
         />
       </div>
     </main>
-  ) : todayHomeContent
+  ) : learningContent
 
   const mobileSessionsContent = (
     <main className="student-mobile-stage student-mobile-sessions-stage" data-testid="student-session-list-panel">
@@ -555,7 +702,7 @@ export default function App() {
         <StudentLayout
           sidebarOpen={state.sidebarOpen}
           sidebar={sessionSidebarContent}
-          chat={homeOpen ? todayHomeContent : chatContent}
+          chat={homeOpen || assignmentHistoryOpen || Boolean(submitAssignmentId) ? learningContent : chatContent}
         />
       )}
       {studentUseMobileShellV2 ? (

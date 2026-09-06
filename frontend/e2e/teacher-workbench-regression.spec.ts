@@ -21,13 +21,13 @@ test('skills favorites filter keeps insertion target and sends cleaned payload',
   await expect(page.locator('.skill-card')).toHaveCount(1)
 
   await homeworkSkillCard.getByRole('button', { name: '插入 $' }).click()
-  await expect(composer).toHaveValue(/\$physics-homework-generator\s*$/)
+  await expect(composer).toHaveValue(/\$homework-generator\s*$/)
 
   await composer.type(' 生成 3 道巩固题')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
-  expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   expect(chatStartCalls[0].messages?.[chatStartCalls[0].messages!.length - 1]?.content).toBe('生成 3 道巩固题')
 })
 
@@ -151,27 +151,6 @@ test('workflow assignment confirm button enters confirming state and prevents du
   await expect(confirmBtn).toHaveText('已创建')
 })
 
-test('workflow mode switch keeps assignment and exam draft fields isolated', async ({ page }) => {
-  await openTeacherApp(page, {
-    stateOverrides: {
-      teacherWorkbenchTab: 'workflow',
-    },
-  })
-
-  const assignmentInput = page.getByPlaceholder('例如：HW-2026-02-05')
-  await assignmentInput.fill('HW-SWITCH-001')
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  const examInput = page.getByPlaceholder('例如：EX2403_PHY')
-  await expect(examInput).toBeVisible()
-  await examInput.fill('EX-SWITCH-009')
-
-  await page.getByRole('button', { name: '作业', exact: true }).first().click()
-  await expect(assignmentInput).toHaveValue('HW-SWITCH-001')
-
-  await page.getByRole('button', { name: '考试', exact: true }).first().click()
-  await expect(examInput).toHaveValue('EX-SWITCH-009')
-})
 
 test('mobile overlay closes both session sidebar and workbench panels', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -205,7 +184,7 @@ test('workbench template path can toggle back to auto routing and omit skill_id'
   await expect(homeworkSkillCard).toBeVisible()
 
   await homeworkSkillCard.getByRole('button', { name: '使用模板' }).first().click()
-  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
+  await expect(page.getByText('当前路由: $homework-generator')).toBeVisible()
 
   await page.getByRole('button', { name: '切回自动推荐' }).click()
   await expect(page.getByText('当前路由: 自动编排')).toBeVisible()

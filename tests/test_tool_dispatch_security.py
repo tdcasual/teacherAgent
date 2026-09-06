@@ -80,12 +80,80 @@ class ToolDispatchSecurityTest(unittest.TestCase):
             self.assertEqual(result["error"], "opencode_forbidden")
             self.assertEqual(result.get("status_code"), 400)
 
-    def test_exam_analysis_charts_generate_requires_teacher(self):
+    def test_assignment_generate_requires_teacher(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
-            denied = app_mod.get_core().tool_dispatch("exam.analysis.charts.generate", {"exam_id": "EX001"}, role="student")
+            denied = app_mod.get_core().tool_dispatch(
+                "assignment.generate",
+                {"assignment_id": "HW1", "subject_id": "physics"},
+                role="student",
+            )
             self.assertIn("error", denied)
             self.assertEqual(denied["error"], "permission denied")
+
+    def test_assignment_generate_forbids_other_teacher_existing_assignment(self):
+        from services.api.tool_dispatch_service import ToolDispatchDeps, tool_dispatch
+
+        class _Registry:
+            def get(self, name):
+                return name if name == "assignment.generate" else None
+
+            def validate_arguments(self, _name, _args):
+                return []
+
+        generated = {}
+
+        def _deps():
+            return ToolDispatchDeps(
+                tool_registry=_Registry(),
+                list_assignments=lambda owner_teacher_id=None: {},
+                list_lessons=lambda: {},
+                lesson_capture=lambda args: {},
+                student_search=lambda query, limit: {},
+                student_profile_get=lambda student_id: {},
+                student_profile_update=lambda args: {},
+                student_import=lambda args: {},
+                assignment_generate=lambda args: generated.__setitem__("ok", True) or {"ok": True},
+                assignment_render=lambda args: {},
+                save_assignment_requirements=lambda *a, **k: {},
+                parse_date_str=lambda raw: str(raw or ""),
+                core_example_search=lambda args: {},
+                core_example_register=lambda args: {},
+                core_example_render=lambda args: {},
+                chart_agent_run=lambda args: {},
+                chart_exec=lambda args: {},
+                resolve_teacher_id=lambda raw: str(raw or ""),
+                ensure_teacher_workspace=lambda teacher_id: Path("/tmp") / str(teacher_id),
+                teacher_workspace_dir=lambda teacher_id: Path("/tmp") / str(teacher_id),
+                teacher_workspace_file=lambda teacher_id, name: Path("/tmp") / str(teacher_id) / name,
+                teacher_daily_memory_path=lambda teacher_id, date_str=None: Path("/tmp") / str(teacher_id) / "d.md",
+                teacher_read_text=lambda path, max_chars=8000: "",
+                teacher_memory_search=lambda teacher_id, query, limit=5: {},
+                teacher_memory_propose=lambda *a, **k: {},
+                teacher_memory_apply=lambda *a, **k: {},
+                assignment_owner_id=lambda assignment_id: "t_owner" if assignment_id == "HW_A" else None,
+            )
+
+        stolen = tool_dispatch(
+            "assignment.generate",
+            {"assignment_id": "HW_A", "subject_id": "physics"},
+            role="teacher",
+            teacher_id="t_thief",
+            deps=_deps(),
+            confirmed=True,
+        )
+        self.assertEqual(stolen.get("error"), "forbidden_assignment_owner")
+        self.assertNotIn("ok", generated)
+
+        created = tool_dispatch(
+            "assignment.generate",
+            {"assignment_id": "HW_NEW", "subject_id": "physics"},
+            role="teacher",
+            teacher_id="t_thief",
+            deps=_deps(),
+            confirmed=True,
+        )
+        self.assertTrue(created.get("ok"))
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import { resolve } from 'path'
 export default defineConfig({
   root: 'apps/teacher',
   publicDir: '../../public',
+  cacheDir: 'node_modules/.vite-teacher',
   plugins: [
     tailwindcss(),
     react(),
@@ -17,11 +18,11 @@ export default defineConfig({
       },
       includeAssets: ['icon.svg'],
       manifest: {
-        name: '物理教学助手（老师端）',
-        short_name: '物理老师端',
-        description: '物理教学助手老师端控制台',
+        name: '教学助手（老师端）',
+        short_name: '老师端',
+        description: '教学助手老师端',
         theme_color: '#0052CC',
-        background_color: '#f6f2ea',
+        background_color: '#FAFBFC',
         display: 'standalone',
         start_url: '/',
         icons: [{ src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' }],

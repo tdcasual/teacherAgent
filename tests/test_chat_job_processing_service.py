@@ -3,7 +3,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from services.api.chat_job_processing_service import ComputeChatReplyDeps, compute_chat_reply_sync
+from services.api.chat_job_processing_service import (
+    ComputeChatReplyDeps,
+    _student_can_attach_assignment,
+    compute_chat_reply_sync,
+)
+from services.api.subject_pack_service import overlay_for_role
 
 
 class _Msg:
@@ -44,8 +49,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -80,8 +83,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                     {"build_assignment_detail": calls["build_assignment_detail"] + 1}
                 )
                 or {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -96,6 +97,96 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             self.assertEqual(role_hint, "student")
             self.assertEqual(last_user, "讲一下牛顿第二定律")
             self.assertEqual(calls["build_assignment_detail"], 0)
+
+    def test_student_extra_system_does_not_fallback_to_find_assignment_for_date(self):
+        from services.api import chat_job_processing_service as mod
+        from services.api.chat_job_processing_service import _student_extra_system
+
+        source = Path(mod.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("find_assignment_for_date", source)
+        self.assertNotIn("find_assignment_for_date", ComputeChatReplyDeps.__dataclass_fields__)
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = ComputeChatReplyDeps(
+                detect_role=lambda _text: "student",
+                diag_log=lambda *_args, **_kwargs: None,
+                teacher_assignment_preflight=lambda _req: None,
+                resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+                teacher_build_context=lambda *_args, **_kwargs: "",
+                detect_student_study_trigger=lambda _text: True,
+                load_profile_file=lambda _path: {"student_id": "S001"},
+                data_dir=root / "data",
+                build_verified_student_context=lambda _sid, _profile: "verified",
+                build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
+                build_assignment_context=lambda *_args, **_kwargs: "ASSIGNMENT",
+                chat_extra_system_max_chars=6000,
+                trim_messages=lambda msgs, role_hint=None: msgs,
+                student_inflight=_student_inflight,
+                run_agent=lambda *_args, **_kwargs: {"reply": "OK"},
+                normalize_math_delimiters=lambda text: text,
+                resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+            )
+            req = _Req(assignment_id="")
+            extra = _student_extra_system(req, deps=deps, last_user_text="讲一下牛顿第二定律", last_assistant_text="")
+            self.assertNotIn("ASSIGNMENT", extra or "")
+
+    def test_student_cannot_attach_draft_or_orphan_assignment(self):
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {"meta": {"teacher_id": "t1", "visibility_status": "draft", "scope": "public"}},
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {"meta": {"scope": "public"}},
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "public",
+                    }
+                },
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertFalse(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "class",
+                        "class_name": "c",
+                    }
+                },
+                student_id="S1",
+                class_name="c",
+            )
+        )
+        self.assertTrue(
+            _student_can_attach_assignment(
+                {
+                    "meta": {
+                        "teacher_id": "t1",
+                        "visibility_status": "published",
+                        "scope": "public",
+                        "expected_students": ["S1"],
+                    }
+                },
+                student_id="S1",
+                class_name="other-class",
+            )
+        )
 
     def test_compute_chat_reply_ignores_invalid_student_profile_path(self):
         with TemporaryDirectory() as td:
@@ -112,8 +203,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -149,8 +238,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -188,8 +275,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -234,8 +319,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -274,8 +357,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -314,7 +395,16 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             captured = {"skill_id": None, "teacher_id": None, "extra_system": None}
             events = []
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                event_sink=None,
+                **_kwargs,
+            ):
                 del messages, role_hint, event_sink
                 captured["skill_id"] = skill_id
                 captured["teacher_id"] = teacher_id
@@ -332,8 +422,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -342,10 +430,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
                     "requested_skill_id": "",
-                    "effective_skill_id": "physics-homework-generator",
+                    "effective_skill_id": "homework-generator",
                     "reason": "auto_rule",
                     "confidence": 0.64,
-                    "candidates": [{"skill_id": "physics-homework-generator", "score": 12}],
+                    "candidates": [{"skill_id": "homework-generator", "score": 12}],
                 },
             )
 
@@ -358,7 +446,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertEqual(reply, "OK")
             self.assertEqual(role_hint, "teacher")
             self.assertEqual(last_user, "请帮我生成作业")
-            self.assertEqual(captured["skill_id"], "physics-homework-generator")
+            self.assertEqual(captured["skill_id"], "homework-generator")
             self.assertEqual(captured["teacher_id"], "teacher-1")
             self.assertIn("teacher-context", str(captured["extra_system"] or ""))
             self.assertIn(
@@ -366,10 +454,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                     "workflow.resolved",
                     {
                         "requested_skill_id": "",
-                        "effective_skill_id": "physics-homework-generator",
+                        "effective_skill_id": "homework-generator",
                         "reason": "auto_rule",
                         "confidence": 0.64,
-                        "candidates": [{"skill_id": "physics-homework-generator", "score": 12}],
+                        "candidates": [{"skill_id": "homework-generator", "score": 12}],
                         "resolution_mode": "auto",
                         "auto_selected": True,
                         "requested_rewritten": False,
@@ -395,8 +483,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -404,11 +490,11 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=lambda *_args, **_kwargs: calls.update({"run_agent": calls["run_agent"] + 1}) or {"reply": "OK"},
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-teacher-ops",
+                    "effective_skill_id": "teacher-assignment-ops",
                     "reason": "auto_rule",
                 },
                 teacher_workflow_preflight=lambda _req, effective_skill_id, last_user_text, attachment_context: (
-                    "请先提供考试编号或上传成绩单。" if effective_skill_id == "physics-teacher-ops" else None
+                    "请先提供考试编号或上传成绩单。" if effective_skill_id == "teacher-assignment-ops" else None
                 ),
             )
 
@@ -421,14 +507,23 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertIn("考试编号", reply)
             self.assertEqual(calls["run_agent"], 0)
 
-    def test_compute_chat_reply_passes_explicit_analysis_target_to_run_agent(self):
+    def test_compute_chat_reply_does_not_pass_analysis_target_to_run_agent(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            captured = {"analysis_target": None}
+            captured = {"kwargs": None}
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, analysis_target=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                event_sink=None,
+                **kwargs,
+            ):
                 del messages, role_hint, extra_system, skill_id, teacher_id, event_sink
-                captured["analysis_target"] = analysis_target
+                captured["kwargs"] = kwargs
                 return {"reply": "OK"}
 
             deps = ComputeChatReplyDeps(
@@ -442,8 +537,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -451,7 +544,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=_run_agent,
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-teacher-ops",
+                    "effective_skill_id": "teacher-assignment-ops",
                     "reason": "explicit",
                     "confidence": 1.0,
                 },
@@ -473,8 +566,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
 
             self.assertEqual(reply, "OK")
             self.assertEqual(role_hint, "teacher")
-            self.assertIsNotNone(captured["analysis_target"])
-            self.assertEqual(captured["analysis_target"]["target_id"], "report_9")
+            self.assertNotIn("analysis_target", captured["kwargs"] or {})
 
 
     def test_compute_chat_reply_merges_teacher_workflow_extra_system(self):
@@ -482,7 +574,16 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             root = Path(td)
             captured = {"extra_system": None}
 
-            def _run_agent(messages, role_hint, *, extra_system=None, skill_id=None, teacher_id=None, event_sink=None):
+            def _run_agent(
+                messages,
+                role_hint,
+                *,
+                extra_system=None,
+                skill_id=None,
+                teacher_id=None,
+                event_sink=None,
+                **_kwargs,
+            ):
                 del messages, role_hint, skill_id, teacher_id, event_sink
                 captured["extra_system"] = extra_system
                 return {"reply": "OK"}
@@ -498,8 +599,6 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                find_assignment_for_date=lambda *_args, **_kwargs: None,
-                parse_date_str=lambda raw: str(raw or ""),
                 build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
@@ -507,7 +606,7 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 run_agent=_run_agent,
                 normalize_math_delimiters=lambda text: text,
                 resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {
-                    "effective_skill_id": "physics-homework-generator",
+                    "effective_skill_id": "homework-generator",
                     "reason": "auto_rule",
                 },
                 resolve_teacher_workflow=lambda _req, effective_skill_id, last_user_text, attachment_context: {
@@ -526,6 +625,176 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
             self.assertEqual(role_hint, "teacher")
             self.assertIn("teacher-context", str(captured["extra_system"] or ""))
             self.assertIn("工作流步骤", str(captured["extra_system"] or ""))
+
+
+class SubjectPackOverlayInjectionTest(unittest.TestCase):
+    def _deps(self, root: Path, *, run_agent, **overrides):
+        values = dict(
+            detect_role=lambda _text: "student",
+            diag_log=lambda *_args, **_kwargs: None,
+            teacher_assignment_preflight=lambda _req: None,
+            resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+            teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
+            detect_student_study_trigger=lambda _text: False,
+            load_profile_file=lambda _path: {"student_id": "S001"},
+            data_dir=root / "data",
+            build_verified_student_context=lambda _sid, _profile: "verified",
+            build_assignment_detail_cached=lambda _folder, include_text=False: {
+                "assignment_id": "A1",
+                "meta": {"subject_id": "math", "pack_id": "math"},
+            },
+            build_assignment_context=lambda *_args, **_kwargs: "",
+            chat_extra_system_max_chars=6000,
+            trim_messages=lambda msgs, role_hint=None: msgs,
+            student_inflight=_student_inflight,
+            run_agent=run_agent,
+            normalize_math_delimiters=lambda text: text,
+            resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+            subject_prompt_overlay=lambda subject_id, role_hint=None: (
+                f"OVERLAY:{subject_id or 'generic'}:{role_hint or 'unknown'}"
+            ),
+        )
+        values.update(overrides)
+        return ComputeChatReplyDeps(**values)
+
+    def test_assignment_subject_overlay_injected_into_extra_system(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(root, run_agent=_run_agent)
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:math:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_assignment_overlay_prefers_pack_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                build_assignment_detail_cached=lambda _folder, include_text=False: {
+                    "assignment_id": "A1",
+                    "meta": {"subject_id": "math", "pack_id": "physics"},
+                },
+            )
+            reply, _role, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:physics:student", extra)
+            self.assertNotIn("OVERLAY:math:", extra)
+
+    def test_free_ask_uses_generic_overlay_never_physics(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(root, run_agent=_run_agent)
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id=""), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_free_ask_ignores_date_lookup_assignment_overlay(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                build_assignment_detail_cached=lambda _folder, include_text=False: {
+                    "assignment_id": "PHYS1",
+                    "meta": {"subject_id": "physics", "pack_id": "physics"},
+                },
+            )
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id=""), deps=deps
+            )
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:student", extra)
+            self.assertNotIn("OVERLAY:physics", extra)
+
+    def test_missing_subject_pack_uses_real_generic_overlay_not_physics(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "data" / "assignments" / "A1").mkdir(parents=True)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                subject_prompt_overlay=overlay_for_role,
+            )
+            reply, _role, _last = compute_chat_reply_sync(_Req(assignment_id="A1"), deps=deps)
+            self.assertEqual(reply, "OK")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("【学科 overlay：通用】", extra)
+            self.assertNotIn("【学科 overlay：物理】", extra)
+
+    def test_teacher_free_ask_uses_generic_overlay(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = self._deps(
+                root,
+                run_agent=_run_agent,
+                detect_role=lambda _text: "teacher",
+            )
+            reply, role_hint, _last = compute_chat_reply_sync(_TeacherReq("随便问一下"), deps=deps)
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "teacher")
+            extra = str(captured["extra_system"] or "")
+            self.assertIn("OVERLAY:generic:teacher", extra)
+            self.assertIn("teacher-context", extra)
 
 
 if __name__ == "__main__":

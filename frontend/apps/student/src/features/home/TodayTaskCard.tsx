@@ -8,9 +8,10 @@ type TodayTaskCardProps = {
 const statusToneClassMap: Record<StudentTodayHomeViewModel['status'], string> = {
   pending_generation: 'border-border bg-surface-soft text-muted',
   generating: 'border-border bg-surface-soft text-muted',
+  empty: 'border-border bg-surface-soft text-muted',
   ready: 'border-border bg-surface-soft text-muted',
   in_progress: 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
-  submitted: 'border-[color:color-mix(in_oklab,var(--color-success)_35%,white)] bg-[color:color-mix(in_oklab,var(--color-success)_14%,white)] text-[color:var(--color-success)]',
+  submitted: 'border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)]',
 }
 
 export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskCardProps) {
@@ -22,9 +23,9 @@ export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskC
             {viewModel.statusLabel}
           </span>
         </div>
-        <h1 className="m-0 text-[clamp(20px,6vw,30px)] leading-[1.06] font-semibold tracking-[-0.02em] text-ink">
+        <p className="m-0 text-[clamp(16px,4vw,22px)] leading-[1.2] font-semibold tracking-[-0.02em] text-ink">
           {viewModel.title}
-        </h1>
+        </p>
       </div>
       <div className="md:justify-self-end">
         <button

@@ -447,11 +447,11 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
 
     await page
       .getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
-      .fill('$physics-teacher-ops $physics-homework-generator 多令牌')
+      .fill('$teacher-assignment-ops $homework-generator 多令牌')
     await page.getByRole('button', { name: '发送' }).click()
 
     await expect.poll(() => chatStartCalls.length).toBe(1)
-    expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+    expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   },
 
   A011: async ({ page }) => {
@@ -465,7 +465,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       el.setSelectionRange(6, 6)
     })
     await composer.type('$')
-    await expect(page.getByText('技能建议（↑↓ 选择 / 回车插入）')).toBeVisible()
+    await expect(page.getByText('能力建议（↑↓ 选择 / 回车插入）')).toBeVisible()
     await composer.press('Enter')
 
     await expect(composer).toHaveValue(/alpha \$[A-Za-z0-9_-]+ beta/)
@@ -558,12 +558,12 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     const { chatStartCalls } = await openTeacherApp(page)
 
     const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
-    await composer.fill('$physics-homework-generator')
+    await composer.fill('$homework-generator')
     await page.getByRole('button', { name: '发送' }).click()
 
-    await expect(page.locator('.messages').getByText('$physics-homework-generator')).toHaveCount(0)
+    await expect(page.locator('.messages').getByText('$homework-generator')).toHaveCount(0)
     expect(chatStartCalls.length).toBe(0)
-    await expect(composer).toHaveValue('$physics-homework-generator')
+    await expect(composer).toHaveValue('$homework-generator')
   },
 
   A014: async ({ page }) => {
@@ -860,7 +860,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
       localStorage.setItem('teacherSkillsOpen', 'true')
       localStorage.setItem('teacherWorkbenchTab', 'skills')
       localStorage.setItem('teacherSkillPinned', 'false')
-      localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
+      localStorage.setItem('teacherActiveSkillId', 'teacher-assignment-ops')
       localStorage.setItem('apiBaseTeacher', 'http://localhost:8000')
       localStorage.setItem('teacherAuthAccessToken', 'e2e-teacher-token')
       localStorage.setItem(
@@ -887,7 +887,7 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
           body: JSON.stringify({
             skills: [
               {
-                id: 'physics-teacher-ops',
+                id: 'teacher-assignment-ops',
                 title: '教学运营',
                 desc: '老师运营流程',
                 prompts: ['请总结班级学习情况'],

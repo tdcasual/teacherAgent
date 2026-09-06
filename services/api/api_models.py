@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class ChatMessage(BaseModel):
@@ -56,9 +56,9 @@ class ChatRequest(BaseModel):
     student_id: Optional[str] = None
     assignment_id: Optional[str] = None
     assignment_date: Optional[str] = None
-    auto_generate_assignment: Optional[bool] = None
     attachments: Optional[List[ChatAttachmentRef]] = None
     attachment_context: Optional[str] = None
+    # Deprecated: accepted so extra=forbid clients still 200; ignored by runtime.
     analysis_target: Optional[ChatAnalysisTarget] = None
 
 
@@ -93,7 +93,6 @@ class StudentMemoryProposalReviewRequest(BaseModel):
 
 class StudentImportRequest(BaseModel):
     source: Optional[str] = None
-    exam_id: Optional[str] = None
     file_path: Optional[str] = None
     mode: Optional[str] = None
 
@@ -103,6 +102,16 @@ class AssignmentRequirementsRequest(BaseModel):
     date: Optional[str] = None
     requirements: Dict[str, Any]
     created_by: Optional[str] = None
+
+
+class TeacherGradeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    override_score: Optional[float] = None
+    override_score_earned: Optional[float] = None
+    comment: Optional[str] = None
+    adopted_coach_excerpts: Optional[List[Dict[str, Any]]] = None
+    attempt_id: Optional[str] = None
 
 
 class StudentVerifyRequest(BaseModel):
@@ -159,6 +168,12 @@ class AuthExportTokensRequest(BaseModel):
     ids: Optional[List[str]] = None
 
 
+class AdminTeacherCreateRequest(BaseModel):
+    teacher_name: str
+    email: Optional[str] = None
+    teacher_id: Optional[str] = None
+
+
 class AdminTeacherSetDisabledRequest(BaseModel):
     target_id: str
     is_disabled: bool
@@ -176,6 +191,58 @@ class TeacherStudentPasswordResetRequest(BaseModel):
     new_password: Optional[str] = None
 
 
+class AdminSubjectAddRequest(BaseModel):
+    subject_id: str
+    display_name: str
+    pack_id: Optional[str] = None
+
+
+class AdminRosterRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    class_name: str
+    allow_empty: bool = False
+
+
+class AdminEnrollClassRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    class_name: str
+    resync: bool = False
+
+
+class AdminEnrollRequest(BaseModel):
+    student_id: str
+    subject_id: str
+    class_name: str
+    teacher_id: Optional[str] = None
+
+
+class AdminUnenrollRequest(BaseModel):
+    student_id: str
+    subject_id: str
+    class_name: str
+
+
+class AdminBulkMoveRequest(BaseModel):
+    subject_id: str
+    from_class: str
+    to_class: str
+    student_ids: Optional[List[str]] = None
+
+
+class AdminRenameClassRequest(BaseModel):
+    subject_id: str
+    old_class_name: str
+    new_class_name: str
+
+
+class AdminAssignmentClaimRequest(BaseModel):
+    teacher_id: str
+    subject_id: str
+    visibility_status: Optional[str] = "draft"
+
+
 class UploadConfirmRequest(BaseModel):
     job_id: str
     requirements_override: Optional[Dict[str, Any]] = None
@@ -187,20 +254,6 @@ class UploadDraftSaveRequest(BaseModel):
     job_id: str
     requirements: Optional[Dict[str, Any]] = None
     questions: Optional[List[Dict[str, Any]]] = None
-
-
-class ExamUploadConfirmRequest(BaseModel):
-    job_id: str
-    confirm: Optional[bool] = True
-
-
-class ExamUploadDraftSaveRequest(BaseModel):
-    job_id: str
-    meta: Optional[Dict[str, Any]] = None
-    questions: Optional[List[Dict[str, Any]]] = None
-    score_schema: Optional[Dict[str, Any]] = None
-    answer_key_text: Optional[str] = None
-    reparse: Optional[bool] = False
 
 
 class TeacherProviderRegistryCreateRequest(BaseModel):
@@ -238,102 +291,4 @@ class TeacherModelConfigUpdateRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     role: Optional[str] = None
-
-
-class SurveyWebhookAckResponse(BaseModel):
-    ok: bool = True
-    job_id: str
-    status: str
-    accepted_at: Optional[str] = None
-
-
-class SurveyReportSummary(BaseModel):
-    report_id: str
-    teacher_id: str
-    class_name: Optional[str] = None
-    status: str
-    confidence: Optional[float] = None
-    summary: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-
-class SurveyReportDetail(BaseModel):
-    report: SurveyReportSummary
-    analysis_artifact: Dict[str, Any]
-    bundle_meta: Dict[str, Any]
-    review_required: bool = False
-
-
-class SurveyReportRerunRequest(BaseModel):
-    teacher_id: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class AnalysisReportRerunRequest(BaseModel):
-    teacher_id: str
-    domain: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class AnalysisReportBulkRerunRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    teacher_id: str
-    report_ids: List[str]
-    domain: Optional[str] = None
-    reason: Optional[str] = None
-
-    @field_validator('report_ids')
-    @classmethod
-    def _normalize_report_ids(cls, value: List[str]) -> List[str]:
-        normalized = [str(item or '').strip() for item in value if str(item or '').strip()]
-        if not normalized:
-            raise ValueError('report_ids must not be empty')
-        if len(normalized) > 20:
-            raise ValueError('report_ids must not exceed 20 items')
-        deduped: List[str] = []
-        seen: set[str] = set()
-        for item in normalized:
-            if item in seen:
-                continue
-            seen.add(item)
-            deduped.append(item)
-        return deduped
-
-
-class AnalysisReviewQueueActionRequest(BaseModel):
-    teacher_id: str
-    domain: Optional[str] = None
-    action: str
-    reviewer_id: Optional[str] = None
-    operator_note: Optional[str] = None
-
-
-class SurveyReviewQueueItemSummary(BaseModel):
-    report_id: str
-    teacher_id: str
-    reason: str
-    confidence: Optional[float] = None
-    created_at: Optional[str] = None
-
-
-class AnalysisOpsSummaryResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    top_failure_reason: Optional[str] = None
-    top_review_reason: Optional[str] = None
-    needs_attention: bool = False
-
-
-class AnalysisOpsSnapshotResponse(BaseModel):
-    model_config = ConfigDict(extra='allow')
-
-    generated_at: Optional[str] = None
-    window_sec: int
-    workflow_routing: Dict[str, Any] = Field(default_factory=dict)
-    runtime_metrics: Dict[str, Any] = Field(default_factory=dict)
-    review_feedback: Dict[str, Any] = Field(default_factory=dict)
-    replay_compare: Dict[str, Any] = Field(default_factory=dict)
-    ops_summary: AnalysisOpsSummaryResponse = Field(default_factory=AnalysisOpsSummaryResponse)
 

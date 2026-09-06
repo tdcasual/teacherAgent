@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from .auth_service import get_current_principal
+from .paths import InvalidAssignmentDate
 from .upload_limits import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES
 
 
@@ -36,13 +37,13 @@ _ASSIGNMENT_ALLOWED_SUFFIXES = {
 @dataclass(frozen=True)
 class AssignmentUploadStartDeps:
     new_job_id: Callable[[], str]
-    parse_date_str: Callable[[Any], str]
+    optional_assignment_date: Callable[[Any], Optional[str]]
     upload_job_path: Callable[[str], Path]
     sanitize_filename: Callable[[Any], str]
     save_upload_file: Callable[[Any, Path], Awaitable[int]]
     parse_ids_value: Callable[[Any], List[str]]
     resolve_scope: Callable[[str, List[str], str], str]
-    normalize_due_at: Callable[[Any], str]
+    normalize_due_at: Callable[[Any], Optional[str]]
     now_iso: Callable[[], str]
     write_upload_job: Callable[[str, Dict[str, Any], bool], Dict[str, Any]]
     enqueue_upload_job: Callable[[str], None]
@@ -150,6 +151,33 @@ def _validate_upload_scope(scope_val: str, student_ids_list: List[str], class_na
         raise AssignmentUploadStartError(400, "class scope requires class_name")
 
 
+def _require_subject_id(subject_id: Any) -> str:
+    raw = str(subject_id or "").strip()
+    if not raw:
+        raise AssignmentUploadStartError(400, "subject_id_required")
+    return raw
+
+
+def _job_assignment_date(date: Any, deps: AssignmentUploadStartDeps) -> str:
+    try:
+        parsed = deps.optional_assignment_date(date)
+    except InvalidAssignmentDate as exc:
+        raise AssignmentUploadStartError(400, "invalid_assignment_date") from exc
+    return str(parsed or "")
+
+
+def _principal_teacher_id() -> str:
+    principal = get_current_principal()
+    return str(getattr(principal, "actor_id", "") or "").strip()
+
+
+def _require_teacher_id() -> str:
+    teacher_id = _principal_teacher_id()
+    if not teacher_id:
+        raise AssignmentUploadStartError(400, "teacher_id_required")
+    return teacher_id
+
+
 def _build_upload_record(
     *,
     job_id: str,
@@ -157,6 +185,7 @@ def _build_upload_record(
     teacher_id: str,
     date_str: str,
     due_at: Any,
+    subject_id: str,
     scope_val: str,
     class_name: Any,
     student_ids_list: List[str],
@@ -171,6 +200,7 @@ def _build_upload_record(
         "job_id": job_id,
         "assignment_id": assignment_id,
         "teacher_id": teacher_id,
+        "subject_id": subject_id,
         "date": date_str,
         "due_at": deps.normalize_due_at(due_at),
         "scope": scope_val,
@@ -205,6 +235,7 @@ async def start_assignment_upload(
     assignment_id: str,
     date: Any,
     due_at: Any,
+    subject_id: Any,
     scope: Any,
     class_name: Any,
     student_ids: Any,
@@ -214,7 +245,9 @@ async def start_assignment_upload(
     language: Any,
     deps: AssignmentUploadStartDeps,
 ) -> Dict[str, Any]:
-    date_str = deps.parse_date_str(date)
+    date_str = _job_assignment_date(date, deps)
+    subject_id_val = _require_subject_id(subject_id)
+    teacher_id = _require_teacher_id()
     job_id = deps.new_job_id()
     job_dir = deps.upload_job_path(job_id)
     source_dir = job_dir / "source"
@@ -234,8 +267,6 @@ async def start_assignment_upload(
     )
     _ensure_total_upload_size(source_known_total + answer_known_total)
 
-    principal = get_current_principal()
-    teacher_id = str(getattr(principal, "actor_id", "") or "").strip()
     try:
         saved_sources, total_written, delivery_mode = await _save_upload_batch(
             source_inputs,
@@ -263,6 +294,7 @@ async def start_assignment_upload(
             teacher_id=teacher_id,
             date_str=date_str,
             due_at=due_at,
+            subject_id=subject_id_val,
             scope_val=scope_val,
             class_name=class_name,
             student_ids_list=student_ids_list,

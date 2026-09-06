@@ -115,12 +115,12 @@ export function useTeacherComposerInteractions(params: UseTeacherComposerInterac
 
   useEffect(() => {
     if (!activeSkillId) {
-      setActiveSkillId('physics-teacher-ops')
+      setActiveSkillId('teacher-assignment-ops')
       setSkillPinned(false)
       return
     }
     if (!activeSkill) {
-      setActiveSkillId('physics-teacher-ops')
+      setActiveSkillId('teacher-assignment-ops')
       setSkillPinned(false)
     }
   }, [activeSkillId, activeSkill, setActiveSkillId, setSkillPinned])

@@ -5,7 +5,8 @@ services:
       dockerfile: services/api/Dockerfile
     command: ["uvicorn", "services.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "${API_WORKERS:-2}"]
     ports:
-      - "8000:8000"
+      # Default loopback. Campus LAN: PUBLISH_HOST=0.0.0.0
+      - "${PUBLISH_HOST:-127.0.0.1}:8000:8000"
     env_file: .env
     environment:
       - DATA_DIR=/app/data
@@ -126,7 +127,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     ports:
-      - "3001:80"
+      - "${PUBLISH_HOST:-127.0.0.1}:3001:80"
     depends_on:
       - api
     restart: unless-stopped
@@ -144,7 +145,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     ports:
-      - "3002:80"
+      - "${PUBLISH_HOST:-127.0.0.1}:3002:80"
     depends_on:
       - api
     restart: unless-stopped

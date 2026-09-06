@@ -22,7 +22,7 @@ class AssignmentContextServiceTest(unittest.TestCase):
         self.assertIn("Assignment ID: A1", result)
         self.assertNotIn("【学习与诊断规则", result)
 
-    def test_study_mode_includes_marker_rule(self):
+    def test_study_mode_does_not_require_discussion_marker(self):
         detail = {
             "assignment_id": "A1",
             "date": "2026-02-07",
@@ -31,11 +31,15 @@ class AssignmentContextServiceTest(unittest.TestCase):
             "requirements": {"subject": "物理", "topic": "力学"},
         }
         marker = "【个性化作业】"
-        result = build_assignment_context(detail, study_mode=True, discussion_complete_marker=marker)
+        result = build_assignment_context(
+            detail, study_mode=True, discussion_complete_marker=marker
+        )
         self.assertIsInstance(result, str)
         assert isinstance(result, str)
         self.assertIn("【学习与诊断规则", result)
-        self.assertIn(marker, result)
+        self.assertNotIn(marker, result)
+        self.assertNotIn("K0)", result)
+        self.assertNotIn("K) 个性化作业生成", result)
         self.assertIn("作业总要求", result)
 
 

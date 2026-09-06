@@ -12,20 +12,42 @@ from ..wiring.assignment_wiring import (
 )
 
 
-@dataclass(frozen=True)
+def _student_enrolled_for_core(
+    core: Any, student_id: str, teacher_id: str, subject_id: str, class_name: str = ""
+) -> bool:
+    from ..assignment_student_list_service import student_currently_enrolled
+
+    data_dir = getattr(core, "DATA_DIR", None)
+    return student_currently_enrolled(
+        student_id, teacher_id, subject_id, data_dir=data_dir, class_name=class_name
+    )
+
+
+def _sql_visibility_for_core(core: Any, assignment_id: str) -> str:
+    from .store import assignment_sql_visibility
+
+    data_dir = getattr(core, "DATA_DIR", None)
+    if data_dir is None:
+        return ""
+    return assignment_sql_visibility(Path(data_dir), assignment_id)
+
+
+@dataclass(frozen=True, kw_only=True)
 class AssignmentAccessDeps:
     resolve_assignment_dir: Callable[[str], Path]
     load_assignment_meta: Callable[[Path], Dict[str, Any]]
     resolve_student_profile_path: Callable[[str], Path]
     load_profile_file: Callable[[Path], Dict[str, Any]]
     assignment_specificity: Callable[[Dict[str, Any], Optional[str], Optional[str]], int]
+    student_enrolled: Callable[..., bool]
+    sql_visibility: Optional[Callable[[str], str]] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AssignmentApplicationDeps(AssignmentAccessDeps):
-    list_assignments: Callable[[int, int], Awaitable[Dict[str, Any]]]
+    list_assignments: Callable[..., Awaitable[Dict[str, Any]]]
     teacher_assignment_progress: Callable[[str, bool], Awaitable[Dict[str, Any]]]
-    teacher_assignments_progress: Callable[[Optional[str]], Awaitable[Dict[str, Any]]]
+    teacher_assignments_progress: Callable[..., Awaitable[Dict[str, Any]]]
     assignment_requirements: Callable[[AssignmentRequirementsRequest], Awaitable[Dict[str, Any]]]
     assignment_requirements_get: Callable[[str], Awaitable[Dict[str, Any]]]
     assignment_upload_start: Callable[..., Awaitable[Dict[str, Any]]]
@@ -42,9 +64,12 @@ class AssignmentApplicationDeps(AssignmentAccessDeps):
 
 
 def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
-    def _teacher_assignments_progress(date: Optional[str] = None) -> Awaitable[Dict[str, Any]]:
+    def _teacher_assignments_progress(
+        date: Optional[str] = None, owner_teacher_id: Optional[str] = None
+    ) -> Awaitable[Dict[str, Any]]:
         return core.assignment_handlers.teacher_assignments_progress(
             date=date,
+            owner_teacher_id=owner_teacher_id,
             deps=_assignment_handlers_deps(),
         )
 
@@ -58,8 +83,17 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         assignment_specificity=lambda meta, student_id, class_name: core.assignment_specificity(
             meta, student_id, class_name
         ),
-        list_assignments=lambda limit, cursor: core.assignment_handlers.assignments(
-            limit=limit, cursor=cursor, deps=_assignment_handlers_deps()
+        student_enrolled=lambda student_id, teacher_id, subject_id, class_name="": (
+            _student_enrolled_for_core(core, student_id, teacher_id, subject_id, class_name)
+        ),
+        sql_visibility=lambda assignment_id: _sql_visibility_for_core(core, assignment_id),
+        list_assignments=lambda limit, cursor, owner_teacher_id=None: (
+            core.assignment_handlers.assignments(
+                limit=limit,
+                cursor=cursor,
+                owner_teacher_id=owner_teacher_id,
+                deps=_assignment_handlers_deps(),
+            )
         ),
         teacher_assignment_progress=lambda assignment_id, include_students: core.assignment_handlers.teacher_assignment_progress(
             assignment_id,

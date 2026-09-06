@@ -23,11 +23,14 @@ from .auth.bootstrap_service import (
     write_admin_bootstrap_file,
 )
 from .auth.identify_service import handle_identify_student, handle_identify_teacher
+from .auth.identity_graph_service import IdentityGraphMixin
+from .auth.identity_graph_service import ensure_roster_tables as _ensure_roster_tables
 from .auth.login_service import handle_login
 from .auth.password_reset_service import (
     handle_reset_student_passwords,
     handle_reset_teacher_password,
 )
+from .auth.teacher_provision_service import handle_create_teacher
 from .config import DATA_DIR as CONFIG_DATA_DIR
 from .core_utils import normalize
 from .paths import resolve_teacher_id
@@ -41,7 +44,7 @@ _OPAQUE_CANDIDATE_TTL = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
-class AuthRegistryStore:
+class AuthRegistryStore(IdentityGraphMixin):
     db_path: Path
     data_dir: Path
 
@@ -151,6 +154,7 @@ class AuthRegistryStore:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_auth_candidate_map_expiry ON auth_candidate_map(expires_at)"
             )
+        _ensure_roster_tables(self)
 
     def _migrate_admin_token_version(self, conn: sqlite3.Connection) -> None:
         try:
@@ -587,6 +591,20 @@ class AuthRegistryStore:
             hash_password=_hash_password,
             utc_now=_utc_now,
             iso=_iso,
+        )
+
+    def create_teacher(self, **kwargs: Any) -> Dict[str, Any]:
+        return handle_create_teacher(
+            self,
+            generate_bootstrap_password=_generate_bootstrap_password,
+            validate_password_strength=validate_password_strength,
+            hash_password=_hash_password,
+            generate_token=_generate_token,
+            hash_token=_hash_token,
+            token_hint=_token_hint,
+            utc_now=_utc_now,
+            iso=_iso,
+            **kwargs,
         )
 
     def reset_student_passwords(
@@ -1300,9 +1318,19 @@ class AuthRegistryStore:
         scope: str,
         student_id: Optional[str],
         class_name: Optional[str],
+        actor_id: str = "",
+        actor_role: str = "",
     ) -> Dict[str, Any]:
         if scope not in {"student", "class", "all"}:
             return {"ok": False, "error": "invalid_scope"}
+
+        if scope == "all":
+            if str(actor_role or "").strip().lower() != "admin":
+                return {"ok": False, "error": "forbidden"}
+            all_students = self._list_student_identities()
+            if not all_students:
+                return {"ok": False, "error": "not_found"}
+            return {"ok": True, "scope": scope, "items": all_students}
 
         if scope == "student":
             sid = str(student_id or "").strip()
@@ -1312,26 +1340,24 @@ class AuthRegistryStore:
             identity = self._get_student_identity(sid)
             if identity is None:
                 return {"ok": False, "error": "not_found"}
+            role = str(actor_role or "").strip().lower()
+            if role != "admin":
+                from .auth.identity_graph_service import student_enrolled
+
+                if not student_enrolled(
+                    self, student_id=sid, teacher_id=str(actor_id or "")
+                ):
+                    return {"ok": False, "error": "forbidden"}
             return {"ok": True, "scope": scope, "items": [identity]}
 
-        all_students = self._list_student_identities()
-        if scope == "all":
-            if not all_students:
-                return {"ok": False, "error": "not_found"}
-            return {"ok": True, "scope": scope, "items": all_students}
+        from .auth.identity_graph_service import list_class_reset_targets
 
-        class_text = str(class_name or "").strip()
-        if not class_text:
-            return {"ok": False, "error": "missing_class_name"}
-        class_norm = normalize(class_text)
-        class_students = [
-            item
-            for item in all_students
-            if normalize(str(item.get("class_name") or "").strip()) == class_norm
-        ]
-        if not class_students:
-            return {"ok": False, "error": "not_found"}
-        return {"ok": True, "scope": scope, "items": class_students}
+        return list_class_reset_targets(
+            self,
+            class_name=str(class_name or ""),
+            actor_id=str(actor_id or ""),
+            actor_role=str(actor_role or ""),
+        )
 
     def _to_csv(self, role: str, items: Sequence[Dict[str, Any]]) -> str:
         output = StringIO()

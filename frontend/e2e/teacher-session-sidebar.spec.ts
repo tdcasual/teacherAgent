@@ -10,8 +10,8 @@ const openMobileMoreMenu = async (page: Page) => {
 
 const openMobileAuthPanel = async (page: Page) => {
   const menu = await openMobileMoreMenu(page)
-  await menu.getByRole('button', { name: /认证/ }).first().click()
-  const panel = page.getByRole('dialog', { name: '教师认证面板' })
+  await menu.getByRole('button', { name: '打开管理' }).click()
+  const panel = page.getByRole('region', { name: '教师管理面板' })
   await expect(panel).toBeVisible()
   return panel
 }

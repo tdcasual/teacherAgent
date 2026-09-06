@@ -49,6 +49,9 @@ data/student_chat_sessions/
 # Assignments generated from question bank / core examples
 data/assignments/
 
+# Runtime tool confirmation payloads
+data/tool_confirms/
+
 # Uploads
 uploads/
 

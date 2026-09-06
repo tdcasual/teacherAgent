@@ -2,22 +2,19 @@
  * Shared type definitions for the workflow feature.
  *
  * Centralizes types used across WorkflowTab, UploadSection,
- * AssignmentDraftSection, ExamDraftSection, and WorkflowSummaryCard.
+ * AssignmentDraftSection, and WorkflowSummaryCard.
  */
 import type { FormEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react'
 import type {
   UploadJobStatus,
-  ExamUploadJobStatus,
   AssignmentProgress,
   UploadDraft,
-  ExamUploadDraft,
   WorkflowIndicator,
 } from '../appTypes'
 
 // ── Primitive helpers ──────────────────────────────────────────────────
 
 export type UploadScope = 'public' | 'class' | 'student'
-type UploadMode = 'assignment' | 'exam'
 
 type DifficultyOption = Readonly<{ value: string; label: string }>
 
@@ -33,20 +30,10 @@ export type AssignmentQuestion = {
   question_id?: string
 }
 
-export type ExamQuestion = {
-  question_id?: string
-  question_no?: string
-  max_score?: number | null
-}
-
 // ── Formatter function signatures ──────────────────────────────────────
 
 type FormatUploadJobSummary = (
   job: UploadJobStatus | null,
-  fallbackId?: string,
-) => string
-type FormatExamJobSummary = (
-  job: ExamUploadJobStatus | null,
   fallbackId?: string,
 ) => string
 export type FormatProgressSummary = (
@@ -56,10 +43,6 @@ export type FormatProgressSummary = (
 type FormatDraftSummary = (
   draft: UploadDraft | null,
   jobInfo: UploadJobStatus | null,
-) => string
-type FormatExamDraftSummary = (
-  draft: ExamUploadDraft | null,
-  jobInfo: ExamUploadJobStatus | null,
 ) => string
 type FormatMissingRequirements = (missing?: string[]) => string
 type DifficultyLabel = (value: string | number | undefined) => string
@@ -73,9 +56,6 @@ type StopKeyPropagation = (e: KeyboardEvent<HTMLElement>) => void
 // ── Shared prop groups ─────────────────────────────────────────────────
 
 export type UploadSectionProps = {
-  // Upload mode & state
-  uploadMode: UploadMode
-  setUploadMode: (v: UploadMode) => void
   uploadCardCollapsed: boolean
   setUploadCardCollapsed: Dispatch<SetStateAction<boolean>>
 
@@ -84,6 +64,10 @@ export type UploadSectionProps = {
   setUploadAssignmentId: (v: string) => void
   uploadDate: string
   setUploadDate: (v: string) => void
+  uploadDueAt: string
+  setUploadDueAt: (v: string) => void
+  uploadSubjectId: string
+  setUploadSubjectId: (v: string) => void
   uploadScope: UploadScope
   setUploadScope: (v: UploadScope) => void
   uploadClassName: string
@@ -93,32 +77,16 @@ export type UploadSectionProps = {
   setUploadFiles: (v: File[]) => void
   setUploadAnswerFiles: (v: File[]) => void
 
-  // Exam upload fields
-  examId: string
-  setExamId: (v: string) => void
-  examDate: string
-  setExamDate: (v: string) => void
-  examClassName: string
-  setExamClassName: (v: string) => void
-  setExamPaperFiles: (v: File[]) => void
-  setExamAnswerFiles: (v: File[]) => void
-  setExamScoreFiles: (v: File[]) => void
-
   // Job info & status
   uploadJobInfo: UploadJobStatus | null
-  examJobInfo: ExamUploadJobStatus | null
   uploadError: string
   uploadStatus: string
-  examUploadError: string
-  examUploadStatus: string
 
   // Actions
   handleUploadAssignment: (e: FormEvent) => Promise<void>
-  handleUploadExam: (e: FormEvent) => Promise<void>
 
   // Formatters
   formatUploadJobSummary: FormatUploadJobSummary
-  formatExamJobSummary: FormatExamJobSummary
 }
 
 export type AssignmentDraftSectionProps = {
@@ -151,36 +119,10 @@ export type AssignmentDraftSectionProps = {
   stopKeyPropagation: StopKeyPropagation
 }
 
-export type ExamDraftSectionProps = {
-  examDraft: ExamUploadDraft | null
-  examJobInfo: ExamUploadJobStatus | null
-  examDraftPanelCollapsed: boolean
-  setExamDraftPanelCollapsed: Dispatch<SetStateAction<boolean>>
-  examDraftError: string
-  examDraftActionError: string
-  examDraftActionStatus: string
-
-  // Actions
-  saveExamDraft: (draft: ExamUploadDraft) => Promise<void>
-  handleConfirmExamUpload: () => Promise<void>
-  updateExamDraftMeta: (key: string, value: string) => void
-  updateExamQuestionField: (index: number, patch: Record<string, unknown>) => void
-  updateExamAnswerKeyText: (value: string) => void
-  updateExamScoreSchemaSelectedCandidate: (candidateId: string) => void
-
-  // Formatters & utils
-  formatExamDraftSummary: FormatExamDraftSummary
-  stopKeyPropagation: StopKeyPropagation
-}
-
 export type WorkflowSummaryCardProps = {
   activeWorkflowIndicator: WorkflowIndicator
-  uploadMode: UploadMode
-  setUploadMode: (v: UploadMode) => void
   uploadJobInfo: UploadJobStatus | null
   uploadAssignmentId: string
-  examJobInfo: ExamUploadJobStatus | null
-  examId: string
   progressData: AssignmentProgress | null
   progressAssignmentId: string
   progressLoading: boolean
@@ -192,185 +134,6 @@ export type WorkflowSummaryCardProps = {
 
   // Formatters
   formatUploadJobSummary: FormatUploadJobSummary
-  formatExamJobSummary: FormatExamJobSummary
   formatProgressSummary: FormatProgressSummary
 }
 
-export type AnalysisReportSummary = {
-  report_id: string
-  domain?: string | null
-  analysis_type: string
-  target_type: string
-  target_id: string
-  strategy_id: string
-  teacher_id: string
-  status: string
-  confidence?: number | null
-  summary?: string | null
-  review_required: boolean
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export type AnalysisReportDetail = {
-  report: AnalysisReportSummary
-  analysis_artifact: Record<string, unknown>
-  artifact_meta: Record<string, unknown>
-}
-
-export type AnalysisReviewQueueItem = {
-  item_id: string
-  domain: string
-  report_id: string
-  teacher_id: string
-  status: string
-  reason: string
-  reason_code?: string | null
-  disposition?: string | null
-  reviewer_id?: string | null
-  operator_note?: string | null
-  confidence?: number | null
-  created_at?: string | null
-  updated_at?: string | null
-  claimed_at?: string | null
-  resolved_at?: string | null
-  rejected_at?: string | null
-  dismissed_at?: string | null
-  escalated_at?: string | null
-  retried_at?: string | null
-}
-
-export type AnalysisReviewQueueSummary = {
-  total_items: number
-  unresolved_items: number
-  status_counts?: Record<string, number>
-  reason_counts?: Record<string, number>
-  domains: Array<{
-    domain: string
-    total_items: number
-    unresolved_items: number
-    status_counts?: Record<string, number>
-    reason_counts?: Record<string, number>
-  }>
-  generated_at?: string | null
-}
-
-export type AnalysisReportsDomainSummary = {
-  domain: string
-  total_reports: number
-  review_required_reports: number
-  queued_review_items: number
-  status_counts?: Record<string, number>
-}
-
-export type AnalysisReportsSummary = {
-  total_reports: number
-  review_required_reports: number
-  status_counts?: Record<string, number>
-  domains: AnalysisReportsDomainSummary[]
-}
-
-export type AnalysisOpsRecommendation = {
-  action_type?: string | null
-  recommended_action?: string | null
-  priority?: string | null
-  scope_id?: string | null
-}
-
-export type AnalysisOpsSnapshot = {
-  generated_at?: string | null
-  window_sec?: number
-  workflow_routing?: Record<string, unknown>
-  runtime_metrics?: Record<string, unknown>
-  review_feedback?: {
-    summary?: Record<string, unknown>
-    recommendations?: AnalysisOpsRecommendation[]
-  } | null
-  ops_summary?: {
-    top_failure_reason?: string | null
-    top_review_reason?: string | null
-    needs_attention?: boolean | null
-  } | null
-}
-
-export type AnalysisOpsSectionProps = {
-  analysisReports: AnalysisReportSummary[]
-  analysisReportsSummary: AnalysisReportsSummary | null
-  analysisReviewSummary: AnalysisReviewQueueSummary | null
-  analysisOpsSnapshot: AnalysisOpsSnapshot | null
-  analysisDomainFilter: string
-  setAnalysisDomainFilter: (value: string) => void
-  rerunAnalysisReportsBulk: (reportIds: string[]) => void | Promise<void>
-}
-
-export type AnalysisReportSectionProps = {
-  analysisFeatureEnabled: boolean
-  analysisFeatureShadowMode: boolean
-  analysisReportsLoading: boolean
-  analysisReportsError: string
-  analysisReports: AnalysisReportSummary[]
-  selectedAnalysisReportId: string
-  selectedAnalysisReport: AnalysisReportDetail | null
-  analysisReviewQueue: AnalysisReviewQueueItem[]
-  analysisReportsSummary: AnalysisReportsSummary | null
-  analysisReviewSummary: AnalysisReviewQueueSummary | null
-  analysisOpsSnapshot: AnalysisOpsSnapshot | null
-  analysisDomainFilter: string
-  analysisStatusFilter: string
-  analysisStrategyFilter: string
-  analysisTargetTypeFilter: string
-  setAnalysisDomainFilter: (value: string) => void
-  setAnalysisStatusFilter: (value: string) => void
-  setAnalysisStrategyFilter: (value: string) => void
-  setAnalysisTargetTypeFilter: (value: string) => void
-  refreshAnalysisReports: () => void | Promise<void>
-  selectAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
-  rerunAnalysisReport: (reportId: string, domain?: string) => void | Promise<void>
-  rerunAnalysisReportsBulk: (reportIds: string[]) => void | Promise<void>
-}
-
-export type VideoHomeworkAnalysisSectionProps = {
-  videoHomeworkFeatureEnabled: boolean
-  analysisReports: AnalysisReportSummary[]
-  selectedAnalysisReport: AnalysisReportDetail | null
-}
-
-export type SurveyReportSummary = {
-  report_id: string
-  teacher_id: string
-  class_name?: string | null
-  status: string
-  confidence?: number | null
-  summary?: string | null
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export type SurveyReportDetail = {
-  report: SurveyReportSummary
-  analysis_artifact: Record<string, unknown>
-  bundle_meta: Record<string, unknown>
-  review_required: boolean
-}
-
-export type SurveyReviewQueueItem = {
-  report_id: string
-  teacher_id: string
-  reason: string
-  confidence?: number | null
-  created_at?: string | null
-}
-
-export type SurveyAnalysisSectionProps = {
-  surveyFeatureEnabled: boolean
-  surveyFeatureShadowMode: boolean
-  surveyReportsLoading: boolean
-  surveyReportsError: string
-  surveyReports: SurveyReportSummary[]
-  selectedSurveyReportId: string
-  selectedSurveyReport: SurveyReportDetail | null
-  surveyReviewQueue: SurveyReviewQueueItem[]
-  refreshSurveyReports: () => void | Promise<void>
-  selectSurveyReport: (reportId: string) => void | Promise<void>
-  rerunSurveyReport: (reportId: string) => void | Promise<void>
-}

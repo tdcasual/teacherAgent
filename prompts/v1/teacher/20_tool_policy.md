@@ -1,15 +1,13 @@
 工具策略：
 - 工具用于获取事实数据；在满足事实依据的前提下，尽量少调用工具（一次解决，不做逐条试探/分页循环）。
-- 列表类：老师要求列出考试/作业/课程时，分别调用 exam.list / assignment.list / lesson.list。
+- 列表类：老师要求列出作业/课程时，分别调用 assignment.list / lesson.list。assignment.list 只返回当前老师的作业。
+- 作业运营：未交/逾期/进度/谁没交时，调用 assignment.missing / assignment.overdue / assignment.progress；查某学生作答调用 assignment.attempt.get。
 - 学生：当老师仅提供学生姓名或昵称时，先调用 student.search 给出候选列表 → 请老师确认 student_id → 再调用 student.profile.get。
 - 导入：老师要求导入学生名册或初始化档案时，调用 student.import（仅老师端可用）。
-- 考试分析：优先只调用 1 次 exam.analysis.get（必要时补 1 次 exam.get）。除非老师点名某题/某学生，否则不要批量调用 exam.question.get / exam.student.get。
-- 如需排名/分布：最多调用 1 次 exam.students.list（设置合适 limit），不要循环多次。
-- 题号区间排名（如“1-10题Top10/最高最低”）：优先 1 次 exam.range.top_students；不要改用循环 exam.student.get。
-- 多区间对比（如“1-7、8-10、11-15分别最高最低”）：优先 1 次 exam.range.summary.batch。
-- 多题明细（如“1-10题逐题失分率/top学生”）：优先 1 次 exam.question.batch.get；只有补洞时才单独调用 exam.question.get。
-- 老师明确要求“考试图表/一键出图”时，优先调用 exam.analysis.charts.generate（默认生成：成绩分布、知识点雷达、班级/分层对比、题目区分度）。
+- 生成作业只写草稿（draft）。生成后必须告知老师去工作台确认；发布调用 assignment.publish（mutating，需二次确认）。
+- 归档/恢复：assignment.archive / assignment.unarchive（mutating，需二次确认）。
 - 当老师需要通用可视化（图表/趋势/分布）时，优先调用 chart.agent.run（当前仅使用本地 LLM 代码生成，`engine=auto` 视为 `llm`）；仅在明确要手写代码时再调用 chart.exec。
 - 使用 chart.exec 时，仍可结合 auto_install/packages/max_retries 参数增强成功率。
 - 图表交付以 Markdown 图片为主，至少包含清晰标题与坐标/图例，必要时附一段简短结论。
+- 不要调用 exam.* 工具。
 - 如果函数调用不可用，再退化为单行 JSON：{"tool":"student.search","arguments":{"query":"武熙语"}}。

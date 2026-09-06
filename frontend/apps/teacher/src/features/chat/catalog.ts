@@ -2,17 +2,17 @@ import type { Skill } from '../../appTypes'
 
 export const fallbackSkills: Skill[] = [
   {
-    id: 'physics-teacher-ops',
-    title: '教师运营',
-    desc: '考试分析、课前检测、教学备课与课堂讨论。',
+    id: 'teacher-assignment-ops',
+    title: '作业运营',
+    desc: '作业进度、未交/逾期名单与发布归档。',
     instructions: '',
-    prompts: ['列出所有考试，并给出最新考试概览。'],
-    examples: ['列出考试', '生成课前检测清单', '做一次考试分析'],
+    prompts: ['列出今天未交作业的学生。'],
+    examples: ['谁没交', '查看作业进度', '逾期名单'],
     keywords: [],
     source_type: 'system',
   },
   {
-    id: 'physics-homework-generator',
+    id: 'homework-generator',
     title: '作业生成',
     desc: '基于课堂讨论生成课后诊断与作业。',
     instructions: '',
@@ -22,49 +22,19 @@ export const fallbackSkills: Skill[] = [
     source_type: 'system',
   },
   {
-    id: 'physics-lesson-capture',
-    title: '课堂采集',
-    desc: '课堂材料文字识别并抽取例题与讨论结构。',
-    instructions: '',
-    prompts: ['采集课堂材料 L2403_2026-02-04，主题"静电场综合"。'],
-    examples: ['采集课堂材料 L2403_2026-02-04', '列出课程'],
-    keywords: [],
-    source_type: 'system',
-  },
-  {
-    id: 'physics-student-coach',
+    id: 'student-coach',
     title: '学生教练',
     desc: '学生侧讨论、作业批改与画像更新。',
     instructions: '',
-    prompts: ['查看学生画像 高二2403班_武熙语。'],
-    examples: ['查看学生画像 武熙语', '开始今天作业'],
-    keywords: [],
-    source_type: 'system',
-  },
-  {
-    id: 'physics-student-focus',
-    title: '学生重点分析',
-    desc: '针对某个学生进行重点诊断与画像更新。',
-    instructions: '',
-    prompts: ['请分析学生 高二2403班_武熙语 的最近作业表现。'],
-    examples: ['分析学生 高二2403班_武熙语'],
-    keywords: [],
-    source_type: 'system',
-  },
-  {
-    id: 'physics-core-examples',
-    title: '核心例题库',
-    desc: '登记核心例题、标准解法与变式题。',
-    instructions: '',
-    prompts: ['登记核心例题 CE001，知识点 KP-M01。'],
-    examples: ['登记核心例题 CE001', '生成变式题 3 道'],
+    prompts: ['开始今天作业。'],
+    examples: ['开始今天作业', '查看我的作业结果'],
     keywords: [],
     source_type: 'system',
   },
 ]
 
 export const TEACHER_GREETING =
-  '老师端已就绪。你可以直接提需求，例如：\n- 列出考试\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$能力ID` 选择教学能力（未指定时自动推荐）。'
+  '老师端已就绪。你可以直接提需求，例如：\n- 谁没交作业\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$能力ID` 选择教学能力（未指定时自动推荐）。'
 
 type RawSkill = {
   id: string

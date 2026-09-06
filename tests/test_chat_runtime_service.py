@@ -104,6 +104,35 @@ class ChatRuntimeServiceTest(unittest.TestCase):
         self.assertEqual(result.get("choices", [{}])[0].get("message", {}).get("content"), "ok")
         self.assertIs(limiter_seen[-1], teacher_limiter)
 
+    def test_teacher_runtime_without_teacher_id_does_not_use_default_actor(self):
+        gateway = _FakeGateway()
+        actors = []
+
+        @contextmanager
+        def fake_limit(_limiter):
+            yield
+
+        deps = ChatRuntimeDeps(
+            gateway=gateway,
+            limit=fake_limit,
+            default_limiter=object(),
+            student_limiter=object(),
+            teacher_limiter=object(),
+            resolve_teacher_id=lambda teacher_id: actors.append(teacher_id) or str(teacher_id or "teacher_default"),
+            resolve_teacher_model_config=lambda actor: actors.append(("config", actor)) or {},
+            resolve_teacher_provider_target=lambda *_args, **_kwargs: None,
+            diag_log=lambda *_args, **_kwargs: None,
+        )
+        result = call_llm_runtime(
+            [{"role": "user", "content": "hi"}],
+            deps=deps,
+            role_hint="teacher",
+            teacher_id="",
+        )
+        self.assertEqual(result.get("choices", [{}])[0].get("message", {}).get("content"), "ok")
+        self.assertNotIn("teacher_default", actors)
+        self.assertNotIn(("",), [item for item in actors if isinstance(item, tuple)])
+
 
     def test_teacher_policy_keeps_teacher_model_config_route(self):
         gateway = _FakeGateway()

@@ -26,23 +26,21 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     studentProposalLoading,
     progressLoading,
     uploading,
-    examUploading,
     activeWorkflowIndicator,
-    uploadMode,
     progressData,
     scrollToWorkflowSection,
   } = viewModel
 
   const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
   const guidance = buildTeacherWorkflowGuidance({
-    mode: uploadMode === 'exam' ? 'exam' : 'assignment',
+    mode: 'assignment',
     tone: activeWorkflowIndicator.tone,
     activeStepKey: activeStep?.key,
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
   })
   const workflowTabActive = workbenchTab === 'workflow'
-  const focusLabel = activeStep?.label || (uploadMode === 'assignment' ? '上传文件' : '上传考试材料')
+  const focusLabel = activeStep?.label || '上传文件'
 
   const handlePrimaryAction = () => {
     setWorkbenchTab('workflow')
@@ -57,11 +55,11 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     <aside
       data-testid="teacher-workbench-shell"
       data-workbench-flow="continuous"
-      className={`skills-panel border-l border-[color:color-mix(in_oklab,var(--color-border)_86%,white)] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-rail)_90%,white)_0%,color-mix(in_oklab,var(--color-surface)_96%,white)_100%)] p-3 shadow-none flex-auto w-full flex-col gap-3 min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}
+      className={`skills-panel border-l border-[color:color-mix(in_oklab,var(--color-border)_86%,var(--color-surface))] bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-rail)_90%,var(--color-surface))_0%,color-mix(in_oklab,var(--color-surface)_96%,var(--color-surface))_100%)] p-3 shadow-none flex-auto w-full flex-col gap-3 min-h-0 overflow-hidden relative ${skillsOpen ? 'open flex' : 'collapsed hidden'}`}
     >
       <div className="skills-header flex justify-between items-start gap-3 mb-[10px]">
         <div className="grid gap-1">
-          <h3 className="m-0">教学编辑台</h3>
+          <h1 className="m-0 text-base font-semibold">教学编辑台</h1>
           <p className="m-0 text-[12px] text-muted">这里收纳主线摘要与辅助入口。</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -84,7 +82,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 ? skillsLoading
                 : workbenchTab === 'memory'
                   ? proposalLoading || studentProposalLoading
-                  : progressLoading || uploading || examUploading
+                  : progressLoading || uploading
             }
           >
             刷新
@@ -95,7 +93,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         </div>
       </div>
       <section
-        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,white)] px-3.5 py-3.5 shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_72%,white)]"
+        className="grid gap-3 rounded-[20px] border border-[color:color-mix(in_oklab,var(--color-border)_76%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_84%,var(--color-surface))] px-3.5 py-3.5 shadow-none ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-surface)_72%,var(--color-surface))]"
         data-testid="teacher-workbench-summary-card"
         data-workbench-tone="summary"
       >
@@ -116,7 +114,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
               </span>
             </div>
             <div
-              className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,white)] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,white)]"
+              className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,var(--color-surface))] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,var(--color-surface))]"
               data-testid="teacher-workbench-focus-block"
               data-workbench-tier="supporting"
             >
@@ -142,7 +140,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 </span>
               </div>
               <div
-                className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,white)] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,white)]"
+                className="grid gap-1 rounded-[16px] bg-[color:color-mix(in_oklab,var(--color-surface)_72%,var(--color-surface))] px-3 py-2.5 ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-border)_68%,var(--color-surface))]"
                 data-testid="teacher-workbench-focus-block"
                 data-workbench-tier="supporting"
               >
@@ -160,18 +158,18 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </div>
         )}
       </section>
-      <div className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,white)] self-start flex-none">
-        <button type="button" className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
+      <div className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,var(--color-surface))] self-start flex-none" role="tablist" aria-label="工作台分区">
+        <button type="button" role="tab" aria-selected={workbenchTab === 'skills'} className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
           能力
         </button>
-        <button type="button" className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
+        <button type="button" role="tab" aria-selected={workbenchTab === 'memory'} className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
           自动记忆
         </button>
-        <button type="button" className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,white)] bg-transparent text-muted text-[12px] py-[6px] px-[12px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,white)] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
+        <button type="button" role="tab" aria-selected={workbenchTab === 'workflow'} className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
           工作流
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,white)] pt-3">
+      <div className="min-h-0 flex-1 overflow-hidden border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3">
         {workbenchTab === 'skills' ? (
           <SkillsTab
             apiBase={viewModel.apiBase}

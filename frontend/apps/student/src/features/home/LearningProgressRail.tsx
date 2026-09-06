@@ -7,13 +7,13 @@ type LearningProgressRailProps = {
 const toneClassMap: Record<StudentTodayHomeStep['tone'], string> = {
   neutral: 'bg-[color:var(--color-progress)] text-muted border-border',
   active: 'bg-accent-soft text-accent border-[color:var(--color-accent)]',
-  success: 'bg-[color:color-mix(in_oklab,var(--color-success)_14%,white)] text-[color:var(--color-success)] border-[color:color-mix(in_oklab,var(--color-success)_35%,white)]',
+  success: 'bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)] border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))]',
 }
 
 export default function LearningProgressRail({ steps }: LearningProgressRailProps) {
   return (
     <section
-      className="grid gap-2.5 rounded-[20px] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_78%,white)] p-3.5"
+      className="grid gap-2.5 rounded-[20px] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_78%,var(--color-surface))] p-3.5"
       aria-labelledby="student-home-progress-title"
       data-testid="student-home-progress-stage"
       data-home-tier="supporting"

@@ -186,6 +186,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 last_user = ""
                 for m in reversed(messages or []):
@@ -201,6 +202,7 @@ class ChatJobFlowTest(unittest.TestCase):
                 payload = {
                     "request_id": "req_test_001",
                     "role": "teacher",
+                    "teacher_id": "T001",
                     "messages": [
                         {
                             "role": "user",
@@ -227,16 +229,16 @@ class ChatJobFlowTest(unittest.TestCase):
                 self.assertEqual(data["status"], "done")
                 self.assertIn("echo:teacher:", data.get("reply", ""))
                 self.assertEqual(data.get("skill_id_requested"), "")
-                self.assertEqual(data.get("skill_id_effective"), "physics-homework-generator")
+                self.assertEqual(data.get("skill_id_effective"), "homework-generator")
                 self.assertEqual(data.get("skill_reason"), "auto_rule")
                 self.assertGreater(float(data.get("skill_confidence") or 0.0), 0.28)
-                self.assertEqual((data.get("skill_candidates") or [])[0].get("skill_id"), "physics-homework-generator")
+                self.assertEqual((data.get("skill_candidates") or [])[0].get("skill_id"), "homework-generator")
                 self.assertEqual(data.get("skill_resolution_mode"), "auto")
                 self.assertTrue(bool(data.get("skill_auto_selected")))
                 self.assertFalse(bool(data.get("skill_requested_rewritten")))
                 self.assertEqual(data.get("skill_outcome"), "done")
                 self.assertEqual(data.get("skill_outcome_reason"), "done")
-                self.assertEqual(captured["skill_id"], "physics-homework-generator")
+                self.assertEqual(captured["skill_id"], "homework-generator")
 
     def test_chat_status_missing_job(self):
         with TemporaryDirectory() as td:
@@ -413,6 +415,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
@@ -442,10 +445,10 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 payload = status.json()
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
-                self.assertIn("单科成绩说明", reply_text)
-                self.assertIn('score_mode: "total"', reply_text)
-                self.assertIn("不能把总分当作物理单科成绩", reply_text)
-                self.assertEqual(calls["run_agent"], 0)
+                self.assertNotIn("单科成绩说明", reply_text)
+                self.assertNotIn('score_mode: "total"', reply_text)
+                self.assertNotIn("不能把总分当作物理单科成绩", reply_text)
+                self.assertGreaterEqual(calls["run_agent"], 1)
 
     def test_chat_job_total_mode_matching_single_subject_allows_agent_end_to_end(self):
         with TemporaryDirectory() as td:
@@ -471,6 +474,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_total_mode_analysis"}
@@ -500,10 +504,10 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 payload = status.json()
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
-                self.assertIn("单科成绩说明", reply_text)
-                self.assertIn('score_mode: "total"', reply_text)
-                self.assertIn("不能把总分当作物理单科成绩", reply_text)
-                self.assertEqual(calls["run_agent"], 0)
+                self.assertNotIn("单科成绩说明", reply_text)
+                self.assertNotIn('score_mode: "total"', reply_text)
+                self.assertNotIn("不能把总分当作物理单科成绩", reply_text)
+                self.assertGreaterEqual(calls["run_agent"], 1)
 
     def test_chat_job_total_mode_matching_single_subject_guard_logs_and_no_agent_call(self):
         with TemporaryDirectory() as td:
@@ -529,6 +533,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
@@ -558,16 +563,16 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 payload = status.json()
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
-                self.assertIn("单科成绩说明", reply_text)
-                self.assertIn('score_mode: "total"', reply_text)
-                self.assertEqual(calls["run_agent"], 0)
+                self.assertNotIn("单科成绩说明", reply_text)
+                self.assertNotIn('score_mode: "total"', reply_text)
+                self.assertGreaterEqual(calls["run_agent"], 1)
 
             log_path = tmp / "tmp" / "diagnostics.log"
             self.assertTrue(log_path.exists())
             log_text = log_path.read_text(encoding="utf-8")
             self.assertIn('"event": "skill.resolve"', log_text)
             self.assertIn('"event": "teacher_chat.in"', log_text)
-            self.assertIn('"event": "teacher_preflight.subject_total_guard"', log_text)
+            self.assertNotIn('"event": "teacher_preflight.subject_total_guard"', log_text)
             self.assertNotIn(
                 '"event": "teacher_preflight.subject_total_allow_single_subject"', log_text
             )
@@ -604,6 +609,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "physics_subject_score_reply"}
@@ -638,7 +644,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
             event_names = [event for event, _ in diag_events]
             self.assertIn("skill.resolve", event_names)
             self.assertIn("teacher_chat.in", event_names)
-            self.assertIn("teacher_preflight.subject_total_auto_extract_subject", event_names)
+            self.assertNotIn("teacher_preflight.subject_total_auto_extract_subject", event_names)
             self.assertNotIn("teacher_preflight.subject_total_guard", event_names)
 
     def test_chat_job_total_mode_chemistry_request_is_guarded_end_to_end(self):
@@ -660,6 +666,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
@@ -689,10 +696,10 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 payload = status.json()
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
-                self.assertIn("单科成绩说明", reply_text)
-                self.assertIn('score_mode: "total"', reply_text)
-                self.assertIn("不能把总分", reply_text)
-                self.assertEqual(calls["run_agent"], 0)
+                self.assertNotIn("单科成绩说明", reply_text)
+                self.assertNotIn('score_mode: "total"', reply_text)
+                self.assertNotIn("不能把总分", reply_text)
+                self.assertGreaterEqual(calls["run_agent"], 1)
 
     def test_chat_job_total_mode_english_subject_score_request_is_guarded_end_to_end(self):
         with TemporaryDirectory() as td:
@@ -713,6 +720,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "should_not_reach_llm_path"}
@@ -742,10 +750,10 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 payload = status.json()
                 self.assertEqual(payload.get("status"), "done")
                 reply_text = str(payload.get("reply") or "")
-                self.assertIn("单科成绩说明", reply_text)
-                self.assertIn('score_mode: "total"', reply_text)
-                self.assertIn("不能把总分", reply_text)
-                self.assertEqual(calls["run_agent"], 0)
+                self.assertNotIn("单科成绩说明", reply_text)
+                self.assertNotIn('score_mode: "total"', reply_text)
+                self.assertNotIn("不能把总分", reply_text)
+                self.assertGreaterEqual(calls["run_agent"], 1)
 
     def test_chat_job_subject_mode_english_subject_score_request_allows_agent(self):
         with TemporaryDirectory() as td:
@@ -766,6 +774,7 @@ class ChatJobStateMachineTest(unittest.TestCase):
                 skill_id=None,
                 teacher_id=None,
                 event_sink=None,
+                **_kwargs,
             ):
                 calls["run_agent"] += 1
                 return {"reply": "normal_subject_mode_reply"}

@@ -100,6 +100,7 @@ class TestRateLimitMiddleware(unittest.TestCase):
         # Reset buckets for isolation.
         self._original_rpm = rl_mod._rpm
         self._original_login_rpm = rl_mod._login_rpm
+        self._original_provision_rpm = rl_mod._provision_rpm
         self._original_buckets = rl_mod._buckets
         self._original_last_seen = rl_mod._bucket_last_seen
         self._original_max_buckets = rl_mod._max_buckets
@@ -116,6 +117,7 @@ class TestRateLimitMiddleware(unittest.TestCase):
         self._patcher.stop()
         rl_mod._rpm = self._original_rpm
         rl_mod._login_rpm = self._original_login_rpm
+        rl_mod._provision_rpm = self._original_provision_rpm
         rl_mod._buckets = self._original_buckets
         rl_mod._bucket_last_seen = self._original_last_seen
         rl_mod._max_buckets = self._original_max_buckets
@@ -339,6 +341,46 @@ class TestRateLimitMiddleware(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         resp = _run(rl_mod.rate_limit_middleware(req, call_next))
         self.assertEqual(resp.status_code, 429)
+
+    def test_admin_provision_create_uses_independent_bucket(self):
+        rl_mod._rpm = 100
+        rl_mod._login_rpm = 100
+        rl_mod._provision_rpm = 1
+        req = _make_request(path="/auth/admin/teacher/create", client_host="10.0.0.11")
+        call_next = AsyncMock(return_value=_ok_response())
+
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 200)
+        resp = _run(rl_mod.rate_limit_middleware(req, call_next))
+        self.assertEqual(resp.status_code, 429)
+        self.assertIn("provision:10.0.0.11", rl_mod._buckets)
+
+    def test_admin_provision_bucket_isolated_from_login_and_general(self):
+        rl_mod._rpm = 1
+        rl_mod._login_rpm = 1
+        rl_mod._provision_rpm = 2
+        call_next = AsyncMock(return_value=_ok_response())
+        general = _make_request(path="/api/test", client_host="10.0.0.12")
+        login = _make_request(path="/auth/admin/login", client_host="10.0.0.12")
+        create = _make_request(path="/auth/admin/teacher/create", client_host="10.0.0.12")
+
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(general, call_next)).status_code, 200)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(general, call_next)).status_code, 429)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(login, call_next)).status_code, 200)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
+
+    def test_admin_provision_import_shares_create_bucket(self):
+        rl_mod._rpm = 100
+        rl_mod._login_rpm = 100
+        rl_mod._provision_rpm = 1
+        call_next = AsyncMock(return_value=_ok_response())
+        create = _make_request(path="/auth/admin/teacher/create", client_host="10.0.0.13")
+        imported = _make_request(path="/auth/admin/students/import", client_host="10.0.0.13")
+
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(create, call_next)).status_code, 200)
+        self.assertEqual(_run(rl_mod.rate_limit_middleware(imported, call_next)).status_code, 429)
+        self.assertIn("provision:10.0.0.13", rl_mod._buckets)
 
 
 if __name__ == "__main__":

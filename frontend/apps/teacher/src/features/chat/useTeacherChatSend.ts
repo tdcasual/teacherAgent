@@ -2,10 +2,6 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import { stripTransientPendingBubbles } from './pendingOverlay'
 import { parseInvocationInput } from './invocation'
 import { decideSkillRouting } from './requestRouting'
-import {
-  buildAnalysisTargetContextMessage,
-  buildAnalysisTargetContract,
-} from './useTeacherChatApiHelpers'
 import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
 import { readTeacherAuthSubject } from '../auth/teacherAuth'
 import { makeId } from '../../utils/id'
@@ -19,8 +15,6 @@ import type {
   Skill,
   WheelScrollZone,
 } from '../../appTypes'
-import type { AnalysisReportSummary } from '../../types/workflow'
-
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
   return toUserFacingErrorMessage(error, fallback)
 }
@@ -35,7 +29,6 @@ export type UseTeacherChatSendParams = {
   skillPinned: boolean
   activeSessionId: string
   messages: Message[]
-  selectedAnalysisTarget?: AnalysisReportSummary | null
   setComposerWarning: Dispatch<SetStateAction<string>>
   chooseSkill: (skillId: string, pinned?: boolean) => void
   setActiveSessionId: Dispatch<SetStateAction<string>>
@@ -62,7 +55,6 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
     skillPinned,
     activeSessionId,
     messages,
-    selectedAnalysisTarget,
     setComposerWarning,
     chooseSkill,
     setActiveSessionId,
@@ -92,7 +84,7 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
       if (!trimmed && attachmentRefs.length === 0) return false
       const parsedInvocation = parseInvocationInput(trimmed, {
         knownSkillIds: skillList.map((item) => item.id),
-        activeSkillId: activeSkillId || 'physics-teacher-ops',
+        activeSkillId: activeSkillId || 'teacher-assignment-ops',
       })
       let cleanedText = parsedInvocation.cleanedInput.trim()
       if (!cleanedText && attachmentRefs.length > 0) {
@@ -131,12 +123,7 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
         ]
       })
       setInput('')
-      const analysisTarget = buildAnalysisTargetContract(selectedAnalysisTarget)
-      const analysisTargetContext = buildAnalysisTargetContextMessage(selectedAnalysisTarget)
-      const contextSeed = analysisTargetContext
-        ? [...messages, { id: 'analysis_target', role: 'assistant' as const, content: analysisTargetContext, time: '' }]
-        : [...messages]
-      const contextMessages = [...contextSeed, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
+      const contextMessages = [...messages, { id: 'temp', role: 'user' as const, content: cleanedText, time: '' }]
         .slice(-40)
         .map((msg) => ({ role: msg.role, content: msg.content }))
       setSending(true)
@@ -153,7 +140,6 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
             teacher_id: teacherId || undefined,
             skill_id: routingDecision.skillIdForRequest,
             attachments: attachmentRefs.length ? attachmentRefs : undefined,
-            analysis_target: analysisTarget || undefined,
           }),
         })
         if (!res.ok) {
@@ -205,7 +191,7 @@ export function useTeacherChatSend(params: UseTeacherChatSendParams) {
     },
     [
       pendingChatJob?.job_id, skillList, activeSkillId, skillPinned, activeSessionId, messages, apiBase,
-      authToken, selectedAnalysisTarget, pendingChatJobRef,
+      authToken, pendingChatJobRef,
       setComposerWarning, chooseSkill, setActiveSessionId, setWheelScrollZone, enableAutoScroll,
       setMessages, setInput, setSending, setChatQueueHint, setPendingStreamStage, setPendingToolRuns, setExecutionTimeline, setPendingChatJob,
     ],

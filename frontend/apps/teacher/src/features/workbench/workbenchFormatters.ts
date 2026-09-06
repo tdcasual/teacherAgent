@@ -1,7 +1,5 @@
 import type {
   AssignmentProgress,
-  ExamUploadDraft,
-  ExamUploadJobStatus,
   UploadDraft,
   UploadJobStatus,
 } from '../../appTypes'
@@ -58,80 +56,6 @@ export const formatUploadJobStatus = (job: UploadJobStatus) => {
     lines.push(`题目预览：\n${previews}`)
   }
   return lines.join('\n')
-}
-
-export const formatExamJobStatus = (job: ExamUploadJobStatus) => {
-  const lines: string[] = []
-  const statusMap: Record<string, string> = {
-    queued: '排队中',
-    processing: '解析中',
-    done: '解析完成（待确认）',
-    failed: '解析失败',
-    confirmed: '已创建考试',
-    confirming: '确认中',
-    cancelled: '已取消',
-  }
-  lines.push(`解析状态：${statusMap[job.status] || job.status}`)
-  if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
-  if (job.exam_id) lines.push(`考试编号：${job.exam_id}`)
-  if (job.counts?.students !== undefined) lines.push(`学生数：${job.counts.students}`)
-  if (job.counts?.questions !== undefined) lines.push(`题目数：${job.counts.questions}`)
-  if (job.scoring?.status) {
-    const scoreMap: Record<string, string> = { scored: '已评分', partial: '部分已评分', unscored: '未评分' }
-    const label = scoreMap[job.scoring.status] || job.scoring.status
-    const sTotal = job.scoring.students_total ?? job.counts?.students
-    const sScored = job.scoring.students_scored ?? job.counts_scored?.students
-    if (sTotal !== undefined && sScored !== undefined) lines.push(`评分：${label}（已评分学生 ${sScored}/${sTotal}）`)
-    else lines.push(`评分：${label}`)
-    const defaults = Array.isArray(job.scoring.default_max_score_qids) ? job.scoring.default_max_score_qids.length : 0
-    if (defaults) lines.push(`提示：有 ${defaults} 题缺少满分，系统已默认按 1 分/题 评分（建议在草稿里核对满分）。`)
-  }
-  if (job.error) lines.push(`错误：${job.error}`)
-  if (job.error_detail) lines.push(`详情：${job.error_detail}`)
-  if (Array.isArray(job.hints) && job.hints.length) lines.push(`建议：${job.hints.join('；')}`)
-  if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
-  if (job.needs_confirm) lines.push('提示：成绩映射置信度不足，请先在草稿中确认物理分映射列。')
-  return lines.join('\n')
-}
-
-export const formatExamJobSummary = (job: ExamUploadJobStatus | null, fallbackExamId?: string) => {
-  if (!job) return `未开始解析${fallbackExamId ? ` · 考试编号：${fallbackExamId}` : ''}`
-  const statusMap: Record<string, string> = {
-    queued: '排队中',
-    processing: '解析中',
-    done: '解析完成（待确认）',
-    failed: '解析失败',
-    confirmed: '已创建',
-    confirming: '确认中',
-    cancelled: '已取消',
-  }
-  const parts: string[] = []
-  parts.push(`状态：${statusMap[job.status] || job.status}`)
-  if (job.progress !== undefined) parts.push(`${job.progress}%`)
-  parts.push(`考试编号：${job.exam_id || fallbackExamId || job.job_id}`)
-  if (job.counts?.students !== undefined) parts.push(`学生：${job.counts.students}`)
-  if (job.counts?.questions !== undefined) parts.push(`题目：${job.counts.questions}`)
-  if (job.scoring?.status) {
-    const scoreMap: Record<string, string> = { scored: '已评分', partial: '部分已评分', unscored: '未评分' }
-    parts.push(`评分：${scoreMap[job.scoring.status] || job.scoring.status}`)
-  }
-  if (job.needs_confirm) parts.push('待确认映射')
-  if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
-  return parts.join(' · ')
-}
-
-export const formatExamDraftSummary = (draft: ExamUploadDraft | null, jobInfo: ExamUploadJobStatus | null) => {
-  if (!draft) return ''
-  const parts: string[] = []
-  parts.push(`考试编号：${draft.exam_id}`)
-  if (draft.meta?.date) parts.push(String(draft.meta.date))
-  if (draft.meta?.class_name) parts.push(String(draft.meta.class_name))
-  if (draft.counts?.students !== undefined) parts.push(`学生：${draft.counts.students}`)
-  if (draft.counts?.questions !== undefined) parts.push(`题目：${draft.counts.questions}`)
-  if (draft.needs_confirm || draft.score_schema?.needs_confirm) parts.push('待确认映射')
-  if (jobInfo?.status === 'confirmed') parts.push('已创建')
-  else if (jobInfo?.status === 'done') parts.push('待创建')
-  return parts.join(' · ')
 }
 
 export const formatUploadJobSummary = (job: UploadJobStatus | null, fallbackAssignmentId?: string) => {

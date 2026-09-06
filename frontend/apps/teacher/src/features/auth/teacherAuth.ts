@@ -8,6 +8,7 @@ type TeacherAuthSubject = {
   teacher_id: string
   teacher_name: string
   email?: string
+  role?: string
 }
 
 export const readTeacherAccessToken = (): string =>
@@ -22,10 +23,12 @@ export const readTeacherAuthSubject = (): TeacherAuthSubject | null => {
     if (!teacherId) return null
     const teacherName = String(parsed?.teacher_name || '').trim() || teacherId
     const email = String(parsed?.email || '').trim()
+    const role = String(parsed?.role || '').trim()
     return {
       teacher_id: teacherId,
       teacher_name: teacherName,
       ...(email ? { email } : {}),
+      ...(role ? { role } : {}),
     }
   } catch {
     return null
@@ -42,18 +45,30 @@ export const writeTeacherAuthSession = (params: {
   teacherId: string
   teacherName: string
   email?: string
+  role?: string
 }): void => {
   const accessToken = String(params.accessToken || '').trim()
   const teacherId = String(params.teacherId || '').trim()
   if (!accessToken || !teacherId) return
   const teacherName = String(params.teacherName || '').trim() || teacherId
   const email = String(params.email || '').trim()
+  const role = String(params.role || '').trim()
   safeLocalStorageSetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, accessToken)
   safeLocalStorageSetItem(
     TEACHER_AUTH_SUBJECT_KEY,
-    JSON.stringify({ teacher_id: teacherId, teacher_name: teacherName, ...(email ? { email } : {}) }),
+    JSON.stringify({
+      teacher_id: teacherId,
+      teacher_name: teacherName,
+      ...(email ? { email } : {}),
+      ...(role ? { role } : {}),
+    }),
   )
   emitTeacherAuthUpdated()
+}
+
+export const readTeacherAuthRole = (): string => {
+  const role = String(readTeacherAuthSubject()?.role || '').trim().toLowerCase()
+  return role || 'teacher'
 }
 
 export const clearTeacherAuthSession = (): void => {

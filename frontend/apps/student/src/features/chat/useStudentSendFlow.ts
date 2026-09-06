@@ -2,7 +2,8 @@ import { useCallback, type FormEvent, type MutableRefObject } from 'react'
 import { makeId } from '../../../../shared/id'
 import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
 import { nowTime } from '../../../../shared/time'
-import type { AssignmentDetail, ChatStartResult, Message, PendingChatJob, VerifiedStudent } from '../../appTypes'
+import type { ChatStartResult, Message, PendingChatJob, StudentHistorySession, VerifiedStudent } from '../../appTypes'
+import { assignmentIdForStudentSend } from './studentSendAssignment'
 import { stripTransientPendingBubbles } from './pendingOverlay'
 import { parsePendingChatJobFromStorage } from './pendingChatJob'
 import { withStudentSendLock } from './sendLock'
@@ -12,7 +13,8 @@ type UseStudentSendFlowParams = {
   input: string
   messages: Message[]
   activeSessionId: string
-  todayAssignment: AssignmentDetail | null
+  selectedAssignmentId: string
+  sessions: StudentHistorySession[]
   verifiedStudent: VerifiedStudent | null
   pendingChatJob: PendingChatJob | null
   attachments: Array<{ attachment_id: string }>
@@ -48,7 +50,8 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
     input,
     messages,
     activeSessionId,
-    todayAssignment,
+    selectedAssignmentId,
+    sessions,
     verifiedStudent,
     pendingChatJob,
     attachments,
@@ -141,10 +144,16 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
         if (await syncPendingFromStorage({ verifyRemote: true })) return
 
         startedSubmission = true
-        const sessionId = activeSessionId || todayAssignment?.assignment_id || `general_${todayDate()}`
+        const sessionId = activeSessionId || `general_${todayDate()}`
         if (!activeSessionId) setActiveSession(sessionId)
         const requestId = `schat_${studentId}_${Date.now()}_${Math.random().toString(16).slice(2)}`
         const placeholderId = `asst_${Date.now()}_${Math.random().toString(16).slice(2)}`
+        const sessionAssignmentId = String(sessions.find((item) => item.session_id === sessionId)?.assignment_id || '').trim()
+        const assignmentId = assignmentIdForStudentSend({
+          sessionId,
+          selectedAssignmentId,
+          sessionAssignmentId,
+        })
 
         setMessages((prev) => {
           const next = stripTransientPendingBubbles(prev)
@@ -162,12 +171,6 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
 
         setSending(true)
         try {
-          const inferredAssignmentId =
-            sessionId && !sessionId.startsWith('general_')
-              ? sessionId
-              : todayAssignment?.assignment_id && sessionId === todayAssignment.assignment_id
-                ? todayAssignment.assignment_id
-                : undefined
           const res = await fetch(`${apiBase}/chat/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -177,7 +180,7 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
               messages: contextMessages,
               role: 'student',
               student_id: studentId,
-              assignment_id: inferredAssignmentId,
+              assignment_id: assignmentId,
               assignment_date: todayDate(),
               attachments: attachmentRefs.length ? attachmentRefs : undefined,
             }),
@@ -225,7 +228,8 @@ export function useStudentSendFlow(params: UseStudentSendFlowParams) {
       attachments,
       pendingChatKeyPrefix,
       activeSessionId,
-      todayAssignment,
+      selectedAssignmentId,
+      sessions,
       todayDate,
       onSendSuccess,
       messages,

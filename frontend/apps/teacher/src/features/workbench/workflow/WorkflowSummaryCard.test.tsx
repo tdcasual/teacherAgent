@@ -20,12 +20,8 @@ const baseProps = (): WorkflowSummaryCardProps => ({
       { key: 'confirm', label: '创建作业', state: 'todo' },
     ],
   },
-  uploadMode: 'assignment',
-  setUploadMode: () => undefined,
   uploadJobInfo: null,
   uploadAssignmentId: 'HW-20260314',
-  examJobInfo: null,
-  examId: '',
   progressData: null,
   progressAssignmentId: '',
   progressLoading: false,
@@ -33,7 +29,6 @@ const baseProps = (): WorkflowSummaryCardProps => ({
   refreshWorkflowWorkbench: vi.fn(),
   fetchAssignmentProgress: async () => undefined,
   formatUploadJobSummary: () => '状态：解析完成（待确认） · 作业编号：HW-20260314',
-  formatExamJobSummary: () => '状态：未开始',
   formatProgressSummary: () => '暂无完成情况',
 })
 

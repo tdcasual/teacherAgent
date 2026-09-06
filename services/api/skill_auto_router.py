@@ -4,11 +4,12 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .skills.auto_route_rules import score_role_skill
 from .skills.loader import load_skills
-from .skills.router import default_skill_id_for_role
+from .skills.product import is_visible_skill
+from .skills.router import canonicalize_skill_id, default_skill_id_for_role
 
 _log = logging.getLogger(__name__)
 
@@ -19,12 +20,12 @@ _CE_ID_RE = re.compile(r"\bCE\d+\b", flags=re.I)
 _SINGLE_STUDENT_RE = re.compile(r"(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))")
 _NEGATION_CUES = ("不要", "不是", "不做", "不生成", "不布置", "不用", "无需", "别", "不")
 _TIE_BREAK_ORDER = [
-    "physics-homework-generator",
+    "homework-generator",
     "physics-lesson-capture",
     "physics-core-examples",
     "physics-student-focus",
-    "physics-student-coach",
-    "physics-teacher-ops",
+    "student-coach",
+    "teacher-assignment-ops",
 ]
 _TIE_BREAK_INDEX = {skill_id: idx for idx, skill_id in enumerate(_TIE_BREAK_ORDER)}
 
@@ -143,7 +144,8 @@ def _score_intent_matches(intents: List[str], text: str, *, assignment_intent: b
     intent_rules = (
         ("student_focus", ("学生", "画像", "诊断"), 4),
         ("core_examples", ("例题", "变式题"), 4),
-        ("teacher_ops", ("考试", "讲评", "备课"), 3),
+        ("teacher_ops", ("未交", "逾期", "进度", "谁没交"), 3),
+        ("assignment_ops", ("未交", "逾期", "进度", "谁没交"), 3),
         ("student_coach", ("开始作业", "开始练习", "讲解错题"), 4),
     )
     for intent_name, markers, delta in intent_rules:
@@ -274,7 +276,7 @@ def _requested_reason_prefix(
 
 def _resolution_mode(reason: str) -> str:
     normalized = str(reason or '').strip()
-    if normalized == 'explicit':
+    if normalized in {'explicit', 'skill_id_aliased'}:
         return 'explicit'
     if 'auto_rule' in normalized and not normalized.endswith('_default'):
         return 'auto'
@@ -436,26 +438,35 @@ def resolve_effective_skill(
     requested_skill_id: Optional[str],
     last_user_text: str,
     detect_assignment_intent: Optional[Callable[[str], bool]] = None,
+    extra_skill_ids: Optional[Iterable[str]] = None,
 ) -> Dict[str, Any]:
     loaded = load_skills(app_root / "skills")
     skills = dict(loaded.skills or {})
     role = str(role_hint or "").strip()
     text = str(last_user_text or "").strip().lower()
     load_errors = len(loaded.errors or [])
+    extra_ids = extra_skill_ids or ()
 
-    available_ids = sorted([skill_id for skill_id, spec in skills.items() if _role_allowed(spec, role)])
+    available_ids = sorted(
+        [
+            skill_id
+            for skill_id, spec in skills.items()
+            if is_visible_skill(skill_id, extra_skill_ids=extra_ids) and _role_allowed(spec, role)
+        ]
+    )
     default_skill_id = _default_from_available(role, available_ids)
 
-    requested = str(requested_skill_id or "").strip()
+    raw_requested = str(requested_skill_id or "").strip()
+    requested, aliased = canonicalize_skill_id(raw_requested)
     requested_valid, requested_exists, requested_allowed = _requested_state(requested, skills, available_ids)
 
     if requested and requested_valid and requested_allowed:
         return _with_resolution_metadata({
-            "requested_skill_id": requested,
+            "requested_skill_id": raw_requested,
             "effective_skill_id": requested,
-            "reason": "explicit",
+            "reason": "skill_id_aliased" if aliased else "explicit",
             "confidence": 1.0,
-            "matched_rule": "explicit",
+            "matched_rule": "skill_id_aliased" if aliased else "explicit",
             "candidates": [],
             "best_score": 0,
             "second_score": 0,

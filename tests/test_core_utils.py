@@ -12,10 +12,12 @@ from services.api.core_utils import (
     _non_ws_len,
     _percentile,
     _resolve_app_path,
+    _safe_int_arg,
     _score_band_label,
     count_csv_rows,
     normalize,
     normalize_due_at,
+    normalize_excel_cell,
     resolve_scope,
     run_script,
     safe_slug,
@@ -177,3 +179,26 @@ def test_run_script_uses_env_timeout(monkeypatch, tmp_path: Path):
         out = run_script(["python3", "-V"])
     assert out == "ok"
     assert captured["timeout"] == 42
+
+
+def test_safe_int_arg_normal():
+    assert _safe_int_arg(5, default=10, minimum=1, maximum=20) == 5
+
+
+def test_safe_int_arg_below_min():
+    assert _safe_int_arg(-5, default=10, minimum=1, maximum=20) == 1
+
+
+def test_safe_int_arg_above_max():
+    assert _safe_int_arg(100, default=10, minimum=1, maximum=20) == 20
+
+
+def test_safe_int_arg_non_int():
+    assert _safe_int_arg("xyz", default=10, minimum=1, maximum=20) == 10
+
+
+def test_normalize_excel_cell_variants():
+    assert normalize_excel_cell(None) == ""
+    assert normalize_excel_cell("12.0") == "12"
+    assert normalize_excel_cell("  3.5  ") == "3.5"
+    assert normalize_excel_cell(7) == "7"

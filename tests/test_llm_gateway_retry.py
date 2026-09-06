@@ -111,9 +111,9 @@ providers:
                 "",
                 'data: {"choices":[{"delta":{"content":"world"}}]}',
                 "",
-                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"exam.get","arguments":"{\\"exam_id\\":\\""}}]}}]}',
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"assignment.list","arguments":"{\\"owner\\":\\""}}]}}]}',
                 "",
-                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"EX001\\"}"}}]},"finish_reason":"tool_calls"}]}',
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"t1\\"}"}}]},"finish_reason":"tool_calls"}]}',
                 "",
                 "data: [DONE]",
                 "",
@@ -135,8 +135,8 @@ providers:
             self.assertEqual(len(resp.tool_calls), 1)
             self.assertEqual(resp.tool_calls[0].get("id"), "call_1")
             func = resp.tool_calls[0].get("function") or {}
-            self.assertEqual(func.get("name"), "exam.get")
-            self.assertEqual(func.get("arguments"), '{"exam_id":"EX001"}')
+            self.assertEqual(func.get("name"), "assignment.list")
+            self.assertEqual(func.get("arguments"), '{"owner":"t1"}')
 
     def test_generate_stream_openai_chat_decodes_utf8_without_mojibake(self):
         with tempfile.TemporaryDirectory() as d:

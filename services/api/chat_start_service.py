@@ -4,8 +4,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from .analysis_target_resolution_service import extract_report_id_from_text
 from .chat_execution_timeline_service import append_chat_execution_timeline
+from .paths import TeacherIdentityError
 from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class ChatStartDeps:
     append_chat_event: Callable[[str, str, Dict[str, Any]], Dict[str, Any]] = (
         lambda _job_id, _event_type, _payload: {}
     )
+    load_student_sessions_index: Callable[..., List[Dict[str, Any]]] = lambda *_a, **_k: []
 
 
 @dataclass(frozen=True)
@@ -73,88 +74,6 @@ def _extract_attachment_ids(req: Any) -> List[str]:
         ids.append(value)
         seen.add(value)
     return ids
-
-def _extract_recent_analysis_target_id(messages: Any) -> str:
-    if not isinstance(messages, list):
-        return ''
-    history = messages[:-1] if messages else []
-    for item in reversed(history):
-        if not isinstance(item, dict):
-            continue
-        target_id = extract_report_id_from_text(item.get('content'))
-        if target_id:
-            return target_id
-    return ''
-
-
-_ANALYSIS_TARGET_KEYS = (
-    'target_type',
-    'target_id',
-    'report_id',
-    'source_domain',
-    'domain',
-    'artifact_type',
-    'teacher_id',
-    'strategy_id',
-)
-
-
-def _analysis_target_raw_payload(raw_target: Any) -> Dict[str, Any]:
-    if isinstance(raw_target, dict):
-        return dict(raw_target)
-    model_dump = getattr(raw_target, 'model_dump', None)
-    if callable(model_dump):
-        dumped = model_dump(exclude_none=True)
-        return dict(dumped) if isinstance(dumped, dict) else {}
-    return {
-        key: getattr(raw_target, key, None)
-        for key in _ANALYSIS_TARGET_KEYS
-        if getattr(raw_target, key, None) is not None
-    }
-
-
-def _first_non_empty_value(raw: Dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = str(raw.get(key) or '').strip()
-        if value:
-            return value
-    return ''
-
-
-def _set_optional_analysis_field(
-    normalized: Dict[str, Any],
-    raw: Dict[str, Any],
-    target_key: str,
-    *source_keys: str,
-) -> None:
-    value = _first_non_empty_value(raw, *source_keys)
-    if value:
-        normalized[target_key] = value
-
-
-def _normalize_analysis_target_payload(raw_target: Any) -> Optional[Dict[str, Any]]:
-    if raw_target is None:
-        return None
-    raw = _analysis_target_raw_payload(raw_target)
-    target_id = _first_non_empty_value(raw, 'target_id', 'report_id')
-    if not target_id:
-        return None
-    target_type = _first_non_empty_value(raw, 'target_type') or 'report'
-    report_id = _first_non_empty_value(raw, 'report_id')
-    if target_type == 'report' and not report_id:
-        report_id = target_id
-
-    normalized: Dict[str, Any] = {
-        'target_type': target_type,
-        'target_id': target_id,
-    }
-    _set_optional_analysis_field(normalized, raw, 'source_domain', 'source_domain', 'domain')
-    _set_optional_analysis_field(normalized, raw, 'artifact_type', 'artifact_type')
-    if report_id:
-        normalized['report_id'] = report_id
-    _set_optional_analysis_field(normalized, raw, 'strategy_id', 'strategy_id')
-    _set_optional_analysis_field(normalized, raw, 'teacher_id', 'teacher_id')
-    return normalized
 
 
 def _persist_execution_timeline(job_id: str, event: Dict[str, Any], deps: ChatStartDeps) -> None:
@@ -198,6 +117,15 @@ def _validate_start_request(req: Any, deps: ChatStartDeps) -> str:
     return request_id
 
 
+def _start_teacher_id(req: Any, policy: Any, deps: ChatStartDeps) -> str:
+    if policy.role != "teacher":
+        return ""
+    try:
+        return deps.resolve_teacher_id(req.teacher_id)
+    except (TeacherIdentityError, ValueError) as exc:
+        raise deps.http_error(400, str(exc) or "teacher_id_required") from exc
+
+
 def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _StartContext:
     role_hint = deps.detect_role_hint(req)
     policy = get_role_runtime_policy(role_hint)
@@ -208,7 +136,7 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         )
     if policy.default_session_id and not session_id:
         session_id = policy.default_session_id
-    teacher_id = deps.resolve_teacher_id(req.teacher_id) if policy.role == "teacher" else ""
+    teacher_id = _start_teacher_id(req, policy, deps)
     lane_id = deps.resolve_chat_lane_id(
         role_hint,
         session_id=session_id,
@@ -224,13 +152,7 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
         "student_id": req.student_id,
         "assignment_id": req.assignment_id,
         "assignment_date": req.assignment_date,
-        "auto_generate_assignment": req.auto_generate_assignment,
     }
-    analysis_target = _normalize_analysis_target_payload(getattr(req, 'analysis_target', None))
-    if analysis_target is not None:
-        if policy.role == 'teacher' and teacher_id and not str(analysis_target.get('teacher_id') or '').strip():
-            analysis_target['teacher_id'] = teacher_id
-        req_payload['analysis_target'] = analysis_target
     attachment_ids = _extract_attachment_ids(req)
     attachment_payload = deps.resolve_chat_attachment_context(
         role=role_hint,
@@ -248,15 +170,11 @@ def _resolve_start_context(req: Any, request_id: str, deps: ChatStartDeps) -> _S
     req_payload["attachments"] = [{"attachment_id": aid} for aid in attachment_ids]
     req_payload["attachment_context"] = attachment_context
     last_user_text = deps.chat_last_user_text(req_payload.get("messages"))
-    analysis_target_id = str((analysis_target or {}).get('target_id') or '').strip()
-    if not analysis_target_id:
-        analysis_target_id = _extract_recent_analysis_target_id(req_payload.get('messages'))
     fingerprint_seed = "|".join(
         [
             str(req_payload.get("skill_id") or "").strip(),
             str(req_payload.get("assignment_id") or "").strip(),
             str(last_user_text or ""),
-            str(analysis_target_id or ''),
             ",".join(attachment_ids),
         ]
     )
@@ -454,6 +372,49 @@ def _enqueue_and_finalize_start(
     }
 
 
+def _is_free_ask_session(session_id: Optional[str]) -> bool:
+    sid = str(session_id or "").strip()
+    return sid.startswith("general_") or sid.startswith("free-ask") or sid.startswith("free_ask")
+
+
+def _existing_student_session(
+    student_id: str, session_id: str, deps: ChatStartDeps
+) -> Optional[Dict[str, Any]]:
+    sid = str(student_id or "").strip()
+    wanted = str(session_id or "").strip()
+    if not sid or not wanted:
+        return None
+    try:
+        items = deps.load_student_sessions_index(sid)
+    except Exception:  # policy: allowed-broad-except
+        _log.warning("failed to load student session index for assignment binding", exc_info=True)
+        return None
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and str(item.get("session_id") or "").strip() == wanted:
+            return item
+    return None
+
+
+def _student_assignment_unbound(req: Any, context: _StartContext, deps: ChatStartDeps) -> bool:
+    if str(context.role_hint or "").strip() != "student":
+        return False
+    session_id = str(context.session_id or "").strip()
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    if _is_free_ask_session(session_id):
+        return False
+    existing = _existing_student_session(str(getattr(req, "student_id", "") or ""), session_id, deps)
+    if existing is not None:
+        stored = str(existing.get("assignment_id") or "").strip()
+        if stored:
+            return False
+        return True
+    if assignment_id:
+        return False
+    raise deps.http_error(400, "assignment_id_required")
+
+
 def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]:
     request_id = _validate_start_request(req, deps)
 
@@ -462,6 +423,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
         return existing_response
 
     context = _resolve_start_context(req, request_id, deps)
+    unbound = _student_assignment_unbound(req, context, deps)
     recent_response = _lookup_recent_dedup(request_id, context, deps)
     if recent_response is not None:
         return recent_response
@@ -481,4 +443,7 @@ def start_chat_orchestration(req: Any, *, deps: ChatStartDeps) -> Dict[str, Any]
     if prewrite_result is not None:
         return prewrite_result
 
-    return _enqueue_and_finalize_start(job_id, context, deps)
+    result = _enqueue_and_finalize_start(job_id, context, deps)
+    if unbound:
+        result["assignment_unbound"] = True
+    return result

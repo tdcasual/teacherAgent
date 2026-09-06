@@ -11,7 +11,7 @@ _log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ChatSupportDeps:
-    compile_system_prompt: Callable[[Optional[str]], Any]
+    compile_system_prompt: Callable[..., Any]
     diag_log: Callable[..., None]
     getenv: Callable[[str, Optional[str]], Optional[str]]
 
@@ -239,9 +239,14 @@ def normalize_math_delimiters(text: str) -> str:
     )
 
 
-def build_system_prompt(role_hint: Optional[str], *, deps: ChatSupportDeps) -> str:
+def build_system_prompt(
+    role_hint: Optional[str],
+    *,
+    deps: ChatSupportDeps,
+    overlay: Optional[str] = None,
+) -> str:
     try:
-        prompt, modules = deps.compile_system_prompt(role_hint)
+        prompt, modules = deps.compile_system_prompt(role_hint, overlay=overlay)
         deps.diag_log(
             "prompt.compiled",
             {
@@ -275,21 +280,17 @@ def build_system_prompt(role_hint: Optional[str], *, deps: ChatSupportDeps) -> s
 def allowed_tools(role_hint: Optional[str]) -> Set[str]:
     if role_hint == "teacher":
         return {
-            "exam.list",
-            "exam.get",
-            "exam.analysis.get",
-            "exam.analysis.charts.generate",
-            "exam.students.list",
-            "exam.student.get",
-            "exam.question.get",
-            "exam.range.top_students",
-            "exam.range.summary.batch",
-            "exam.question.batch.get",
-            "analysis.report.list",
-            "analysis.report.get",
-            "analysis.report.rerun",
-            "analysis.review.list",
             "assignment.list",
+            "assignment.progress",
+            "assignment.missing",
+            "assignment.overdue",
+            "assignment.attempt.get",
+            "assignment.publish",
+            "assignment.archive",
+            "assignment.unarchive",
+            "assignment.recompute_roster",
+            "assignment.my_today",
+            "assignment.my_result",
             "lesson.list",
             "lesson.capture",
             "student.search",
@@ -309,6 +310,11 @@ def allowed_tools(role_hint: Optional[str]) -> Set[str]:
             "teacher.memory.search",
             "teacher.memory.propose",
             "teacher.memory.apply",
+        }
+    if role_hint == "student":
+        return {
+            "assignment.my_today",
+            "assignment.my_result",
         }
     return set()
 
@@ -334,27 +340,3 @@ def extract_min_chars_requirement(text: str) -> Optional[int]:
         if value > 0:
             return value
     return None
-
-
-_EXAM_ID_RE = re.compile(r"(?<![0-9A-Za-z_-])(EX[0-9A-Za-z_-]{3,})(?![0-9A-Za-z_-])")
-
-
-def extract_exam_id(text: str) -> Optional[str]:
-    if not text:
-        return None
-    match = _EXAM_ID_RE.search(text)
-    if match:
-        return match.group(1)
-    match = re.search(r"exam[_\s-]*id\s*=?\s*(EX[0-9A-Za-z_-]+)", text, flags=re.I)
-    if match:
-        return match.group(1)
-    return None
-
-
-def is_exam_analysis_request(text: str) -> bool:
-    text = (text or "").strip()
-    if not text:
-        return False
-    if any(key in text for key in ("考试分析", "分析考试", "exam.analysis", "exam.analysis.get")):
-        return True
-    return ("考试" in text) and ("分析" in text)

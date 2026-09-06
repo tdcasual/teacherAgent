@@ -30,18 +30,18 @@ const studentLoopCases: MatrixCase[] = [
   {
     id: 'I004',
     priority: 'P0',
-    title: 'Student multi-image submit returns grading summary',
+    title: 'Student multi-image submit returns official score',
     given: '/student/submit endpoint is available',
     when: 'Upload multiple homework images',
-    then: 'Response includes grading summary',
+    then: 'Response includes submitted=true and official_score',
   },
   {
     id: 'I005',
     priority: 'P0',
-    title: 'Auto assignment mode selects latest eligible assignment',
+    title: 'Auto assignment mode is rejected',
     given: 'auto_assignment flag is true',
     when: 'Submit without explicit assignment id',
-    then: 'Server resolves and records nearest eligible assignment',
+    then: 'Server returns 400 auto_assignment_disabled',
   },
   {
     id: 'I006',
@@ -128,17 +128,22 @@ test('student shell defaults to today-first home and enters chat on primary acti
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        ok: true,
-        assignment: {
-          assignment_id: 'A-TODAY-001',
-          date: '2026-03-14',
-          question_count: 6,
-          meta: { target_kp: ['力学'] },
-          delivery: {
-            mode: 'files',
-            files: [{ name: '练习题.pdf', url: '/files/assignment.pdf' }],
+        date: '2026-03-14',
+        assignments: [
+          {
+            assignment_id: 'A-TODAY-001',
+            teacher_id: 't_zhang',
+            subject_id: 'physics',
+            title: '今日练习',
+            due_at: '2026-03-14T23:59:59',
+            progress: {
+              submitted: false,
+              overdue: false,
+              official_score: null,
+              process_archive_status: 'none',
+            },
           },
-        },
+        ],
       }),
     })
   })
@@ -146,7 +151,7 @@ test('student shell defaults to today-first home and enters chat on primary acti
   await page.goto('/')
   await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
   await expect(page.getByTestId('student-today-home')).toBeVisible()
-  await expect(page.getByRole('button', { name: '进入任务' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '进入任务' }).first()).toBeVisible()
   await expect(page.getByText('今日主线')).toHaveCount(0)
   await expect(page.getByText('TODAY FIRST')).toHaveCount(0)
   await expect(page.getByText('辅助区')).toHaveCount(0)
@@ -158,10 +163,87 @@ test('student shell defaults to today-first home and enters chat on primary acti
   await expect(page.getByRole('button', { name: '会话' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '今日任务', exact: true })).toHaveCount(0)
 
-  await page.getByRole('button', { name: '进入任务' }).click()
+  await expect(page.getByRole('button', { name: '提交作业' }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '作业记录' })).toBeVisible()
+  await page.getByRole('button', { name: '进入任务' }).first().click()
   await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('聊天')
   await expect(page.getByTestId('student-chat-panel')).toBeVisible()
   await expect(page.getByRole('button', { name: '发送' })).toBeVisible()
+  await expect(page.getByText('对话不会记为提交').first()).toBeVisible()
+  await page.getByRole('button', { name: '提交作业' }).click()
+  await expect(page.getByTestId('student-submit-panel')).toBeVisible()
+  await expect(page.locator('.mobile-tabbar-button.active .mobile-tabbar-label')).toHaveText('学习')
+  await expect(page.getByTestId('student-chat-panel')).toHaveCount(0)
+})
+
+test('student submit panel requires assignment files and history is not session sidebar', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.route('http://localhost:8000/assignment/today**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        date: '2026-03-14',
+        assignments: [
+          {
+            assignment_id: 'A-TODAY-001',
+            teacher_id: 't_zhang',
+            subject_id: 'physics',
+            title: '今日练习',
+            due_at: '2026-03-14T23:59:59',
+            progress: { submitted: false, overdue: false, official_score: null, process_archive_status: 'none' },
+          },
+        ],
+      }),
+    })
+  })
+  await page.route('http://localhost:8000/student/assignments/history**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        assignments: [
+          {
+            assignment_id: 'A-TODAY-001',
+            teacher_id: 't_zhang',
+            subject_id: 'physics',
+            title: '今日练习',
+            due_at: '2026-03-14T23:59:59',
+            visibility_status: 'published',
+            submitted: false,
+            official_score: null,
+          },
+        ],
+      }),
+    })
+  })
+  await page.route('http://localhost:8000/student/submit', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        submitted: false,
+        assignment_id: 'A-TODAY-001',
+        reason: 'min_graded_total',
+        official_score: null,
+      }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.getByTestId('student-today-home')).toBeVisible()
+  await page.getByRole('button', { name: '作业记录' }).click()
+  await expect(page.getByTestId('student-assignment-history-page')).toBeVisible()
+  await expect(page.getByRole('button', { name: '补交 今日练习' })).toBeVisible()
+
+  await page.getByRole('button', { name: '返回今日' }).click()
+  await page.getByRole('button', { name: '提交作业' }).click()
+  await expect(page.getByTestId('student-submit-panel')).toBeVisible()
+  const fileInput = page.getByLabel('选择提交文件')
+  await fileInput.setInputFiles({ name: 'blank.pdf', mimeType: 'application/pdf', buffer: Buffer.from('x') })
+  await page.getByRole('button', { name: '提交作业' }).click()
+  await expect(page.getByTestId('student-submit-not-counted')).toContainText('未记为提交')
 })
 
 const implementations: Partial<Record<string, MatrixCaseRunner>> = {
@@ -291,12 +373,10 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         contentType: 'application/json',
         body: JSON.stringify({
           ok: true,
+          submitted: true,
           assignment_id: 'A-ACCESSIBLE-001',
-          grading: {
-            score_earned: 78,
-            score_total: 100,
-            graded_pages: 2,
-          },
+          attempt_id: 'submission_ok',
+          official_score: 78,
         }),
       })
     })
@@ -316,24 +396,19 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     })
 
     expect(data.ok).toBe(true)
-    expect(data.grading.score_earned).toBe(78)
-    expect(data.grading.graded_pages).toBe(2)
+    expect(data.submitted).toBe(true)
+    expect(data.official_score).toBe(78)
+    expect(data.attempt_id).toBe('submission_ok')
   },
 
   I005: async ({ page }) => {
     await page.goto('/')
 
     await page.route('http://localhost:8000/student/submit', async (route) => {
-      const bodyText = route.request().postData() || ''
-      expect(bodyText).toContain('auto_assignment')
       await route.fulfill({
-        status: 200,
+        status: 400,
         contentType: 'application/json',
-        body: JSON.stringify({
-          ok: true,
-          assignment_id: 'A-LATEST-ELIGIBLE-009',
-          auto_assignment: true,
-        }),
+        body: JSON.stringify({ detail: 'auto_assignment_disabled' }),
       })
     })
 
@@ -347,12 +422,11 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
         method: 'POST',
         body: form,
       })
-      return res.json()
+      return { status: res.status, body: await res.json() }
     })
 
-    expect(data.ok).toBe(true)
-    expect(data.assignment_id).toBe('A-LATEST-ELIGIBLE-009')
-    expect(data.auto_assignment).toBe(true)
+    expect(data.status).toBe(400)
+    expect(data.body.detail).toBe('auto_assignment_disabled')
   },
 
   I006: async ({ page }) => {

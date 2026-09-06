@@ -1,0 +1,74 @@
+id: teacher-assignment-ops
+schema_version: 2
+title: 作业运营
+desc: 作业进度、未交/逾期名单与发布归档
+allowed_roles: [teacher]
+routing:
+  intents: [teacher_ops, assignment_ops]
+  keywords:
+    - 未交
+    - 逾期
+    - 进度
+    - 谁没交
+    - 作业进度
+    - 缺交
+  negative_keywords:
+    - 模型路由
+    - 生成作业
+  keyword_weights:
+    未交: 7
+    逾期: 7
+    谁没交: 7
+    缺交: 6
+    作业进度: 6
+    进度: 4
+  min_score: 3
+  min_margin: 1
+  confidence_floor: 0.28
+  match_mode: substring
+agent:
+  prompt_modules:
+    - teacher/skills/teacher_ops.md
+  tools:
+    allow:
+      - assignment.list
+      - assignment.progress
+      - assignment.missing
+      - assignment.overdue
+      - assignment.attempt.get
+      - assignment.publish
+      - assignment.archive
+      - assignment.unarchive
+      - assignment.recompute_roster
+      - student.search
+      - student.profile.get
+      - chart.agent.run
+      - chart.exec
+  budgets:
+    max_tool_rounds: 3
+    max_tool_calls: 8
+  model_policy:
+    enabled: true
+    default:
+      provider: siliconflow
+      mode: openai-chat
+      model: deepseek-ai/DeepSeek-V3.2
+      temperature: 0.2
+    routes:
+      - id: planning_no_tools
+        priority: 180
+        match:
+          kinds: [chat.agent_no_tools]
+          needs_tools: false
+        target:
+          provider: openai
+          mode: openai-chat
+          model: gpt-4.1-mini
+          temperature: 0.2
+ui:
+  prompts:
+    - 列出今天未交作业的学生。
+  examples:
+    - 谁没交
+    - 查看作业进度
+    - 逾期名单

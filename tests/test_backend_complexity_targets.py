@@ -9,7 +9,6 @@ _TARGETS = [
     "services/api/auth_registry_service.py",
     "services/api/chart_executor.py",
     "services/api/teacher_memory_core.py",
-    "services/api/exam_upload_parse_service.py",
 ]
 
 

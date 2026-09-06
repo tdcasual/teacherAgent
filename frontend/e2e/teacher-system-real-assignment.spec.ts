@@ -65,12 +65,12 @@ const setTeacherWorkflowState = async (page: Page) => {
     localStorage.setItem('teacherSkillsOpen', 'true')
     localStorage.setItem('teacherWorkbenchTab', 'workflow')
     localStorage.setItem('teacherSkillPinned', 'false')
-    localStorage.setItem('teacherActiveSkillId', 'physics-teacher-ops')
+    localStorage.setItem('teacherActiveSkillId', 'teacher-assignment-ops')
     localStorage.setItem('apiBaseTeacher', base)
   }, { base: apiBase })
 }
 
-const readActiveUploadJobId = async (page: Page, expectedType: 'assignment' | 'exam') => {
+const readActiveUploadJobId = async (page: Page, expectedType: 'assignment') => {
   return page.evaluate((type) => {
     const raw = localStorage.getItem('teacherActiveUpload')
     if (!raw) return ''

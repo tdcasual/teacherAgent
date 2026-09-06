@@ -65,8 +65,8 @@ export default function ChatMessages({
               <div
                 className={
                   msg.role === 'assistant'
-                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-[14px] py-[12px] shadow-[0_8px_18px_rgba(15,23,42,0.05)]'
-                    : 'max-w-[var(--chat-bubble-max-width)] rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_84%,white)] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_90%,white)] px-[14px] py-[10px] shadow-none'
+                    ? 'max-w-[var(--chat-assistant-bubble-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,var(--color-surface))] px-[14px] py-[12px] shadow-[0_8px_18px_rgba(15,23,42,0.05)]'
+                    : 'max-w-[var(--chat-bubble-max-width)] rounded-[14px] border border-[color:color-mix(in_oklab,var(--color-border)_84%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-surface-soft)_90%,var(--color-surface))] px-[14px] py-[10px] shadow-none'
                 }
               >
                 <div className="text-[11px] text-muted mb-1">
@@ -78,7 +78,7 @@ export default function ChatMessages({
           ))}
           {sending && !hasPendingChatJob && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_34%,white)] py-2.5 px-3">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_34%,var(--color-surface))] py-2.5 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
                 <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">正在思考…</div>
               </div>
@@ -86,7 +86,7 @@ export default function ChatMessages({
           )}
           {hasPendingChatJob && (pendingStreamStage || pendingToolRuns.length > 0) && (
             <div className="flex">
-              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,white)] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,white)] px-3 py-2.5 grid gap-2">
+              <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,var(--color-surface))] px-3 py-2.5 grid gap-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="grid gap-[2px]">
                     <div className="text-[11px] text-muted">执行过程 · {pendingStreamStage || '处理中'}</div>
@@ -97,7 +97,7 @@ export default function ChatMessages({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,white)] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,white)]"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,var(--color-surface))] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,var(--color-surface))]"
                       disabled={failedCount === 0 && !showOnlyFailed}
                       onClick={() => setShowOnlyFailed((prev) => !prev)}
                     >
@@ -105,7 +105,7 @@ export default function ChatMessages({
                     </button>
                     <button
                       type="button"
-                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,white)] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,white)]"
+                      className="text-[11px] px-2 py-[2px] rounded border border-[color:color-mix(in_oklab,var(--color-border-strong)_70%,var(--color-surface))] bg-white text-[color:color-mix(in_oklab,var(--color-ink)_76%,var(--color-surface))]"
                       onClick={() => setProcessCollapsed((prev) => !prev)}
                     >
                       {processCollapsed ? '展开' : '收起'}
@@ -120,10 +120,10 @@ export default function ChatMessages({
                       visibleToolRuns.map((item) => {
                         const lineClass =
                           item.status === 'running'
-                            ? 'bg-warning-soft border-[color:color-mix(in_oklab,var(--color-warning)_24%,white)] text-warning'
+                            ? 'bg-warning-soft border-[color:color-mix(in_oklab,var(--color-warning)_24%,var(--color-surface))] text-warning'
                             : item.status === 'ok'
-                              ? 'bg-success-soft border-[color:color-mix(in_oklab,var(--color-success)_22%,white)] text-success'
-                              : 'bg-danger-soft border-[color:color-mix(in_oklab,var(--color-danger)_18%,white)] text-danger'
+                              ? 'bg-success-soft border-[color:color-mix(in_oklab,var(--color-success)_22%,var(--color-surface))] text-success'
+                              : 'bg-danger-soft border-[color:color-mix(in_oklab,var(--color-danger)_18%,var(--color-surface))] text-danger'
                         return (
                           <div key={item.key} className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}>
                             <div className="font-medium">{item.name}</div>

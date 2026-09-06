@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .assignment.visibility import snapshot_student_ids, student_can_read_assignment
 from .chat_job_processing.compute import _compute_reply_with_runtime_events
 from .chat_job_processing.confirm import _persist_confirmation_pause
 from .chat_job_processing.history import (
@@ -19,6 +20,7 @@ from .chat_job_state_machine import (
     normalize_chat_job_status,
     transition_chat_job_status,
 )
+from .paths import TeacherIdentityError, require_teacher_id
 
 _log = logging.getLogger(__name__)
 
@@ -43,6 +45,14 @@ def _default_resolve_teacher_workflow(
     return {}
 
 
+def _default_subject_prompt_overlay(
+    subject_id: Optional[str], role_hint: Optional[str] = None
+) -> str:
+    from .subject_pack_service import overlay_for_role
+
+    return overlay_for_role(subject_id, role_hint)
+
+
 @dataclass(frozen=True)
 class ComputeChatReplyDeps:
     detect_role: Callable[[str], Optional[str]]
@@ -55,8 +65,6 @@ class ComputeChatReplyDeps:
     data_dir: Any
     build_verified_student_context: Callable[[str, Dict[str, Any]], str]
     build_assignment_detail_cached: Callable[..., Dict[str, Any]]
-    find_assignment_for_date: Callable[..., Optional[Dict[str, Any]]]
-    parse_date_str: Callable[[Optional[str]], str]
     build_assignment_context: Callable[..., str]
     chat_extra_system_max_chars: int
     trim_messages: Callable[..., List[Dict[str, Any]]]
@@ -70,6 +78,7 @@ class ComputeChatReplyDeps:
     resolve_teacher_workflow: Callable[[Any, str, str, str], Dict[str, Any]] = (
         _default_resolve_teacher_workflow
     )
+    subject_prompt_overlay: Callable[..., str] = _default_subject_prompt_overlay
 
 
 def _resolve_assignment_dir(data_dir: Any, assignment_id: str) -> Optional[Any]:
@@ -425,7 +434,10 @@ def _teacher_extra_system(
     teacher_id_override: Optional[str],
     workflow_payload: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
-    teacher_id = deps.resolve_teacher_id(teacher_id_override or req.teacher_id)
+    try:
+        teacher_id = require_teacher_id(teacher_id_override or getattr(req, "teacher_id", None))
+    except TeacherIdentityError:
+        return None, None
     teacher_context = deps.teacher_build_context(
         teacher_id, last_user_text, 6000, str(session_id or "main")
     )
@@ -433,6 +445,21 @@ def _teacher_extra_system(
         _merge_teacher_extra_system(teacher_context, workflow_payload or {}),
         teacher_id,
     )
+
+
+def _student_can_attach_assignment(
+    detail: Optional[Dict[str, Any]], *, student_id: Optional[str], class_name: Optional[str] = None
+) -> bool:
+    del class_name
+    if not isinstance(detail, dict):
+        return False
+    meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else detail
+    if not student_can_read_assignment(meta):
+        return False
+    sid = str(student_id or "").strip()
+    if not sid:
+        return False
+    return sid in snapshot_student_ids(meta)
 
 
 def _student_extra_system(
@@ -459,16 +486,10 @@ def _student_extra_system(
         folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
         if folder and folder.exists():
             assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
-    elif req.student_id:
-        date_str = deps.parse_date_str(req.assignment_date)
-        class_name = profile.get("class_name")
-        found = deps.find_assignment_for_date(
-            date_str, student_id=req.student_id, class_name=class_name
-        )
-        if found:
-            assignment_detail = deps.build_assignment_detail_cached(
-                found["folder"], include_text=False
-            )
+    if assignment_detail and not _student_can_attach_assignment(
+        assignment_detail, student_id=req.student_id
+    ):
+        assignment_detail = None
 
     if assignment_detail and study_mode:
         extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))
@@ -489,6 +510,38 @@ def _cap_extra_system(text: Optional[str], *, max_chars: int) -> Optional[str]:
     if text and len(text) > max_chars:
         return text[:max_chars] + "…"
     return text
+
+
+def _join_extra_system(*blocks: Optional[str]) -> Optional[str]:
+    parts = [str(block).strip() for block in blocks if str(block or "").strip()]
+    return "\n\n".join(parts) or None
+
+
+def _subject_id_from_assignment_detail(detail: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(detail, dict):
+        return None
+    meta = detail.get("meta") if isinstance(detail.get("meta"), dict) else {}
+    from .subject_pack_service import pack_id_from_meta
+
+    token = pack_id_from_meta(meta)
+    return token or None
+
+
+def _resolve_chat_subject_id(
+    req: Any,
+    *,
+    deps: ComputeChatReplyDeps,
+    role_hint: Optional[str],
+) -> Optional[str]:
+    del role_hint
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    if not assignment_id:
+        return None
+    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if folder and folder.exists():
+        detail = deps.build_assignment_detail_cached(folder, include_text=False)
+        return _subject_id_from_assignment_detail(detail)
+    return None
 
 
 def _missing_student_attachment_reply(
@@ -571,6 +624,14 @@ def _build_chat_extra_system(
             last_user_text=last_user_text,
             last_assistant_text=last_assistant_text,
         )
+    overlay = str(
+        deps.subject_prompt_overlay(
+            _resolve_chat_subject_id(req, deps=deps, role_hint=role_hint),
+            role_hint,
+        )
+        or ""
+    ).strip()
+    extra_system = _join_extra_system(overlay, extra_system)
     extra_system = _with_attachment_context(extra_system, attachment_context)
     return (
         _cap_extra_system(
@@ -598,9 +659,6 @@ def _build_run_agent_kwargs(
         "teacher_id": effective_teacher_id or req.teacher_id,
         "event_sink": event_sink,
     }
-    analysis_target = getattr(req, "analysis_target", None)
-    if analysis_target is not None:
-        run_agent_kwargs["analysis_target"] = analysis_target
     if job_id:
         run_agent_kwargs["job_id"] = job_id
     if lane_id:
@@ -733,7 +791,12 @@ def compute_chat_reply_sync(
         event_sink=event_sink,
         job_id=job_id,
         lane_id=lane_id,
-        actor_id=actor_id or effective_teacher_id,
+        actor_id=actor_id
+        or (
+            str(getattr(req, "student_id", "") or "").strip()
+            if role_hint == "student"
+            else effective_teacher_id
+        ),
         initial_convo=initial_convo,
     )
     if blocked_reply:

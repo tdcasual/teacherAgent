@@ -54,6 +54,8 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByRole('button', { name: '打开工作台' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '管理' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '设置' }).className).toContain('min-h-[44px]')
+    expect(screen.getByRole('button', { name: '设置' }).className).toContain('min-w-[44px]')
     expect(screen.queryByRole('button', { name: '模型设置' })).toBeNull()
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
@@ -69,13 +71,29 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.queryByRole('button', { name: '教师认证' })).toBeNull()
   })
 
+  it('labels the shell as admin and hides workbench controls after admin login', () => {
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('admin-token')
+    vi.spyOn(teacherAuth, 'readTeacherAuthRole').mockReturnValue('admin')
+    vi.spyOn(teacherAuth, 'readTeacherAuthSubject').mockReturnValue({
+      teacher_id: 'principal_admin',
+      teacher_name: 'principal_admin',
+      role: 'admin',
+    })
+    render(<TeacherTopbar {...buildProps()} />)
+
+    expect(screen.getByText('身份：管理员')).toBeTruthy()
+    expect(screen.queryByText('身份：老师')).toBeNull()
+    expect(screen.queryByRole('button', { name: '打开工作台' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '展开会话' })).toBeNull()
+  })
+
   it('opens admin panel from desktop management button', () => {
     const props = buildProps()
     render(<TeacherTopbar {...props} />)
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
 
-    expect(screen.getByRole('dialog', { name: '教师管理面板' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: '教师管理面板' })).toBeTruthy()
     expect(screen.getByText('工具抽屉')).toBeTruthy()
   })
 
@@ -87,7 +105,7 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     fireEvent.change(screen.getByPlaceholderText('例如：张老师'), { target: { value: '李老师' } })
     fireEvent.click(screen.getByRole('button', { name: '收起' }))
 
-    expect(screen.queryByRole('dialog', { name: '教师管理面板' })).toBeNull()
+    expect(screen.queryByRole('region', { name: '教师管理面板' })).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect((screen.getByPlaceholderText('例如：张老师') as HTMLInputElement).value).toBe('李老师')
@@ -111,7 +129,8 @@ describe('TeacherTopbar desktop AI entry logo', () => {
     expect(screen.getByText('密码设置', { exact: true })).toBeTruthy()
     expect(screen.getByText('设置或更新当前账号密码。')).toBeTruthy()
     expect(screen.getByText('学生密码管理', { exact: true })).toBeTruthy()
-    expect(screen.getByText('按学生、班级或全部学生重置密码。')).toBeTruthy()
+    expect(screen.getByText('按学生或班级重置密码。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '全部学生' })).toBeNull()
   })
 
   it('associates admin form labels with their fields', () => {

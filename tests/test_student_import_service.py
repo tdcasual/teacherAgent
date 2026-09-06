@@ -46,10 +46,10 @@ class StudentImportServiceTest(unittest.TestCase):
                 now_iso=lambda: "2026-02-07T10:00:00",
             )
 
-            resolved = resolve_responses_file(None, "exports/responses.csv", deps=deps)
+            resolved = resolve_responses_file("exports/responses.csv", deps=deps)
             self.assertEqual(resolved, target.resolve())
 
-    def test_resolve_responses_file_reads_manifest_responses_path(self):
+    def test_resolve_responses_file_ignores_exam_manifest_and_uses_staging(self):
         with TemporaryDirectory() as td:
             root = Path(td)
             app_root = root / "app"
@@ -60,7 +60,7 @@ class StudentImportServiceTest(unittest.TestCase):
                 json.dumps({"files": {"responses": "data/staging/latest_responses.csv"}}, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            target = app_root / "data" / "staging" / "latest_responses.csv"
+            target = data_dir / "staging" / "latest_responses.csv"
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("student_id,student_name,class_name,exam_id\n", encoding="utf-8")
             deps = StudentImportDeps(
@@ -70,20 +70,8 @@ class StudentImportServiceTest(unittest.TestCase):
                 now_iso=lambda: "2026-02-07T10:00:00",
             )
 
-            resolved = resolve_responses_file("EX1", None, deps=deps)
+            resolved = resolve_responses_file(None, deps=deps)
             self.assertEqual(resolved, target.resolve())
-
-    def test_resolve_responses_file_rejects_invalid_exam_id_path(self):
-        with TemporaryDirectory() as td:
-            root = Path(td)
-            deps = StudentImportDeps(
-                app_root=root / "app",
-                data_dir=root / "data",
-                load_profile_file=_load_profile_file,
-                now_iso=lambda: "2026-02-07T10:00:00",
-            )
-            resolved = resolve_responses_file("../escape", None, deps=deps)
-            self.assertIsNone(resolved)
 
     def test_resolve_responses_file_rejects_absolute_path_outside_allowed_roots(self):
         with TemporaryDirectory() as td:
@@ -99,7 +87,7 @@ class StudentImportServiceTest(unittest.TestCase):
                 now_iso=lambda: "2026-02-07T10:00:00",
             )
 
-            resolved = resolve_responses_file(None, str(outside), deps=deps)
+            resolved = resolve_responses_file(str(outside), deps=deps)
             self.assertIsNone(resolved)
 
     def test_resolve_responses_file_manifest_rejects_outside_absolute_path(self):
@@ -122,7 +110,7 @@ class StudentImportServiceTest(unittest.TestCase):
                 now_iso=lambda: "2026-02-07T10:00:00",
             )
 
-            resolved = resolve_responses_file("EX1", None, deps=deps)
+            resolved = resolve_responses_file(None, deps=deps)
             self.assertIsNone(resolved)
 
     def test_import_students_from_responses_creates_and_updates_aliases(self):
@@ -172,7 +160,18 @@ class StudentImportServiceTest(unittest.TestCase):
             now_iso=lambda: "2026-02-07T10:00:00",
         )
         result = student_import({"source": "unknown"}, deps=deps)
-        self.assertEqual(result.get("error"), "unsupported source: unknown")
+        self.assertEqual(result.get("error"), "gone")
+
+    def test_student_import_exam_responses_is_gone(self):
+        deps = StudentImportDeps(
+            app_root=Path("/tmp/app"),
+            data_dir=Path("/tmp/data"),
+            load_profile_file=_load_profile_file,
+            now_iso=lambda: "2026-02-07T10:00:00",
+        )
+        result = student_import({"source": "responses_scored"}, deps=deps)
+        self.assertEqual(result.get("error"), "gone")
+        self.assertFalse(result.get("ok"))
 
     def test_import_skips_invalid_student_id_path(self):
         with TemporaryDirectory() as td:

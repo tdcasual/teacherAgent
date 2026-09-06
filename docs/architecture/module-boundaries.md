@@ -28,40 +28,33 @@
   - 老师端 workflow 解释（`requested -> effective -> reason -> confidence`）属于 chat application contract
   - 高频教学场景优先在 chat application 层补 workflow orchestration / preflight，不把“猜下一步”外包给模型
 
-### Exam Context
-- 入口：`services/api/routes/exam_routes.py`
-- 应用编排：`services/api/exam/application.py`
-- 依赖注入：`services/api/exam/deps.py`
-- 约束：
-  - 任何新的考试聚合逻辑放入 `exam/application.py`
-  - `app_core.py` 只保留组合根职责，不新增 exam 编排逻辑
-
 ### Assignment Context
-- 入口：`services/api/routes/assignment_routes.py`
+- 入口：`services/api/routes/assignment_routes.py`（listing / upload / delivery / generation）
 - 应用编排：`services/api/assignment/application.py`
 - 依赖注入：`services/api/assignment/deps.py`
+- 学科 pack：`packs/subjects/<id>/`（`pack.yaml` + overlays），装载器 `services/api/subject_pack_service.py`
+- 孤儿认领：`POST /auth/admin/assignments/{assignment_id}/claim`（`services/api/routes/auth_identity_route_handlers.py` + `assignment_meta_ownership_migrate_service.claim_assignment`）
 - 约束：
   - 路由层仅调用 application 公开函数
   - assignment 编排逻辑不得回流到 `app_core.py`
+  - 产品主线是 upload → confirm → progress，不再挂 exam 路由或 exam application
+  - 未知 `subject_id` 回退 `packs/subjects/generic/`，禁止回退物理 pack
+  - `generic` pack 缺失必须失败，不能静默用其他学科顶上
 
 ### Composition Root
 - 模块：`services/api/app.py`、`services/api/container.py`
 - 约束：
   - 新依赖通过容器挂载到 `app.state.container`
   - 禁止新增模块级全局依赖入口作为默认路径
-  - analysis domain 的 specialist runtime 优先通过 `services/api/domains/runtime_builder.py` 组装；`services/api/wiring/*` 只保留薄封装或兼容入口
-  - runtime / report 的 binding 优先由 manifest 元信息声明，并通过统一 resolver 与共享 binding registry 解析；避免在多个中心模块继续扩张 domain 专属 lookup 逻辑
-  - analysis report plane 的 domain provider 优先由 manifest 元信息驱动装配，不再在应用层维护一份独立的按域硬编码真相表
-  - strategy 元数据若引用不存在的 specialist 或 artifact，必须在装配期直接失败，而不是等运行时静默退化
-  - 新增 analysis domain 前，先按 `docs/reference/analysis-domain-onboarding-template.md` 设计 manifest / strategy / report plane / review queue，再进入实现
+  - 全员产品面 skill 以 `services/api/skills/product.py` 的 allow-list 为准（作业运营 / 作业生成 / 学生教练）
+  - 学科 pack 的 `skill_affiliates` 只对**任教该学科**的老师开放（例如物理老师才看到 `physics-*`）；学生与未任教老师看不到
+  - 布置作业走 `subject_id` + 作业工作流，不要求附属 skill
+  - 不要在 `create_app()` 装配已卸载的 analysis/survey HTTP 子系统
+  - `services/api/wiring/*` 只保留薄封装；作业编排走 `assignment/application.py`
 
-
-
-### Analysis Ops Context
-- 在线聚合层：`services/api/analysis_ops_service.py` 只读取持久化 metrics、review feedback 与报告 lineage 元数据，不在 HTTP 请求内做重放 diff。
-- 在线写入层：`services/api/review_queue_service.py` 在 review queue 终态迁移时追加 `data/analysis/review_feedback.jsonl`；这属于 ops telemetry，不反向进入 memory 治理链路。
-- HTTP 边界：`services/api/routes/analysis_report_routes.py` 仅暴露 `/teacher/analysis/ops` 的协议转换，不承载 compare 编排。
-- 离线分析层：`scripts/export_analysis_ops_snapshot.py` 与 `scripts/compare_analysis_runs.py` 负责导出候选与显式 diff，属于 operator tooling，不应被 request path 直接调用。
+### Leftover analysis / survey
+- 考试、问卷、class_report、multimodal/analysis runtime 已从产品面删除，不是现行产品面。
+- `docs/reference/analysis-*` 与 `docs/plans/` 中的分析域文档可作历史留存，不是运行时契约，也不是 CI 要求的产品身份。
 
 ## Frontend Boundaries (Student App)
 
@@ -87,7 +80,7 @@
 - 约束：
   - `App.tsx` 只做跨模块状态编排与 hook 装配；壳层 JSX 留在 `TeacherAppLayout`，不得把 `.teacher-layout` / 移动 tab / 会话 sheet 回流到 `App.tsx`
   - 新 UI 区块优先进入 `features/*`，避免将复杂视图回流到 `App.tsx`
-  - 布局/顶栏/移动 tab 不承载 chat send、upload、exam 业务编排
+  - 布局/顶栏/移动 tab 不承载 chat send、assignment upload/confirm/progress 业务编排
   - `TeacherAppLayout` 可以组合 chat / workbench 表面；`features/chat` 与 `features/workbench` 不得反向依赖 `TeacherAppLayout` 或 `App.tsx`
   - E2E 稳定定位器必须使用 `data-testid`
   - 壳层 class（`.app.teacher`、`.teacher-layout`、`.teacher-mobile-shell-v2`）变更必须跑 `frontend/e2e/teacher-layout-sentinel.spec.ts`

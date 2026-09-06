@@ -1,6 +1,8 @@
 # 统一分析运行时契约（Analysis Runtime Contract）
 
-Date: 2026-03-07
+Date: 2026-03-07（2026-08-30 标注：非产品主面）
+
+> **产品状态：** 本仓库已收成单校作业产品。survey / class_report / analysis_report **不再挂主 UI 或 HTTP 路由**。下文是历史分析平台契约，**不是**当前产品闸门，也不再进入 CI。作业主线见 `docs/plans/2026-08-28-assignment-core-product-design.md`。
 
 ## 1. 目标与边界
 

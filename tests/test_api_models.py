@@ -39,7 +39,7 @@ class TestChatRequest:
         assert len(req.messages) == 1
         assert req.role is None
         assert req.skill_id is None
-        assert req.auto_generate_assignment is None
+        assert not hasattr(req, "auto_generate_assignment")
 
     def test_all_optional_fields(self):
         req = ChatRequest(
@@ -50,11 +50,16 @@ class TestChatRequest:
             student_id="st1",
             assignment_id="as1",
             assignment_date="2026-01-01",
-            auto_generate_assignment=True,
         )
         assert req.role == "teacher"
         assert req.skill_id == "s1"
-        assert req.auto_generate_assignment is True
+
+    def test_auto_generate_assignment_is_forbidden(self):
+        with pytest.raises(ValidationError):
+            ChatRequest(
+                messages=[ChatMessage(role="user", content="hi")],
+                auto_generate_assignment=True,
+            )
 
     def test_missing_messages(self):
         with pytest.raises(ValidationError):

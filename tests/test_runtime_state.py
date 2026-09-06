@@ -11,7 +11,6 @@ def test_reset_runtime_state_resets_queues_and_caches(tmp_path):
     mod.DATA_DIR = tmp_path / "data"
     mod.UPLOADS_DIR = tmp_path / "uploads"
     mod.UPLOAD_JOB_DIR = mod.UPLOADS_DIR / "assignment_jobs"
-    mod.EXAM_UPLOAD_JOB_DIR = mod.UPLOADS_DIR / "exam_jobs"
     mod.CHAT_JOB_DIR = mod.UPLOADS_DIR / "chat_jobs"
     mod.CHAT_LANE_DEBOUNCE_MS = 0
     mod.CHAT_JOB_CLAIM_TTL_SEC = 600

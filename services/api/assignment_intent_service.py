@@ -119,6 +119,7 @@ def detect_assignment_intent(text: str) -> bool:
         "生成作业",
         "布置作业",
         "作业生成",
+        "@homework-generator",
         "@physics-homework-generator",
         "作业ID",
         "作业 ID",

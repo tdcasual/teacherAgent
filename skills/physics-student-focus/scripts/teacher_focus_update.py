@@ -78,7 +78,7 @@ def main():
         save_text(base_dir / "ocr_summary.txt", "\n".join(texts))
 
     # call update_profile.py
-    updater = Path("skills/physics-student-coach/scripts/update_profile.py")
+    updater = Path("skills/student-coach/scripts/update_profile.py")
     cmd = [
         sys.executable,
         str(updater),

@@ -56,6 +56,10 @@ def create_test_app(
     os.environ["DIAG_LOG"] = "0"
     os.environ["JOB_QUEUE_BACKEND"] = "inline"
     os.environ["RQ_BACKEND_ENABLED"] = "0"
+    # Unset (pytest auto-off), not AUTH_REQUIRED=0. Explicit 0 is fail-closed
+    # and requires teacher_id; leaked AUTH_REQUIRED=1 from earlier tests
+    # would otherwise 401 later TestClients.
+    os.environ.pop("AUTH_REQUIRED", None)
     os.environ.pop("REDIS_URL", None)
     os.environ.pop("RQ_QUEUE_NAME", None)
 

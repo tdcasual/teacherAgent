@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
+from .assignment.visibility import student_can_read_assignment
+from .assignment_student_list_service import (  # noqa: F401
+    list_assignments_for_student as list_assignments_for_student,
+)
+from .auth.identity_graph_service import ExpectedStudentsError
+
 _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
 _MAX_LIST_LIMIT = 100
@@ -31,7 +37,7 @@ class AssignmentMetaPostprocessDeps:
     parse_ids_value: Callable[[Any], List[str]]
     resolve_scope: Callable[[str, List[str], str], str]
     normalize_due_at: Callable[[Any], str]
-    compute_expected_students: Callable[[str, str, List[str]], List[str]]
+    compute_expected_students: Callable[..., List[str]]
     atomic_write_json: Callable[[Path, Any], None]
     now_iso: Callable[[], str]
 
@@ -71,19 +77,28 @@ def _resolve_expected_students_for_postprocess(
         resolved = []
     if resolved:
         return resolved
-    return deps.compute_expected_students(scope_val, class_name, student_ids)
+    try:
+        return deps.compute_expected_students(
+            scope_val,
+            class_name,
+            student_ids,
+            teacher_id=str(meta.get("teacher_id") or ""),
+            subject_id=str(meta.get("subject_id") or ""),
+        )
+    except ExpectedStudentsError:
+        return []
 
 
 def _default_assignment_completion_policy(
     discussion_complete_marker: str,
 ) -> Dict[str, Any]:
     return {
-        "requires_discussion": True,
+        "requires_discussion": False,
         "discussion_marker": discussion_complete_marker,
         "requires_submission": True,
         "min_graded_total": 1,
         "best_attempt": "score_earned_then_correct_then_graded_total",
-        "version": 1,
+        "version": 2,
     }
 
 
@@ -104,13 +119,16 @@ def resolve_assignment_date(meta: Dict[str, Any], folder: Path) -> Optional[str]
         return date_val
     raw = meta.get("assignment_id") or folder.name
     import re
+
     match = re.search(r"\d{4}-\d{2}-\d{2}", str(raw))
     if match:
         return match.group(0)
     return None
 
 
-def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]) -> int:
+def assignment_specificity(
+    meta: Dict[str, Any], student_id: Optional[str], class_name: Optional[str]
+) -> int:
     scope = meta.get("scope")
     student_ids = meta.get("student_ids") or []
     class_meta = meta.get("class_name")
@@ -120,13 +138,16 @@ def assignment_specificity(meta: Dict[str, Any], student_id: Optional[str], clas
     if scope == "class":
         return 2 if class_name and class_meta and class_name == class_meta else 0
     if scope == "public":
-        return 1
+        expected = meta.get("expected_students") or []
+        if expected:
+            return 1 if student_id and student_id in expected else 0
+        return 0
 
     if student_ids:
         return 3 if student_id and student_id in student_ids else 0
     if class_name and class_meta and class_name == class_meta:
         return 2
-    return 1
+    return 0
 
 
 def parse_iso_timestamp(value: Optional[str]) -> float:
@@ -155,7 +176,19 @@ def _normalize_paging(limit: Any, cursor: Any) -> tuple[int, int]:
     return limit_int, cursor_int
 
 
-def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps: AssignmentCatalogDeps) -> Dict[str, Any]:
+def _meta_matches_owner(meta: Dict[str, Any], owner_teacher_id: Optional[str]) -> bool:
+    if not owner_teacher_id:
+        return True
+    return str(meta.get("teacher_id") or "").strip() == owner_teacher_id
+
+
+def list_assignments(
+    *,
+    limit: Any = _DEFAULT_LIST_LIMIT,
+    cursor: Any = 0,
+    owner_teacher_id: Optional[str] = None,
+    deps: AssignmentCatalogDeps,
+) -> Dict[str, Any]:
     limit_int, cursor_int = _normalize_paging(limit, cursor)
     assignments_dir = deps.data_dir / "assignments"
     if not assignments_dir.exists():
@@ -173,6 +206,8 @@ def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps:
             continue
         assignment_id = folder.name
         meta = deps.load_assignment_meta(folder)
+        if not _meta_matches_owner(meta, owner_teacher_id):
+            continue
         assignment_date = resolve_assignment_date(meta, folder)
         questions_path = folder / "questions.csv"
         count = deps.count_csv_rows(questions_path) if questions_path.exists() else 0
@@ -180,7 +215,9 @@ def list_assignments(*, limit: Any = _DEFAULT_LIST_LIMIT, cursor: Any = 0, deps:
         if meta.get("generated_at"):
             updated_at = meta.get("generated_at")
         elif questions_path.exists():
-            updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(timespec="seconds")
+            updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(
+                timespec="seconds"
+            )
         items.append(
             {
                 "assignment_id": assignment_id,
@@ -223,6 +260,8 @@ def find_assignment_for_date(
         if not folder.is_dir():
             continue
         meta = deps.load_assignment_meta(folder)
+        if not student_can_read_assignment(meta, for_today=True):
+            continue
         assignment_date = resolve_assignment_date(meta, folder)
         if assignment_date != date_str:
             continue
@@ -235,7 +274,9 @@ def find_assignment_for_date(
         if not updated_at:
             questions_path = folder / "questions.csv"
             if questions_path.exists():
-                updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(timespec="seconds")
+                updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(
+                    timespec="seconds"
+                )
         candidates.append((teacher_flag, spec, parse_iso_timestamp(updated_at), folder, meta))
 
     if not candidates:
@@ -307,6 +348,22 @@ def build_assignment_detail(
     }
 
 
+def _apply_generated_owner_fields(
+    meta: Dict[str, Any],
+    *,
+    visibility_status: Optional[str],
+    teacher_id: Optional[str],
+    subject_id: Optional[str],
+) -> None:
+    if visibility_status:
+        meta["visibility_status"] = str(visibility_status)
+    if teacher_id:
+        meta["teacher_id"] = str(teacher_id)
+    if subject_id:
+        meta["subject_id"] = str(subject_id)
+        meta.setdefault("pack_id", str(subject_id))
+
+
 def postprocess_assignment_meta(
     *,
     assignment_id: str,
@@ -314,6 +371,9 @@ def postprocess_assignment_meta(
     expected_students: Optional[List[str]],
     completion_policy: Optional[Dict[str, Any]],
     deps: AssignmentMetaPostprocessDeps,
+    visibility_status: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    subject_id: Optional[str] = None,
 ) -> None:
     meta_path, meta = _load_assignment_meta_for_postprocess(
         assignment_id=assignment_id,
@@ -326,7 +386,11 @@ def postprocess_assignment_meta(
     class_name = str(meta.get("class_name") or "")
     scope_val = deps.resolve_scope(str(meta.get("scope") or ""), student_ids, class_name)
 
-    due_norm = deps.normalize_due_at(due_at) if due_at is not None else deps.normalize_due_at(meta.get("due_at"))
+    due_norm = (
+        deps.normalize_due_at(due_at)
+        if due_at is not None
+        else deps.normalize_due_at(meta.get("due_at"))
+    )
     if due_at is not None:
         meta["due_at"] = due_norm or ""
     elif due_norm:
@@ -351,5 +415,11 @@ def postprocess_assignment_meta(
             deps.discussion_complete_marker,
         )
     meta.setdefault("completion_policy", completion_policy)
+    _apply_generated_owner_fields(
+        meta,
+        visibility_status=visibility_status,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+    )
 
     deps.atomic_write_json(meta_path, meta)

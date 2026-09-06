@@ -177,7 +177,7 @@ def update_profile(
     interaction_note: Optional[str] = "",
     deps: StudentOpsDeps,
 ) -> Dict[str, Any]:
-    script = deps.app_root / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
+    script = deps.app_root / "skills" / "student-coach" / "scripts" / "update_profile.py"
     args = [
         "python3",
         str(script),

@@ -346,7 +346,7 @@ def test_chat_text_fingerprint_normalizes_whitespace_and_case():
 
 def test_resolve_chat_lane_id_student_and_teacher(monkeypatch):
     monkeypatch.setattr(clr, "safe_fs_id", lambda value, prefix="": f"{prefix}-{value}")
-    monkeypatch.setattr(clr, "resolve_teacher_id", lambda teacher_id: f"teacher-{teacher_id}")
+    monkeypatch.setattr(clr, "require_teacher_id", lambda teacher_id: f"teacher-{teacher_id}")
 
     student_lane = clr.resolve_chat_lane_id("student", session_id="s1", student_id="stu-1")
     teacher_lane = clr.resolve_chat_lane_id("teacher", session_id="s2", teacher_id="t-1")

@@ -64,7 +64,7 @@ async def assignment_questions_ocr(
         raise_upload_limit_http(exc)
     file_paths = [str(path) for path in saved]
 
-    script = deps.app_root / "skills" / "physics-student-coach" / "scripts" / "ingest_assignment_questions.py"
+    script = deps.app_root / "skills" / "student-coach" / "scripts" / "ingest_assignment_questions.py"
     args = [
         "python3",
         str(script),

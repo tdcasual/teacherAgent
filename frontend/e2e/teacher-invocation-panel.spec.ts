@@ -10,13 +10,13 @@ test('keyboard mention for skill wraps and inserts selected $skill', async ({ pa
 
   await composer.press('ArrowDown')
   await composer.press('Enter')
-  await expect(composer).toHaveValue('$physics-homework-generator ')
+  await expect(composer).toHaveValue('$homework-generator ')
 
   await composer.type('生成 6 题分层练习')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
-  expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   expect(chatStartCalls[0].messages?.[chatStartCalls[0].messages!.length - 1]?.content).toBe('生成 6 题分层练习')
 })
 
@@ -29,14 +29,14 @@ test('keyboard mention for skill pins selected skill and sends cleaned prompt', 
 
   await composer.press('ArrowDown')
   await composer.press('Enter')
-  await expect(composer).toHaveValue('$physics-homework-generator ')
-  await expect(page.getByText('当前路由: $physics-homework-generator')).toBeVisible()
+  await expect(composer).toHaveValue('$homework-generator ')
+  await expect(page.getByText('当前路由: $homework-generator')).toBeVisible()
 
   await composer.type('生成 6 题分层练习')
   await page.getByRole('button', { name: '发送' }).click()
 
   await expect.poll(() => chatStartCalls.length).toBe(1)
-  expect(chatStartCalls[0].skill_id).toBe('physics-homework-generator')
+  expect(chatStartCalls[0].skill_id).toBe('homework-generator')
   expect(chatStartCalls[0].messages?.[chatStartCalls[0].messages!.length - 1]?.content).toBe('生成 6 题分层练习')
 })
 
@@ -58,11 +58,11 @@ test('invocation-only input is blocked from sending', async ({ page }) => {
   const { chatStartCalls } = await openTeacherApp(page)
   const composer = page.getByPlaceholder(TEACHER_COMPOSER_PLACEHOLDER)
 
-  await composer.fill('$physics-homework-generator')
+  await composer.fill('$homework-generator')
   await page.getByRole('button', { name: '发送' }).click()
 
   await page.waitForTimeout(200)
-  await expect(composer).toHaveValue('$physics-homework-generator')
+  await expect(composer).toHaveValue('$homework-generator')
   expect(chatStartCalls.length).toBe(0)
 })
 

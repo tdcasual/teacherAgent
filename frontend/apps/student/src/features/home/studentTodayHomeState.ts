@@ -1,11 +1,11 @@
 import type {
-  AssignmentDetail,
   Message,
   PendingChatJob,
-  RecentCompletedReply,
+  StudentTodayHomeItem,
   StudentTodayHomeMaterial,
   StudentTodayHomeStep,
   StudentTodayHomeViewModel,
+  TodayAssignmentItem,
   VerifiedStudent,
 } from '../../appTypes'
 
@@ -13,21 +13,12 @@ type BuildStudentTodayHomeViewModelInput = {
   verifiedStudent: VerifiedStudent | null
   assignmentLoading: boolean
   assignmentError: string
-  todayAssignment: AssignmentDetail | null
+  todayAssignments: TodayAssignmentItem[]
   activeSessionId: string
   messages: Message[]
   pendingChatJob: PendingChatJob | null
-  recentCompletedReplies: RecentCompletedReply[]
   onOpenExecutionLabel?: string
 }
-
-const toMaterials = (assignment: AssignmentDetail | null): StudentTodayHomeMaterial[] =>
-  Array.isArray(assignment?.delivery?.files)
-    ? assignment!.delivery!.files!.map((item) => ({
-      label: String(item?.name || '学习材料'),
-      url: typeof item?.url === 'string' ? item.url : undefined,
-    }))
-    : []
 
 const buildProgressSteps = (status: StudentTodayHomeViewModel['status']): StudentTodayHomeStep[] => {
   if (status === 'pending_generation') {
@@ -40,6 +31,13 @@ const buildProgressSteps = (status: StudentTodayHomeViewModel['status']): Studen
   if (status === 'generating') {
     return [
       { label: '准备中', tone: 'active' },
+      { label: '待开始', tone: 'neutral' },
+      { label: '待提交', tone: 'neutral' },
+    ]
+  }
+  if (status === 'empty') {
+    return [
+      { label: '未布置', tone: 'neutral' },
       { label: '待开始', tone: 'neutral' },
       { label: '待提交', tone: 'neutral' },
     ]
@@ -65,52 +63,44 @@ const buildProgressSteps = (status: StudentTodayHomeViewModel['status']): Studen
   ]
 }
 
-const estimateMinutes = (assignment: AssignmentDetail | null): number | null => {
-  const questionCount = Number(assignment?.question_count || 0)
-  if (!Number.isFinite(questionCount) || questionCount <= 0) return null
-  return Math.max(15, questionCount * 3)
+const dueLabelOf = (item: TodayAssignmentItem): string => {
+  const due = String(item.due_at || '').trim()
+  if (item.progress.overdue) return due ? `${due} 已逾期` : '已逾期'
+  return due ? `${due} 截止` : '无截止时间'
 }
 
-const dueLabelOf = (assignment: AssignmentDetail | null): string => {
-  const date = String(assignment?.date || '').trim()
-  return date ? `${date} 截止` : '今天完成'
-}
+const toHomeItems = (assignments: TodayAssignmentItem[]): StudentTodayHomeItem[] =>
+  assignments.map((item) => ({
+    assignment_id: item.assignment_id,
+    teacher_id: item.teacher_id,
+    subject_id: item.subject_id,
+    title: item.title || item.assignment_id,
+    dueLabel: dueLabelOf(item),
+    overdue: Boolean(item.progress.overdue),
+    submitted: Boolean(item.progress.submitted),
+  }))
 
 const includesUserWork = (messages: Message[]): boolean => messages.some((item) => item.role === 'user' && item.content.trim())
-
-const matchesTodaySession = (
-  activeSessionId: string,
-  assignment: AssignmentDetail | null,
-  reply: RecentCompletedReply,
-): boolean => {
-  const activeId = activeSessionId.trim()
-  const assignmentId = String(assignment?.assignment_id || '').trim()
-  return Boolean(reply.session_id && (reply.session_id === activeId || reply.session_id === assignmentId))
-}
 
 export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewModelInput): StudentTodayHomeViewModel {
   const {
     verifiedStudent,
     assignmentLoading,
-    todayAssignment,
-    activeSessionId,
+    todayAssignments,
     messages,
     pendingChatJob,
-    recentCompletedReplies,
     onOpenExecutionLabel = '继续任务',
   } = input
 
-  const materials = toMaterials(todayAssignment)
-  const estimatedMinutesValue = estimateMinutes(todayAssignment)
-  const dueLabel = dueLabelOf(todayAssignment)
-  const submitted = recentCompletedReplies.some((item) => matchesTodaySession(activeSessionId, todayAssignment, item))
+  const items = toHomeItems(todayAssignments)
   const inProgress = Boolean(pendingChatJob?.job_id) || includesUserWork(messages)
+  const allSubmitted = items.length > 0 && items.every((item) => item.submitted)
 
   if (!verifiedStudent) {
     return {
       status: 'pending_generation',
-      title: '今日任务尚未生成',
-      summary: '先完成身份验证，系统会为你准备今天的练习内容。',
+      title: '老师尚未布置',
+      summary: '先完成身份验证，再查看今天各科老师布置的作业。',
       primaryActionLabel: '先完成身份验证',
       primaryActionDisabled: true,
       statusLabel: '等待验证',
@@ -118,51 +108,55 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       dueLabel: '完成验证后开始',
       materials: [],
       progressSteps: buildProgressSteps('pending_generation'),
+      items: [],
     }
   }
 
   if (assignmentLoading) {
     return {
       status: 'generating',
-      title: '正在准备今天的任务',
-      summary: '系统正在整理题目、要求和提交入口，请稍后查看。',
+      title: '正在加载今天的任务',
+      summary: '正在读取各科作业列表，请稍后查看。',
       primaryActionLabel: '稍后查看',
       primaryActionDisabled: true,
-      statusLabel: '生成中',
+      statusLabel: '加载中',
       estimatedMinutes: null,
-      dueLabel: '准备完成后可开始',
-      materials,
+      dueLabel: '加载完成后可开始',
+      materials: [],
       progressSteps: buildProgressSteps('generating'),
+      items,
     }
   }
 
-  if (submitted) {
+  if (items.length === 0) {
+    return {
+      status: 'empty',
+      title: '老师尚未布置',
+      summary: '今天还没有需要处理的作业。可以先自由提问，或查看作业记录。',
+      primaryActionLabel: '老师尚未布置',
+      primaryActionDisabled: true,
+      statusLabel: '未布置',
+      estimatedMinutes: null,
+      dueLabel: '',
+      materials: [],
+      progressSteps: buildProgressSteps('empty'),
+      items: [],
+    }
+  }
+
+  if (allSubmitted) {
     return {
       status: 'submitted',
       title: '今天的任务已提交',
-      summary: '你已完成本次任务提交，现在可以查看结果或等待老师反馈。',
-      primaryActionLabel: '查看提交',
+      summary: '已提交的作业会进入作业记录，不再占用今日列表。',
+      primaryActionLabel: '查看作业记录',
       primaryActionDisabled: false,
       statusLabel: '已提交',
-      estimatedMinutes: estimatedMinutesValue,
-      dueLabel,
-      materials,
-      progressSteps: buildProgressSteps('submitted'),
-    }
-  }
-
-  if (!todayAssignment) {
-    return {
-      status: 'pending_generation',
-      title: '今日任务尚未生成',
-      summary: '系统会根据今天安排准备练习内容，你可以立即生成任务。',
-      primaryActionLabel: '生成任务',
-      primaryActionDisabled: false,
-      statusLabel: '待生成',
       estimatedMinutes: null,
-      dueLabel: '生成后开始',
-      materials: [],
-      progressSteps: buildProgressSteps('pending_generation'),
+      dueLabel: items[0]?.dueLabel || '',
+      materials: [] as StudentTodayHomeMaterial[],
+      progressSteps: buildProgressSteps('submitted'),
+      items,
     }
   }
 
@@ -174,24 +168,26 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       primaryActionLabel: onOpenExecutionLabel,
       primaryActionDisabled: false,
       statusLabel: '进行中',
-      estimatedMinutes: estimatedMinutesValue,
-      dueLabel,
-      materials,
+      estimatedMinutes: null,
+      dueLabel: items[0]?.dueLabel || '',
+      materials: [],
       progressSteps: buildProgressSteps('in_progress'),
+      items,
     }
   }
 
   return {
     status: 'ready',
-    title: String(todayAssignment.assignment_id || '今日任务'),
-    summary: '今天的练习已经准备好，先开始主任务，再处理补充内容。',
+    title: '今日作业',
+    summary: '按学科查看老师布置的作业，进入任务后可以开始陪练。',
     primaryActionLabel: '进入任务',
     primaryActionDisabled: false,
     statusLabel: '未开始',
-    estimatedMinutes: estimatedMinutesValue,
-    dueLabel,
-    materials,
+    estimatedMinutes: null,
+    dueLabel: items[0]?.dueLabel || '',
+    materials: [],
     progressSteps: buildProgressSteps('ready'),
+    items,
   }
 }
 

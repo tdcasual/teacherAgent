@@ -1,20 +1,14 @@
-import importlib
-import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
+from tests.helpers.app_factory import create_test_app
+
 
 def load_app(tmp_dir: Path):
-    os.environ["DATA_DIR"] = str(tmp_dir / "data")
-    os.environ["UPLOADS_DIR"] = str(tmp_dir / "uploads")
-    os.environ["DIAG_LOG"] = "0"
-    import services.api.app as app_mod
-
-    importlib.reload(app_mod)
-    return app_mod
+    return create_test_app(tmp_dir)
 
 
 class SkillsEndpointTest(unittest.TestCase):
@@ -33,8 +27,13 @@ class SkillsEndpointTest(unittest.TestCase):
             self.assertGreaterEqual(len(skills), 1)
 
             by_id = {s.get("id"): s for s in skills}
-            self.assertIn("physics-core-examples", by_id)
-            core = by_id["physics-core-examples"]
+            self.assertIn("teacher-assignment-ops", by_id)
+            self.assertIn("homework-generator", by_id)
+            self.assertIn("student-coach", by_id)
+            self.assertNotIn("physics-core-examples", by_id)
+            self.assertNotIn("physics-lesson-capture", by_id)
+            self.assertNotIn("physics-student-focus", by_id)
+            core = by_id["teacher-assignment-ops"]
             self.assertEqual(core.get("schema_version"), 2)
             self.assertIn("agent", core)
             self.assertIn("routing", core)

@@ -63,7 +63,7 @@ def _make_deps(**overrides):
         get_chat_job_id_by_request=lambda rid: None,
         load_chat_job=lambda jid: jobs.get(jid, {'job_id': jid, 'status': 'queued'}),
         detect_role_hint=lambda req: req.role or 'student',
-        resolve_student_session_id=lambda sid, aid, ad: f'sess-{sid}',
+        resolve_student_session_id=lambda sid, aid, ad: aid or f'general_{ad or "2026-02-11"}',
         resolve_teacher_id=lambda tid: tid or 'teacher-default',
         resolve_chat_lane_id=lambda *a, **kw: 'lane-test',
         chat_last_user_text=lambda msgs: (msgs[-1]['content'] if msgs else ''),
@@ -102,6 +102,38 @@ class ChatStartServiceTest(unittest.TestCase):
         result = start_chat_orchestration(req, deps=deps)
         self.assertTrue(result['ok'])
         self.assertEqual(result['status'], 'queued')
+
+    def test_teacher_missing_teacher_id_is_4xx(self):
+        from services.api.paths import require_teacher_id
+
+        def _http_error(code, msg):
+            return ValueError(f"{code}: {msg}")
+
+        deps, _ = _make_deps(
+            http_error=_http_error,
+            detect_role_hint=lambda req: "teacher",
+            resolve_teacher_id=require_teacher_id,
+        )
+        req = _FakeRequest(role="teacher", teacher_id="", student_id="")
+        with self.assertRaises(ValueError) as ctx:
+            start_chat_orchestration(req, deps=deps)
+        self.assertIn("400", str(ctx.exception))
+        self.assertIn("teacher_id_required", str(ctx.exception))
+
+    def test_student_chat_does_not_require_teacher_id(self):
+        from services.api.paths import require_teacher_id
+
+        called = {"teacher": 0}
+
+        def _require(tid):
+            called["teacher"] += 1
+            return require_teacher_id(tid)
+
+        deps, _ = _make_deps(resolve_teacher_id=_require)
+        req = _FakeRequest(role="student", teacher_id="", student_id="stu-1")
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result["ok"])
+        self.assertEqual(called["teacher"], 0)
 
     def test_enqueue_failure_marks_job_failed(self):
         """When enqueue_chat_job raises, job should be marked failed, not crash."""
@@ -211,7 +243,7 @@ class ChatStartServiceTest(unittest.TestCase):
         self.assertEqual(captured.get('role_hint'), 'teacher')
         self.assertEqual(captured.get('session_id'), 'main')
 
-    def test_request_payload_carries_explicit_analysis_target_contract(self):
+    def test_request_payload_ignores_deprecated_analysis_target(self):
         writes: list[tuple[bool, dict[str, object]]] = []
 
         def track_write(jid, data, overwrite):
@@ -235,9 +267,7 @@ class ChatStartServiceTest(unittest.TestCase):
         start_chat_orchestration(req, deps=deps)
         initial_record = next(data for overwrite, data in writes if overwrite and 'request' in data)
         request_payload = initial_record['request']
-        self.assertEqual(request_payload['analysis_target']['target_id'], 'submission_7')
-        self.assertEqual(request_payload['analysis_target']['target_type'], 'submission')
-        self.assertEqual(request_payload['analysis_target']['source_domain'], 'video_homework')
+        self.assertNotIn('analysis_target', request_payload)
 
     def test_fingerprint_seed_excludes_removed_persona_field(self):
         captured_seed: dict[str, str] = {}
@@ -251,7 +281,7 @@ class ChatStartServiceTest(unittest.TestCase):
         start_chat_orchestration(req, deps=deps)
         self.assertNotIn('persona_lin_dai_yu', captured_seed.get('value', ''))
 
-    def test_fingerprint_seed_includes_explicit_analysis_target_contract(self):
+    def test_fingerprint_seed_excludes_deprecated_analysis_target(self):
         captured_seed: dict[str, str] = {}
 
         def _capture_seed(seed: str) -> str:
@@ -270,9 +300,11 @@ class ChatStartServiceTest(unittest.TestCase):
             messages=[_FakeMsg('user', '请继续深入分析')],
         )
         start_chat_orchestration(req, deps=deps)
-        self.assertIn('submission_7', captured_seed.get('value', ''))
+        seed = captured_seed.get('value', '')
+        self.assertNotIn('submission_7', seed)
+        self.assertEqual(seed, '|'.join(['', '', '请继续深入分析', '']))
 
-    def test_fingerprint_seed_includes_explicit_analysis_target_marker(self):
+    def test_fingerprint_seed_excludes_analysis_target_marker_in_history(self):
         captured_seed: dict[str, str] = {}
 
         def _capture_seed(seed: str) -> str:
@@ -289,7 +321,40 @@ class ChatStartServiceTest(unittest.TestCase):
             ],
         )
         start_chat_orchestration(req, deps=deps)
-        self.assertIn('report_9', captured_seed.get('value', ''))
+        seed = captured_seed.get('value', '')
+        self.assertNotIn('report_9', seed)
+        self.assertEqual(seed, '|'.join(['', '', '请继续深入分析', '']))
+
+    def test_new_student_session_requires_assignment_id(self):
+        deps, _ = _make_deps()
+        req = _FakeRequest(session_id='s_new', assignment_id='')
+        with self.assertRaises(ValueError) as ctx:
+            start_chat_orchestration(req, deps=deps)
+        self.assertIn('400', str(ctx.exception))
+        self.assertIn('assignment_id_required', str(ctx.exception))
+
+    def test_free_ask_student_session_does_not_require_assignment_id(self):
+        deps, _ = _make_deps()
+        req = _FakeRequest(session_id='general_2026-08-28', assignment_id='')
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result['ok'])
+        self.assertNotIn('assignment_unbound', result)
+
+    def test_existing_unbound_student_session_may_continue(self):
+        deps, _ = _make_deps(
+            load_student_sessions_index=lambda _sid: [{"session_id": "s_old", "preview": "hi"}],
+        )
+        req = _FakeRequest(session_id='s_old', assignment_id='')
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result['ok'])
+        self.assertTrue(result.get('assignment_unbound'))
+
+    def test_new_student_session_with_assignment_id_is_allowed(self):
+        deps, _ = _make_deps()
+        req = _FakeRequest(session_id='s_hw', assignment_id='HW_1')
+        result = start_chat_orchestration(req, deps=deps)
+        self.assertTrue(result['ok'])
+        self.assertNotIn('assignment_unbound', result)
 
 
 if __name__ == '__main__':

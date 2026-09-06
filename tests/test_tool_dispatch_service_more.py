@@ -25,27 +25,10 @@ def _deps(tools: set[str]):
 
     deps = ToolDispatchDeps(
         tool_registry=_Registry(tools),
-        list_exams=lambda: {"tool": "exam.list"},
-        exam_get=lambda exam_id: _remember("exam.get", exam_id),
-        exam_analysis_get=lambda exam_id: _remember("exam.analysis.get", exam_id),
-        exam_analysis_charts_generate=lambda args: _remember("exam.analysis.charts.generate", args),
-        exam_students_list=lambda exam_id, limit: _remember("exam.students.list", (exam_id, limit)),
-        exam_student_detail=lambda exam_id, student_id=None, student_name=None, class_name=None: _remember(
-            "exam.student.get", (exam_id, student_id, student_name, class_name)
-        ),
-        exam_question_detail=lambda exam_id, question_id=None, question_no=None, top_n=5: _remember(
-            "exam.question.get", (exam_id, question_id, question_no, top_n)
-        ),
-        exam_range_top_students=lambda exam_id, start_question_no=None, end_question_no=None, top_n=10: _remember(
-            "exam.range.top_students", (exam_id, start_question_no, end_question_no, top_n)
-        ),
-        exam_range_summary_batch=lambda exam_id, ranges=None, top_n=5: _remember(
-            "exam.range.summary.batch", (exam_id, ranges, top_n)
-        ),
-        exam_question_batch_detail=lambda exam_id, question_nos=None, top_n=5: _remember(
-            "exam.question.batch.get", (exam_id, question_nos, top_n)
-        ),
-        list_assignments=lambda: {"tool": "assignment.list"},
+        list_assignments=lambda owner_teacher_id=None: {
+            "tool": "assignment.list",
+            "owner": owner_teacher_id,
+        },
         list_lessons=lambda: {"tool": "lesson.list"},
         lesson_capture=lambda args: _remember("lesson.capture", args),
         student_search=lambda query, limit: _remember("student.search", (query, limit)),
@@ -76,18 +59,13 @@ def _deps(tools: set[str]):
         teacher_memory_apply=lambda teacher_id, proposal_id, approve=True: _remember(
             "teacher.memory.apply", (teacher_id, proposal_id, approve)
         ),
+        assignment_owner_id=lambda assignment_id: "t_zhang" if str(assignment_id or "").strip() else None,
     )
     return deps, calls
 
 
-def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
+def test_tool_dispatch_covers_core_assignment_and_student_paths():
     names = {
-        "exam.list",
-        "exam.get",
-        "exam.analysis.get",
-        "exam.students.list",
-        "exam.student.get",
-        "exam.question.get",
         "assignment.list",
         "lesson.list",
         "student.search",
@@ -99,32 +77,21 @@ def test_tool_dispatch_covers_core_exam_assignment_and_student_paths():
     }
     deps, calls = _deps(names)
 
-    assert tool_dispatch("exam.list", {}, role="teacher", deps=deps)["tool"] == "exam.list"
-    assert tool_dispatch("exam.get", {"exam_id": "e1"}, role="teacher", deps=deps)["tool"] == "exam.get"
-    assert tool_dispatch("exam.analysis.get", {"exam_id": "e2"}, role="teacher", deps=deps)["tool"] == "exam.analysis.get"
-    assert tool_dispatch("exam.students.list", {"exam_id": "e3", "limit": 7}, role="teacher", deps=deps)["tool"] == "exam.students.list"
-    assert tool_dispatch(
-        "exam.student.get",
-        {"exam_id": "e4", "student_id": "s1", "student_name": "N", "class_name": "C"},
-        role="teacher",
-        deps=deps,
-    )["tool"] == "exam.student.get"
-    assert tool_dispatch(
-        "exam.question.get",
-        {"exam_id": "e5", "question_id": "q1", "question_no": 2, "top_n": 6},
-        role="teacher",
-        deps=deps,
-    )["tool"] == "exam.question.get"
-    assert tool_dispatch("assignment.list", {}, role="teacher", deps=deps)["tool"] == "assignment.list"
+    listed = tool_dispatch("assignment.list", {}, role="teacher", teacher_id="t_zhang", deps=deps)
+    assert listed["tool"] == "assignment.list"
+    assert listed["owner"] == "t_zhang"
+    missing = tool_dispatch("assignment.list", {}, role="teacher", deps=deps)
+    assert missing.get("error") == "teacher_id_required"
     assert tool_dispatch("lesson.list", {}, role="teacher", deps=deps)["tool"] == "lesson.list"
     assert tool_dispatch("student.search", {"query": "abc", "limit": 3}, role="teacher", deps=deps)["tool"] == "student.search"
     assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"
     assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "student.profile.update"
-    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.generate"
-    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "assignment.render"
+    assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.generate"
+    generate_denied = tool_dispatch("assignment.generate", {"topic": "t"}, role="student", deps=deps, confirmed=True)
+    assert generate_denied.get("error") == "permission denied"
+    assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 
-    assert calls["exam.students.list"] == ("e3", 7)
     assert calls["student.search"] == ("abc", 3)
 
 
@@ -145,6 +112,7 @@ def test_tool_dispatch_assignment_requirements_save_uses_parser():
         "assignment.requirements.save",
         {"assignment_id": "a1", "requirements": {"x": 1}, "date": "2026-02-12"},
         role="teacher",
+        teacher_id="t_zhang",
         deps=deps,
         confirmed=True,
     )
@@ -212,53 +180,21 @@ def test_tool_dispatch_teacher_memory_search_propose_and_apply():
     assert applied["tool"] == "teacher.memory.apply"
 
 
-def test_tool_dispatch_covers_remaining_exam_lesson_and_core_example_branches():
+def test_tool_dispatch_covers_remaining_lesson_and_core_example_branches():
     names = {
-        "exam.analysis.charts.generate",
-        "exam.range.top_students",
-        "exam.range.summary.batch",
-        "exam.question.batch.get",
         "lesson.capture",
         "core_example.register",
         "core_example.render",
     }
-    deps, calls = _deps(names)
+    deps, _calls = _deps(names)
 
-    denied = tool_dispatch("exam.analysis.charts.generate", {"exam_id": "e1"}, role="student", deps=deps)
-    allowed = tool_dispatch("exam.analysis.charts.generate", {"exam_id": "e1"}, role="teacher", deps=deps)
-    top_students = tool_dispatch(
-        "exam.range.top_students",
-        {"exam_id": "e2", "start_question_no": 1, "end_question_no": 3, "top_n": 6},
-        role="teacher",
-        deps=deps,
-    )
-    summary_batch = tool_dispatch(
-        "exam.range.summary.batch",
-        {"exam_id": "e3", "ranges": [[1, 3]], "top_n": 2},
-        role="teacher",
-        deps=deps,
-    )
-    question_batch = tool_dispatch(
-        "exam.question.batch.get",
-        {"exam_id": "e4", "question_nos": [1, 2], "top_n": 9},
-        role="teacher",
-        deps=deps,
-    )
     captured = tool_dispatch("lesson.capture", {"topic": "x"}, role="teacher", deps=deps, confirmed=True)
     registered = tool_dispatch("core_example.register", {"id": "c1"}, role="teacher", deps=deps, confirmed=True)
     rendered = tool_dispatch("core_example.render", {"id": "c1"}, role="teacher", deps=deps)
 
-    assert denied["error"] == "permission denied"
-    assert allowed["tool"] == "exam.analysis.charts.generate"
-    assert top_students["tool"] == "exam.range.top_students"
-    assert summary_batch["tool"] == "exam.range.summary.batch"
-    assert question_batch["tool"] == "exam.question.batch.get"
     assert captured["tool"] == "lesson.capture"
     assert registered["tool"] == "core_example.register"
     assert rendered["tool"] == "core_example.render"
-    assert calls["exam.range.top_students"] == ("e2", 1, 3, 6)
-    assert calls["exam.range.summary.batch"] == ("e3", [[1, 3]], 2)
-    assert calls["exam.question.batch.get"] == ("e4", [1, 2], 9)
 
 
 def test_tool_dispatch_chart_tools_require_teacher_role():
@@ -300,99 +236,93 @@ def test_tool_dispatch_falls_back_to_unknown_when_registry_accepts_unhandled_nam
     assert out == {"error": "unknown tool: custom.unhandled"}
 
 
-def test_tool_dispatch_survey_report_tools_accept_target_id_alias():
-    deps, calls = _deps({"survey.report.get", "survey.report.rerun"})
-    deps = ToolDispatchDeps(
-        **{**deps.__dict__,
-           "survey_report_get": lambda report_id, teacher_id: {"tool": "survey.report.get", "payload": (report_id, teacher_id)},
-           "survey_report_rerun": lambda report_id, teacher_id, reason=None: {
-               "tool": "survey.report.rerun",
-               "payload": (report_id, teacher_id, reason),
-           }}
-    )
-
-    got = tool_dispatch(
-        "survey.report.get",
-        {"target_id": "report_9", "teacher_id": "t1"},
-        role="teacher",
-        deps=deps,
-    )
-    rerun = tool_dispatch(
-        "survey.report.rerun",
-        {"target_id": "report_9", "teacher_id": "t1", "reason": "need-refresh"},
-        role="teacher",
-        deps=deps,
-        confirmed=True,
-    )
-
-    assert got["payload"] == ("report_9", "t1-resolved")
-    assert rerun["payload"] == ("report_9", "t1-resolved", "need-refresh")
-
-
-
-def test_tool_dispatch_survey_report_tools_require_report_id_or_target_id():
-    deps, _ = _deps({"survey.report.get", "survey.report.rerun"})
-
-    got = tool_dispatch("survey.report.get", {"teacher_id": "t1"}, role="teacher", deps=deps)
-    rerun = tool_dispatch("survey.report.rerun", {"teacher_id": "t1"}, role="teacher", deps=deps)
-
-    assert got["error"] == "invalid_arguments"
-    assert any("target_id" in issue for issue in got["issues"])
-    assert rerun["error"] == "invalid_arguments"
-    assert any("target_id" in issue for issue in rerun["issues"])
-
-
-def test_tool_dispatch_analysis_report_tools_cover_unified_report_plane():
-    deps, _ = _deps({"analysis.report.list", "analysis.report.get", "analysis.report.rerun", "analysis.review.list"})
+def test_assignment_progress_tools_require_owner():
+    owners = {"HW_MINE": "t_zhang", "HW_OTHER": "t_li"}
+    calls: list[str] = []
+    base, _ = _deps({"assignment.progress", "assignment.missing", "assignment.overdue", "assignment.attempt.get"})
     deps = ToolDispatchDeps(
         **{
-            **deps.__dict__,
-            'analysis_report_list': lambda teacher_id, domain=None, status=None, strategy_id=None, target_type=None: {
-                'tool': 'analysis.report.list',
-                'payload': (teacher_id, domain, status, strategy_id, target_type),
-            },
-            'analysis_report_get': lambda report_id, teacher_id, domain=None: {
-                'tool': 'analysis.report.get',
-                'payload': (report_id, teacher_id, domain),
-            },
-            'analysis_report_rerun': lambda report_id, teacher_id, domain=None, reason=None: {
-                'tool': 'analysis.report.rerun',
-                'payload': (report_id, teacher_id, domain, reason),
-            },
-            'analysis_review_list': lambda teacher_id, domain=None, status=None: {
-                'tool': 'analysis.review.list',
-                'payload': (teacher_id, domain, status),
+            **base.__dict__,
+            "assignment_owner_id": lambda assignment_id: owners.get(str(assignment_id or "").strip()),
+            "assignment_progress": lambda assignment_id: calls.append(assignment_id) or {
+                "ok": True,
+                "assignment_id": assignment_id,
+                "students": [
+                    {"student_id": "S1", "overdue": True, "submission": {"best": None}},
+                    {"student_id": "S2", "overdue": True, "submission": {"best": {"score_earned": 8}}},
+                ],
             },
         }
     )
+    mine = tool_dispatch(
+        "assignment.progress",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert mine.get("ok") is True
+    forbidden = tool_dispatch(
+        "assignment.missing",
+        {"assignment_id": "HW_OTHER"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert forbidden.get("error") == "forbidden_assignment_owner"
+    missing = tool_dispatch(
+        "assignment.progress",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        deps=deps,
+    )
+    assert missing.get("error") == "teacher_id_required"
+    overdue = tool_dispatch(
+        "assignment.overdue",
+        {"assignment_id": "HW_MINE"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )
+    assert overdue.get("count") == 1
+    assert overdue["students"][0]["student_id"] == "S1"
+    assert "HW_OTHER" not in calls
 
-    listed = tool_dispatch(
-        'analysis.report.list',
-        {'teacher_id': 't1', 'domain': 'survey', 'status': 'analysis_ready', 'strategy_id': 'survey.teacher.report', 'target_type': 'report'},
-        role='teacher',
-        deps=deps,
-    )
-    got = tool_dispatch(
-        'analysis.report.get',
-        {'teacher_id': 't1', 'domain': 'survey', 'report_id': 'report_1'},
-        role='teacher',
-        deps=deps,
-    )
-    rerun = tool_dispatch(
-        'analysis.report.rerun',
-        {'teacher_id': 't1', 'domain': 'survey', 'target_id': 'report_1', 'reason': 'refresh'},
-        role='teacher',
-        deps=deps,
-        confirmed=True,
-    )
-    review = tool_dispatch(
-        'analysis.review.list',
-        {'teacher_id': 't1', 'domain': 'survey', 'status': 'queued'},
-        role='teacher',
-        deps=deps,
-    )
 
-    assert listed['payload'] == ('t1-resolved', 'survey', 'analysis_ready', 'survey.teacher.report', 'report')
-    assert got['payload'] == ('report_1', 't1-resolved', 'survey')
-    assert rerun['payload'] == ('report_1', 't1-resolved', 'survey', 'refresh')
-    assert review['payload'] == ('t1-resolved', 'survey', 'queued')
+def test_assignment_student_tools_require_student_actor_id():
+    base, _ = _deps({"assignment.my_today", "assignment.my_result"})
+    deps = ToolDispatchDeps(
+        **{
+            **base.__dict__,
+            "assignment_my_today": lambda student_id, date=None: {
+                "ok": True,
+                "student_id": student_id,
+                "date": date,
+            },
+            "assignment_my_result": lambda assignment_id, student_id: {
+                "ok": True,
+                "assignment_id": assignment_id,
+                "student_id": student_id,
+            },
+        }
+    )
+    denied = tool_dispatch("assignment.my_today", {}, role="teacher", teacher_id="t_zhang", deps=deps)
+    assert denied.get("error") == "permission denied"
+    missing = tool_dispatch("assignment.my_today", {}, role="student", deps=deps)
+    assert missing.get("error") == "student_id_required"
+    today = tool_dispatch(
+        "assignment.my_today",
+        {},
+        role="student",
+        actor_id="S_WU",
+        deps=deps,
+    )
+    assert today == {"ok": True, "student_id": "S_WU", "date": None}
+    result = tool_dispatch(
+        "assignment.my_result",
+        {"assignment_id": "HW_1"},
+        role="student",
+        actor_id="S_WU",
+        deps=deps,
+    )
+    assert result == {"ok": True, "assignment_id": "HW_1", "student_id": "S_WU"}

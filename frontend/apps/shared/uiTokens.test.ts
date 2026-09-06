@@ -50,17 +50,36 @@ describe('ui accent, font, and color-scheme tokens', () => {
     );
   });
 
-  it('declares light color-scheme on :root and uses app-blue PWA theme_color', () => {
+  it('declares light-dark color-scheme and dark token overrides', () => {
     const teacherCss = readFrontend('apps/teacher/src/tailwind.css');
     const studentCss = readFrontend('apps/student/src/tailwind.css');
     const teacherVite = readFrontend('vite.teacher.config.ts');
     const studentVite = readFrontend('vite.student.config.ts');
 
-    expect(extractRuleBlock(teacherCss, ':root')).toContain('color-scheme: light;');
-    expect(extractRuleBlock(studentCss, ':root')).toContain('color-scheme: light;');
+    expect(extractRuleBlock(teacherCss, ':root')).toContain('color-scheme: light dark;');
+    expect(extractRuleBlock(studentCss, ':root')).toContain('color-scheme: light dark;');
+    expect(teacherCss).toContain('@media (prefers-color-scheme: dark)');
+    expect(studentCss).toContain('@media (prefers-color-scheme: dark)');
     expect(teacherVite).toContain("theme_color: '#0052CC'");
     expect(studentVite).toContain("theme_color: '#0052CC'");
+    expect(teacherVite).toContain("background_color: '#FAFBFC'");
+    expect(studentVite).toContain("background_color: '#FAFBFC'");
     expect(teacherVite).not.toContain('#2f6d6b');
     expect(studentVite).not.toContain('#2f6d6b');
+  });
+
+  it('does not mix theme colors with literal white in app TSX', () => {
+    const roots = [
+      readFrontend('apps/teacher/src/features/layout/TeacherAdminPanel.tsx'),
+      readFrontend('apps/teacher/src/features/workbench/TeacherWorkbench.tsx'),
+      readFrontend('apps/teacher/src/features/chat/ChatMessages.tsx'),
+      readFrontend('apps/student/src/features/home/StudentTodayHome.tsx'),
+      readFrontend('apps/student/src/features/home/TodayTaskCard.tsx'),
+      readFrontend('apps/teacher/src/features/workbench/tabs/MemoryTab.tsx'),
+    ];
+    for (const source of roots) {
+      expect(source).not.toMatch(/%,\s*white\)/i);
+      expect(source).not.toMatch(/text-\[#[0-9a-f]{3,8}\]/i);
+    }
   });
 });

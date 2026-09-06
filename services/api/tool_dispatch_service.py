@@ -3,64 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
+from .paths import TeacherIdentityError
 from .tool_confirm_service import maybe_confirmation_required, tool_is_mutating
-
-
-def _default_survey_report_list(_teacher_id: str, _status: Optional[str] = None) -> Dict[str, Any]:
-    return {"items": []}
-
-
-
-def _default_survey_report_get(_report_id: str, _teacher_id: str) -> Dict[str, Any]:
-    return {"error": "survey_not_available"}
-
-
-
-def _default_survey_report_rerun(
-    _report_id: str,
-    _teacher_id: str,
-    _reason: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "survey_not_available"}
-
-
-
-def _default_analysis_report_list(
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _status: Optional[str] = None,
-    _strategy_id: Optional[str] = None,
-    _target_type: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"items": []}
-
-
-
-def _default_analysis_report_get(
-    _report_id: str,
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "analysis_report_not_available"}
-
-
-
-def _default_analysis_report_rerun(
-    _report_id: str,
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _reason: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"error": "analysis_report_not_available"}
-
-
-
-def _default_analysis_review_list(
-    _teacher_id: str,
-    _domain: Optional[str] = None,
-    _status: Optional[str] = None,
-) -> Dict[str, Any]:
-    return {"items": []}
 
 
 def _default_load_skill_runtime(_role: Optional[str], _skill_id: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
@@ -71,20 +15,30 @@ def _default_allowed_tools(_role: Optional[str]) -> Set[str]:
     return set()
 
 
+def _default_assignment_progress(_assignment_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_progress_not_available"}
+
+
+def _default_assignment_mutate(_assignment_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_mutate_not_available"}
+
+
+def _default_assignment_my_today(_student_id: str, _date: Optional[str] = None) -> Dict[str, Any]:
+    return {"error": "assignment_today_not_available"}
+
+
+def _default_assignment_my_result(_assignment_id: str, _student_id: str) -> Dict[str, Any]:
+    return {"error": "assignment_result_not_available"}
+
+
+def _default_assignment_owner_id(_assignment_id: str) -> Optional[str]:
+    return None
+
+
 @dataclass(frozen=True)
 class ToolDispatchDeps:
     tool_registry: Any
-    list_exams: Callable[[], Dict[str, Any]]
-    exam_get: Callable[[str], Dict[str, Any]]
-    exam_analysis_get: Callable[[str], Dict[str, Any]]
-    exam_analysis_charts_generate: Callable[[Dict[str, Any]], Dict[str, Any]]
-    exam_students_list: Callable[[str, int], Dict[str, Any]]
-    exam_student_detail: Callable[..., Dict[str, Any]]
-    exam_question_detail: Callable[..., Dict[str, Any]]
-    exam_range_top_students: Callable[..., Dict[str, Any]]
-    exam_range_summary_batch: Callable[..., Dict[str, Any]]
-    exam_question_batch_detail: Callable[..., Dict[str, Any]]
-    list_assignments: Callable[[], Dict[str, Any]]
+    list_assignments: Callable[..., Dict[str, Any]]
     list_lessons: Callable[[], Dict[str, Any]]
     lesson_capture: Callable[[Dict[str, Any]], Dict[str, Any]]
     student_search: Callable[[str, int], Dict[str, Any]]
@@ -109,15 +63,16 @@ class ToolDispatchDeps:
     teacher_memory_search: Callable[[str, str, int], Dict[str, Any]]
     teacher_memory_propose: Callable[..., Dict[str, Any]]
     teacher_memory_apply: Callable[..., Dict[str, Any]]
-    survey_report_list: Callable[[str, Optional[str]], Dict[str, Any]] = _default_survey_report_list
-    survey_report_get: Callable[[str, str], Dict[str, Any]] = _default_survey_report_get
-    survey_report_rerun: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_survey_report_rerun
-    analysis_report_list: Callable[[str, Optional[str], Optional[str], Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_report_list
-    analysis_report_get: Callable[[str, str, Optional[str]], Dict[str, Any]] = _default_analysis_report_get
-    analysis_report_rerun: Callable[[str, str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_report_rerun
-    analysis_review_list: Callable[[str, Optional[str], Optional[str]], Dict[str, Any]] = _default_analysis_review_list
     load_skill_runtime: Callable[[Optional[str], Optional[str]], Tuple[Optional[Any], Optional[str]]] = _default_load_skill_runtime
     allowed_tools: Callable[[Optional[str]], Set[str]] = _default_allowed_tools
+    assignment_progress: Callable[[str], Dict[str, Any]] = _default_assignment_progress
+    assignment_publish: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_archive: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_unarchive: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_recompute_roster: Callable[[str], Dict[str, Any]] = _default_assignment_mutate
+    assignment_my_today: Callable[[str, Optional[str]], Dict[str, Any]] = _default_assignment_my_today
+    assignment_my_result: Callable[[str, str], Dict[str, Any]] = _default_assignment_my_result
+    assignment_owner_id: Callable[[str], Optional[str]] = _default_assignment_owner_id
 
 
 
@@ -125,14 +80,6 @@ def _require_teacher(role: Optional[str], detail: str) -> Optional[Dict[str, Any
     if role == "teacher":
         return None
     return {"error": "permission denied", "detail": detail}
-
-
-def _resolve_survey_report_id(args: Dict[str, Any]) -> str:
-    return str(args.get("report_id") or args.get("target_id") or "").strip()
-
-
-def _resolve_analysis_report_id(args: Dict[str, Any]) -> str:
-    return str(args.get("report_id") or args.get("target_id") or "").strip()
 
 
 def _resolve_skill_allowed_tools(
@@ -208,6 +155,224 @@ def _resolve_tool_teacher_id(
     return deps.resolve_teacher_id(raw_teacher_id)
 
 
+def _assignment_list_for_actor(
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    role_norm = str(role or "").strip().lower()
+    if role_norm in {"admin", "service"}:
+        return deps.list_assignments(owner_teacher_id=None)
+    owner = str(teacher_id or "").strip()
+    if not owner:
+        return {"error": "teacher_id_required"}
+    return deps.list_assignments(owner_teacher_id=owner)
+
+
+def _require_student_actor(*, role: Optional[str], actor_id: Optional[str]) -> str | Dict[str, Any]:
+    if str(role or "").strip().lower() != "student":
+        return {"error": "permission denied", "detail": "student tools require student role"}
+    student_id = str(actor_id or "").strip()
+    if not student_id:
+        return {"error": "student_id_required"}
+    return student_id
+
+
+def _require_assignment_owner(
+    assignment_id: str,
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+    allow_missing: bool = False,
+) -> Optional[Dict[str, Any]]:
+    role_norm = str(role or "").strip().lower()
+    if role_norm in {"admin", "service"}:
+        return None
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        if allow_missing:
+            return None
+        return {"error": "assignment_id is required"}
+    owner = str(teacher_id or "").strip()
+    if not owner:
+        return {"error": "teacher_id_required"}
+    meta_owner = deps.assignment_owner_id(aid)
+    if meta_owner is None:
+        if allow_missing:
+            return None
+        return {"error": "assignment_not_found", "assignment_id": aid}
+    if str(meta_owner).strip() != owner:
+        return {"error": "forbidden_assignment_owner"}
+    return None
+
+
+def _owned_assignment_generate(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+        allow_missing=True,
+    )
+    if denied:
+        return denied
+    return deps.assignment_generate(args)
+
+
+def _owned_assignment_render(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+    )
+    if denied:
+        return denied
+    return deps.assignment_render(args)
+
+
+def _owned_assignment_requirements_save(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    denied = _require_assignment_owner(
+        str(args.get("assignment_id") or ""),
+        deps=deps,
+        role=role,
+        teacher_id=teacher_id,
+        allow_missing=True,
+    )
+    if denied:
+        return denied
+    return deps.save_assignment_requirements(
+        str(args.get("assignment_id", "")),
+        args.get("requirements") or {},
+        deps.parse_date_str(args.get("date")),
+        created_by="teacher",
+    )
+
+
+def _owned_assignment_progress(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    assignment_id = str(args.get("assignment_id") or "")
+    denied = _require_assignment_owner(
+        assignment_id, deps=deps, role=role, teacher_id=teacher_id
+    )
+    if denied:
+        return denied
+    return deps.assignment_progress(assignment_id)
+
+
+def _filter_progress_students(
+    progress: Dict[str, Any], *, predicate: Callable[[Dict[str, Any]], bool]
+) -> Dict[str, Any]:
+    if not isinstance(progress, dict) or progress.get("error"):
+        return progress
+    students = [item for item in (progress.get("students") or []) if isinstance(item, dict) and predicate(item)]
+    out = dict(progress)
+    out["students"] = students
+    out["count"] = len(students)
+    return out
+
+
+def _is_unsubmitted(student: Dict[str, Any]) -> bool:
+    raw = student.get("submission")
+    submission = raw if isinstance(raw, dict) else {}
+    return not bool(submission.get("best"))
+
+
+def _assignment_missing(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    return _filter_progress_students(
+        _owned_assignment_progress(args, deps=deps, role=role, teacher_id=teacher_id),
+        predicate=_is_unsubmitted,
+    )
+
+
+def _assignment_overdue(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    return _filter_progress_students(
+        _owned_assignment_progress(args, deps=deps, role=role, teacher_id=teacher_id),
+        predicate=lambda student: bool(student.get("overdue")) and _is_unsubmitted(student),
+    )
+
+
+def _assignment_attempt_get(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    assignment_id = str(args.get("assignment_id") or "")
+    student_id = str(args.get("student_id") or "")
+    progress = _owned_assignment_progress(args, deps=deps, role=role, teacher_id=teacher_id)
+    if not isinstance(progress, dict) or progress.get("error"):
+        return progress
+    for student in progress.get("students") or []:
+        if isinstance(student, dict) and str(student.get("student_id") or "") == student_id:
+            return {"ok": True, "assignment_id": assignment_id, "student": student}
+    return {"error": "attempt_not_found", "assignment_id": assignment_id, "student_id": student_id}
+
+
+def _assignment_my_today(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    actor_id: Optional[str],
+) -> Dict[str, Any]:
+    student_id = _require_student_actor(role=role, actor_id=actor_id)
+    if isinstance(student_id, dict):
+        return student_id
+    return deps.assignment_my_today(student_id, str(args.get("date") or "").strip() or None)
+
+
+def _assignment_my_result(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    actor_id: Optional[str],
+) -> Dict[str, Any]:
+    student_id = _require_student_actor(role=role, actor_id=actor_id)
+    if isinstance(student_id, dict):
+        return student_id
+    return deps.assignment_my_result(str(args.get("assignment_id") or ""), student_id)
+
+
 def _chart_exec_handler(
     args: Dict[str, Any],
     *,
@@ -280,113 +445,66 @@ def _build_handlers(
     role: Optional[str],
     deps: ToolDispatchDeps,
     teacher_id: Optional[str],
+    actor_id: Optional[str] = None,
 ) -> Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]]:
     return {
-        "exam.list": lambda _args: deps.list_exams(),
-        "exam.get": lambda args: deps.exam_get(args.get("exam_id", "")),
-        "exam.analysis.get": lambda args: deps.exam_analysis_get(args.get("exam_id", "")),
-        "exam.analysis.charts.generate": _teacher_only_handler(
+        "assignment.list": lambda _args: _assignment_list_for_actor(
+            deps=deps, role=role, teacher_id=teacher_id
+        ),
+        "assignment.progress": _teacher_only_handler(
             role=role,
-            detail="exam.analysis.charts.generate requires teacher role",
-            fn=lambda args: deps.exam_analysis_charts_generate(args),
-        ),
-        "exam.students.list": lambda args: deps.exam_students_list(
-            args.get("exam_id", ""),
-            int(args.get("limit", 50) or 50),
-        ),
-        "exam.student.get": lambda args: deps.exam_student_detail(
-            args.get("exam_id", ""),
-            student_id=args.get("student_id"),
-            student_name=args.get("student_name"),
-            class_name=args.get("class_name"),
-        ),
-        "exam.question.get": lambda args: deps.exam_question_detail(
-            args.get("exam_id", ""),
-            question_id=args.get("question_id"),
-            question_no=args.get("question_no"),
-            top_n=args.get("top_n", 5),
-        ),
-        "exam.range.top_students": lambda args: deps.exam_range_top_students(
-            args.get("exam_id", ""),
-            start_question_no=args.get("start_question_no"),
-            end_question_no=args.get("end_question_no"),
-            top_n=args.get("top_n", 10),
-        ),
-        "exam.range.summary.batch": lambda args: deps.exam_range_summary_batch(
-            args.get("exam_id", ""),
-            ranges=args.get("ranges"),
-            top_n=args.get("top_n", 5),
-        ),
-        "exam.question.batch.get": lambda args: deps.exam_question_batch_detail(
-            args.get("exam_id", ""),
-            question_nos=args.get("question_nos"),
-            top_n=args.get("top_n", 5),
-        ),
-        "analysis.report.list": _teacher_only_handler(
-            role=role,
-            detail="analysis.report.list requires teacher role",
-            fn=lambda args: deps.analysis_report_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("status") or "").strip() or None,
-                str(args.get("strategy_id") or "").strip() or None,
-                str(args.get("target_type") or "").strip() or None,
+            detail="assignment.progress requires teacher role",
+            fn=lambda args: _owned_assignment_progress(
+                args, deps=deps, role=role, teacher_id=teacher_id
             ),
         ),
-        "analysis.report.get": _teacher_only_handler(
+        "assignment.missing": _teacher_only_handler(
             role=role,
-            detail="analysis.report.get requires teacher role",
-            fn=lambda args: deps.analysis_report_get(
-                _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
+            detail="assignment.missing requires teacher role",
+            fn=lambda args: _assignment_missing(
+                args, deps=deps, role=role, teacher_id=teacher_id
             ),
         ),
-        "analysis.report.rerun": _teacher_only_handler(
+        "assignment.overdue": _teacher_only_handler(
             role=role,
-            detail="analysis.report.rerun requires teacher role",
-            fn=lambda args: deps.analysis_report_rerun(
-                _resolve_analysis_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("reason") or "").strip() or None,
+            detail="assignment.overdue requires teacher role",
+            fn=lambda args: _assignment_overdue(
+                args, deps=deps, role=role, teacher_id=teacher_id
             ),
         ),
-        "analysis.review.list": _teacher_only_handler(
+        "assignment.attempt.get": _teacher_only_handler(
             role=role,
-            detail="analysis.review.list requires teacher role",
-            fn=lambda args: deps.analysis_review_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("domain") or "").strip() or None,
-                str(args.get("status") or "").strip() or None,
+            detail="assignment.attempt.get requires teacher role",
+            fn=lambda args: _assignment_attempt_get(
+                args, deps=deps, role=role, teacher_id=teacher_id
             ),
         ),
-        "survey.report.list": _teacher_only_handler(
+        "assignment.publish": _teacher_only_handler(
             role=role,
-            detail="survey.report.list requires teacher role",
-            fn=lambda args: deps.survey_report_list(
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("status") or "").strip() or None,
-            ),
+            detail="assignment.publish requires teacher role",
+            fn=lambda args: deps.assignment_publish(str(args.get("assignment_id") or "")),
         ),
-        "survey.report.get": _teacher_only_handler(
+        "assignment.archive": _teacher_only_handler(
             role=role,
-            detail="survey.report.get requires teacher role",
-            fn=lambda args: deps.survey_report_get(
-                _resolve_survey_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-            ),
+            detail="assignment.archive requires teacher role",
+            fn=lambda args: deps.assignment_archive(str(args.get("assignment_id") or "")),
         ),
-        "survey.report.rerun": _teacher_only_handler(
+        "assignment.unarchive": _teacher_only_handler(
             role=role,
-            detail="survey.report.rerun requires teacher role",
-            fn=lambda args: deps.survey_report_rerun(
-                _resolve_survey_report_id(args),
-                _resolve_tool_teacher_id(args, deps=deps, teacher_id=teacher_id),
-                str(args.get("reason") or "").strip() or None,
-            ),
+            detail="assignment.unarchive requires teacher role",
+            fn=lambda args: deps.assignment_unarchive(str(args.get("assignment_id") or "")),
         ),
-        "assignment.list": lambda _args: deps.list_assignments(),
+        "assignment.recompute_roster": _teacher_only_handler(
+            role=role,
+            detail="assignment.recompute_roster requires teacher role",
+            fn=lambda args: deps.assignment_recompute_roster(str(args.get("assignment_id") or "")),
+        ),
+        "assignment.my_today": lambda args: _assignment_my_today(
+            args, deps=deps, role=role, actor_id=actor_id
+        ),
+        "assignment.my_result": lambda args: _assignment_my_result(
+            args, deps=deps, role=role, actor_id=actor_id
+        ),
         "lesson.list": lambda _args: deps.list_lessons(),
         "lesson.capture": lambda args: deps.lesson_capture(args),
         "student.search": lambda args: deps.student_search(
@@ -400,13 +518,26 @@ def _build_handlers(
             detail="student.import requires teacher role",
             fn=lambda args: deps.student_import(args),
         ),
-        "assignment.generate": lambda args: deps.assignment_generate(args),
-        "assignment.render": lambda args: deps.assignment_render(args),
-        "assignment.requirements.save": lambda args: deps.save_assignment_requirements(
-            str(args.get("assignment_id", "")),
-            args.get("requirements") or {},
-            deps.parse_date_str(args.get("date")),
-            created_by="teacher",
+        "assignment.generate": _teacher_only_handler(
+            role=role,
+            detail="assignment.generate requires teacher role",
+            fn=lambda args: _owned_assignment_generate(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
+        ),
+        "assignment.render": _teacher_only_handler(
+            role=role,
+            detail="assignment.render requires teacher role",
+            fn=lambda args: _owned_assignment_render(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
+        ),
+        "assignment.requirements.save": _teacher_only_handler(
+            role=role,
+            detail="assignment.requirements.save requires teacher role",
+            fn=lambda args: _owned_assignment_requirements_save(
+                args, deps=deps, role=role, teacher_id=teacher_id
+            ),
         ),
         "core_example.search": lambda args: deps.core_example_search(args),
         "core_example.register": lambda args: deps.core_example_register(args),
@@ -421,11 +552,21 @@ def _build_handlers(
             detail="chart.exec requires teacher role",
             fn=lambda args: _chart_exec_handler(args, deps=deps, role=role, teacher_id=teacher_id),
         ),
-        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(args, deps=deps),
-        "teacher.memory.get": lambda args: _teacher_memory_get(args, deps),
-        "teacher.memory.search": lambda args: _teacher_memory_search_handler(args, deps=deps),
-        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(args, deps=deps),
-        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(args, deps=deps),
+        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.get": lambda args: _teacher_memory_get(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps
+        ),
+        "teacher.memory.search": lambda args: _teacher_memory_search_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
+        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(
+            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        ),
     }
 
 
@@ -483,10 +624,6 @@ def tool_dispatch(
         return {"error": f"unknown tool: {name}"}
 
     issues = deps.tool_registry.validate_arguments(name, args)
-    if name in {"survey.report.get", "survey.report.rerun"} and not _resolve_survey_report_id(args):
-        issues = [*issues, "arguments.report_id: required (or provide target_id)"]
-    if name in {"analysis.report.get", "analysis.report.rerun"} and not _resolve_analysis_report_id(args):
-        issues = [*issues, "arguments.report_id: required (or provide target_id)"]
     if issues:
         return {"error": "invalid_arguments", "tool": name, "issues": issues[:20]}
 
@@ -499,7 +636,7 @@ def tool_dispatch(
             "skill_id": str(skill_id or ""),
         }
 
-    handlers = _build_handlers(role=role, deps=deps, teacher_id=teacher_id)
+    handlers = _build_handlers(role=role, deps=deps, teacher_id=teacher_id, actor_id=actor_id)
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"unknown tool: {name}"}
@@ -518,4 +655,7 @@ def tool_dispatch(
     )
     if mutating_denied is not None:
         return mutating_denied
-    return handler(args)
+    try:
+        return handler(args)
+    except TeacherIdentityError as exc:
+        return {"error": str(exc.detail or "teacher_id_required"), "status_code": int(exc.status_code)}

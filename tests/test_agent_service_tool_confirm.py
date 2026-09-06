@@ -15,9 +15,6 @@ def _deps(tool_dispatch, call_llm):
         max_tool_rounds=3,
         max_tool_calls=5,
         extract_min_chars_requirement=lambda text: None,
-        extract_exam_id=lambda text: None,
-        is_exam_analysis_request=lambda text: False,
-        build_exam_longform_context=lambda exam_id: {},
         generate_longform_reply=lambda *args, **kwargs: "",
         call_llm=call_llm,
         tool_dispatch=tool_dispatch,
@@ -28,7 +25,7 @@ def _deps(tool_dispatch, call_llm):
 def test_run_agent_runtime_pauses_without_appending_sentinel() -> None:
     dispatches: list[str] = []
 
-    def fake_dispatch(name, args, role, skill_id=None, teacher_id=None):
+    def fake_dispatch(name, args, role, skill_id=None, teacher_id=None, **_kwargs):
         dispatches.append(name)
         return {
             "error": "confirmation_required",

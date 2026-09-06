@@ -94,6 +94,34 @@ export type AssignmentDetail = {
   delivery?: { mode?: string; files?: Array<{ name: string; url: string }> }
 }
 
+export type TodayAssignmentProgress = {
+  submitted: boolean
+  overdue: boolean
+  official_score: number | null
+  process_archive_status: string
+}
+
+export type TodayAssignmentItem = {
+  assignment_id: string
+  teacher_id: string
+  subject_id: string
+  title: string
+  due_at?: string | null
+  progress: TodayAssignmentProgress
+}
+
+export type StudentAssignmentHistoryItem = {
+  assignment_id: string
+  teacher_id: string
+  subject_id: string
+  title: string
+  due_at?: string | null
+  visibility_status: string
+  submitted: boolean
+  official_score: number | null
+  archived_at?: string | null
+}
+
 export type VerifiedStudent = {
   student_id: string
   student_name: string
@@ -103,6 +131,7 @@ export type VerifiedStudent = {
 export type StudentTodayHomeStatus =
   | 'pending_generation'
   | 'generating'
+  | 'empty'
   | 'ready'
   | 'in_progress'
   | 'submitted'
@@ -117,6 +146,16 @@ export type StudentTodayHomeStep = {
   tone: 'neutral' | 'active' | 'success'
 }
 
+export type StudentTodayHomeItem = {
+  assignment_id: string
+  teacher_id: string
+  subject_id: string
+  title: string
+  dueLabel: string
+  overdue: boolean
+  submitted: boolean
+}
+
 export type StudentTodayHomeViewModel = {
   status: StudentTodayHomeStatus
   title: string
@@ -128,6 +167,7 @@ export type StudentTodayHomeViewModel = {
   dueLabel: string
   materials: StudentTodayHomeMaterial[]
   progressSteps: StudentTodayHomeStep[]
+  items: StudentTodayHomeItem[]
 }
 
 export type StudentVerifyCandidate = {

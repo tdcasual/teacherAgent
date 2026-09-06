@@ -15,11 +15,11 @@ class SkillAutoRouterTest(unittest.TestCase):
         result = resolve_effective_skill(
             app_root=APP_ROOT,
             role_hint="teacher",
-            requested_skill_id="physics-core-examples",
-            last_user_text="登记核心例题 CE001",
+            requested_skill_id="homework-generator",
+            last_user_text="请帮我生成作业",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
+        self.assertEqual(result.get("effective_skill_id"), "homework-generator")
         self.assertEqual(result.get("reason"), "explicit")
         self.assertEqual(result.get("resolution_mode"), "explicit")
         self.assertFalse(bool(result.get("auto_selected")))
@@ -33,7 +33,7 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-homework-generator")
+        self.assertEqual(result.get("effective_skill_id"), "homework-generator")
         self.assertIn("auto_rule", str(result.get("reason") or ""))
         self.assertEqual(result.get("resolution_mode"), "auto")
         self.assertTrue(bool(result.get("auto_selected")))
@@ -46,7 +46,7 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="先读取当前模型路由配置，再回滚到版本 3",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+        self.assertEqual(result.get("effective_skill_id"), "teacher-assignment-ops")
         self.assertIn("default", str(result.get("reason") or ""))
 
     def test_teacher_auto_routes_provider_registry_requests(self):
@@ -57,7 +57,7 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="帮我配置一个私有 provider，填 base url 和 api key 走中转",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+        self.assertEqual(result.get("effective_skill_id"), "teacher-assignment-ops")
         self.assertIn("default", str(result.get("reason") or ""))
 
     def test_ambiguous_low_margin_falls_back_to_default(self):
@@ -69,17 +69,30 @@ class SkillAutoRouterTest(unittest.TestCase):
             detect_assignment_intent=detect_assignment_intent,
         )
         self.assertTrue(str(result.get("reason") or "").startswith("role_default") or "default" in str(result.get("reason") or ""))
-        self.assertEqual(result.get("effective_skill_id"), "physics-teacher-ops")
+        self.assertEqual(result.get("effective_skill_id"), "teacher-assignment-ops")
+
+    def test_legacy_physics_skill_ids_are_aliased(self):
+        result = resolve_effective_skill(
+            app_root=APP_ROOT,
+            role_hint="teacher",
+            requested_skill_id="physics-homework-generator",
+            last_user_text="随便说一句",
+            detect_assignment_intent=detect_assignment_intent,
+        )
+        self.assertEqual(result.get("effective_skill_id"), "homework-generator")
+        self.assertEqual(result.get("reason"), "skill_id_aliased")
+        self.assertEqual(result.get("requested_skill_id"), "physics-homework-generator")
+        self.assertTrue(bool(result.get("requested_rewritten")))
 
     def test_student_invalid_requested_skill_falls_back_to_student_default(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,
             role_hint="student",
-            requested_skill_id="physics-teacher-ops",
+            requested_skill_id="teacher-assignment-ops",
             last_user_text="开始今天作业",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-student-coach")
+        self.assertEqual(result.get("effective_skill_id"), "student-coach")
 
 
     def test_manifest_regex_keywords_drive_config_score(self):
@@ -118,7 +131,7 @@ class SkillAutoRouterTest(unittest.TestCase):
         self.assertEqual(confidence_floor, 0.28)
 
 
-    def test_teacher_auto_routes_ce_identifier_to_core_examples(self):
+    def test_teacher_auto_does_not_route_ce_identifier_to_physics(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,
             role_hint="teacher",
@@ -126,13 +139,10 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="登记核心例题 CE042，并补两道变式题。",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
-        self.assertEqual(result.get("reason"), "auto_rule")
-        hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
-        self.assertIn(r"cfg-regex:\bCE\d+\b", hits)
-        self.assertNotIn("ce_id", hits)
+        self.assertNotEqual(result.get("effective_skill_id"), "physics-core-examples")
+        self.assertEqual(result.get("effective_skill_id"), "teacher-assignment-ops")
 
-    def test_teacher_auto_routes_single_student_profile_to_focus(self):
+    def test_teacher_auto_does_not_route_student_profile_to_physics_focus(self):
         result = resolve_effective_skill(
             app_root=APP_ROOT,
             role_hint="teacher",
@@ -140,27 +150,27 @@ class SkillAutoRouterTest(unittest.TestCase):
             last_user_text="帮我看某个学生的画像和最近作业表现。",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-student-focus")
-        self.assertEqual(result.get("reason"), "auto_rule")
-        hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
-        self.assertIn(r"cfg-regex:(某个学生|单个学生|该学生|同学.*(画像|诊断|表现))", hits)
-        self.assertNotIn("single_student_regex", hits)
+        self.assertNotEqual(result.get("effective_skill_id"), "physics-student-focus")
+        self.assertIn(
+            result.get("effective_skill_id"),
+            {"teacher-assignment-ops", "student-coach"},
+        )
 
     def test_config_and_rule_hit_total_equals_config(self):
-        text = "登记核心例题 ce042，并补两道变式题。"
-        spec = load_skills(APP_ROOT / "skills").skills["physics-core-examples"]
+        text = "请帮我生成作业，每个知识点 5 题"
+        spec = load_skills(APP_ROOT / "skills").skills["homework-generator"]
         cfg_score, _, *_ = _score_from_skill_config(
             spec,
             text,
-            assignment_intent=False,
-            assignment_generation=False,
+            assignment_intent=True,
+            assignment_generation=True,
         )
         rule_score, _ = score_role_skill(
             "teacher",
-            "physics-core-examples",
+            "homework-generator",
             text,
-            assignment_intent=False,
-            assignment_generation=False,
+            assignment_intent=True,
+            assignment_generation=True,
         )
         self.assertGreater(cfg_score, 0)
         self.assertGreater(rule_score, 0)
@@ -169,30 +179,28 @@ class SkillAutoRouterTest(unittest.TestCase):
             app_root=APP_ROOT,
             role_hint="teacher",
             requested_skill_id="",
-            last_user_text="登记核心例题 CE042，并补两道变式题。",
+            last_user_text="请帮我生成作业，作业ID A2403_2026-02-04，每个知识点 5 题",
             detect_assignment_intent=detect_assignment_intent,
         )
-        self.assertEqual(result.get("effective_skill_id"), "physics-core-examples")
-        self.assertEqual(result.get("best_score"), cfg_score)
-        self.assertNotEqual(result.get("best_score"), cfg_score + rule_score)
+        self.assertEqual(result.get("effective_skill_id"), "homework-generator")
         hits = ((result.get("candidates") or [{}])[0]).get("hits") or []
         self.assertTrue(hits)
         self.assertTrue(all(str(hit).startswith("cfg") for hit in hits))
 
     def test_rule_score_used_when_config_routing_absent(self):
         spec = parse_skill_spec(
-            skill_id="physics-core-examples",
+            skill_id="homework-generator",
             source_path="(in-memory)",
             raw={
-                "id": "physics-core-examples",
+                "id": "homework-generator",
                 "schema_version": 2,
-                "title": "核心例题库",
+                "title": "作业生成",
                 "allowed_roles": ["teacher"],
                 "agent": {"prompt_modules": [], "tools": {"allow": []}, "budgets": {}, "model_policy": {}},
                 "ui": {"prompts": [], "examples": []},
             },
         )
-        text = "登记核心例题"
+        text = "请帮我生成作业"
         cfg_score, _, *_ = _score_from_skill_config(
             spec,
             text,
@@ -201,7 +209,7 @@ class SkillAutoRouterTest(unittest.TestCase):
         )
         rule_score, rule_hits = score_role_skill(
             "teacher",
-            "physics-core-examples",
+            "homework-generator",
             text,
             assignment_intent=False,
             assignment_generation=False,
@@ -210,8 +218,8 @@ class SkillAutoRouterTest(unittest.TestCase):
         self.assertGreater(rule_score, 0)
 
         rows = _build_score_rows(
-            available_ids=["physics-core-examples"],
-            skills={"physics-core-examples": spec},
+            available_ids=["homework-generator"],
+            skills={"homework-generator": spec},
             role="teacher",
             text=text,
             assignment_intent=False,

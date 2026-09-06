@@ -5,8 +5,8 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TEACHER_SKILL = ROOT / "skills/physics-teacher-ops/SKILL.md"
-STUDENT_SKILL = ROOT / "skills/physics-student-coach/SKILL.md"
+TEACHER_SKILL = ROOT / "skills/teacher-assignment-ops/SKILL.md"
+STUDENT_SKILL = ROOT / "skills/student-coach/SKILL.md"
 
 
 def read_text(path: pathlib.Path) -> str:

@@ -25,6 +25,14 @@ from ..chat_attachment_service import (
     upload_chat_attachments,
 )
 from ..chat_event_stream_service import encode_sse_event, load_chat_events_incremental
+from ..paths import TeacherIdentityError, require_teacher_id
+
+
+def _teacher_fs_id(teacher_scope: str) -> str:
+    try:
+        return require_teacher_id(teacher_scope)
+    except TeacherIdentityError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 def _bind_or_raise(req: ChatRequest | ChatStartRequest) -> ChatRequest | ChatStartRequest:
@@ -286,7 +294,7 @@ def register_chat_attachment_routes(router: APIRouter, core: Any) -> None:
             student_id=student_id,
         )
         if role_norm == "teacher":
-            teacher_scope = core.resolve_teacher_id(teacher_scope)
+            teacher_scope = _teacher_fs_id(teacher_scope)
         try:
             return await upload_chat_attachments(
                 role=role_norm,
@@ -316,7 +324,7 @@ def register_chat_attachment_routes(router: APIRouter, core: Any) -> None:
             student_id=student_id,
         )
         if role_norm == "teacher":
-            teacher_scope = core.resolve_teacher_id(teacher_scope)
+            teacher_scope = _teacher_fs_id(teacher_scope)
         try:
             return get_chat_attachment_status(
                 role=role_norm,
@@ -343,7 +351,7 @@ def register_chat_attachment_routes(router: APIRouter, core: Any) -> None:
             student_id=student_id,
         )
         if role_norm == "teacher":
-            teacher_scope = core.resolve_teacher_id(teacher_scope)
+            teacher_scope = _teacher_fs_id(teacher_scope)
         try:
             return delete_chat_attachment(
                 role=role_norm,

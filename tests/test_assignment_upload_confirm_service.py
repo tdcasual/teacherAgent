@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -8,6 +9,7 @@ from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmError,
     confirm_assignment_upload,
 )
+from services.api.auth.identity_graph_service import ExpectedStudentsError
 
 
 class AssignmentUploadConfirmServiceTest(unittest.TestCase):
@@ -21,16 +23,21 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             now_iso=lambda: "2026-02-08T12:00:00",
             discussion_complete_marker="[[discussion_complete]]",
             write_upload_job=write_upload_job,
-            merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
+            merge_requirements=lambda base, override, overwrite=True: {
+                **(base or {}),
+                **(override or {}),
+            },
             compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
             write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
-            parse_date_str=lambda v: str(v or ""),
+            optional_assignment_date=lambda v: str(v).strip() if str(v or "").strip() else None,
             save_assignment_requirements=lambda *_args, **_kwargs: None,
             parse_ids_value=lambda value: value if isinstance(value, list) else [],
             resolve_scope=lambda scope, _student_ids, _class_name: str(scope or ""),
             normalize_due_at=lambda value: str(value or ""),
-            compute_expected_students=lambda _scope, _class_name, _student_ids: [],
-            atomic_write_json=lambda path, data: path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8"),
+            compute_expected_students=lambda *_args, **_kwargs: [],
+            atomic_write_json=lambda path, data: path.write_text(
+                json.dumps(data, ensure_ascii=False), encoding="utf-8"
+            ),
             copy2=lambda src, dst: dst.write_bytes(src.read_bytes()),
         )
 
@@ -60,8 +67,15 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             writes = []
             job_dir = root / "uploads" / "assignment_jobs" / "job-1"
             job_dir.mkdir(parents=True, exist_ok=True)
-            parsed = {"questions": [{"stem": "x"}], "requirements": {}, "missing": ["subject"], "warnings": []}
-            (job_dir / "parsed.json").write_text(json.dumps(parsed, ensure_ascii=False), encoding="utf-8")
+            parsed = {
+                "questions": [{"stem": "x"}],
+                "requirements": {},
+                "missing": ["subject"],
+                "warnings": [],
+            }
+            (job_dir / "parsed.json").write_text(
+                json.dumps(parsed, ensure_ascii=False), encoding="utf-8"
+            )
             deps = self._deps(root, writes)
             with self.assertRaises(AssignmentUploadConfirmError) as ctx:
                 confirm_assignment_upload(
@@ -106,6 +120,8 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                     "class_name": "高二2403班",
                     "student_ids": [],
                     "date": "2026-02-08",
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
                 },
                 job_dir,
                 requirements_override=None,
@@ -117,6 +133,16 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             meta_path = root / "data" / "assignments" / "A1" / "meta.json"
             self.assertTrue(meta_path.exists())
             self.assertEqual(writes[-1][1].get("status"), "confirmed")
+            from services.api.assignment.store import connect, get_assignment
+
+            conn = connect(root / "data")
+            try:
+                row = get_assignment(conn, "A1")
+            finally:
+                conn.close()
+            self.assertIsNotNone(row)
+            self.assertEqual(row["visibility_status"], "published")
+            self.assertEqual(row["teacher_id"], "t_zhang")
 
     def test_rejects_invalid_assignment_id_path(self):
         with TemporaryDirectory() as td:
@@ -125,14 +151,27 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             job_dir = root / "uploads" / "assignment_jobs" / "job-1"
             job_dir.mkdir(parents=True, exist_ok=True)
             (job_dir / "parsed.json").write_text(
-                json.dumps({"questions": [{"stem": "x"}], "requirements": {"subject": "物理"}, "missing": [], "warnings": []}, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             deps = self._deps(root, writes)
             with self.assertRaises(AssignmentUploadConfirmError) as ctx:
                 confirm_assignment_upload(
                     "job-1",
-                    {"assignment_id": "../escape", "status": "done"},
+                    {
+                        "assignment_id": "../escape",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                    },
                     job_dir,
                     requirements_override=None,
                     strict_requirements=True,
@@ -141,6 +180,151 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual(ctx.exception.detail, "invalid assignment_id")
             self.assertEqual(writes[-1][1].get("status"), "failed")
+
+    def test_confirm_maps_roster_required(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            def _raise_roster(*_args, **_kwargs):
+                raise ExpectedStudentsError("roster_required")
+
+            deps = replace(self._deps(root, writes), compute_expected_students=_raise_roster)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "HW-1",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "scope": "class",
+                        "class_name": "高二2403班",
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "roster_required")
+            self.assertEqual(writes[-1][1].get("status"), "failed")
+
+    def test_json_write_failure_rolls_back_sql_and_does_not_unlink(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+
+            def _write_then_fail(path, data):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+                raise OSError("fsync failed")
+
+            deps = replace(self._deps(root, writes), atomic_write_json=_write_then_fail)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "A1",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "scope": "public",
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 500)
+            meta_path = root / "data" / "assignments" / "A1" / "meta.json"
+            self.assertTrue(meta_path.exists())
+            from services.api.assignment.store import connect, get_assignment
+
+            conn = connect(root / "data")
+            try:
+                self.assertIsNone(get_assignment(conn, "A1"))
+            finally:
+                conn.close()
+
+    def test_existing_sql_and_json_still_conflict(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes)
+            confirm_assignment_upload(
+                "job-1",
+                {
+                    "assignment_id": "A1",
+                    "status": "done",
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
+                    "scope": "public",
+                },
+                job_dir,
+                requirements_override=None,
+                strict_requirements=True,
+                deps=deps,
+            )
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "A1",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "scope": "public",
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 409)
+            self.assertEqual(ctx.exception.detail, "assignment already exists")
 
 
 if __name__ == "__main__":

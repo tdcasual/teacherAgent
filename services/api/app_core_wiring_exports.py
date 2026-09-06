@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .survey_orchestrator_service import process_survey_job
 from .wiring.assignment_wiring import (
     assignment_catalog_deps,
     assignment_generate_deps,
@@ -35,19 +34,6 @@ from .wiring.chat_wiring import (
     compute_chat_reply_deps,
     session_history_deps,
 )
-from .wiring.exam_wiring import (
-    exam_analysis_charts_deps,
-    exam_catalog_deps,
-    exam_detail_deps,
-    exam_longform_deps,
-    exam_overview_deps,
-    exam_range_deps,
-    exam_upload_confirm_deps,
-    exam_upload_handlers_deps,
-    exam_upload_ops_deps,
-    exam_upload_parse_deps,
-    exam_upload_start_deps,
-)
 from .wiring.misc_wiring import (
     agent_runtime_deps,
     chart_agent_run_deps,
@@ -59,17 +45,11 @@ from .wiring.misc_wiring import (
     upload_text_deps,
 )
 from .wiring.student_wiring import (
+    assignment_process_archive_deps,
     student_directory_deps,
     student_import_deps,
     student_ops_deps,
     student_submit_deps,
-)
-from .wiring.survey_wiring import (
-    survey_get_report,
-    survey_list_reports,
-    survey_list_review_queue,
-    survey_load_bundle,
-    survey_rerun_report,
 )
 from .wiring.teacher_wiring import (
     teacher_assignment_preflight_deps,
@@ -77,9 +57,8 @@ from .wiring.teacher_wiring import (
     teacher_provider_registry_deps,
 )
 from .wiring.worker_wiring import (
-    exam_worker_deps,
+    process_archive_worker_deps,
     profile_update_worker_deps,
-    survey_worker_deps,
     upload_worker_deps,
 )
 
@@ -115,17 +94,6 @@ __all__ = [
     "chat_worker_deps",
     "compute_chat_reply_deps",
     "session_history_deps",
-    "exam_analysis_charts_deps",
-    "exam_catalog_deps",
-    "exam_detail_deps",
-    "exam_longform_deps",
-    "exam_overview_deps",
-    "exam_range_deps",
-    "exam_upload_confirm_deps",
-    "exam_upload_handlers_deps",
-    "exam_upload_ops_deps",
-    "exam_upload_parse_deps",
-    "exam_upload_start_deps",
     "agent_runtime_deps",
     "chart_agent_run_deps",
     "content_catalog_deps",
@@ -134,6 +102,7 @@ __all__ = [
     "tool_dispatch_deps",
     "upload_llm_deps",
     "upload_text_deps",
+    "assignment_process_archive_deps",
     "student_directory_deps",
     "student_import_deps",
     "student_ops_deps",
@@ -142,13 +111,6 @@ __all__ = [
     "teacher_model_config_deps",
     "teacher_provider_registry_deps",
     "upload_worker_deps",
-    "exam_worker_deps",
-    "survey_worker_deps",
     "profile_update_worker_deps",
-    "process_survey_job",
-    "survey_get_report",
-    "survey_list_reports",
-    "survey_list_review_queue",
-    "survey_load_bundle",
-    "survey_rerun_report",
+    "process_archive_worker_deps",
 ]

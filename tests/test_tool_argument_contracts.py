@@ -21,6 +21,7 @@ def load_mcp(tmp_dir: Path, api_key: str = ""):
     os.environ["DATA_DIR"] = str(tmp_dir / "data")
     os.environ["MCP_API_KEY"] = api_key
     os.environ["MCP_SCRIPT_TIMEOUT_SEC"] = "5"
+    os.environ.pop("MCP_BOUND_TEACHER_ID", None)
     import services.mcp.app as mcp_mod
 
     importlib.reload(mcp_mod)
@@ -40,14 +41,18 @@ class ToolArgumentContractsTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_api(Path(td))
 
-            unknown = app_mod.get_core().tool_dispatch("exam.get", {"exam_id": "EX1", "unexpected": 1}, role="teacher")
+            unknown = app_mod.get_core().tool_dispatch(
+                "student.profile.get",
+                {"student_id": "C1_A", "unexpected": 1},
+                role="teacher",
+            )
             self.assertEqual(unknown.get("error"), "invalid_arguments")
-            self.assertEqual(unknown.get("tool"), "exam.get")
+            self.assertEqual(unknown.get("tool"), "student.profile.get")
             self.assertTrue(any("unexpected" in item for item in unknown.get("issues") or []))
 
-            missing = app_mod.get_core().tool_dispatch("exam.get", {}, role="teacher")
+            missing = app_mod.get_core().tool_dispatch("student.profile.get", {}, role="teacher")
             self.assertEqual(missing.get("error"), "invalid_arguments")
-            self.assertEqual(missing.get("tool"), "exam.get")
+            self.assertEqual(missing.get("tool"), "student.profile.get")
             self.assertTrue(any("required" in item for item in missing.get("issues") or []))
 
     def test_mcp_rejects_invalid_arguments_before_execution(self):
@@ -63,15 +68,39 @@ class ToolArgumentContractsTest(unittest.TestCase):
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "exam.get", "arguments": {"exam_id": "EX1", "unexpected": "x"}},
+                    "params": {
+                        "name": "student.profile.get",
+                        "arguments": {"student_id": "C1_A", "unexpected": "x"},
+                    },
                 },
             )
             self.assertEqual(res.status_code, 200)
             payload = res.json()
             self.assertEqual(payload["error"]["code"], -32602)
             self.assertEqual(payload["error"]["message"], "invalid arguments")
-            self.assertEqual(payload["error"]["data"]["tool"], "exam.get")
+            self.assertEqual(payload["error"]["data"]["tool"], "student.profile.get")
             self.assertTrue(any("unexpected" in item for item in payload["error"]["data"]["issues"]))
+
+    def test_mcp_dropped_tools_are_unknown(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="k")
+            client = TestClient(mcp_mod.app)
+            headers = {"X-API-Key": "k"}
+            for idx, name in enumerate(("exam.get", "lesson.capture", "assignment.generate"), start=1):
+                res = client.post(
+                    "/mcp",
+                    headers=headers,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": idx,
+                        "method": "tools/call",
+                        "params": {"name": name, "arguments": {}},
+                    },
+                )
+                self.assertEqual(res.status_code, 200)
+                err = res.json().get("error") or {}
+                self.assertEqual(err.get("code"), -32601)
+                self.assertEqual(err.get("message"), f"Unknown tool: {name}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentProps, type CSSProperties, type MutableRefObject, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useState, type ComponentProps, type CSSProperties, type MutableRefObject, type ReactNode } from 'react'
 import { Group, Panel, Separator } from 'react-resizable-panels'
 import type { PanelImperativeHandle } from 'react-resizable-panels'
 import TeacherTopbar from './TeacherTopbar'
@@ -12,10 +12,12 @@ import { MobileTabBar } from '../../../../shared/mobile/MobileTabBar'
 import { formatSessionUpdatedLabel } from '../../utils/time'
 import { TEACHER_MOBILE_TAB_ITEMS, WORKBENCH_MIN_WIDTH } from '../../teacherAppChrome'
 import type { TeacherMobileTab } from './mobileShellState'
+import { TEACHER_AUTH_EVENT, readTeacherAuthRole } from '../auth/teacherAuth'
 
 // Keep workbench and settings out of the teacher shell chunk.
 const TeacherWorkbench = lazy(() => import('../workbench/TeacherWorkbench'))
 const TeacherSettingsPanel = lazy(() => import('../settings/TeacherSettingsPanel'))
+const AdminSchoolPanel = lazy(() => import('../admin/AdminSchoolPanel'))
 
 const workbenchFallback = <div className="h-full w-full min-h-0 bg-surface" aria-busy="true" />
 
@@ -131,6 +133,17 @@ export default function TeacherAppLayout({
   onCancelArchiveDialog,
   onConfirmArchiveDialog,
 }: TeacherAppLayoutProps) {
+  const [isAdmin, setIsAdmin] = useState(() => readTeacherAuthRole() === 'admin')
+  useEffect(() => {
+    const sync = () => setIsAdmin(readTeacherAuthRole() === 'admin')
+    sync()
+    window.addEventListener('storage', sync)
+    window.addEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener(TEACHER_AUTH_EVENT, sync as EventListener)
+    }
+  }, [])
   const appStyle: CSSProperties & Record<'--teacher-topbar-height', string> = {
     '--teacher-topbar-height': `${topbarHeight}px`,
     overscrollBehavior: 'none',
@@ -164,6 +177,13 @@ export default function TeacherAppLayout({
           />
         </Suspense>
       ) : null}
+      {isAdmin ? (
+        <div className="teacher-layout flex-1 min-h-0 min-w-0 overflow-hidden bg-surface">
+          <Suspense fallback={workbenchFallback}>
+            <AdminSchoolPanel />
+          </Suspense>
+        </div>
+      ) : (
       <div
         className={`teacher-layout flex-1 min-h-0 grid relative bg-surface overflow-hidden ${
           teacherUseMobileShellV2
@@ -208,11 +228,11 @@ export default function TeacherAppLayout({
             {teacherUseMobileShellV2 ? null : (
               <>
                 <Separator
-                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)] ${isWorkbenchResizing ? 'bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,white)]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
+                  className={`group w-2 cursor-col-resize flex items-center justify-center bg-transparent transition-[background] duration-150 ease-in-out shrink-0 hover:bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,var(--color-surface))] ${isWorkbenchResizing ? 'bg-[color:color-mix(in_oklab,var(--color-accent-soft)_72%,var(--color-surface))]' : ''} ${!skillsOpen ? 'cursor-default pointer-events-none' : ''}`}
                   onPointerDown={startWorkbenchResize}
                   onDoubleClick={onWorkbenchResizeReset}
                 >
-                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-accent' : 'bg-[#d1d5db] group-hover:bg-accent'}`} />
+                  <span className={`w-[3px] h-7 rounded-sm transition-[background] duration-150 ease-in-out ${isWorkbenchResizing ? 'bg-accent' : 'bg-border-strong group-hover:bg-accent'}`} />
                 </Separator>
                 <Panel
                   panelRef={workbenchPanelRef}
@@ -241,6 +261,9 @@ export default function TeacherAppLayout({
           </Group>
         </div>
       </div>
+      )}
+      {isAdmin ? null : (
+        <>
       <BottomSheet
         open={teacherUseMobileShellV2 && mobileTab === 'sessions'}
         onClose={closeMobileSheet}
@@ -269,6 +292,8 @@ export default function TeacherAppLayout({
           ariaLabel="教师端移动导航"
         />
       ) : null}
+        </>
+      )}
       <PromptDialog
         open={Boolean(renameDialogSessionId)}
         title="重命名会话"

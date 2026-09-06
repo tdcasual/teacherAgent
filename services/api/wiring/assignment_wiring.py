@@ -1,5 +1,6 @@
 # mypy: disable-error-code=no-untyped-def
 """Assignment domain deps builders — extracted from app_core."""
+
 from __future__ import annotations
 
 __all__ = [
@@ -43,7 +44,6 @@ __all__ = [
     "_assignment_upload_confirm_deps",
 ]
 
-import os
 import shutil
 import time
 import uuid
@@ -72,6 +72,14 @@ from ..assignment_questions_ocr_service import (
     assignment_questions_ocr as _assignment_questions_ocr_impl,
 )
 from ..assignment_requirements_service import AssignmentRequirementsDeps
+from ..assignment_student_list_service import (
+    StudentAssignmentListDeps,
+    student_currently_enrolled,
+    today_lookback_days,
+)
+from ..assignment_student_list_service import (
+    list_assignments_for_student as _list_assignments_for_student_impl,
+)
 from ..assignment_submission_attempt_service import AssignmentSubmissionAttemptDeps
 from ..assignment_today_service import (
     AssignmentTodayDeps,
@@ -127,6 +135,7 @@ from ..assignment_upload_start_service import (
 )
 from ..assignment_uploaded_question_service import AssignmentUploadedQuestionDeps
 from ..handlers import assignment_handlers, assignment_io_handlers, assignment_upload_handlers
+from ..paths import today_iso as _today_iso
 from . import get_app_core as _app_core
 
 
@@ -143,19 +152,23 @@ def _assignment_handlers_deps(core: Any | None = None) -> assignment_handlers.As
         return _ac.build_assignment_detail(folder, include_text=True)
 
     return assignment_handlers.AssignmentHandlerDeps(
-        list_assignments=lambda limit, cursor: _ac.list_assignments(limit=limit, cursor=cursor),
+        list_assignments=lambda limit, cursor, owner_teacher_id=None: _ac.list_assignments(
+            limit=limit, cursor=cursor, owner_teacher_id=owner_teacher_id
+        ),
         compute_assignment_progress=_ac.compute_assignment_progress,
         parse_date_str=_ac.parse_date_str,
         save_assignment_requirements=_ac.save_assignment_requirements,
         resolve_assignment_dir=_ac.resolve_assignment_dir,
         load_assignment_requirements=_ac.load_assignment_requirements,
-        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: _assignment_today_impl(
-            student_id=student_id,
-            date=date,
-            auto_generate=auto_generate,
-            generate=generate,
-            per_kp=per_kp,
-            deps=_assignment_today_deps(core),
+        assignment_today=lambda student_id, date=None, auto_generate=False, generate=True, per_kp=5: (
+            _assignment_today_impl(
+                student_id=student_id,
+                date=date,
+                auto_generate=auto_generate,
+                generate=generate,
+                per_kp=per_kp,
+                deps=_assignment_today_deps(core),
+            )
         ),
         get_assignment_detail_api=_get_assignment_detail_api,
     )
@@ -170,23 +183,31 @@ def _assignment_upload_handlers_deps(
             deps=_assignment_upload_start_deps(core),
             **kwargs,
         ),
-        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(job_id, deps=_assignment_upload_query_deps(core)),
-        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(job_id, deps=_assignment_upload_query_deps(core)),
-        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: _save_assignment_upload_draft_impl(
-            job_id,
-            requirements,
-            questions,
-            deps=_assignment_upload_draft_save_deps(core),
+        assignment_upload_status=lambda job_id: _get_assignment_upload_status_impl(
+            job_id, deps=_assignment_upload_query_deps(core)
+        ),
+        assignment_upload_draft=lambda job_id: _get_assignment_upload_draft_impl(
+            job_id, deps=_assignment_upload_query_deps(core)
+        ),
+        assignment_upload_draft_save=lambda job_id, requirements, questions, deps=None: (
+            _save_assignment_upload_draft_impl(
+                job_id,
+                requirements,
+                questions,
+                deps=_assignment_upload_draft_save_deps(core),
+            )
         ),
         load_upload_job=_ac.load_upload_job,
         ensure_assignment_upload_confirm_ready=_ensure_assignment_upload_confirm_ready_impl,
-        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: _confirm_assignment_upload_impl(
-            job_id,
-            job,
-            job_dir,
-            requirements_override=requirements_override,
-            strict_requirements=strict_requirements,
-            deps=_assignment_upload_confirm_deps(core),
+        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: (
+            _confirm_assignment_upload_impl(
+                job_id,
+                job,
+                job_dir,
+                requirements_override=requirements_override,
+                strict_requirements=strict_requirements,
+                deps=_assignment_upload_confirm_deps(core),
+            )
         ),
         upload_job_path=_ac.upload_job_path,
     )
@@ -233,7 +254,7 @@ def _assignment_progress_deps(core: Any | None = None):
         best_submission_attempt=_ac.best_submission_attempt,
         resolve_assignment_date=_ac.resolve_assignment_date,
         atomic_write_json=_ac._atomic_write_json,
-        time_time=time.time,
+        today_iso=_today_iso,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
 
@@ -266,6 +287,28 @@ def _assignment_catalog_deps(core: Any | None = None):
     )
 
 
+def _bound_compute_expected_students(core: Any) -> Any:
+    def _compute(
+        scope: str,
+        class_name: str,
+        student_ids: list[str],
+        teacher_id: str = "",
+        subject_id: str = "",
+        conn: Any = None,
+    ) -> list[str]:
+        return core.compute_expected_students(
+            scope,
+            class_name,
+            student_ids,
+            teacher_id=teacher_id,
+            subject_id=subject_id,
+            data_dir=core.DATA_DIR,
+            conn=conn,
+        )
+
+    return _compute
+
+
 def _assignment_meta_postprocess_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentMetaPostprocessDeps(
@@ -275,7 +318,7 @@ def _assignment_meta_postprocess_deps(core: Any | None = None):
         parse_ids_value=_ac.parse_ids_value,
         resolve_scope=_ac.resolve_scope,
         normalize_due_at=_ac.normalize_due_at,
-        compute_expected_students=_ac.compute_expected_students,
+        compute_expected_students=_bound_compute_expected_students(_ac),
         atomic_write_json=_ac._atomic_write_json,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
     )
@@ -297,19 +340,30 @@ def _assignment_upload_parse_deps(core: Any | None = None):
     )
 
 
+def _student_assignment_list_deps(core: Any | None = None) -> StudentAssignmentListDeps:
+    _ac = _app_core(core)
+    data_dir = _ac.DATA_DIR
+    return StudentAssignmentListDeps(
+        data_dir=data_dir,
+        load_assignment_meta=_ac.load_assignment_meta,
+        student_enrolled=lambda sid, tid, sub, class_name="": student_currently_enrolled(
+            sid, tid, sub, data_dir=data_dir, class_name=class_name
+        ),
+        list_submission_attempts=_ac.list_submission_attempts,
+        lookback_days=today_lookback_days(),
+    )
+
+
 def _assignment_today_deps(core: Any | None = None):
     _ac = _app_core(core)
+    list_deps = _student_assignment_list_deps(core)
     return AssignmentTodayDeps(
-        data_dir=_ac.DATA_DIR,
         parse_date_str=_ac.parse_date_str,
-        has_llm_key=lambda: bool(os.getenv("OPENAI_API_KEY") or os.getenv("SILICONFLOW_API_KEY")),
-        load_profile_file=_ac.load_profile_file,
-        find_assignment_for_date=_ac.find_assignment_for_date,
-        derive_kp_from_profile=_ac.derive_kp_from_profile,
-        safe_assignment_id=_ac.safe_assignment_id,
-        assignment_generate=_ac.assignment_generate,
-        load_assignment_meta=_ac.load_assignment_meta,
-        build_assignment_detail=_ac.build_assignment_detail,
+        list_student_today=lambda student_id, date_str: _list_assignments_for_student_impl(
+            student_id=student_id,
+            date_str=date_str,
+            deps=list_deps,
+        ),
     )
 
 
@@ -317,7 +371,7 @@ def _assignment_generate_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentGenerateDeps(
         app_root=_ac.APP_ROOT,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         ensure_requirements_for_assignment=_ac.ensure_requirements_for_assignment,
         run_script=_ac.run_script,
         postprocess_assignment_meta=_ac.postprocess_assignment_meta,
@@ -329,7 +383,7 @@ def _assignment_generate_tool_deps(core: Any | None = None):
     _ac = _app_core(core)
     return AssignmentGenerateToolDeps(
         app_root=_ac.APP_ROOT,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         ensure_requirements_for_assignment=_ac.ensure_requirements_for_assignment,
         run_script=_ac.run_script,
         postprocess_assignment_meta=_ac.postprocess_assignment_meta,
@@ -366,7 +420,7 @@ def _assignment_upload_start_deps(core: Any | None = None):
     )
     return AssignmentUploadStartDeps(
         new_job_id=lambda: f"job_{uuid.uuid4().hex[:12]}",
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         upload_job_path=_ac.upload_job_path,
         sanitize_filename=_ac.sanitize_filename,
         save_upload_file=_ac.save_upload_file,
@@ -422,12 +476,12 @@ def _assignment_upload_confirm_deps(core: Any | None = None):
         merge_requirements=_ac.merge_requirements,
         compute_requirements_missing=_ac.compute_requirements_missing,
         write_uploaded_questions=_ac.write_uploaded_questions,
-        parse_date_str=_ac.parse_date_str,
+        optional_assignment_date=_ac.optional_assignment_date,
         save_assignment_requirements=_ac.save_assignment_requirements,
         parse_ids_value=_ac.parse_ids_value,
         resolve_scope=_ac.resolve_scope,
         normalize_due_at=_ac.normalize_due_at,
-        compute_expected_students=_ac.compute_expected_students,
+        compute_expected_students=_bound_compute_expected_students(_ac),
         atomic_write_json=_ac._atomic_write_json,
         copy2=shutil.copy2,
     )
@@ -437,7 +491,9 @@ def assignment_handlers_deps(core: Any) -> assignment_handlers.AssignmentHandler
     return _assignment_handlers_deps(core)
 
 
-def assignment_upload_handlers_deps(core: Any) -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
+def assignment_upload_handlers_deps(
+    core: Any,
+) -> assignment_upload_handlers.AssignmentUploadHandlerDeps:
     return _assignment_upload_handlers_deps(core)
 
 

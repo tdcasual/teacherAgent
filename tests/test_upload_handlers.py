@@ -5,36 +5,8 @@ from fastapi import HTTPException
 
 from services.api.api_models import UploadConfirmRequest
 from services.api.assignment_upload_start_service import AssignmentUploadStartError
-from services.api.exam_upload_service import ExamUploadError
-from services.api.handlers import assignment_upload_handlers, exam_upload_handlers
+from services.api.handlers import assignment_upload_handlers
 
-
-def _exam_deps(**overrides):
-    def start_exam_upload(*_args, **_kwargs):
-        return {"ok": True}
-
-    def exam_upload_status(_job_id):
-        return {"ok": True}
-
-    def exam_upload_draft(_job_id):
-        return {"ok": True}
-
-    def exam_upload_draft_save(**_kwargs):
-        return {"ok": True}
-
-    def exam_upload_confirm(_job_id):
-        return {"ok": True}
-
-    deps = exam_upload_handlers.ExamUploadHandlerDeps(
-        start_exam_upload=start_exam_upload,
-        exam_upload_status=exam_upload_status,
-        exam_upload_draft=exam_upload_draft,
-        exam_upload_draft_save=exam_upload_draft_save,
-        exam_upload_confirm=exam_upload_confirm,
-    )
-    for key, value in overrides.items():
-        setattr(deps, key, value)
-    return deps
 
 
 def _assignment_deps(tmp_path, **overrides):
@@ -77,18 +49,6 @@ def _assignment_deps(tmp_path, **overrides):
     return deps
 
 
-@pytest.mark.anyio
-async def test_exam_upload_status_maps_error():
-    def exam_upload_status(_job_id):
-        raise ExamUploadError(400, "bad")
-
-    deps = _exam_deps(exam_upload_status=exam_upload_status)
-
-    with pytest.raises(HTTPException) as exc:
-        await exam_upload_handlers.exam_upload_status("job-1", deps=deps)
-
-    assert exc.value.status_code == 400
-
 
 @pytest.mark.anyio
 async def test_assignment_upload_start_maps_error(tmp_path):
@@ -102,6 +62,7 @@ async def test_assignment_upload_start_maps_error(tmp_path):
             assignment_id="a1",
             date="",
             due_at="",
+            subject_id="physics",
             scope="",
             class_name="",
             student_ids="",
@@ -136,7 +97,9 @@ async def test_assignment_upload_confirm_returns_ready(tmp_path):
     def ensure_assignment_upload_confirm_ready(_job):
         return {"ok": True}
 
-    deps = _assignment_deps(tmp_path, ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready)
+    deps = _assignment_deps(
+        tmp_path, ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready
+    )
 
     result = await assignment_upload_handlers.assignment_upload_confirm(
         UploadConfirmRequest(job_id="job-1"),

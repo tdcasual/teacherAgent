@@ -42,9 +42,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -80,21 +77,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "total",
-                    "totals_summary": {
-                        "avg_total": 371.714,
-                        "median_total": 366.5,
-                        "max_total_observed": 511.5,
-                        "min_total_observed": 289.5,
-                    },
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -105,15 +87,13 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         reply = str(result.get("reply") or "")
-        self.assertIn("单科成绩说明", reply)
-        self.assertIn("score_mode: \"total\"", reply)
-        self.assertIn("不能把总分当作物理单科成绩", reply)
-        self.assertEqual(len(llm_calls), 0)
-        self.assertTrue(any(event == "teacher.subject_total_guard" for event, _ in logs))
+        self.assertNotIn("单科成绩说明", reply)
+        self.assertEqual(len(llm_calls), 1)
+        self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
 
     def test_run_agent_runtime_subject_request_non_total_continues(self):
         llm_calls = []
@@ -131,15 +111,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "subject",
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -150,7 +121,7 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         self.assertEqual(result.get("reply"), "normal_teacher_reply")
@@ -173,16 +144,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "total",
-                    "meta": {"subject": "physics"},
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -193,15 +154,13 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         reply = str(result.get("reply") or "")
-        self.assertIn("单科成绩说明", reply)
-        self.assertIn("score_mode: \"total\"", reply)
-        self.assertIn("不能把总分当作物理单科成绩", reply)
-        self.assertEqual(len(llm_calls), 0)
-        self.assertTrue(any(event == "teacher.subject_total_guard" for event, _ in logs))
+        self.assertNotIn("单科成绩说明", reply)
+        self.assertEqual(len(llm_calls), 1)
+        self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
         self.assertFalse(any(event == "teacher.subject_total_allow_single_subject" for event, _ in logs))
 
 
@@ -222,16 +181,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: "EX20260209_9b92e1" if "EX20260209_9b92e1" in (text or "") else None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {
-                "exam_overview": {
-                    "ok": True,
-                    "exam_id": exam_id,
-                    "score_mode": "subject",
-                    "score_mode_source": "subject_from_scores_file",
-                }
-            },
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=fake_call_llm,
             tool_dispatch=lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True},
@@ -242,12 +191,12 @@ class AgentServiceTest(unittest.TestCase):
             [{"role": "user", "content": "分析EX20260209_9b92e1的物理成绩"}],
             "teacher",
             deps=deps,
-            skill_id="physics-teacher-ops",
+            skill_id="teacher-assignment-ops",
         )
 
         self.assertEqual(result.get("reply"), "subject_score_reply")
         self.assertEqual(len(llm_calls), 1)
-        self.assertTrue(any(event == "teacher.subject_total_auto_extract_subject" for event, _ in logs))
+        self.assertFalse(any(event == "teacher.subject_total_auto_extract_subject" for event, _ in logs))
         self.assertFalse(any(event == "teacher.subject_total_guard" for event, _ in logs))
 
 
@@ -267,9 +216,6 @@ class AgentServiceTest(unittest.TestCase):
             max_tool_rounds=3,
             max_tool_calls=5,
             extract_min_chars_requirement=lambda text: None,
-            extract_exam_id=lambda text: None,
-            is_exam_analysis_request=lambda text: False,
-            build_exam_longform_context=lambda exam_id: {},
             generate_longform_reply=lambda *args, **kwargs: "",
             call_llm=call_llm,
             tool_dispatch=tool_dispatch or (lambda name, args, role, skill_id=None, teacher_id=None: {"ok": True}),

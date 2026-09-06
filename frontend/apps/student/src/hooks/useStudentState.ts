@@ -11,6 +11,7 @@ import type {
   PendingChatJob,
   RecentCompletedReply,
   StudentHistorySession,
+  TodayAssignmentItem,
   VerifiedStudent,
 } from '../appTypes'
 import { parsePendingChatJobFromStorage } from '../features/chat/pendingChatJob'
@@ -118,6 +119,8 @@ export type StudentState = {
   pendingChatJob: PendingChatJob | null
   recentCompletedReplies: RecentCompletedReply[]
   todayAssignment: AssignmentDetail | null
+  todayAssignments: TodayAssignmentItem[]
+  selectedAssignmentId: string
   assignmentLoading: boolean
   assignmentError: string
   assignmentRefreshNonce: number
@@ -216,6 +219,8 @@ function buildInitialState(): StudentState {
     pendingChatJob,
     recentCompletedReplies,
     todayAssignment: null,
+    todayAssignments: [],
+    selectedAssignmentId: '',
     assignmentLoading: false,
     assignmentError: '',
     assignmentRefreshNonce: 0,

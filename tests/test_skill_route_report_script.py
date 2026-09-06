@@ -17,7 +17,7 @@ class SkillRouteReportScriptTest(unittest.TestCase):
                 "event": "skill.resolve",
                 "role": "teacher",
                 "requested_skill_id": "",
-                "effective_skill_id": "physics-homework-generator",
+                "effective_skill_id": "homework-generator",
                 "reason": "auto_rule",
                 "confidence": 0.84,
             },
@@ -26,7 +26,7 @@ class SkillRouteReportScriptTest(unittest.TestCase):
                 "event": "skill.resolve",
                 "role": "teacher",
                 "requested_skill_id": "",
-                "effective_skill_id": "physics-teacher-ops",
+                "effective_skill_id": "teacher-assignment-ops",
                 "reason": "role_default",
                 "confidence": 0.28,
             },
@@ -53,8 +53,8 @@ class SkillRouteReportScriptTest(unittest.TestCase):
             payload = json.loads(proc.stdout or "{}")
             self.assertEqual(payload.get("total"), 3)
             self.assertEqual((payload.get("reasons") or {}).get("explicit"), 1)
-            self.assertEqual((payload.get("effective_skills") or {}).get("physics-homework-generator"), 1)
-            self.assertIn("(empty) -> physics-homework-generator", payload.get("transitions") or {})
+            self.assertEqual((payload.get("effective_skills") or {}).get("homework-generator"), 1)
+            self.assertIn("(empty) -> homework-generator", payload.get("transitions") or {})
             self.assertAlmostEqual(float(payload.get("auto_hit_rate") or 0.0), 1 / 3, places=3)
 
 

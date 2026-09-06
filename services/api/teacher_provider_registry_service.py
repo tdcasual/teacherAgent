@@ -107,16 +107,29 @@ def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:
     return bytes(out[:length])
 
 
+def _decrypt_legacy_v1(raw: bytes, key: bytes) -> str:
+    if len(raw) < 29:
+        raise ValueError("invalid_encrypted_secret")
+    nonce = raw[1:13]
+    expected = raw[13:29]
+    cipher = raw[29:]
+    actual = hmac.new(key, b"tprv-v1:" + nonce + cipher, hashlib.sha256).digest()[:16]
+    if not hmac.compare_digest(expected, actual):
+        raise ValueError("secret_integrity_check_failed")
+    plain = bytes(a ^ b for a, b in zip(cipher, _keystream(key, nonce, len(cipher))))
+    return plain.decode("utf-8")
+
+
 def encrypt_secret(secret: str, master: str) -> str:
     plain = _as_str(secret).encode("utf-8")
     if not plain:
         return ""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     key = _derive_key(master)
     nonce = secrets.token_bytes(12)
-    stream = _keystream(key, nonce, len(plain))
-    cipher = bytes(a ^ b for a, b in zip(plain, stream))
-    tag = hmac.new(key, b"tprv-v1:" + nonce + cipher, hashlib.sha256).digest()[:16]
-    raw = b"\x01" + nonce + tag + cipher
+    packed = AESGCM(key).encrypt(nonce, plain, b"tprv-v2")
+    raw = b"\x02" + nonce + packed
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
@@ -126,16 +139,22 @@ def decrypt_secret(secret: str, master: str) -> str:
         return ""
     pad = "=" * (-len(text) % 4)
     raw = base64.urlsafe_b64decode(text + pad)
-    if len(raw) < 29 or raw[0] != 1:
+    if len(raw) < 13:
         raise ValueError("invalid_encrypted_secret")
-    nonce = raw[1:13]
-    expected = raw[13:29]
-    cipher = raw[29:]
     key = _derive_key(master)
-    actual = hmac.new(key, b"tprv-v1:" + nonce + cipher, hashlib.sha256).digest()[:16]
-    if not hmac.compare_digest(expected, actual):
-        raise ValueError("secret_integrity_check_failed")
-    plain = bytes(a ^ b for a, b in zip(cipher, _keystream(key, nonce, len(cipher))))
+    version = raw[0]
+    if version == 1:
+        return _decrypt_legacy_v1(raw, key)
+    if version != 2:
+        raise ValueError("invalid_encrypted_secret")
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    nonce = raw[1:13]
+    packed = raw[13:]
+    try:
+        plain = AESGCM(key).decrypt(nonce, packed, b"tprv-v2")
+    except Exception as exc:
+        raise ValueError("secret_integrity_check_failed") from exc
     return plain.decode("utf-8")
 
 
@@ -434,7 +453,7 @@ def teacher_provider_registry_create(args: Dict[str, Any], *, deps: TeacherProvi
     return {"ok": True, "teacher_id": actor, "provider": _public_provider(record)}
 
 
-def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProviderRegistryDeps) -> Dict[str, Any]:
+def teacher_provider_registry_update(args: Dict[str, Any], *, deps: TeacherProviderRegistryDeps) -> Dict[str, Any]:  # noqa: C901
     actor = deps.resolve_teacher_id(args.get("teacher_id"))
     provider_id = _normalize_provider_id(args.get("provider_id") or args.get("id"))
     if not provider_id:

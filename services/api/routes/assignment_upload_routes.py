@@ -5,14 +5,25 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..api_models import UploadConfirmRequest, UploadDraftSaveRequest
-from ..auth_service import AuthError, require_principal
+from ..assignment.application import AssignmentAccessError
+from ..auth_service import AuthError, get_current_principal, require_principal
 
 
 def _require_teacher_or_admin() -> None:
     try:
-        require_principal(roles=("teacher", "admin"))
+        require_principal(roles=("teacher", "admin", "service"))
     except AuthError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _forbid_admin_assignment_write() -> None:
+    principal = get_current_principal()
+    if principal is not None and principal.role == "admin":
+        raise HTTPException(status_code=403, detail="forbidden")
+
+
+def _http_from_assignment_access(exc: AssignmentAccessError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 def register_assignment_upload_routes(
@@ -23,6 +34,7 @@ def register_assignment_upload_routes(
         assignment_id: str = Form(...),
         date: Optional[str] = Form(""),
         due_at: Optional[str] = Form(""),
+        subject_id: Optional[str] = Form(""),
         scope: Optional[str] = Form(""),
         class_name: Optional[str] = Form(""),
         student_ids: Optional[str] = Form(""),
@@ -31,20 +43,25 @@ def register_assignment_upload_routes(
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
     ) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
-        return await assignment_app.upload_assignment_start(
-            assignment_id=assignment_id,
-            date=date,
-            due_at=due_at,
-            scope=scope,
-            class_name=class_name,
-            student_ids=student_ids,
-            files=files,
-            answer_files=answer_files,
-            ocr_mode=ocr_mode,
-            language=language,
-            deps=app_deps,
-        )
+        try:
+            return await assignment_app.upload_assignment_start(
+                assignment_id=assignment_id,
+                date=date,
+                due_at=due_at,
+                subject_id=subject_id,
+                scope=scope,
+                class_name=class_name,
+                student_ids=student_ids,
+                files=files,
+                answer_files=answer_files,
+                ocr_mode=ocr_mode,
+                language=language,
+                deps=app_deps,
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc
 
     @router.get("/assignment/upload/status")
     async def assignment_upload_status(job_id: str) -> Any:
@@ -58,10 +75,12 @@ def register_assignment_upload_routes(
 
     @router.post("/assignment/upload/draft/save")
     async def assignment_upload_draft_save(req: UploadDraftSaveRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         return await assignment_app.save_assignment_upload_draft(req, deps=app_deps)
 
     @router.post("/assignment/upload/confirm")
     async def assignment_upload_confirm(req: UploadConfirmRequest) -> Any:
+        _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         return await assignment_app.confirm_assignment_upload(req, deps=app_deps)

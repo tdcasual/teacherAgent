@@ -14,6 +14,7 @@ SessionSidebarProps,
 | 'verifyError'
 | 'verifyInfo'
 | 'todayAssignment'
+| 'todayAssignments'
 | 'assignmentLoading'
 | 'assignmentError'
 | 'resetVerification'
@@ -33,6 +34,7 @@ export default function SessionSidebarLearningSection(props: Props) {
     verifyError,
     verifyInfo,
     todayAssignment,
+    todayAssignments,
     assignmentLoading,
     assignmentError,
     resetVerification,
@@ -116,28 +118,13 @@ export default function SessionSidebarLearningSection(props: Props) {
           <div className="text-xs text-muted">今日任务（{todayAssignment?.date || todayDateStr}）</div>
           {assignmentLoading && <div className="text-xs text-muted">加载中…</div>}
           {assignmentError && <div className="text-xs text-muted">{assignmentError}</div>}
-          {!assignmentLoading && !todayAssignment && !assignmentError && <div className="text-xs text-muted">今日任务准备中，可返回首页继续生成。</div>}
-          {todayAssignment && (
-            <>
-              <div className="text-xs text-muted">
-                作业编号：{todayAssignment.assignment_id || '-'} · 题数：{todayAssignment.question_count || 0}
-              </div>
-              {todayAssignment.meta?.target_kp?.length ? (
-                <div className="text-xs text-muted">知识点：{todayAssignment.meta.target_kp.join('，')}</div>
-              ) : null}
-              {todayAssignment.delivery?.files?.length ? (
-                <div className="grid gap-1.5">
-                  {todayAssignment.delivery.files.map((file) => (
-                    <a key={file.url} className="inline-flex items-center gap-1.5 rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-note)] px-2.5 py-1.5 text-[13px] text-ink no-underline" href={`${apiBase}${file.url}`} target="_blank" rel="noreferrer">
-                      下载：{file.name}
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-muted">返回学习页后，点“进入任务”继续。</div>
-              )}
-            </>
-          )}
+          {!assignmentLoading && todayAssignments.length === 0 && !assignmentError && <div className="text-xs text-muted">老师尚未布置</div>}
+          {todayAssignments.map((item) => (
+            <div key={item.assignment_id} className="text-xs text-muted">
+              {item.subject_id || '未分科'} · {item.title}
+              {item.progress.overdue ? ' · 逾期未交' : ''}
+            </div>
+          ))}
         </div>
       )}
       {verifiedStudent && (

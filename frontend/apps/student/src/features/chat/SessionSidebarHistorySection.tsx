@@ -86,8 +86,8 @@ export default function SessionSidebarHistorySection(props: Props) {
                     key={sid}
                     className={`session-item relative rounded-xl border px-2.5 py-2 transition-[border-color,background] duration-150 max-[900px]:px-[9px] max-[900px]:py-2 ${
                       isActive
-                        ? 'border-[color:color-mix(in_oklab,var(--color-accent)_24%,white)] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_44%,white)]'
-                        : 'border-border bg-white hover:border-[color:color-mix(in_oklab,var(--color-border-strong)_68%,white)] hover:bg-[color:color-mix(in_oklab,var(--color-surface-soft)_82%,white)]'
+                        ? 'border-[color:color-mix(in_oklab,var(--color-accent)_24%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_44%,var(--color-surface))]'
+                        : 'border-border bg-white hover:border-[color:color-mix(in_oklab,var(--color-border-strong)_68%,var(--color-surface))] hover:bg-[color:color-mix(in_oklab,var(--color-surface-soft)_82%,var(--color-surface))]'
                     } ${isActive ? 'active' : ''}`}
                   >
                     <button type="button" className="session-select w-full border-none bg-transparent pr-7 text-left cursor-pointer block" onClick={() => onSelectSession(sid)}>

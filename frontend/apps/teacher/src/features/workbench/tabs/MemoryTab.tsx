@@ -31,10 +31,10 @@ const studentMemoryStatusLabel = (value: string) => {
 
 const studentMemoryStatusClass = (value: string) => {
   const key = String(value || '').trim().toLowerCase()
-  if (key === 'applied') return 'text-[#1f6b57] bg-[#e9f6f1] border-[#b8e3d4]'
-  if (key === 'rejected') return 'text-[#8a1f1f] bg-[#ffe8e6] border-[#f4b9b3]'
-  if (key === 'deleted') return 'text-[#6c6f7a] bg-[#f2f3f5] border-[#d7dae0]'
-  return 'text-[#815900] bg-[#fff7df] border-[#efd58f]'
+  if (key === 'applied') return 'text-success bg-success-soft border-success'
+  if (key === 'rejected') return 'text-danger bg-danger-soft border-danger'
+  if (key === 'deleted') return 'text-muted bg-surface-soft border-border'
+  return 'text-warning bg-warning-soft border-warning'
 }
 
 const statusCount = (insights: StudentMemoryInsightsResponse | null | undefined, status: string) => {
@@ -236,10 +236,10 @@ export default function MemoryTab({
                   <span>{p.source || 'manual'}</span>
                   <span className={`rounded-lg px-2 py-0.5 text-[11px] border ${
                     String(p.status || '').toLowerCase() === 'applied'
-                      ? 'text-[#1f6b57] bg-[#e9f6f1] border-[#b8e3d4]'
+                      ? 'text-success bg-success-soft border-success'
                       : String(p.status || '').toLowerCase() === 'rejected'
-                        ? 'text-[#8a1f1f] bg-[#ffe8e6] border-[#f4b9b3]'
-                        : 'text-muted bg-white border-border'
+                        ? 'text-danger bg-danger-soft border-danger'
+                        : 'text-muted bg-surface border-border'
                   }`}>
                     {String(p.status || '').toLowerCase() === 'applied'
                       ? '已写入'
@@ -389,7 +389,7 @@ export default function MemoryTab({
                   ) : null}
 
                   {Array.isArray(proposal.risk_flags) && proposal.risk_flags.length > 0 ? (
-                    <div className="text-[12px] text-[#8a1f1f] break-all">
+                    <div className="text-[12px] text-danger break-all">
                       风险标记：{proposal.risk_flags.join('，')}
                     </div>
                   ) : null}

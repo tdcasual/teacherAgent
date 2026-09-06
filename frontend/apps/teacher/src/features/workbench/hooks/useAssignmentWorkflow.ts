@@ -35,6 +35,8 @@ interface UseAssignmentWorkflowParams {
   uploadMode: string
   uploadAssignmentId: string
   uploadDate: string
+  uploadDueAt: string
+  uploadSubjectId: string
   uploadScope: string
   uploadClassName: string
   uploadStudentIds: string
@@ -67,9 +69,6 @@ interface UseAssignmentWorkflowParams {
   progressData: AssignmentProgress | null
   progressOnlyIncomplete: boolean
 
-  // Exam poll nonce (needed by refreshWorkflowWorkbench)
-  examStatusPollNonce: number
-
   // Setters
   setUploadError: (value: string) => void
   setUploadStatus: (value: string | ((prev: string) => string)) => void
@@ -96,7 +95,6 @@ interface UseAssignmentWorkflowParams {
   setProgressLoading: (value: boolean) => void
   setProgressError: (value: string) => void
   setProgressData: (value: AssignmentProgress | null) => void
-  setExamStatusPollNonce: (value: number | ((prev: number) => number)) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +106,16 @@ interface UseAssignmentWorkflowReturn {
   saveDraft: (draft: UploadDraft) => Promise<void>
   handleConfirmUpload: () => Promise<void>
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>
+  archiveAssignment: (assignmentId?: string) => Promise<void>
+  unarchiveAssignment: (assignmentId?: string) => Promise<void>
+  saveStudentGrade: (
+    studentId: string,
+    payload: {
+      override_score?: number | null
+      comment?: string
+      adopted_coach_excerpts?: Array<{ text: string }>
+    },
+  ) => Promise<void>
   refreshWorkflowWorkbench: () => void
   scrollToWorkflowSection: (sectionId: string) => void
   assignmentWorkflowIndicator: WorkflowIndicator
@@ -127,6 +135,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     uploadMode,
     uploadAssignmentId,
     uploadDate,
+    uploadDueAt,
+    uploadSubjectId,
     uploadScope,
     uploadClassName,
     uploadStudentIds,
@@ -170,7 +180,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     setProgressLoading,
     setProgressError,
     setProgressData,
-    setExamStatusPollNonce,
   } = params
 
   // ---- Workflow indicator (memoised) ----
@@ -427,11 +436,90 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     ],
   )
 
+  const mutateAssignmentVisibility = useCallback(
+    async (path: 'archive' | 'unarchive', assignmentId?: string) => {
+      const aid = (assignmentId || progressAssignmentId || '').trim()
+      if (!aid) {
+        setProgressError('请先填写作业编号')
+        return
+      }
+      setProgressLoading(true)
+      setProgressError('')
+      try {
+        const res = await fetch(`${apiBase}/assignment/${encodeURIComponent(aid)}/${path}`, { method: 'POST' })
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        await fetchAssignmentProgress(aid)
+      } catch (err: unknown) {
+        setProgressError(toErrorMessage(err))
+        setProgressLoading(false)
+      }
+    },
+    [apiBase, fetchAssignmentProgress, progressAssignmentId, setProgressError, setProgressLoading],
+  )
+
+  const archiveAssignment = useCallback(
+    (assignmentId?: string) => mutateAssignmentVisibility('archive', assignmentId),
+    [mutateAssignmentVisibility],
+  )
+  const unarchiveAssignment = useCallback(
+    (assignmentId?: string) => mutateAssignmentVisibility('unarchive', assignmentId),
+    [mutateAssignmentVisibility],
+  )
+
+  const saveStudentGrade = useCallback(
+    async (
+      studentId: string,
+      payload: {
+        override_score?: number | null
+        comment?: string
+        adopted_coach_excerpts?: Array<{ text: string }>
+      },
+    ) => {
+      const loadedId = String(params.progressData?.assignment_id || '').trim()
+      const aid = loadedId || (progressAssignmentId || '').trim()
+      const sid = (studentId || '').trim()
+      if (!aid || !sid) {
+        setProgressError('请先填写作业编号')
+        return
+      }
+      setProgressLoading(true)
+      setProgressError('')
+      try {
+        const res = await fetch(
+          `${apiBase}/teacher/assignment/${encodeURIComponent(aid)}/student/${encodeURIComponent(sid)}/grade`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          },
+        )
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(text || `状态码 ${res.status}`)
+        }
+        await fetchAssignmentProgress(aid)
+      } catch (err: unknown) {
+        setProgressError(toErrorMessage(err))
+        setProgressLoading(false)
+      }
+    },
+    [
+      apiBase,
+      fetchAssignmentProgress,
+      params.progressData?.assignment_id,
+      progressAssignmentId,
+      setProgressError,
+      setProgressLoading,
+    ],
+  )
+
   // ---- refreshWorkflowWorkbench ----
 
   const refreshWorkflowWorkbench = useCallback(() => {
     setUploadStatusPollNonce((n) => n + 1)
-    setExamStatusPollNonce((n) => n + 1)
     const assignmentId = (progressAssignmentId || uploadAssignmentId || uploadDraft?.assignment_id || '').trim()
     if (assignmentId) {
       void fetchAssignmentProgress(assignmentId)
@@ -439,7 +527,6 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
   }, [
     fetchAssignmentProgress,
     progressAssignmentId,
-    setExamStatusPollNonce,
     setUploadStatusPollNonce,
     uploadAssignmentId,
     uploadDraft?.assignment_id,
@@ -584,11 +671,17 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
         setUploadError('班级作业请填写班级')
         return
       }
+      if (!uploadSubjectId.trim()) {
+        setUploadError('请选择学科')
+        return
+      }
       setUploading(true)
       try {
         const fd = new FormData()
         fd.append('assignment_id', uploadAssignmentId.trim())
         if (uploadDate.trim()) fd.append('date', uploadDate.trim())
+        if (uploadDueAt.trim()) fd.append('due_at', uploadDueAt.trim())
+        fd.append('subject_id', uploadSubjectId.trim())
         fd.append('scope', uploadScope)
         if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim())
         if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim())
@@ -656,6 +749,8 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
       uploadAssignmentId,
       uploadClassName,
       uploadDate,
+      uploadDueAt,
+      uploadSubjectId,
       uploadFiles,
       uploadScope,
       uploadStudentIds,
@@ -822,6 +917,9 @@ export function useAssignmentWorkflow(params: UseAssignmentWorkflowParams): UseA
     saveDraft,
     handleConfirmUpload,
     fetchAssignmentProgress,
+    archiveAssignment,
+    unarchiveAssignment,
+    saveStudentGrade,
     refreshWorkflowWorkbench,
     scrollToWorkflowSection,
     assignmentWorkflowIndicator,

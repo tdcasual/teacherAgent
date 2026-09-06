@@ -478,8 +478,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 headers=student_headers,
                 json={"source": "responses"},
             )
-            self.assertEqual(denied.status_code, 403)
-            self.assertEqual(denied.json().get("detail"), "forbidden")
+            self.assertEqual(denied.status_code, 410)
+            self.assertEqual(denied.json().get("detail"), "gone")
 
     def test_student_import_rejects_outside_file_path(self):
         with TemporaryDirectory() as td:
@@ -499,8 +499,8 @@ class SecurityAuthHardeningTest(unittest.TestCase):
                 headers=teacher_headers,
                 json={"source": "responses", "file_path": str(outside)},
             )
-            self.assertEqual(blocked.status_code, 400)
-            self.assertEqual(blocked.json().get("detail"), "responses file not found")
+            self.assertEqual(blocked.status_code, 410)
+            self.assertEqual(blocked.json().get("detail"), "gone")
 
     def test_removed_teacher_skills_routes_return_not_found(self):
         with TemporaryDirectory() as td:
@@ -528,7 +528,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             )
             self.assertEqual(denied_create.status_code, 404)
 
-    def test_assignment_exam_teacher_routes_forbid_student_role(self):
+    def test_assignment_teacher_routes_forbid_student_role(self):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td), secret=self.SECRET)
             client = TestClient(app_mod.app)
@@ -537,10 +537,6 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             denied_assignments = client.get("/assignments", headers=student_headers)
             self.assertEqual(denied_assignments.status_code, 403)
             self.assertEqual(denied_assignments.json().get("detail"), "forbidden")
-
-            denied_exams = client.get("/exams", headers=student_headers)
-            self.assertEqual(denied_exams.status_code, 403)
-            self.assertEqual(denied_exams.json().get("detail"), "forbidden")
 
     def test_assignment_today_enforces_student_scope(self):
         with TemporaryDirectory() as td:
@@ -576,7 +572,7 @@ class SecurityAuthHardeningTest(unittest.TestCase):
             start = client.post(
                 "/assignment/upload/start",
                 headers=teacher_a,
-                data={"assignment_id": "HW_SEC_1"},
+                data={"assignment_id": "HW_SEC_1", "subject_id": "generic"},
                 files=[("files", ("paper.txt", b"q1", "text/plain"))],
             )
             self.assertEqual(start.status_code, 200)
@@ -593,43 +589,6 @@ class SecurityAuthHardeningTest(unittest.TestCase):
 
             denied_confirm = client.post(
                 "/assignment/upload/confirm",
-                headers=teacher_b,
-                json={"job_id": job_id},
-            )
-            self.assertEqual(denied_confirm.status_code, 403)
-            self.assertEqual(denied_confirm.json().get("detail"), "forbidden_upload_job")
-
-    def test_exam_upload_job_owner_binding_blocks_cross_teacher_access(self):
-        with TemporaryDirectory() as td:
-            app_mod = load_app(Path(td), secret=self.SECRET)
-            client = TestClient(app_mod.app)
-
-            teacher_a = _auth_headers("teacher_a", "teacher", secret=self.SECRET)
-            teacher_b = _auth_headers("teacher_b", "teacher", secret=self.SECRET)
-
-            start = client.post(
-                "/exam/upload/start",
-                headers=teacher_a,
-                data={"exam_id": "EX_SEC_1"},
-                files=[
-                    ("paper_files", ("paper.txt", b"paper", "text/plain")),
-                    ("score_files", ("scores.csv", b"student,score\nA,90\n", "text/csv")),
-                ],
-            )
-            self.assertEqual(start.status_code, 200)
-            job_id = str(start.json().get("job_id") or "")
-            self.assertTrue(job_id)
-
-            denied_status = client.get(
-                "/exam/upload/status",
-                headers=teacher_b,
-                params={"job_id": job_id},
-            )
-            self.assertEqual(denied_status.status_code, 403)
-            self.assertEqual(denied_status.json().get("detail"), "forbidden_upload_job")
-
-            denied_confirm = client.post(
-                "/exam/upload/confirm",
                 headers=teacher_b,
                 json={"job_id": job_id},
             )

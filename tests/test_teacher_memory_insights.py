@@ -85,7 +85,7 @@ class TeacherMemoryInsightsTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_app(Path(td))
             with TestClient(app_mod.app) as client:
-                res = client.get("/teacher/memory/insights")
+                res = client.get("/teacher/memory/insights", params={"teacher_id": "teacher"})
                 self.assertEqual(res.status_code, 200)
                 body = res.json()
                 self.assertTrue(body.get("ok"))

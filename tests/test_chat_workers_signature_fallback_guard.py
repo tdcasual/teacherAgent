@@ -11,8 +11,8 @@ TARGET_FILES = {
     "services/api/chat_job_processing_service.py",
     "services/api/workers/chat_worker_service.py",
     "services/api/workers/upload_worker_service.py",
-    "services/api/workers/exam_worker_service.py",
     "services/api/workers/profile_update_worker_service.py",
+    "services/api/workers/process_archive_worker_service.py",
 }
 
 # Strict guard: all target files must stay free from signature/fallback compatibility shims.

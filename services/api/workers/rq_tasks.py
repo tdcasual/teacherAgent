@@ -83,16 +83,22 @@ def enqueue_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     _enqueue_retry_job(run_upload_job, job_id, tenant_id=tenant_id)
 
 
-def enqueue_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    _enqueue_retry_job(run_exam_job, job_id, tenant_id=tenant_id)
-
-
-def enqueue_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    _enqueue_retry_job(run_survey_job, job_id, tenant_id=tenant_id)
-
-
 def enqueue_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
     _enqueue_retry_job(run_profile_update, payload=payload, tenant_id=tenant_id)
+
+
+PROCESS_ARCHIVE_JOB_TIMEOUT = 60
+
+
+def enqueue_process_archive(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
+    queue = _get_queue()
+    queue.enqueue(
+        run_process_archive,
+        payload=payload,
+        tenant_id=tenant_id,
+        job_timeout=PROCESS_ARCHIVE_JOB_TIMEOUT,
+        result_ttl=RESULT_TTL,
+    )
 
 
 def enqueue_chat_job(job_id: str, lane_id: Optional[str] = None, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
@@ -143,14 +149,6 @@ def scan_pending_upload_jobs(*, tenant_id: Optional[str] = None) -> int:
     )
 
 
-def scan_pending_exam_jobs(*, tenant_id: Optional[str] = None) -> int:
-    mod = load_tenant_module(tenant_id)
-    return _scan_pending_jobs(
-        mod.EXAM_UPLOAD_JOB_DIR,
-        enqueue_fn=lambda data: enqueue_exam_job(str(data.get("job_id") or ""), tenant_id=tenant_id),
-    )
-
-
 def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
     mod = load_tenant_module(tenant_id)
     return _scan_pending_jobs(
@@ -163,34 +161,22 @@ def scan_pending_chat_jobs(*, tenant_id: Optional[str] = None) -> int:
     )
 
 
-def scan_pending_survey_jobs(*, tenant_id: Optional[str] = None) -> int:
-    mod = load_tenant_module(tenant_id)
-    return _scan_pending_jobs(
-        mod.SURVEY_JOB_DIR,
-        enqueue_fn=lambda data: enqueue_survey_job(str(data.get("job_id") or ""), tenant_id=tenant_id),
-    )
-
-
 def run_upload_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     mod.process_upload_job(job_id)
 
 
-def run_exam_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    mod = load_tenant_module(tenant_id)
-    mod.process_exam_upload_job(job_id)
-
-
-def run_survey_job(job_id: str, *, tenant_id: Optional[str] = None) -> None:
-    mod = load_tenant_module(tenant_id)
-    process_job = getattr(mod, "process_survey_job", None)
-    if callable(process_job):
-        process_job(job_id)
-
-
 def run_profile_update(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
     mod = load_tenant_module(tenant_id)
     mod.student_profile_update(payload)
+
+
+def run_process_archive(payload: Dict[str, Any], *, tenant_id: Optional[str] = None) -> None:
+    from services.api.workers.process_archive_worker_service import run_process_archive_job
+
+    mod = load_tenant_module(tenant_id)
+    deps = mod.process_archive_worker_deps()
+    run_process_archive_job(payload if isinstance(payload, dict) else {}, deps=deps)
 
 
 def _chat_job_confirm_pending_active(mod: Any, job_id: str) -> bool:

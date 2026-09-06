@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
+from .paths import require_teacher_id
+
 
 def resolve_chat_lane_id(
     role_hint: Optional[str],
@@ -19,7 +21,7 @@ def resolve_chat_lane_id(
         student = safe_fs_id(student_id or "student", prefix="student")
         return f"student:{student}:{sid}"
     if role == "teacher":
-        teacher = resolve_teacher_id(teacher_id)
+        teacher = require_teacher_id(teacher_id)
         return f"teacher:{teacher}:{sid}"
     rid = safe_fs_id(request_id or "req", prefix="req")
     return f"unknown:{sid}:{rid}"

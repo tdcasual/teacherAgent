@@ -139,19 +139,6 @@ def test_load_upload_job_rejects_non_dict(tmp_path, monkeypatch):
         load_upload_job("j1")
 
 
-def test_load_exam_job_rejects_non_dict(tmp_path, monkeypatch):
-    from services.api.job_repository import load_exam_job
-
-    monkeypatch.setattr(
-        "services.api.job_repository.exam_job_path",
-        lambda jid: tmp_path / jid,
-    )
-    job_dir = tmp_path / "e1"
-    job_dir.mkdir()
-    (job_dir / "job.json").write_text("[1,2,3]", encoding="utf-8")
-    with pytest.raises(ValueError, match="not a JSON object"):
-        load_exam_job("e1")
-
 
 def test_write_upload_job_logs_corrupt_json(tmp_path, monkeypatch, caplog):
     from services.api.job_repository import write_upload_job

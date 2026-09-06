@@ -8,24 +8,33 @@ from ..session_history_service import SessionHistoryError
 from .teacher_route_helpers import scoped_teacher_id
 
 
+def _history_or_http(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except SessionHistoryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
 def register_history_routes(router: APIRouter, core: Any) -> None:
     @router.get("/teacher/history/sessions")
     def teacher_history_sessions(
         teacher_id: Optional[str] = None, limit: int = 20, cursor: int = 0
     ) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        return core.teacher_history_sessions(teacher_id_scoped, limit=limit, cursor=cursor)
+        return _history_or_http(
+            core.teacher_history_sessions, teacher_id_scoped, limit=limit, cursor=cursor
+        )
 
     @router.get("/teacher/session/view-state")
     def teacher_session_view_state(teacher_id: Optional[str] = None) -> Any:
         teacher_id_scoped = scoped_teacher_id(teacher_id)
-        return core.teacher_session_view_state(teacher_id_scoped)
+        return _history_or_http(core.teacher_session_view_state, teacher_id_scoped)
 
     @router.put("/teacher/session/view-state")
     def update_teacher_session_view_state(req: dict[str, Any]) -> Any:
         payload = dict(req or {})
         payload["teacher_id"] = scoped_teacher_id(payload.get("teacher_id"))
-        return core.update_teacher_session_view_state(payload)
+        return _history_or_http(core.update_teacher_session_view_state, payload)
 
     @router.get("/teacher/history/session")
     def teacher_history_session(
