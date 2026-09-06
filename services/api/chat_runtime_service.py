@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from llm_gateway import UnifiedLLMRequest
 
-from .paths import TeacherIdentityError, require_teacher_id
+from .paths import require_teacher_id
 from .role_runtime_policy import get_role_runtime_policy
 
 _log = logging.getLogger(__name__)
