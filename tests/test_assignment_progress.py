@@ -706,7 +706,7 @@ class AssignmentProgressTest(unittest.TestCase):
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
                 res = client.get("/assignment/%2e%2e/requirements")
-                self.assertIn(res.status_code, (400, 401))
+                self.assertEqual(res.status_code, 400)
 
     def test_assignment_download_rejects_invalid_assignment_id_path(self):
         with TemporaryDirectory() as td:
@@ -714,8 +714,7 @@ class AssignmentProgressTest(unittest.TestCase):
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
                 res = client.get("/assignment/%2e%2e/download", params={"file": "q1.png"})
-                # Fail-closed: unauthenticated download is 401 before path validation.
-                self.assertEqual(res.status_code, 401)
+                self.assertEqual(res.status_code, 400)
 
     def test_student_profile_rejects_invalid_student_id_path(self):
         with TemporaryDirectory() as td:
@@ -730,9 +729,8 @@ class AssignmentProgressTest(unittest.TestCase):
             tmp = Path(td)
             app_mod = load_app(tmp)
             with TestClient(app_mod.app) as client:
-                # Fail-closed auth may 401 before the path is treated as missing.
-                self.assertIn(client.get("/assignment/%2e%2e").status_code, (401, 404))
-                self.assertIn(client.get("/assignment/%2e%2e/progress").status_code, (401, 404))
+                self.assertEqual(client.get("/assignment/%2e%2e").status_code, 404)
+                self.assertEqual(client.get("/assignment/%2e%2e/progress").status_code, 404)
 
 
 if __name__ == "__main__":

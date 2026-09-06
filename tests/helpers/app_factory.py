@@ -56,6 +56,7 @@ def create_test_app(
     os.environ["DIAG_LOG"] = "0"
     os.environ["JOB_QUEUE_BACKEND"] = "inline"
     os.environ["RQ_BACKEND_ENABLED"] = "0"
+    os.environ["AUTH_REQUIRED"] = "0"
     os.environ.pop("REDIS_URL", None)
     os.environ.pop("RQ_QUEUE_NAME", None)
 
