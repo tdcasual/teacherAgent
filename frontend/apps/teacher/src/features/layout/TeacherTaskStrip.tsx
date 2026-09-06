@@ -1,21 +1,23 @@
-import type { WorkflowIndicatorTone } from '../../appTypes'
+import type { WorkflowIndicatorTone } from '../../appTypes';
 
 type TeacherTaskStripProps = {
-  statusLabel: string
-  tone: WorkflowIndicatorTone
-  summary: string
-  nextStepLabel: string
-  primaryActionLabel: string
-  onPrimaryAction: () => void
-  primaryActionDisabled?: boolean
-}
+  statusLabel: string;
+  tone: WorkflowIndicatorTone;
+  summary: string;
+  nextStepLabel: string;
+  primaryActionLabel: string;
+  onPrimaryAction: () => void;
+  primaryActionDisabled?: boolean;
+};
 
 const toneClassMap: Record<WorkflowIndicatorTone, string> = {
   neutral: 'border-border bg-surface-soft text-muted',
-  active: 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
-  success: 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]',
+  active:
+    'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
+  success:
+    'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]',
   error: 'border-[color:var(--color-danger)] bg-danger-soft text-danger',
-}
+};
 
 export default function TeacherTaskStrip({
   statusLabel,
@@ -25,8 +27,8 @@ export default function TeacherTaskStrip({
   onPrimaryAction,
   primaryActionDisabled = false,
 }: TeacherTaskStripProps) {
-  const modeLabel = '今日作业'
-  const displayNextStep = nextStepLabel.replace(/^下一步[:：]\s*/, '')
+  const modeLabel = '今日作业';
+  const displayNextStep = nextStepLabel.replace(/^下一步[:：]\s*/, '');
 
   return (
     <section className="rounded-[24px] border border-border bg-[color:var(--color-panel)] px-5 py-4 shadow-sm">
@@ -36,7 +38,9 @@ export default function TeacherTaskStrip({
             <span className="inline-flex items-center rounded-full bg-[color:var(--color-surface-soft)] px-2.5 py-1 text-[11px] font-semibold tracking-[0.12em] text-muted">
               {modeLabel}
             </span>
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${toneClassMap[tone]}`}>
+            <span
+              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${toneClassMap[tone]}`}
+            >
               {statusLabel}
             </span>
           </div>
@@ -56,5 +60,5 @@ export default function TeacherTaskStrip({
         </div>
       </div>
     </section>
-  )
+  );
 }

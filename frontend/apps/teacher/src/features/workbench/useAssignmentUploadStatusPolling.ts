@@ -1,33 +1,30 @@
-import { useEffect } from 'react'
-import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling'
-import { toUserFacingErrorMessage } from '../../../../shared/errorMessage'
-import { safeLocalStorageGetItem, safeLocalStorageRemoveItem } from '../../utils/storage'
-import type { UploadJobStatus } from '../../appTypes'
+import { useEffect } from 'react';
+import { startVisibilityAwareBackoffPolling } from '../../../../shared/visibilityBackoffPolling';
+import { toUserFacingErrorMessage } from '../../../../shared/errorMessage';
+import { safeLocalStorageGetItem, safeLocalStorageRemoveItem } from '../../utils/storage';
+import type { UploadJobStatus } from '../../appTypes';
 
 type Params = {
-  apiBase: string
-  uploadJobId: string
-  uploadStatusPollNonce: number
-  formatUploadJobStatus: (value: UploadJobStatus) => string
-  setUploadError: (value: string) => void
+  apiBase: string;
+  uploadJobId: string;
+  uploadStatusPollNonce: number;
+  formatUploadJobStatus: (value: UploadJobStatus) => string;
+  setUploadError: (value: string) => void;
   setUploadJobInfo: (
-    value:
-      | UploadJobStatus
-      | null
-      | ((prev: UploadJobStatus | null) => UploadJobStatus | null),
-  ) => void
-  setUploadStatus: (value: string) => void
-}
+    value: UploadJobStatus | null | ((prev: UploadJobStatus | null) => UploadJobStatus | null),
+  ) => void;
+  setUploadStatus: (value: string) => void;
+};
 
 const isAbortError = (error: unknown): boolean => {
-  if (error instanceof DOMException) return error.name === 'AbortError'
-  if (!error || typeof error !== 'object') return false
-  return (error as { name?: unknown }).name === 'AbortError'
-}
+  if (error instanceof DOMException) return error.name === 'AbortError';
+  if (!error || typeof error !== 'object') return false;
+  return (error as { name?: unknown }).name === 'AbortError';
+};
 
 const toErrorMessage = (error: unknown, fallback = '请求失败') => {
-  return toUserFacingErrorMessage(error, fallback)
-}
+  return toUserFacingErrorMessage(error, fallback);
+};
 
 export function useAssignmentUploadStatusPolling({
   apiBase,
@@ -39,27 +36,29 @@ export function useAssignmentUploadStatusPolling({
   setUploadStatus,
 }: Params) {
   useEffect(() => {
-    if (!uploadJobId) return
-    const BASE_DELAY_MS = 4000
-    const MAX_DELAY_MS = 30000
+    if (!uploadJobId) return;
+    const BASE_DELAY_MS = 4000;
+    const MAX_DELAY_MS = 30000;
 
-    let cancelled = false
-    let abortController: AbortController | null = null
-    let lastFingerprint = ''
+    let cancelled = false;
+    let abortController: AbortController | null = null;
+    let lastFingerprint = '';
 
     const abortInFlight = () => {
       try {
-        abortController?.abort()
+        abortController?.abort();
       } catch {
         // ignore
       }
-      abortController = null
-    }
+      abortController = null;
+    };
 
     const makeFingerprint = (data: UploadJobStatus) => {
-      const updatedAt = data.updated_at || data.updatedAt || ''
-      const missing = Array.isArray(data.requirements_missing) ? data.requirements_missing.join(',') : ''
-      const warnings = Array.isArray(data.warnings) ? data.warnings.length : 0
+      const updatedAt = data.updated_at || data.updatedAt || '';
+      const missing = Array.isArray(data.requirements_missing)
+        ? data.requirements_missing.join(',')
+        : '';
+      const warnings = Array.isArray(data.warnings) ? data.warnings.length : 0;
       return [
         data.status,
         data.progress ?? '',
@@ -71,70 +70,81 @@ export function useAssignmentUploadStatusPolling({
         warnings,
         updatedAt,
         data.error ?? '',
-      ].join('|')
-    }
+      ].join('|');
+    };
 
     const clearActiveUpload = () => {
       try {
-        const raw = safeLocalStorageGetItem('teacherActiveUpload')
-        if (!raw) return
-        const active = JSON.parse(raw)
-        if (active?.type === 'assignment' && active?.job_id === uploadJobId) safeLocalStorageRemoveItem('teacherActiveUpload')
+        const raw = safeLocalStorageGetItem('teacherActiveUpload');
+        if (!raw) return;
+        const active = JSON.parse(raw);
+        if (active?.type === 'assignment' && active?.job_id === uploadJobId)
+          safeLocalStorageRemoveItem('teacherActiveUpload');
       } catch {
         // ignore
       }
-    }
+    };
 
     const poll = async () => {
-      if (cancelled) return 'stop' as const
-      abortInFlight()
-      abortController = new AbortController()
+      if (cancelled) return 'stop' as const;
+      abortInFlight();
+      abortController = new AbortController();
       try {
-        const res = await fetch(`${apiBase}/assignment/upload/status?job_id=${encodeURIComponent(uploadJobId)}`, {
-          signal: abortController.signal,
-        })
+        const res = await fetch(
+          `${apiBase}/assignment/upload/status?job_id=${encodeURIComponent(uploadJobId)}`,
+          {
+            signal: abortController.signal,
+          },
+        );
         if (!res.ok) {
-          const text = await res.text()
-          throw new Error(text || `状态码 ${res.status}`)
+          const text = await res.text();
+          throw new Error(text || `状态码 ${res.status}`);
         }
-        const data = (await res.json()) as UploadJobStatus
-        if (cancelled) return 'stop' as const
-        setUploadError('')
+        const data = (await res.json()) as UploadJobStatus;
+        if (cancelled) return 'stop' as const;
+        setUploadError('');
         setUploadJobInfo((prev: UploadJobStatus | null) => {
           if (prev && prev.job_id === data.job_id) {
-            if ((prev.status === 'confirming' || prev.status === 'confirmed' || prev.status === 'created') && data.status === 'done') {
-              setUploadStatus(formatUploadJobStatus(prev))
-              return prev
+            if (
+              (prev.status === 'confirming' ||
+                prev.status === 'confirmed' ||
+                prev.status === 'created') &&
+              data.status === 'done'
+            ) {
+              setUploadStatus(formatUploadJobStatus(prev));
+              return prev;
             }
           }
-          setUploadStatus(formatUploadJobStatus(data))
-          return data
-        })
+          setUploadStatus(formatUploadJobStatus(data));
+          return data;
+        });
 
-        if (data.status === 'failed' || data.status === 'confirmed' || data.status === 'created') clearActiveUpload()
+        if (data.status === 'failed' || data.status === 'confirmed' || data.status === 'created')
+          clearActiveUpload();
 
-        if (['done', 'failed', 'confirmed', 'created'].includes(data.status)) return 'stop' as const
+        if (['done', 'failed', 'confirmed', 'created'].includes(data.status))
+          return 'stop' as const;
 
-        const fp = makeFingerprint(data)
-        const changed = fp !== lastFingerprint
-        lastFingerprint = fp
+        const fp = makeFingerprint(data);
+        const changed = fp !== lastFingerprint;
+        lastFingerprint = fp;
 
         if (changed) {
-          return { action: 'continue', resetDelay: true } as const
+          return { action: 'continue', resetDelay: true } as const;
         }
-        return 'continue' as const
+        return 'continue' as const;
       } catch (err: unknown) {
-        if (cancelled) return 'stop' as const
-        if (isAbortError(err)) return 'stop' as const
-        throw err
+        if (cancelled) return 'stop' as const;
+        if (isAbortError(err)) return 'stop' as const;
+        throw err;
       }
-    }
+    };
 
     const cleanup = startVisibilityAwareBackoffPolling(
       poll,
       (err) => {
-        if (cancelled) return
-        setUploadError(toErrorMessage(err))
+        if (cancelled) return;
+        setUploadError(toErrorMessage(err));
       },
       {
         initialDelayMs: BASE_DELAY_MS,
@@ -144,12 +154,20 @@ export function useAssignmentUploadStatusPolling({
         jitterMin: 0.8,
         jitterMax: 1.2,
       },
-    )
+    );
 
     return () => {
-      cancelled = true
-      cleanup()
-      abortInFlight()
-    }
-  }, [uploadJobId, apiBase, uploadStatusPollNonce, formatUploadJobStatus, setUploadError, setUploadJobInfo, setUploadStatus])
+      cancelled = true;
+      cleanup();
+      abortInFlight();
+    };
+  }, [
+    uploadJobId,
+    apiBase,
+    uploadStatusPollNonce,
+    formatUploadJobStatus,
+    setUploadError,
+    setUploadJobInfo,
+    setUploadStatus,
+  ]);
 }

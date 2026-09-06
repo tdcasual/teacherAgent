@@ -7,64 +7,68 @@ import type {
   UploadDraft,
   UploadJobStatus,
   ExecutionTimelineEntry,
-} from '../../appTypes'
+} from '../../appTypes';
 
 export type TeacherWorkbenchState = {
-  uploadMode: 'assignment'
+  uploadMode: 'assignment';
 
-  uploadAssignmentId: string
-  uploadDate: string
-  uploadDueAt: string
-  uploadSubjectId: string
-  uploadScope: 'public' | 'class' | 'student'
-  uploadClassName: string
-  uploadStudentIds: string
-  uploadFiles: File[]
-  uploadAnswerFiles: File[]
-  uploading: boolean
-  uploadStatus: string
-  uploadError: string
-  uploadCardCollapsed: boolean
-  uploadJobId: string
-  uploadJobInfo: UploadJobStatus | null
-  uploadConfirming: boolean
-  uploadStatusPollNonce: number
-  uploadDraft: UploadDraft | null
-  draftPanelCollapsed: boolean
-  draftLoading: boolean
-  draftError: string
-  questionShowCount: number
-  draftSaving: boolean
-  draftActionStatus: string
-  draftActionError: string
-  misconceptionsText: string
-  misconceptionsDirty: boolean
+  uploadAssignmentId: string;
+  uploadDate: string;
+  uploadDueAt: string;
+  uploadSubjectId: string;
+  uploadScope: 'public' | 'class' | 'student';
+  uploadClassName: string;
+  uploadStudentIds: string;
+  uploadFiles: File[];
+  uploadAnswerFiles: File[];
+  uploading: boolean;
+  uploadStatus: string;
+  uploadError: string;
+  uploadCardCollapsed: boolean;
+  uploadJobId: string;
+  uploadJobInfo: UploadJobStatus | null;
+  uploadConfirming: boolean;
+  uploadStatusPollNonce: number;
+  uploadDraft: UploadDraft | null;
+  draftPanelCollapsed: boolean;
+  draftLoading: boolean;
+  draftError: string;
+  questionShowCount: number;
+  draftSaving: boolean;
+  draftActionStatus: string;
+  draftActionError: string;
+  misconceptionsText: string;
+  misconceptionsDirty: boolean;
 
-  progressPanelCollapsed: boolean
-  progressAssignmentId: string
-  progressLoading: boolean
-  progressError: string
-  progressData: AssignmentProgress | null
-  progressOnlyIncomplete: boolean
+  progressPanelCollapsed: boolean;
+  progressAssignmentId: string;
+  progressLoading: boolean;
+  progressError: string;
+  progressData: AssignmentProgress | null;
+  progressOnlyIncomplete: boolean;
 
-  proposalLoading: boolean
-  proposalError: string
-  proposals: TeacherMemoryProposal[]
-  memoryStatusFilter: 'applied' | 'rejected' | 'all'
-  memoryInsights: TeacherMemoryInsightsResponse | null
-  studentProposalLoading: boolean
-  studentProposalError: string
-  studentProposals: StudentMemoryProposal[]
-  studentMemoryStatusFilter: 'proposed' | 'applied' | 'rejected' | 'all'
-  studentMemoryStudentFilter: string
-  studentMemoryInsights: StudentMemoryInsightsResponse | null
+  proposalLoading: boolean;
+  proposalError: string;
+  proposals: TeacherMemoryProposal[];
+  memoryStatusFilter: 'applied' | 'rejected' | 'all';
+  memoryInsights: TeacherMemoryInsightsResponse | null;
+  studentProposalLoading: boolean;
+  studentProposalError: string;
+  studentProposals: StudentMemoryProposal[];
+  studentMemoryStatusFilter: 'proposed' | 'applied' | 'rejected' | 'all';
+  studentMemoryStudentFilter: string;
+  studentMemoryInsights: StudentMemoryInsightsResponse | null;
 
-  executionTimeline: ExecutionTimelineEntry[]
-}
+  executionTimeline: ExecutionTimelineEntry[];
+};
 
 type TeacherWorkbenchAction =
-  | { type: 'set'; key: keyof TeacherWorkbenchState; value: TeacherWorkbenchState[keyof TeacherWorkbenchState] }
-  | { type: 'update'; update: (prev: TeacherWorkbenchState) => TeacherWorkbenchState }
+  | {
+      type: 'set';
+      key: keyof TeacherWorkbenchState;
+      value: TeacherWorkbenchState[keyof TeacherWorkbenchState];
+    }
+  | { type: 'update'; update: (prev: TeacherWorkbenchState) => TeacherWorkbenchState };
 
 export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
   return {
@@ -118,11 +122,15 @@ export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
     studentMemoryInsights: null,
 
     executionTimeline: [],
-  }
-}
+  };
+};
 
-export const teacherWorkbenchReducer = (state: TeacherWorkbenchState, action: TeacherWorkbenchAction): TeacherWorkbenchState => {
-  if (action.type === 'update') return action.update(state)
-  if (action.type === 'set') return { ...state, [action.key]: action.value } as TeacherWorkbenchState
-  return state
-}
+export const teacherWorkbenchReducer = (
+  state: TeacherWorkbenchState,
+  action: TeacherWorkbenchAction,
+): TeacherWorkbenchState => {
+  if (action.type === 'update') return action.update(state);
+  if (action.type === 'set')
+    return { ...state, [action.key]: action.value } as TeacherWorkbenchState;
+  return state;
+};

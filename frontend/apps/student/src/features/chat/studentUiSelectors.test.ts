@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest';
 
-import { selectComposerHint } from './studentUiSelectors'
+import { selectComposerHint } from './studentUiSelectors';
 
 describe('selectComposerHint', () => {
   it('tells verified students that chat is coaching, not submit', () => {
@@ -10,6 +10,6 @@ describe('selectComposerHint', () => {
         pendingChatJobId: '',
         sending: false,
       }),
-    ).toContain('对话不会记为提交')
-  })
-})
+    ).toContain('对话不会记为提交');
+  });
+});

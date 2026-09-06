@@ -1,4 +1,4 @@
-import type { Skill } from '../../appTypes'
+import type { Skill } from '../../appTypes';
 
 export const fallbackSkills: Skill[] = [
   {
@@ -31,27 +31,29 @@ export const fallbackSkills: Skill[] = [
     keywords: [],
     source_type: 'system',
   },
-]
+];
 
 export const TEACHER_GREETING =
-  '老师端已就绪。你可以直接提需求，例如：\n- 谁没交作业\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$能力ID` 选择教学能力（未指定时自动推荐）。'
+  '老师端已就绪。你可以直接提需求，例如：\n- 谁没交作业\n- 导入学生名册\n- 生成作业\n\n召唤规则：`$能力ID` 选择教学能力（未指定时自动推荐）。';
 
 type RawSkill = {
-  id: string
-  title?: string
-  desc?: string
-  instructions?: string
-  prompts?: string[]
-  examples?: string[]
-  source_type?: string
-  routing?: { keywords?: string[] }
-}
+  id: string;
+  title?: string;
+  desc?: string;
+  instructions?: string;
+  prompts?: string[];
+  examples?: string[];
+  source_type?: string;
+  routing?: { keywords?: string[] };
+};
 
 export const buildSkill = (skill: RawSkill): Skill => {
-  const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : []
-  const examples = Array.isArray(skill.examples) ? skill.examples.filter(Boolean) : []
-  const keywords = Array.isArray(skill.routing?.keywords) ? skill.routing.keywords.filter(Boolean) : []
-  const sourceType = (skill.source_type || 'system') as Skill['source_type']
+  const prompts = Array.isArray(skill.prompts) ? skill.prompts.filter(Boolean) : [];
+  const examples = Array.isArray(skill.examples) ? skill.examples.filter(Boolean) : [];
+  const keywords = Array.isArray(skill.routing?.keywords)
+    ? skill.routing.keywords.filter(Boolean)
+    : [];
+  const sourceType = (skill.source_type || 'system') as Skill['source_type'];
   return {
     id: skill.id,
     title: (skill.title || '').trim() || '未命名能力',
@@ -61,5 +63,5 @@ export const buildSkill = (skill: RawSkill): Skill => {
     examples,
     keywords,
     source_type: sourceType,
-  }
-}
+  };
+};

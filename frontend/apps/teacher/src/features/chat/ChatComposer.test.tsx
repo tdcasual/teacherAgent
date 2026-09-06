@@ -1,13 +1,13 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { createRef } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react';
+import { createRef } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import ChatComposer from './ChatComposer'
+import ChatComposer from './ChatComposer';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('ChatComposer copy', () => {
   it('surfaces workflow capability wording for automatic routing', () => {
@@ -32,15 +32,19 @@ describe('ChatComposer copy', () => {
         onPickFiles={async () => undefined}
         onRemoveAttachment={async () => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByText('当前路由: 自动编排')).toBeTruthy()
-    expect(screen.getByPlaceholderText('输入教学指令、审阅要求或追问，使用 $ 查看能力。回车发送，Shift+Enter 换行')).toBeTruthy()
-    expect(screen.getByLabelText('教学指令')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '添加附件' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '发送' }).className).toContain('composer-btn')
-    expect(screen.getByText('工作流指令 | 回车发送')).toBeTruthy()
-  })
+    expect(screen.getByText('当前路由: 自动编排')).toBeTruthy();
+    expect(
+      screen.getByPlaceholderText(
+        '输入教学指令、审阅要求或追问，使用 $ 查看能力。回车发送，Shift+Enter 换行',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByLabelText('教学指令')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '添加附件' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '发送' }).className).toContain('composer-btn');
+    expect(screen.getByText('工作流指令 | 回车发送')).toBeTruthy();
+  });
 
   it('shows pinned capability label when a workflow is explicitly chosen', () => {
     render(
@@ -64,8 +68,8 @@ describe('ChatComposer copy', () => {
         onPickFiles={async () => undefined}
         onRemoveAttachment={async () => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByText('当前路由: $homework-generator')).toBeTruthy()
-  })
-})
+    expect(screen.getByText('当前路由: $homework-generator')).toBeTruthy();
+  });
+});

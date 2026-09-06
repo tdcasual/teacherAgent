@@ -1,13 +1,13 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { StudentAssignmentHistoryItem } from '../../appTypes'
-import StudentAssignmentHistoryPage from './StudentAssignmentHistoryPage'
+import type { StudentAssignmentHistoryItem } from '../../appTypes';
+import StudentAssignmentHistoryPage from './StudentAssignmentHistoryPage';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const items: StudentAssignmentHistoryItem[] = [
   {
@@ -43,7 +43,7 @@ const items: StudentAssignmentHistoryItem[] = [
     official_score: null,
     archived_at: '2026-08-25T00:00:00',
   },
-]
+];
 
 describe('StudentAssignmentHistoryPage', () => {
   it('lists assignment history and shows official scores for submitted work', () => {
@@ -56,20 +56,20 @@ describe('StudentAssignmentHistoryPage', () => {
         onSubmit={() => undefined}
         onOpenAssignment={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByTestId('student-assignment-history-page')).toBeTruthy()
-    expect(screen.getByText('作业记录')).toBeTruthy()
-    expect(screen.getByText('已交力学')).toBeTruthy()
-    expect(screen.getByText('官方分 12')).toBeTruthy()
-    expect(screen.getByText('未交力学')).toBeTruthy()
-    expect(screen.getByText('归档未交')).toBeTruthy()
-  })
+    expect(screen.getByTestId('student-assignment-history-page')).toBeTruthy();
+    expect(screen.getByText('作业记录')).toBeTruthy();
+    expect(screen.getByText('已交力学')).toBeTruthy();
+    expect(screen.getByText('官方分 12')).toBeTruthy();
+    expect(screen.getByText('未交力学')).toBeTruthy();
+    expect(screen.getByText('归档未交')).toBeTruthy();
+  });
 
   it('lets published unsubmitted work open the submit panel, not session history', () => {
-    const onSubmit = vi.fn()
-    const onOpenAssignment = vi.fn()
-    const onBack = vi.fn()
+    const onSubmit = vi.fn();
+    const onOpenAssignment = vi.fn();
+    const onBack = vi.fn();
     render(
       <StudentAssignmentHistoryPage
         items={items}
@@ -79,12 +79,12 @@ describe('StudentAssignmentHistoryPage', () => {
         onSubmit={onSubmit}
         onOpenAssignment={onOpenAssignment}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '补交 未交力学' }))
-    expect(onSubmit).toHaveBeenCalledWith('HW_OPEN')
-    expect(onOpenAssignment).not.toHaveBeenCalled()
-    expect(onBack).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: '补交 归档未交' })).toBeNull()
-  })
-})
+    fireEvent.click(screen.getByRole('button', { name: '补交 未交力学' }));
+    expect(onSubmit).toHaveBeenCalledWith('HW_OPEN');
+    expect(onOpenAssignment).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: '补交 归档未交' })).toBeNull();
+  });
+});

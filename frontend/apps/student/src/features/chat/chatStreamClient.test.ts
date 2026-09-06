@@ -1,45 +1,51 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   CHAT_STREAM_EVENT_VERSION,
   runStudentChatStream,
   type StudentChatStreamEvent,
-} from './chatStreamClient'
+} from './chatStreamClient';
 
-const toSseEvent = (eventId: number, eventType: string, payload: Record<string, unknown>, eventVersion = CHAT_STREAM_EVENT_VERSION): string =>
-  `id:${eventId}\nevent:${eventType}\ndata:${JSON.stringify({ type: eventType, event_id: eventId, event_version: eventVersion, payload })}\n\n`
+const toSseEvent = (
+  eventId: number,
+  eventType: string,
+  payload: Record<string, unknown>,
+  eventVersion = CHAT_STREAM_EVENT_VERSION,
+): string =>
+  `id:${eventId}\nevent:${eventType}\ndata:${JSON.stringify({ type: eventType, event_id: eventId, event_version: eventVersion, payload })}\n\n`;
 
 const sseResponse = (body: string): Response => {
-  const encoder = new TextEncoder()
+  const encoder = new TextEncoder();
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(encoder.encode(body))
-        controller.close()
+        controller.enqueue(encoder.encode(body));
+        controller.close();
       },
     }),
     {
       status: 200,
       headers: { 'Content-Type': 'text/event-stream' },
     },
-  )
-}
+  );
+};
 
 describe('runStudentChatStream', () => {
   it('reconnects with last_event_id and continues stream cursor', async () => {
-    const first = [toSseEvent(1, 'assistant.delta', { delta: 'A' })].join('')
-    const second = [toSseEvent(2, 'job.done', { reply: 'AB' })].join('')
-    const urls: string[] = []
-    let calls = 0
-    let stop = false
-    const events: StudentChatStreamEvent[] = []
+    const first = [toSseEvent(1, 'assistant.delta', { delta: 'A' })].join('');
+    const second = [toSseEvent(2, 'job.done', { reply: 'AB' })].join('');
+    const urls: string[] = [];
+    let calls = 0;
+    let stop = false;
+    const events: StudentChatStreamEvent[] = [];
 
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      urls.push(url)
-      calls += 1
-      return calls === 1 ? sseResponse(first) : sseResponse(second)
-    })
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      urls.push(url);
+      calls += 1;
+      return calls === 1 ? sseResponse(first) : sseResponse(second);
+    });
 
     const result = await runStudentChatStream({
       apiBase: 'http://localhost:8000',
@@ -49,20 +55,25 @@ describe('runStudentChatStream', () => {
       sleep: async () => undefined,
       shouldStop: () => stop,
       onEvent: (event) => {
-        events.push(event)
-        if (event.eventType === 'job.done') stop = true
+        events.push(event);
+        if (event.eventType === 'job.done') stop = true;
       },
-    })
+    });
 
-    expect(events.map((item) => item.eventType)).toEqual(['assistant.delta', 'job.done'])
-    expect(result.cursor).toBe(2)
-    expect(urls[0] || '').not.toContain('last_event_id=')
-    expect(urls[1] || '').toContain('last_event_id=1')
-  })
+    expect(events.map((item) => item.eventType)).toEqual(['assistant.delta', 'job.done']);
+    expect(result.cursor).toBe(2);
+    expect(urls[0] || '').not.toContain('last_event_id=');
+    expect(urls[1] || '').toContain('last_event_id=1');
+  });
 
   it('marks protocol mismatch on unsupported stream version', async () => {
-    const unsupported = toSseEvent(1, 'assistant.delta', { delta: 'A' }, CHAT_STREAM_EVENT_VERSION + 1)
-    const fetchImpl = vi.fn(async () => sseResponse(unsupported))
+    const unsupported = toSseEvent(
+      1,
+      'assistant.delta',
+      { delta: 'A' },
+      CHAT_STREAM_EVENT_VERSION + 1,
+    );
+    const fetchImpl = vi.fn(async () => sseResponse(unsupported));
 
     const result = await runStudentChatStream({
       apiBase: 'http://localhost:8000',
@@ -72,16 +83,16 @@ describe('runStudentChatStream', () => {
       sleep: async () => undefined,
       shouldStop: () => false,
       onEvent: () => undefined,
-    })
+    });
 
-    expect(result.protocolMismatch).toBe(true)
-    expect(result.needsFallback).toBe(true)
-  })
+    expect(result.protocolMismatch).toBe(true);
+    expect(result.needsFallback).toBe(true);
+  });
 
   it('falls back after no-event reconnect failures hit the no-event cap', async () => {
     const fetchImpl = vi.fn(async () => {
-      throw new Error('stream unavailable')
-    })
+      throw new Error('stream unavailable');
+    });
 
     const result = await runStudentChatStream({
       apiBase: 'http://localhost:8000',
@@ -92,12 +103,12 @@ describe('runStudentChatStream', () => {
       shouldStop: () => false,
       onEvent: () => undefined,
       maxReconnects: 3,
-    })
+    });
 
     // When no events are ever observed (cursor does not advance),
     // runStudentChatStream uses the no-event reconnect cap (min(2, maxReconnects)).
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
-    expect(result.needsFallback).toBe(true)
-    expect(result.protocolMismatch).toBe(false)
-  })
-})
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.needsFallback).toBe(true);
+    expect(result.protocolMismatch).toBe(false);
+  });
+});

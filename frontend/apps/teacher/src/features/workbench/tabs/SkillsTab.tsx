@@ -1,27 +1,27 @@
-import type { Skill } from '../../../appTypes'
-import type { InvocationTriggerType } from '../../chat/invocation'
+import type { Skill } from '../../../appTypes';
+import type { InvocationTriggerType } from '../../chat/invocation';
 
 export type SkillsTabProps = {
-  apiBase: string
-  filteredSkills: Skill[]
-  favorites: string[]
-  activeSkillId: string | null
-  skillPinned: boolean
-  skillQuery: string
-  showFavoritesOnly: boolean
-  skillsLoading: boolean
-  skillsError: string
-  fetchSkills: () => void | Promise<void>
-  chooseSkill: (id: string, pin: boolean) => void
-  toggleFavorite: (id: string) => void
-  insertPrompt: (prompt: string) => void
-  insertInvocationTokenAtCursor: (type: InvocationTriggerType, id: string) => void
-  stopKeyPropagation: (e: React.KeyboardEvent<HTMLElement>) => void
-  setSkillQuery: (q: string) => void
-  setShowFavoritesOnly: (v: boolean) => void
-  setSkillPinned: (v: boolean) => void
-  setComposerWarning: (msg: string) => void
-}
+  apiBase: string;
+  filteredSkills: Skill[];
+  favorites: string[];
+  activeSkillId: string | null;
+  skillPinned: boolean;
+  skillQuery: string;
+  showFavoritesOnly: boolean;
+  skillsLoading: boolean;
+  skillsError: string;
+  fetchSkills: () => void | Promise<void>;
+  chooseSkill: (id: string, pin: boolean) => void;
+  toggleFavorite: (id: string) => void;
+  insertPrompt: (prompt: string) => void;
+  insertInvocationTokenAtCursor: (type: InvocationTriggerType, id: string) => void;
+  stopKeyPropagation: (e: React.KeyboardEvent<HTMLElement>) => void;
+  setSkillQuery: (q: string) => void;
+  setShowFavoritesOnly: (v: boolean) => void;
+  setSkillPinned: (v: boolean) => void;
+  setComposerWarning: (msg: string) => void;
+};
 
 export default function SkillsTab(props: SkillsTabProps) {
   const {
@@ -41,7 +41,7 @@ export default function SkillsTab(props: SkillsTabProps) {
     setShowFavoritesOnly,
     setSkillPinned,
     setComposerWarning,
-  } = props
+  } = props;
 
   return (
     <>
@@ -63,8 +63,8 @@ export default function SkillsTab(props: SkillsTabProps) {
             className="ghost"
             disabled={!skillPinned}
             onClick={() => {
-              setSkillPinned(false)
-              setComposerWarning('已切换到自动工作流推荐（未显式指定时由后端自动选择）。')
+              setSkillPinned(false);
+              setComposerWarning('已切换到自动工作流推荐（未显式指定时由后端自动选择）。');
             }}
           >
             切回自动推荐
@@ -80,24 +80,35 @@ export default function SkillsTab(props: SkillsTabProps) {
         </div>
       </div>
 
-      <div className="mb-[10px] text-[12px] text-muted">当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。</div>
+      <div className="mb-[10px] text-[12px] text-muted">
+        当前仅保留系统内置教学能力，可直接选择或让系统自动推荐。
+      </div>
 
-      {skillsLoading ? <div className="text-[12px] text-muted mb-[8px]">正在加载能力...</div> : null}
+      {skillsLoading ? (
+        <div className="text-[12px] text-muted mb-[8px]">正在加载能力...</div>
+      ) : null}
       {skillsError ? <div className="text-[12px] text-danger mb-[8px]">{skillsError}</div> : null}
 
-      <div className="skills-body grid gap-0 overflow-y-auto flex-1 min-h-0 pr-[2px]" style={{ overscrollBehavior: 'contain' }}>
+      <div
+        className="skills-body grid gap-0 overflow-y-auto flex-1 min-h-0 pr-[2px]"
+        style={{ overscrollBehavior: 'contain' }}
+      >
         {filteredSkills.map((skill) => (
           <div
             key={skill.id}
-            className={`skill-card grid gap-3 px-3 py-3 ${skillPinned && skill.id === activeSkillId
-              ? 'rounded-[18px] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_48%,var(--color-surface))] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface))]'
-              : 'border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] last:border-b-0'}`}
+            className={`skill-card grid gap-3 px-3 py-3 ${
+              skillPinned && skill.id === activeSkillId
+                ? 'rounded-[18px] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_48%,var(--color-surface))] ring-1 ring-inset ring-[color:color-mix(in_oklab,var(--color-accent)_22%,var(--color-surface))]'
+                : 'border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] last:border-b-0'
+            }`}
           >
             <div className="flex justify-between items-baseline gap-[8px] mb-[6px]">
               <div>
                 <strong>{skill.title}</strong>
                 {skill.source_type === 'teacher' ? (
-                  <span className="inline-block text-[11px] text-muted bg-surface-soft py-[1px] px-[6px] rounded-[4px] ml-[6px] align-middle">[只读]</span>
+                  <span className="inline-block text-[11px] text-muted bg-surface-soft py-[1px] px-[6px] rounded-[4px] ml-[6px] align-middle">
+                    [只读]
+                  </span>
                 ) : null}
               </div>
               <button
@@ -117,8 +128,8 @@ export default function SkillsTab(props: SkillsTabProps) {
                 type="button"
                 className="teacher-drawer-link"
                 onClick={() => {
-                  chooseSkill(skill.id, true)
-                  setComposerWarning('')
+                  chooseSkill(skill.id, true);
+                  setComposerWarning('');
                 }}
               >
                 设为当前
@@ -127,8 +138,8 @@ export default function SkillsTab(props: SkillsTabProps) {
                 type="button"
                 className="teacher-drawer-link"
                 onClick={() => {
-                  chooseSkill(skill.id, true)
-                  insertInvocationTokenAtCursor('skill', skill.id)
+                  chooseSkill(skill.id, true);
+                  insertInvocationTokenAtCursor('skill', skill.id);
                 }}
               >
                 插入 $
@@ -142,8 +153,8 @@ export default function SkillsTab(props: SkillsTabProps) {
                   type="button"
                   className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-accent)_20%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_62%,var(--color-surface))] py-[6px] px-[10px] text-[12px] text-accent cursor-pointer"
                   onClick={() => {
-                    chooseSkill(skill.id, true)
-                    insertPrompt(prompt)
+                    chooseSkill(skill.id, true);
+                    insertPrompt(prompt);
                   }}
                 >
                   使用模板
@@ -158,8 +169,8 @@ export default function SkillsTab(props: SkillsTabProps) {
                   type="button"
                   className="rounded-[999px] border border-[color:color-mix(in_oklab,var(--color-border)_74%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_86%,var(--color-surface))] py-[6px] px-[10px] text-[12px] text-muted cursor-pointer"
                   onClick={() => {
-                    chooseSkill(skill.id, true)
-                    insertPrompt(example)
+                    chooseSkill(skill.id, true);
+                    insertPrompt(example);
                   }}
                 >
                   {example}
@@ -170,5 +181,5 @@ export default function SkillsTab(props: SkillsTabProps) {
         ))}
       </div>
     </>
-  )
+  );
 }

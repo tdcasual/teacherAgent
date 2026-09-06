@@ -1,57 +1,64 @@
-import { useEffect, useRef, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from 'react'
-import ChatComposer from './ChatComposer'
-import ChatMessages from './ChatMessages'
-import MentionPanel from './MentionPanel'
-import type { MentionOption, PendingToolRun } from '../../appTypes'
-import type { InvocationTriggerType } from './invocation'
-import type { ComposerAttachment } from '../../../../shared/useChatAttachments'
+import {
+  useEffect,
+  useRef,
+  type FormEvent,
+  type KeyboardEvent,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react';
+import ChatComposer from './ChatComposer';
+import ChatMessages from './ChatMessages';
+import MentionPanel from './MentionPanel';
+import type { MentionOption, PendingToolRun } from '../../appTypes';
+import type { InvocationTriggerType } from './invocation';
+import type { ComposerAttachment } from '../../../../shared/useChatAttachments';
 
 type MentionState = {
-  start: number
-  query: string
-  type: InvocationTriggerType
-  items: MentionOption[]
-} | null
+  start: number;
+  query: string;
+  type: InvocationTriggerType;
+  items: MentionOption[];
+} | null;
 
 type RenderedMessage = {
-  id: string
-  role: 'user' | 'assistant'
-  html: string
-  time: string
-}
+  id: string;
+  role: 'user' | 'assistant';
+  html: string;
+  time: string;
+};
 
 type TeacherChatMainContentProps = {
-  taskStrip?: ReactNode
-  renderedMessages: RenderedMessage[]
-  sending: boolean
-  hasPendingChatJob: boolean
-  typingTimeLabel: string
-  messagesRef: MutableRefObject<HTMLDivElement | null>
-  onMessagesScroll: () => void
-  showScrollToBottom: boolean
-  onScrollToBottom: () => void
-  activeSkillId: string
-  skillPinned: boolean
-  input: string
-  chatQueueHint: string
-  pendingStreamStage: string
-  pendingToolRuns: PendingToolRun[]
-  composerWarning: string
-  attachments: ComposerAttachment[]
-  uploadingAttachments: boolean
-  hasSendableAttachments: boolean
-  inputRef: MutableRefObject<HTMLTextAreaElement | null>
-  onSubmit: (event: FormEvent) => void | Promise<void>
-  onInputChange: (value: string, selectionStart: number) => void
-  onInputClick: (selectionStart: number) => void
-  onInputKeyUp: (selectionStart: number) => void
-  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
-  onPickFiles: (files: File[]) => void | Promise<void>
-  onRemoveAttachment: (localId: string) => void | Promise<void>
-  mention: MentionState
-  mentionIndex: number
-  onInsertMention: (item: MentionOption) => void
-}
+  taskStrip?: ReactNode;
+  renderedMessages: RenderedMessage[];
+  sending: boolean;
+  hasPendingChatJob: boolean;
+  typingTimeLabel: string;
+  messagesRef: MutableRefObject<HTMLDivElement | null>;
+  onMessagesScroll: () => void;
+  showScrollToBottom: boolean;
+  onScrollToBottom: () => void;
+  activeSkillId: string;
+  skillPinned: boolean;
+  input: string;
+  chatQueueHint: string;
+  pendingStreamStage: string;
+  pendingToolRuns: PendingToolRun[];
+  composerWarning: string;
+  attachments: ComposerAttachment[];
+  uploadingAttachments: boolean;
+  hasSendableAttachments: boolean;
+  inputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  onSubmit: (event: FormEvent) => void | Promise<void>;
+  onInputChange: (value: string, selectionStart: number) => void;
+  onInputClick: (selectionStart: number) => void;
+  onInputKeyUp: (selectionStart: number) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPickFiles: (files: File[]) => void | Promise<void>;
+  onRemoveAttachment: (localId: string) => void | Promise<void>;
+  mention: MentionState;
+  mentionIndex: number;
+  onInsertMention: (item: MentionOption) => void;
+};
 
 export default function TeacherChatMainContent({
   taskStrip,
@@ -85,13 +92,13 @@ export default function TeacherChatMainContent({
   mentionIndex,
   onInsertMention,
 }: TeacherChatMainContentProps) {
-  const shellRef = useRef<HTMLElement | null>(null)
+  const shellRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const shell = shellRef.current
-    if (!shell) return
-    if (shell.scrollTop !== 0) shell.scrollTop = 0
-  }, [renderedMessages.length])
+    const shell = shellRef.current;
+    if (!shell) return;
+    if (shell.scrollTop !== 0) shell.scrollTop = 0;
+  }, [renderedMessages.length]);
 
   return (
     <main
@@ -142,5 +149,5 @@ export default function TeacherChatMainContent({
         <MentionPanel mention={mention} mentionIndex={mentionIndex} onInsert={onInsertMention} />
       </section>
     </main>
-  )
+  );
 }

@@ -1,14 +1,15 @@
-import type { StudentTodayHomeStep } from '../../appTypes'
+import type { StudentTodayHomeStep } from '../../appTypes';
 
 type LearningProgressRailProps = {
-  steps: StudentTodayHomeStep[]
-}
+  steps: StudentTodayHomeStep[];
+};
 
 const toneClassMap: Record<StudentTodayHomeStep['tone'], string> = {
   neutral: 'bg-[color:var(--color-progress)] text-muted border-border',
   active: 'bg-accent-soft text-accent border-[color:var(--color-accent)]',
-  success: 'bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)] border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))]',
-}
+  success:
+    'bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)] border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))]',
+};
 
 export default function LearningProgressRail({ steps }: LearningProgressRailProps) {
   return (
@@ -18,7 +19,9 @@ export default function LearningProgressRail({ steps }: LearningProgressRailProp
       data-testid="student-home-progress-stage"
       data-home-tier="supporting"
     >
-      <h2 id="student-home-progress-title" className="m-0 text-[14px] font-semibold text-ink">学习进度</h2>
+      <h2 id="student-home-progress-title" className="m-0 text-[14px] font-semibold text-ink">
+        学习进度
+      </h2>
       <ol className="m-0 flex flex-wrap gap-2 p-0 list-none">
         {steps.map((step, index) => (
           <li
@@ -30,5 +33,5 @@ export default function LearningProgressRail({ steps }: LearningProgressRailProp
         ))}
       </ol>
     </section>
-  )
+  );
 }

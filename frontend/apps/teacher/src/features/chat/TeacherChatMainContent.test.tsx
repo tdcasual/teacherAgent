@@ -1,24 +1,24 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import TeacherChatMainContent from './TeacherChatMainContent'
+import TeacherChatMainContent from './TeacherChatMainContent';
 
 vi.mock('./ChatMessages', () => ({
   default: () => <div>chat-messages</div>,
-}))
+}));
 
 vi.mock('./ChatComposer', () => ({
   default: () => <div>chat-composer</div>,
-}))
+}));
 
 vi.mock('./MentionPanel', () => ({
   default: () => null,
-}))
+}));
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe('TeacherChatMainContent', () => {
   it('wraps the desktop conversation in a focused stage shell', () => {
@@ -55,13 +55,13 @@ describe('TeacherChatMainContent', () => {
         mentionIndex={0}
         onInsertMention={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByText('task-strip')).toBeTruthy()
+    expect(screen.getByText('task-strip')).toBeTruthy();
     expect(screen.getByTestId('teacher-chat-stage').getAttribute('data-chat-stage-tone')).toBe(
       'focused',
-    )
-    expect(screen.getByText('chat-messages')).toBeTruthy()
-    expect(screen.getByText('chat-composer')).toBeTruthy()
-  })
-})
+    );
+    expect(screen.getByText('chat-messages')).toBeTruthy();
+    expect(screen.getByText('chat-composer')).toBeTruthy();
+  });
+});

@@ -1,26 +1,26 @@
-import { useRef, type FormEvent, type KeyboardEvent, type MutableRefObject } from 'react'
-import type { ComposerAttachment } from '../../../../shared/useChatAttachments'
+import { useRef, type FormEvent, type KeyboardEvent, type MutableRefObject } from 'react';
+import type { ComposerAttachment } from '../../../../shared/useChatAttachments';
 
 type Props = {
-  activeSkillId: string
-  skillPinned: boolean
-  input: string
-  pendingChatJob: boolean
-  sending: boolean
-  chatQueueHint: string
-  composerWarning: string
-  attachments: ComposerAttachment[]
-  uploadingAttachments: boolean
-  hasSendableAttachments: boolean
-  inputRef: MutableRefObject<HTMLTextAreaElement | null>
-  onSubmit: (event: FormEvent) => void
-  onInputChange: (value: string, selectionStart: number) => void
-  onInputClick: (selectionStart: number) => void
-  onInputKeyUp: (selectionStart: number) => void
-  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
-  onPickFiles: (files: File[]) => void | Promise<void>
-  onRemoveAttachment: (localId: string) => void | Promise<void>
-}
+  activeSkillId: string;
+  skillPinned: boolean;
+  input: string;
+  pendingChatJob: boolean;
+  sending: boolean;
+  chatQueueHint: string;
+  composerWarning: string;
+  attachments: ComposerAttachment[];
+  uploadingAttachments: boolean;
+  hasSendableAttachments: boolean;
+  inputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  onSubmit: (event: FormEvent) => void;
+  onInputChange: (value: string, selectionStart: number) => void;
+  onInputClick: (selectionStart: number) => void;
+  onInputKeyUp: (selectionStart: number) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPickFiles: (files: File[]) => void | Promise<void>;
+  onRemoveAttachment: (localId: string) => void | Promise<void>;
+};
 
 export default function ChatComposer({
   activeSkillId,
@@ -42,8 +42,8 @@ export default function ChatComposer({
   onPickFiles,
   onRemoveAttachment,
 }: Props) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const canSend = Boolean(input.trim()) || hasSendableAttachments
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canSend = Boolean(input.trim()) || hasSendableAttachments;
 
   return (
     <form
@@ -53,7 +53,9 @@ export default function ChatComposer({
       <div className="w-full max-w-[var(--chat-content-max-width)] rounded-[18px] border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-surface)_92%,var(--color-surface))] px-3 py-[10px] shadow-[0_8px_18px_rgba(15,23,42,0.05)] grid gap-[10px]">
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center rounded-lg border border-border px-2 py-[2px] text-[11px] text-muted bg-surface-soft">
-            {skillPinned ? `当前路由: $${activeSkillId || 'teacher-assignment-ops'}` : '当前路由: 自动编排'}
+            {skillPinned
+              ? `当前路由: $${activeSkillId || 'teacher-assignment-ops'}`
+              : '当前路由: 自动编排'}
           </span>
           <span className="inline-flex items-center rounded-lg bg-[color:var(--color-accent-soft)] px-2 py-[2px] text-[11px] text-[color:var(--color-accent)]">
             教学指令入口
@@ -62,15 +64,28 @@ export default function ChatComposer({
         {attachments.length ? (
           <div className="flex flex-wrap gap-2">
             {attachments.map((item) => (
-              <span key={item.localId} className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-surface-soft px-2 py-1 text-[12px]">
-                <span className="max-w-[220px] truncate" title={item.fileName}>{item.fileName}</span>
-                <span className={`text-[11px] ${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-muted' : 'text-danger'}`}>
-                  {item.status === 'ready' ? '已就绪' : item.status === 'uploading' ? '上传中' : '失败'}
+              <span
+                key={item.localId}
+                className="inline-flex max-w-full items-center gap-2 rounded-lg border border-border bg-surface-soft px-2 py-1 text-[12px]"
+              >
+                <span className="max-w-[220px] truncate" title={item.fileName}>
+                  {item.fileName}
+                </span>
+                <span
+                  className={`text-[11px] ${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-muted' : 'text-danger'}`}
+                >
+                  {item.status === 'ready'
+                    ? '已就绪'
+                    : item.status === 'uploading'
+                      ? '上传中'
+                      : '失败'}
                 </span>
                 <button
                   type="button"
                   className="composer-btn border-0 bg-transparent text-muted cursor-pointer px-0"
-                  onClick={() => { void onRemoveAttachment(item.localId) }}
+                  onClick={() => {
+                    void onRemoveAttachment(item.localId);
+                  }}
                   title={item.error || '移除附件'}
                   aria-label="移除附件"
                 >
@@ -85,9 +100,15 @@ export default function ChatComposer({
           aria-label="教学指令"
           className="border-none bg-transparent px-[2px] py-0 shadow-none resize-none min-h-[56px] max-h-[220px] overflow-auto leading-[1.4] max-[900px]:leading-[1.32] focus:border-none focus:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent)]"
           value={input}
-          onChange={(e) => onInputChange(e.target.value, e.target.selectionStart || e.target.value.length)}
-          onClick={(e) => onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)}
-          onKeyUp={(e) => onInputKeyUp((e.target as HTMLTextAreaElement).selectionStart || input.length)}
+          onChange={(e) =>
+            onInputChange(e.target.value, e.target.selectionStart || e.target.value.length)
+          }
+          onClick={(e) =>
+            onInputClick((e.target as HTMLTextAreaElement).selectionStart || input.length)
+          }
+          onKeyUp={(e) =>
+            onInputKeyUp((e.target as HTMLTextAreaElement).selectionStart || input.length)
+          }
           onKeyDown={onInputKeyDown}
           placeholder="输入教学指令、审阅要求或追问，使用 $ 查看能力。回车发送，Shift+Enter 换行"
           rows={3}
@@ -111,12 +132,14 @@ export default function ChatComposer({
               multiple
               accept=".md,.markdown,.xls,.xlsx,application/pdf,image/*"
               onChange={(e) => {
-                const files = Array.from(e.target.files || [])
-                if (files.length) void onPickFiles(files)
-                e.currentTarget.value = ''
+                const files = Array.from(e.target.files || []);
+                if (files.length) void onPickFiles(files);
+                e.currentTarget.value = '';
               }}
             />
-            <span className="composer-hint text-[12px] text-muted truncate">{chatQueueHint || '工作流指令 | 回车发送'}</span>
+            <span className="composer-hint text-[12px] text-muted truncate">
+              {chatQueueHint || '工作流指令 | 回车发送'}
+            </span>
           </div>
           <button
             type="submit"
@@ -129,5 +152,5 @@ export default function ChatComposer({
         {composerWarning ? <div className="status err">{composerWarning}</div> : null}
       </div>
     </form>
-  )
+  );
 }

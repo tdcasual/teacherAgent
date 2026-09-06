@@ -1,15 +1,15 @@
-import SkillsTab from './tabs/SkillsTab'
-import WorkflowTab from './tabs/WorkflowTab'
-import MemoryTab from './tabs/MemoryTab'
-import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel'
-import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from './workflowIndicators'
+import SkillsTab from './tabs/SkillsTab';
+import WorkflowTab from './tabs/WorkflowTab';
+import MemoryTab from './tabs/MemoryTab';
+import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel';
+import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from './workflowIndicators';
 
 type TeacherWorkbenchProps = {
-  viewModel: TeacherWorkbenchViewModel
-}
+  viewModel: TeacherWorkbenchViewModel;
+};
 
 export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
-  const { viewModel } = props
+  const { viewModel } = props;
   const {
     skillsOpen,
     setSkillsOpen,
@@ -29,27 +29,27 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     activeWorkflowIndicator,
     progressData,
     scrollToWorkflowSection,
-  } = viewModel
+  } = viewModel;
 
-  const activeStep = findActiveWorkflowStep(activeWorkflowIndicator)
+  const activeStep = findActiveWorkflowStep(activeWorkflowIndicator);
   const guidance = buildTeacherWorkflowGuidance({
     mode: 'assignment',
     tone: activeWorkflowIndicator.tone,
     activeStepKey: activeStep?.key,
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
-  })
-  const workflowTabActive = workbenchTab === 'workflow'
-  const focusLabel = activeStep?.label || '上传文件'
+  });
+  const workflowTabActive = workbenchTab === 'workflow';
+  const focusLabel = activeStep?.label || '上传文件';
 
   const handlePrimaryAction = () => {
-    setWorkbenchTab('workflow')
-    scrollToWorkflowSection(guidance.primaryActionTargetId)
+    setWorkbenchTab('workflow');
+    scrollToWorkflowSection(guidance.primaryActionTargetId);
     if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => scrollToWorkflowSection(guidance.primaryActionTargetId))
-      return
+      window.requestAnimationFrame(() => scrollToWorkflowSection(guidance.primaryActionTargetId));
+      return;
     }
-  }
+  };
 
   return (
     <aside
@@ -67,14 +67,14 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
             className="ghost"
             onClick={() => {
               if (workbenchTab === 'skills') {
-                void fetchSkills()
+                void fetchSkills();
               } else if (workbenchTab === 'memory') {
-                void refreshMemoryProposals()
-                void refreshMemoryInsights()
-                void refreshStudentMemoryProposals()
-                void refreshStudentMemoryInsights()
+                void refreshMemoryProposals();
+                void refreshMemoryInsights();
+                void refreshStudentMemoryProposals();
+                void refreshStudentMemoryInsights();
               } else {
-                refreshWorkflowWorkbench()
+                refreshWorkflowWorkbench();
               }
             }}
             disabled={
@@ -100,16 +100,21 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         {workflowTabActive ? (
           <div className="grid gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[14px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
-              <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
-                activeWorkflowIndicator.tone === 'active'
-                  ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
-                  : activeWorkflowIndicator.tone === 'success'
-                    ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
-                    : activeWorkflowIndicator.tone === 'error'
-                      ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
-                      : 'border-border bg-surface-soft text-muted'
-                }`}>
+              <span className="text-[14px] font-semibold text-ink">
+                {activeWorkflowIndicator.label}
+              </span>
+              <span
+                data-testid="teacher-workflow-status-chip"
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                  activeWorkflowIndicator.tone === 'active'
+                    ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
+                    : activeWorkflowIndicator.tone === 'success'
+                      ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
+                      : activeWorkflowIndicator.tone === 'error'
+                        ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
+                        : 'border-border bg-surface-soft text-muted'
+                }`}
+              >
                 {activeStep?.label || '等待开始'}
               </span>
             </div>
@@ -119,23 +124,30 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
               data-workbench-tier="supporting"
             >
               <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
-              <div className="text-[13px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">{focusLabel}</div>
+              <div className="text-[13px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">
+                {focusLabel}
+              </div>
             </div>
           </div>
         ) : (
           <div className="grid gap-3">
             <div className="min-w-0 flex-1 grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[15px] font-semibold text-ink">{activeWorkflowIndicator.label}</span>
-                <span data-testid="teacher-workflow-status-chip" className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
-                  activeWorkflowIndicator.tone === 'active'
-                    ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
-                    : activeWorkflowIndicator.tone === 'success'
-                      ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
-                      : activeWorkflowIndicator.tone === 'error'
-                        ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
-                        : 'border-border bg-surface-soft text-muted'
-                }`}>
+                <span className="text-[15px] font-semibold text-ink">
+                  {activeWorkflowIndicator.label}
+                </span>
+                <span
+                  data-testid="teacher-workflow-status-chip"
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                    activeWorkflowIndicator.tone === 'active'
+                      ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]'
+                      : activeWorkflowIndicator.tone === 'success'
+                        ? 'border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] text-[color:var(--color-success)]'
+                        : activeWorkflowIndicator.tone === 'error'
+                          ? 'border-[color:var(--color-danger)] bg-danger-soft text-danger'
+                          : 'border-border bg-surface-soft text-muted'
+                  }`}
+                >
                   {activeStep?.label || '等待开始'}
                 </span>
               </div>
@@ -144,8 +156,12 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
                 data-testid="teacher-workbench-focus-block"
                 data-workbench-tier="supporting"
               >
-                <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">当前焦点</div>
-                <div className="text-[14px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">{focusLabel}</div>
+                <div className="text-[11px] font-semibold tracking-[0.12em] text-muted">
+                  当前焦点
+                </div>
+                <div className="text-[14px] font-semibold text-[color:color-mix(in_oklab,var(--color-ink)_88%,var(--color-accent))]">
+                  {focusLabel}
+                </div>
               </div>
             </div>
             <button
@@ -158,14 +174,36 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
           </div>
         )}
       </section>
-      <div className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,var(--color-surface))] self-start flex-none" role="tablist" aria-label="工作台分区">
-        <button type="button" role="tab" aria-selected={workbenchTab === 'skills'} className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('skills')}>
+      <div
+        className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,var(--color-surface))] self-start flex-none"
+        role="tablist"
+        aria-label="工作台分区"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workbenchTab === 'skills'}
+          className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
+          onClick={() => setWorkbenchTab('skills')}
+        >
           能力
         </button>
-        <button type="button" role="tab" aria-selected={workbenchTab === 'memory'} className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('memory')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workbenchTab === 'memory'}
+          className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
+          onClick={() => setWorkbenchTab('memory')}
+        >
           自动记忆
         </button>
-        <button type="button" role="tab" aria-selected={workbenchTab === 'workflow'} className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`} onClick={() => setWorkbenchTab('workflow')}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={workbenchTab === 'workflow'}
+          className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
+          onClick={() => setWorkbenchTab('workflow')}
+        >
           工作流
         </button>
       </div>
@@ -217,5 +255,5 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         )}
       </div>
     </aside>
-  )
+  );
 }

@@ -1,19 +1,23 @@
-import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageRemoveItem,
+  safeLocalStorageSetItem,
+} from '../../../../shared/storage';
 
-const STUDENT_AUTH_TOKEN_KEY = 'studentAuthAccessToken'
+const STUDENT_AUTH_TOKEN_KEY = 'studentAuthAccessToken';
 
 export const readStudentAccessToken = (): string =>
-  String(safeLocalStorageGetItem(STUDENT_AUTH_TOKEN_KEY) || '').trim()
+  String(safeLocalStorageGetItem(STUDENT_AUTH_TOKEN_KEY) || '').trim();
 
 export const writeStudentAccessToken = (token: string): void => {
-  const text = String(token || '').trim()
+  const text = String(token || '').trim();
   if (!text) {
-    safeLocalStorageRemoveItem(STUDENT_AUTH_TOKEN_KEY)
-    return
+    safeLocalStorageRemoveItem(STUDENT_AUTH_TOKEN_KEY);
+    return;
   }
-  safeLocalStorageSetItem(STUDENT_AUTH_TOKEN_KEY, text)
-}
+  safeLocalStorageSetItem(STUDENT_AUTH_TOKEN_KEY, text);
+};
 
 export const clearStudentAccessToken = (): void => {
-  safeLocalStorageRemoveItem(STUDENT_AUTH_TOKEN_KEY)
-}
+  safeLocalStorageRemoveItem(STUDENT_AUTH_TOKEN_KEY);
+};

@@ -8,6 +8,8 @@ def test_frontend_has_lint_script() -> None:
     scripts = pkg.get("scripts", {})
     assert "lint" in scripts
     assert "format:check" in scripts
+    format_check = str(scripts.get("format:check") or "")
+    assert "apps/**/*.{ts,tsx,css}" in format_check
 
 
 def test_frontend_smoke_runs_mocked_assignment_how_to_loop() -> None:

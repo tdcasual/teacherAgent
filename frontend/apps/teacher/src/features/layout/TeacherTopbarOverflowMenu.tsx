@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 
-import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
+import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer';
 
 type TeacherTopbarOverflowMenuProps = {
-  skillsOpen: boolean
-  authOpen: boolean
-  authButtonRef: MutableRefObject<HTMLButtonElement | null>
-  onToggleAuth: () => void
-  onToggleSkillsWorkbench: () => void
-  onToggleSettingsPanel: () => void
-}
+  skillsOpen: boolean;
+  authOpen: boolean;
+  authButtonRef: MutableRefObject<HTMLButtonElement | null>;
+  onToggleAuth: () => void;
+  onToggleSkillsWorkbench: () => void;
+  onToggleSettingsPanel: () => void;
+};
 
 export default function TeacherTopbarOverflowMenu({
   skillsOpen,
@@ -20,24 +20,24 @@ export default function TeacherTopbarOverflowMenu({
   onToggleSkillsWorkbench,
   onToggleSettingsPanel,
 }: TeacherTopbarOverflowMenuProps) {
-  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false)
-  const closeQuickActions = useCallback(() => setQuickActionsOpen(false), [])
+  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const closeQuickActions = useCallback(() => setQuickActionsOpen(false), []);
   const quickActionsLayerRefs = useMemo(
     () => [quickActionsPanelRef, quickActionsButtonRef] as const,
     [],
-  )
+  );
 
   useEffect(() => {
-    if (authOpen && quickActionsOpen) setQuickActionsOpen(false)
-  }, [authOpen, quickActionsOpen])
+    if (authOpen && quickActionsOpen) setQuickActionsOpen(false);
+  }, [authOpen, quickActionsOpen]);
 
   useDismissibleLayer({
     open: quickActionsOpen,
     onDismiss: closeQuickActions,
     refs: quickActionsLayerRefs,
-  })
+  });
 
   return (
     <>
@@ -65,8 +65,8 @@ export default function TeacherTopbarOverflowMenu({
             aria-haspopup="dialog"
             aria-expanded={authOpen}
             onClick={() => {
-              onToggleAuth()
-              setQuickActionsOpen(false)
+              onToggleAuth();
+              setQuickActionsOpen(false);
             }}
           >
             打开管理
@@ -75,8 +75,8 @@ export default function TeacherTopbarOverflowMenu({
             className="ghost justify-start"
             type="button"
             onClick={() => {
-              onToggleSkillsWorkbench()
-              setQuickActionsOpen(false)
+              onToggleSkillsWorkbench();
+              setQuickActionsOpen(false);
             }}
           >
             {skillsOpen ? '收起工作台' : '打开工作台'}
@@ -85,8 +85,8 @@ export default function TeacherTopbarOverflowMenu({
             className="ghost justify-start"
             type="button"
             onClick={() => {
-              onToggleSettingsPanel()
-              setQuickActionsOpen(false)
+              onToggleSettingsPanel();
+              setQuickActionsOpen(false);
             }}
           >
             打开设置
@@ -94,5 +94,5 @@ export default function TeacherTopbarOverflowMenu({
         </div>
       ) : null}
     </>
-  )
+  );
 }

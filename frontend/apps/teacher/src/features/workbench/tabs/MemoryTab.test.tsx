@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import MemoryTab, { type MemoryTabProps } from './MemoryTab'
+import MemoryTab, { type MemoryTabProps } from './MemoryTab';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const buildProps = (override?: Partial<MemoryTabProps>): MemoryTabProps => ({
   memoryStatusFilter: 'all',
@@ -27,12 +27,12 @@ const buildProps = (override?: Partial<MemoryTabProps>): MemoryTabProps => ({
   onReviewStudentProposal: async () => undefined,
   onDeleteStudentProposal: async () => undefined,
   ...override,
-})
+});
 
 describe('MemoryTab', () => {
   it('shows delete button and emits teacher proposal id when clicked', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onDeleteProposal = vi.fn(async () => undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onDeleteProposal = vi.fn(async () => undefined);
 
     render(
       <MemoryTab
@@ -49,16 +49,16 @@ describe('MemoryTab', () => {
           onDeleteProposal,
         })}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0])
-    expect(onDeleteProposal).toHaveBeenCalledTimes(1)
-    expect(onDeleteProposal).toHaveBeenCalledWith('p-100')
-  })
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0]);
+    expect(onDeleteProposal).toHaveBeenCalledTimes(1);
+    expect(onDeleteProposal).toHaveBeenCalledWith('p-100');
+  });
 
   it('reviews student proposal with approve action', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onReviewStudentProposal = vi.fn(async () => undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onReviewStudentProposal = vi.fn(async () => undefined);
 
     render(
       <MemoryTab
@@ -76,15 +76,15 @@ describe('MemoryTab', () => {
           onReviewStudentProposal,
         })}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '通过' }))
-    expect(onReviewStudentProposal).toHaveBeenCalledTimes(1)
-    expect(onReviewStudentProposal).toHaveBeenCalledWith('smem_1', true)
-  })
+    fireEvent.click(screen.getByRole('button', { name: '通过' }));
+    expect(onReviewStudentProposal).toHaveBeenCalledTimes(1);
+    expect(onReviewStudentProposal).toHaveBeenCalledWith('smem_1', true);
+  });
 
   it('reviews student proposal with reject action', async () => {
-    const onReviewStudentProposal = vi.fn(async () => undefined)
+    const onReviewStudentProposal = vi.fn(async () => undefined);
 
     render(
       <MemoryTab
@@ -101,16 +101,16 @@ describe('MemoryTab', () => {
           onReviewStudentProposal,
         })}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '拒绝' }))
-    expect(onReviewStudentProposal).toHaveBeenCalledTimes(1)
-    expect(onReviewStudentProposal).toHaveBeenCalledWith('smem_1', false)
-  })
+    fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
+    expect(onReviewStudentProposal).toHaveBeenCalledTimes(1);
+    expect(onReviewStudentProposal).toHaveBeenCalledWith('smem_1', false);
+  });
 
   it('deletes student proposal when confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onDeleteStudentProposal = vi.fn(async () => undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onDeleteStudentProposal = vi.fn(async () => undefined);
 
     render(
       <MemoryTab
@@ -127,16 +127,16 @@ describe('MemoryTab', () => {
           onDeleteStudentProposal,
         })}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '删除' }))
-    expect(onDeleteStudentProposal).toHaveBeenCalledTimes(1)
-    expect(onDeleteStudentProposal).toHaveBeenCalledWith('smem_2')
-  })
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(onDeleteStudentProposal).toHaveBeenCalledTimes(1);
+    expect(onDeleteStudentProposal).toHaveBeenCalledWith('smem_2');
+  });
 
   it('updates student memory filter controls', async () => {
-    const setStudentMemoryStatusFilter = vi.fn()
-    const setStudentMemoryStudentFilter = vi.fn()
+    const setStudentMemoryStatusFilter = vi.fn();
+    const setStudentMemoryStudentFilter = vi.fn();
 
     render(
       <MemoryTab
@@ -146,14 +146,14 @@ describe('MemoryTab', () => {
           setStudentMemoryStudentFilter,
         })}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '已通过' }))
-    expect(setStudentMemoryStatusFilter).toHaveBeenCalledWith('applied')
+    fireEvent.click(screen.getByRole('button', { name: '已通过' }));
+    expect(setStudentMemoryStatusFilter).toHaveBeenCalledWith('applied');
 
     fireEvent.change(screen.getByPlaceholderText('按学生ID过滤（可选）'), {
       target: { value: 'S1001' },
-    })
-    expect(setStudentMemoryStudentFilter).toHaveBeenCalledWith('S1001')
-  })
-})
+    });
+    expect(setStudentMemoryStudentFilter).toHaveBeenCalledWith('S1001');
+  });
+});

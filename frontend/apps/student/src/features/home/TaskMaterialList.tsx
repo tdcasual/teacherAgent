@@ -1,8 +1,8 @@
-import type { StudentTodayHomeMaterial } from '../../appTypes'
+import type { StudentTodayHomeMaterial } from '../../appTypes';
 
 type TaskMaterialListProps = {
-  materials: StudentTodayHomeMaterial[]
-}
+  materials: StudentTodayHomeMaterial[];
+};
 
 export default function TaskMaterialList({ materials }: TaskMaterialListProps) {
   return (
@@ -13,7 +13,9 @@ export default function TaskMaterialList({ materials }: TaskMaterialListProps) {
       data-home-tier="supporting"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 id="student-home-materials-title" className="m-0 text-[14px] font-semibold text-ink">准备材料</h2>
+        <h2 id="student-home-materials-title" className="m-0 text-[14px] font-semibold text-ink">
+          准备材料
+        </h2>
         <span className="text-[12px] text-muted">{materials.length} 份</span>
       </div>
       {materials.length ? (
@@ -37,5 +39,5 @@ export default function TaskMaterialList({ materials }: TaskMaterialListProps) {
         <div className="text-[13px] text-muted">任务生成后，这里会出现题目材料和老师说明。</div>
       )}
     </section>
-  )
+  );
 }

@@ -1,9 +1,9 @@
-import { useCallback, useReducer } from 'react'
+import { useCallback, useReducer } from 'react';
 import {
   createInitialTeacherWorkbenchState,
   teacherWorkbenchReducer,
   type TeacherWorkbenchState,
-} from './teacherWorkbenchState'
+} from './teacherWorkbenchState';
 import type {
   AssignmentProgress,
   StudentMemoryInsightsResponse,
@@ -13,137 +13,251 @@ import type {
   UploadDraft,
   UploadJobStatus,
   ExecutionTimelineEntry,
-} from '../../appTypes'
+} from '../../appTypes';
 
-type StateSetterValue<T> = T | ((prev: T) => T)
+type StateSetterValue<T> = T | ((prev: T) => T);
 
 const resolveStateSetter = <T>(value: StateSetterValue<T>, prev: T): T => {
   if (typeof value === 'function') {
-    return (value as (prev: T) => T)(prev)
+    return (value as (prev: T) => T)(prev);
   }
-  return value
-}
+  return value;
+};
 
 export function useTeacherWorkbenchState() {
-  const [state, dispatch] = useReducer(teacherWorkbenchReducer, undefined, createInitialTeacherWorkbenchState)
+  const [state, dispatch] = useReducer(
+    teacherWorkbenchReducer,
+    undefined,
+    createInitialTeacherWorkbenchState,
+  );
 
   const setField = useCallback(
-    (key: keyof TeacherWorkbenchState, value: TeacherWorkbenchState[keyof TeacherWorkbenchState]) => {
-      dispatch({ type: 'set', key, value })
+    (
+      key: keyof TeacherWorkbenchState,
+      value: TeacherWorkbenchState[keyof TeacherWorkbenchState],
+    ) => {
+      dispatch({ type: 'set', key, value });
     },
     [dispatch],
-  )
+  );
 
   const update = useCallback(
     (updater: (prev: TeacherWorkbenchState) => TeacherWorkbenchState) => {
-      dispatch({ type: 'update', update: updater })
+      dispatch({ type: 'update', update: updater });
     },
     [dispatch],
-  )
+  );
 
   const setUploadJobInfo = useCallback(
     (value: StateSetterValue<UploadJobStatus | null>) => {
-      update((prev) => ({ ...prev, uploadJobInfo: resolveStateSetter(value, prev.uploadJobInfo) }))
+      update((prev) => ({ ...prev, uploadJobInfo: resolveStateSetter(value, prev.uploadJobInfo) }));
     },
     [update],
-  )
+  );
 
-  const setUploadError = useCallback((value: string) => setField('uploadError', value), [setField])
+  const setUploadError = useCallback((value: string) => setField('uploadError', value), [setField]);
 
   const setUploadStatus = useCallback(
     (value: StateSetterValue<string>) => {
-      update((prev) => ({ ...prev, uploadStatus: resolveStateSetter(value, prev.uploadStatus) }))
+      update((prev) => ({ ...prev, uploadStatus: resolveStateSetter(value, prev.uploadStatus) }));
     },
     [update],
-  )
+  );
 
-  const setUploadMode = useCallback((value: 'assignment') => setField('uploadMode', value), [setField])
-  const setUploadAssignmentId = useCallback((value: string) => setField('uploadAssignmentId', value), [setField])
-  const setUploadDate = useCallback((value: string) => setField('uploadDate', value), [setField])
-  const setUploadDueAt = useCallback((value: string) => setField('uploadDueAt', value), [setField])
-  const setUploadSubjectId = useCallback((value: string) => setField('uploadSubjectId', value), [setField])
-  const setUploadScope = useCallback((value: 'public' | 'class' | 'student') => setField('uploadScope', value), [setField])
-  const setUploadClassName = useCallback((value: string) => setField('uploadClassName', value), [setField])
-  const setUploadStudentIds = useCallback((value: string) => setField('uploadStudentIds', value), [setField])
-  const setUploadFiles = useCallback((value: File[]) => setField('uploadFiles', value), [setField])
-  const setUploadAnswerFiles = useCallback((value: File[]) => setField('uploadAnswerFiles', value), [setField])
-  const setUploading = useCallback((value: boolean) => setField('uploading', value), [setField])
+  const setUploadMode = useCallback(
+    (value: 'assignment') => setField('uploadMode', value),
+    [setField],
+  );
+  const setUploadAssignmentId = useCallback(
+    (value: string) => setField('uploadAssignmentId', value),
+    [setField],
+  );
+  const setUploadDate = useCallback((value: string) => setField('uploadDate', value), [setField]);
+  const setUploadDueAt = useCallback((value: string) => setField('uploadDueAt', value), [setField]);
+  const setUploadSubjectId = useCallback(
+    (value: string) => setField('uploadSubjectId', value),
+    [setField],
+  );
+  const setUploadScope = useCallback(
+    (value: 'public' | 'class' | 'student') => setField('uploadScope', value),
+    [setField],
+  );
+  const setUploadClassName = useCallback(
+    (value: string) => setField('uploadClassName', value),
+    [setField],
+  );
+  const setUploadStudentIds = useCallback(
+    (value: string) => setField('uploadStudentIds', value),
+    [setField],
+  );
+  const setUploadFiles = useCallback((value: File[]) => setField('uploadFiles', value), [setField]);
+  const setUploadAnswerFiles = useCallback(
+    (value: File[]) => setField('uploadAnswerFiles', value),
+    [setField],
+  );
+  const setUploading = useCallback((value: boolean) => setField('uploading', value), [setField]);
   const setUploadCardCollapsed = useCallback(
     (value: StateSetterValue<boolean>) => {
-      update((prev) => ({ ...prev, uploadCardCollapsed: resolveStateSetter(value, prev.uploadCardCollapsed) }))
+      update((prev) => ({
+        ...prev,
+        uploadCardCollapsed: resolveStateSetter(value, prev.uploadCardCollapsed),
+      }));
     },
     [update],
-  )
-  const setUploadJobId = useCallback((value: string) => setField('uploadJobId', value), [setField])
-  const setUploadConfirming = useCallback((value: boolean) => setField('uploadConfirming', value), [setField])
+  );
+  const setUploadJobId = useCallback((value: string) => setField('uploadJobId', value), [setField]);
+  const setUploadConfirming = useCallback(
+    (value: boolean) => setField('uploadConfirming', value),
+    [setField],
+  );
   const setUploadStatusPollNonce = useCallback(
     (value: StateSetterValue<number>) => {
-      update((prev) => ({ ...prev, uploadStatusPollNonce: resolveStateSetter(value, prev.uploadStatusPollNonce) }))
+      update((prev) => ({
+        ...prev,
+        uploadStatusPollNonce: resolveStateSetter(value, prev.uploadStatusPollNonce),
+      }));
     },
     [update],
-  )
+  );
   const setUploadDraft = useCallback(
     (value: StateSetterValue<UploadDraft | null>) => {
-      update((prev) => ({ ...prev, uploadDraft: resolveStateSetter(value, prev.uploadDraft) }))
+      update((prev) => ({ ...prev, uploadDraft: resolveStateSetter(value, prev.uploadDraft) }));
     },
     [update],
-  )
+  );
   const setDraftPanelCollapsed = useCallback(
     (value: StateSetterValue<boolean>) => {
-      update((prev) => ({ ...prev, draftPanelCollapsed: resolveStateSetter(value, prev.draftPanelCollapsed) }))
+      update((prev) => ({
+        ...prev,
+        draftPanelCollapsed: resolveStateSetter(value, prev.draftPanelCollapsed),
+      }));
     },
     [update],
-  )
-  const setDraftLoading = useCallback((value: boolean) => setField('draftLoading', value), [setField])
-  const setDraftError = useCallback((value: string) => setField('draftError', value), [setField])
+  );
+  const setDraftLoading = useCallback(
+    (value: boolean) => setField('draftLoading', value),
+    [setField],
+  );
+  const setDraftError = useCallback((value: string) => setField('draftError', value), [setField]);
   const setQuestionShowCount = useCallback(
     (value: StateSetterValue<number>) => {
-      update((prev) => ({ ...prev, questionShowCount: resolveStateSetter(value, prev.questionShowCount) }))
+      update((prev) => ({
+        ...prev,
+        questionShowCount: resolveStateSetter(value, prev.questionShowCount),
+      }));
     },
     [update],
-  )
-  const setDraftSaving = useCallback((value: boolean) => setField('draftSaving', value), [setField])
-  const setDraftActionStatus = useCallback((value: string) => setField('draftActionStatus', value), [setField])
-  const setDraftActionError = useCallback((value: string) => setField('draftActionError', value), [setField])
-  const setMisconceptionsText = useCallback((value: string) => setField('misconceptionsText', value), [setField])
-  const setMisconceptionsDirty = useCallback((value: boolean) => setField('misconceptionsDirty', value), [setField])
+  );
+  const setDraftSaving = useCallback(
+    (value: boolean) => setField('draftSaving', value),
+    [setField],
+  );
+  const setDraftActionStatus = useCallback(
+    (value: string) => setField('draftActionStatus', value),
+    [setField],
+  );
+  const setDraftActionError = useCallback(
+    (value: string) => setField('draftActionError', value),
+    [setField],
+  );
+  const setMisconceptionsText = useCallback(
+    (value: string) => setField('misconceptionsText', value),
+    [setField],
+  );
+  const setMisconceptionsDirty = useCallback(
+    (value: boolean) => setField('misconceptionsDirty', value),
+    [setField],
+  );
 
   const setProgressPanelCollapsed = useCallback(
     (value: StateSetterValue<boolean>) => {
-      update((prev) => ({ ...prev, progressPanelCollapsed: resolveStateSetter(value, prev.progressPanelCollapsed) }))
+      update((prev) => ({
+        ...prev,
+        progressPanelCollapsed: resolveStateSetter(value, prev.progressPanelCollapsed),
+      }));
     },
     [update],
-  )
-  const setProgressAssignmentId = useCallback((value: string) => setField('progressAssignmentId', value), [setField])
-  const setProgressLoading = useCallback((value: boolean) => setField('progressLoading', value), [setField])
-  const setProgressError = useCallback((value: string) => setField('progressError', value), [setField])
-  const setProgressData = useCallback((value: AssignmentProgress | null) => setField('progressData', value), [setField])
-  const setProgressOnlyIncomplete = useCallback((value: boolean) => setField('progressOnlyIncomplete', value), [setField])
-
-  const setProposalLoading = useCallback((value: boolean) => setField('proposalLoading', value), [setField])
-  const setProposalError = useCallback((value: string) => setField('proposalError', value), [setField])
-  const setProposals = useCallback((value: TeacherMemoryProposal[]) => setField('proposals', value), [setField])
-  const setMemoryStatusFilter = useCallback((value: 'applied' | 'rejected' | 'all') => setField('memoryStatusFilter', value), [setField])
-  const setMemoryInsights = useCallback((value: TeacherMemoryInsightsResponse | null) => setField('memoryInsights', value), [setField])
-  const setStudentProposalLoading = useCallback((value: boolean) => setField('studentProposalLoading', value), [setField])
-  const setStudentProposalError = useCallback((value: string) => setField('studentProposalError', value), [setField])
-  const setStudentProposals = useCallback((value: StudentMemoryProposal[]) => setField('studentProposals', value), [setField])
-  const setStudentMemoryStatusFilter = useCallback(
-    (value: 'proposed' | 'applied' | 'rejected' | 'all') => setField('studentMemoryStatusFilter', value),
+  );
+  const setProgressAssignmentId = useCallback(
+    (value: string) => setField('progressAssignmentId', value),
     [setField],
-  )
-  const setStudentMemoryStudentFilter = useCallback((value: string) => setField('studentMemoryStudentFilter', value), [setField])
+  );
+  const setProgressLoading = useCallback(
+    (value: boolean) => setField('progressLoading', value),
+    [setField],
+  );
+  const setProgressError = useCallback(
+    (value: string) => setField('progressError', value),
+    [setField],
+  );
+  const setProgressData = useCallback(
+    (value: AssignmentProgress | null) => setField('progressData', value),
+    [setField],
+  );
+  const setProgressOnlyIncomplete = useCallback(
+    (value: boolean) => setField('progressOnlyIncomplete', value),
+    [setField],
+  );
+
+  const setProposalLoading = useCallback(
+    (value: boolean) => setField('proposalLoading', value),
+    [setField],
+  );
+  const setProposalError = useCallback(
+    (value: string) => setField('proposalError', value),
+    [setField],
+  );
+  const setProposals = useCallback(
+    (value: TeacherMemoryProposal[]) => setField('proposals', value),
+    [setField],
+  );
+  const setMemoryStatusFilter = useCallback(
+    (value: 'applied' | 'rejected' | 'all') => setField('memoryStatusFilter', value),
+    [setField],
+  );
+  const setMemoryInsights = useCallback(
+    (value: TeacherMemoryInsightsResponse | null) => setField('memoryInsights', value),
+    [setField],
+  );
+  const setStudentProposalLoading = useCallback(
+    (value: boolean) => setField('studentProposalLoading', value),
+    [setField],
+  );
+  const setStudentProposalError = useCallback(
+    (value: string) => setField('studentProposalError', value),
+    [setField],
+  );
+  const setStudentProposals = useCallback(
+    (value: StudentMemoryProposal[]) => setField('studentProposals', value),
+    [setField],
+  );
+  const setStudentMemoryStatusFilter = useCallback(
+    (value: 'proposed' | 'applied' | 'rejected' | 'all') =>
+      setField('studentMemoryStatusFilter', value),
+    [setField],
+  );
+  const setStudentMemoryStudentFilter = useCallback(
+    (value: string) => setField('studentMemoryStudentFilter', value),
+    [setField],
+  );
   const setStudentMemoryInsights = useCallback(
     (value: StudentMemoryInsightsResponse | null) => setField('studentMemoryInsights', value),
     [setField],
-  )
+  );
 
   const setExecutionTimeline = useCallback(
-    (value: ExecutionTimelineEntry[] | ((prev: ExecutionTimelineEntry[]) => ExecutionTimelineEntry[])) => {
-      update((prev) => ({ ...prev, executionTimeline: resolveStateSetter(value, prev.executionTimeline) }))
+    (
+      value:
+        | ExecutionTimelineEntry[]
+        | ((prev: ExecutionTimelineEntry[]) => ExecutionTimelineEntry[]),
+    ) => {
+      update((prev) => ({
+        ...prev,
+        executionTimeline: resolveStateSetter(value, prev.executionTimeline),
+      }));
     },
     [update],
-  )
+  );
 
   return {
     ...state,
@@ -193,5 +307,5 @@ export function useTeacherWorkbenchState() {
     setStudentMemoryStudentFilter,
     setStudentMemoryInsights,
     setExecutionTimeline,
-  }
+  };
 }

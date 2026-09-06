@@ -1,18 +1,18 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import type { Dispatch } from 'react'
-import type { VerifiedStudent } from '../../appTypes'
-import type { StudentAction } from '../../hooks/useStudentState'
-import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer'
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { Dispatch } from 'react';
+import type { VerifiedStudent } from '../../appTypes';
+import type { StudentAction } from '../../hooks/useStudentState';
+import { useDismissibleLayer } from '../../../../shared/useDismissibleLayer';
 
 type Props = {
-  verifiedStudent: VerifiedStudent | null
-  sidebarOpen: boolean
-  homeActive: boolean
-  compactMobile?: boolean
-  dispatch: Dispatch<StudentAction>
-  openTodayHome: () => void
-  startNewStudentSession: () => void
-}
+  verifiedStudent: VerifiedStudent | null;
+  sidebarOpen: boolean;
+  homeActive: boolean;
+  compactMobile?: boolean;
+  dispatch: Dispatch<StudentAction>;
+  openTodayHome: () => void;
+  startNewStudentSession: () => void;
+};
 
 export default function StudentTopbar({
   verifiedStudent,
@@ -23,30 +23,40 @@ export default function StudentTopbar({
   openTodayHome,
   startNewStudentSession,
 }: Props) {
-  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null)
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false)
+  const quickActionsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const quickActionsPanelRef = useRef<HTMLDivElement | null>(null);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const closeQuickActions = useCallback(() => {
-    setQuickActionsOpen(false)
-  }, [])
+    setQuickActionsOpen(false);
+  }, []);
   const quickActionsLayerRefs = useMemo(
     () => [quickActionsPanelRef, quickActionsButtonRef] as const,
     [],
-  )
+  );
 
   useDismissibleLayer({
     open: quickActionsOpen,
     onDismiss: closeQuickActions,
     refs: quickActionsLayerRefs,
-  })
+  });
 
-  const titleText = compactMobile ? '学习助手' : '学习助手 · 学生端'
-  const sidebarLabel = compactMobile ? (sidebarOpen ? '会话开' : '会话') : (sidebarOpen ? '收起会话' : '展开会话')
-  const todayHomeLabel = '今日任务'
+  const titleText = compactMobile ? '学习助手' : '学习助手 · 学生端';
+  const sidebarLabel = compactMobile
+    ? sidebarOpen
+      ? '会话开'
+      : '会话'
+    : sidebarOpen
+      ? '收起会话'
+      : '展开会话';
+  const todayHomeLabel = '今日任务';
 
   return (
-    <header className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-surface border-b border-border sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}>
-      <div className={`flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}>
+    <header
+      className={`mobile-topbar relative flex justify-between items-center gap-3 px-4 py-2.5 bg-surface border-b border-border sticky top-0 z-25 max-[900px]:items-start max-[900px]:flex-wrap ${compactMobile ? 'mobile-topbar-compact max-[900px]:px-3 max-[900px]:py-2 max-[900px]:gap-2' : ''}`.trim()}
+    >
+      <div
+        className={`flex items-center gap-2 flex-wrap max-[900px]:w-full max-[900px]:justify-between ${compactMobile ? 'max-[900px]:gap-1.5 max-[900px]:flex-nowrap' : ''}`.trim()}
+      >
         <div className="flex items-center gap-2 min-w-0">
           {!compactMobile ? (
             <img
@@ -56,7 +66,11 @@ export default function StudentTopbar({
               draggable={false}
             />
           ) : null}
-          <div className={`mobile-topbar-title font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}>{titleText}</div>
+          <div
+            className={`mobile-topbar-title font-bold text-base tracking-[0.2px] max-[900px]:text-sm ${compactMobile ? 'max-[900px]:truncate' : ''}`.trim()}
+          >
+            {titleText}
+          </div>
         </div>
         {!compactMobile ? (
           <>
@@ -69,7 +83,11 @@ export default function StudentTopbar({
             >
               {sidebarLabel}
             </button>
-            <button className={`ghost ${homeActive ? 'font-semibold' : ''}`.trim()} type="button" onClick={openTodayHome}>
+            <button
+              className={`ghost ${homeActive ? 'font-semibold' : ''}`.trim()}
+              type="button"
+              onClick={openTodayHome}
+            >
               {todayHomeLabel}
             </button>
           </>
@@ -91,9 +109,7 @@ export default function StudentTopbar({
         <div className="flex items-center gap-2 max-[900px]:w-full max-[900px]:justify-between relative">
           <div className="role-badge student">身份：学生</div>
           {verifiedStudent?.student_id ? (
-            <span className="muted">
-              当前学生：{verifiedStudent.student_id}
-            </span>
+            <span className="muted">当前学生：{verifiedStudent.student_id}</span>
           ) : null}
         </div>
       ) : null}
@@ -105,15 +121,24 @@ export default function StudentTopbar({
           aria-label="移动端更多操作"
         >
           {verifiedStudent?.student_id ? (
-            <div className="text-[12px] text-muted px-1 py-0.5">当前学生：{verifiedStudent.student_id}</div>
+            <div className="text-[12px] text-muted px-1 py-0.5">
+              当前学生：{verifiedStudent.student_id}
+            </div>
           ) : (
             <div className="text-[12px] text-muted px-1 py-0.5">未验证学生身份</div>
           )}
-          <button className="ghost justify-start" type="button" onClick={() => { startNewStudentSession(); closeQuickActions() }}>
+          <button
+            className="ghost justify-start"
+            type="button"
+            onClick={() => {
+              startNewStudentSession();
+              closeQuickActions();
+            }}
+          >
             新建会话
           </button>
         </div>
       ) : null}
     </header>
-  )
+  );
 }

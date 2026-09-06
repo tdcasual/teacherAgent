@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from 'react';
 
 type Props = {
-  sidebarOpen: boolean
-  sidebar: ReactNode
-  chat: ReactNode
-}
+  sidebarOpen: boolean;
+  sidebar: ReactNode;
+  chat: ReactNode;
+};
 
 export default function StudentLayout({ sidebarOpen, sidebar, chat }: Props) {
   return (
@@ -12,5 +12,5 @@ export default function StudentLayout({ sidebarOpen, sidebar, chat }: Props) {
       {sidebar}
       {chat}
     </div>
-  )
+  );
 }

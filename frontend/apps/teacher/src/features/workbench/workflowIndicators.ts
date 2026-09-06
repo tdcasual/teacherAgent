@@ -5,25 +5,27 @@ import type {
   WorkflowIndicatorTone,
   WorkflowStepItem,
   WorkflowStepState,
-} from '../../appTypes'
+} from '../../appTypes';
 
 type TeacherWorkflowGuidanceArgs = {
-  mode?: 'assignment'
-  tone: WorkflowIndicator['tone']
-  activeStepKey?: string
-  hasExecutionTimeline: boolean
-  hasProgressData: boolean
-}
+  mode?: 'assignment';
+  tone: WorkflowIndicator['tone'];
+  activeStepKey?: string;
+  hasExecutionTimeline: boolean;
+  hasProgressData: boolean;
+};
 
 export type TeacherWorkflowGuidance = {
-  nextStepLabel: string
-  primaryActionLabel: string
-  primaryActionTargetId: string
-}
+  nextStepLabel: string;
+  primaryActionLabel: string;
+  primaryActionTargetId: string;
+};
 
 export function findActiveWorkflowStep(indicator: WorkflowIndicator) {
-  return indicator.steps.find((step) => step.state === 'error')
-    || indicator.steps.find((step) => step.state === 'active')
+  return (
+    indicator.steps.find((step) => step.state === 'error') ||
+    indicator.steps.find((step) => step.state === 'active')
+  );
 }
 
 export function buildTeacherWorkflowGuidance({
@@ -39,14 +41,14 @@ export function buildTeacherWorkflowGuidance({
         nextStepLabel: '下一步：回到草稿并处理异常后，再确认创建作业',
         primaryActionLabel: '查看草稿',
         primaryActionTargetId: 'workflow-assignment-draft-section',
-      }
+      };
     }
 
     return {
       nextStepLabel: '下一步：检查上传材料并重新解析作业',
       primaryActionLabel: '去上传区',
       primaryActionTargetId: 'workflow-upload-section',
-    }
+    };
   }
 
   if (activeStepKey === 'upload') {
@@ -54,7 +56,7 @@ export function buildTeacherWorkflowGuidance({
       nextStepLabel: '下一步：上传今天的作业材料',
       primaryActionLabel: '去上传区',
       primaryActionTargetId: 'workflow-upload-section',
-    }
+    };
   }
 
   if (activeStepKey === 'parse') {
@@ -62,7 +64,7 @@ export function buildTeacherWorkflowGuidance({
       nextStepLabel: '下一步：查看解析进度并等待作业草稿生成',
       primaryActionLabel: '查看上传区',
       primaryActionTargetId: 'workflow-upload-section',
-    }
+    };
   }
 
   if (activeStepKey === 'review') {
@@ -70,7 +72,7 @@ export function buildTeacherWorkflowGuidance({
       nextStepLabel: '下一步：继续审核草稿并确认创建作业',
       primaryActionLabel: '查看草稿',
       primaryActionTargetId: 'workflow-assignment-draft-section',
-    }
+    };
   }
 
   if (activeStepKey === 'confirm') {
@@ -78,7 +80,7 @@ export function buildTeacherWorkflowGuidance({
       nextStepLabel: '下一步：确认创建作业并跟进学生完成情况',
       primaryActionLabel: '查看草稿',
       primaryActionTargetId: 'workflow-assignment-draft-section',
-    }
+    };
   }
 
   if (tone === 'success') {
@@ -88,7 +90,7 @@ export function buildTeacherWorkflowGuidance({
         : '下一步：查看完成情况并开始跟进班级提交',
       primaryActionLabel: '查看完成情况',
       primaryActionTargetId: 'workflow-progress-section',
-    }
+    };
   }
 
   if (hasExecutionTimeline) {
@@ -96,26 +98,26 @@ export function buildTeacherWorkflowGuidance({
       nextStepLabel: '下一步：查看最近一次执行结果',
       primaryActionLabel: '去上传区',
       primaryActionTargetId: 'workflow-upload-section',
-    }
+    };
   }
 
   return {
     nextStepLabel: '下一步：从上传区开始今天的作业流程',
     primaryActionLabel: '去上传区',
     primaryActionTargetId: 'workflow-upload-section',
-  }
+  };
 }
 
 type AssignmentArgs = {
-  uploadJobId: string
-  uploadJobInfoStatus?: UploadJobStatus['status'] | string
-  uploading: boolean
-  uploadConfirming: boolean
-  uploadDraft: UploadDraft | null
-  uploadError: string
-  draftError: string
-  draftActionError: string
-}
+  uploadJobId: string;
+  uploadJobInfoStatus?: UploadJobStatus['status'] | string;
+  uploading: boolean;
+  uploadConfirming: boolean;
+  uploadDraft: UploadDraft | null;
+  uploadError: string;
+  draftError: string;
+  draftActionError: string;
+};
 
 export function buildAssignmentWorkflowIndicator({
   uploadJobId,
@@ -132,20 +134,22 @@ export function buildAssignmentWorkflowIndicator({
     { key: 'parse', label: '解析', state: 'todo' },
     { key: 'review', label: '审核草稿', state: 'todo' },
     { key: 'confirm', label: '创建作业', state: 'todo' },
-  ]
+  ];
   const setState = (key: WorkflowStepItem['key'], state: WorkflowStepState) => {
-    const step = steps.find((item) => item.key === key)
-    if (step) step.state = state
-  }
+    const step = steps.find((item) => item.key === key);
+    if (step) step.state = state;
+  };
   const markDone = (...keys: WorkflowStepItem['key'][]) => {
-    keys.forEach((key) => setState(key, 'done'))
-  }
+    keys.forEach((key) => setState(key, 'done'));
+  };
 
-  const status = uploadJobInfoStatus
-  const hasError = Boolean(uploadError || draftError || draftActionError || status === 'failed' || status === 'cancelled')
+  const status = uploadJobInfoStatus;
+  const hasError = Boolean(
+    uploadError || draftError || draftActionError || status === 'failed' || status === 'cancelled',
+  );
 
-  let label = '未开始'
-  let tone: WorkflowIndicatorTone = 'neutral'
+  let label = '未开始';
+  let tone: WorkflowIndicatorTone = 'neutral';
   let stage:
     | 'idle'
     | 'uploading'
@@ -155,82 +159,82 @@ export function buildAssignmentWorkflowIndicator({
     | 'completed'
     | 'failed-parse'
     | 'failed-review'
-    | 'failed-confirm' = 'idle'
+    | 'failed-confirm' = 'idle';
 
   if (status === 'confirmed' || status === 'created') {
-    stage = 'completed'
-    label = '已创建作业'
-    tone = 'success'
+    stage = 'completed';
+    label = '已创建作业';
+    tone = 'success';
   } else if (uploadConfirming || status === 'confirming') {
-    stage = 'confirming'
-    label = '创建中'
-    tone = 'active'
+    stage = 'confirming';
+    label = '创建中';
+    tone = 'active';
   } else if (status === 'done' || uploadDraft) {
-    stage = 'review'
-    label = '待审核'
-    tone = 'active'
+    stage = 'review';
+    label = '待审核';
+    tone = 'active';
   } else if (uploading) {
-    stage = 'uploading'
-    label = '上传中'
-    tone = 'active'
+    stage = 'uploading';
+    label = '上传中';
+    tone = 'active';
   } else if (status === 'queued' || status === 'processing' || uploadJobId) {
-    stage = 'parsing'
-    label = '解析中'
-    tone = 'active'
+    stage = 'parsing';
+    label = '解析中';
+    tone = 'active';
   }
 
   if (hasError) {
-    tone = 'error'
+    tone = 'error';
     if (status === 'failed' || status === 'cancelled' || uploadError) {
-      stage = 'failed-parse'
-      label = status === 'cancelled' ? '流程取消' : '解析失败'
+      stage = 'failed-parse';
+      label = status === 'cancelled' ? '流程取消' : '解析失败';
     } else if (uploadConfirming || status === 'confirming') {
-      stage = 'failed-confirm'
-      label = '创建失败'
+      stage = 'failed-confirm';
+      label = '创建失败';
     } else {
-      stage = 'failed-review'
-      label = '审核异常'
+      stage = 'failed-review';
+      label = '审核异常';
     }
   }
 
   switch (stage) {
     case 'uploading':
-      setState('upload', 'active')
-      break
+      setState('upload', 'active');
+      break;
     case 'parsing':
-      markDone('upload')
-      setState('parse', 'active')
-      break
+      markDone('upload');
+      setState('parse', 'active');
+      break;
     case 'review':
-      markDone('upload', 'parse')
-      setState('review', 'active')
-      break
+      markDone('upload', 'parse');
+      setState('review', 'active');
+      break;
     case 'confirming':
-      markDone('upload', 'parse', 'review')
-      setState('confirm', 'active')
-      break
+      markDone('upload', 'parse', 'review');
+      setState('confirm', 'active');
+      break;
     case 'completed':
-      markDone('upload', 'parse', 'review', 'confirm')
-      break
+      markDone('upload', 'parse', 'review', 'confirm');
+      break;
     case 'failed-parse':
       if (uploading) {
-        setState('upload', 'error')
+        setState('upload', 'error');
       } else {
-        markDone('upload')
-        setState('parse', 'error')
+        markDone('upload');
+        setState('parse', 'error');
       }
-      break
+      break;
     case 'failed-review':
-      markDone('upload', 'parse')
-      setState('review', 'error')
-      break
+      markDone('upload', 'parse');
+      setState('review', 'error');
+      break;
     case 'failed-confirm':
-      markDone('upload', 'parse', 'review')
-      setState('confirm', 'error')
-      break
+      markDone('upload', 'parse', 'review');
+      setState('confirm', 'error');
+      break;
     default:
-      break
+      break;
   }
 
-  return { label, tone, steps }
+  return { label, tone, steps };
 }

@@ -1,21 +1,33 @@
-import type { RefObject } from 'react'
-import type { RenderedMessage } from '../../appTypes'
+import type { RefObject } from 'react';
+import type { RenderedMessage } from '../../appTypes';
 
 type Props = {
-  renderedMessages: RenderedMessage[]
-  messagesRef: RefObject<HTMLDivElement | null>
-  endRef: RefObject<HTMLDivElement | null>
-  isNearBottom: boolean
-  scrollToBottom: () => void
-}
+  renderedMessages: RenderedMessage[];
+  messagesRef: RefObject<HTMLDivElement | null>;
+  endRef: RefObject<HTMLDivElement | null>;
+  isNearBottom: boolean;
+  scrollToBottom: () => void;
+};
 
-export default function ChatMessages({ renderedMessages, messagesRef, endRef, isNearBottom, scrollToBottom }: Props) {
+export default function ChatMessages({
+  renderedMessages,
+  messagesRef,
+  endRef,
+  isNearBottom,
+  scrollToBottom,
+}: Props) {
   return (
     <>
-      <div className="messages flex-1 min-h-0 overflow-x-hidden overflow-y-auto pt-[18px] pb-2 bg-surface [scrollbar-gutter:stable_both-edges] max-[900px]:pt-3.5 max-[900px]:pb-1.5 max-[900px]:[-webkit-overflow-scrolling:touch] max-[900px]:[overscroll-behavior:contain]" ref={messagesRef}>
+      <div
+        className="messages flex-1 min-h-0 overflow-x-hidden overflow-y-auto pt-[18px] pb-2 bg-surface [scrollbar-gutter:stable_both-edges] max-[900px]:pt-3.5 max-[900px]:pb-1.5 max-[900px]:[-webkit-overflow-scrolling:touch] max-[900px]:[overscroll-behavior:contain]"
+        ref={messagesRef}
+      >
         <div className="max-w-[860px] mx-auto px-5 pb-3.5 grid gap-3.5 max-[900px]:px-3.5 max-[900px]:pb-3 max-[900px]:gap-3">
           {renderedMessages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              key={msg.id}
+              className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
               <div
                 className={
                   msg.role === 'user'
@@ -26,7 +38,10 @@ export default function ChatMessages({ renderedMessages, messagesRef, endRef, is
                 <div className="text-[11px] text-muted mb-1.5">
                   {msg.role === 'user' ? '我' : '助手'} · {msg.time}
                 </div>
-                <div className="text markdown leading-[1.54] max-[900px]:leading-[1.4] [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div
+                  className="text markdown leading-[1.54] max-[900px]:leading-[1.4] [overflow-wrap:anywhere]"
+                  dangerouslySetInnerHTML={{ __html: msg.html }}
+                />
               </div>
             </div>
           ))}
@@ -44,5 +59,5 @@ export default function ChatMessages({ renderedMessages, messagesRef, endRef, is
         </button>
       )}
     </>
-  )
+  );
 }

@@ -2,25 +2,25 @@ export const parseCommaList = (text: string) =>
   String(text || '')
     .split(/[，,]/g)
     .map((s) => s.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 
 export const parseLineList = (text: string) =>
   String(text || '')
     .split(/\n/g)
     .map((s) => s.trim())
-    .filter(Boolean)
+    .filter(Boolean);
 
 export const difficultyOptions = [
   { value: 'basic', label: '基础' },
   { value: 'medium', label: '中等' },
   { value: 'advanced', label: '较难' },
   { value: 'challenge', label: '压轴' },
-] as const
+] as const;
 
 export const normalizeDifficulty = (value: unknown) => {
-  const raw = String(value || '').trim()
-  if (!raw) return 'basic'
-  const v = raw.toLowerCase()
+  const raw = String(value || '').trim();
+  if (!raw) return 'basic';
+  const v = raw.toLowerCase();
   const mapping: Record<string, string> = {
     basic: 'basic',
     medium: 'medium',
@@ -31,7 +31,7 @@ export const normalizeDifficulty = (value: unknown) => {
     hard: 'advanced',
     expert: 'challenge',
     'very hard': 'challenge',
-    'very_hard': 'challenge',
+    very_hard: 'challenge',
     入门: 'basic',
     简单: 'basic',
     基础: 'basic',
@@ -43,19 +43,19 @@ export const normalizeDifficulty = (value: unknown) => {
     拔高: 'advanced',
     压轴: 'challenge',
     挑战: 'challenge',
-  }
-  if (mapping[v]) return mapping[v]
+  };
+  if (mapping[v]) return mapping[v];
   for (const [k, norm] of Object.entries(mapping)) {
-    if (k && raw.includes(k)) return norm
+    if (k && raw.includes(k)) return norm;
   }
-  return 'basic'
-}
+  return 'basic';
+};
 
 export const difficultyLabel = (value: unknown) => {
-  const norm = normalizeDifficulty(value)
-  const found = difficultyOptions.find((opt) => opt.value === norm)
-  return found ? found.label : '基础'
-}
+  const norm = normalizeDifficulty(value);
+  const found = difficultyOptions.find((opt) => opt.value === norm);
+  return found ? found.label : '基础';
+};
 
 const requirementLabels: Record<string, string> = {
   subject: '学科',
@@ -68,9 +68,9 @@ const requirementLabels: Record<string, string> = {
   duration_minutes: '作业时间',
   preferences: '作业偏好',
   extra_constraints: '额外限制',
-}
+};
 
 export const formatMissingRequirements = (missing?: string[]) => {
-  const items = Array.isArray(missing) ? missing : []
-  return items.map((key) => requirementLabels[key] || key).join('、')
-}
+  const items = Array.isArray(missing) ? missing : [];
+  return items.map((key) => requirementLabels[key] || key).join('、');
+};

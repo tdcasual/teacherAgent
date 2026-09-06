@@ -42,12 +42,10 @@ describe('ui accent, font, and color-scheme tokens', () => {
 
     const teacherCss = sources[0];
     const studentCss = sources[1];
-    expect(teacherCss).toContain(
-      '--font-sans: "PingFang SC", "Helvetica Neue", Arial, sans-serif;',
-    );
-    expect(studentCss).toContain(
-      '--font-sans: "PingFang SC", "Helvetica Neue", Arial, sans-serif;',
-    );
+    const fontSans =
+      /--font-sans:\s*['"]PingFang SC['"],\s*['"]Helvetica Neue['"],\s*Arial,\s*sans-serif;/;
+    expect(teacherCss).toMatch(fontSans);
+    expect(studentCss).toMatch(fontSans);
   });
 
   it('declares light-dark color-scheme and dark token overrides', () => {

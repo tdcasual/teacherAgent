@@ -1,21 +1,21 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { trapFocusOnTab } from '../../../../shared/focusTrap'
+import { useEffect, useRef, type ReactNode } from 'react';
+import { trapFocusOnTab } from '../../../../shared/focusTrap';
 
 type SettingsSection = {
-  id: string
-  label: string
-}
+  id: string;
+  label: string;
+};
 
 type Props = {
-  open: boolean
-  onClose: () => void
-  sections: SettingsSection[]
-  activeSection: string
-  onSectionChange: (id: string) => void
-  title?: string
-  statusBar?: ReactNode
-  children: ReactNode
-}
+  open: boolean;
+  onClose: () => void;
+  sections: SettingsSection[];
+  activeSection: string;
+  onSectionChange: (id: string) => void;
+  title?: string;
+  statusBar?: ReactNode;
+  children: ReactNode;
+};
 
 export default function SettingsModal({
   open,
@@ -27,36 +27,36 @@ export default function SettingsModal({
   statusBar,
   children,
 }: Props) {
-  const mouseDownOnOverlay = useRef(false)
-  const dialogRef = useRef<HTMLDivElement | null>(null)
-  const closeRef = useRef<HTMLButtonElement | null>(null)
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+  const mouseDownOnOverlay = useRef(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!open) return
-    previouslyFocusedRef.current = (document.activeElement as HTMLElement | null) || null
-    const focusTimer = window.setTimeout(() => closeRef.current?.focus(), 0)
+    if (!open) return;
+    previouslyFocusedRef.current = (document.activeElement as HTMLElement | null) || null;
+    const focusTimer = window.setTimeout(() => closeRef.current?.focus(), 0);
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-        return
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
       }
-      trapFocusOnTab(e, dialogRef.current)
-    }
-    document.addEventListener('keydown', onKeyDown, true)
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+      trapFocusOnTab(e, dialogRef.current);
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      window.clearTimeout(focusTimer)
-      document.removeEventListener('keydown', onKeyDown, true)
-      document.body.style.overflow = previousOverflow
-      previouslyFocusedRef.current?.focus?.()
-    }
-  }, [open, onClose])
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocusedRef.current?.focus?.();
+    };
+  }, [open, onClose]);
 
-  if (!open) return null
+  if (!open) return null;
   return (
     <div
       className="settings-overlay fixed inset-0 bg-[color:color-mix(in_oklab,var(--color-ink)_45%,transparent)] flex items-center justify-center"
@@ -64,8 +64,12 @@ export default function SettingsModal({
       aria-modal="true"
       aria-label={title}
       style={{ zIndex: 'var(--layer-settings-modal, 150)' }}
-      onMouseDown={(e) => { mouseDownOnOverlay.current = e.target === e.currentTarget }}
-      onClick={(e) => { if (e.target === e.currentTarget && mouseDownOnOverlay.current) onClose() }}
+      onMouseDown={(e) => {
+        mouseDownOnOverlay.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && mouseDownOnOverlay.current) onClose();
+      }}
     >
       <div
         ref={dialogRef}
@@ -105,5 +109,5 @@ export default function SettingsModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
