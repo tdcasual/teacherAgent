@@ -1,25 +1,25 @@
-import { useEffect, useMemo, useState, type MutableRefObject } from 'react'
-import type { PendingToolRun } from '../../appTypes'
+import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
+import type { PendingToolRun } from '../../appTypes';
 
 type RenderedMessage = {
-  id: string
-  role: 'user' | 'assistant'
-  html: string
-  time: string
-}
+  id: string;
+  role: 'user' | 'assistant';
+  html: string;
+  time: string;
+};
 
 type Props = {
-  renderedMessages: RenderedMessage[]
-  sending: boolean
-  hasPendingChatJob: boolean
-  typingTimeLabel: string
-  messagesRef: MutableRefObject<HTMLDivElement | null>
-  onMessagesScroll: () => void
-  showScrollToBottom: boolean
-  onScrollToBottom: () => void
-  pendingStreamStage: string
-  pendingToolRuns: PendingToolRun[]
-}
+  renderedMessages: RenderedMessage[];
+  sending: boolean;
+  hasPendingChatJob: boolean;
+  typingTimeLabel: string;
+  messagesRef: MutableRefObject<HTMLDivElement | null>;
+  onMessagesScroll: () => void;
+  showScrollToBottom: boolean;
+  onScrollToBottom: () => void;
+  pendingStreamStage: string;
+  pendingToolRuns: PendingToolRun[];
+};
 
 export default function ChatMessages({
   renderedMessages,
@@ -33,23 +33,23 @@ export default function ChatMessages({
   pendingStreamStage,
   pendingToolRuns,
 }: Props) {
-  const [processCollapsed, setProcessCollapsed] = useState(false)
-  const [showOnlyFailed, setShowOnlyFailed] = useState(false)
+  const [processCollapsed, setProcessCollapsed] = useState(false);
+  const [showOnlyFailed, setShowOnlyFailed] = useState(false);
 
-  const runningCount = pendingToolRuns.filter((item) => item.status === 'running').length
-  const okCount = pendingToolRuns.filter((item) => item.status === 'ok').length
-  const failedCount = pendingToolRuns.filter((item) => item.status === 'failed').length
+  const runningCount = pendingToolRuns.filter((item) => item.status === 'running').length;
+  const okCount = pendingToolRuns.filter((item) => item.status === 'ok').length;
+  const failedCount = pendingToolRuns.filter((item) => item.status === 'failed').length;
 
   const visibleToolRuns = useMemo(() => {
-    if (!showOnlyFailed) return pendingToolRuns
-    return pendingToolRuns.filter((item) => item.status === 'failed')
-  }, [pendingToolRuns, showOnlyFailed])
+    if (!showOnlyFailed) return pendingToolRuns;
+    return pendingToolRuns.filter((item) => item.status === 'failed');
+  }, [pendingToolRuns, showOnlyFailed]);
 
   useEffect(() => {
-    if (hasPendingChatJob) return
-    setProcessCollapsed(false)
-    setShowOnlyFailed(false)
-  }, [hasPendingChatJob])
+    if (hasPendingChatJob) return;
+    setProcessCollapsed(false);
+    setShowOnlyFailed(false);
+  }, [hasPendingChatJob]);
 
   return (
     <>
@@ -61,7 +61,10 @@ export default function ChatMessages({
       >
         <div className="w-full max-w-[var(--chat-content-max-width)] px-6 pb-[16px] grid gap-[14px]">
           {renderedMessages.map((msg) => (
-            <div key={msg.id} className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : ''}`}>
+            <div
+              key={msg.id}
+              className={`message ${msg.role} flex ${msg.role === 'user' ? 'justify-end' : ''}`}
+            >
               <div
                 className={
                   msg.role === 'assistant'
@@ -72,7 +75,10 @@ export default function ChatMessages({
                 <div className="text-[11px] text-muted mb-1">
                   {msg.role === 'user' ? '我的指令' : '执行结果'} · {msg.time}
                 </div>
-                <div className="text leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words markdown" dangerouslySetInnerHTML={{ __html: msg.html }} />
+                <div
+                  className="text leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words markdown"
+                  dangerouslySetInnerHTML={{ __html: msg.html }}
+                />
               </div>
             </div>
           ))}
@@ -80,7 +86,9 @@ export default function ChatMessages({
             <div className="flex">
               <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-dashed border-[color:color-mix(in_oklab,var(--color-accent)_16%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-accent-soft)_34%,var(--color-surface))] py-2.5 px-3">
                 <div className="text-[11px] text-muted mb-1">助手 · {typingTimeLabel}</div>
-                <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">正在思考…</div>
+                <div className="leading-[1.4] max-[900px]:leading-[1.32] whitespace-normal break-words">
+                  正在思考…
+                </div>
               </div>
             </div>
           )}
@@ -89,7 +97,9 @@ export default function ChatMessages({
               <div className="max-w-[var(--chat-assistant-bubble-max-width)] rounded-[16px] border border-[color:color-mix(in_oklab,var(--color-accent)_14%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-panel)_92%,var(--color-surface))] px-3 py-2.5 grid gap-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="grid gap-[2px]">
-                    <div className="text-[11px] text-muted">执行过程 · {pendingStreamStage || '处理中'}</div>
+                    <div className="text-[11px] text-muted">
+                      执行过程 · {pendingStreamStage || '处理中'}
+                    </div>
                     <div className="text-[11px] text-muted">
                       进行中 {runningCount} · 成功 {okCount} · 失败 {failedCount}
                     </div>
@@ -123,17 +133,24 @@ export default function ChatMessages({
                             ? 'bg-warning-soft border-[color:color-mix(in_oklab,var(--color-warning)_24%,var(--color-surface))] text-warning'
                             : item.status === 'ok'
                               ? 'bg-success-soft border-[color:color-mix(in_oklab,var(--color-success)_22%,var(--color-surface))] text-success'
-                              : 'bg-danger-soft border-[color:color-mix(in_oklab,var(--color-danger)_18%,var(--color-surface))] text-danger'
+                              : 'bg-danger-soft border-[color:color-mix(in_oklab,var(--color-danger)_18%,var(--color-surface))] text-danger';
                         return (
-                          <div key={item.key} className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}>
+                          <div
+                            key={item.key}
+                            className={`text-[12px] leading-[1.32] max-[900px]:leading-[1.26] border rounded px-2 py-[6px] ${lineClass}`}
+                          >
                             <div className="font-medium">{item.name}</div>
                             <div>
                               {item.status === 'running' ? '进行中' : ''}
-                              {item.status === 'ok' ? `成功${item.durationMs ? `（${item.durationMs}ms）` : ''}` : ''}
-                              {item.status === 'failed' ? `失败${item.error ? `：${item.error}` : ''}` : ''}
+                              {item.status === 'ok'
+                                ? `成功${item.durationMs ? `（${item.durationMs}ms）` : ''}`
+                                : ''}
+                              {item.status === 'failed'
+                                ? `失败${item.error ? `：${item.error}` : ''}`
+                                : ''}
                             </div>
                           </div>
-                        )
+                        );
                       })
                     )}
                   </div>
@@ -153,5 +170,5 @@ export default function ChatMessages({
         </button>
       )}
     </>
-  )
+  );
 }

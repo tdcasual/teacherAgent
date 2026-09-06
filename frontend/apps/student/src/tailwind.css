@@ -1,30 +1,30 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-app-bg: #FAFBFC;
-  --color-bg: #FAFBFC;
-  --color-surface: #FFFFFF;
-  --color-surface-soft: #F4F5F7;
-  --color-surface-hover: #EBECF0;
-  --color-task-strip: #F7F9FF;
-  --color-note: #F7F8FA;
-  --color-progress: #F1F5FF;
-  --color-ink: #172B4D;
-  --color-muted: #44546F;
-  --color-accent: #0052CC;
-  --color-accent-soft: #DEEBFF;
-  --color-success: #206A83;
-  --color-success-soft: #E9F2F5;
-  --color-border: #DFE1E6;
-  --color-border-strong: #C1C7D0;
-  --color-danger-soft: #FFF0EE;
-  --color-danger: #C9372C;
+  --color-app-bg: #fafbfc;
+  --color-bg: #fafbfc;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f4f5f7;
+  --color-surface-hover: #ebecf0;
+  --color-task-strip: #f7f9ff;
+  --color-note: #f7f8fa;
+  --color-progress: #f1f5ff;
+  --color-ink: #172b4d;
+  --color-muted: #44546f;
+  --color-accent: #0052cc;
+  --color-accent-soft: #deebff;
+  --color-success: #206a83;
+  --color-success-soft: #e9f2f5;
+  --color-border: #dfe1e6;
+  --color-border-strong: #c1c7d0;
+  --color-danger-soft: #fff0ee;
+  --color-danger: #c9372c;
 
   --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
   --shadow-md: 0 6px 18px rgba(9, 30, 66, 0.12);
 
-  --font-sans: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
 }
 
 :root {
@@ -60,7 +60,11 @@
 }
 
 /* ── Global resets ── */
-html, body, #root { height: 100%; }
+html,
+body,
+#root {
+  height: 100%;
+}
 body {
   margin: 0;
   font-family: var(--font-sans);
@@ -69,24 +73,28 @@ body {
 }
 
 @media (min-width: 901px) {
-  html, body, #root { overflow: hidden; }
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
 }
 
 /* ── Global form elements ── */
 :where(
   input:not([type]),
-  input[type="text"],
-  input[type="search"],
-  input[type="email"],
-  input[type="password"],
-  input[type="url"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="date"],
-  input[type="datetime-local"],
-  input[type="month"],
-  input[type="time"],
-  input[type="week"],
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='password'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='time'],
+  input[type='week'],
   textarea,
   select
 ) {
@@ -97,22 +105,24 @@ body {
   background: var(--color-surface);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 :where(
   input:not([type]),
-  input[type="text"],
-  input[type="search"],
-  input[type="email"],
-  input[type="password"],
-  input[type="url"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="date"],
-  input[type="datetime-local"],
-  input[type="month"],
-  input[type="time"],
-  input[type="week"],
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='password'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='time'],
+  input[type='week'],
   textarea,
   select
 ):focus {
@@ -137,7 +147,9 @@ body {
     cursor: pointer;
     color: color-mix(in oklab, var(--color-ink) 78%, var(--color-surface));
     font-size: 12px;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
   }
   .ghost:hover {
     background: var(--color-surface-soft);
@@ -181,7 +193,10 @@ body {
     color: color-mix(in oklab, var(--color-ink) 82%, var(--color-muted));
     font-size: 12px;
     font-weight: 500;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      transform 0.15s ease;
   }
   .student-supporting-link:hover {
     background: color-mix(in oklab, var(--color-note) 45%, var(--color-surface));
@@ -209,26 +224,54 @@ body {
     font-size: 12px;
     white-space: pre-wrap;
   }
-  .status.ok { background: var(--color-success-soft); color: var(--color-success); }
-  .status.err { background: var(--color-danger-soft); color: var(--color-danger); }
+  .status.ok {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+  }
+  .status.err {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+  }
 
-  .muted { color: var(--color-muted); font-size: 12px; }
+  .muted {
+    color: var(--color-muted);
+    font-size: 12px;
+  }
 }
 
 /* ── Markdown rich text ── */
-.markdown p { margin: 0 0 3px; }
-.markdown p:last-child { margin-bottom: 0; }
-.markdown ul, .markdown ol { margin: 0 0 2px 16px; padding: 0; }
-.markdown li { margin: 0; padding: 0; }
-.markdown li + li { margin-top: 1px; }
-.markdown li p { margin: 0; }
-.markdown h1, .markdown h2, .markdown h3,
-.markdown h4, .markdown h5, .markdown h6 {
+.markdown p {
+  margin: 0 0 3px;
+}
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 2px 16px;
+  padding: 0;
+}
+.markdown li {
+  margin: 0;
+  padding: 0;
+}
+.markdown li + li {
+  margin-top: 1px;
+}
+.markdown li p {
+  margin: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
   margin: 6px 0 4px;
   line-height: 1.25;
 }
 .markdown code {
-  font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
   background: color-mix(in oklab, var(--color-note) 64%, var(--color-surface));
   padding: 2px 6px;
   border-radius: 6px;
@@ -257,7 +300,9 @@ body {
   overflow-y: hidden;
   padding: 4px 0;
 }
-.markdown .katex { overflow-wrap: normal; }
+.markdown .katex {
+  overflow-wrap: normal;
+}
 .markdown table {
   display: block;
   overflow-x: auto;
@@ -265,12 +310,15 @@ body {
   margin: 0 0 6px;
   font-size: 14px;
 }
-.markdown th, .markdown td {
+.markdown th,
+.markdown td {
   border: 1px solid var(--color-border);
   padding: 6px 10px;
   text-align: left;
 }
-.markdown tr:nth-child(even) { background: var(--color-surface-soft); }
+.markdown tr:nth-child(even) {
+  background: var(--color-surface-soft);
+}
 .markdown img {
   max-width: 100%;
   height: auto;
@@ -279,7 +327,7 @@ body {
 
 .katex-error {
   background: color-mix(in oklab, var(--color-note) 64%, var(--color-surface));
-  font-family: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-family: 'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
   padding: 2px 6px;
   border-radius: 4px;
@@ -313,7 +361,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: transform 0.18s ease, opacity 0.18s ease, padding 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    padding 0.18s ease;
 }
 .student-layout.sidebar-collapsed .session-sidebar {
   opacity: 0;
@@ -344,7 +395,9 @@ body {
 }
 
 @media (max-width: 900px) {
-  html, body, #root {
+  html,
+  body,
+  #root {
     overflow: hidden;
     height: 100dvh;
   }

@@ -1,13 +1,13 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import WorkflowSummaryCard from './WorkflowSummaryCard'
-import type { WorkflowSummaryCardProps } from '../../../types/workflow'
+import WorkflowSummaryCard from './WorkflowSummaryCard';
+import type { WorkflowSummaryCardProps } from '../../../types/workflow';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const baseProps = (): WorkflowSummaryCardProps => ({
   activeWorkflowIndicator: {
@@ -30,38 +30,40 @@ const baseProps = (): WorkflowSummaryCardProps => ({
   fetchAssignmentProgress: async () => undefined,
   formatUploadJobSummary: () => '状态：解析完成（待确认） · 作业编号：HW-20260314',
   formatProgressSummary: () => '暂无完成情况',
-})
+});
 
 describe('WorkflowSummaryCard', () => {
   it('surfaces one primary action around the current assignment step', () => {
-    const props = baseProps()
+    const props = baseProps();
 
-    render(<WorkflowSummaryCard {...props} />)
+    render(<WorkflowSummaryCard {...props} />);
 
-    expect(screen.queryByText('状态总览')).toBeNull()
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull()
-    expect(screen.queryByText('动作目标')).toBeNull()
-    expect(screen.getByRole('button', { name: '查看草稿' })).toBeTruthy()
-    expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull()
-    expect(screen.getByRole('button', { name: '查看上传区' })).toBeTruthy()
+    expect(screen.queryByText('状态总览')).toBeNull();
+    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.queryByText('动作目标')).toBeNull();
+    expect(screen.getByRole('button', { name: '查看草稿' })).toBeTruthy();
+    expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull();
+    expect(screen.getByRole('button', { name: '查看上传区' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '查看草稿' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看草稿' }));
 
-    expect(props.scrollToWorkflowSection).toHaveBeenCalledWith('workflow-assignment-draft-section')
-  })
+    expect(props.scrollToWorkflowSection).toHaveBeenCalledWith('workflow-assignment-draft-section');
+  });
 
   it('lets the primary CTA take its own row in narrow sidebar layouts', () => {
-    const props = baseProps()
+    const props = baseProps();
 
-    render(<WorkflowSummaryCard {...props} />)
+    render(<WorkflowSummaryCard {...props} />);
 
-    const primaryAction = screen.getByRole('button', { name: '查看草稿' })
-    const summaryLayout = primaryAction.parentElement
+    const primaryAction = screen.getByRole('button', { name: '查看草稿' });
+    const summaryLayout = primaryAction.parentElement;
 
-    expect(summaryLayout).toBeTruthy()
-    expect((summaryLayout as HTMLElement).className).toContain('grid')
-    expect((summaryLayout as HTMLElement).className).not.toContain('xl:grid-cols-[minmax(0,1fr)_auto]')
-    expect(primaryAction.className).toContain('w-full')
-    expect(primaryAction.className).not.toContain('xl:w-auto')
-  })
-})
+    expect(summaryLayout).toBeTruthy();
+    expect((summaryLayout as HTMLElement).className).toContain('grid');
+    expect((summaryLayout as HTMLElement).className).not.toContain(
+      'xl:grid-cols-[minmax(0,1fr)_auto]',
+    );
+    expect(primaryAction.className).toContain('w-full');
+    expect(primaryAction.className).not.toContain('xl:w-auto');
+  });
+});

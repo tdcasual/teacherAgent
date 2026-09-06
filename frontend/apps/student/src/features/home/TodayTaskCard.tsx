@@ -1,25 +1,29 @@
-import type { StudentTodayHomeViewModel } from '../../appTypes'
+import type { StudentTodayHomeViewModel } from '../../appTypes';
 
 type TodayTaskCardProps = {
-  viewModel: StudentTodayHomeViewModel
-  onPrimaryAction: () => void
-}
+  viewModel: StudentTodayHomeViewModel;
+  onPrimaryAction: () => void;
+};
 
 const statusToneClassMap: Record<StudentTodayHomeViewModel['status'], string> = {
   pending_generation: 'border-border bg-surface-soft text-muted',
   generating: 'border-border bg-surface-soft text-muted',
   empty: 'border-border bg-surface-soft text-muted',
   ready: 'border-border bg-surface-soft text-muted',
-  in_progress: 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
-  submitted: 'border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)]',
-}
+  in_progress:
+    'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent)]',
+  submitted:
+    'border-[color:color-mix(in_oklab,var(--color-success)_35%,var(--color-surface))] bg-[color:color-mix(in_oklab,var(--color-success)_14%,var(--color-surface))] text-[color:var(--color-success)]',
+};
 
 export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskCardProps) {
   return (
     <section className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-4">
       <div className="min-w-0 grid gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-medium ${statusToneClassMap[viewModel.status]}`}>
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-[12px] font-medium ${statusToneClassMap[viewModel.status]}`}
+          >
             {viewModel.statusLabel}
           </span>
         </div>
@@ -39,5 +43,5 @@ export default function TodayTaskCard({ viewModel, onPrimaryAction }: TodayTaskC
         </button>
       </div>
     </section>
-  )
+  );
 }

@@ -1,18 +1,18 @@
-import { useMemo, useState } from 'react'
-import type { StudentSubmitResult } from './studentSubmit'
-import { postStudentSubmit } from './studentSubmit'
+import { useMemo, useState } from 'react';
+import type { StudentSubmitResult } from './studentSubmit';
+import { postStudentSubmit } from './studentSubmit';
 
 type StudentSubmitPanelProps = {
-  apiBase: string
-  studentId: string
-  assignmentId: string
-  assignmentTitle: string
-  chatFiles: File[]
-  onClose: () => void
-  onSubmitted: (result: StudentSubmitResult) => void
-}
+  apiBase: string;
+  studentId: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  chatFiles: File[];
+  onClose: () => void;
+  onSubmitted: (result: StudentSubmitResult) => void;
+};
 
-const filesFromList = (list: FileList | null): File[] => (list ? Array.from(list) : [])
+const filesFromList = (list: FileList | null): File[] => (list ? Array.from(list) : []);
 
 export default function StudentSubmitPanel({
   apiBase,
@@ -23,50 +23,55 @@ export default function StudentSubmitPanel({
   onClose,
   onSubmitted,
 }: StudentSubmitPanelProps) {
-  const [pickedFiles, setPickedFiles] = useState<File[]>([])
-  const [chatConfirmArmed, setChatConfirmArmed] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<StudentSubmitResult | null>(null)
-  const [error, setError] = useState('')
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [chatConfirmArmed, setChatConfirmArmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<StudentSubmitResult | null>(null);
+  const [error, setError] = useState('');
 
-  const previewFiles = chatConfirmArmed ? chatFiles : pickedFiles
+  const previewFiles = chatConfirmArmed ? chatFiles : pickedFiles;
   const previewNames = useMemo(
     () => previewFiles.map((file) => file.name).filter(Boolean),
     [previewFiles],
-  )
+  );
 
-  const submitFiles = (): File[] => (chatConfirmArmed ? chatFiles : pickedFiles)
+  const submitFiles = (): File[] => (chatConfirmArmed ? chatFiles : pickedFiles);
 
   const runSubmit = async () => {
-    const files = submitFiles()
+    const files = submitFiles();
     if (!files.length) {
-      setError('请先选择要提交的作业文件')
-      return
+      setError('请先选择要提交的作业文件');
+      return;
     }
-    setBusy(true)
-    setError('')
+    setBusy(true);
+    setError('');
     try {
       const next = await postStudentSubmit({
         apiBase,
         studentId,
         assignmentId,
         files,
-      })
-      setResult(next)
-      if (next.submitted) onSubmitted(next)
+      });
+      setResult(next);
+      if (next.submitted) onSubmitted(next);
     } catch {
-      setError('提交失败，请稍后重试。')
+      setError('提交失败，请稍后重试。');
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <main className="flex-1 min-h-0 overflow-y-auto bg-[color:var(--color-app-bg)] px-4 py-5 md:px-6 md:py-6" data-testid="student-submit-panel">
+    <main
+      className="flex-1 min-h-0 overflow-y-auto bg-[color:var(--color-app-bg)] px-4 py-5 md:px-6 md:py-6"
+      data-testid="student-submit-panel"
+    >
       <div className="mx-auto grid max-w-[720px] gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="m-0 text-[20px] font-semibold text-ink">提交作业</h1>
-          <button type="button" className="student-supporting-link" onClick={onClose}>返回</button>
+          <button type="button" className="student-supporting-link" onClick={onClose}>
+            返回
+          </button>
         </div>
         <p className="m-0 text-[14px] text-muted">
           {assignmentTitle || assignmentId}。聊天与附件只是陪练，不会记为提交。
@@ -81,10 +86,10 @@ export default function StudentSubmitPanel({
               aria-label="选择提交文件"
               accept="application/pdf,image/*,.txt,.md,.csv"
               onChange={(event) => {
-                setPickedFiles(filesFromList(event.target.files))
-                setChatConfirmArmed(false)
-                setResult(null)
-                event.currentTarget.value = ''
+                setPickedFiles(filesFromList(event.target.files));
+                setChatConfirmArmed(false);
+                setResult(null);
+                event.currentTarget.value = '';
               }}
             />
           </label>
@@ -93,18 +98,26 @@ export default function StudentSubmitPanel({
               type="button"
               className="student-supporting-link justify-self-start"
               onClick={() => {
-                setChatConfirmArmed(true)
-                setResult(null)
-                setError('')
+                setChatConfirmArmed(true);
+                setResult(null);
+                setError('');
               }}
             >
               把当前聊天附件作为本次提交
             </button>
           ) : null}
           {previewNames.length ? (
-            <ul className="m-0 grid gap-1 p-0 list-none text-[13px]" data-testid="student-submit-preview">
+            <ul
+              className="m-0 grid gap-1 p-0 list-none text-[13px]"
+              data-testid="student-submit-preview"
+            >
               {previewNames.map((name, index) => (
-                <li key={`${name}-${index}`} className="rounded-[12px] border border-border px-3 py-2">{name}</li>
+                <li
+                  key={`${name}-${index}`}
+                  className="rounded-[12px] border border-border px-3 py-2"
+                >
+                  {name}
+                </li>
               ))}
             </ul>
           ) : null}
@@ -113,7 +126,9 @@ export default function StudentSubmitPanel({
               type="button"
               className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
               disabled={busy || chatFiles.length === 0}
-              onClick={() => { void runSubmit() }}
+              onClick={() => {
+                void runSubmit();
+              }}
             >
               确认提交
             </button>
@@ -122,27 +137,43 @@ export default function StudentSubmitPanel({
               type="button"
               className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white disabled:opacity-60"
               disabled={busy || !pickedFiles.length}
-              onClick={() => { void runSubmit() }}
+              onClick={() => {
+                void runSubmit();
+              }}
             >
               提交作业
             </button>
           )}
-          {error ? <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">
+              {error}
+            </div>
+          ) : null}
           {result?.submitted ? (
-            <div className="rounded-[14px] border border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-success" role="status">
+            <div
+              className="rounded-[14px] border border-[color:var(--color-success)] bg-[color:var(--color-success-soft)] px-3 py-2 text-[13px]"
+              data-testid="student-submit-success"
+              role="status"
+            >
               <span data-testid="student-submit-result">{result.message}</span>
             </div>
           ) : null}
           {result && !result.submitted && result.ok ? (
-            <div className="rounded-[14px] border border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)] px-3 py-2 text-[13px]" data-testid="student-submit-not-counted" role="alert">
+            <div
+              className="rounded-[14px] border border-[color:var(--color-danger)] bg-[color:var(--color-danger-soft)] px-3 py-2 text-[13px]"
+              data-testid="student-submit-not-counted"
+              role="alert"
+            >
               <span data-testid="student-submit-result">{result.message}</span>
             </div>
           ) : null}
           {result && !result.ok ? (
-            <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">{result.message}</div>
+            <div className="text-[13px] text-[color:var(--color-danger)]" role="alert">
+              {result.message}
+            </div>
           ) : null}
         </section>
       </div>
     </main>
-  )
+  );
 }

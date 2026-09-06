@@ -1,1 +1,1 @@
-export { parsePendingChatJob } from '../../../../shared/pendingChatJob'
+export { parsePendingChatJob } from '../../../../shared/pendingChatJob';

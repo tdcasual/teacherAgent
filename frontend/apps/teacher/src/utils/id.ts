@@ -1,1 +1,1 @@
-export { makeId } from '../../../shared/id'
+export { makeId } from '../../../shared/id';

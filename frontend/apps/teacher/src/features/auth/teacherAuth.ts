@@ -1,59 +1,63 @@
-import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../utils/storage'
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageRemoveItem,
+  safeLocalStorageSetItem,
+} from '../../utils/storage';
 
-export const TEACHER_AUTH_ACCESS_TOKEN_KEY = 'teacherAuthAccessToken'
-const TEACHER_AUTH_SUBJECT_KEY = 'teacherAuthSubject'
-export const TEACHER_AUTH_EVENT = 'teacher-auth-updated'
+export const TEACHER_AUTH_ACCESS_TOKEN_KEY = 'teacherAuthAccessToken';
+const TEACHER_AUTH_SUBJECT_KEY = 'teacherAuthSubject';
+export const TEACHER_AUTH_EVENT = 'teacher-auth-updated';
 
 type TeacherAuthSubject = {
-  teacher_id: string
-  teacher_name: string
-  email?: string
-  role?: string
-}
+  teacher_id: string;
+  teacher_name: string;
+  email?: string;
+  role?: string;
+};
 
 export const readTeacherAccessToken = (): string =>
-  String(safeLocalStorageGetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY) || '').trim()
+  String(safeLocalStorageGetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY) || '').trim();
 
 export const readTeacherAuthSubject = (): TeacherAuthSubject | null => {
-  const raw = safeLocalStorageGetItem(TEACHER_AUTH_SUBJECT_KEY)
-  if (!raw) return null
+  const raw = safeLocalStorageGetItem(TEACHER_AUTH_SUBJECT_KEY);
+  if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as Partial<TeacherAuthSubject>
-    const teacherId = String(parsed?.teacher_id || '').trim()
-    if (!teacherId) return null
-    const teacherName = String(parsed?.teacher_name || '').trim() || teacherId
-    const email = String(parsed?.email || '').trim()
-    const role = String(parsed?.role || '').trim()
+    const parsed = JSON.parse(raw) as Partial<TeacherAuthSubject>;
+    const teacherId = String(parsed?.teacher_id || '').trim();
+    if (!teacherId) return null;
+    const teacherName = String(parsed?.teacher_name || '').trim() || teacherId;
+    const email = String(parsed?.email || '').trim();
+    const role = String(parsed?.role || '').trim();
     return {
       teacher_id: teacherId,
       teacher_name: teacherName,
       ...(email ? { email } : {}),
       ...(role ? { role } : {}),
-    }
+    };
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 const emitTeacherAuthUpdated = (): void => {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new Event(TEACHER_AUTH_EVENT))
-}
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(TEACHER_AUTH_EVENT));
+};
 
 export const writeTeacherAuthSession = (params: {
-  accessToken: string
-  teacherId: string
-  teacherName: string
-  email?: string
-  role?: string
+  accessToken: string;
+  teacherId: string;
+  teacherName: string;
+  email?: string;
+  role?: string;
 }): void => {
-  const accessToken = String(params.accessToken || '').trim()
-  const teacherId = String(params.teacherId || '').trim()
-  if (!accessToken || !teacherId) return
-  const teacherName = String(params.teacherName || '').trim() || teacherId
-  const email = String(params.email || '').trim()
-  const role = String(params.role || '').trim()
-  safeLocalStorageSetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, accessToken)
+  const accessToken = String(params.accessToken || '').trim();
+  const teacherId = String(params.teacherId || '').trim();
+  if (!accessToken || !teacherId) return;
+  const teacherName = String(params.teacherName || '').trim() || teacherId;
+  const email = String(params.email || '').trim();
+  const role = String(params.role || '').trim();
+  safeLocalStorageSetItem(TEACHER_AUTH_ACCESS_TOKEN_KEY, accessToken);
   safeLocalStorageSetItem(
     TEACHER_AUTH_SUBJECT_KEY,
     JSON.stringify({
@@ -62,17 +66,19 @@ export const writeTeacherAuthSession = (params: {
       ...(email ? { email } : {}),
       ...(role ? { role } : {}),
     }),
-  )
-  emitTeacherAuthUpdated()
-}
+  );
+  emitTeacherAuthUpdated();
+};
 
 export const readTeacherAuthRole = (): string => {
-  const role = String(readTeacherAuthSubject()?.role || '').trim().toLowerCase()
-  return role || 'teacher'
-}
+  const role = String(readTeacherAuthSubject()?.role || '')
+    .trim()
+    .toLowerCase();
+  return role || 'teacher';
+};
 
 export const clearTeacherAuthSession = (): void => {
-  safeLocalStorageRemoveItem(TEACHER_AUTH_ACCESS_TOKEN_KEY)
-  safeLocalStorageRemoveItem(TEACHER_AUTH_SUBJECT_KEY)
-  emitTeacherAuthUpdated()
-}
+  safeLocalStorageRemoveItem(TEACHER_AUTH_ACCESS_TOKEN_KEY);
+  safeLocalStorageRemoveItem(TEACHER_AUTH_SUBJECT_KEY);
+  emitTeacherAuthUpdated();
+};

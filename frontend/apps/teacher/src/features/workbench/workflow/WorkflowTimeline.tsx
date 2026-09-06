@@ -1,37 +1,42 @@
-import type { ExecutionTimelineEntry } from '../../../appTypes'
+import type { ExecutionTimelineEntry } from '../../../appTypes';
 
 type WorkflowTimelineProps = {
-  entries: ExecutionTimelineEntry[]
-}
+  entries: ExecutionTimelineEntry[];
+};
 
 const timelineTone = (entry: ExecutionTimelineEntry): 'error' | 'neutral' => {
-  const text = `${entry.type} ${entry.summary}`.toLowerCase()
-  return text.includes('failed') || text.includes('error') || text.includes('失败') || text.includes('异常')
+  const text = `${entry.type} ${entry.summary}`.toLowerCase();
+  return text.includes('failed') ||
+    text.includes('error') ||
+    text.includes('失败') ||
+    text.includes('异常')
     ? 'error'
-    : 'neutral'
-}
+    : 'neutral';
+};
 
 const toTimestampValue = (value?: string) => {
-  if (!value) return Number.NEGATIVE_INFINITY
-  const parsed = Date.parse(value)
-  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed
-}
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+};
 
 const formatTimelineTimestamp = (value?: string) => {
-  if (!value) return ''
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  })
-}
+  });
+};
 
 export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
-  const sortedEntries = [...entries].sort((left, right) => toTimestampValue(right.ts) - toTimestampValue(left.ts))
+  const sortedEntries = [...entries].sort(
+    (left, right) => toTimestampValue(right.ts) - toTimestampValue(left.ts),
+  );
 
   return (
     <section className="rounded-[14px] border border-border bg-surface p-[10px] shadow-sm">
@@ -43,7 +48,7 @@ export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
       {sortedEntries.length ? (
         <div className="mt-[8px] grid gap-[6px]">
           {sortedEntries.map((item, index) => {
-            const tone = timelineTone(item)
+            const tone = timelineTone(item);
             return (
               <div
                 key={`${item.type}-${item.ts || index}`}
@@ -59,11 +64,15 @@ export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="font-medium text-[#334155]">{item.summary}</div>
-                  {item.ts ? <span className="shrink-0 text-[11px] text-muted">{formatTimelineTimestamp(item.ts)}</span> : null}
+                  {item.ts ? (
+                    <span className="shrink-0 text-[11px] text-muted">
+                      {formatTimelineTimestamp(item.ts)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-[2px] text-muted">{item.type}</div>
               </div>
-            )
+            );
           })}
         </div>
       ) : (
@@ -75,5 +84,5 @@ export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
         </div>
       )}
     </section>
-  )
+  );
 }

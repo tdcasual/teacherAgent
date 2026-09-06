@@ -1,12 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import AssignmentProgressSection from './AssignmentProgressSection'
+import AssignmentProgressSection from './AssignmentProgressSection';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const baseProps = {
   progressPanelCollapsed: false,
@@ -19,7 +19,7 @@ const baseProps = {
   progressLoading: false,
   fetchAssignmentProgress: vi.fn(async () => undefined),
   progressError: '',
-}
+};
 
 describe('AssignmentProgressSection', () => {
   it('renders result and process columns and colors by submitted not discussion', () => {
@@ -52,30 +52,34 @@ describe('AssignmentProgressSection', () => {
               submission: { attempts: 0 },
               official_score: null,
               result: { attempts: 0, official_score: null, overdue: true, submitted: false },
-              process: { status: 'pending', stuck_points: [{ summary: '把 v 与 a 混用' }], has_memory_proposal: false },
+              process: {
+                status: 'pending',
+                stuck_points: [{ summary: '把 v 与 a 混用' }],
+                has_memory_proposal: false,
+              },
             },
           ],
         }}
       />,
-    )
+    );
 
-    expect(screen.getByText('结果')).toBeTruthy()
-    expect(screen.getByText('过程')).toBeTruthy()
-    expect(screen.getByText(/提交2次/)).toBeTruthy()
-    expect(screen.getByText(/官方分11/)).toBeTruthy()
-    expect(screen.getByText(/过程：无/)).toBeTruthy()
-    expect(screen.getByText(/过程：生成中/)).toBeTruthy()
-    expect(screen.queryByText('讨论通过')).toBeNull()
-    expect(screen.queryByText('讨论未完成')).toBeNull()
+    expect(screen.getByText('结果')).toBeTruthy();
+    expect(screen.getByText('过程')).toBeTruthy();
+    expect(screen.getByText(/提交2次/)).toBeTruthy();
+    expect(screen.getByText(/官方分11/)).toBeTruthy();
+    expect(screen.getByText(/过程：无/)).toBeTruthy();
+    expect(screen.getByText(/过程：生成中/)).toBeTruthy();
+    expect(screen.queryByText('讨论通过')).toBeNull();
+    expect(screen.queryByText('讨论未完成')).toBeNull();
 
-    const submittedRow = screen.getByTestId('progress-row-S1')
-    const discussionOnlyRow = screen.getByTestId('progress-row-S2')
-    expect(submittedRow.className).toContain('bg-[color:var(--color-success-soft)]')
-    expect(discussionOnlyRow.className).toContain('bg-[color:var(--color-danger-soft)]')
-  })
+    const submittedRow = screen.getByTestId('progress-row-S1');
+    const discussionOnlyRow = screen.getByTestId('progress-row-S2');
+    expect(submittedRow.className).toContain('bg-[color:var(--color-success-soft)]');
+    expect(discussionOnlyRow.className).toContain('bg-[color:var(--color-danger-soft)]');
+  });
 
   it('saves teacher grade override comment and adopted excerpts', () => {
-    const saveStudentGrade = vi.fn(async () => undefined)
+    const saveStudentGrade = vi.fn(async () => undefined);
     render(
       <AssignmentProgressSection
         {...baseProps}
@@ -95,22 +99,22 @@ describe('AssignmentProgressSection', () => {
           ],
         }}
       />,
-    )
+    );
 
-    fireEvent.change(screen.getByLabelText('覆盖分数'), { target: { value: '12' } })
-    fireEvent.change(screen.getByLabelText('评语'), { target: { value: '步骤完整' } })
-    fireEvent.change(screen.getByLabelText('采纳陪练摘录'), { target: { value: '先写单位' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存成绩' }))
+    fireEvent.change(screen.getByLabelText('覆盖分数'), { target: { value: '12' } });
+    fireEvent.change(screen.getByLabelText('评语'), { target: { value: '步骤完整' } });
+    fireEvent.change(screen.getByLabelText('采纳陪练摘录'), { target: { value: '先写单位' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存成绩' }));
 
     expect(saveStudentGrade).toHaveBeenCalledWith('S1', {
       override_score: 12,
       comment: '步骤完整',
       adopted_coach_excerpts: [{ text: '先写单位' }],
-    })
-  })
+    });
+  });
 
   it('restores auto score by posting override_score null', () => {
-    const saveStudentGrade = vi.fn(async () => undefined)
+    const saveStudentGrade = vi.fn(async () => undefined);
     render(
       <AssignmentProgressSection
         {...baseProps}
@@ -131,14 +135,14 @@ describe('AssignmentProgressSection', () => {
           ],
         }}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: '恢复自动分' }))
-    expect(saveStudentGrade).toHaveBeenCalledWith('S1', { override_score: null })
-  })
+    fireEvent.click(screen.getByRole('button', { name: '恢复自动分' }));
+    expect(saveStudentGrade).toHaveBeenCalledWith('S1', { override_score: null });
+  });
 
   it('prompts teacher override when auto-grade left no official score', () => {
-    const saveStudentGrade = vi.fn(async () => undefined)
+    const saveStudentGrade = vi.fn(async () => undefined);
     render(
       <AssignmentProgressSection
         {...baseProps}
@@ -158,9 +162,9 @@ describe('AssignmentProgressSection', () => {
           ],
         }}
       />,
-    )
+    );
 
-    expect(screen.getByText('未自动出分，请老师覆盖')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '保存成绩' })).toBeTruthy()
-  })
-})
+    expect(screen.getByText('未自动出分，请老师覆盖')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '保存成绩' })).toBeTruthy();
+  });
+});

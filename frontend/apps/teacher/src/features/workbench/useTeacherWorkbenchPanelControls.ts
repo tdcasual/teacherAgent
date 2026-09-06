@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useState, type MutableRefObject } from 'react'
-import type { PanelImperativeHandle } from 'react-resizable-panels'
+import { useCallback, useEffect, useState, type MutableRefObject } from 'react';
+import type { PanelImperativeHandle } from 'react-resizable-panels';
 
 type UseTeacherWorkbenchPanelControlsParams = {
-  workbenchPanelRef: MutableRefObject<PanelImperativeHandle | null>
-  skillsOpen: boolean
-  setSkillsOpen: (value: boolean | ((prev: boolean) => boolean)) => void
-  isMobileLayout: boolean
-  workbenchMaxWidth: number
-  workbenchMinWidth: number
-  defaultWorkbenchWidth: number
-}
+  workbenchPanelRef: MutableRefObject<PanelImperativeHandle | null>;
+  skillsOpen: boolean;
+  setSkillsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  isMobileLayout: boolean;
+  workbenchMaxWidth: number;
+  workbenchMinWidth: number;
+  defaultWorkbenchWidth: number;
+};
 
 export function useTeacherWorkbenchPanelControls(params: UseTeacherWorkbenchPanelControlsParams) {
   const {
@@ -20,51 +20,54 @@ export function useTeacherWorkbenchPanelControls(params: UseTeacherWorkbenchPane
     workbenchMaxWidth,
     workbenchMinWidth,
     defaultWorkbenchWidth,
-  } = params
-  const [isWorkbenchResizing, setIsWorkbenchResizing] = useState(false)
+  } = params;
+  const [isWorkbenchResizing, setIsWorkbenchResizing] = useState(false);
 
   const startWorkbenchResize = useCallback(() => {
-    setIsWorkbenchResizing(true)
-  }, [])
+    setIsWorkbenchResizing(true);
+  }, []);
 
   const handleWorkbenchResizeReset = useCallback(() => {
-    const panel = workbenchPanelRef.current
-    if (!panel) return
-    panel.resize(defaultWorkbenchWidth)
-    panel.expand()
-    if (!skillsOpen) setSkillsOpen(true)
-  }, [defaultWorkbenchWidth, skillsOpen, setSkillsOpen, workbenchPanelRef])
+    const panel = workbenchPanelRef.current;
+    if (!panel) return;
+    panel.resize(defaultWorkbenchWidth);
+    panel.expand();
+    if (!skillsOpen) setSkillsOpen(true);
+  }, [defaultWorkbenchWidth, skillsOpen, setSkillsOpen, workbenchPanelRef]);
 
   useEffect(() => {
-    const panel = workbenchPanelRef.current
-    if (!panel) return
+    const panel = workbenchPanelRef.current;
+    if (!panel) return;
     if (isMobileLayout || !skillsOpen) {
-      panel.collapse()
-      return
+      panel.collapse();
+      return;
     }
-    panel.expand()
-    const currentWidth = panel.getSize().inPixels
-    if (!Number.isFinite(currentWidth)) return
-    const clamped = Math.min(workbenchMaxWidth, Math.max(workbenchMinWidth, Math.round(currentWidth)))
+    panel.expand();
+    const currentWidth = panel.getSize().inPixels;
+    if (!Number.isFinite(currentWidth)) return;
+    const clamped = Math.min(
+      workbenchMaxWidth,
+      Math.max(workbenchMinWidth, Math.round(currentWidth)),
+    );
     if (Math.abs(clamped - currentWidth) > 1) {
-      panel.resize(clamped)
+      panel.resize(clamped);
     }
-  }, [isMobileLayout, skillsOpen, workbenchMaxWidth, workbenchMinWidth, workbenchPanelRef])
+  }, [isMobileLayout, skillsOpen, workbenchMaxWidth, workbenchMinWidth, workbenchPanelRef]);
 
   useEffect(() => {
-    if (!isWorkbenchResizing || typeof window === 'undefined') return
-    const stop = () => setIsWorkbenchResizing(false)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
+    if (!isWorkbenchResizing || typeof window === 'undefined') return;
+    const stop = () => setIsWorkbenchResizing(false);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
     return () => {
-      window.removeEventListener('pointerup', stop)
-      window.removeEventListener('pointercancel', stop)
-    }
-  }, [isWorkbenchResizing])
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [isWorkbenchResizing]);
 
   return {
     isWorkbenchResizing,
     startWorkbenchResize,
     handleWorkbenchResizeReset,
-  }
+  };
 }

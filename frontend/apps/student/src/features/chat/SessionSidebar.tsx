@@ -1,7 +1,7 @@
-import SessionSidebarDialogs from './SessionSidebarDialogs'
-import SessionSidebarHistorySection from './SessionSidebarHistorySection'
-import SessionSidebarLearningSection from './SessionSidebarLearningSection'
-import type { SessionSidebarProps } from './sessionSidebarTypes'
+import SessionSidebarDialogs from './SessionSidebarDialogs';
+import SessionSidebarHistorySection from './SessionSidebarHistorySection';
+import SessionSidebarLearningSection from './SessionSidebarLearningSection';
+import type { SessionSidebarProps } from './sessionSidebarTypes';
 
 export default function SessionSidebar(props: SessionSidebarProps) {
   return (
@@ -12,7 +12,10 @@ export default function SessionSidebar(props: SessionSidebarProps) {
         aria-label="关闭会话侧栏"
         onClick={() => props.dispatch({ type: 'SET', field: 'sidebarOpen', value: false })}
       />
-      <aside id="student-session-sidebar" className={`session-sidebar ${props.sidebarOpen ? 'open' : 'collapsed'}`}>
+      <aside
+        id="student-session-sidebar"
+        className={`session-sidebar ${props.sidebarOpen ? 'open' : 'collapsed'}`}
+      >
         {props.showHistorySection !== false ? (
           <SessionSidebarHistorySection
             dispatch={props.dispatch}
@@ -76,5 +79,5 @@ export default function SessionSidebar(props: SessionSidebarProps) {
         confirmArchiveDialog={props.confirmArchiveDialog}
       />
     </>
-  )
+  );
 }

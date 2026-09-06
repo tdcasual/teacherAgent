@@ -124,11 +124,11 @@
 
 ### AR-L3
 - 风险描述：prettier 只扫描 `frontend/apps/shared`，teacher/student 未纳入。
-- 状态：已接受
+- 状态：已关闭
+- 关闭说明：2026-09-06 B3：`format:check` 改为 `apps/**/*.{ts,tsx,css}`，并对 teacher/student 做一次 format。
 - Owner：前端
 - 下次复审日期：2026-12-01
 - 退出条件：prettier 纳入 `apps/teacher` + `apps/student` 且一次 format PR。
-- 补偿控制：CI `frontend-quality` 对 teacher/student 跑 eslint / typecheck / build；`format:check` 至少覆盖 shared。
 
 ## 持续关注项
 1. 上传链路资源上限（数量/大小/MIME）必须持续防回退。

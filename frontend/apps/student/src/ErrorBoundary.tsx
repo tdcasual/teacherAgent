@@ -1,54 +1,73 @@
-import React from 'react'
+import React from 'react';
 
 type Props = {
-  children: React.ReactNode
-}
+  children: React.ReactNode;
+};
 
 type State = {
-  error: Error | null
-}
+  error: Error | null;
+};
 
-const AUTH_TOKEN_KEY = 'studentAuthAccessToken'
-const CLEARABLE_PREFIXES = ['studentPendingChatJob:', 'studentSessionViewState:']
+const AUTH_TOKEN_KEY = 'studentAuthAccessToken';
+const CLEARABLE_PREFIXES = ['studentPendingChatJob:', 'studentSessionViewState:'];
 
 const safeClearLocalCache = () => {
   try {
-    const storage = window.localStorage
-    const keys: string[] = []
+    const storage = window.localStorage;
+    const keys: string[] = [];
     for (let i = 0; i < storage.length; i += 1) {
-      const key = storage.key(i)
-      if (key) keys.push(key)
+      const key = storage.key(i);
+      if (key) keys.push(key);
     }
     for (const key of keys) {
       if (key === AUTH_TOKEN_KEY || CLEARABLE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-        storage.removeItem(key)
+        storage.removeItem(key);
       }
     }
   } catch {
     // ignore
   }
-}
+};
 
 export default class ErrorBoundary extends React.Component<Props, State> {
-  state: State = { error: null }
+  state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error }
+    return { error };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // eslint-disable-next-line no-console
-    console.error('Student app crashed', error, info)
+    console.error('Student app crashed', error, info);
   }
 
   render() {
-    if (!this.state.error) return this.props.children
-    const message = this.state.error?.message || String(this.state.error)
+    if (!this.state.error) return this.props.children;
+    const message = this.state.error?.message || String(this.state.error);
     return (
-      <div style={{ padding: 16, maxWidth: 880, margin: '0 auto', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
+      <div
+        style={{
+          padding: 16,
+          maxWidth: 880,
+          margin: '0 auto',
+          fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+        }}
+      >
         <h1 style={{ fontSize: 18, margin: '8px 0' }}>页面发生错误</h1>
-        <p style={{ margin: '8px 0', color: '#444' }}>请尝试刷新页面；如果反复出现，可以清空本地缓存后重试。</p>
-        <pre style={{ whiteSpace: 'pre-wrap', background: '#f6f6f6', padding: 12, borderRadius: 8, color: '#222' }}>{message}</pre>
+        <p style={{ margin: '8px 0', color: '#444' }}>
+          请尝试刷新页面；如果反复出现，可以清空本地缓存后重试。
+        </p>
+        <pre
+          style={{
+            whiteSpace: 'pre-wrap',
+            background: '#f6f6f6',
+            padding: 12,
+            borderRadius: 8,
+            color: '#222',
+          }}
+        >
+          {message}
+        </pre>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button type="button" onClick={() => window.location.reload()}>
             刷新页面
@@ -56,15 +75,14 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <button
             type="button"
             onClick={() => {
-              safeClearLocalCache()
-              window.location.reload()
+              safeClearLocalCache();
+              window.location.reload();
             }}
           >
             清空本地缓存并刷新
           </button>
         </div>
       </div>
-    )
+    );
   }
 }
-

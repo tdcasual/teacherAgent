@@ -1,77 +1,86 @@
-import { useState } from 'react'
+import { useState } from 'react';
 
 import type {
   StudentMemoryInsightsResponse,
   StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
   TeacherMemoryProposal,
-} from '../../../appTypes'
+} from '../../../appTypes';
 
-type MemoryStatusFilter = 'applied' | 'rejected' | 'all'
-type StudentMemoryStatusFilter = 'proposed' | 'applied' | 'rejected' | 'all'
+type MemoryStatusFilter = 'applied' | 'rejected' | 'all';
+type StudentMemoryStatusFilter = 'proposed' | 'applied' | 'rejected' | 'all';
 
-type TopQueryItem = NonNullable<TeacherMemoryInsightsResponse['top_queries']>[number]
+type TopQueryItem = NonNullable<TeacherMemoryInsightsResponse['top_queries']>[number];
 
 const studentMemoryTypeLabel = (value: string) => {
-  const key = String(value || '').trim().toLowerCase()
-  if (key === 'learning_preference') return '学习偏好'
-  if (key === 'stable_misconception') return '稳定误区'
-  if (key === 'long_term_goal') return '长期目标'
-  if (key === 'effective_intervention') return '有效干预'
-  return key || '未分类'
-}
+  const key = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (key === 'learning_preference') return '学习偏好';
+  if (key === 'stable_misconception') return '稳定误区';
+  if (key === 'long_term_goal') return '长期目标';
+  if (key === 'effective_intervention') return '有效干预';
+  return key || '未分类';
+};
 
 const studentMemoryStatusLabel = (value: string) => {
-  const key = String(value || '').trim().toLowerCase()
-  if (key === 'applied') return '已通过'
-  if (key === 'rejected') return '已拒绝'
-  if (key === 'deleted') return '已删除'
-  return '待审核'
-}
+  const key = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (key === 'applied') return '已通过';
+  if (key === 'rejected') return '已拒绝';
+  if (key === 'deleted') return '已删除';
+  return '待审核';
+};
 
 const studentMemoryStatusClass = (value: string) => {
-  const key = String(value || '').trim().toLowerCase()
-  if (key === 'applied') return 'text-success bg-success-soft border-success'
-  if (key === 'rejected') return 'text-danger bg-danger-soft border-danger'
-  if (key === 'deleted') return 'text-muted bg-surface-soft border-border'
-  return 'text-warning bg-warning-soft border-warning'
-}
+  const key = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (key === 'applied') return 'text-success bg-success-soft border-success';
+  if (key === 'rejected') return 'text-danger bg-danger-soft border-danger';
+  if (key === 'deleted') return 'text-muted bg-surface-soft border-border';
+  return 'text-warning bg-warning-soft border-warning';
+};
 
-const statusCount = (insights: StudentMemoryInsightsResponse | null | undefined, status: string) => {
-  const raw = insights?.status_counts?.[status]
-  return Number.isFinite(raw) ? Number(raw) : 0
-}
+const statusCount = (
+  insights: StudentMemoryInsightsResponse | null | undefined,
+  status: string,
+) => {
+  const raw = insights?.status_counts?.[status];
+  return Number.isFinite(raw) ? Number(raw) : 0;
+};
 
 const typeCountItems = (insights: StudentMemoryInsightsResponse | null | undefined) => {
-  const source = insights?.type_counts
-  if (!source || typeof source !== 'object') return []
+  const source = insights?.type_counts;
+  if (!source || typeof source !== 'object') return [];
   return Object.entries(source)
     .map(([key, value]) => ({ key, value: Number(value || 0) }))
     .filter((item) => Number.isFinite(item.value) && item.value > 0)
     .sort((a, b) => b.value - a.value)
-    .slice(0, 4)
-}
+    .slice(0, 4);
+};
 
 export type MemoryTabProps = {
-  memoryStatusFilter: MemoryStatusFilter
-  setMemoryStatusFilter: (filter: MemoryStatusFilter) => void
-  memoryInsights: TeacherMemoryInsightsResponse | null | undefined
-  proposalError: string
-  proposalLoading: boolean
-  proposals: TeacherMemoryProposal[]
-  onDeleteProposal: (proposalId: string) => Promise<void>
+  memoryStatusFilter: MemoryStatusFilter;
+  setMemoryStatusFilter: (filter: MemoryStatusFilter) => void;
+  memoryInsights: TeacherMemoryInsightsResponse | null | undefined;
+  proposalError: string;
+  proposalLoading: boolean;
+  proposals: TeacherMemoryProposal[];
+  onDeleteProposal: (proposalId: string) => Promise<void>;
 
-  studentMemoryStatusFilter: StudentMemoryStatusFilter
-  setStudentMemoryStatusFilter: (filter: StudentMemoryStatusFilter) => void
-  studentMemoryStudentFilter: string
-  setStudentMemoryStudentFilter: (studentId: string) => void
-  studentMemoryInsights: StudentMemoryInsightsResponse | null | undefined
-  studentProposalError: string
-  studentProposalLoading: boolean
-  studentProposals: StudentMemoryProposal[]
-  onReviewStudentProposal: (proposalId: string, approve: boolean) => Promise<void>
-  onDeleteStudentProposal: (proposalId: string) => Promise<void>
-}
+  studentMemoryStatusFilter: StudentMemoryStatusFilter;
+  setStudentMemoryStatusFilter: (filter: StudentMemoryStatusFilter) => void;
+  studentMemoryStudentFilter: string;
+  setStudentMemoryStudentFilter: (studentId: string) => void;
+  studentMemoryInsights: StudentMemoryInsightsResponse | null | undefined;
+  studentProposalError: string;
+  studentProposalLoading: boolean;
+  studentProposals: StudentMemoryProposal[];
+  onReviewStudentProposal: (proposalId: string, approve: boolean) => Promise<void>;
+  onDeleteStudentProposal: (proposalId: string) => Promise<void>;
+};
 
 export default function MemoryTab({
   memoryStatusFilter,
@@ -92,63 +101,66 @@ export default function MemoryTab({
   onReviewStudentProposal,
   onDeleteStudentProposal,
 }: MemoryTabProps) {
-  const [deletingProposalId, setDeletingProposalId] = useState('')
-  const [deleteError, setDeleteError] = useState('')
-  const [reviewingStudentProposalId, setReviewingStudentProposalId] = useState('')
-  const [deletingStudentProposalId, setDeletingStudentProposalId] = useState('')
-  const [studentActionError, setStudentActionError] = useState('')
+  const [deletingProposalId, setDeletingProposalId] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [reviewingStudentProposalId, setReviewingStudentProposalId] = useState('');
+  const [deletingStudentProposalId, setDeletingStudentProposalId] = useState('');
+  const [studentActionError, setStudentActionError] = useState('');
 
   const handleDeleteProposal = async (proposalId: string) => {
-    const pid = String(proposalId || '').trim()
-    if (!pid) return
-    const confirmed = window.confirm('确认删除这条自动记忆记录？删除后将不再用于自动记忆检索。')
-    if (!confirmed) return
-    setDeleteError('')
-    setDeletingProposalId(pid)
+    const pid = String(proposalId || '').trim();
+    if (!pid) return;
+    const confirmed = window.confirm('确认删除这条自动记忆记录？删除后将不再用于自动记忆检索。');
+    if (!confirmed) return;
+    setDeleteError('');
+    setDeletingProposalId(pid);
     try {
-      await onDeleteProposal(pid)
+      await onDeleteProposal(pid);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error || '删除失败')
-      setDeleteError(message)
+      const message = error instanceof Error ? error.message : String(error || '删除失败');
+      setDeleteError(message);
     } finally {
-      setDeletingProposalId('')
+      setDeletingProposalId('');
     }
-  }
+  };
 
   const handleReviewStudentProposal = async (proposalId: string, approve: boolean) => {
-    const pid = String(proposalId || '').trim()
-    if (!pid) return
-    setStudentActionError('')
-    setReviewingStudentProposalId(pid)
+    const pid = String(proposalId || '').trim();
+    if (!pid) return;
+    setStudentActionError('');
+    setReviewingStudentProposalId(pid);
     try {
-      await onReviewStudentProposal(pid, approve)
+      await onReviewStudentProposal(pid, approve);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error || '审核失败')
-      setStudentActionError(message)
+      const message = error instanceof Error ? error.message : String(error || '审核失败');
+      setStudentActionError(message);
     } finally {
-      setReviewingStudentProposalId('')
+      setReviewingStudentProposalId('');
     }
-  }
+  };
 
   const handleDeleteStudentProposal = async (proposalId: string) => {
-    const pid = String(proposalId || '').trim()
-    if (!pid) return
-    const confirmed = window.confirm('确认删除这条学生记忆提案？')
-    if (!confirmed) return
-    setStudentActionError('')
-    setDeletingStudentProposalId(pid)
+    const pid = String(proposalId || '').trim();
+    if (!pid) return;
+    const confirmed = window.confirm('确认删除这条学生记忆提案？');
+    if (!confirmed) return;
+    setStudentActionError('');
+    setDeletingStudentProposalId(pid);
     try {
-      await onDeleteStudentProposal(pid)
+      await onDeleteStudentProposal(pid);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error || '删除失败')
-      setStudentActionError(message)
+      const message = error instanceof Error ? error.message : String(error || '删除失败');
+      setStudentActionError(message);
     } finally {
-      setDeletingStudentProposalId('')
+      setDeletingStudentProposalId('');
     }
-  }
+  };
 
   return (
-    <section className="grid gap-[12px] p-0 border-none rounded-none bg-transparent shadow-none min-h-0 flex-1 overflow-auto" style={{ overscrollBehavior: 'contain' }}>
+    <section
+      className="grid gap-[12px] p-0 border-none rounded-none bg-transparent shadow-none min-h-0 flex-1 overflow-auto"
+      style={{ overscrollBehavior: 'contain' }}
+    >
       <div className="grid gap-[10px] rounded-[14px] border border-border bg-white p-[10px_12px]">
         <div className="flex justify-between items-center gap-3">
           <strong>自动记忆记录</strong>
@@ -181,19 +193,27 @@ export default function MemoryTab({
         {memoryInsights?.summary && (
           <div className="grid grid-cols-3 gap-2 max-[900px]:grid-cols-2">
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{memoryInsights.summary.active_total ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {memoryInsights.summary.active_total ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">活跃记忆</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{memoryInsights.summary.expired_total ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {memoryInsights.summary.expired_total ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">已过期</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{memoryInsights.summary.superseded_total ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {memoryInsights.summary.superseded_total ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">已替代</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{memoryInsights.summary.avg_priority_active ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {memoryInsights.summary.avg_priority_active ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">平均优先级</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
@@ -203,44 +223,58 @@ export default function MemoryTab({
               <div className="mt-0.5 text-[11px] text-muted">检索命中率(14d)</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{memoryInsights.retrieval?.search_calls ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {memoryInsights.retrieval?.search_calls ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">检索次数(14d)</div>
             </div>
           </div>
         )}
-        {Array.isArray(memoryInsights?.top_queries) && (memoryInsights?.top_queries || []).length > 0 && (
-          <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
-            <div className="muted">高频命中查询（14天）</div>
-            {(memoryInsights?.top_queries || []).slice(0, 5).map((q: TopQueryItem) => (
-              <div key={q.query} className="text-[12px] text-muted flex justify-between gap-2 flex-wrap">
-                <span>{q.query}</span>
-                <span>
-                  {q.hit_calls}/{q.calls}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {Array.isArray(memoryInsights?.top_queries) &&
+          (memoryInsights?.top_queries || []).length > 0 && (
+            <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
+              <div className="muted">高频命中查询（14天）</div>
+              {(memoryInsights?.top_queries || []).slice(0, 5).map((q: TopQueryItem) => (
+                <div
+                  key={q.query}
+                  className="text-[12px] text-muted flex justify-between gap-2 flex-wrap"
+                >
+                  <span>{q.query}</span>
+                  <span>
+                    {q.hit_calls}/{q.calls}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         {proposalError ? <div className="status err">{proposalError}</div> : null}
         {deleteError ? <div className="status err">{deleteError}</div> : null}
-        {!proposalLoading && proposals.length === 0 ? <div className="text-[12px] text-muted">暂无记录。</div> : null}
+        {!proposalLoading && proposals.length === 0 ? (
+          <div className="text-[12px] text-muted">暂无记录。</div>
+        ) : null}
         {proposals.length > 0 && (
           <div className="grid gap-[10px]">
             {proposals.map((p) => (
-              <div key={p.proposal_id} className="border border-border rounded-[14px] bg-white p-[10px_12px] grid gap-2">
+              <div
+                key={p.proposal_id}
+                className="border border-border rounded-[14px] bg-white p-[10px_12px] grid gap-2"
+              >
                 <div className="font-semibold">
-                  {p.title || 'Memory Update'} <span className="muted">[{p.target || 'MEMORY'}]</span>
+                  {p.title || 'Memory Update'}{' '}
+                  <span className="muted">[{p.target || 'MEMORY'}]</span>
                 </div>
                 <div className="text-[12px] text-muted flex justify-between gap-2 flex-wrap">
                   <span>{p.created_at || '-'}</span>
                   <span>{p.source || 'manual'}</span>
-                  <span className={`rounded-lg px-2 py-0.5 text-[11px] border ${
-                    String(p.status || '').toLowerCase() === 'applied'
-                      ? 'text-success bg-success-soft border-success'
-                      : String(p.status || '').toLowerCase() === 'rejected'
-                        ? 'text-danger bg-danger-soft border-danger'
-                        : 'text-muted bg-surface border-border'
-                  }`}>
+                  <span
+                    className={`rounded-lg px-2 py-0.5 text-[11px] border ${
+                      String(p.status || '').toLowerCase() === 'applied'
+                        ? 'text-success bg-success-soft border-success'
+                        : String(p.status || '').toLowerCase() === 'rejected'
+                          ? 'text-danger bg-danger-soft border-danger'
+                          : 'text-muted bg-surface border-border'
+                    }`}
+                  >
                     {String(p.status || '').toLowerCase() === 'applied'
                       ? '已写入'
                       : String(p.status || '').toLowerCase() === 'rejected'
@@ -248,7 +282,9 @@ export default function MemoryTab({
                         : '待处理'}
                   </span>
                 </div>
-                <div className="text-[13px] leading-[1.45] whitespace-pre-wrap">{p.content || ''}</div>
+                <div className="text-[13px] leading-[1.45] whitespace-pre-wrap">
+                  {p.content || ''}
+                </div>
                 <div className="text-[12px] text-muted flex justify-between gap-2 flex-wrap">
                   <span>{p.proposal_id}</span>
                   <span>{p.applied_at || p.rejected_at || '-'}</span>
@@ -258,7 +294,7 @@ export default function MemoryTab({
                     type="button"
                     className="ghost"
                     onClick={() => {
-                      void handleDeleteProposal(p.proposal_id)
+                      void handleDeleteProposal(p.proposal_id);
                     }}
                     disabled={Boolean(deletingProposalId)}
                   >
@@ -320,19 +356,27 @@ export default function MemoryTab({
         {studentMemoryInsights ? (
           <div className="grid grid-cols-4 gap-2 max-[900px]:grid-cols-2">
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{studentMemoryInsights.total ?? 0}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {studentMemoryInsights.total ?? 0}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">提案总数(14d)</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{statusCount(studentMemoryInsights, 'proposed')}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {statusCount(studentMemoryInsights, 'proposed')}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">待审核</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{statusCount(studentMemoryInsights, 'applied')}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {statusCount(studentMemoryInsights, 'applied')}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">已通过</div>
             </div>
             <div className="border border-border rounded-xl bg-white p-[8px_10px]">
-              <div className="text-[16px] font-bold text-ink">{statusCount(studentMemoryInsights, 'rejected')}</div>
+              <div className="text-[16px] font-bold text-ink">
+                {statusCount(studentMemoryInsights, 'rejected')}
+              </div>
               <div className="mt-0.5 text-[11px] text-muted">已拒绝</div>
             </div>
           </div>
@@ -342,7 +386,10 @@ export default function MemoryTab({
           <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
             <div className="muted">类型分布（14天）</div>
             {typeCountItems(studentMemoryInsights).map((item) => (
-              <div key={item.key} className="text-[12px] text-muted flex justify-between gap-2 flex-wrap">
+              <div
+                key={item.key}
+                className="text-[12px] text-muted flex justify-between gap-2 flex-wrap"
+              >
                 <span>{studentMemoryTypeLabel(item.key)}</span>
                 <span>{item.value}</span>
               </div>
@@ -359,17 +406,22 @@ export default function MemoryTab({
         {studentProposals.length > 0 ? (
           <div className="grid gap-[10px]">
             {studentProposals.map((proposal) => {
-              const status = String(proposal.status || '').toLowerCase()
-              const isProposed = status === 'proposed' || !status
-              const isReviewingThis = reviewingStudentProposalId === proposal.proposal_id
-              const isDeletingThis = deletingStudentProposalId === proposal.proposal_id
-              const busy = Boolean(reviewingStudentProposalId || deletingStudentProposalId)
+              const status = String(proposal.status || '').toLowerCase();
+              const isProposed = status === 'proposed' || !status;
+              const isReviewingThis = reviewingStudentProposalId === proposal.proposal_id;
+              const isDeletingThis = deletingStudentProposalId === proposal.proposal_id;
+              const busy = Boolean(reviewingStudentProposalId || deletingStudentProposalId);
 
               return (
-                <div key={proposal.proposal_id} className="border border-border rounded-[14px] bg-white p-[10px_12px] grid gap-2">
+                <div
+                  key={proposal.proposal_id}
+                  className="border border-border rounded-[14px] bg-white p-[10px_12px] grid gap-2"
+                >
                   <div className="font-semibold flex justify-between gap-2 flex-wrap items-center">
                     <span>{studentMemoryTypeLabel(proposal.memory_type || '')}</span>
-                    <span className={`rounded-lg px-2 py-0.5 text-[11px] border ${studentMemoryStatusClass(status)}`}>
+                    <span
+                      className={`rounded-lg px-2 py-0.5 text-[11px] border ${studentMemoryStatusClass(status)}`}
+                    >
                       {studentMemoryStatusLabel(status)}
                     </span>
                   </div>
@@ -380,7 +432,9 @@ export default function MemoryTab({
                     <span>{proposal.source || 'manual'}</span>
                   </div>
 
-                  <div className="text-[13px] leading-[1.45] whitespace-pre-wrap">{proposal.content || ''}</div>
+                  <div className="text-[13px] leading-[1.45] whitespace-pre-wrap">
+                    {proposal.content || ''}
+                  </div>
 
                   {Array.isArray(proposal.evidence_refs) && proposal.evidence_refs.length > 0 ? (
                     <div className="text-[12px] text-muted break-all">
@@ -407,7 +461,7 @@ export default function MemoryTab({
                           className="ghost"
                           disabled={busy}
                           onClick={() => {
-                            void handleReviewStudentProposal(proposal.proposal_id, true)
+                            void handleReviewStudentProposal(proposal.proposal_id, true);
                           }}
                         >
                           {isReviewingThis ? '处理中…' : '通过'}
@@ -417,7 +471,7 @@ export default function MemoryTab({
                           className="ghost"
                           disabled={busy}
                           onClick={() => {
-                            void handleReviewStudentProposal(proposal.proposal_id, false)
+                            void handleReviewStudentProposal(proposal.proposal_id, false);
                           }}
                         >
                           {isReviewingThis ? '处理中…' : '拒绝'}
@@ -429,18 +483,18 @@ export default function MemoryTab({
                       className="ghost"
                       disabled={busy}
                       onClick={() => {
-                        void handleDeleteStudentProposal(proposal.proposal_id)
+                        void handleDeleteStudentProposal(proposal.proposal_id);
                       }}
                     >
                       {isDeletingThis ? '删除中…' : '删除'}
                     </button>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         ) : null}
       </div>
     </section>
-  )
+  );
 }

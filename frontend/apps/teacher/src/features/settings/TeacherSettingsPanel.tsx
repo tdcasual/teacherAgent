@@ -1,16 +1,16 @@
-import SettingsModal from './SettingsModal'
-import ModelSettingsPage from './ModelSettingsPage'
+import SettingsModal from './SettingsModal';
+import ModelSettingsPage from './ModelSettingsPage';
 
 type TeacherSettingsPanelProps = {
-  open: boolean
-  onClose: () => void
-  apiBase: string
-  onApiBaseChange: (value: string) => void
-}
+  open: boolean;
+  onClose: () => void;
+  apiBase: string;
+  onApiBaseChange: (value: string) => void;
+};
 
 const SETTINGS_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'model-settings', label: '模型设置' },
-]
+];
 
 export default function TeacherSettingsPanel({
   open,
@@ -28,5 +28,5 @@ export default function TeacherSettingsPanel({
     >
       <ModelSettingsPage apiBase={apiBase} onApiBaseChange={onApiBaseChange} />
     </SettingsModal>
-  )
+  );
 }

@@ -1,25 +1,25 @@
-import type { InvocationTriggerType } from './invocation'
+import type { InvocationTriggerType } from './invocation';
 
 type MentionOption = {
-  id: string
-  title: string
-  desc: string
-  type: InvocationTriggerType
-}
+  id: string;
+  title: string;
+  desc: string;
+  type: InvocationTriggerType;
+};
 
 type MentionState = {
-  type: InvocationTriggerType
-  items: MentionOption[]
-}
+  type: InvocationTriggerType;
+  items: MentionOption[];
+};
 
 type Props = {
-  mention: MentionState | null
-  mentionIndex: number
-  onInsert: (item: MentionOption) => void
-}
+  mention: MentionState | null;
+  mentionIndex: number;
+  onInsert: (item: MentionOption) => void;
+};
 
 export default function MentionPanel({ mention, mentionIndex, onInsert }: Props) {
-  if (!mention || mention.items.length === 0) return null
+  if (!mention || mention.items.length === 0) return null;
   return (
     <div className="mention-panel border border-dashed border-border rounded-[14px] px-[10px] py-2 bg-[#fbf6ee]">
       <div className="text-[12px] text-muted mb-2">能力建议（↑↓ 选择 / 回车插入）</div>
@@ -29,9 +29,7 @@ export default function MentionPanel({ mention, mentionIndex, onInsert }: Props)
             key={`${item.type}:${item.id}`}
             type="button"
             className={`text-left px-[10px] py-2 rounded-[10px] bg-white cursor-pointer flex gap-2 items-baseline border ${
-              index === mentionIndex
-                ? 'border-accent bg-[#e8f3f1]'
-                : 'border-transparent'
+              index === mentionIndex ? 'border-accent bg-[#e8f3f1]' : 'border-transparent'
             }`}
             onClick={() => onInsert(item)}
           >
@@ -42,5 +40,5 @@ export default function MentionPanel({ mention, mentionIndex, onInsert }: Props)
         ))}
       </div>
     </div>
-  )
+  );
 }

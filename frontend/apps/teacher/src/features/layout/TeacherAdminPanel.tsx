@@ -1,13 +1,13 @@
-import type { MutableRefObject, ReactNode } from 'react'
+import type { MutableRefObject, ReactNode } from 'react';
 
 type TeacherAdminPanelProps = {
-  panelRef: MutableRefObject<HTMLDivElement | null>
-  authed: boolean
-  authSubjectLabel: string
-  onOpenModelSettingsPanel: () => void
-  onClose: () => void
-  children: ReactNode
-}
+  panelRef: MutableRefObject<HTMLDivElement | null>;
+  authed: boolean;
+  authSubjectLabel: string;
+  onOpenModelSettingsPanel: () => void;
+  onClose: () => void;
+  children: ReactNode;
+};
 
 export default function TeacherAdminPanel({
   panelRef,
@@ -41,12 +41,16 @@ export default function TeacherAdminPanel({
 
       <div className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:color-mix(in_oklab,var(--color-panel)_88%,var(--color-surface))] px-3 py-2.5">
         <div className="text-xs text-muted">模型、认证和密码操作集中在这里。</div>
-        <button type="button" className="teacher-drawer-link justify-start" onClick={onOpenModelSettingsPanel}>
+        <button
+          type="button"
+          className="teacher-drawer-link justify-start"
+          onClick={onOpenModelSettingsPanel}
+        >
           模型设置
         </button>
       </div>
 
       {children}
     </div>
-  )
+  );
 }

@@ -1,24 +1,31 @@
-import { ConfirmDialog, PromptDialog } from '../../../../shared/dialog'
-import type { SessionSidebarProps } from './sessionSidebarTypes'
+import { ConfirmDialog, PromptDialog } from '../../../../shared/dialog';
+import type { SessionSidebarProps } from './sessionSidebarTypes';
 
 type Props = Pick<
-SessionSidebarProps,
-| 'renameDialogSessionId'
-| 'archiveDialogSessionId'
-| 'getSessionTitle'
-| 'archiveDialogActionLabel'
-| 'archiveDialogIsArchived'
-| 'cancelRenameDialog'
-| 'confirmRenameDialog'
-| 'cancelArchiveDialog'
-| 'confirmArchiveDialog'
->
+  SessionSidebarProps,
+  | 'renameDialogSessionId'
+  | 'archiveDialogSessionId'
+  | 'getSessionTitle'
+  | 'archiveDialogActionLabel'
+  | 'archiveDialogIsArchived'
+  | 'cancelRenameDialog'
+  | 'confirmRenameDialog'
+  | 'cancelArchiveDialog'
+  | 'confirmArchiveDialog'
+>;
 
 export default function SessionSidebarDialogs(props: Props) {
   const {
-    renameDialogSessionId, archiveDialogSessionId, getSessionTitle, archiveDialogActionLabel,
-    archiveDialogIsArchived, cancelRenameDialog, confirmRenameDialog, cancelArchiveDialog, confirmArchiveDialog,
-  } = props
+    renameDialogSessionId,
+    archiveDialogSessionId,
+    getSessionTitle,
+    archiveDialogActionLabel,
+    archiveDialogIsArchived,
+    cancelRenameDialog,
+    confirmRenameDialog,
+    cancelArchiveDialog,
+    confirmArchiveDialog,
+  } = props;
 
   return (
     <>
@@ -36,7 +43,9 @@ export default function SessionSidebarDialogs(props: Props) {
       <ConfirmDialog
         open={Boolean(archiveDialogSessionId)}
         title={`确认${archiveDialogActionLabel}会话？`}
-        description={archiveDialogSessionId ? `会话：${getSessionTitle(archiveDialogSessionId)}` : undefined}
+        description={
+          archiveDialogSessionId ? `会话：${getSessionTitle(archiveDialogSessionId)}` : undefined
+        }
         confirmText={archiveDialogActionLabel}
         confirmTone={archiveDialogIsArchived ? 'primary' : 'danger'}
         cancelText="取消"
@@ -44,5 +53,5 @@ export default function SessionSidebarDialogs(props: Props) {
         onConfirm={confirmArchiveDialog}
       />
     </>
-  )
+  );
 }

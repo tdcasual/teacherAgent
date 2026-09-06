@@ -1,13 +1,13 @@
-import { useCallback } from 'react'
+import { useCallback } from 'react';
 
 type UseTeacherUiPanelsParams = {
-  skillsOpen: boolean
-  setSkillsOpen: (value: boolean | ((prev: boolean) => boolean)) => void
-  setSessionSidebarOpen: (value: boolean | ((prev: boolean) => boolean)) => void
-  isMobileViewport: () => boolean
-  settingsOpen: boolean
-  setSettingsOpen: (value: boolean) => void
-}
+  skillsOpen: boolean;
+  setSkillsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  setSessionSidebarOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
+  isMobileViewport: () => boolean;
+  settingsOpen: boolean;
+  setSettingsOpen: (value: boolean) => void;
+};
 
 export function useTeacherUiPanels(params: UseTeacherUiPanelsParams) {
   const {
@@ -17,37 +17,37 @@ export function useTeacherUiPanels(params: UseTeacherUiPanelsParams) {
     isMobileViewport,
     settingsOpen,
     setSettingsOpen,
-  } = params
+  } = params;
 
   const toggleSkillsWorkbench = useCallback(() => {
     if (skillsOpen) {
-      setSkillsOpen(false)
-      return
+      setSkillsOpen(false);
+      return;
     }
-    setSkillsOpen(true)
-    if (isMobileViewport()) setSessionSidebarOpen(false)
-  }, [isMobileViewport, setSessionSidebarOpen, setSkillsOpen, skillsOpen])
+    setSkillsOpen(true);
+    if (isMobileViewport()) setSessionSidebarOpen(false);
+  }, [isMobileViewport, setSessionSidebarOpen, setSkillsOpen, skillsOpen]);
 
   const requestCloseSettings = useCallback(() => {
-    setSettingsOpen(false)
-  }, [setSettingsOpen])
+    setSettingsOpen(false);
+  }, [setSettingsOpen]);
 
   const toggleSettingsPanel = useCallback(() => {
     if (settingsOpen) {
-      requestCloseSettings()
-      return
+      requestCloseSettings();
+      return;
     }
-    setSettingsOpen(true)
-  }, [requestCloseSettings, setSettingsOpen, settingsOpen])
+    setSettingsOpen(true);
+  }, [requestCloseSettings, setSettingsOpen, settingsOpen]);
 
   const openModelSettingsPanel = useCallback(() => {
-    setSettingsOpen(true)
-  }, [setSettingsOpen])
+    setSettingsOpen(true);
+  }, [setSettingsOpen]);
 
   return {
     toggleSkillsWorkbench,
     requestCloseSettings,
     toggleSettingsPanel,
     openModelSettingsPanel,
-  }
+  };
 }

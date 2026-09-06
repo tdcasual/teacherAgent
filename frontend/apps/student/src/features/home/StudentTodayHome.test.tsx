@@ -1,15 +1,17 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { StudentTodayHomeViewModel } from '../../appTypes'
-import StudentTodayHome from './StudentTodayHome'
+import type { StudentTodayHomeViewModel } from '../../appTypes';
+import StudentTodayHome from './StudentTodayHome';
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
-const buildViewModel = (overrides: Partial<StudentTodayHomeViewModel> = {}): StudentTodayHomeViewModel => ({
+const buildViewModel = (
+  overrides: Partial<StudentTodayHomeViewModel> = {},
+): StudentTodayHomeViewModel => ({
   status: 'ready',
   title: '牛顿第二定律练习',
   summary: '今天先完成本次物理练习，再查看补充讲义。',
@@ -39,7 +41,7 @@ const buildViewModel = (overrides: Partial<StudentTodayHomeViewModel> = {}): Stu
     },
   ],
   ...overrides,
-})
+});
 
 describe('StudentTodayHome', () => {
   it('renders the home sections around a single primary task card', () => {
@@ -53,16 +55,16 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByText('3月14日 周六')).toBeTruthy()
-    expect(screen.getAllByText('牛顿第二定律练习').length).toBeGreaterThan(0)
-    expect(screen.getByText('练习题.pdf')).toBeTruthy()
-    expect(screen.getByText('已准备')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '进入任务' }).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { level: 1, name: '今日任务' })).toBeTruthy()
-    expect(screen.queryByText('历史与补充')).toBeNull()
-  })
+    expect(screen.getByText('3月14日 周六')).toBeTruthy();
+    expect(screen.getAllByText('牛顿第二定律练习').length).toBeGreaterThan(0);
+    expect(screen.getByText('练习题.pdf')).toBeTruthy();
+    expect(screen.getByText('已准备')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '进入任务' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { level: 1, name: '今日任务' })).toBeTruthy();
+    expect(screen.queryByText('历史与补充')).toBeNull();
+  });
 
   it('keeps the primary stage distinct from supplementary content', () => {
     render(
@@ -75,31 +77,31 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    const primaryStage = screen.getByTestId('student-today-primary-stage')
-    const secondaryStage = screen.getByTestId('student-today-secondary-stage')
-    const materialsStage = screen.getByTestId('student-home-materials-stage')
-    const progressStage = screen.getByTestId('student-home-progress-stage')
-    const historyStage = screen.getByTestId('student-home-history-stage')
+    const primaryStage = screen.getByTestId('student-today-primary-stage');
+    const secondaryStage = screen.getByTestId('student-today-secondary-stage');
+    const materialsStage = screen.getByTestId('student-home-materials-stage');
+    const progressStage = screen.getByTestId('student-home-progress-stage');
+    const historyStage = screen.getByTestId('student-home-history-stage');
 
-    expect(primaryStage.textContent).toContain('牛顿第二定律练习')
-    expect(primaryStage.textContent).toContain('进入任务')
-    expect(primaryStage.textContent).toContain('今日任务')
-    expect(primaryStage.textContent).not.toContain('开始练习')
-    expect(primaryStage.textContent).not.toContain('今日主线')
-    expect(primaryStage.textContent).not.toContain('TODAY FIRST')
-    expect(primaryStage.textContent).not.toContain('先从这里开始')
-    expect(secondaryStage.textContent).toContain('练习题.pdf')
-    expect(secondaryStage.textContent).toContain('已准备')
-    expect(secondaryStage.textContent).toContain('历史任务')
-    expect(secondaryStage.textContent).not.toContain('辅助区')
-    expect(secondaryStage.textContent).not.toContain('历史与补充')
-    expect(materialsStage.getAttribute('data-home-tier')).toBe('supporting')
-    expect(progressStage.getAttribute('data-home-tier')).toBe('supporting')
-    expect(historyStage.getAttribute('data-home-tier')).toBe('supporting')
-    expect(historyStage.getAttribute('data-home-style')).toBe('inline-links')
-  })
+    expect(primaryStage.textContent).toContain('牛顿第二定律练习');
+    expect(primaryStage.textContent).toContain('进入任务');
+    expect(primaryStage.textContent).toContain('今日任务');
+    expect(primaryStage.textContent).not.toContain('开始练习');
+    expect(primaryStage.textContent).not.toContain('今日主线');
+    expect(primaryStage.textContent).not.toContain('TODAY FIRST');
+    expect(primaryStage.textContent).not.toContain('先从这里开始');
+    expect(secondaryStage.textContent).toContain('练习题.pdf');
+    expect(secondaryStage.textContent).toContain('已准备');
+    expect(secondaryStage.textContent).toContain('历史任务');
+    expect(secondaryStage.textContent).not.toContain('辅助区');
+    expect(secondaryStage.textContent).not.toContain('历史与补充');
+    expect(materialsStage.getAttribute('data-home-tier')).toBe('supporting');
+    expect(progressStage.getAttribute('data-home-tier')).toBe('supporting');
+    expect(historyStage.getAttribute('data-home-tier')).toBe('supporting');
+    expect(historyStage.getAttribute('data-home-style')).toBe('inline-links');
+  });
 
   it('shows empty copy when teachers have not assigned work', () => {
     render(
@@ -127,12 +129,12 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getAllByText('老师尚未布置').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: '生成任务' })).toBeNull()
-    expect(screen.getByRole('button', { name: '作业记录' })).toBeTruthy()
-  })
+    expect(screen.getAllByText('老师尚未布置').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '生成任务' })).toBeNull();
+    expect(screen.getByRole('button', { name: '作业记录' })).toBeTruthy();
+  });
 
   it('shows generating feedback without an active primary action', () => {
     render(
@@ -151,11 +153,11 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByText('正在准备今天的任务')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '稍后查看' }).hasAttribute('disabled')).toBe(true)
-  })
+    expect(screen.getByText('正在准备今天的任务')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '稍后查看' }).hasAttribute('disabled')).toBe(true);
+  });
 
   it('shows continue copy for in-progress work', () => {
     render(
@@ -172,10 +174,10 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByRole('button', { name: '进入任务' })).toBeTruthy()
-  })
+    expect(screen.getByRole('button', { name: '进入任务' })).toBeTruthy();
+  });
 
   it('shows submitted copy and still keeps one primary action', () => {
     render(
@@ -204,19 +206,19 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={() => undefined}
         onOpenSubmit={() => undefined}
       />,
-    )
+    );
 
-    expect(screen.getByRole('button', { name: '查看提交' })).toBeTruthy()
-    expect(screen.getAllByTestId('student-today-primary-action')).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: '提交作业' })).toBeNull()
-  })
+    expect(screen.getByRole('button', { name: '查看提交' })).toBeTruthy();
+    expect(screen.getAllByTestId('student-today-primary-action')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: '提交作业' })).toBeNull();
+  });
 
   it('wires primary and secondary actions', () => {
-    const onPrimaryAction = vi.fn()
-    const onOpenHistory = vi.fn()
-    const onOpenFreeChat = vi.fn()
-    const onOpenAssignmentHistory = vi.fn()
-    const onOpenSubmit = vi.fn()
+    const onPrimaryAction = vi.fn();
+    const onOpenHistory = vi.fn();
+    const onOpenFreeChat = vi.fn();
+    const onOpenAssignmentHistory = vi.fn();
+    const onOpenSubmit = vi.fn();
 
     render(
       <StudentTodayHome
@@ -228,18 +230,18 @@ describe('StudentTodayHome', () => {
         onOpenAssignmentHistory={onOpenAssignmentHistory}
         onOpenSubmit={onOpenSubmit}
       />,
-    )
+    );
 
-    fireEvent.click(screen.getAllByRole('button', { name: '进入任务' })[0])
-    fireEvent.click(screen.getByRole('button', { name: '提交作业' }))
-    fireEvent.click(screen.getByRole('button', { name: '历史任务' }))
-    fireEvent.click(screen.getByRole('button', { name: '作业记录' }))
-    fireEvent.click(screen.getByRole('button', { name: '自由提问' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '进入任务' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '提交作业' }));
+    fireEvent.click(screen.getByRole('button', { name: '历史任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '作业记录' }));
+    fireEvent.click(screen.getByRole('button', { name: '自由提问' }));
 
-    expect(onPrimaryAction).toHaveBeenCalledTimes(1)
-    expect(onOpenSubmit).toHaveBeenCalledWith('A001')
-    expect(onOpenHistory).toHaveBeenCalledTimes(1)
-    expect(onOpenAssignmentHistory).toHaveBeenCalledTimes(1)
-    expect(onOpenFreeChat).toHaveBeenCalledTimes(1)
-  })
-})
+    expect(onPrimaryAction).toHaveBeenCalledTimes(1);
+    expect(onOpenSubmit).toHaveBeenCalledWith('A001');
+    expect(onOpenHistory).toHaveBeenCalledTimes(1);
+    expect(onOpenAssignmentHistory).toHaveBeenCalledTimes(1);
+    expect(onOpenFreeChat).toHaveBeenCalledTimes(1);
+  });
+});

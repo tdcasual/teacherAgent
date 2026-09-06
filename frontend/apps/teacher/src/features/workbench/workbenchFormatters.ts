@@ -1,11 +1,7 @@
-import type {
-  AssignmentProgress,
-  UploadDraft,
-  UploadJobStatus,
-} from '../../appTypes'
+import type { AssignmentProgress, UploadDraft, UploadJobStatus } from '../../appTypes';
 
 export const formatUploadJobStatus = (job: UploadJobStatus) => {
-  const lines: string[] = []
+  const lines: string[] = [];
   const statusMap: Record<string, string> = {
     queued: '排队中',
     processing: '解析中',
@@ -15,17 +11,17 @@ export const formatUploadJobStatus = (job: UploadJobStatus) => {
     created: '已创建作业',
     confirming: '确认中',
     cancelled: '已取消',
-  }
-  lines.push(`解析状态：${statusMap[job.status] || job.status}`)
-  if (job.progress !== undefined) lines.push(`进度：${job.progress}%`)
-  if (job.assignment_id) lines.push(`作业编号：${job.assignment_id}`)
-  if (job.question_count !== undefined) lines.push(`题目数量：${job.question_count}`)
-  if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? '文档' : '图片'}`)
-  if (job.error) lines.push(`错误：${job.error}`)
+  };
+  lines.push(`解析状态：${statusMap[job.status] || job.status}`);
+  if (job.progress !== undefined) lines.push(`进度：${job.progress}%`);
+  if (job.assignment_id) lines.push(`作业编号：${job.assignment_id}`);
+  if (job.question_count !== undefined) lines.push(`题目数量：${job.question_count}`);
+  if (job.delivery_mode) lines.push(`交付方式：${job.delivery_mode === 'pdf' ? '文档' : '图片'}`);
+  if (job.error) lines.push(`错误：${job.error}`);
 
-  if (job.error_detail) lines.push(`详情：${job.error_detail}`)
-  if (Array.isArray(job.hints) && job.hints.length) lines.push(`建议：${job.hints.join('；')}`)
-  if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`)
+  if (job.error_detail) lines.push(`详情：${job.error_detail}`);
+  if (Array.isArray(job.hints) && job.hints.length) lines.push(`建议：${job.hints.join('；')}`);
+  if (job.warnings && job.warnings.length) lines.push(`解析提示：${job.warnings.join('；')}`);
   if (job.requirements_missing && job.requirements_missing.length) {
     const missingLabelMap: Record<string, string> = {
       // 8-point requirements
@@ -47,19 +43,23 @@ export const formatUploadJobStatus = (job: UploadJobStatus) => {
       score: '分值',
       tags: '标签',
       type: '题型',
-    }
-    const missingCn = job.requirements_missing.map((key) => missingLabelMap[key] || key)
-    lines.push(`作业要求缺失项：${missingCn.join('、')}`)
+    };
+    const missingCn = job.requirements_missing.map((key) => missingLabelMap[key] || key);
+    lines.push(`作业要求缺失项：${missingCn.join('、')}`);
   }
   if (job.questions_preview && job.questions_preview.length) {
-    const previews = job.questions_preview.map((q) => `Q${q.id}：${q.stem}`).join('\n')
-    lines.push(`题目预览：\n${previews}`)
+    const previews = job.questions_preview.map((q) => `Q${q.id}：${q.stem}`).join('\n');
+    lines.push(`题目预览：\n${previews}`);
   }
-  return lines.join('\n')
-}
+  return lines.join('\n');
+};
 
-export const formatUploadJobSummary = (job: UploadJobStatus | null, fallbackAssignmentId?: string) => {
-  if (!job) return `未开始解析${fallbackAssignmentId ? ` · 作业编号：${fallbackAssignmentId}` : ''}`
+export const formatUploadJobSummary = (
+  job: UploadJobStatus | null,
+  fallbackAssignmentId?: string,
+) => {
+  if (!job)
+    return `未开始解析${fallbackAssignmentId ? ` · 作业编号：${fallbackAssignmentId}` : ''}`;
   const statusMap: Record<string, string> = {
     queued: '排队中',
     processing: '解析中',
@@ -69,42 +69,48 @@ export const formatUploadJobSummary = (job: UploadJobStatus | null, fallbackAssi
     created: '已创建',
     confirming: '确认中',
     cancelled: '已取消',
-  }
-  const parts: string[] = []
-  parts.push(`状态：${statusMap[job.status] || job.status}`)
-  if (job.progress !== undefined) parts.push(`${job.progress}%`)
-  parts.push(`作业编号：${job.assignment_id || fallbackAssignmentId || job.job_id}`)
-  if (job.question_count !== undefined) parts.push(`题目：${job.question_count}`)
-  if (job.requirements_missing && job.requirements_missing.length) parts.push(`缺失：${job.requirements_missing.length}项`)
-  if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`)
-  return parts.join(' · ')
-}
+  };
+  const parts: string[] = [];
+  parts.push(`状态：${statusMap[job.status] || job.status}`);
+  if (job.progress !== undefined) parts.push(`${job.progress}%`);
+  parts.push(`作业编号：${job.assignment_id || fallbackAssignmentId || job.job_id}`);
+  if (job.question_count !== undefined) parts.push(`题目：${job.question_count}`);
+  if (job.requirements_missing && job.requirements_missing.length)
+    parts.push(`缺失：${job.requirements_missing.length}项`);
+  if (job.status === 'failed' && job.error) parts.push(`错误：${job.error}`);
+  return parts.join(' · ');
+};
 
 export const formatDraftSummary = (draft: UploadDraft | null, jobInfo: UploadJobStatus | null) => {
-  if (!draft) return ''
-  const scopeLabel = draft.scope === 'public' ? '公共作业' : draft.scope === 'class' ? '班级作业' : '私人作业'
-  const parts: string[] = []
-  parts.push(`作业编号：${draft.assignment_id}`)
-  if (draft.date) parts.push(draft.date)
-  parts.push(scopeLabel)
-  parts.push(`题目：${draft.questions?.length || 0}`)
-  if (draft.requirements_missing && draft.requirements_missing.length) parts.push(`缺失：${draft.requirements_missing.length}项`)
-  else parts.push('要求已补全')
-  if (jobInfo?.status === 'confirmed' || jobInfo?.status === 'created') parts.push('已创建')
-  else if (jobInfo?.status === 'done') parts.push('待创建')
-  return parts.join(' · ')
-}
+  if (!draft) return '';
+  const scopeLabel =
+    draft.scope === 'public' ? '公共作业' : draft.scope === 'class' ? '班级作业' : '私人作业';
+  const parts: string[] = [];
+  parts.push(`作业编号：${draft.assignment_id}`);
+  if (draft.date) parts.push(draft.date);
+  parts.push(scopeLabel);
+  parts.push(`题目：${draft.questions?.length || 0}`);
+  if (draft.requirements_missing && draft.requirements_missing.length)
+    parts.push(`缺失：${draft.requirements_missing.length}项`);
+  else parts.push('要求已补全');
+  if (jobInfo?.status === 'confirmed' || jobInfo?.status === 'created') parts.push('已创建');
+  else if (jobInfo?.status === 'done') parts.push('待创建');
+  return parts.join(' · ');
+};
 
-export const formatProgressSummary = (p: AssignmentProgress | null, fallbackAssignmentId?: string) => {
-  const aid = (p?.assignment_id || fallbackAssignmentId || '').trim()
-  if (!aid) return '未加载作业完成情况'
-  const expected = p?.counts?.expected ?? p?.expected_count ?? 0
-  const completed = p?.counts?.completed ?? 0
-  const overdue = p?.counts?.overdue ?? 0
-  const parts: string[] = []
-  parts.push(`作业编号：${aid}`)
-  if (p?.date) parts.push(String(p.date))
-  parts.push(`完成：${completed}/${expected}`)
-  if (overdue) parts.push(`逾期：${overdue}`)
-  return parts.join(' · ')
-}
+export const formatProgressSummary = (
+  p: AssignmentProgress | null,
+  fallbackAssignmentId?: string,
+) => {
+  const aid = (p?.assignment_id || fallbackAssignmentId || '').trim();
+  if (!aid) return '未加载作业完成情况';
+  const expected = p?.counts?.expected ?? p?.expected_count ?? 0;
+  const completed = p?.counts?.completed ?? 0;
+  const overdue = p?.counts?.overdue ?? 0;
+  const parts: string[] = [];
+  parts.push(`作业编号：${aid}`);
+  if (p?.date) parts.push(String(p.date));
+  parts.push(`完成：${completed}/${expected}`);
+  if (overdue) parts.push(`逾期：${overdue}`);
+  return parts.join(' · ');
+};

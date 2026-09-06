@@ -1,31 +1,31 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --color-app-bg: #FAFBFC;
-  --color-rail: #F4F5F7;
-  --color-panel: #FFFFFF;
-  --color-bg: #FAFBFC;
-  --color-surface: #FFFFFF;
-  --color-surface-soft: #F4F5F7;
-  --color-surface-hover: #EBECF0;
-  --color-ink: #172B4D;
-  --color-muted: #44546F;
-  --color-accent: #0052CC;
-  --color-accent-soft: #DEEBFF;
-  --color-border: #DFE1E6;
-  --color-border-strong: #C1C7D0;
-  --color-warning: #FF8B00;
-  --color-warning-soft: #FFF0B3;
-  --color-success: #206A83;
-  --color-success-soft: #E9F2F5;
-  --color-danger-soft: #FFF0EE;
-  --color-danger: #C9372C;
+  --color-app-bg: #fafbfc;
+  --color-rail: #f4f5f7;
+  --color-panel: #ffffff;
+  --color-bg: #fafbfc;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f4f5f7;
+  --color-surface-hover: #ebecf0;
+  --color-ink: #172b4d;
+  --color-muted: #44546f;
+  --color-accent: #0052cc;
+  --color-accent-soft: #deebff;
+  --color-border: #dfe1e6;
+  --color-border-strong: #c1c7d0;
+  --color-warning: #ff8b00;
+  --color-warning-soft: #fff0b3;
+  --color-success: #206a83;
+  --color-success-soft: #e9f2f5;
+  --color-danger-soft: #fff0ee;
+  --color-danger: #c9372c;
 
   --shadow-sm: 0 1px 2px rgba(9, 30, 66, 0.08);
   --shadow-md: 0 6px 18px rgba(9, 30, 66, 0.12);
 
-  --font-sans: "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* ── Chat layout custom properties ── */
@@ -66,7 +66,11 @@
 }
 
 /* ── Global resets ── */
-html, body, #root { height: 100%; }
+html,
+body,
+#root {
+  height: 100%;
+}
 body {
   margin: 0;
   font-family: var(--font-sans);
@@ -75,24 +79,28 @@ body {
 }
 
 @media (min-width: 901px) {
-  html, body, #root { overflow: hidden; }
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
 }
 
 /* ── Global form elements ── */
 :where(
   input:not([type]),
-  input[type="text"],
-  input[type="search"],
-  input[type="email"],
-  input[type="password"],
-  input[type="url"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="date"],
-  input[type="datetime-local"],
-  input[type="month"],
-  input[type="time"],
-  input[type="week"],
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='password'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='time'],
+  input[type='week'],
   textarea,
   select
 ) {
@@ -103,22 +111,24 @@ body {
   background: var(--color-surface);
   font-size: 14px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 :where(
   input:not([type]),
-  input[type="text"],
-  input[type="search"],
-  input[type="email"],
-  input[type="password"],
-  input[type="url"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="date"],
-  input[type="datetime-local"],
-  input[type="month"],
-  input[type="time"],
-  input[type="week"],
+  input[type='text'],
+  input[type='search'],
+  input[type='email'],
+  input[type='password'],
+  input[type='url'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='time'],
+  input[type='week'],
   textarea,
   select
 ):focus {
@@ -143,7 +153,9 @@ body {
     cursor: pointer;
     color: color-mix(in oklab, var(--color-ink) 78%, var(--color-surface));
     font-size: 12px;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
   }
   .ghost:hover {
     background: var(--color-surface-soft);
@@ -214,12 +226,24 @@ body {
     font-size: 12px;
     white-space: pre-wrap;
   }
-  .status.ok { background: var(--color-success-soft); color: var(--color-success); }
-  .status.err { background: var(--color-danger-soft); color: var(--color-danger); }
+  .status.ok {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+  }
+  .status.err {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+  }
 
-  .muted { color: var(--color-muted); font-size: 12px; }
+  .muted {
+    color: var(--color-muted);
+    font-size: 12px;
+  }
 
-  .settings-section { display: grid; gap: 12px; }
+  .settings-section {
+    display: grid;
+    gap: 12px;
+  }
 
   .secondary-btn {
     border: 1px solid var(--color-border);
@@ -229,12 +253,18 @@ body {
     color: var(--color-ink);
     cursor: pointer;
   }
-  .secondary-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .secondary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 
   .teacher-rail-cta {
     background: color-mix(in oklab, var(--color-accent) 90%, var(--color-surface));
     box-shadow: 0 10px 20px rgba(0, 82, 204, 0.16);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      background 0.15s ease;
   }
   .teacher-rail-cta:hover {
     background: color-mix(in oklab, var(--color-accent) 94%, var(--color-surface));
@@ -253,7 +283,10 @@ body {
     padding: 7px 12px;
     font-size: 12px;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      transform 0.15s ease;
   }
   .teacher-drawer-link:hover {
     background: color-mix(in oklab, var(--color-surface-soft) 94%, var(--color-surface));
@@ -271,13 +304,17 @@ body {
   overflow: hidden;
   border-left: 3px solid color-mix(in oklab, var(--color-accent-soft) 80%, var(--color-surface));
   box-shadow: var(--shadow-md);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 .rule-card.rule-disabled {
   border-left-color: color-mix(in oklab, var(--color-border) 84%, var(--color-surface));
   opacity: 0.7;
 }
-.rule-card details { border-top: 1px solid var(--color-border); }
+.rule-card details {
+  border-top: 1px solid var(--color-border);
+}
 .rule-card details summary {
   padding: 6px 10px;
   font-size: 12px;
@@ -285,36 +322,61 @@ body {
   cursor: pointer;
   user-select: none;
 }
-.rule-card details[open] summary { color: var(--color-accent); }
+.rule-card details[open] summary {
+  color: var(--color-accent);
+}
 
 /* ── Provider row ── */
 .provider-row {
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: var(--color-surface);
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
   box-shadow: var(--shadow-md);
 }
-.provider-row:hover { box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); }
+.provider-row:hover {
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
 .provider-row[open] {
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.1);
   border-color: color-mix(in oklab, var(--color-accent) 18%, var(--color-surface));
 }
 
 /* ── Markdown rich text ── */
-.markdown p { margin: 0 0 3px; }
-.markdown p:last-child { margin-bottom: 0; }
-.markdown ul, .markdown ol { margin: 0 0 2px 16px; padding: 0; }
-.markdown li { margin: 0; padding: 0; }
-.markdown li + li { margin-top: 1px; }
-.markdown li p { margin: 0; }
-.markdown h1, .markdown h2, .markdown h3,
-.markdown h4, .markdown h5, .markdown h6 {
+.markdown p {
+  margin: 0 0 3px;
+}
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 2px 16px;
+  padding: 0;
+}
+.markdown li {
+  margin: 0;
+  padding: 0;
+}
+.markdown li + li {
+  margin-top: 1px;
+}
+.markdown li p {
+  margin: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
   margin: 6px 0 4px;
   line-height: 1.25;
 }
 .markdown code {
-  font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, monospace;
   background: color-mix(in oklab, var(--color-accent-soft) 34%, var(--color-surface));
   padding: 2px 6px;
   border-radius: 6px;
@@ -334,20 +396,35 @@ body {
 }
 
 /* ── Workbench resize drag ── */
-.dragging, .dragging * {
+.dragging,
+.dragging * {
   user-select: none !important;
   -webkit-user-select: none !important;
 }
 
 /* ── Settings modal animations ── */
-.settings-overlay { animation: fadeIn 0.15s ease; }
-.settings-dialog { animation: slideUp 0.2s ease; }
+.settings-overlay {
+  animation: fadeIn 0.15s ease;
+}
+.settings-dialog {
+  animation: slideUp 0.2s ease;
+}
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

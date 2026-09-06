@@ -146,14 +146,14 @@ describe('mobile shared style guardrails', () => {
     const studentCss = readFileSync(studentCssPath, 'utf8');
     const teacherCss = readFileSync(teacherCssPath, 'utf8');
 
-    expect(studentCss).toContain('--color-app-bg: #FAFBFC;');
-    expect(studentCss).toContain('--color-task-strip: #F7F9FF;');
-    expect(studentCss).toContain('--color-accent: #0052CC;');
-    expect(studentCss).toContain('--color-accent-soft: #DEEBFF;');
+    expect(studentCss).toMatch(/--color-app-bg:\s*#fafbfc;/i);
+    expect(studentCss).toMatch(/--color-task-strip:\s*#f7f9ff;/i);
+    expect(studentCss).toMatch(/--color-accent:\s*#0052cc;/i);
+    expect(studentCss).toMatch(/--color-accent-soft:\s*#deebff;/i);
 
-    expect(teacherCss).toContain('--color-app-bg: #FAFBFC;');
-    expect(teacherCss).toContain('--color-rail: #F4F5F7;');
-    expect(teacherCss).toContain('--color-accent: #0052CC;');
-    expect(teacherCss).toContain('--color-success: #206A83;');
+    expect(teacherCss).toMatch(/--color-app-bg:\s*#fafbfc;/i);
+    expect(teacherCss).toMatch(/--color-rail:\s*#f4f5f7;/i);
+    expect(teacherCss).toMatch(/--color-accent:\s*#0052cc;/i);
+    expect(teacherCss).toMatch(/--color-success:\s*#206a83;/i);
   });
 });

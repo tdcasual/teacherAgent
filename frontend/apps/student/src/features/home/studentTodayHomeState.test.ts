@@ -1,15 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest';
 
-import type { PendingChatJob, TodayAssignmentItem, VerifiedStudent } from '../../appTypes'
-import { buildStudentTodayHomeViewModel } from './studentTodayHomeState'
+import type { PendingChatJob, TodayAssignmentItem, VerifiedStudent } from '../../appTypes';
+import { buildStudentTodayHomeViewModel } from './studentTodayHomeState';
 
-type HomeInput = Parameters<typeof buildStudentTodayHomeViewModel>[0]
+type HomeInput = Parameters<typeof buildStudentTodayHomeViewModel>[0];
 
 const verifiedStudent: VerifiedStudent = {
   student_id: 'S001',
   student_name: '测试学生',
   class_name: '高二1班',
-}
+};
 
 const todayAssignments: TodayAssignmentItem[] = [
   {
@@ -25,7 +25,7 @@ const todayAssignments: TodayAssignmentItem[] = [
       process_archive_status: 'none',
     },
   },
-]
+];
 
 const pendingChatJob: PendingChatJob = {
   job_id: 'job-1',
@@ -34,7 +34,7 @@ const pendingChatJob: PendingChatJob = {
   user_text: '开始今天作业',
   session_id: 'sess-1',
   created_at: Date.now(),
-}
+};
 
 const buildInput = (overrides: Partial<HomeInput> = {}): HomeInput => ({
   verifiedStudent,
@@ -46,7 +46,7 @@ const buildInput = (overrides: Partial<HomeInput> = {}): HomeInput => ({
   pendingChatJob: null,
   onOpenExecutionLabel: '继续任务',
   ...overrides,
-})
+});
 
 describe('buildStudentTodayHomeViewModel', () => {
   it('blocks the main task flow until the student is verified', () => {
@@ -55,49 +55,53 @@ describe('buildStudentTodayHomeViewModel', () => {
         verifiedStudent: null,
         todayAssignments: [],
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('pending_generation')
-    expect(viewModel.title).toBe('老师尚未布置')
-    expect(viewModel.primaryActionLabel).toBe('先完成身份验证')
-    expect(viewModel.primaryActionDisabled).toBe(true)
-  })
+    expect(viewModel.status).toBe('pending_generation');
+    expect(viewModel.title).toBe('老师尚未布置');
+    expect(viewModel.primaryActionLabel).toBe('先完成身份验证');
+    expect(viewModel.primaryActionDisabled).toBe(true);
+  });
 
   it('returns generating while today assignment is still loading', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
         assignmentLoading: true,
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('generating')
-    expect(viewModel.title).toBe('正在加载今天的任务')
-    expect(viewModel.primaryActionLabel).toBe('稍后查看')
-    expect(viewModel.primaryActionDisabled).toBe(true)
-  })
+    expect(viewModel.status).toBe('generating');
+    expect(viewModel.title).toBe('正在加载今天的任务');
+    expect(viewModel.primaryActionLabel).toBe('稍后查看');
+    expect(viewModel.primaryActionDisabled).toBe(true);
+  });
 
   it('returns empty copy when no assignment is ready yet', () => {
     const viewModel = buildStudentTodayHomeViewModel(
       buildInput({
         todayAssignments: [],
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('empty')
-    expect(viewModel.title).toBe('老师尚未布置')
-    expect(viewModel.primaryActionLabel).toBe('老师尚未布置')
-    expect(viewModel.primaryActionDisabled).toBe(true)
-  })
+    expect(viewModel.status).toBe('empty');
+    expect(viewModel.title).toBe('老师尚未布置');
+    expect(viewModel.primaryActionLabel).toBe('老师尚未布置');
+    expect(viewModel.primaryActionDisabled).toBe(true);
+  });
 
   it('returns ready when the assignment exists but the student has not started', () => {
-    const viewModel = buildStudentTodayHomeViewModel(buildInput())
+    const viewModel = buildStudentTodayHomeViewModel(buildInput());
 
-    expect(viewModel.status).toBe('ready')
-    expect(viewModel.primaryActionLabel).toBe('进入任务')
-    expect(viewModel.items).toHaveLength(1)
-    expect(viewModel.items[0].submitted).toBe(false)
-    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '待开始', '待提交'])
-  })
+    expect(viewModel.status).toBe('ready');
+    expect(viewModel.primaryActionLabel).toBe('进入任务');
+    expect(viewModel.items).toHaveLength(1);
+    expect(viewModel.items[0].submitted).toBe(false);
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual([
+      '已准备',
+      '待开始',
+      '待提交',
+    ]);
+  });
 
   it('returns in_progress when there is a pending chat job', () => {
     const viewModel = buildStudentTodayHomeViewModel(
@@ -105,13 +109,17 @@ describe('buildStudentTodayHomeViewModel', () => {
         activeSessionId: 'sess-1',
         pendingChatJob,
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('in_progress')
-    expect(viewModel.title).toBe('继续今日任务')
-    expect(viewModel.primaryActionLabel).toBe('继续任务')
-    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '进行中', '待提交'])
-  })
+    expect(viewModel.status).toBe('in_progress');
+    expect(viewModel.title).toBe('继续今日任务');
+    expect(viewModel.primaryActionLabel).toBe('继续任务');
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual([
+      '已准备',
+      '进行中',
+      '待提交',
+    ]);
+  });
 
   it('returns in_progress when the active session already contains user work', () => {
     const viewModel = buildStudentTodayHomeViewModel(
@@ -122,11 +130,11 @@ describe('buildStudentTodayHomeViewModel', () => {
           { id: 'user-1', role: 'user', content: '这是我的第一题答案', time: '09:01' },
         ],
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('in_progress')
-    expect(viewModel.primaryActionLabel).toBe('继续任务')
-  })
+    expect(viewModel.status).toBe('in_progress');
+    expect(viewModel.primaryActionLabel).toBe('继续任务');
+  });
 
   it('uses progress.submitted instead of recent chat completion', () => {
     const viewModel = buildStudentTodayHomeViewModel(
@@ -138,11 +146,15 @@ describe('buildStudentTodayHomeViewModel', () => {
           },
         ],
       }),
-    )
+    );
 
-    expect(viewModel.status).toBe('submitted')
-    expect(viewModel.items[0].submitted).toBe(true)
-    expect(viewModel.primaryActionLabel).toBe('查看作业记录')
-    expect(viewModel.progressSteps.map((step) => step.label)).toEqual(['已准备', '已完成', '已提交'])
-  })
-})
+    expect(viewModel.status).toBe('submitted');
+    expect(viewModel.items[0].submitted).toBe(true);
+    expect(viewModel.primaryActionLabel).toBe('查看作业记录');
+    expect(viewModel.progressSteps.map((step) => step.label)).toEqual([
+      '已准备',
+      '已完成',
+      '已提交',
+    ]);
+  });
+});

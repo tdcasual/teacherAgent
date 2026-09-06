@@ -1,1 +1,1 @@
-export { formatSessionUpdatedLabel, nowTime, timeFromIso } from '../../../shared/time'
+export { formatSessionUpdatedLabel, nowTime, timeFromIso } from '../../../shared/time';

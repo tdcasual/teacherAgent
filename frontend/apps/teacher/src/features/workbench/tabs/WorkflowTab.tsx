@@ -1,56 +1,56 @@
-import type { Dispatch, SetStateAction } from 'react'
+import type { Dispatch, SetStateAction } from 'react';
 import type {
   UploadSectionProps,
   AssignmentDraftSectionProps,
   WorkflowSummaryCardProps,
-} from '../../../types/workflow'
-import type { ExecutionTimelineEntry } from '../../../appTypes'
+} from '../../../types/workflow';
+import type { ExecutionTimelineEntry } from '../../../appTypes';
 
-import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard'
-import UploadSection from '../workflow/UploadSection'
-import AssignmentProgressSection from '../workflow/AssignmentProgressSection'
-import AssignmentDraftSection from '../workflow/AssignmentDraftSection'
-import WorkflowTimeline from '../workflow/WorkflowTimeline'
-import { findActiveWorkflowStep } from '../workflowIndicators'
+import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard';
+import UploadSection from '../workflow/UploadSection';
+import AssignmentProgressSection from '../workflow/AssignmentProgressSection';
+import AssignmentDraftSection from '../workflow/AssignmentDraftSection';
+import WorkflowTimeline from '../workflow/WorkflowTimeline';
+import { findActiveWorkflowStep } from '../workflowIndicators';
 
-export type WorkflowTabProps =
-  WorkflowSummaryCardProps &
+export type WorkflowTabProps = WorkflowSummaryCardProps &
   UploadSectionProps &
   AssignmentDraftSectionProps & {
-    uploading: boolean
-    progressPanelCollapsed: boolean
-    setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>
-    progressAssignmentId: string
-    setProgressAssignmentId: (v: string) => void
-    progressOnlyIncomplete: boolean
-    setProgressOnlyIncomplete: (v: boolean) => void
-    progressError: string
-    archiveAssignment?: (assignmentId?: string) => Promise<void>
-    unarchiveAssignment?: (assignmentId?: string) => Promise<void>
+    uploading: boolean;
+    progressPanelCollapsed: boolean;
+    setProgressPanelCollapsed: Dispatch<SetStateAction<boolean>>;
+    progressAssignmentId: string;
+    setProgressAssignmentId: (v: string) => void;
+    progressOnlyIncomplete: boolean;
+    setProgressOnlyIncomplete: (v: boolean) => void;
+    progressError: string;
+    archiveAssignment?: (assignmentId?: string) => Promise<void>;
+    unarchiveAssignment?: (assignmentId?: string) => Promise<void>;
     saveStudentGrade?: (
       studentId: string,
       payload: {
-        override_score?: number | null
-        comment?: string
-        adopted_coach_excerpts?: Array<{ text: string }>
+        override_score?: number | null;
+        comment?: string;
+        adopted_coach_excerpts?: Array<{ text: string }>;
       },
-    ) => Promise<void>
-    draftLoading: boolean
-    draftError: string
-    draftSaving: boolean
-    uploadConfirming: boolean
-    executionTimeline: ExecutionTimelineEntry[]
-  }
+    ) => Promise<void>;
+    draftLoading: boolean;
+    draftError: string;
+    draftSaving: boolean;
+    uploadConfirming: boolean;
+    executionTimeline: ExecutionTimelineEntry[];
+  };
 
 export default function WorkflowTab(props: WorkflowTabProps) {
-  const {
-    draftLoading, draftError, uploadDraft,
-  } = props
-  const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator)
-  const focusLabel = activeStep?.label || '上传文件'
+  const { draftLoading, draftError, uploadDraft } = props;
+  const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator);
+  const focusLabel = activeStep?.label || '上传文件';
 
   return (
-    <section className="min-h-0 flex-1 overflow-auto grid gap-[10px]" style={{ overscrollBehavior: 'contain' }}>
+    <section
+      className="min-h-0 flex-1 overflow-auto grid gap-[10px]"
+      style={{ overscrollBehavior: 'contain' }}
+    >
       <div className="grid gap-1 pb-1 border-b border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))]">
         <strong>工作流编辑</strong>
         <div className="text-[12px] text-muted">先完成必做动作，再展开补充参考。</div>
@@ -113,13 +113,17 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         {draftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">草稿加载中…</div>
+            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-success-soft text-success">
+              草稿加载中…
+            </div>
           </section>
         )}
         {draftError && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-danger-soft text-danger">{draftError}</div>
+            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap bg-danger-soft text-danger">
+              {draftError}
+            </div>
           </section>
         )}
         {uploadDraft && (
@@ -188,5 +192,5 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         <WorkflowTimeline entries={props.executionTimeline} />
       </section>
     </section>
-  )
+  );
 }

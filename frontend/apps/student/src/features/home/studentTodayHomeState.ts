@@ -7,67 +7,69 @@ import type {
   StudentTodayHomeViewModel,
   TodayAssignmentItem,
   VerifiedStudent,
-} from '../../appTypes'
+} from '../../appTypes';
 
 type BuildStudentTodayHomeViewModelInput = {
-  verifiedStudent: VerifiedStudent | null
-  assignmentLoading: boolean
-  assignmentError: string
-  todayAssignments: TodayAssignmentItem[]
-  activeSessionId: string
-  messages: Message[]
-  pendingChatJob: PendingChatJob | null
-  onOpenExecutionLabel?: string
-}
+  verifiedStudent: VerifiedStudent | null;
+  assignmentLoading: boolean;
+  assignmentError: string;
+  todayAssignments: TodayAssignmentItem[];
+  activeSessionId: string;
+  messages: Message[];
+  pendingChatJob: PendingChatJob | null;
+  onOpenExecutionLabel?: string;
+};
 
-const buildProgressSteps = (status: StudentTodayHomeViewModel['status']): StudentTodayHomeStep[] => {
+const buildProgressSteps = (
+  status: StudentTodayHomeViewModel['status'],
+): StudentTodayHomeStep[] => {
   if (status === 'pending_generation') {
     return [
       { label: '准备中', tone: 'active' },
       { label: '待开始', tone: 'neutral' },
       { label: '待提交', tone: 'neutral' },
-    ]
+    ];
   }
   if (status === 'generating') {
     return [
       { label: '准备中', tone: 'active' },
       { label: '待开始', tone: 'neutral' },
       { label: '待提交', tone: 'neutral' },
-    ]
+    ];
   }
   if (status === 'empty') {
     return [
       { label: '未布置', tone: 'neutral' },
       { label: '待开始', tone: 'neutral' },
       { label: '待提交', tone: 'neutral' },
-    ]
+    ];
   }
   if (status === 'ready') {
     return [
       { label: '已准备', tone: 'success' },
       { label: '待开始', tone: 'active' },
       { label: '待提交', tone: 'neutral' },
-    ]
+    ];
   }
   if (status === 'submitted') {
     return [
       { label: '已准备', tone: 'success' },
       { label: '已完成', tone: 'success' },
       { label: '已提交', tone: 'success' },
-    ]
+    ];
   }
   return [
     { label: '已准备', tone: 'success' },
     { label: '进行中', tone: 'active' },
     { label: '待提交', tone: 'neutral' },
-  ]
-}
+  ];
+};
 
 const dueLabelOf = (item: TodayAssignmentItem): string => {
-  const due = String(item.due_at || '').trim()
-  if (item.progress.overdue) return due ? `${due} 已逾期` : '已逾期'
-  return due ? `${due} 截止` : '无截止时间'
-}
+  const due = String(item.due_at || '').trim();
+  if (item.progress.overdue) return due ? `${due} 已逾期` : '已逾期';
+  return due ? `${due} 截止` : '无截止时间';
+};
 
 const toHomeItems = (assignments: TodayAssignmentItem[]): StudentTodayHomeItem[] =>
   assignments.map((item) => ({
@@ -78,11 +80,14 @@ const toHomeItems = (assignments: TodayAssignmentItem[]): StudentTodayHomeItem[]
     dueLabel: dueLabelOf(item),
     overdue: Boolean(item.progress.overdue),
     submitted: Boolean(item.progress.submitted),
-  }))
+  }));
 
-const includesUserWork = (messages: Message[]): boolean => messages.some((item) => item.role === 'user' && item.content.trim())
+const includesUserWork = (messages: Message[]): boolean =>
+  messages.some((item) => item.role === 'user' && item.content.trim());
 
-export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewModelInput): StudentTodayHomeViewModel {
+export function buildStudentTodayHomeViewModel(
+  input: BuildStudentTodayHomeViewModelInput,
+): StudentTodayHomeViewModel {
   const {
     verifiedStudent,
     assignmentLoading,
@@ -90,11 +95,11 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
     messages,
     pendingChatJob,
     onOpenExecutionLabel = '继续任务',
-  } = input
+  } = input;
 
-  const items = toHomeItems(todayAssignments)
-  const inProgress = Boolean(pendingChatJob?.job_id) || includesUserWork(messages)
-  const allSubmitted = items.length > 0 && items.every((item) => item.submitted)
+  const items = toHomeItems(todayAssignments);
+  const inProgress = Boolean(pendingChatJob?.job_id) || includesUserWork(messages);
+  const allSubmitted = items.length > 0 && items.every((item) => item.submitted);
 
   if (!verifiedStudent) {
     return {
@@ -109,7 +114,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       materials: [],
       progressSteps: buildProgressSteps('pending_generation'),
       items: [],
-    }
+    };
   }
 
   if (assignmentLoading) {
@@ -125,7 +130,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       materials: [],
       progressSteps: buildProgressSteps('generating'),
       items,
-    }
+    };
   }
 
   if (items.length === 0) {
@@ -141,7 +146,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       materials: [],
       progressSteps: buildProgressSteps('empty'),
       items: [],
-    }
+    };
   }
 
   if (allSubmitted) {
@@ -157,7 +162,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       materials: [] as StudentTodayHomeMaterial[],
       progressSteps: buildProgressSteps('submitted'),
       items,
-    }
+    };
   }
 
   if (inProgress) {
@@ -173,7 +178,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
       materials: [],
       progressSteps: buildProgressSteps('in_progress'),
       items,
-    }
+    };
   }
 
   return {
@@ -188,7 +193,7 @@ export function buildStudentTodayHomeViewModel(input: BuildStudentTodayHomeViewM
     materials: [],
     progressSteps: buildProgressSteps('ready'),
     items,
-  }
+  };
 }
 
-export type { BuildStudentTodayHomeViewModelInput }
+export type { BuildStudentTodayHomeViewModelInput };

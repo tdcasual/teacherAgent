@@ -1,68 +1,72 @@
-import { safeLocalStorageGetItem, safeLocalStorageRemoveItem, safeLocalStorageSetItem } from '../../../../shared/storage'
+import {
+  safeLocalStorageGetItem,
+  safeLocalStorageRemoveItem,
+  safeLocalStorageSetItem,
+} from '../../../../shared/storage';
 
-const SEND_LOCK_KEY_PREFIX = 'studentSendLock:'
-const FALLBACK_SEND_LOCK_TTL_MS = 5000
-const FALLBACK_SEND_LOCK_SETTLE_MS = 120
-const FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS = 1000
+const SEND_LOCK_KEY_PREFIX = 'studentSendLock:';
+const FALLBACK_SEND_LOCK_TTL_MS = 5000;
+const FALLBACK_SEND_LOCK_SETTLE_MS = 120;
+const FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS = 1000;
 
 type FallbackLockPayload = {
-  owner: string
-  expires_at: number
-}
+  owner: string;
+  expires_at: number;
+};
 
 type WebLocksLike = {
   request: (
     name: string,
     options: { ifAvailable: boolean; mode: 'exclusive' },
     callback: (lock: { name?: string } | null) => Promise<boolean>,
-  ) => Promise<boolean>
-}
+  ) => Promise<boolean>;
+};
 
 const parseFallbackLock = (raw: string | null): FallbackLockPayload | null => {
-  if (!raw) return null
+  if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { owner?: string; expires_at?: number }
-    const parsedOwner = String(parsed?.owner || '').trim()
-    const parsedExpiresAt = Number(parsed?.expires_at || 0)
-    if (!parsedOwner || !Number.isFinite(parsedExpiresAt)) return null
-    return { owner: parsedOwner, expires_at: parsedExpiresAt }
+    const parsed = JSON.parse(raw) as { owner?: string; expires_at?: number };
+    const parsedOwner = String(parsed?.owner || '').trim();
+    const parsedExpiresAt = Number(parsed?.expires_at || 0);
+    if (!parsedOwner || !Number.isFinite(parsedExpiresAt)) return null;
+    return { owner: parsedOwner, expires_at: parsedExpiresAt };
   } catch {
-    return null
+    return null;
   }
-}
+};
 
 export async function withStudentSendLock(studentId: string, task: () => Promise<void>) {
-  const sid = String(studentId || '').trim()
-  if (!sid) return false
+  const sid = String(studentId || '').trim();
+  if (!sid) return false;
   const lockManager =
     typeof navigator !== 'undefined'
       ? (navigator as Navigator & { locks?: WebLocksLike }).locks
-      : null
+      : null;
   if (lockManager?.request) {
     const acquired = await lockManager.request(
       `student-send-lock:${sid}`,
       { ifAvailable: true, mode: 'exclusive' },
       async (lock) => {
-        if (!lock) return false
-        await task()
-        return true
+        if (!lock) return false;
+        await task();
+        return true;
       },
-    )
-    return Boolean(acquired)
+    );
+    return Boolean(acquired);
   }
 
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined') return false;
 
-  const lockKey = `${SEND_LOCK_KEY_PREFIX}${sid}`
-  const owner = `slock_${Date.now()}_${Math.random().toString(16).slice(2)}`
+  const lockKey = `${SEND_LOCK_KEY_PREFIX}${sid}`;
+  const owner = `slock_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-  const now = Date.now()
-  const existing = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+  const now = Date.now();
+  const existing = parseFallbackLock(safeLocalStorageGetItem(lockKey));
   if (existing && existing.expires_at > now) {
-    return false
+    return false;
   }
   if (existing && existing.expires_at <= now) {
-    safeLocalStorageRemoveItem(lockKey)
+    safeLocalStorageRemoveItem(lockKey);
   }
 
   const wrote = safeLocalStorageSetItem(
@@ -71,61 +75,61 @@ export async function withStudentSendLock(studentId: string, task: () => Promise
       owner,
       expires_at: now + FALLBACK_SEND_LOCK_TTL_MS,
     }),
-  )
-  if (!wrote) return false
+  );
+  if (!wrote) return false;
 
-  const settleStartedAt = Date.now()
+  const settleStartedAt = Date.now();
   while (Date.now() - settleStartedAt < FALLBACK_SEND_LOCK_SETTLE_MS) {
-    await new Promise((resolve) => window.setTimeout(resolve, 24))
-    const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+    await new Promise((resolve) => window.setTimeout(resolve, 24));
+    const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey));
     if (!observed || observed.owner !== owner || observed.expires_at <= Date.now()) {
-      return false
+      return false;
     }
   }
 
-  const latest = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+  const latest = parseFallbackLock(safeLocalStorageGetItem(lockKey));
   if (!latest || latest.owner !== owner || latest.expires_at <= Date.now()) {
-    return false
+    return false;
   }
 
   const extendFallbackLock = () => {
-    const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-    if (!current || current.owner !== owner) return false
+    const current = parseFallbackLock(safeLocalStorageGetItem(lockKey));
+    if (!current || current.owner !== owner) return false;
     const renewed = safeLocalStorageSetItem(
       lockKey,
       JSON.stringify({
         owner,
         expires_at: Date.now() + FALLBACK_SEND_LOCK_TTL_MS,
       }),
-    )
-    if (!renewed) return false
-    const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey))
-    return Boolean(observed && observed.owner === owner && observed.expires_at > Date.now())
-  }
+    );
+    if (!renewed) return false;
+    const observed = parseFallbackLock(safeLocalStorageGetItem(lockKey));
+    return Boolean(observed && observed.owner === owner && observed.expires_at > Date.now());
+  };
 
   if (!extendFallbackLock()) {
-    return false
+    return false;
   }
 
   let renewTimer: number | null = window.setInterval(() => {
-    if (extendFallbackLock()) return
+    if (extendFallbackLock()) return;
     if (renewTimer !== null) {
-      window.clearInterval(renewTimer)
-      renewTimer = null
+      window.clearInterval(renewTimer);
+      renewTimer = null;
     }
-  }, FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS)
+  }, FALLBACK_SEND_LOCK_RENEW_INTERVAL_MS);
 
   try {
-    await task()
-    return true
+    await task();
+    return true;
   } finally {
     if (renewTimer !== null) {
-      window.clearInterval(renewTimer)
-      renewTimer = null
+      window.clearInterval(renewTimer);
+      renewTimer = null;
     }
-    const current = parseFallbackLock(safeLocalStorageGetItem(lockKey))
+    const current = parseFallbackLock(safeLocalStorageGetItem(lockKey));
     if (current?.owner === owner) {
-      safeLocalStorageRemoveItem(lockKey)
+      safeLocalStorageRemoveItem(lockKey);
     }
   }
 }

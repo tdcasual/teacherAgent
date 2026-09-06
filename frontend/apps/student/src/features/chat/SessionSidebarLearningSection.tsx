@@ -1,24 +1,24 @@
-import type { SessionSidebarProps } from './sessionSidebarTypes'
+import type { SessionSidebarProps } from './sessionSidebarTypes';
 
 type Props = Pick<
-SessionSidebarProps,
-| 'apiBase'
-| 'dispatch'
-| 'verifiedStudent'
-| 'verifyOpen'
-| 'handleVerify'
-| 'nameInput'
-| 'classInput'
-| 'credentialInput'
-| 'verifying'
-| 'verifyError'
-| 'verifyInfo'
-| 'todayAssignment'
-| 'todayAssignments'
-| 'assignmentLoading'
-| 'assignmentError'
-| 'resetVerification'
->
+  SessionSidebarProps,
+  | 'apiBase'
+  | 'dispatch'
+  | 'verifiedStudent'
+  | 'verifyOpen'
+  | 'handleVerify'
+  | 'nameInput'
+  | 'classInput'
+  | 'credentialInput'
+  | 'verifying'
+  | 'verifyError'
+  | 'verifyInfo'
+  | 'todayAssignment'
+  | 'todayAssignments'
+  | 'assignmentLoading'
+  | 'assignmentError'
+  | 'resetVerification'
+>;
 
 export default function SessionSidebarLearningSection(props: Props) {
   const {
@@ -38,12 +38,12 @@ export default function SessionSidebarLearningSection(props: Props) {
     assignmentLoading,
     assignmentError,
     resetVerification,
-  } = props
-  const todayDateStr = new Date().toLocaleDateString('sv-SE')
-  const nameInputId = 'student-verify-name'
-  const classInputId = 'student-verify-class'
-  const credentialInputId = 'student-verify-credential'
-  const verifyPanelId = 'student-verify-panel'
+  } = props;
+  const todayDateStr = new Date().toLocaleDateString('sv-SE');
+  const nameInputId = 'student-verify-name';
+  const classInputId = 'student-verify-class';
+  const credentialInputId = 'student-verify-credential';
+  const verifyPanelId = 'student-verify-panel';
 
   return (
     <section className="border-t border-border pt-3 grid gap-2.5">
@@ -61,7 +61,8 @@ export default function SessionSidebarLearningSection(props: Props) {
       </div>
       {verifiedStudent ? (
         <div className="text-xs text-muted">
-          已认证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}{verifiedStudent.student_name}
+          已认证：{verifiedStudent.class_name ? `${verifiedStudent.class_name} · ` : ''}
+          {verifiedStudent.student_name}
         </div>
       ) : (
         <div className="text-xs text-muted">请先完成姓名/班级 + 密码认证后开始提问。</div>
@@ -74,7 +75,9 @@ export default function SessionSidebarLearningSection(props: Props) {
               <input
                 id={nameInputId}
                 value={nameInput}
-                onChange={(e) => dispatch({ type: 'SET', field: 'nameInput', value: e.target.value })}
+                onChange={(e) =>
+                  dispatch({ type: 'SET', field: 'nameInput', value: e.target.value })
+                }
                 placeholder="例如：刘昊然"
                 autoComplete="name"
               />
@@ -84,7 +87,9 @@ export default function SessionSidebarLearningSection(props: Props) {
               <input
                 id={classInputId}
                 value={classInput}
-                onChange={(e) => dispatch({ type: 'SET', field: 'classInput', value: e.target.value })}
+                onChange={(e) =>
+                  dispatch({ type: 'SET', field: 'classInput', value: e.target.value })
+                }
                 placeholder="例如：高二2403班"
                 autoComplete="organization"
               />
@@ -95,7 +100,9 @@ export default function SessionSidebarLearningSection(props: Props) {
                 id={credentialInputId}
                 type="password"
                 value={credentialInput}
-                onChange={(e) => dispatch({ type: 'SET', field: 'credentialInput', value: e.target.value })}
+                onChange={(e) =>
+                  dispatch({ type: 'SET', field: 'credentialInput', value: e.target.value })
+                }
                 placeholder="输入老师分发或重置后的密码"
                 autoComplete="current-password"
               />
@@ -115,10 +122,14 @@ export default function SessionSidebarLearningSection(props: Props) {
       )}
       {verifiedStudent && (
         <div className="grid gap-1.5 rounded-[16px] border border-border bg-[color:var(--color-surface)] px-3 py-3">
-          <div className="text-xs text-muted">今日任务（{todayAssignment?.date || todayDateStr}）</div>
+          <div className="text-xs text-muted">
+            今日任务（{todayAssignment?.date || todayDateStr}）
+          </div>
           {assignmentLoading && <div className="text-xs text-muted">加载中…</div>}
           {assignmentError && <div className="text-xs text-muted">{assignmentError}</div>}
-          {!assignmentLoading && todayAssignments.length === 0 && !assignmentError && <div className="text-xs text-muted">老师尚未布置</div>}
+          {!assignmentLoading && todayAssignments.length === 0 && !assignmentError && (
+            <div className="text-xs text-muted">老师尚未布置</div>
+          )}
           {todayAssignments.map((item) => (
             <div key={item.assignment_id} className="text-xs text-muted">
               {item.subject_id || '未分科'} · {item.title}
@@ -128,8 +139,10 @@ export default function SessionSidebarLearningSection(props: Props) {
         </div>
       )}
       {verifiedStudent && (
-        <button type="button" className="ghost" onClick={resetVerification}>重新认证</button>
+        <button type="button" className="ghost" onClick={resetVerification}>
+          重新认证
+        </button>
       )}
     </section>
-  )
+  );
 }

@@ -1,31 +1,31 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import TeacherWorkbench from './TeacherWorkbench'
-import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel'
+import TeacherWorkbench from './TeacherWorkbench';
+import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel';
 
 vi.mock('./tabs/SkillsTab', () => ({
   default: () => <div>skills-tab-content</div>,
-}))
+}));
 
 vi.mock('./tabs/WorkflowTab', () => ({
   default: () => <div>workflow-tab-content</div>,
-}))
+}));
 
 vi.mock('./tabs/MemoryTab', () => ({
   default: () => <div>memory-tab-content</div>,
-}))
+}));
 
 afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const buildViewModel = (): TeacherWorkbenchViewModel => {
-  const setSkillsOpen = vi.fn()
-  const setWorkbenchTab = vi.fn()
-  const refreshWorkflowWorkbench = vi.fn()
-  const scrollToWorkflowSection = vi.fn()
+  const setSkillsOpen = vi.fn();
+  const setWorkbenchTab = vi.fn();
+  const refreshWorkflowWorkbench = vi.fn();
+  const scrollToWorkflowSection = vi.fn();
 
   return {
     skillsOpen: true,
@@ -62,63 +62,75 @@ const buildViewModel = (): TeacherWorkbenchViewModel => {
     fetchAssignmentProgress: async () => undefined,
     formatUploadJobSummary: () => '状态：解析完成（待确认） · 作业编号：HW-20260314',
     formatProgressSummary: () => '暂无完成情况',
-  } as unknown as TeacherWorkbenchViewModel
-}
+  } as unknown as TeacherWorkbenchViewModel;
+};
 
 describe('TeacherWorkbench header', () => {
   it('shows current workflow status and routes the primary CTA into the workflow tab', () => {
-    const viewModel = buildViewModel()
+    const viewModel = buildViewModel();
 
-    render(<TeacherWorkbench viewModel={viewModel} />)
+    render(<TeacherWorkbench viewModel={viewModel} />);
 
-    expect(screen.getByTestId('teacher-workbench-shell').getAttribute('data-workbench-flow')).toBe('continuous')
-    expect(screen.getByText('教学编辑台')).toBeTruthy()
-    expect(screen.getByText('这里收纳主线摘要与辅助入口。')).toBeTruthy()
-    expect(screen.queryByText('摘要入口')).toBeNull()
-    expect(screen.getByText('待审核')).toBeTruthy()
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull()
-    expect(screen.getByText('当前焦点')).toBeTruthy()
-    expect(screen.getAllByText('审核草稿')).toHaveLength(2)
-    expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull()
-    expect(screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone')).toBe('summary')
-    expect(screen.getByTestId('teacher-workbench-focus-block').getAttribute('data-workbench-tier')).toBe('supporting')
-    expect(screen.getByRole('button', { name: '刷新' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '收起' })).toBeTruthy()
+    expect(screen.getByTestId('teacher-workbench-shell').getAttribute('data-workbench-flow')).toBe(
+      'continuous',
+    );
+    expect(screen.getByText('教学编辑台')).toBeTruthy();
+    expect(screen.getByText('这里收纳主线摘要与辅助入口。')).toBeTruthy();
+    expect(screen.queryByText('摘要入口')).toBeNull();
+    expect(screen.getByText('待审核')).toBeTruthy();
+    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.getByText('当前焦点')).toBeTruthy();
+    expect(screen.getAllByText('审核草稿')).toHaveLength(2);
+    expect(screen.queryByText('状态：解析完成（待确认） · 作业编号：HW-20260314')).toBeNull();
+    expect(
+      screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone'),
+    ).toBe('summary');
+    expect(
+      screen.getByTestId('teacher-workbench-focus-block').getAttribute('data-workbench-tier'),
+    ).toBe('supporting');
+    expect(screen.getByRole('button', { name: '刷新' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '收起' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '查看草稿' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看草稿' }));
 
-    expect(viewModel.setWorkbenchTab).toHaveBeenCalledWith('workflow')
-    expect(viewModel.scrollToWorkflowSection).toHaveBeenCalledWith('workflow-assignment-draft-section')
-  })
+    expect(viewModel.setWorkbenchTab).toHaveBeenCalledWith('workflow');
+    expect(viewModel.scrollToWorkflowSection).toHaveBeenCalledWith(
+      'workflow-assignment-draft-section',
+    );
+  });
 
   it('stacks the summary CTA for narrow workbench widths', () => {
-    const viewModel = buildViewModel()
+    const viewModel = buildViewModel();
 
-    render(<TeacherWorkbench viewModel={viewModel} />)
+    render(<TeacherWorkbench viewModel={viewModel} />);
 
-    const primaryAction = screen.getByRole('button', { name: '查看草稿' })
-    const summaryLayout = primaryAction.parentElement
+    const primaryAction = screen.getByRole('button', { name: '查看草稿' });
+    const summaryLayout = primaryAction.parentElement;
 
-    expect(summaryLayout).toBeTruthy()
-    expect((summaryLayout as HTMLElement).className).toContain('grid')
-    expect((summaryLayout as HTMLElement).className).not.toContain('xl:grid-cols-[minmax(0,1fr)_auto]')
-    expect(primaryAction.className).toContain('w-full')
-    expect(primaryAction.className).not.toContain('xl:w-auto')
-  })
+    expect(summaryLayout).toBeTruthy();
+    expect((summaryLayout as HTMLElement).className).toContain('grid');
+    expect((summaryLayout as HTMLElement).className).not.toContain(
+      'xl:grid-cols-[minmax(0,1fr)_auto]',
+    );
+    expect(primaryAction.className).toContain('w-full');
+    expect(primaryAction.className).not.toContain('xl:w-auto');
+  });
 
   it('switches to a compact status header when the workflow tab is already active', () => {
-    const viewModel = buildViewModel()
-    viewModel.workbenchTab = 'workflow'
+    const viewModel = buildViewModel();
+    viewModel.workbenchTab = 'workflow';
 
-    render(<TeacherWorkbench viewModel={viewModel} />)
+    render(<TeacherWorkbench viewModel={viewModel} />);
 
-    expect(screen.getByText('待审核')).toBeTruthy()
-    expect(screen.getByTestId('teacher-workflow-status-chip').textContent).toBe('审核草稿')
-    expect(screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone')).toBe('summary')
-    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业 · 下方继续处理。')).toBeNull()
-    expect(screen.queryByText('摘要入口')).toBeNull()
-    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('当前焦点')
-    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('审核草稿')
-    expect(screen.queryByRole('button', { name: '查看草稿' })).toBeNull()
-  })
-})
+    expect(screen.getByText('待审核')).toBeTruthy();
+    expect(screen.getByTestId('teacher-workflow-status-chip').textContent).toBe('审核草稿');
+    expect(
+      screen.getByTestId('teacher-workbench-summary-card').getAttribute('data-workbench-tone'),
+    ).toBe('summary');
+    expect(screen.queryByText('下一步：继续审核草稿并确认创建作业 · 下方继续处理。')).toBeNull();
+    expect(screen.queryByText('摘要入口')).toBeNull();
+    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('当前焦点');
+    expect(screen.getByTestId('teacher-workbench-focus-block').textContent).toContain('审核草稿');
+    expect(screen.queryByRole('button', { name: '查看草稿' })).toBeNull();
+  });
+});
