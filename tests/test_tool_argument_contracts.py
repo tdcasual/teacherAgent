@@ -41,14 +41,18 @@ class ToolArgumentContractsTest(unittest.TestCase):
         with TemporaryDirectory() as td:
             app_mod = load_api(Path(td))
 
-            unknown = app_mod.get_core().tool_dispatch("exam.get", {"exam_id": "EX1", "unexpected": 1}, role="teacher")
+            unknown = app_mod.get_core().tool_dispatch(
+                "student.profile.get",
+                {"student_id": "C1_A", "unexpected": 1},
+                role="teacher",
+            )
             self.assertEqual(unknown.get("error"), "invalid_arguments")
-            self.assertEqual(unknown.get("tool"), "exam.get")
+            self.assertEqual(unknown.get("tool"), "student.profile.get")
             self.assertTrue(any("unexpected" in item for item in unknown.get("issues") or []))
 
-            missing = app_mod.get_core().tool_dispatch("exam.get", {}, role="teacher")
+            missing = app_mod.get_core().tool_dispatch("student.profile.get", {}, role="teacher")
             self.assertEqual(missing.get("error"), "invalid_arguments")
-            self.assertEqual(missing.get("tool"), "exam.get")
+            self.assertEqual(missing.get("tool"), "student.profile.get")
             self.assertTrue(any("required" in item for item in missing.get("issues") or []))
 
     def test_mcp_rejects_invalid_arguments_before_execution(self):
