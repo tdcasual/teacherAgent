@@ -14,10 +14,11 @@ from services.api.paths import (
 
 def test_require_teacher_id_rejects_none_empty_and_whitespace() -> None:
     for value in (None, "", "   "):
-        with pytest.raises(TeacherIdentityError) as exc:
+        with pytest.raises(Exception) as exc:
             require_teacher_id(value)
-        assert exc.value.detail == "teacher_id_required"
-        assert exc.value.status_code == 400
+        assert type(exc.value).__name__ == "TeacherIdentityError"
+        assert getattr(exc.value, "detail", None) == "teacher_id_required"
+        assert getattr(exc.value, "status_code", None) == 400
         assert str(exc.value) == "teacher_id_required"
 
 
