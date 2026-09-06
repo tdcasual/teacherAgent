@@ -9,7 +9,7 @@ from ..paths import TeacherIdentityError, require_teacher_id
 from .teacher_route_helpers import ensure_ok_error_detail, scoped_teacher_id
 
 
-def _required_teacher_id(teacher_id) -> str:
+def _required_teacher_id(teacher_id: Optional[str]) -> str:
     try:
         return require_teacher_id(teacher_id)
     except TeacherIdentityError as exc:
