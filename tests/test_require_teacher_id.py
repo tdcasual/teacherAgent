@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from services.api.paths import (
-    TeacherIdentityError,
     require_teacher_id,
     resolve_teacher_id,
     safe_fs_id,
