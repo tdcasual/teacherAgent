@@ -97,6 +97,10 @@ jobs:
         run: |
           python scripts/quality/check_complexity_budget.py
 
+      - name: Maintainer recovery check
+        run: |
+          bash scripts/maintainer_recovery_check.sh
+
       - name: Run full backend test suite
         env:
           PYTHONPATH: ${{ github.workspace }}
