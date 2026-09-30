@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List
@@ -40,7 +41,15 @@ def _setup_assignment(tmp_path: Path, aid: str = "hw1",
                       due_at: str = "") -> Dict[str, Any]:
     folder = tmp_path / "assignments" / aid
     folder.mkdir(parents=True, exist_ok=True)
-    meta = {"assignment_id": aid, "expected_students": students or [], "due_at": due_at}
+    meta = {
+        "assignment_id": aid,
+        "teacher_id": "t_zhang",
+        "subject_id": "physics",
+        "visibility_status": "published",
+        "expected_students": students or [],
+        "due_at": due_at,
+    }
+    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     return meta
 
 

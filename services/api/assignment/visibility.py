@@ -33,6 +33,29 @@ def student_can_read_assignment(
     return vis in allowed
 
 
+def row_visible(
+    row: Any,
+    *,
+    role: str,
+    actor_id: str,
+    for_today: bool = False,
+) -> bool:
+    teacher_id = str(row["teacher_id"] if row is not None else "").strip()
+    vis = str(row["visibility_status"] if row is not None else "").strip().lower()
+    role_norm = str(role or "").strip().lower()
+    actor = str(actor_id or "").strip()
+    if role_norm == "admin":
+        return True
+    if role_norm == "teacher":
+        return bool(teacher_id) and teacher_id == actor
+    if role_norm == "student":
+        if not teacher_id:
+            return False
+        allowed = _STUDENT_TODAY if for_today else _STUDENT_READABLE
+        return vis in allowed
+    return False
+
+
 _STUDENT_META_OMIT = frozenset({"expected_students", "student_ids"})
 
 

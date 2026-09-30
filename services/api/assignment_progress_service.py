@@ -7,6 +7,9 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .assignment.store import connect as assignment_connect
+from .assignment.store import ensure as assignment_ensure
+from .assignment.store import get_assignment as assignment_sql_get
 from .assignment_learning_evidence_service import build_assignment_progress_evidence
 from .assignment_process_archive_service import read_process_archive_summary
 from .teacher_grade_service import load_teacher_grade, official_score_from
@@ -384,6 +387,15 @@ def compute_assignment_progress(
     deps: AssignmentProgressDeps,
     include_students: bool = True,
 ) -> Dict[str, Any]:
+    data_dir = Path(deps.data_dir)
+    conn = assignment_connect(data_dir)
+    try:
+        assignment_ensure(conn, data_dir=data_dir)
+        sql_row = assignment_sql_get(conn, assignment_id)
+    finally:
+        conn.close()
+    if sql_row is None:
+        return _assignment_not_found(assignment_id)
     folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
     if folder is None:
         return _assignment_not_found(assignment_id)

@@ -172,6 +172,88 @@ class AssignmentCatalogServiceTest(unittest.TestCase):
             self.assertEqual(ids, ["HW_A"])
             self.assertEqual(owned.get("total"), 1)
 
+    def test_list_assignments_hides_json_only_orphans_after_v2(self):
+        from services.api.assignment.store import (
+            SCHEMA_V2,
+            connect,
+            ensure,
+            reconcile_assignment_sql,
+        )
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            data_dir = root / "data"
+            conn = connect(data_dir)
+            try:
+                ensure(conn, data_dir=data_dir)
+                self.assertTrue(
+                    conn.execute(
+                        "SELECT 1 FROM assignment_schema_migrations WHERE version = ?",
+                        (SCHEMA_V2,),
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
+            folder = data_dir / "assignments" / "HW_CRASH"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_CRASH",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "published",
+                        "generated_at": "2026-02-08T09:00:00",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._catalog_deps(root)
+            owned = list_assignments(limit=50, cursor=0, owner_teacher_id="t_zhang", deps=deps)
+            ids = [item.get("assignment_id") for item in owned.get("assignments") or []]
+            self.assertNotIn("HW_CRASH", ids)
+            report = reconcile_assignment_sql(data_dir)
+            self.assertIn("HW_CRASH", report["orphan_ids"])
+
+    def test_list_assignments_does_not_leak_other_teachers(self):
+        from services.api.assignment.store import connect, ensure, upsert_assignment
+
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            data_dir = root / "data"
+            conn = connect(data_dir)
+            try:
+                ensure(conn, data_dir=data_dir)
+                upsert_assignment(
+                    conn,
+                    {
+                        "assignment_id": "HW_MINE",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "visibility_status": "published",
+                        "date": "2026-02-08",
+                    },
+                    now_iso="2026-02-08T09:00:00",
+                )
+                upsert_assignment(
+                    conn,
+                    {
+                        "assignment_id": "HW_THEIRS",
+                        "teacher_id": "t_li",
+                        "subject_id": "physics",
+                        "visibility_status": "published",
+                        "date": "2026-02-08",
+                    },
+                    now_iso="2026-02-08T10:00:00",
+                )
+            finally:
+                conn.close()
+            deps = self._catalog_deps(root)
+            owned = list_assignments(limit=50, cursor=0, owner_teacher_id="t_zhang", deps=deps)
+            ids = [item.get("assignment_id") for item in owned.get("assignments") or []]
+            self.assertEqual(ids, ["HW_MINE"])
+            self.assertNotIn("HW_THEIRS", ids)
+
     def test_build_assignment_detail_includes_delivery_and_stem_text(self):
         with TemporaryDirectory() as td:
             root = Path(td)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote
 
+from .assignment import store as assignment_store
 from .assignment.visibility import student_can_read_assignment
 from .assignment_student_list_service import (  # noqa: F401
     list_assignments_for_student as list_assignments_for_student,
@@ -190,52 +192,47 @@ def list_assignments(
     deps: AssignmentCatalogDeps,
 ) -> Dict[str, Any]:
     limit_int, cursor_int = _normalize_paging(limit, cursor)
-    assignments_dir = deps.data_dir / "assignments"
-    if not assignments_dir.exists():
-        return {
-            "assignments": [],
-            "total": 0,
-            "limit": limit_int,
-            "cursor": cursor_int,
-            "has_more": False,
-        }
+    owner = str(owner_teacher_id or "").strip() or None
+    conn = assignment_store.connect(deps.data_dir)
+    try:
+        assignment_store.ensure(conn, data_dir=deps.data_dir)
+        total = assignment_store.count_assignments(conn, teacher_id=owner)
+        rows = assignment_store.list_assignment_rows(
+            conn, teacher_id=owner, limit=limit_int, cursor=cursor_int
+        )
+    finally:
+        conn.close()
 
     items = []
-    for folder in assignments_dir.iterdir():
-        if not folder.is_dir():
+    for row in rows:
+        assignment_id = str(row["assignment_id"] or "").strip()
+        if not assignment_id:
             continue
-        assignment_id = folder.name
-        meta = deps.load_assignment_meta(folder)
-        if not _meta_matches_owner(meta, owner_teacher_id):
-            continue
-        assignment_date = resolve_assignment_date(meta, folder)
+        folder = deps.data_dir / "assignments" / assignment_id
         questions_path = folder / "questions.csv"
-        count = deps.count_csv_rows(questions_path) if questions_path.exists() else 0
-        updated_at = None
-        if meta.get("generated_at"):
-            updated_at = meta.get("generated_at")
-        elif questions_path.exists():
-            updated_at = datetime.fromtimestamp(questions_path.stat().st_mtime).isoformat(
-                timespec="seconds"
-            )
+        count = deps.count_csv_rows(questions_path) if questions_path.is_file() else 0
+        try:
+            meta_payload = json.loads(str(row["meta_json"] or "{}"))
+        except json.JSONDecodeError:
+            meta_payload = {}
+        if not isinstance(meta_payload, dict):
+            meta_payload = {}
         items.append(
             {
                 "assignment_id": assignment_id,
-                "date": assignment_date,
+                "date": str(row["date"] or "") or str(meta_payload.get("date") or ""),
                 "question_count": count,
-                "updated_at": updated_at,
-                "mode": meta.get("mode"),
-                "target_kp": meta.get("target_kp") or [],
-                "class_name": meta.get("class_name"),
+                "updated_at": str(row["updated_at"] or "") or None,
+                "mode": meta_payload.get("mode"),
+                "target_kp": meta_payload.get("target_kp") or [],
+                "class_name": str(row["class_name"] or "") or meta_payload.get("class_name"),
+                "visibility_status": str(row["visibility_status"] or ""),
             }
         )
 
-    items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    total = len(items)
-    page = items[cursor_int : cursor_int + limit_int]
-    next_cursor = cursor_int + len(page)
+    next_cursor = cursor_int + len(items)
     return {
-        "assignments": page,
+        "assignments": items,
         "total": total,
         "limit": limit_int,
         "cursor": cursor_int,

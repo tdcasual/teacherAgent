@@ -152,6 +152,10 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_assignments_subject "
         "ON assignments(subject_id, class_name)"
     )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assignments_updated "
+        "ON assignments(updated_at, assignment_id)"
+    )
     conn.execute(_CREATE_PROGRESS)
     conn.execute(_CREATE_ATTEMPTS)
     conn.execute(_CREATE_GRADES)
@@ -181,6 +185,13 @@ def ensure(conn: sqlite3.Connection, *, data_dir: Path, force_scan: bool = False
         import_json_legacy(conn, Path(data_dir))
         if not v2_applied:
             _record_version(conn, SCHEMA_V2)
+    report = _reconcile_counts(conn, Path(data_dir))
+    if report["orphan_ids"]:
+        _log.warning(
+            "assignment sql orphans after ensure: count=%s ids=%s",
+            len(report["orphan_ids"]),
+            ",".join(report["orphan_ids"][:20]),
+        )
 
 
 def get_assignment(conn: sqlite3.Connection, assignment_id: str) -> Optional[sqlite3.Row]:
@@ -203,6 +214,75 @@ def published_ids(conn: sqlite3.Connection) -> Set[str]:
         "SELECT assignment_id FROM assignments WHERE visibility_status = 'published'"
     ).fetchall()
     return {_text(row["assignment_id"]) for row in rows if _text(row["assignment_id"])}
+
+
+def list_assignment_rows(
+    conn: sqlite3.Connection,
+    *,
+    teacher_id: Optional[str] = None,
+    limit: int = 50,
+    cursor: int = 0,
+) -> list[sqlite3.Row]:
+    limit_n = max(1, min(int(limit), 100))
+    cursor_n = max(0, int(cursor))
+    tid = _text(teacher_id)
+    if tid:
+        rows = conn.execute(
+            """
+            SELECT * FROM assignments
+            WHERE teacher_id = ?
+            ORDER BY updated_at DESC, assignment_id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (tid, limit_n, cursor_n),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM assignments
+            ORDER BY updated_at DESC, assignment_id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit_n, cursor_n),
+        ).fetchall()
+    return list(rows)
+
+
+def count_assignments(conn: sqlite3.Connection, *, teacher_id: Optional[str] = None) -> int:
+    tid = _text(teacher_id)
+    if tid:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM assignments WHERE teacher_id = ?",
+            (tid,),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT COUNT(*) AS n FROM assignments").fetchone()
+    return int(row["n"] if row is not None else 0)
+
+
+def _reconcile_counts(conn: sqlite3.Connection, data_dir: Path) -> Dict[str, Any]:
+    sql_ids = {
+        _text(row["assignment_id"])
+        for row in conn.execute("SELECT assignment_id FROM assignments").fetchall()
+        if _text(row["assignment_id"])
+    }
+    json_ids = {aid for aid, _meta in _iter_assignment_meta(data_dir)}
+    orphan_ids = sorted(json_ids - sql_ids)
+    return {
+        "sql_count": len(sql_ids),
+        "json_meta_count": len(json_ids),
+        "orphan_ids": orphan_ids,
+    }
+
+
+def reconcile_assignment_sql(data_dir: Path) -> Dict[str, Any]:
+    root = Path(data_dir)
+    conn = connect(root)
+    try:
+        ensure(conn, data_dir=root)
+        return _reconcile_counts(conn, root)
+    finally:
+        conn.close()
 
 
 def _visibility_from_meta(meta: Dict[str, Any], *, teacher_id: str) -> str:
