@@ -48,17 +48,20 @@ export default function TeacherSessionRail({
     ],
   );
 
+  const overlayOpen = sessionSidebarOpen || skillsOpen;
   return (
     <>
-      <button
-        type="button"
-        className={`hidden max-[900px]:block max-[900px]:fixed max-[900px]:inset-0 max-[900px]:z-[15] max-[900px]:bg-black/[0.15] max-[900px]:transition-opacity max-[900px]:duration-200 max-[900px]:ease-in-out ${sessionSidebarOpen || skillsOpen ? 'max-[900px]:opacity-100 max-[900px]:pointer-events-auto' : 'max-[900px]:opacity-0 max-[900px]:pointer-events-none'}`}
-        aria-label="关闭侧边栏"
-        onClick={() => {
-          setSessionSidebarOpen(false);
-          setSkillsOpen(false);
-        }}
-      />
+      {overlayOpen ? (
+        <button
+          type="button"
+          className="hidden max-[900px]:block max-[900px]:fixed max-[900px]:inset-0 max-[900px]:z-[15] max-[900px]:bg-black/[0.15] max-[900px]:opacity-100 max-[900px]:pointer-events-auto"
+          aria-label="关闭侧边栏"
+          onClick={() => {
+            setSessionSidebarOpen(false);
+            setSkillsOpen(false);
+          }}
+        />
+      ) : null}
       <SessionSidebar
         {...sessionSidebarProps}
         open={sessionSidebarOpen}

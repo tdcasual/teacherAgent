@@ -109,7 +109,7 @@ export default function SessionSidebarLearningSection(props: Props) {
             </div>
             <button
               type="submit"
-              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer"
               disabled={verifying}
             >
               {verifying ? '认证中…' : '确认认证'}

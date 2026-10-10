@@ -14,7 +14,55 @@
 - 退出条件：生产已轮换 admin 密码与 `AUTH_TOKEN_SECRET`（及 `AUTH_TOKEN_SECRET_FILE` 内容）；旧 Bearer 全部失效
 - 补偿控制：`.gitignore` 覆盖 `data/auth/admin_bootstrap.txt` 与 `data/auth/*bootstrap*`；该文件已从 git 索引取消跟踪；不 rewrite `main` 历史。退出仍要求运营完成轮换。
 
+### RISK-CHART-SANDBOX-RESIDUAL-001
+- 风险描述：C2 收紧 chart sandbox（去掉 DATA_DIR env、扫描并补丁 `os.open`/`os.fdopen`、LLM schema 去掉 `auto_install`/`packages`）后，pathlib.Path.read_text/open、`io.open`、shutil.copyfile、glob、mmap、os.mkdir/rename 仍可能绕过 `builtins.open` 补丁读取 DATA_DIR。C2 不是 jail；本条目保持开放。
+- 状态：开放
+- Owner：后端
+- 下次复审日期：2026-12-01
+- 退出条件：Landlock/seccomp 或等价隔离落地，且残余旁路测试不再作为接受项。
+- 补偿控制：扫描拦截 `os.open`/`os.fdopen`/`os.read(` / `os.write(` / `os.replace`；guard 补丁 `builtins.open` 与 `os.open`/`os.fdopen`；LLM 不可选 `auto_install`/`packages`；tool_loop / `tool_dispatch.chart.exec` 强制 `auto_install=False` 并忽略 packages。接受测试 `test_pathlib_read_text_data_dir_is_accepted_residual` 锁死残余。
+
+### RISK-ADMIN-WEB-001
+- 风险描述：空 `TENANT_ADMIN_KEY` 时仍挂 multi-tenant dispatcher，可能把 `/health` 或管理面绑到非 default_app。
+- 状态：已关闭（补偿控制）
+- 关闭说明：空 key 时 `_build_runtime_entrypoint` 只返回 `default_app`。非空 key 必须设置 `TENANT_DATA_BASE_DIR`，否则启动失败。
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：空 key 不挂 dispatcher；非空 key 强制数据根目录。
+
+### RISK-GHCR-VITE-URL-001
+- 风险描述：GHCR bake 将 `VITE_API_URL=http://127.0.0.1:8000` 编进前端。校园局域网需另建 compose/`VITE_API_URL`。
+- 状态：已接受
+- Owner：运维
+- 下次复审日期：2026-12-01
+- 退出条件：校园镜像单独 bake；文档写明 GHCR 仅 loopback。
+- 补偿控制：`docs/getting-started/quickstart.md` 记录 bake URL。
+
+### RISK-PIP-AUDIT-IGNORES-001
+- 风险描述：`check_backend_dep_audit.sh` 忽略 PYSEC-2026-161、PYSEC-2026-248、PYSEC-2026-249、PYSEC-2026-2280、PYSEC-2026-2281、PYSEC-2026-2636。原因：FastAPI 0.128.7 caps starlette<1；mem0 1.0.3。
+- 状态：开放
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：升级 FastAPI/starlette/mem0 后去掉对应 ignore。
+
+
+### RISK-ASSIGNMENT-DUALWRITE-001
+- 风险描述：进度数字仍 compute-primary；表双写。非 SQL-primary GET。
+- 状态：开放
+- Owner：平台
+- 下次复审日期：2026-12-01
+- 退出条件：discussion/submission 迁表且 GET 以 SQL 为权威（目标 2026-12-01）。
+- 补偿控制：folder 缺失不 2PC、不 mkdir；JSON 失败 ROLLBACK；submit/grade 双写失败不影响 GET compute。
+
 ## 已关闭风险
+
+### RISK-TOKEN-VERSION-SET-PASSWORD-001
+- 风险描述：`set_password` 过去只更新密码哈希、不递增 `token_version`，且师生 Bearer 缺 `tv` 仍放行，改密后旧 access token 继续有效。
+- 状态：已关闭
+- 关闭说明：改密与密码哈希同一 UPDATE 递增 `token_version` 并签发新 access token；teacher/student/admin 缺 `tv` 一律 401 `token_revoked`。无 tv 的旧师生 Bearer 需重新登录。
+- 回滚：revert 代码（旧代码会再次忽略缺 tv，且仍接受带 tv 的新 token）。若生产已发出新 token 后必须回滚：旋转 `AUTH_TOKEN_SECRET` / `AUTH_TOKEN_SECRET_FILE`。
+- Owner：平台
+- 下次复审日期：2026-12-01
 
 ### RISK-MASTERKEY-CRYPTO-001
 - 风险描述：加密算法为自制流密码（非 AEAD）。

@@ -197,6 +197,14 @@ const buildProps = (overrides: Partial<TeacherAppLayoutProps> = {}): TeacherAppL
 });
 
 describe('TeacherAppLayout', () => {
+  it('puts a skip link first inside the app shell', () => {
+    render(<TeacherAppLayout {...buildProps()} />);
+    const shell = document.querySelector('.app.teacher');
+    const skip = screen.getByRole('link', { name: '跳到主内容' });
+    expect(shell?.firstElementChild).toBe(skip);
+    expect(skip.getAttribute('href')).toBe('#teacher-chat-main');
+  });
+
   it('renders the desktop teacher shell with rail, chat, and workbench', async () => {
     render(<TeacherAppLayout {...buildProps()} />);
 

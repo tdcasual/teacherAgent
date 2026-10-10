@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .agent_service import (
@@ -64,12 +63,6 @@ from .core_example_tool_service import (
 from .handlers import chat_handlers as _chat_handlers_module
 from .lesson_core_tool_service import lesson_capture as _lesson_capture_impl
 from .paths import DATA_DIR, parse_date_str
-from .student_import_service import (
-    import_students_from_responses as _import_students_from_responses_impl,
-)
-from .student_import_service import (
-    resolve_responses_file as _resolve_responses_file_impl,
-)
 from .student_import_service import (
     student_import as _student_import_impl,
 )
@@ -192,18 +185,6 @@ def teacher_provider_registry_probe_models(
     args: Dict[str, Any], core: Any | None = None
 ) -> Dict[str, Any]:
     return _teacher_provider_registry_probe_models_impl(args, deps=_teacher_provider_registry_deps(core))
-
-
-def resolve_responses_file(
-    file_path: Optional[str], core: Any | None = None
-) -> Optional[Path]:
-    return _resolve_responses_file_impl(file_path, deps=_student_import_deps(core))
-
-
-def import_students_from_responses(
-    path: Path, mode: str = "merge", core: Any | None = None
-) -> Dict[str, Any]:
-    return _import_students_from_responses_impl(path, deps=_student_import_deps(core), mode=mode)
 
 
 def student_import(args: Dict[str, Any], core: Any | None = None) -> Dict[str, Any]:

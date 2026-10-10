@@ -64,6 +64,27 @@ class ToolRegistrySyncTest(unittest.TestCase):
             mcp = tool.to_mcp()
             self.assertEqual(openai["function"]["parameters"], mcp["inputSchema"])
 
+    def test_chart_tool_schemas_omit_auto_install_and_packages(self):
+        from services.common.tool_registry import DEFAULT_TOOL_REGISTRY
+
+        samples = {
+            "chart.exec": {"python_code": "print(1)", "auto_install": True, "packages": ["numpy"]},
+            "chart.agent.run": {"task": "plot", "auto_install": True, "packages": ["numpy"]},
+        }
+        for name, extra in samples.items():
+            props = DEFAULT_TOOL_REGISTRY.require(name).parameters.get("properties") or {}
+            self.assertNotIn("auto_install", props)
+            self.assertNotIn("packages", props)
+            issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, extra)
+            self.assertTrue(
+                any("auto_install" in item and "unexpected" in item for item in issues),
+                issues,
+            )
+            self.assertTrue(
+                any("packages" in item and "unexpected" in item for item in issues),
+                issues,
+            )
+
     def test_run_agent_tools_filtered_by_skill(self):
         with TemporaryDirectory() as td:
             tmp = Path(td)

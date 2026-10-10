@@ -373,6 +373,7 @@ def _upsert_progress(
     assignment_id: str,
     student: Dict[str, Any],
     now_iso: str,
+    payload_json: Optional[str] = None,
 ) -> None:
     student_id = _text(student.get("student_id"))
     if not student_id:
@@ -383,6 +384,7 @@ def _upsert_progress(
     except (TypeError, ValueError):
         official_score = None
     process_status = _text(student.get("process_archive_status") or student.get("process_status")) or "none"
+    stored_payload = "{}" if payload_json == "{}" else (payload_json if payload_json is not None else _dumps(student))
     conn.execute(
         """
         INSERT INTO assignment_progress(
@@ -404,10 +406,34 @@ def _upsert_progress(
             1 if bool(student.get("overdue")) else 0,
             official_score,
             process_status,
-            _dumps(student),
+            stored_payload,
             now_iso,
         ),
     )
+
+
+def upsert_progress_snapshot(
+    conn: sqlite3.Connection,
+    *,
+    assignment_id: str,
+    students: list,
+    now_iso: str,
+) -> None:
+    aid = _text(assignment_id)
+    if not aid:
+        return
+    for student in students:
+        if not isinstance(student, dict):
+            continue
+        empty_payload = student.get("payload_json") == "{}"
+        row = {key: value for key, value in student.items() if key != "payload_json"}
+        _upsert_progress(
+            conn,
+            assignment_id=aid,
+            student=row,
+            now_iso=now_iso,
+            payload_json="{}" if empty_payload else None,
+        )
 
 
 def _import_progress(conn: sqlite3.Connection, data_dir: Path, now_iso: str) -> None:
@@ -424,11 +450,12 @@ def _import_progress(conn: sqlite3.Connection, data_dir: Path, now_iso: str) -> 
         if not isinstance(students, list):
             continue
         assignment_id = _text(payload.get("assignment_id")) or folder.name
-        for student in students:
-            if isinstance(student, dict):
-                _upsert_progress(
-                    conn, assignment_id=assignment_id, student=student, now_iso=now_iso
-                )
+        upsert_progress_snapshot(
+            conn,
+            assignment_id=assignment_id,
+            students=[student for student in students if isinstance(student, dict)],
+            now_iso=now_iso,
+        )
 
 
 def _relative_files(attempt_dir: Path) -> list[str]:
@@ -437,6 +464,108 @@ def _relative_files(attempt_dir: Path) -> list[str]:
         if path.is_file():
             files.append(path.name)
     return files
+
+
+def upsert_attempt(
+    conn: sqlite3.Connection,
+    *,
+    assignment_id: str,
+    student_id: str,
+    attempt_id: str,
+    submitted_at: str,
+    grading_report: Dict[str, Any],
+    files: list,
+) -> None:
+    aid = _text(assignment_id)
+    sid = _text(student_id)
+    att = _text(attempt_id)
+    if not aid or not sid or not att:
+        return
+    report = grading_report if isinstance(grading_report, dict) else {}
+    conn.execute(
+        """
+        INSERT INTO student_submission_attempts(
+          assignment_id, student_id, attempt_id, submitted_at,
+          grading_report_json, files_json
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(assignment_id, student_id, attempt_id) DO UPDATE SET
+          submitted_at=excluded.submitted_at,
+          grading_report_json=excluded.grading_report_json,
+          files_json=excluded.files_json
+        """,
+        (
+            aid,
+            sid,
+            att,
+            _text(submitted_at) or _now_iso(),
+            _dumps(report),
+            _dumps(list(files or [])),
+        ),
+    )
+
+
+def upsert_teacher_grade(
+    conn: sqlite3.Connection,
+    *,
+    assignment_id: str,
+    student_id: str,
+    payload: Dict[str, Any],
+    now_iso: str,
+) -> None:
+    aid = _text(assignment_id)
+    sid = _text(student_id)
+    if not aid or not sid:
+        return
+    body = payload if isinstance(payload, dict) else {}
+    conn.execute(
+        """
+        INSERT INTO teacher_grades(
+          assignment_id, student_id, payload_json, updated_at
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT(assignment_id, student_id) DO UPDATE SET
+          payload_json=excluded.payload_json,
+          updated_at=excluded.updated_at
+        """,
+        (aid, sid, _dumps(body), now_iso),
+    )
+
+
+def reconcile_progress(conn: sqlite3.Connection, data_dir: Path) -> Dict[str, Any]:
+    sql_keys = {
+        (_text(row["assignment_id"]), _text(row["student_id"]))
+        for row in conn.execute(
+            "SELECT assignment_id, student_id FROM assignment_progress"
+        ).fetchall()
+        if _text(row["assignment_id"]) and _text(row["student_id"])
+    }
+    json_student_count = 0
+    orphan_ids: list[str] = []
+    root = Path(data_dir) / "assignments"
+    if root.is_dir():
+        for folder in root.iterdir():
+            if not folder.is_dir() or not _safe_id(folder.name):
+                continue
+            payload = _load_json_file(folder / "progress.json")
+            if payload is None:
+                continue
+            students = payload.get("students")
+            if not isinstance(students, list):
+                continue
+            assignment_id = _text(payload.get("assignment_id")) or folder.name
+            for student in students:
+                if not isinstance(student, dict):
+                    continue
+                student_id = _text(student.get("student_id"))
+                if not student_id:
+                    continue
+                json_student_count += 1
+                if (assignment_id, student_id) not in sql_keys:
+                    orphan_ids.append(student_id)
+    return {
+        "sql_row_count": len(sql_keys),
+        "json_student_count": json_student_count,
+        "orphan_ids": orphan_ids,
+    }
 
 
 def _import_attempts(conn: sqlite3.Connection, data_dir: Path) -> None:
@@ -464,25 +593,14 @@ def _import_student_attempts(
         submitted_at = _text(report.get("submitted_at"))
         if not submitted_at:
             submitted_at = _now_iso()
-        conn.execute(
-            """
-            INSERT INTO student_submission_attempts(
-              assignment_id, student_id, attempt_id, submitted_at,
-              grading_report_json, files_json
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(assignment_id, student_id, attempt_id) DO UPDATE SET
-              submitted_at=excluded.submitted_at,
-              grading_report_json=excluded.grading_report_json,
-              files_json=excluded.files_json
-            """,
-            (
-                assignment_id,
-                student_id,
-                attempt_dir.name,
-                submitted_at,
-                _dumps(report),
-                _dumps(_relative_files(attempt_dir)),
-            ),
+        upsert_attempt(
+            conn,
+            assignment_id=assignment_id,
+            student_id=student_id,
+            attempt_id=attempt_dir.name,
+            submitted_at=submitted_at,
+            grading_report=report,
+            files=_relative_files(attempt_dir),
         )
 
 
@@ -499,16 +617,12 @@ def _import_teacher_grades(conn: sqlite3.Connection, data_dir: Path, now_iso: st
             payload = _load_json_file(student_dir / "teacher_grade.json")
             if payload is None:
                 continue
-            conn.execute(
-                """
-                INSERT INTO teacher_grades(
-                  assignment_id, student_id, payload_json, updated_at
-                ) VALUES (?, ?, ?, ?)
-                ON CONFLICT(assignment_id, student_id) DO UPDATE SET
-                  payload_json=excluded.payload_json,
-                  updated_at=excluded.updated_at
-                """,
-                (assignment_dir.name, student_dir.name, _dumps(payload), now_iso),
+            upsert_teacher_grade(
+                conn,
+                assignment_id=assignment_dir.name,
+                student_id=student_dir.name,
+                payload=payload,
+                now_iso=now_iso,
             )
 
 

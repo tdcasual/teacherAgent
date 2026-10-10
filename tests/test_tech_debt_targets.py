@@ -6,6 +6,27 @@ _STUDENT_APP_PATH = (
     Path(__file__).resolve().parent.parent / "frontend" / "apps" / "student" / "src" / "App.tsx"
 )
 
+STRUCTURE_TEST_GLOBS = (
+    "tests/test_*structure*.py",
+    "tests/test_*split*.py",
+    "tests/test_*budget*.py",
+    "tests/test_*leftover*.py",
+    "tests/test_no_*.py",
+    "tests/test_*guard*.py",
+)
+STRUCTURE_TEST_COUNT_FROZEN = 84
+
+
+def test_structure_test_count_frozen() -> None:
+    tests_dir = Path("tests")
+    names = set()
+    for pattern in STRUCTURE_TEST_GLOBS:
+        glob = pattern[len("tests/") :] if pattern.startswith("tests/") else pattern
+        names.update(path.name for path in tests_dir.glob(glob))
+    assert len(names) == STRUCTURE_TEST_COUNT_FROZEN, (
+        f"structure-test count is {len(names)}, frozen at {STRUCTURE_TEST_COUNT_FROZEN}"
+    )
+
 
 def test_student_app_line_budget() -> None:
     lines = _STUDENT_APP_PATH.read_text(encoding="utf-8").splitlines()

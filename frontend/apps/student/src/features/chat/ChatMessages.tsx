@@ -31,7 +31,7 @@ export default function ChatMessages({
               <div
                 className={
                   msg.role === 'user'
-                    ? 'bubble max-w-[min(760px,90%)] rounded-[18px] px-3.5 py-2.5 border border-[#e1e6eb] bg-[#eef1f4] shadow-sm max-[900px]:max-w-[min(100%,92vw)]'
+                    ? 'bubble max-w-[min(760px,90%)] rounded-[18px] px-3.5 py-2.5 border border-border bg-surface-soft shadow-sm max-[900px]:max-w-[min(100%,92vw)]'
                     : 'bubble max-w-[760px] bg-transparent p-[2px_0]'
                 }
               >
@@ -51,7 +51,7 @@ export default function ChatMessages({
       {!isNearBottom && (
         <button
           type="button"
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-accent text-white border-none rounded-2xl px-4 py-1.5 text-[13px] cursor-pointer shadow-sm z-5 animate-[fadeInUp_0.2s_ease] hover:opacity-90"
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-accent text-on-accent border-none rounded-2xl px-4 py-1.5 text-[13px] cursor-pointer shadow-sm z-5 animate-[fadeInUp_0.2s_ease] hover:opacity-90"
           onClick={scrollToBottom}
           aria-label="滚动到最新消息"
         >

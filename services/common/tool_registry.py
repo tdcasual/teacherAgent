@@ -421,12 +421,6 @@ def build_default_registry() -> ToolRegistry:
                     "type": "string",
                     "description": "optional PNG filename, e.g. main.png",
                 },
-                "auto_install": {"type": "boolean", "default": False},
-                "packages": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "optional pip packages to install",
-                },
                 "max_retries": {"type": "integer", "default": 1},
             },
             required=["python_code"],
@@ -435,7 +429,7 @@ def build_default_registry() -> ToolRegistry:
     tools["chart.agent.run"] = ToolDef(
         name="chart.agent.run",
         mutating=True,
-        description="Generate chart code with LLM, auto-install dependencies, execute, and auto-repair on failures",
+        description="Generate chart code with LLM, execute, and auto-repair on failures",
         parameters=_schema_object(
             {
                 "task": {"type": "string", "description": "chart requirement in natural language"},
@@ -449,12 +443,6 @@ def build_default_registry() -> ToolRegistry:
                 "save_as": {"type": "string"},
                 "timeout_sec": {"type": "integer", "default": 180},
                 "max_retries": {"type": "integer", "default": 3},
-                "auto_install": {"type": "boolean", "default": True},
-                "packages": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "optional pip package hints",
-                },
                 "opencode_enabled": {"type": "boolean"},
                 "opencode_bin": {"type": "string"},
                 "opencode_mode": {"type": "string", "description": "run|attach"},
@@ -472,6 +460,7 @@ def build_default_registry() -> ToolRegistry:
     # Teacher workspace/memory (API-only for now, but defined here to keep one source of truth)
     tools["teacher.workspace.init"] = ToolDef(
         name="teacher.workspace.init",
+        mutating=True,
         description="Initialize teacher workspace files (AGENTS/USER/MEMORY/etc.)",
         parameters=_schema_object(
             {"teacher_id": {"type": "string", "description": "optional teacher id"}}
@@ -506,6 +495,7 @@ def build_default_registry() -> ToolRegistry:
     )
     tools["teacher.memory.propose"] = ToolDef(
         name="teacher.memory.propose",
+        mutating=True,
         description="Propose a memory/workspace update and return proposal_id for review",
         parameters=_schema_object(
             {

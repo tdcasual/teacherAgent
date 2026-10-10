@@ -53,16 +53,9 @@ jobs:
 
       - name: Ruff (scoped backend quality gate)
         run: |
-          python -m ruff check \
-            services/api/settings.py \
-            services/api/runtime/runtime_manager.py \
-            services/api/routes \
-            services/mcp/app.py \
-            services/api/auth_service.py \
-            services/api/chart/policy_service.py \
-            services/api/rate_limit.py \
-            tests/test_ci_workflow_quality.py \
-            tests/test_ci_backend_scope.py
+          python -m ruff check services/api services/mcp/app.py \
+            services/api/auth_service.py services/api/chart/policy_service.py \
+            services/api/rate_limit.py
 
       - name: Black (backend quality gate)
         run: |
@@ -87,7 +80,7 @@ jobs:
 
       - name: Check backend quality budget
         run: |
-          python scripts/quality/check_backend_quality_budget.py
+          python scripts/quality/check_backend_quality_budget.py --skip-ruff
 
       - name: Check strict exception policy
         run: |

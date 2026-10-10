@@ -10,7 +10,7 @@ export default function StudentLayout({ sidebarOpen, sidebar, chat }: Props) {
   return (
     <div className={`student-layout ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       {sidebar}
-      {chat}
+      <div id="student-main">{chat}</div>
     </div>
   );
 }

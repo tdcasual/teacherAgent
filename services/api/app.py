@@ -148,6 +148,11 @@ def _build_runtime_entrypoint() -> Any:
 
     app_root = Path(get_core(default_app).APP_ROOT or Path(__file__).resolve().parents[2])
     tenant_admin_key = str(os.getenv("TENANT_ADMIN_KEY", "") or "").strip()
+    if not tenant_admin_key:
+        return default_app
+    tenant_data_base_dir = str(os.getenv("TENANT_DATA_BASE_DIR", "") or "").strip()
+    if not tenant_data_base_dir:
+        raise RuntimeError("TENANT_DATA_BASE_DIR is required when TENANT_ADMIN_KEY is set")
     tenant_db_path = Path(
         os.getenv(
             "TENANT_DB_PATH",

@@ -1,9 +1,11 @@
 # 历史 Plan 迁移映射
 
-- 最后更新：2026-09-05
+- 最后更新：2026-10-10
 - 当前权威产品设计：`docs/plans/2026-08-28-assignment-core-product-design.md`
 - 审计修复历史权威：`docs/plans/2026-08-26-audit-remediation-design.md`（**不是**运行时契约）
-- 当前下一阶段计划：`docs/plans/2026-09-05-next-phase-after-audit-design.md`
+- catalog vis 权威：`docs/plans/2026-09-06-strict-score-floor-design.md`（进度数字见 10-10 KD-7）
+- 本波审计修复：`docs/plans/2026-10-10-audit-remediation-design.md`
+- `docs/plans/2026-09-05-next-phase-after-audit-design.md`：部分落地，其余 10-10 承接
 - `docs/plans/` 其余稿为历史；文件名索引见 `docs/plans/ARCHIVE.md`。稳定结论在 `docs/reference/`、`docs/explain/`、`docs/operations/`。
 - 目的：标记已提炼为稳定文档的内容，降低重复查阅成本。未全部归档的历史稿接受为 AR-L1。
 
@@ -13,7 +15,9 @@
 |---|---|---|
 | `docs/plans/2026-08-28-assignment-core-product-design.md` | 当前权威（产品身份） | 作业内核产品身份；运行时契约仍见 `docs/reference/` |
 | `docs/plans/2026-08-26-audit-remediation-design.md` | 当前权威（审计修复历史） | 修复历史权威；运行时契约仍见 `docs/reference/` |
-| `docs/plans/2026-09-05-next-phase-after-audit-design.md` | 当前权威（下一阶段计划） | 08-28 之后的工程与校内部署阶段 |
+| `docs/plans/2026-09-05-next-phase-after-audit-design.md` | 部分落地，其余 10-10 承接 | `docs/plans/2026-10-10-audit-remediation-design.md` |
+| `docs/plans/2026-09-06-strict-score-floor-design.md` | 当前权威（catalog vis） | 进度数字权威见 10-10 KD-7 |
+| `docs/plans/2026-10-10-audit-remediation-design.md` | 当前权威（本波审计修复） | 工具绑定、sandbox、tv、双写、a11y、CI |
 | `docs/plans/2026-02-13-auth-token-password-design.md` | 已提炼（核心认证模型） | `docs/reference/auth-and-token-model.md` |
 | `docs/plans/2026-02-13-code-audit-findings.md` | 部分提炼（风险与接受项） | `docs/reference/risk-register.md` |
 | `docs/plans/2026-02-13-code-audit-findings.md`（上传限额相关） | 已提炼（资源防护基线） | `docs/reference/upload-resource-guardrails.md` |

@@ -93,8 +93,15 @@ def student_profile_get(student_id: str) -> Dict[str, Any]:
 def student_profile_update(args: Dict[str, Any]) -> Dict[str, Any]:
     from .config import APP_ROOT
     from .core_utils import run_script
+    from .paths import resolve_student_profile_path
+
+    student_id = str(args.get("student_id") or "").strip()
+    try:
+        resolve_student_profile_path(student_id)
+    except ValueError:
+        return {"error": "invalid_student_id", "student_id": student_id}
     script = APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
-    cmd = ["python3", str(script), "--student-id", args.get("student_id", "")]
+    cmd = ["python3", str(script), "--student-id", student_id]
     for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note",
                 "misconceptions", "mastery_json", "completion_status"):
         if args.get(key) is not None:

@@ -31,7 +31,7 @@ def _deps(tools: set[str]):
         },
         list_lessons=lambda: {"tool": "lesson.list"},
         lesson_capture=lambda args: _remember("lesson.capture", args),
-        student_search=lambda query, limit: _remember("student.search", (query, limit)),
+        student_search=lambda query, limit, allowed=None: _remember("student.search", (query, limit, allowed)),
         student_profile_get=lambda student_id: _remember("student.profile.get", student_id),
         student_profile_update=lambda args: _remember("student.profile.update", args),
         student_import=lambda args: _remember("student.import", args),
@@ -75,7 +75,14 @@ def test_tool_dispatch_covers_core_assignment_and_student_paths():
         "assignment.render",
         "core_example.search",
     }
-    deps, calls = _deps(names)
+    base, calls = _deps(names)
+    deps = ToolDispatchDeps(
+        **{
+            **base.__dict__,
+            "list_enrolled_student_ids": lambda _tid: {"stu1"},
+            "assignment_owner_id": lambda assignment_id: "t_zhang" if assignment_id == "a1" else None,
+        }
+    )
 
     listed = tool_dispatch("assignment.list", {}, role="teacher", teacher_id="t_zhang", deps=deps)
     assert listed["tool"] == "assignment.list"
@@ -83,26 +90,46 @@ def test_tool_dispatch_covers_core_assignment_and_student_paths():
     missing = tool_dispatch("assignment.list", {}, role="teacher", deps=deps)
     assert missing.get("error") == "teacher_id_required"
     assert tool_dispatch("lesson.list", {}, role="teacher", deps=deps)["tool"] == "lesson.list"
-    assert tool_dispatch("student.search", {"query": "abc", "limit": 3}, role="teacher", deps=deps)["tool"] == "student.search"
-    assert tool_dispatch("student.profile.get", {"student_id": "stu1"}, role="teacher", deps=deps)["tool"] == "student.profile.get"
-    assert tool_dispatch("student.profile.update", {"student_id": "stu1"}, role="teacher", deps=deps, confirmed=True)["tool"] == "student.profile.update"
+    assert tool_dispatch(
+        "student.search",
+        {"query": "abc", "limit": 3},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )["tool"] == "student.search"
+    assert tool_dispatch(
+        "student.profile.get",
+        {"student_id": "stu1"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+    )["tool"] == "student.profile.get"
+    assert tool_dispatch(
+        "student.profile.update",
+        {"student_id": "stu1"},
+        role="teacher",
+        teacher_id="t_zhang",
+        deps=deps,
+        confirmed=True,
+    )["tool"] == "student.profile.update"
     assert tool_dispatch("assignment.generate", {"topic": "t"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.generate"
     generate_denied = tool_dispatch("assignment.generate", {"topic": "t"}, role="student", deps=deps, confirmed=True)
     assert generate_denied.get("error") == "permission denied"
     assert tool_dispatch("assignment.render", {"assignment_id": "a1"}, role="teacher", teacher_id="t_zhang", deps=deps, confirmed=True)["tool"] == "assignment.render"
     assert tool_dispatch("core_example.search", {"query": "x"}, role="teacher", deps=deps)["tool"] == "core_example.search"
 
-    assert calls["student.search"] == ("abc", 3)
+    assert calls["student.search"] == ("abc", 3, {"stu1"})
 
 
 def test_tool_dispatch_student_import_role_guard_and_success():
     deps, _ = _deps({"student.import"})
 
     denied = tool_dispatch("student.import", {"rows": []}, role="student", deps=deps)
-    allowed = tool_dispatch("student.import", {"rows": [1]}, role="teacher", deps=deps, confirmed=True)
+    gone = tool_dispatch("student.import", {"rows": [1]}, role="teacher", deps=deps, confirmed=True)
 
     assert denied["error"] == "permission denied"
-    assert allowed["tool"] == "student.import"
+    assert gone.get("error") == "gone"
+    assert gone.get("status_code") == 410
 
 
 def test_tool_dispatch_assignment_requirements_save_uses_parser():
@@ -124,7 +151,14 @@ def test_tool_dispatch_assignment_requirements_save_uses_parser():
 def test_tool_dispatch_teacher_workspace_and_memory_get_variants():
     deps, _ = _deps({"teacher.workspace.init", "teacher.memory.get"})
 
-    init_out = tool_dispatch("teacher.workspace.init", {"teacher_id": "t1"}, role="teacher", deps=deps)
+    init_out = tool_dispatch(
+        "teacher.workspace.init",
+        {"teacher_id": "t1"},
+        role="teacher",
+        teacher_id="t1",
+        deps=deps,
+        confirmed=True,
+    )
     assert init_out == {
         "ok": True,
         "teacher_id": "t1-resolved",
@@ -135,12 +169,14 @@ def test_tool_dispatch_teacher_workspace_and_memory_get_variants():
         "teacher.memory.get",
         {"teacher_id": "t1", "file": "DAILY", "date": "2026-02-12", "max_chars": 20},
         role="teacher",
+        teacher_id="t1",
         deps=deps,
     )
     agents = tool_dispatch(
         "teacher.memory.get",
         {"teacher_id": "t1", "file": "AGENTS.md", "max_chars": 30},
         role="teacher",
+        teacher_id="t1",
         deps=deps,
     )
 
@@ -157,18 +193,22 @@ def test_tool_dispatch_teacher_memory_search_propose_and_apply():
         "teacher.memory.search",
         {"teacher_id": "t1", "query": "q", "limit": 4},
         role="teacher",
+        teacher_id="t1",
         deps=deps,
     )
     proposed = tool_dispatch(
         "teacher.memory.propose",
         {"teacher_id": "t1", "target": "MEMORY", "title": "ttl", "content": "body"},
         role="teacher",
+        teacher_id="t1",
         deps=deps,
+        confirmed=True,
     )
     applied = tool_dispatch(
         "teacher.memory.apply",
         {"teacher_id": "t1", "proposal_id": "p1", "approve": False},
         role="teacher",
+        teacher_id="t1",
         deps=deps,
         confirmed=True,
     )

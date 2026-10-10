@@ -141,6 +141,33 @@ def _is_safe_tool_id(value: Any) -> bool:
     return bool(text) and bool(_SAFE_TOOL_ID_RE.match(text))
 
 
+def _resolve_data_dir_path(
+    path_value: Any,
+    must_exist: bool = False,
+    *,
+    data_dir: Optional[Path] = None,
+    app_root: Optional[Path] = None,
+) -> Optional[Path]:
+    from .config import APP_ROOT as _APP_ROOT
+    from .config import DATA_DIR as _DATA_DIR
+
+    raw = str(path_value or "").strip()
+    if not raw:
+        return None
+    root = Path(app_root or _APP_ROOT).resolve()
+    data_root = Path(data_dir or _DATA_DIR).resolve()
+    p = Path(raw)
+    if not p.is_absolute():
+        p = (root / p).resolve()
+    else:
+        p = p.resolve()
+    if data_root not in p.parents and p != data_root:
+        return None
+    if must_exist and not p.exists():
+        return None
+    return p
+
+
 def _resolve_app_path(path_value: Any, must_exist: bool = True) -> Optional[Path]:
     raw = str(path_value or "").strip()
     if not raw:

@@ -49,4 +49,5 @@
 ## 设计与演进
 - **当前权威产品设计（作业内核 / 删除考试）**：`docs/plans/2026-08-28-assignment-core-product-design.md`
 - **审计修复方案（2026-08-26，历史权威）**：`docs/plans/2026-08-26-audit-remediation-design.md`
-- **当前下一阶段计划（2026-09-05 审计后）**：`docs/plans/2026-09-05-next-phase-after-audit-design.md`
+- **评分地板 / catalog vis（2026-09-06）**：`docs/plans/2026-09-06-strict-score-floor-design.md`
+- **审计修复方案（2026-10-10）**：`docs/plans/2026-10-10-audit-remediation-design.md`

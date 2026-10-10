@@ -6,12 +6,14 @@ import type { SessionSidebarProps } from './sessionSidebarTypes';
 export default function SessionSidebar(props: SessionSidebarProps) {
   return (
     <>
-      <button
-        type="button"
-        className={`sidebar-overlay ${props.sidebarOpen ? 'show' : ''}`}
-        aria-label="关闭会话侧栏"
-        onClick={() => props.dispatch({ type: 'SET', field: 'sidebarOpen', value: false })}
-      />
+      {props.sidebarOpen ? (
+        <button
+          type="button"
+          className="sidebar-overlay show"
+          aria-label="关闭会话侧栏"
+          onClick={() => props.dispatch({ type: 'SET', field: 'sidebarOpen', value: false })}
+        />
+      ) : null}
       <aside
         id="student-session-sidebar"
         className={`session-sidebar ${props.sidebarOpen ? 'open' : 'collapsed'}`}

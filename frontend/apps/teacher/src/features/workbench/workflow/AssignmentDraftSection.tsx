@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { AssignmentDraftSectionProps, AssignmentQuestion } from '../../../types/workflow';
 
 type Props = AssignmentDraftSectionProps & {
@@ -33,6 +34,7 @@ export default function AssignmentDraftSection(props: Props) {
     setQuestionShowCount,
     stopKeyPropagation,
   } = props;
+  const fieldId = useId();
 
   return (
     <section
@@ -79,7 +81,7 @@ export default function AssignmentDraftSection(props: Props) {
             <div>题目数量：{uploadDraft.questions?.length || 0}</div>
             <div>交付方式：{uploadDraft.delivery_mode === 'pdf' ? '文档' : '图片'}</div>
             {uploadDraft.requirements_missing && uploadDraft.requirements_missing.length ? (
-              <div className="text-[#8a1f1f] font-semibold">
+              <div className="text-danger font-semibold">
                 缺失项：{formatMissingRequirements(uploadDraft.requirements_missing)}
                 （补全后才能创建）
               </div>
@@ -89,7 +91,10 @@ export default function AssignmentDraftSection(props: Props) {
           </div>
 
           {draftActionError && (
-            <div className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger">
+            <div
+              role="alert"
+              className="mt-[10px] p-[10px_12px] rounded-xl text-[12px] whitespace-pre-wrap overflow-x-auto bg-danger-soft text-danger"
+            >
               {draftActionError}
             </div>
           )}
@@ -114,7 +119,7 @@ export default function AssignmentDraftSection(props: Props) {
             <button
               type="button"
               data-testid="assignment-confirm-button"
-              className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className="confirm-btn border-none rounded-xl py-[10px] px-[14px] bg-accent text-on-accent cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               onClick={handleConfirmUpload}
               disabled={
                 uploadConfirming ||
@@ -146,23 +151,27 @@ export default function AssignmentDraftSection(props: Props) {
             <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
               <h4 className="m-0 mb-[10px]">作业 8 点要求（可编辑）</h4>
               <div className="grid gap-2">
-                <label>1) 学科</label>
+                <label htmlFor={`${fieldId}-subject`}>1) 学科</label>
                 <input
+                  id={`${fieldId}-subject`}
                   value={uploadDraft.requirements?.subject || ''}
                   onChange={(e) => updateDraftRequirement('subject', e.target.value)}
                 />
-                <label>1) 本节课主题</label>
+                <label htmlFor={`${fieldId}-topic`}>1) 本节课主题</label>
                 <input
+                  id={`${fieldId}-topic`}
                   value={uploadDraft.requirements?.topic || ''}
                   onChange={(e) => updateDraftRequirement('topic', e.target.value)}
                 />
-                <label>2) 年级</label>
+                <label htmlFor={`${fieldId}-grade`}>2) 年级</label>
                 <input
+                  id={`${fieldId}-grade`}
                   value={uploadDraft.requirements?.grade_level || ''}
                   onChange={(e) => updateDraftRequirement('grade_level', e.target.value)}
                 />
-                <label>2) 班级水平（偏弱/中等/较强/混合）</label>
+                <label htmlFor={`${fieldId}-class-level`}>2) 班级水平（偏弱/中等/较强/混合）</label>
                 <select
+                  id={`${fieldId}-class-level`}
                   value={uploadDraft.requirements?.class_level || ''}
                   onChange={(e) => updateDraftRequirement('class_level', e.target.value)}
                   onKeyDown={stopKeyPropagation}
@@ -173,22 +182,25 @@ export default function AssignmentDraftSection(props: Props) {
                   <option value="较强">较强</option>
                   <option value="混合">混合</option>
                 </select>
-                <label>3) 核心概念（逗号分隔 3–8 个）</label>
+                <label htmlFor={`${fieldId}-concepts`}>3) 核心概念（逗号分隔 3–8 个）</label>
                 <input
+                  id={`${fieldId}-concepts`}
                   value={(uploadDraft.requirements?.core_concepts || []).join('，')}
                   onChange={(e) =>
                     updateDraftRequirement('core_concepts', parseCommaList(e.target.value))
                   }
                 />
-                <label>4) 典型题型/例题特征</label>
+                <label htmlFor={`${fieldId}-typical`}>4) 典型题型/例题特征</label>
                 <textarea
+                  id={`${fieldId}-typical`}
                   value={uploadDraft.requirements?.typical_problem || ''}
                   onChange={(e) => updateDraftRequirement('typical_problem', e.target.value)}
                   onKeyDown={stopKeyPropagation}
                   rows={3}
                 />
-                <label>5) 易错点（每行一条，至少 4 条）</label>
+                <label htmlFor={`${fieldId}-misconceptions`}>5) 易错点（每行一条，至少 4 条）</label>
                 <textarea
+                  id={`${fieldId}-misconceptions`}
                   value={misconceptionsText}
                   onChange={(e) => {
                     setMisconceptionsText(e.target.value);
@@ -202,8 +214,9 @@ export default function AssignmentDraftSection(props: Props) {
                   }
                   rows={4}
                 />
-                <label>6) 作业时间（20/40/60）</label>
+                <label htmlFor={`${fieldId}-duration`}>6) 作业时间（20/40/60）</label>
                 <select
+                  id={`${fieldId}-duration`}
                   value={String(uploadDraft.requirements?.duration_minutes || '')}
                   onChange={(e) =>
                     updateDraftRequirement('duration_minutes', Number(e.target.value))
@@ -214,16 +227,18 @@ export default function AssignmentDraftSection(props: Props) {
                   <option value="40">40</option>
                   <option value="60">60</option>
                 </select>
-                <label>7) 作业偏好（逗号分隔）</label>
+                <label htmlFor={`${fieldId}-preferences`}>7) 作业偏好（逗号分隔）</label>
                 <input
+                  id={`${fieldId}-preferences`}
                   value={(uploadDraft.requirements?.preferences || []).join('，')}
                   onChange={(e) =>
                     updateDraftRequirement('preferences', parseCommaList(e.target.value))
                   }
                   placeholder="例如：B提升，E小测验"
                 />
-                <label>8) 额外限制</label>
+                <label htmlFor={`${fieldId}-extra`}>8) 额外限制</label>
                 <textarea
+                  id={`${fieldId}-extra`}
                   value={uploadDraft.requirements?.extra_constraints || ''}
                   onChange={(e) => updateDraftRequirement('extra_constraints', e.target.value)}
                   onKeyDown={stopKeyPropagation}
@@ -242,7 +257,7 @@ export default function AssignmentDraftSection(props: Props) {
                 .map((q: AssignmentQuestion, idx: number) => (
                   <details
                     key={idx}
-                    className="border border-border rounded-[14px] py-2 px-[10px] mb-[10px] bg-[#fbfaf7]"
+                    className="border border-border rounded-[14px] py-2 px-[10px] mb-[10px] bg-surface-soft"
                     open={idx < 1}
                   >
                     <summary>

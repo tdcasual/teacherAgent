@@ -60,9 +60,6 @@ export default function SettingsModal({
   return (
     <div
       className="settings-overlay fixed inset-0 bg-[color:color-mix(in_oklab,var(--color-ink)_45%,transparent)] flex items-center justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
       style={{ zIndex: 'var(--layer-settings-modal, 150)' }}
       onMouseDown={(e) => {
         mouseDownOnOverlay.current = e.target === e.currentTarget;
@@ -75,6 +72,9 @@ export default function SettingsModal({
         ref={dialogRef}
         className="settings-dialog bg-surface rounded-[12px] shadow-[0_16px_48px_rgba(0,0,0,0.16)] flex flex-col overflow-hidden max-[640px]:w-screen max-[640px]:max-h-screen max-[640px]:rounded-none"
         style={{ width: 'min(860px, 92vw)', maxHeight: 'min(640px, 85vh)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         tabIndex={-1}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">

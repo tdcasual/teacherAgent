@@ -212,8 +212,6 @@ from .session_discussion_service import (
 )
 from .student_import_service import (
     StudentImportDeps,
-    import_students_from_responses as _import_students_from_responses_impl,
-    resolve_responses_file as _resolve_responses_file_impl,
     student_import as _student_import_impl,
 )
 from .student_directory_service import (

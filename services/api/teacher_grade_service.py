@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .assignment.store import connect as assignment_connect
+from .assignment.store import ensure as assignment_ensure
+from .assignment.store import upsert_teacher_grade
 from .assignment.visibility import assignment_owner_id
 from .auth_service import AuthPrincipal, auth_required
 from .fs_atomic import atomic_write_json
@@ -224,6 +228,32 @@ def _apply_updates(existing: Dict[str, Any], updates: Dict[str, Any]) -> None:
         existing["attempt_id"] = str(updates.get("attempt_id") or "").strip()
 
 
+def _persist_teacher_grade_sql(data_dir: Path, payload: Dict[str, Any]) -> None:
+    assignment_id = str(payload.get("assignment_id") or "").strip()
+    student_id = str(payload.get("student_id") or "").strip()
+    if not assignment_id or not student_id:
+        return
+    conn = assignment_connect(data_dir)
+    try:
+        assignment_ensure(conn, data_dir=data_dir)
+        upsert_teacher_grade(
+            conn,
+            assignment_id=assignment_id,
+            student_id=student_id,
+            payload=payload,
+            now_iso=str(payload.get("updated_at") or datetime.now().isoformat(timespec="seconds")),
+        )
+    except sqlite3.Error:
+        _log.warning(
+            "failed to upsert teacher_grade sql assignment=%s student=%s",
+            assignment_id,
+            student_id,
+            exc_info=True,
+        )
+    finally:
+        conn.close()
+
+
 def save_teacher_grade(
     assignment_id: str,
     student_id: str,
@@ -257,6 +287,7 @@ def save_teacher_grade(
         existing["teacher_id"] = assignment_owner_id(meta)
     existing["updated_at"] = datetime.now().isoformat(timespec="seconds")
     atomic_write_json(grade_dir / "teacher_grade.json", existing)
+    _persist_teacher_grade_sql(resolved, existing)
     return {
         "ok": True,
         "assignment_id": existing["assignment_id"],

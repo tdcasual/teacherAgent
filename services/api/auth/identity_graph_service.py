@@ -770,6 +770,24 @@ def rename_class(
     )
 
 
+def list_enrolled_student_ids(
+    store: Any,
+    *,
+    teacher_id: str,
+    conn: Optional[sqlite3.Connection] = None,
+) -> List[str]:
+    tid = _text(teacher_id)
+    if not tid:
+        return []
+    sql = (
+        "SELECT DISTINCT student_id FROM student_enrollments "
+        "WHERE teacher_id = ? ORDER BY student_id"
+    )
+    with _borrow_conn(store, conn) as used:
+        rows = used.execute(sql, (tid,)).fetchall()
+    return [_text(row["student_id"]) for row in rows if _text(row["student_id"])]
+
+
 def list_enrollment_student_ids(
     store: Any,
     *,

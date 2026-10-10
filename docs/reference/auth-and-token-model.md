@@ -63,7 +63,9 @@
 
 ## 失效与轮换
 - 账号凭据重置后，`token_version` 递增。
+- `POST /auth/teacher/set-password` 与 `POST /auth/student/set-password` 成功时与密码哈希同一 UPDATE 递增 `token_version`，并返回新 `access_token`。
 - 历史 Bearer token 在版本校验时失效（典型错误：`token_revoked`）。
+- 缺 `tv` 的 teacher/student/admin Bearer 视为已撤销；无 tv 的师生 Bearer 失效，请重新登录。
 
 ## 错误语义（常见）
 - `invalid_credential`：凭据错误。

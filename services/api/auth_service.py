@@ -218,9 +218,7 @@ def _validate_principal_token_version(principal: AuthPrincipal) -> None:
         return
     raw_token_version = claims.get("tv")
     if raw_token_version is None:
-        if principal.role == "admin":
-            raise AuthError(401, "token_revoked")
-        return
+        raise AuthError(401, "token_revoked")
     try:
         token_version = int(str(raw_token_version))
     except Exception:

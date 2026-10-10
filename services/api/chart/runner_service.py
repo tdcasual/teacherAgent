@@ -531,6 +531,25 @@ def _chart_exec_audit_payload(audit: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+_LLM_NO_INSTALL_SOURCES = frozenset(
+    {
+        "tool_loop",
+        "chat",
+        "llm",
+        "tool_dispatch.chart.exec",
+        "chart.agent.run",
+    }
+)
+
+
+def _llm_source_disables_install(args: Dict[str, Any], audit: Dict[str, Any]) -> bool:
+    # LLM/tool_loop cannot enable pip even if extra keys bypass schema.
+    for raw in (audit.get("source"), args.get("_audit_source"), args.get("source")):
+        if str(raw or "").strip().lower() in _LLM_NO_INSTALL_SOURCES:
+            return True
+    return False
+
+
 def _execute_chart_exec_inner(
     args: Dict[str, Any],
     app_root: Path,
@@ -553,6 +572,9 @@ def _execute_chart_exec_inner(
     chart_hint = str(args.get("chart_hint") or "").strip()
     input_data = args.get("input_data")
     audit = _chart_exec_audit_details(args)
+    if _llm_source_disables_install(args, audit):
+        auto_install = False
+        requested_packages = []
 
     paths = _prepare_chart_exec_paths(uploads_dir, run_id=run_id, save_as=save_as)
     output_dir = paths["output_dir"]

@@ -52,13 +52,13 @@ export default function ChatComposer({
             {attachments.map((item) => (
               <span
                 key={item.localId}
-                className="inline-flex items-center gap-2 border border-border rounded-lg px-2 py-1 text-[11px] bg-[#f8fafc] max-w-full"
+                className="inline-flex items-center gap-2 border border-border rounded-lg px-2 py-1 text-[11px] bg-surface-soft max-w-full"
               >
                 <span className="max-w-[180px] truncate" title={item.fileName}>
                   {item.fileName}
                 </span>
                 <span
-                  className={`${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-[#6b7280]' : 'text-danger'}`}
+                  className={`${item.status === 'ready' ? 'text-success' : item.status === 'uploading' ? 'text-muted' : 'text-danger'}`}
                 >
                   {item.status === 'ready'
                     ? '已就绪'
@@ -98,7 +98,7 @@ export default function ChatComposer({
           <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              className="composer-btn border border-border rounded-full px-2.5 py-1 text-[13px] cursor-pointer bg-[#f8fafc] disabled:opacity-60 disabled:cursor-not-allowed"
+              className="composer-btn border border-border rounded-full px-2.5 py-1 text-[13px] cursor-pointer bg-surface-soft disabled:opacity-60 disabled:cursor-not-allowed"
               disabled={composerDisabled}
               onClick={() => fileInputRef.current?.click()}
               aria-label="添加附件"
@@ -127,7 +127,7 @@ export default function ChatComposer({
           </div>
           <button
             type="submit"
-            className="composer-btn border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-white transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed"
+            className="composer-btn border-none rounded-full px-4 py-2 text-[13px] cursor-pointer bg-accent text-on-accent transition-opacity duration-150 disabled:opacity-55 disabled:cursor-not-allowed"
             disabled={sending || composerDisabled || !canSend || uploadingAttachments}
           >
             发送

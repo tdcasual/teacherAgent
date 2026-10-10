@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import stat
 import time
@@ -19,10 +20,19 @@ def _auth_headers(actor_id: str, role: str, *, secret: str) -> dict[str, str]:
         "role": role,
         "exp": now + 3600,
     }
-    if role == "admin":
+    if role in {"admin", "teacher", "student"}:
         claims["tv"] = 1
     token = mint_test_token(claims, secret=secret)
     return {"Authorization": f"Bearer {token}"}
+
+
+def _token_claims(token: str) -> dict:
+    payload = str(token or "").split(".")[0]
+    padding = "=" * (-len(payload) % 4)
+    raw = base64.urlsafe_b64decode(payload + padding)
+    data = json.loads(raw.decode("utf-8"))
+    assert isinstance(data, dict)
+    return data
 
 
 def _load_app(
@@ -550,3 +560,213 @@ def test_write_admin_bootstrap_file_chmod_600(tmp_path: Path) -> None:
     assert written.name == "admin_bootstrap.txt"
     assert written.parent == (tmp_path / "data" / "auth").resolve()
     assert stat.S_IMODE(written.stat().st_mode) == 0o600
+
+
+def test_set_password_increments_tv_and_returns_access_token(tmp_path: Path):
+    secret = "auth-set-password-tv-secret"
+    _write_teacher_profile(
+        tmp_path,
+        teacher_id="teacher_alpha",
+        teacher_name="张老师",
+        email="alpha@example.com",
+    )
+    _write_student_profile(
+        tmp_path,
+        student_id="S001",
+        student_name="刘昊然",
+        class_name="高二2403班",
+    )
+
+    app_mod = _load_app(tmp_path, secret=secret)
+    client = TestClient(app_mod.app)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
+
+    export_teacher_res = client.post(
+        "/auth/admin/teacher/export-tokens",
+        headers=admin_headers,
+        json={"ids": ["teacher_alpha"]},
+    )
+    assert export_teacher_res.status_code == 200
+    teacher_token = str(
+        ((export_teacher_res.json().get("items") or [{}])[0].get("token") or "")
+    )
+    assert teacher_token
+
+    login_res = client.post(
+        "/auth/teacher/login",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "token",
+            "credential": teacher_token,
+        },
+    )
+    assert login_res.status_code == 200
+    login_payload = login_res.json()
+    assert login_payload.get("ok") is True
+    old_access_token = str(login_payload.get("access_token") or "")
+    assert old_access_token
+    assert int(_token_claims(old_access_token).get("tv") or 0) == 1
+
+    protected_before = client.get(
+        "/teacher/history/sessions",
+        headers={"Authorization": f"Bearer {old_access_token}"},
+    )
+    assert protected_before.status_code == 200
+
+    set_password_res = client.post(
+        "/auth/teacher/set-password",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "token",
+            "credential": teacher_token,
+            "new_password": "NewPass12",
+        },
+    )
+    assert set_password_res.status_code == 200
+    set_password_payload = set_password_res.json()
+    assert set_password_payload.get("ok") is True
+    new_access_token = str(set_password_payload.get("access_token") or "")
+    assert new_access_token
+    assert set_password_payload.get("expires_in")
+    assert set_password_payload.get("subject_id") == "teacher_alpha"
+    assert int(_token_claims(new_access_token).get("tv") or 0) == 2
+
+    store = AuthRegistryStore(
+        db_path=tmp_path / "data" / "auth" / "auth_registry.sqlite3",
+        data_dir=tmp_path / "data",
+    )
+    with store._connect() as conn:
+        row = conn.execute(
+            "SELECT token_version FROM teacher_auth WHERE teacher_id = ?",
+            ("teacher_alpha",),
+        ).fetchone()
+    assert row is not None
+    assert int(row["token_version"] or 0) == 2
+
+    revoked = client.get(
+        "/teacher/history/sessions",
+        headers={"Authorization": f"Bearer {old_access_token}"},
+    )
+    assert revoked.status_code == 401
+    assert revoked.json().get("detail") == "token_revoked"
+
+    protected_after = client.get(
+        "/teacher/history/sessions",
+        headers={"Authorization": f"Bearer {new_access_token}"},
+    )
+    assert protected_after.status_code == 200
+
+    reset_student = client.post(
+        "/auth/teacher/student/reset-passwords",
+        headers=admin_headers,
+        json={"scope": "student", "student_id": "S001", "new_password": "A1b2c3d4"},
+    )
+    assert reset_student.status_code == 200
+    assert reset_student.json().get("ok") is True
+
+    student_login = client.post(
+        "/auth/student/login",
+        json={
+            "candidate_id": "S001",
+            "credential_type": "password",
+            "credential": "A1b2c3d4",
+        },
+    )
+    assert student_login.status_code == 200
+    student_login_payload = student_login.json()
+    assert student_login_payload.get("ok") is True
+    old_student_token = str(student_login_payload.get("access_token") or "")
+    assert old_student_token
+
+    student_set_password = client.post(
+        "/auth/student/set-password",
+        json={
+            "candidate_id": "S001",
+            "credential_type": "password",
+            "credential": "A1b2c3d4",
+            "new_password": "StuPass99",
+        },
+    )
+    assert student_set_password.status_code == 200
+    student_set_payload = student_set_password.json()
+    assert student_set_payload.get("ok") is True
+    new_student_token = str(student_set_payload.get("access_token") or "")
+    assert new_student_token
+    assert int(_token_claims(new_student_token).get("tv") or 0) >= 2
+
+    student_revoked = client.get(
+        "/student/history/sessions",
+        headers={"Authorization": f"Bearer {old_student_token}"},
+        params={"student_id": "S001"},
+    )
+    assert student_revoked.status_code == 401
+    assert student_revoked.json().get("detail") == "token_revoked"
+
+    student_protected = client.get(
+        "/student/history/sessions",
+        headers={"Authorization": f"Bearer {new_student_token}"},
+        params={"student_id": "S001"},
+    )
+    assert student_protected.status_code == 200
+
+
+def test_teacher_token_without_tv_is_revoked(tmp_path: Path):
+    secret = "auth-teacher-missing-tv-secret"
+    app_mod = _load_app(tmp_path, secret=secret)
+    client = TestClient(app_mod.app)
+    now = int(time.time())
+    token = mint_test_token(
+        {"sub": "teacher_alpha", "role": "teacher", "exp": now + 3600},
+        secret=secret,
+    )
+    assert "tv" not in _token_claims(token)
+
+    rejected = client.get(
+        "/teacher/history/sessions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert rejected.status_code == 401
+    assert rejected.json().get("detail") == "token_revoked"
+
+
+def test_login_minted_teacher_token_with_tv_still_works(tmp_path: Path):
+    secret = "auth-teacher-login-tv-secret"
+    _write_teacher_profile(
+        tmp_path,
+        teacher_id="teacher_alpha",
+        teacher_name="张老师",
+        email="alpha@example.com",
+    )
+    app_mod = _load_app(tmp_path, secret=secret)
+    client = TestClient(app_mod.app)
+    admin_headers = _auth_headers("admin", "admin", secret=secret)
+
+    export_res = client.post(
+        "/auth/admin/teacher/export-tokens",
+        headers=admin_headers,
+        json={"ids": ["teacher_alpha"]},
+    )
+    assert export_res.status_code == 200
+    teacher_token = str(((export_res.json().get("items") or [{}])[0].get("token") or ""))
+    assert teacher_token
+
+    login_res = client.post(
+        "/auth/teacher/login",
+        json={
+            "candidate_id": "teacher_alpha",
+            "credential_type": "token",
+            "credential": teacher_token,
+        },
+    )
+    assert login_res.status_code == 200
+    login_payload = login_res.json()
+    assert login_payload.get("ok") is True
+    access_token = str(login_payload.get("access_token") or "")
+    assert access_token
+    assert int(_token_claims(access_token).get("tv") or 0) == 1
+
+    protected = client.get(
+        "/teacher/history/sessions",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert protected.status_code == 200

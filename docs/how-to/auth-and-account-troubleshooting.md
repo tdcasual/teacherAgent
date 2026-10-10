@@ -14,6 +14,7 @@
 
 3. 提示 `token_revoked`
 - 旧 token 已失效（通常因重置 token/密码导致 `token_version` 变化）。
+- 无 tv 的师生 Bearer 失效，请重新登录。
 - 重新登录获取新 access token。
 
 4. 生产环境认证异常
@@ -35,6 +36,15 @@
 3. GitHub secret scanning 对该历史明文应视为已泄露。
 
 回滚注意：gitignore 规则不要回滚。口令与 `AUTH_TOKEN_SECRET` 轮换不可回滚到旧明文。
+
+## 生产 bootstrap 轮换勾选（H16）
+
+运营退出 RISK-ADMIN-BOOTSTRAP-001 前必须勾选。设计不能代做（OQ-1）。不要 `git filter-repo`，不要 rewrite `main`。
+
+- [ ] 生产 admin 密码已轮换
+- [ ] `AUTH_TOKEN_SECRET` 已轮换
+- [ ] `AUTH_TOKEN_SECRET_FILE` 内容已轮换
+- [ ] 未执行 git filter-repo / 未 rewrite main
 
 ## 推荐排障顺序
 1. 确认服务健康（`/health`）。

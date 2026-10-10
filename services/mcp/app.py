@@ -5,9 +5,10 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -41,6 +42,13 @@ MCP_BOUND_EXTRA_TOOL_NAMES = [
     "assignment.list",
     "assignment.render",
 ]
+MCP_ROSTER_TOOL_NAMES = frozenset(
+    {
+        "student.search",
+        "student.profile.get",
+        "student.profile.update",
+    }
+)
 # Bound extras stay callable when unbound so tools/call can return mcp_teacher_unbound.
 MCP_CALLABLE_TOOL_NAMES = MCP_UNBOUND_TOOL_NAMES + MCP_BOUND_EXTRA_TOOL_NAMES
 
@@ -91,7 +99,7 @@ def _mcp_tools() -> List[Dict[str, Any]]:
 
 _ALLOWED_SCRIPTS = frozenset(
     {
-        (APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py").resolve(),
+        (APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py").resolve(),
         (APP_ROOT / "scripts" / "render_assignment_pdf.py").resolve(),
     }
 )
@@ -145,6 +153,8 @@ def _require_allowed_script(script_value: Any) -> Path:
     resolved = path.resolve()
     if resolved not in _ALLOWED_SCRIPTS:
         raise HTTPException(status_code=400, detail="script_not_allowed")
+    if not resolved.is_file():
+        raise HTTPException(status_code=500, detail="mcp_script_missing")
     return resolved
 
 
@@ -217,33 +227,80 @@ def _tool_assignment_list() -> Dict[str, Any]:
     return {"ok": True, "assignments": items}
 
 
-def _tool_student_search(args: Dict[str, Any]) -> Dict[str, Any]:
+def _auth_registry_sqlite_path() -> Path:
+    return DATA_DIR / "auth" / "auth_registry.sqlite3"
+
+
+def _list_enrolled_student_ids(teacher_id: str) -> Optional[Set[str]]:
+    tid = str(teacher_id or "").strip()
+    if not tid:
+        return None
+    path = _auth_registry_sqlite_path()
+    if not path.is_file():
+        return None
+    try:
+        uri = f"file:{path.resolve().as_posix()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT student_id FROM student_enrollments WHERE teacher_id = ?",
+                (tid,),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    out: Set[str] = set()
+    for row in rows:
+        sid = str(row[0] or "").strip()
+        if sid and _SAFE_ID_RE.match(sid):
+            out.add(sid)
+    return out
+
+
+def _enrolled_or_rpc_error(
+    request_id: Optional[Union[str, int]],
+) -> tuple[Optional[Set[str]], Optional[Dict[str, Any]]]:
+    enrolled = _list_enrolled_student_ids(_mcp_bound_teacher_id())
+    if enrolled is None:
+        return None, _jsonrpc_error(request_id, 403, "mcp_roster_unavailable")
+    return enrolled, None
+
+
+def _tool_student_search(args: Dict[str, Any], enrolled: Set[str]) -> Dict[str, Any]:
     query = str(args.get("query") or "").strip()
     limit = max(1, min(int(args.get("limit", 5) or 5), 50))
     if not query:
         return {"error": "missing_query"}
-    base = DATA_DIR / "student_profiles"
-    if not base.exists():
+    if not enrolled:
         return {"ok": True, "query": query, "students": []}
     results = []
     q = query.lower()
-    for path in base.glob("*.json"):
-        sid = path.stem
-        if q in sid.lower():
-            try:
-                profile = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                _log.debug("JSON parse failed", exc_info=True)
-                profile = {}
-            results.append(
-                {
-                    "student_id": sid,
-                    "student_name": str(profile.get("student_name") or "").strip(),
-                    "class_name": str(profile.get("class_name") or "").strip(),
-                }
-            )
-            if len(results) >= limit:
-                break
+    for sid in sorted(enrolled):
+        path = DATA_DIR / "student_profiles" / f"{sid}.json"
+        if not path.is_file():
+            continue
+        try:
+            profile = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            _log.debug("JSON parse failed", exc_info=True)
+            profile = {}
+        haystacks = [
+            sid,
+            str(profile.get("student_name") or "").strip(),
+            str(profile.get("class_name") or "").strip(),
+        ]
+        if not any(q in item.lower() for item in haystacks if item):
+            continue
+        results.append(
+            {
+                "student_id": sid,
+                "student_name": str(profile.get("student_name") or "").strip(),
+                "class_name": str(profile.get("class_name") or "").strip(),
+            }
+        )
+        if len(results) >= limit:
+            break
     return {"ok": True, "query": query, "students": results[:limit]}
 
 
@@ -287,14 +344,26 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
         issues = DEFAULT_TOOL_REGISTRY.validate_arguments(name, args)
         if issues:
             return _jsonrpc_error(req.id, -32602, "invalid arguments", {"tool": name, "issues": issues[:20]})
+        if name in MCP_ROSTER_TOOL_NAMES and not _mcp_bound_teacher_id():
+            return _jsonrpc_error(req.id, 403, "mcp_teacher_unbound")
         if name in MCP_BOUND_EXTRA_TOOL_NAMES and not _mcp_bound_teacher_id():
             return _unbound_tool_response(req.id, name)
         try:
+            if name in MCP_ROSTER_TOOL_NAMES:
+                enrolled, roster_err = _enrolled_or_rpc_error(req.id)
+                if roster_err:
+                    return roster_err
+                assert enrolled is not None
+            else:
+                enrolled = set()
+
             if name == "student.search":
-                return _jsonrpc_ok(req.id, _tool_student_search(args))
+                return _jsonrpc_ok(req.id, _tool_student_search(args, enrolled))
 
             if name == "student.profile.get":
                 student_id = _require_safe_id(args.get("student_id"), "student_id")
+                if student_id not in enrolled:
+                    return _jsonrpc_error(req.id, 403, "forbidden_student_scope")
                 profile_path = DATA_DIR / "student_profiles" / f"{student_id}.json"
                 if not profile_path.exists():
                     return _jsonrpc_error(req.id, 404, "profile not found", {"student_id": student_id})
@@ -302,7 +371,9 @@ async def mcp_rpc(req: JsonRpcRequest, x_api_key: Optional[str] = Header(default
 
             if name == "student.profile.update":
                 student_id = _require_safe_id(args.get("student_id"), "student_id")
-                script = APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
+                if student_id not in enrolled:
+                    return _jsonrpc_error(req.id, 403, "forbidden_student_scope")
+                script = APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
                 cmd = ["python3", str(script), "--student-id", student_id]
                 for key in ("weak_kp", "strong_kp", "medium_kp", "next_focus", "interaction_note"):
                     if args.get(key) is not None:

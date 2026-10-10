@@ -12,9 +12,9 @@ export default defineConfig({
       },
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Physics Teaching Helper',
-        short_name: 'PhysicsHelper',
-        description: 'Mobile-first physics teaching assistant',
+        name: '教学工作流',
+        short_name: '作业助手',
+        description: '单校作业产品',
         theme_color: '#0b3d91',
         background_color: '#f7f7f7',
         display: 'standalone',

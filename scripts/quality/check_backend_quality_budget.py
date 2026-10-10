@@ -71,11 +71,15 @@ def _line_count(path: Path) -> int:
     return len(path.read_text(encoding="utf-8").splitlines())
 
 
-def collect_metrics() -> tuple[QualityMetrics, dict[str, str]]:
-    ruff_rc, ruff_output = run_command([sys.executable, "-m", "ruff", "check", "services/api", "--statistics"])
-    if ruff_rc not in (0, 1):
-        raise RuntimeError(f"ruff command failed with exit code {ruff_rc}")
-    ruff_errors = parse_ruff_error_count(ruff_output)
+def collect_metrics(*, skip_ruff: bool = False) -> tuple[QualityMetrics, dict[str, str]]:
+    if skip_ruff:
+        ruff_output = ""
+        ruff_errors = 0
+    else:
+        ruff_rc, ruff_output = run_command([sys.executable, "-m", "ruff", "check", "services/api", "--statistics"])
+        if ruff_rc not in (0, 1):
+            raise RuntimeError(f"ruff command failed with exit code {ruff_rc}")
+        ruff_errors = parse_ruff_error_count(ruff_output)
 
     mypy_rc, mypy_output = run_command(
         [sys.executable, "-m", "mypy", "--follow-imports=skip", "services/api"]
@@ -118,10 +122,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Print raw ruff/mypy output for debugging.",
     )
+    parser.add_argument(
+        "--skip-ruff",
+        action="store_true",
+        help="Skip ruff; CI ruff step already covers services/api plus security pins.",
+    )
     args = parser.parse_args(argv)
 
     budget = load_budget(BUDGET_PATH)
-    metrics, outputs = collect_metrics()
+    metrics, outputs = collect_metrics(skip_ruff=bool(args.skip_ruff))
 
     payload = {"budget": asdict(budget), "metrics": asdict(metrics)}
     print(json.dumps(payload, ensure_ascii=False, indent=2))

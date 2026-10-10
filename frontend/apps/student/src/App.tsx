@@ -828,6 +828,12 @@ export default function App() {
       ref={appRef}
       data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
     >
+      <a
+        href="#student-main"
+        className="absolute left-[-999px] top-2 z-[1000] bg-surface text-ink px-3 py-2 rounded-md focus:left-2"
+      >
+        跳到主内容
+      </a>
       <StudentTopbar
         verifiedStudent={state.verifiedStudent}
         sidebarOpen={state.sidebarOpen}

@@ -37,7 +37,8 @@ services:
       - ./.mem0:/app/.mem0
       - ./uploads:/app/uploads
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     mem_limit: 2g
     cpus: 2.0
@@ -91,7 +92,8 @@ services:
       - ./.mem0:/app/.mem0
       - ./uploads:/app/uploads
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     mem_limit: 2g
     cpus: 2.0

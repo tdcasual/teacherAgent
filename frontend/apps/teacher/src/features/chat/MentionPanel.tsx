@@ -21,7 +21,7 @@ type Props = {
 export default function MentionPanel({ mention, mentionIndex, onInsert }: Props) {
   if (!mention || mention.items.length === 0) return null;
   return (
-    <div className="mention-panel border border-dashed border-border rounded-[14px] px-[10px] py-2 bg-[#fbf6ee]">
+    <div className="mention-panel border border-dashed border-border rounded-[14px] px-[10px] py-2 bg-warning-soft">
       <div className="text-[12px] text-muted mb-2">能力建议（↑↓ 选择 / 回车插入）</div>
       <div className="grid gap-2">
         {mention.items.map((item, index) => (
@@ -29,7 +29,7 @@ export default function MentionPanel({ mention, mentionIndex, onInsert }: Props)
             key={`${item.type}:${item.id}`}
             type="button"
             className={`text-left px-[10px] py-2 rounded-[10px] bg-white cursor-pointer flex gap-2 items-baseline border ${
-              index === mentionIndex ? 'border-accent bg-[#e8f3f1]' : 'border-transparent'
+              index === mentionIndex ? 'border-accent bg-accent-soft' : 'border-transparent'
             }`}
             onClick={() => onInsert(item)}
           >

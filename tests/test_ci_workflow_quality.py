@@ -41,7 +41,7 @@ def test_ci_has_maintainability_guardrails_step() -> None:
 def test_ci_has_backend_quality_budget_check_step() -> None:
     text = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "Check backend quality budget" in text
-    assert "python scripts/quality/check_backend_quality_budget.py" in text
+    assert "python scripts/quality/check_backend_quality_budget.py --skip-ruff" in text
 
 
 def test_ci_scans_for_merge_conflict_markers() -> None:
@@ -69,6 +69,7 @@ def test_ci_ruff_gate_is_scoped_and_covers_security_critical_files() -> None:
     step = _ci_ruff_step(text)
     header = step.splitlines()[0]
     assert "scoped" in header.lower()
+    assert "ruff check services/api" in step
     for path in _SECURITY_CRITICAL_RUFF_PATHS:
         assert path in step
 

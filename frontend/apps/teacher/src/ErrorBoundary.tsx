@@ -55,16 +55,16 @@ export default class ErrorBoundary extends React.Component<Props, State> {
         }}
       >
         <h1 style={{ fontSize: 18, margin: '8px 0' }}>页面发生错误</h1>
-        <p style={{ margin: '8px 0', color: '#444' }}>
+        <p style={{ margin: '8px 0', color: 'var(--color-muted)' }}>
           请尝试刷新页面；如果反复出现，可以清空本地缓存后重试。
         </p>
         <pre
           style={{
             whiteSpace: 'pre-wrap',
-            background: '#f6f6f6',
+            background: 'var(--color-surface-soft)',
             padding: 12,
             borderRadius: 8,
-            color: '#222',
+            color: 'var(--color-ink)',
           }}
         >
           {message}

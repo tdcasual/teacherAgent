@@ -182,6 +182,43 @@ class TestTeacherGradeService:
         assert stored["comment"] == "覆盖"
         assert official_score_from(auto_score=8, teacher_grade=stored) == 8.0
 
+    def test_save_teacher_grade_upserts_sql(self, tmp_path: Path) -> None:
+        from services.api.assignment.store import connect, ensure
+
+        _write_json(tmp_path / "assignments" / "HW_1" / "meta.json", _meta())
+        conn = connect(tmp_path)
+        try:
+            ensure(conn, data_dir=tmp_path)
+        finally:
+            conn.close()
+        result = save_teacher_grade(
+            "HW_1",
+            "S1",
+            principal=_owner(),
+            data_dir=tmp_path,
+            updates={
+                "override_score": 12.5,
+                "comment": "步骤完整，单位漏写",
+                "attempt_id": "submission_20260828T120000",
+            },
+        )
+        assert result["ok"] is True
+        conn = connect(tmp_path)
+        try:
+            row = conn.execute(
+                "SELECT payload_json, updated_at FROM teacher_grades "
+                "WHERE assignment_id = ? AND student_id = ?",
+                ("HW_1", "S1"),
+            ).fetchone()
+            assert row is not None
+            payload = json.loads(row["payload_json"])
+            assert payload["override_score_earned"] == 12.5
+            assert payload["comment"] == "步骤完整，单位漏写"
+            assert payload["attempt_id"] == "submission_20260828T120000"
+            assert str(row["updated_at"] or "").strip()
+        finally:
+            conn.close()
+
 
 def test_grade_endpoint_writes_teacher_grade_json() -> None:
     with TemporaryDirectory() as td:

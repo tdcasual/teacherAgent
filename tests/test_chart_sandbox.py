@@ -45,10 +45,15 @@ class BuildSanitizedEnvTest(unittest.TestCase):
             self.assertNotIn("API_KEY_X", env)
             self.assertIn("LANG", env)
 
-    def test_sandboxed_whitelist_includes_data_dir(self):
-        with patch.dict(os.environ, {"DATA_DIR": "/app/data", "PASSWORD": "x"}, clear=True):
+    def test_sandboxed_whitelist_excludes_data_dir(self):
+        with patch.dict(
+            os.environ,
+            {"DATA_DIR": "/app/data", "UPLOADS_DIR": "/app/uploads", "PASSWORD": "x"},
+            clear=True,
+        ):
             env = build_sanitized_env("sandboxed")
-            self.assertIn("DATA_DIR", env)
+            self.assertNotIn("DATA_DIR", env)
+            self.assertIn("UPLOADS_DIR", env)
             self.assertNotIn("PASSWORD", env)
 
     def test_sensitive_patterns_stripped(self):
@@ -194,9 +199,29 @@ class ScanCodePatternsTest(unittest.TestCase):
         result = scan_code_patterns("os.popen('ls')", "sandboxed")
         self.assertIsNotNone(result)
 
+    def test_scan_blocks_os_open(self):
+        cases = (
+            ("fd = os.open('/etc/passwd', os.O_RDONLY)", "os.open"),
+            ("os.fdopen(3)", "os.fdopen"),
+            ("os.read(fd, 64)", "os.read"),
+            ("os.write(fd, b'x')", "os.write"),
+            ("os.replace(src, dst)", "os.replace"),
+        )
+        for snippet, label in cases:
+            with self.subTest(label=label):
+                result = scan_code_patterns(snippet, "sandboxed")
+                self.assertIsNotNone(result)
+                self.assertIn(label, result["violations"])
+
     def test_signal_module_blocked(self):
         result = scan_code_patterns("signal.alarm(5)", "sandboxed")
         self.assertIsNotNone(result)
+
+
+def _restore_fs_patches(*, original_open, original_os_open, original_os_fdopen) -> None:
+    builtins.open = original_open
+    os.open = original_os_open
+    os.fdopen = original_os_fdopen
 
 
 class BuildFilesystemGuardSourceTest(unittest.TestCase):
@@ -208,6 +233,8 @@ class BuildFilesystemGuardSourceTest(unittest.TestCase):
         source = build_filesystem_guard_source("/tmp/out", ["/tmp/out"])
         self.assertIn("_guarded_open", source)
         self.assertIn("builtins", source)
+        self.assertIn("_os.open", source)
+        self.assertIn("_os.fdopen", source)
 
     def test_guard_contains_output_dir(self):
         source = build_filesystem_guard_source("/my/output", ["/my/output"])
@@ -238,6 +265,8 @@ class BuildFilesystemGuardSourceTest(unittest.TestCase):
             )
             namespace: dict[str, object] = {}
             original_open = builtins.open
+            original_os_open = os.open
+            original_os_fdopen = os.fdopen
             try:
                 exec(source, namespace, namespace)
                 guarded_open = namespace.get("_guarded_open")
@@ -245,7 +274,85 @@ class BuildFilesystemGuardSourceTest(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     guarded_open(str(outside_file), "r", encoding="utf-8")  # type: ignore[misc]
             finally:
-                builtins.open = original_open
+                _restore_fs_patches(
+                    original_open=original_open,
+                    original_os_open=original_os_open,
+                    original_os_fdopen=original_os_fdopen,
+                )
+
+    def test_guard_blocks_os_open_outside_roots(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            output_dir = root / "uploads" / "charts" / "chr_test"
+            uploads_dir = root / "uploads"
+            data_dir = root / "data"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            secret = data_dir / "secret.txt"
+            secret.write_text("secret", encoding="utf-8")
+            allowed = uploads_dir / "ok.txt"
+            allowed.write_text("ok", encoding="utf-8")
+
+            source = build_filesystem_guard_source(
+                str(output_dir),
+                [str(output_dir), str(uploads_dir)],
+            )
+            namespace: dict[str, object] = {}
+            original_open = builtins.open
+            original_os_open = os.open
+            original_os_fdopen = os.fdopen
+            try:
+                exec(source, namespace, namespace)
+                with self.assertRaises(PermissionError):
+                    os.open(str(secret), os.O_RDONLY)
+                fd = os.open(str(allowed), os.O_RDONLY)
+                os.close(fd)
+            finally:
+                _restore_fs_patches(
+                    original_open=original_open,
+                    original_os_open=original_os_open,
+                    original_os_fdopen=original_os_fdopen,
+                )
+
+    def test_pathlib_read_text_data_dir_is_accepted_residual(self):
+        # C2 is not a jail. Path.read_text uses io.open bound at import time,
+        # so the builtins.open patch does not wrap pathlib.
+        source = build_filesystem_guard_source("/tmp/out", ["/tmp/out", "/uploads"])
+        self.assertNotIn("pathlib", source.lower())
+        self.assertNotIn("io.open", source)
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td).resolve()
+            output_dir = root / "uploads" / "charts" / "chr_test"
+            uploads_dir = root / "uploads"
+            data_dir = root / "data"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            uploads_dir.mkdir(parents=True, exist_ok=True)
+            data_dir.mkdir(parents=True, exist_ok=True)
+            secret = data_dir / "secret.txt"
+            secret.write_text("secret", encoding="utf-8")
+
+            source = build_filesystem_guard_source(
+                str(output_dir),
+                [str(output_dir), str(uploads_dir)],
+            )
+            namespace: dict[str, object] = {}
+            original_open = builtins.open
+            original_os_open = os.open
+            original_os_fdopen = os.fdopen
+            try:
+                exec(source, namespace, namespace)
+                with self.assertRaises(PermissionError):
+                    builtins.open(str(secret), "r", encoding="utf-8")
+                # Accepted residual: Path.read_text still reads DATA_DIR.
+                self.assertEqual(secret.read_text(encoding="utf-8"), "secret")
+            finally:
+                _restore_fs_patches(
+                    original_open=original_open,
+                    original_os_open=original_os_open,
+                    original_os_fdopen=original_os_fdopen,
+                )
 
 
 class ConcurrencySemaphoreTest(unittest.TestCase):

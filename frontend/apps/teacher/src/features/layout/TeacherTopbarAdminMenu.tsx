@@ -52,6 +52,14 @@ type TeacherSetPasswordResponse = {
   ok: boolean;
   error?: string;
   message?: string;
+  access_token?: string;
+  subject_id?: string;
+  role?: string;
+  teacher?: {
+    teacher_id?: string;
+    teacher_name?: string;
+    email?: string;
+  };
 };
 
 type StudentPasswordResetScope = 'student' | 'class' | 'all';
@@ -361,9 +369,26 @@ export default function TeacherTopbarAdminMenu({
         return;
       }
 
+      const teacher = setPasswordData.teacher || {};
+      const teacherId = toText(
+        setPasswordData.subject_id || teacher.teacher_id || identifyData.candidate_id,
+      );
+      const teacherName = toText(teacher.teacher_name || name || teacherId);
+      const teacherEmail = toText(teacher.email || email);
+      const accessToken = toText(setPasswordData.access_token);
+      if (accessToken) {
+        writeTeacherAuthSession({
+          accessToken,
+          teacherId,
+          teacherName,
+          role: toText(setPasswordData.role) || 'teacher',
+          ...(teacherEmail ? { email: teacherEmail } : {}),
+        });
+      }
+
       setCredentialType('password');
       setNewPasswordInput('');
-      setAuthInfo('密码设置成功，后续可使用密码登录（token 仍可用）。');
+      setAuthInfo('密码设置成功，后续可使用密码登录。');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error || '设置密码失败');
       setAuthError(message);
@@ -543,7 +568,7 @@ export default function TeacherTopbarAdminMenu({
             </div>
             <button
               type="submit"
-              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer"
               disabled={adminSubmitting}
             >
               {adminSubmitting ? '登录中…' : '管理员登录'}
@@ -612,7 +637,7 @@ export default function TeacherTopbarAdminMenu({
           </div>
           <button
             type="submit"
-            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer"
             disabled={submitting}
           >
             {submitting ? '认证中…' : '确认认证'}
@@ -641,7 +666,7 @@ export default function TeacherTopbarAdminMenu({
           </div>
           <button
             type="submit"
-            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer"
             disabled={settingPassword}
           >
             {settingPassword ? '设置中…' : '设置密码'}
@@ -754,7 +779,7 @@ export default function TeacherTopbarAdminMenu({
             </div>
             <button
               type="submit"
-              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer"
+              className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer"
               disabled={studentResetSubmitting}
             >
               {studentResetSubmitting ? '重置中…' : '重置学生密码'}

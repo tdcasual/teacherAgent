@@ -1,7 +1,7 @@
 {
-  "name": "Physics Teaching Helper",
-  "short_name": "PhysicsHelper",
-  "description": "Mobile-first physics teaching assistant",
+  "name": "教学工作流",
+  "short_name": "作业助手",
+  "description": "单校作业产品",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f7f7f7",

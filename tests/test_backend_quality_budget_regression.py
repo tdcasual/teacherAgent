@@ -7,7 +7,12 @@ import sys
 
 def test_backend_quality_budget_print_only_within_budget() -> None:
     completed = subprocess.run(
-        [sys.executable, "scripts/quality/check_backend_quality_budget.py", "--print-only"],
+        [
+            sys.executable,
+            "scripts/quality/check_backend_quality_budget.py",
+            "--print-only",
+            "--skip-ruff",
+        ],
         capture_output=True,
         text=True,
         check=False,

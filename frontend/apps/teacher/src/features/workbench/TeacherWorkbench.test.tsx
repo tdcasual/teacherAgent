@@ -99,6 +99,14 @@ describe('TeacherWorkbench header', () => {
     );
   });
 
+  it('arrow_right_moves_tab', () => {
+    const viewModel = buildViewModel();
+    render(<TeacherWorkbench viewModel={viewModel} />);
+    const tablist = screen.getByRole('tablist', { name: '工作台分区' });
+    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    expect(viewModel.setWorkbenchTab).toHaveBeenCalledWith('memory');
+  });
+
   it('stacks the summary CTA for narrow workbench widths', () => {
     const viewModel = buildViewModel();
 

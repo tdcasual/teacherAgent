@@ -235,7 +235,7 @@ export default function UploadSection(props: Props) {
             <button
               type="submit"
               data-testid="workflow-upload-submit"
-              className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11"
+              className="border-none rounded-xl py-[10px] px-[14px] bg-accent text-on-accent cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed min-h-11"
               disabled={uploading}
             >
               {uploading ? '上传中…' : '上传并开始解析'}

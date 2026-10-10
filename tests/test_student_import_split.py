@@ -29,10 +29,10 @@ def _issues(path: str) -> list[dict]:
     return json.loads(output) if output else []
 
 
-def test_student_import_hotspots_removed() -> None:
+def test_import_students_from_responses_symbol_must_not_exist() -> None:
     target = "services/api/student_import_service.py"
     source = Path(target).read_text(encoding="utf-8")
-    assert "def resolve_responses_file(" in source
-    assert "def import_students_from_responses(" in source
+    assert "def import_students_from_responses(" not in source
+    assert "def resolve_responses_file(" not in source
     issues = _issues(target)
     assert not issues, f"C901 issues still present: {issues}"

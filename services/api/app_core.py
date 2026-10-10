@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # mypy: disable-error-code=name-defined
 
-import csv
 import json
 import logging
 from logging.handlers import RotatingFileHandler
@@ -13,9 +12,7 @@ import subprocess
 import sys
 import threading
 import time
-import uuid
 from datetime import datetime
-import hashlib
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from collections import deque

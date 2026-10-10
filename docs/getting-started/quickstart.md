@@ -34,3 +34,4 @@ docker compose build api
 docker compose up -d api
 ```
 - 本地非 Docker 调试 API：请使用 Python `3.13` 创建虚拟环境，保持与 CI / `pyproject.toml` 一致。
+- GHCR 预构建前端 bake 的 `VITE_API_URL` 是 `http://127.0.0.1:8000`（见 `.github/workflows/docker.yml`）。校园局域网请用 compose 的 `localhost:8000` 或显式 `VITE_API_URL` 另建镜像。

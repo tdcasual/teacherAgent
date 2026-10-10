@@ -56,14 +56,14 @@ export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
                 data-tone={tone}
                 className={`rounded-[10px] border px-[10px] py-[8px] text-[12px] ${
                   tone === 'error'
-                    ? 'border-[#f1b8b8] bg-[#fff4f4]'
+                    ? 'border-danger bg-danger-soft'
                     : index === 0
                       ? 'border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)]'
                       : 'border-border bg-white'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="font-medium text-[#334155]">{item.summary}</div>
+                  <div className="font-medium text-ink">{item.summary}</div>
                   {item.ts ? (
                     <span className="shrink-0 text-[11px] text-muted">
                       {formatTimelineTimestamp(item.ts)}
@@ -77,7 +77,7 @@ export default function WorkflowTimeline({ entries }: WorkflowTimelineProps) {
         </div>
       ) : (
         <div className="mt-[8px] rounded-[10px] border border-dashed border-border bg-white px-[10px] py-[12px]">
-          <div className="text-[12px] font-medium text-[#334155]">暂无执行记录</div>
+          <div className="text-[12px] font-medium text-ink">暂无执行记录</div>
           <div className="mt-[2px] text-[12px] text-muted">
             先从上传区开始今天流程，系统会在这里持续回显解析与审核节点。
           </div>

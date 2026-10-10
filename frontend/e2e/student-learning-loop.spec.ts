@@ -14,7 +14,7 @@ const studentLoopCases: MatrixCase[] = [
   {
     id: 'I002',
     priority: 'P0',
-    title: 'Diagnostic chat can trigger personalized practice generation',
+    title: 'Diagnostic chat can continue into assignment practice',
     given: 'Student diagnostic conversation reaches completion trigger',
     when: 'Run generate practice action',
     then: 'Personalized practice set is created',

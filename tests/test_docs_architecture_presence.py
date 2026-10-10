@@ -4,8 +4,29 @@ from pathlib import Path
 CURRENT_PLAN_AUTHORITIES = {
     "docs/plans/2026-08-28-assignment-core-product-design.md",
     "docs/plans/2026-08-26-audit-remediation-design.md",
-    "docs/plans/2026-09-05-next-phase-after-audit-design.md",
+    "docs/plans/2026-09-06-strict-score-floor-design.md",
+    "docs/plans/2026-10-10-audit-remediation-design.md",
 }
+
+
+def test_pip_audit_ignore_ids_are_in_risk_register() -> None:
+    script = Path("scripts/quality/check_backend_dep_audit.sh").read_text(encoding="utf-8")
+    register = Path("docs/reference/risk-register.md").read_text(encoding="utf-8")
+    ids = re.findall(r"--ignore-vuln (PYSEC-\d+-\d+)", script)
+    assert ids
+    assert "RISK-PIP-AUDIT-IGNORES-001" in register
+    for vuln_id in ids:
+        assert vuln_id in register
+
+
+def test_bootstrap_rotation_checklist_in_howto() -> None:
+    text = Path("docs/how-to/auth-and-account-troubleshooting.md").read_text(encoding="utf-8")
+    assert "生产 bootstrap 轮换勾选" in text
+    assert "admin 密码" in text
+    assert "AUTH_TOKEN_SECRET" in text
+    assert "AUTH_TOKEN_SECRET_FILE" in text
+    assert "filter-repo" in text
+    assert "- [ ]" in text
 
 
 def test_architecture_docs_exist() -> None:

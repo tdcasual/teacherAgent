@@ -52,7 +52,7 @@ class ChartAgentRunToolTest(unittest.TestCase):
 
             res = app_mod.get_core().tool_dispatch(
                 "chart.agent.run",
-                {"task": "画一个简单折线图", "input_data": {"a": 1}, "packages": ["numpy"], "auto_install": True},
+                {"task": "画一个简单折线图", "input_data": {"a": 1}},
                 role="teacher",
                 confirmed=True,
             )
@@ -60,8 +60,6 @@ class ChartAgentRunToolTest(unittest.TestCase):
             self.assertEqual(res.get("attempt_used"), 1)
             self.assertIn("/charts/chr_test/main.png", res.get("markdown", ""))
             exec_args = captured.get("args") or {}
-            self.assertTrue(exec_args.get("auto_install"))
-            self.assertIn("numpy", exec_args.get("packages") or [])
             self.assertIn("pandas", exec_args.get("packages") or [])
 
     def test_chart_agent_run_retries_after_failure(self):
@@ -125,7 +123,6 @@ class ChartAgentRunToolTest(unittest.TestCase):
                     "task": "画一个趋势图",
                     "engine": "opencode",
                     "input_data": {"x": [1, 2, 3], "y": [2, 4, 3]},
-                    "packages": ["numpy"],
                 },
                 role="teacher",
                 confirmed=True,

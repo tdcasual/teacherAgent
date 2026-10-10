@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Set
 
 
 @dataclass(frozen=True)
@@ -13,7 +13,14 @@ class StudentDirectoryDeps:
     normalize: Callable[[str], str]
 
 
-def student_search(query: str, limit: int, deps: StudentDirectoryDeps) -> Dict[str, Any]:
+def student_search(
+    query: str,
+    limit: int,
+    deps: StudentDirectoryDeps,
+    allowed_student_ids: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    if allowed_student_ids is not None and not allowed_student_ids:
+        return {"matches": []}
     profiles_dir = deps.data_dir / "student_profiles"
     if not profiles_dir.exists():
         return {"matches": []}
@@ -23,6 +30,8 @@ def student_search(query: str, limit: int, deps: StudentDirectoryDeps) -> Dict[s
     for path in profiles_dir.glob("*.json"):
         profile = deps.load_profile_file(path)
         student_id = profile.get("student_id") or path.stem
+        if allowed_student_ids is not None and str(student_id) not in allowed_student_ids:
+            continue
         candidates = [
             student_id,
             profile.get("student_name", ""),

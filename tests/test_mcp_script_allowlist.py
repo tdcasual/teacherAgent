@@ -79,7 +79,7 @@ def test_run_script_allows_skill_and_render_scripts(monkeypatch):
         monkeypatch.setattr(mcp_mod.subprocess, "run", _fake_run)
         lesson = mcp_mod.APP_ROOT / "skills" / "physics-lesson-capture" / "scripts" / "lesson_capture.py"
         core = mcp_mod.APP_ROOT / "skills" / "physics-core-examples" / "scripts" / "register_core_example.py"
-        coach = mcp_mod.APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py"
+        coach = mcp_mod.APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py"
         render = mcp_mod.APP_ROOT / "scripts" / "render_assignment_pdf.py"
 
         with pytest.raises(HTTPException) as lesson_exc:
@@ -140,3 +140,13 @@ def test_contained_paths_under_data_or_uploads_are_accepted(monkeypatch):
         assert render.status_code == 200
         assert "result" in render.json()
         assert str(out.resolve()) in (captured.get("args") or [])
+
+
+def test_update_profile_allowlist_path_is_student_coach_and_exists():
+    with TemporaryDirectory() as td:
+        mcp_mod = load_mcp(Path(td))
+        expected = (mcp_mod.APP_ROOT / "skills" / "student-coach" / "scripts" / "update_profile.py").resolve()
+        assert expected.is_file()
+        assert expected in mcp_mod._ALLOWED_SCRIPTS
+        physics = (mcp_mod.APP_ROOT / "skills" / "physics-student-coach" / "scripts" / "update_profile.py").resolve()
+        assert physics not in mcp_mod._ALLOWED_SCRIPTS

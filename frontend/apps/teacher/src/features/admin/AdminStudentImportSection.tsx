@@ -106,7 +106,7 @@ export default function AdminStudentImportSection({ apiBase }: { apiBase: string
       </label>
       <button
         type="submit"
-        className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer w-fit"
+        className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer w-fit"
         disabled={submitting}
       >
         {submitting ? '导入中…' : '导入名册'}

@@ -14,7 +14,7 @@ def _deps(*, executed: list):
         list_assignments=lambda owner_teacher_id=None: {"ok": True},
         list_lessons=lambda: {"ok": True},
         lesson_capture=lambda args: executed.append("lesson.capture") or {"ok": True},
-        student_search=lambda query, limit: {"ok": True},
+        student_search=lambda query, limit, allowed=None: {"ok": True},
         student_profile_get=lambda student_id: {"ok": True},
         student_profile_update=lambda args: executed.append("student.profile.update") or {"ok": True, "args": args},
         student_import=lambda args: executed.append("student.import") or {"ok": True},
@@ -36,6 +36,7 @@ def _deps(*, executed: list):
         teacher_memory_search=lambda teacher_id, query, limit=5: {"matches": []},
         teacher_memory_propose=lambda teacher_id, target, title, content: {"ok": True},
         teacher_memory_apply=lambda teacher_id, proposal_id, approve=True: executed.append("teacher.memory.apply") or {"ok": True},
+        list_enrolled_student_ids=lambda _tid: {"S1"},
     )
 
 
@@ -61,6 +62,7 @@ def test_mutating_tool_without_confirm_does_not_execute(tmp_path: Path, monkeypa
         "student.profile.update",
         {"student_id": "S1"},
         role="teacher",
+        teacher_id="teacher-1",
         deps=_deps(executed=executed),
         confirmed=True,
     )

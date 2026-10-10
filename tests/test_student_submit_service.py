@@ -517,6 +517,106 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.get("reason"), "min_graded_total")
             self._assert_ungraded_report_consumed(root, error_substr="grade_script_timeout")
 
+    def _prepare_assignment_sql(self, root: Path) -> None:
+        from services.api.assignment.store import connect, ensure
+
+        conn = connect(root)
+        try:
+            ensure(conn, data_dir=root)
+        finally:
+            conn.close()
+
+    def _attempt_sql_row(self, root: Path, assignment_id: str, student_id: str):
+        from services.api.assignment.store import connect
+
+        conn = connect(root)
+        try:
+            return conn.execute(
+                "SELECT attempt_id, submitted_at, grading_report_json, files_json "
+                "FROM student_submission_attempts "
+                "WHERE assignment_id = ? AND student_id = ?",
+                (assignment_id, student_id),
+            ).fetchone()
+        finally:
+            conn.close()
+
+    async def test_submit_upserts_attempt_sql(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._prepare_assignment_sql(root)
+
+            def _run_script(_args):
+                attempt = root / "submissions" / "HW_1" / "S1" / "submission_20260115_000000"
+                attempt.mkdir(parents=True, exist_ok=True)
+                report = {
+                    "student_id": "S1",
+                    "assignment_id": "HW_1",
+                    "graded_total": 1,
+                    "score_earned": 8,
+                    "submitted_at": "2026-01-15T00:00:00",
+                }
+                (attempt / "grading_report.json").write_text(
+                    json.dumps(report, ensure_ascii=False), encoding="utf-8"
+                )
+                (attempt / "page1.pdf").write_bytes(b"%PDF")
+                return "ok"
+
+            deps = _deps(
+                root,
+                run_script=_run_script,
+                compute_assignment_progress=lambda _assignment_id, _include_students: _progress(
+                    submitted=True, score=8.0, attempt_id="submission_20260115_000000"
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            row = self._attempt_sql_row(root, "HW_1", "S1")
+            self.assertIsNotNone(row)
+            self.assertEqual(row["attempt_id"], "submission_20260115_000000")
+            report = json.loads(row["grading_report_json"])
+            self.assertEqual(report.get("graded_total"), 1)
+            self.assertEqual(report.get("score_earned"), 8)
+            files = json.loads(row["files_json"])
+            self.assertIn("grading_report.json", files)
+            self.assertIn("page1.pdf", files)
+
+    async def test_ungraded_submit_upserts_attempt_sql(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._prepare_assignment_sql(root)
+
+            def _boom(_args):
+                raise HTTPException(status_code=500, detail="ocr_utils not available")
+
+            deps = _deps(
+                root,
+                run_script=_boom,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress_from_disk(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            row = self._attempt_sql_row(root, "HW_1", "S1")
+            self.assertIsNotNone(row)
+            self.assertTrue(str(row["attempt_id"]).startswith("submission_"))
+            report = json.loads(row["grading_report_json"])
+            self.assertEqual(report.get("ungraded"), 1)
+            self.assertIn("ocr_utils not available", str(report.get("error") or ""))
+
 
 class StudentSubmitServiceImportGuardTest(unittest.TestCase):
     def test_student_submit_service_does_not_import_fastapi(self):

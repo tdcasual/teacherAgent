@@ -23,6 +23,11 @@
 - 老师可按学生/班级/全量重置学生密码，明文默认密码仅在重置响应中返回一次。
 - 管理员名册导入只写 `student_auth`；enroll 必须另带教师+学科+班级。
 - 审计日志记录关键管理动作。
+- LLM 工具面：绑定 actor 胜。`teacher.memory.*` 与 `teacher.workspace.init` 仅 `role=teacher`；模型传入的他人 `teacher_id` 为 `403 forbidden_teacher_scope`。缺绑定 `400 teacher_id_required`。
+- `student.search` 按教师名册过滤；空名册返回 `{matches:[]}`。`student.profile.get/update` 在读盘前做 `bind_tool_student_id`；名册外 `403 forbidden_student_scope`。
+- 学生 JWT/`actor_id` 只能操作自己的档案。admin/service 可对学生 search/get/update 使用显式 `student_id`，不可经工具冒充教师 MEMORY.md。
+- `assignment.render` 显式 `--out` 必须落在 `DATA_DIR` 下；默认 PDF 路径仍为 `output/pdf/assignment_{id}.pdf`。
+- `student.import` 工具恒 `410 gone`。
 
 ## 相关文档
 - `docs/how-to/admin-manage-teachers-tui.md`

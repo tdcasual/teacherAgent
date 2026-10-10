@@ -8,6 +8,23 @@ afterEach(() => {
 });
 
 describe('ConfirmDialog', () => {
+  it('locks_body_overflow_when_open', () => {
+    const previous = document.body.style.overflow;
+    render(
+      <ConfirmDialog
+        open
+        title="删除会话"
+        confirmText="删除"
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.getElementById('root')?.hasAttribute('inert')).toBeFalsy();
+    cleanup();
+    document.body.style.overflow = previous;
+  });
+
   it('calls onCancel when pressing escape', () => {
     const onCancel = vi.fn();
     render(

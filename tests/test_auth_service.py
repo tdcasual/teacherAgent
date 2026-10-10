@@ -187,7 +187,7 @@ class TestResolvePrincipalFromHeaders(unittest.TestCase):
     """resolve_principal_from_headers with various header/path combos."""
 
     def _bearer(self, role="teacher", actor_id="T001"):
-        claims = {"sub": actor_id, "role": role, "exp": int(time.time()) + 3600}
+        claims = {"sub": actor_id, "role": role, "exp": int(time.time()) + 3600, "tv": 1}
         token = mint_test_token(claims, secret=SECRET)
         return {"authorization": f"Bearer {token}"}
 
@@ -212,7 +212,8 @@ class TestResolvePrincipalFromHeaders(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch.dict(os.environ, _AUTH_ON, clear=False)
-    def test_valid_bearer(self):
+    @patch("services.api.auth_registry_service.validate_subject_token_version", return_value=True)
+    def test_valid_bearer(self, _match):
         p = resolve_principal_from_headers(self._bearer(), path="/api/data", method="GET")
         self.assertIsNotNone(p)
         self.assertEqual(p.actor_id, "T001")
@@ -239,7 +240,8 @@ class TestResolvePrincipalFromHeaders(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch.dict(os.environ, _AUTH_OFF_WITH_SECRET, clear=False)
-    def test_auth_off_still_binds_presented_token(self):
+    @patch("services.api.auth_registry_service.validate_subject_token_version", return_value=True)
+    def test_auth_off_still_binds_presented_token(self, _match):
         p = resolve_principal_from_headers(self._bearer(), path="/teacher/history/sessions", method="GET")
         self.assertIsNotNone(p)
         self.assertEqual(p.actor_id, "T001")

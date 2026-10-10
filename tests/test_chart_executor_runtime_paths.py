@@ -398,6 +398,94 @@ def test_execute_chart_exec_inner_meta_contains_audit_context(
     assert (meta.get("audit") or {}).get("trusted_risk_alerts") == ["subprocess"]
 
 
+def test_execute_chart_exec_inner_tool_loop_forces_auto_install_false(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_root = tmp_path / "app"
+    uploads_dir = tmp_path / "uploads"
+    app_root.mkdir(parents=True)
+    uploads_dir.mkdir(parents=True)
+    run_id = _set_fixed_uuid(monkeypatch, "11" * 16)
+    _patch_inner_sandbox(monkeypatch)
+
+    venv_calls = {"n": 0}
+
+    def _ensure_venv(_env_dir: Path) -> Dict[str, Any]:
+        venv_calls["n"] += 1
+        return {"ok": True, "python": "python3"}
+
+    monkeypatch.setattr(ce, "_ensure_venv", _ensure_venv)
+    monkeypatch.setattr(
+        ce,
+        "_pip_install",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("pip must not run")),
+    )
+    monkeypatch.setattr(ce, "_maybe_prune_chart_envs", lambda *_args, **_kwargs: {"enabled": True})
+
+    def _run(*args: Any, **kwargs: Any) -> Any:
+        image = uploads_dir / "charts" / run_id / "main.png"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"\x89PNG\r\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(ce.subprocess, "run", _run)
+
+    out = ce._execute_chart_exec_inner(
+        {
+            "python_code": "print(1)",
+            "auto_install": True,
+            "packages": ["numpy"],
+            "_audit_context": {
+                "source": "tool_dispatch.chart.exec",
+                "role": "teacher",
+                "actor": "teacher_a",
+            },
+        },
+        app_root,
+        uploads_dir,
+        "print(1)",
+        "sandboxed",
+    )
+
+    assert out["ok"] is True
+    assert out["auto_install"] is False
+    assert out["requested_packages"] == []
+    assert venv_calls["n"] == 0
+
+    out_loop = ce._execute_chart_exec_inner(
+        {
+            "python_code": "print(1)",
+            "auto_install": True,
+            "packages": ["pandas"],
+            "_audit_source": "tool_loop",
+        },
+        app_root,
+        uploads_dir,
+        "print(1)",
+        "sandboxed",
+    )
+    assert out_loop["auto_install"] is False
+    assert out_loop["requested_packages"] == []
+    assert venv_calls["n"] == 0
+
+    out_agent = ce._execute_chart_exec_inner(
+        {
+            "python_code": "print(1)",
+            "auto_install": True,
+            "packages": ["scipy"],
+            "_audit_source": "chart.agent.run",
+        },
+        app_root,
+        uploads_dir,
+        "print(1)",
+        "sandboxed",
+    )
+    assert out_agent["auto_install"] is False
+    assert out_agent["requested_packages"] == []
+    assert venv_calls["n"] == 0
+
+
 def test_execute_chart_exec_inner_sandbox_injects_fs_guard(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -122,7 +122,7 @@ def _register_student_auth_routes(router: APIRouter, core: Any) -> None:
 
     @router.post("/auth/student/set-password")
     def auth_student_set_password(req: StudentSetPasswordRequest) -> Any:
-        return _build_store(core).set_password(
+        result = _build_store(core).set_password(
             role="student",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
@@ -131,6 +131,9 @@ def _register_student_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=req.candidate_id,
             actor_role="student",
         )
+        if not result.get("ok"):
+            return result
+        return _student_login_response(result)
 
 
 def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
@@ -150,7 +153,7 @@ def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
 
     @router.post("/auth/teacher/set-password")
     def auth_teacher_set_password(req: TeacherSetPasswordRequest) -> Any:
-        return _build_store(core).set_password(
+        result = _build_store(core).set_password(
             role="teacher",
             candidate_id=req.candidate_id,
             credential_type=req.credential_type,
@@ -159,6 +162,9 @@ def _register_teacher_auth_routes(router: APIRouter, core: Any) -> None:
             actor_id=req.candidate_id,
             actor_role="teacher",
         )
+        if not result.get("ok"):
+            return result
+        return _teacher_login_response(result)
 
     @router.post("/auth/teacher/student/reset-passwords")
     def auth_teacher_student_reset_passwords(req: TeacherStudentPasswordResetRequest) -> Any:

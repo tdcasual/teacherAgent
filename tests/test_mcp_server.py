@@ -2,6 +2,7 @@ import importlib
 import inspect
 import json
 import os
+import sqlite3
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -55,6 +56,49 @@ def _call_tool(client: TestClient, api_key: str, name: str, arguments: dict, rpc
     )
 
 
+def _seed_enrollments(data_dir: Path, teacher_id: str, student_ids: list[str]) -> None:
+    db = data_dir / "auth" / "auth_registry.sqlite3"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS student_enrollments (
+                student_id TEXT NOT NULL,
+                subject_id TEXT NOT NULL,
+                class_name TEXT NOT NULL,
+                teacher_id TEXT NOT NULL,
+                PRIMARY KEY (student_id, subject_id, class_name)
+            )
+            """
+        )
+        for sid in student_ids:
+            conn.execute(
+                "INSERT INTO student_enrollments(student_id, subject_id, class_name, teacher_id) "
+                "VALUES (?, 'physics', 'C1', ?)",
+                (sid, teacher_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _seed_profile(data_dir: Path, student_id: str, student_name: str = "") -> None:
+    profiles = data_dir / "student_profiles"
+    profiles.mkdir(parents=True, exist_ok=True)
+    (profiles / f"{student_id}.json").write_text(
+        json.dumps(
+            {
+                "student_id": student_id,
+                "student_name": student_name or student_id,
+                "class_name": "C1",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
 def _seed_assignment(data_dir: Path, assignment_id: str, teacher_id: str) -> None:
     folder = data_dir / "assignments" / assignment_id
     folder.mkdir(parents=True, exist_ok=True)
@@ -100,7 +144,9 @@ class MCPServerTest(unittest.TestCase):
                 },
             )
             self.assertEqual(res.status_code, 200)
-            self.assertEqual(res.json()["result"]["student_id"], "C1_A")
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "mcp_teacher_unbound")
 
     def test_auth_enforced_when_configured(self):
         with TemporaryDirectory() as td:
@@ -242,6 +288,104 @@ class MCPServerTest(unittest.TestCase):
             self.assertEqual(res.status_code, 200)
             names = res.json()["result"]["assignments"]
             self.assertEqual(names, ["HW_MINE"])
+
+    def test_unbound_student_search_returns_mcp_teacher_unbound(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            res = _call_tool(TestClient(mcp_mod.app), "secret", "student.search", {"query": "A"})
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "mcp_teacher_unbound")
+
+    def test_unbound_student_profile_get_returns_mcp_teacher_unbound(self):
+        with TemporaryDirectory() as td:
+            mcp_mod = load_mcp(Path(td), api_key="secret")
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "student.profile.get",
+                {"student_id": "C1_A"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "mcp_teacher_unbound")
+
+    def test_bound_student_search_uses_enrollments_not_all_profiles(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            data_dir = Path(os.environ["DATA_DIR"])
+            _seed_profile(data_dir, "S1", "Alice")
+            _seed_profile(data_dir, "S2", "Alice2")
+            _seed_enrollments(data_dir, "t_bound", ["S1"])
+            res = _call_tool(TestClient(mcp_mod.app), "secret", "student.search", {"query": "Alice"})
+            self.assertEqual(res.status_code, 200)
+            students = res.json()["result"]["students"]
+            self.assertEqual([row["student_id"] for row in students], ["S1"])
+
+    def test_bound_profile_get_foreign_student_forbidden(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            data_dir = Path(os.environ["DATA_DIR"])
+            _seed_profile(data_dir, "S1")
+            _seed_profile(data_dir, "S2")
+            _seed_enrollments(data_dir, "t_bound", ["S1"])
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "student.profile.get",
+                {"student_id": "S2"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "forbidden_student_scope")
+            own = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "student.profile.get",
+                {"student_id": "S1"},
+            )
+            self.assertEqual(own.status_code, 200)
+            self.assertEqual(own.json()["result"]["student_id"], "S1")
+
+    def test_bound_profile_update_foreign_student_forbidden(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            data_dir = Path(os.environ["DATA_DIR"])
+            _seed_profile(data_dir, "S2")
+            _seed_enrollments(data_dir, "t_bound", ["S1"])
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "student.profile.update",
+                {"student_id": "S2", "next_focus": "力学"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "forbidden_student_scope")
+
+    def test_bound_profile_get_missing_sqlite_is_mcp_roster_unavailable(self):
+        with TemporaryDirectory() as td:
+            tmp = Path(td)
+            mcp_mod = load_mcp(tmp, api_key="secret", bound_teacher_id="t_bound")
+            data_dir = Path(os.environ["DATA_DIR"])
+            _seed_profile(data_dir, "S1")
+            res = _call_tool(
+                TestClient(mcp_mod.app),
+                "secret",
+                "student.profile.get",
+                {"student_id": "S1"},
+            )
+            self.assertEqual(res.status_code, 200)
+            err = res.json().get("error") or {}
+            self.assertEqual(err.get("code"), 403)
+            self.assertEqual(err.get("message"), "mcp_roster_unavailable")
 
 
 if __name__ == "__main__":

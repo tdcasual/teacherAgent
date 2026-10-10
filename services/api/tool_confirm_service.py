@@ -32,6 +32,8 @@ MUTATING_TOOL_NAMES = frozenset(
         "assignment.recompute_roster",
         "lesson.capture",
         "core_example.register",
+        "teacher.workspace.init",
+        "teacher.memory.propose",
         "teacher.memory.apply",
         "chart.exec",
         "chart.agent.run",

@@ -2450,7 +2450,7 @@ test('fallback send lock should not expire during very slow chat/start in same t
   await page.locator('textarea').fill('慢请求第一条')
   await page.locator('textarea').press('Enter')
 
-  await page.waitForTimeout(5400)
+  await expect.poll(() => startBodies.length).toBeGreaterThan(0)
 
   await page.locator('textarea').fill('慢请求第二条')
   await page.locator('textarea').press('Enter')

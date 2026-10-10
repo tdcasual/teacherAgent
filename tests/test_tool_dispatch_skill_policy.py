@@ -41,7 +41,7 @@ class ToolDispatchSkillPolicyTest(unittest.TestCase):
             list_assignments=lambda owner_teacher_id=None: {"ok": True},
             list_lessons=lambda: {"ok": True},
             lesson_capture=lambda args: {"ok": True, "args": args},
-            student_search=lambda query, limit: {"ok": True, "query": query, "limit": limit},
+            student_search=lambda query, limit, allowed=None: {"ok": True, "query": query, "limit": limit},
             student_profile_get=lambda student_id: {"ok": True, "student_id": student_id},
             student_profile_update=lambda args: {"ok": True, "args": args},
             student_import=lambda args: {"ok": True, "args": args},

@@ -268,5 +268,111 @@ class TestComputeAssignmentProgress:
         )
         with caplog.at_level(logging.WARNING):
             result = compute_assignment_progress("hw1", deps=deps)
-        assert result["ok"] is True
-        assert "failed to write progress.json" in caplog.text
+        assert result["ok"] is False
+        assert result.get("error") == "assignment_persist_failed"
+        assert result.get("status") == 500
+        assert "failed to persist progress" in caplog.text
+
+
+def _progress_sql_rows(tmp_path: Path, assignment_id: str):
+    from services.api.assignment.store import connect, ensure
+
+    conn = connect(tmp_path)
+    try:
+        ensure(conn, data_dir=tmp_path)
+        return list(
+            conn.execute(
+                "SELECT student_id, submitted, overdue, official_score, process_status, payload_json "
+                "FROM assignment_progress WHERE assignment_id = ? ORDER BY student_id",
+                (assignment_id,),
+            ).fetchall()
+        )
+    finally:
+        conn.close()
+
+
+def test_compute_writes_sql_progress_rows(tmp_path: Path):
+    from services.api.fs_atomic import atomic_write_json as real_atomic_write_json
+
+    meta = _setup_assignment(tmp_path, "hw1", ["s1", "s2"])
+    deps = _make_deps(
+        tmp_path,
+        load_assignment_meta=lambda _f: meta,
+        list_all_student_profiles=lambda: [
+            {"student_id": "s1", "student_name": "Alice", "class_name": "A"},
+            {"student_id": "s2", "student_name": "Bob", "class_name": "A"},
+        ],
+        list_submission_attempts=lambda _a, s: (
+            [{"graded_total": 1, "score_earned": 9}] if s == "s1" else []
+        ),
+        atomic_write_json=real_atomic_write_json,
+    )
+    result = compute_assignment_progress("hw1", deps=deps)
+    assert result["ok"] is True
+    rows = _progress_sql_rows(tmp_path, "hw1")
+    assert len(rows) == 2
+    by_id = {row["student_id"]: row for row in rows}
+    assert int(by_id["s1"]["submitted"]) == 1
+    assert int(by_id["s2"]["submitted"]) == 0
+    assert float(by_id["s1"]["official_score"]) == 9.0
+    payload = json.loads(by_id["s1"]["payload_json"])
+    assert payload["student_id"] == "s1"
+    assert payload["submitted"] is True
+
+    slim = compute_assignment_progress("hw1", deps=deps, include_students=False)
+    assert slim["ok"] is True
+    assert slim["students"] == []
+    slim_rows = _progress_sql_rows(tmp_path, "hw1")
+    slim_by_id = {row["student_id"]: row for row in slim_rows}
+    assert json.loads(slim_by_id["s1"]["payload_json"]) == {}
+    assert json.loads(slim_by_id["s2"]["payload_json"]) == {}
+    assert int(slim_by_id["s1"]["submitted"]) == 1
+
+
+def test_sql_row_without_folder_is_not_404(tmp_path: Path):
+    from services.api.assignment.store import connect, ensure, upsert_assignment
+    from services.api.fs_atomic import atomic_write_json as real_atomic_write_json
+
+    conn = connect(tmp_path)
+    try:
+        ensure(conn, data_dir=tmp_path)
+        upsert_assignment(
+            conn,
+            {
+                "assignment_id": "ghost",
+                "teacher_id": "t_zhang",
+                "subject_id": "physics",
+                "visibility_status": "published",
+                "scope": "public",
+                "expected_students": ["s1"],
+                "completion_policy": {},
+            },
+            now_iso="2026-01-15T00:00:00+00:00",
+        )
+    finally:
+        conn.close()
+    assert not (tmp_path / "assignments" / "ghost").exists()
+    deps = _make_deps(tmp_path, atomic_write_json=real_atomic_write_json)
+    result = compute_assignment_progress("ghost", deps=deps)
+    assert result.get("error") != "assignment_not_found"
+    assert result.get("ok") is True
+    assert result.get("assignment_id") == "ghost"
+    assert result.get("counts", {}).get("expected") == 1
+    assert not (tmp_path / "assignments" / "ghost").exists()
+
+
+def test_compute_json_write_failure_rolls_back_sql(tmp_path: Path):
+    meta = _setup_assignment(tmp_path, "hw1", ["s1"])
+    deps = _make_deps(
+        tmp_path,
+        load_assignment_meta=lambda _f: meta,
+        list_all_student_profiles=lambda: [{"student_id": "s1"}],
+        list_submission_attempts=lambda _a, _s: [{"graded_total": 1, "score_earned": 4}],
+        atomic_write_json=lambda _p, _d: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    result = compute_assignment_progress("hw1", deps=deps)
+    assert result.get("ok") is False
+    assert result.get("error") == "assignment_persist_failed"
+    assert result.get("status") == 500
+    rows = _progress_sql_rows(tmp_path, "hw1")
+    assert rows == []

@@ -143,7 +143,7 @@ export default function ChatComposer({
           </div>
           <button
             type="submit"
-            className="composer-btn border-none rounded-[12px] px-4 py-[10px] text-[14px] cursor-pointer bg-accent text-white disabled:opacity-60 disabled:cursor-not-allowed"
+            className="composer-btn border-none rounded-[12px] px-4 py-[10px] text-[14px] cursor-pointer bg-accent text-on-accent disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={sending || pendingChatJob || !canSend || uploadingAttachments}
           >
             发送

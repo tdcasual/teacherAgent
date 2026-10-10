@@ -95,22 +95,7 @@ Panels cover request volume, error rate, latency p95, and SLO status for the
 create 30-day series. Importing it into Grafana is optional and still reads
 the in-process window.
 
-对于统一 analysis runtime，还应补充 specialist 维度指标。当前 `/ops/metrics.metrics.analysis_runtime` 与 `GET /teacher/analysis/metrics` 暴露统一 snapshot：
-
-- `schema_version`：当前为 `v1`，作为运维面稳定契约；
-- `counters.run_count`：按 runtime `started` 事件统计真实执行尝试次数；
-- `counters.fail_count`：按 runtime `failed` 事件统计失败次数；
-- `counters.timeout_count`：统计 reason_code=`timeout` 的失败；
-- `counters.invalid_output_count`：统计 reason_code=`invalid_output` 的失败；
-- `counters.review_downgrade_count`：统计进入 review queue 的自动降级次数；
-- `counters.rerun_count`：统计教师或运维触发的 rerun 请求次数；
-- `by_phase`：包含 `prepared` / `started` / `completed` / `failed`，以及治理辅助阶段 `review_downgraded` / `rerun_requested`；
-- `by_domain`：至少区分 `survey` / `class_report` / `video_homework`，缺失上下文统一落入 `unknown` bucket；
-- `by_strategy`：可按 `strategy_id` 聚合，缺失上下文统一落入 `unknown` bucket；
-- `by_agent`：可按 specialist `agent_id` 聚合，缺失上下文统一落入 `unknown` bucket；
-- `by_reason`：至少记录 `timeout`、`budget_exceeded`、`invalid_output`、`specialist_execution_failed` 以及 review downgrade 的原因分布。
-- runtime snapshot 应持久化到本地 metrics store，避免进程重启后丢失 analysis runtime 与 workflow routing 统计。
-- `workflow_routing`：至少暴露 resolution / outcome counters，以及 `by_effective_skill`、`by_resolution_mode`、`by_outcome`。
+作业产品 `/ops/metrics` 只返回进程内 observability snapshot。分析域 metrics 已卸载。
 
 ## Operational Runbook Hooks
 

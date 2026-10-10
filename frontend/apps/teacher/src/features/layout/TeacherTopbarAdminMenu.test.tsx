@@ -113,4 +113,96 @@ describe('TeacherTopbarAdminMenu password reset scope', () => {
     });
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('persists access_token after set-password and does not claim old token still works', async () => {
+    const writeSession = vi
+      .spyOn(teacherAuth, 'writeTeacherAuthSession')
+      .mockImplementation(() => undefined);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/auth/teacher/identify')) {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, candidate_id: 'cid_teacher' }),
+        };
+      }
+      if (url.includes('/auth/teacher/set-password')) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            access_token: 'new-access',
+            role: 'teacher',
+            subject_id: 'teacher_alpha',
+            teacher: { teacher_id: 'teacher_alpha', teacher_name: '张老师' },
+          }),
+        };
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <TeacherTopbarAdminMenu
+        open
+        panelRef={createRef<HTMLDivElement>()}
+        authed={false}
+        authSubjectLabel=""
+        onOpenModelSettingsPanel={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('姓名'), { target: { value: '张老师' } });
+    fireEvent.change(screen.getByLabelText('token'), { target: { value: 'issued-token' } });
+    fireEvent.change(screen.getByLabelText('新密码'), { target: { value: 'NewPass12' } });
+    fireEvent.click(screen.getByRole('button', { name: '设置密码' }));
+
+    await waitFor(() => {
+      expect(writeSession).toHaveBeenCalledWith({
+        accessToken: 'new-access',
+        teacherId: 'teacher_alpha',
+        teacherName: '张老师',
+        role: 'teacher',
+      });
+    });
+    expect(screen.getByText('密码设置成功，后续可使用密码登录。')).toBeTruthy();
+    expect(screen.queryByText(/token 仍可用/)).toBeNull();
+  });
+
+  it('accent CTAs use text-on-accent instead of text-white', () => {
+    const { rerender } = render(
+      <TeacherTopbarAdminMenu
+        open
+        panelRef={createRef<HTMLDivElement>()}
+        authed={false}
+        authSubjectLabel=""
+        onOpenModelSettingsPanel={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const unauthNames = ['管理员登录', '确认认证', '设置密码'];
+    for (const name of unauthNames) {
+      const className = screen.getByRole('button', { name }).className;
+      expect(className).toContain('text-on-accent');
+      expect(className).not.toContain('text-white');
+    }
+
+    vi.spyOn(teacherAuth, 'readTeacherAccessToken').mockReturnValue('teacher-token');
+    vi.spyOn(teacherAuth, 'readTeacherAuthRole').mockReturnValue('teacher');
+    rerender(
+      <TeacherTopbarAdminMenu
+        open
+        panelRef={createRef<HTMLDivElement>()}
+        authed
+        authSubjectLabel="张老师"
+        onOpenModelSettingsPanel={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const resetClassName = screen.getByRole('button', { name: '重置学生密码' }).className;
+    expect(resetClassName).toContain('text-on-accent');
+    expect(resetClassName).not.toContain('text-white');
+  });
 });

@@ -51,7 +51,7 @@ export default function TeacherTaskStrip({
         <div className="flex w-full flex-col items-stretch gap-2 lg:w-auto lg:min-w-[148px]">
           <button
             type="button"
-            className="border-none rounded-[16px] py-[11px] px-[16px] bg-accent text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+            className="border-none rounded-[16px] py-[11px] px-[16px] bg-accent text-on-accent cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
             onClick={onPrimaryAction}
             disabled={primaryActionDisabled}
           >

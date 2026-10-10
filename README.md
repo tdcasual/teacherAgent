@@ -1,4 +1,5 @@
 # Teaching Workflow Product
+[![CI](https://github.com/tdcasual/teacherAgent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tdcasual/teacherAgent/actions/workflows/ci.yml)
 [![Teacher E2E](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml/badge.svg?branch=main)](https://github.com/tdcasual/teacherAgent/actions/workflows/teacher-e2e.yml)
 
 面向老师、学生与管理员的单校作业产品。

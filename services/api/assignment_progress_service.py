@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 from .assignment.store import connect as assignment_connect
 from .assignment.store import ensure as assignment_ensure
 from .assignment.store import get_assignment as assignment_sql_get
+from .assignment.store import upsert_progress_snapshot
 from .assignment_learning_evidence_service import build_assignment_progress_evidence
 from .assignment_process_archive_service import read_process_archive_summary
 from .teacher_grade_service import load_teacher_grade, official_score_from
@@ -57,6 +59,175 @@ def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Optional[Path
 
 def _assignment_not_found(assignment_id: str) -> Dict[str, Any]:
     return {"ok": False, "error": "assignment_not_found", "assignment_id": assignment_id}
+
+
+def _assignment_persist_failed(assignment_id: str) -> Dict[str, Any]:
+    return {
+        "ok": False,
+        "error": "assignment_persist_failed",
+        "assignment_id": assignment_id,
+        "status": 500,
+    }
+
+
+def _rollback_quiet(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("ROLLBACK")
+    except sqlite3.Error:
+        _log.debug("rollback skipped; no open transaction", exc_info=True)
+
+
+def _json_object(raw: Any) -> Dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        payload = json.loads(raw or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _json_list(raw: Any) -> List[Any]:
+    if isinstance(raw, list):
+        return raw
+    try:
+        payload = json.loads(raw or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def _sql_student_row(student_id: str, student: Dict[str, Any], include_students: bool) -> Dict[str, Any]:
+    payload = student.get("payload")
+    if include_students and isinstance(payload, dict):
+        return payload
+    return {
+        "student_id": student_id,
+        "submitted": bool(student.get("submitted")),
+        "overdue": bool(student.get("overdue")),
+        "official_score": student.get("official_score"),
+        "process_status": str(student.get("process_status") or "none"),
+        "payload_json": "{}",
+    }
+
+
+def _format_progress_snapshot(
+    assignment_id: str,
+    sql_row: Any,
+    rows: List[Any],
+    *,
+    include_students: bool,
+) -> Dict[str, Any]:
+    expected_raw = _json_list(sql_row["expected_students_json"] if sql_row is not None else "[]")
+    expected = [str(item).strip() for item in expected_raw if str(item).strip()]
+    students: List[Dict[str, Any]] = []
+    submitted_count = 0
+    overdue_count = 0
+    completed_count = 0
+    discussion_pass_count = 0
+    for row in rows:
+        submitted = bool(row["submitted"])
+        overdue = bool(row["overdue"])
+        submitted_count += int(submitted)
+        overdue_count += int(overdue)
+        completed_count += int(submitted)
+        payload = _json_object(row["payload_json"])
+        discussion = payload.get("discussion")
+        if isinstance(discussion, dict) and bool(discussion.get("pass")):
+            discussion_pass_count += 1
+        if include_students:
+            if payload:
+                students.append(payload)
+            else:
+                students.append(
+                    {
+                        "student_id": row["student_id"],
+                        "submitted": submitted,
+                        "overdue": overdue,
+                        "official_score": row["official_score"],
+                        "process_status": row["process_status"],
+                    }
+                )
+    return {
+        "ok": True,
+        "assignment_id": assignment_id,
+        "date": str((sql_row["date"] if sql_row is not None else "") or ""),
+        "scope": str((sql_row["scope"] if sql_row is not None else "") or ""),
+        "class_name": str((sql_row["class_name"] if sql_row is not None else "") or ""),
+        "visibility_status": str(
+            (sql_row["visibility_status"] if sql_row is not None else "") or ""
+        ).strip().lower(),
+        "archived_at": sql_row["archived_at"] if sql_row is not None else None,
+        "due_at": str((sql_row["due_at"] if sql_row is not None else "") or ""),
+        "expected_count": len(expected),
+        "counts": {
+            "expected": len(expected),
+            "discussion_pass": discussion_pass_count,
+            "submitted": submitted_count,
+            "completed": completed_count,
+            "overdue": overdue_count,
+        },
+        "students": students if include_students else [],
+        "updated_at": str((sql_row["updated_at"] if sql_row is not None else "") or ""),
+    }
+
+
+def _progress_snapshot_from_sql(
+    data_dir: Path,
+    assignment_id: str,
+    sql_row: Any,
+    *,
+    include_students: bool,
+) -> Dict[str, Any]:
+    conn = assignment_connect(data_dir)
+    try:
+        rows = list(
+            conn.execute(
+                """
+                SELECT student_id, submitted, overdue, official_score, process_status, payload_json
+                FROM assignment_progress WHERE assignment_id = ?
+                """,
+                (str(assignment_id),),
+            ).fetchall()
+        )
+        live_row = assignment_sql_get(conn, assignment_id) or sql_row
+    finally:
+        conn.close()
+    return _format_progress_snapshot(
+        assignment_id, live_row, rows, include_students=include_students
+    )
+
+
+def _persist_progress_2pc(
+    *,
+    data_dir: Path,
+    folder: Path,
+    assignment_id: str,
+    students: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    atomic_write_json: Callable[[Any, Any], None],
+    now_iso: str,
+) -> Optional[Dict[str, Any]]:
+    conn = assignment_connect(data_dir)
+    try:
+        assignment_ensure(conn, data_dir=data_dir)
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            upsert_progress_snapshot(
+                conn,
+                assignment_id=assignment_id,
+                students=students,
+                now_iso=now_iso,
+            )
+            atomic_write_json(folder / "progress.json", result)
+            conn.execute("COMMIT")
+        except Exception:  # policy: allowed-broad-except
+            _rollback_quiet(conn)
+            _log.warning("failed to persist progress for assignment %s", assignment_id, exc_info=True)
+            return _assignment_persist_failed(assignment_id)
+    finally:
+        conn.close()
+    return None
 
 
 def _load_expected_students(meta: Dict[str, Any]) -> List[str]:
@@ -369,6 +540,8 @@ def _student_progress(
         "submitted": submitted,
         "completed": completed,
         "overdue": overdue,
+        "official_score": official_score,
+        "process_status": str(process.get("status") or "none"),
         "payload": payload,
     }
 
@@ -400,7 +573,9 @@ def compute_assignment_progress(
     if folder is None:
         return _assignment_not_found(assignment_id)
     if not folder.exists():
-        return _assignment_not_found(assignment_id)
+        return _progress_snapshot_from_sql(
+            data_dir, assignment_id, sql_row, include_students=include_students
+        )
     meta = deps.load_assignment_meta(folder)
     if not meta:
         meta = {"assignment_id": assignment_id}
@@ -416,6 +591,7 @@ def compute_assignment_progress(
     profiles = _profile_map(deps.list_all_student_profiles())
 
     students_out: List[Dict[str, Any]] = []
+    sql_students: List[Dict[str, Any]] = []
     discussion_pass_count = 0
     submission_count = 0
     completed_count = 0
@@ -438,6 +614,7 @@ def compute_assignment_progress(
         completed_count += int(bool(student["completed"]))
         overdue_count += int(bool(student["overdue"]))
         payload = student.get("payload")
+        sql_students.append(_sql_student_row(sid, student, include_students))
         if include_students and isinstance(payload, dict):
             students_out.append(payload)
 
@@ -465,9 +642,15 @@ def compute_assignment_progress(
         "updated_at": deps.now_iso(),
     }
 
-    try:
-        deps.atomic_write_json(folder / "progress.json", result)
-    except Exception:  # policy: allowed-broad-except
-        _log.warning("failed to write progress.json for assignment %s", assignment_id, exc_info=True)
-
+    persist_error = _persist_progress_2pc(
+        data_dir=data_dir,
+        folder=folder,
+        assignment_id=assignment_id,
+        students=sql_students,
+        result=result,
+        atomic_write_json=deps.atomic_write_json,
+        now_iso=str(result.get("updated_at") or deps.now_iso()),
+    )
+    if persist_error is not None:
+        return persist_error
     return result

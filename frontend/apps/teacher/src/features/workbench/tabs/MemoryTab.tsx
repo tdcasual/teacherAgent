@@ -232,7 +232,7 @@ export default function MemoryTab({
         )}
         {Array.isArray(memoryInsights?.top_queries) &&
           (memoryInsights?.top_queries || []).length > 0 && (
-            <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
+            <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-surface/70">
               <div className="muted">高频命中查询（14天）</div>
               {(memoryInsights?.top_queries || []).slice(0, 5).map((q: TopQueryItem) => (
                 <div
@@ -383,7 +383,7 @@ export default function MemoryTab({
         ) : null}
 
         {typeCountItems(studentMemoryInsights).length > 0 ? (
-          <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-white/70">
+          <div className="grid gap-1.5 border border-dashed border-border rounded-xl p-[8px_10px] bg-surface/70">
             <div className="muted">类型分布（14天）</div>
             {typeCountItems(studentMemoryInsights).map((item) => (
               <div

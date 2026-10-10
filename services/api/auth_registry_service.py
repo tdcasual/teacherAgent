@@ -677,7 +677,7 @@ class AuthRegistryStore(IdentityGraphMixin):
             conn.execute(
                 (
                     f"UPDATE {table} SET password_hash = ?, password_algo = ?, password_set_at = ?, "
-                    f"updated_at = ? WHERE {id_field} = ?"
+                    f"token_version = token_version + 1, updated_at = ? WHERE {id_field} = ?"
                 ),
                 (
                     _hash_password(new_password),
@@ -696,7 +696,24 @@ class AuthRegistryStore(IdentityGraphMixin):
                 target_role=role_norm,
                 detail={"credential_type": str(credential_type or "").strip().lower()},
             )
-        return {"ok": True, "role": role_norm, "subject_id": sid}
+            row = conn.execute(
+                f"SELECT token_version FROM {table} WHERE {id_field} = ?",
+                (sid,),
+            ).fetchone()
+        if row is None:
+            return {"ok": False, "error": "not_found"}
+        payload: Dict[str, Any] = {
+            "ok": True,
+            "role": role_norm,
+            "subject_id": sid,
+            "token_version": int(row["token_version"] or 1),
+            "password_set": True,
+        }
+        if role_norm == "student":
+            payload["student"] = auth_result.get("student") or {}
+        else:
+            payload["teacher"] = auth_result.get("teacher") or {}
+        return payload
 
     def reset_token(
         self,

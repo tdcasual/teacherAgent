@@ -45,9 +45,12 @@ function DialogFrame({
     };
 
     document.addEventListener('keydown', onKeyDown, true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('keydown', onKeyDown, true);
+      document.body.style.overflow = previousOverflow;
       previouslyFocusedRef.current?.focus?.();
     };
   }, [initialFocusRef, onCancel, open]);

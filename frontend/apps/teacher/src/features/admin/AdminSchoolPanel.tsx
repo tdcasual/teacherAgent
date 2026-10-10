@@ -210,7 +210,7 @@ export default function AdminSchoolPanel() {
           </div>
           <button
             type="submit"
-            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-white cursor-pointer w-fit"
+            className="border-none rounded-[10px] px-3 py-[9px] bg-accent text-on-accent cursor-pointer w-fit"
             disabled={submitting}
           >
             {submitting ? '创建中…' : '创建教师'}

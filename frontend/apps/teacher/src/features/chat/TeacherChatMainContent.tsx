@@ -103,8 +103,10 @@ export default function TeacherChatMainContent({
   return (
     <main
       ref={shellRef}
+      id="teacher-chat-main"
       className="chat-shell flex-auto w-full min-w-0 min-h-0 flex flex-col gap-3 p-4 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_oklab,var(--color-app-bg)_98%,var(--color-surface))_0%,color-mix(in_oklab,var(--color-rail)_78%,var(--color-surface))_100%)]"
     >
+      <h1 className="absolute w-px h-px overflow-hidden p-0 m-[-1px] border-0">教师对话</h1>
       {taskStrip}
 
       <section

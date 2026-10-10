@@ -14,6 +14,7 @@ def _load_app(tmp_dir: Path, *, admin_key: str):
         env_overrides={
             "TENANT_ADMIN_KEY": admin_key,
             "TENANT_DB_PATH": str(tmp_dir / "tenants.sqlite3"),
+            "TENANT_DATA_BASE_DIR": str(tmp_dir),
             "DIAG_LOG": "0",
         },
         use_runtime_entrypoint=True,
@@ -147,6 +148,7 @@ def test_tenant_registry_init_failure_fails_closed():
                     env_overrides={
                         "TENANT_ADMIN_KEY": "k",
                         "TENANT_DB_PATH": str(tmp / "tenants.sqlite3"),
+                        "TENANT_DATA_BASE_DIR": str(tmp),
                         "DIAG_LOG": "0",
                     },
                     use_runtime_entrypoint=True,
@@ -161,3 +163,47 @@ def test_tenant_registry_init_failure_fails_closed():
         assert result is None
         assert result is not getattr(app_mod, "app", None)
         assert "tenant registry init failed" in str(raised)
+
+
+def test_empty_tenant_admin_key_skips_dispatcher():
+    from services.api.tenant_dispatcher import MultiTenantDispatcher
+
+    with TemporaryDirectory() as td:
+        tmp = Path(td)
+        app_mod = create_test_app(
+            tmp,
+            env_overrides={
+                "TENANT_DB_PATH": str(tmp / "tenants.sqlite3"),
+                "DIAG_LOG": "0",
+            },
+            env_unset=["TENANT_ADMIN_KEY", "TENANT_DATA_BASE_DIR"],
+            use_runtime_entrypoint=True,
+            reset_modules=True,
+        )
+        client = TestClient(app_mod.app)
+        res = client.get("/health")
+        assert res.status_code == 200
+        assert res.json().get("status") == "ok"
+        assert not isinstance(app_mod.app, MultiTenantDispatcher)
+
+
+def test_nonempty_tenant_admin_key_requires_data_base_dir():
+    with TemporaryDirectory() as td:
+        tmp = Path(td)
+        raised = None
+        try:
+            create_test_app(
+                tmp,
+                env_overrides={
+                    "TENANT_ADMIN_KEY": "k",
+                    "TENANT_DB_PATH": str(tmp / "tenants.sqlite3"),
+                    "DIAG_LOG": "0",
+                },
+                env_unset=["TENANT_DATA_BASE_DIR"],
+                use_runtime_entrypoint=True,
+                reset_modules=True,
+            )
+        except RuntimeError as exc:
+            raised = exc
+        assert raised is not None
+        assert "TENANT_DATA_BASE_DIR" in str(raised)

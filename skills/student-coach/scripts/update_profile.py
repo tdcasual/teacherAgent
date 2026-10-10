@@ -83,14 +83,25 @@ def main():
     parser.add_argument("--profile-dir", default="data/student_profiles")
     args = parser.parse_args()
 
-    profile_path = Path(args.profile_dir) / f"{args.student_id}.json"
+    student_id = str(args.student_id or "").strip()
+    if (
+        not student_id
+        or "/" in student_id
+        or "\\" in student_id
+        or ".." in student_id
+    ):
+        raise SystemExit("invalid_student_id")
+    profile_dir = Path(args.profile_dir).resolve()
+    profile_path = (profile_dir / f"{student_id}.json").resolve()
+    if profile_path != profile_dir and profile_dir not in profile_path.parents:
+        raise SystemExit("invalid_student_id")
     lock_path = profile_path.with_suffix(profile_path.suffix + ".lock")
     if not acquire_lock(lock_path):
         raise SystemExit(f"Could not acquire profile lock: {lock_path}")
     try:
         profile = load_profile(profile_path)
 
-        profile["student_id"] = args.student_id
+        profile["student_id"] = student_id
         profile["last_updated"] = datetime.now().isoformat(timespec="seconds")
 
         weak_kp = parse_list(args.weak_kp)

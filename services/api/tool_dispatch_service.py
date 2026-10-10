@@ -7,6 +7,13 @@ from .paths import TeacherIdentityError
 from .tool_confirm_service import maybe_confirmation_required, tool_is_mutating
 
 
+class ToolAuthzError(Exception):
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = int(status_code)
+        self.detail = str(detail)
+
+
 def _default_load_skill_runtime(_role: Optional[str], _skill_id: Optional[str]) -> Tuple[Optional[Any], Optional[str]]:
     return None, None
 
@@ -41,7 +48,7 @@ class ToolDispatchDeps:
     list_assignments: Callable[..., Dict[str, Any]]
     list_lessons: Callable[[], Dict[str, Any]]
     lesson_capture: Callable[[Dict[str, Any]], Dict[str, Any]]
-    student_search: Callable[[str, int], Dict[str, Any]]
+    student_search: Callable[..., Dict[str, Any]]
     student_profile_get: Callable[[str], Dict[str, Any]]
     student_profile_update: Callable[[Dict[str, Any]], Dict[str, Any]]
     student_import: Callable[[Dict[str, Any]], Dict[str, Any]]
@@ -73,6 +80,7 @@ class ToolDispatchDeps:
     assignment_my_today: Callable[[str, Optional[str]], Dict[str, Any]] = _default_assignment_my_today
     assignment_my_result: Callable[[str, str], Dict[str, Any]] = _default_assignment_my_result
     assignment_owner_id: Callable[[str], Optional[str]] = _default_assignment_owner_id
+    list_enrolled_student_ids: Callable[[str], Set[str]] = lambda _tid: set()
 
 
 
@@ -111,7 +119,7 @@ def _resolve_skill_allowed_tools(
 
 
 def _teacher_memory_get(args: Dict[str, Any], deps: ToolDispatchDeps) -> Dict[str, Any]:
-    teacher_id = deps.resolve_teacher_id(args.get("teacher_id"))
+    teacher_id = str(args.get("teacher_id") or "").strip()
     target = str(args.get("file") or "MEMORY.md").strip()
     date_str = str(args.get("date") or "").strip() or None
     max_chars = int(args.get("max_chars", 8000) or 8000)
@@ -145,14 +153,109 @@ def _teacher_only_handler(
     return _wrapped
 
 
-def _resolve_tool_teacher_id(
+def bind_tool_teacher_id(
+    args: Dict[str, Any],
+    *,
+    bound_teacher_id: Optional[str],
+    role: Optional[str],
+) -> str:
+    bound = str(bound_teacher_id or "").strip()
+    requested = str(args.get("teacher_id") or "").strip()
+    role_norm = str(role or "").strip().lower()
+    if role_norm == "teacher":
+        if not bound:
+            raise ToolAuthzError(400, "teacher_id_required")
+        if requested and requested != bound:
+            raise ToolAuthzError(403, "forbidden_teacher_scope")
+        return bound
+    if role_norm in {"admin", "service"}:
+        target = requested or bound
+        if not target:
+            raise ToolAuthzError(400, "teacher_id_required")
+        return target
+    raise ToolAuthzError(403, "permission denied")
+
+
+def bind_tool_student_id(
+    args: Dict[str, Any],
+    *,
+    bound_student_id: Optional[str],
+    bound_teacher_id: Optional[str],
+    role: Optional[str],
+    deps: ToolDispatchDeps,
+) -> str:
+    requested = str(args.get("student_id") or "").strip()
+    role_norm = str(role or "").strip().lower()
+    if role_norm == "student":
+        bound = str(bound_student_id or "").strip()
+        if not bound:
+            raise ToolAuthzError(400, "student_id_required")
+        if requested and requested != bound:
+            raise ToolAuthzError(403, "forbidden_student_scope")
+        return bound
+    if role_norm == "teacher":
+        tid = str(bound_teacher_id or "").strip()
+        if not tid:
+            raise ToolAuthzError(400, "teacher_id_required")
+        if not requested:
+            raise ToolAuthzError(400, "student_id_required")
+        enrolled = deps.list_enrolled_student_ids(tid)
+        if requested not in enrolled:
+            raise ToolAuthzError(403, "forbidden_student_scope")
+        return requested
+    if role_norm in {"admin", "service"}:
+        if not requested:
+            raise ToolAuthzError(400, "student_id_required")
+        return requested
+    raise ToolAuthzError(403, "permission denied")
+
+
+def _bound_teacher_fs_id(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    bound_teacher_id: Optional[str],
+    role: Optional[str],
+) -> str:
+    bound = bind_tool_teacher_id(args, bound_teacher_id=bound_teacher_id, role=role)
+    return deps.resolve_teacher_id(bound)
+
+
+def _args_with_bound_teacher(
     args: Dict[str, Any],
     *,
     deps: ToolDispatchDeps,
     teacher_id: Optional[str],
-) -> str:
-    raw_teacher_id = args.get("teacher_id") or teacher_id or ""
-    return deps.resolve_teacher_id(raw_teacher_id)
+    role: Optional[str],
+) -> Dict[str, Any]:
+    merged = dict(args or {})
+    merged["teacher_id"] = _bound_teacher_fs_id(
+        args, deps=deps, bound_teacher_id=teacher_id, role=role
+    )
+    return merged
+
+
+def _student_search_handler(
+    args: Dict[str, Any],
+    *,
+    deps: ToolDispatchDeps,
+    role: Optional[str],
+    teacher_id: Optional[str],
+) -> Dict[str, Any]:
+    role_norm = str(role or "").strip().lower()
+    query = str(args.get("query") or "")
+    limit = int(args.get("limit", 5) or 5)
+    if role_norm == "student":
+        raise ToolAuthzError(403, "permission denied")
+    if role_norm == "teacher":
+        tid = str(teacher_id or "").strip()
+        if not tid:
+            raise ToolAuthzError(400, "teacher_id_required")
+        allowed = deps.list_enrolled_student_ids(tid)
+        return deps.student_search(query, limit, allowed)
+    if role_norm in {"admin", "service"}:
+        return deps.student_search(query, limit, None)
+    raise ToolAuthzError(403, "permission denied")
 
 
 def _assignment_list_for_actor(
@@ -393,7 +496,7 @@ def _teacher_workspace_init_handler(
     *,
     deps: ToolDispatchDeps,
 ) -> Dict[str, Any]:
-    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    teacher_id_resolved = str(args.get("teacher_id") or "").strip()
     base = deps.ensure_teacher_workspace(teacher_id_resolved)
     return {"ok": True, "teacher_id": teacher_id_resolved, "workspace": str(base)}
 
@@ -403,7 +506,7 @@ def _teacher_memory_search_handler(
     *,
     deps: ToolDispatchDeps,
 ) -> Dict[str, Any]:
-    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    teacher_id_resolved = str(args.get("teacher_id") or "").strip()
     query = str(args.get("query") or "")
     limit = int(args.get("limit", 5) or 5)
     result = deps.teacher_memory_search(teacher_id_resolved, query, limit)
@@ -416,7 +519,7 @@ def _teacher_memory_propose_handler(
     *,
     deps: ToolDispatchDeps,
 ) -> Dict[str, Any]:
-    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    teacher_id_resolved = str(args.get("teacher_id") or "").strip()
     target = str(args.get("target") or "MEMORY")
     title = str(args.get("title") or "")
     content = str(args.get("content") or "")
@@ -433,7 +536,7 @@ def _teacher_memory_apply_handler(
     *,
     deps: ToolDispatchDeps,
 ) -> Dict[str, Any]:
-    teacher_id_resolved = deps.resolve_teacher_id(args.get("teacher_id"))
+    teacher_id_resolved = str(args.get("teacher_id") or "").strip()
     proposal_id = str(args.get("proposal_id") or "")
     approve = bool(args.get("approve", True))
     return deps.teacher_memory_apply(teacher_id_resolved, proposal_id=proposal_id, approve=approve)
@@ -507,16 +610,34 @@ def _build_handlers(
         ),
         "lesson.list": lambda _args: deps.list_lessons(),
         "lesson.capture": lambda args: deps.lesson_capture(args),
-        "student.search": lambda args: deps.student_search(
-            args.get("query", ""),
-            int(args.get("limit", 5) or 5),
+        "student.search": lambda args: _student_search_handler(
+            args, deps=deps, role=role, teacher_id=teacher_id
         ),
-        "student.profile.get": lambda args: deps.student_profile_get(args.get("student_id", "")),
-        "student.profile.update": lambda args: deps.student_profile_update(args),
+        "student.profile.get": lambda args: deps.student_profile_get(
+            bind_tool_student_id(
+                args,
+                bound_student_id=actor_id,
+                bound_teacher_id=teacher_id,
+                role=role,
+                deps=deps,
+            )
+        ),
+        "student.profile.update": lambda args: deps.student_profile_update(
+            {
+                **args,
+                "student_id": bind_tool_student_id(
+                    args,
+                    bound_student_id=actor_id,
+                    bound_teacher_id=teacher_id,
+                    role=role,
+                    deps=deps,
+                ),
+            }
+        ),
         "student.import": _teacher_only_handler(
             role=role,
             detail="student.import requires teacher role",
-            fn=lambda args: deps.student_import(args),
+            fn=lambda _args: {"ok": False, "error": "gone", "status_code": 410},
         ),
         "assignment.generate": _teacher_only_handler(
             role=role,
@@ -552,20 +673,45 @@ def _build_handlers(
             detail="chart.exec requires teacher role",
             fn=lambda args: _chart_exec_handler(args, deps=deps, role=role, teacher_id=teacher_id),
         ),
-        "teacher.workspace.init": lambda args: _teacher_workspace_init_handler(
-            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        "teacher.workspace.init": _teacher_only_handler(
+            role=role,
+            detail="teacher.workspace.init requires teacher role",
+            fn=lambda args: _teacher_workspace_init_handler(
+                _args_with_bound_teacher(args, deps=deps, teacher_id=teacher_id, role=role),
+                deps=deps,
+            ),
         ),
-        "teacher.memory.get": lambda args: _teacher_memory_get(
-            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps
+        "teacher.memory.get": _teacher_only_handler(
+            role=role,
+            detail="teacher.memory.get requires teacher role",
+            fn=lambda args: _teacher_memory_get(
+                _args_with_bound_teacher(args, deps=deps, teacher_id=teacher_id, role=role),
+                deps,
+            ),
         ),
-        "teacher.memory.search": lambda args: _teacher_memory_search_handler(
-            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        "teacher.memory.search": _teacher_only_handler(
+            role=role,
+            detail="teacher.memory.search requires teacher role",
+            fn=lambda args: _teacher_memory_search_handler(
+                _args_with_bound_teacher(args, deps=deps, teacher_id=teacher_id, role=role),
+                deps=deps,
+            ),
         ),
-        "teacher.memory.propose": lambda args: _teacher_memory_propose_handler(
-            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        "teacher.memory.propose": _teacher_only_handler(
+            role=role,
+            detail="teacher.memory.propose requires teacher role",
+            fn=lambda args: _teacher_memory_propose_handler(
+                _args_with_bound_teacher(args, deps=deps, teacher_id=teacher_id, role=role),
+                deps=deps,
+            ),
         ),
-        "teacher.memory.apply": lambda args: _teacher_memory_apply_handler(
-            {**args, "teacher_id": args.get("teacher_id") or teacher_id}, deps=deps
+        "teacher.memory.apply": _teacher_only_handler(
+            role=role,
+            detail="teacher.memory.apply requires teacher role",
+            fn=lambda args: _teacher_memory_apply_handler(
+                _args_with_bound_teacher(args, deps=deps, teacher_id=teacher_id, role=role),
+                deps=deps,
+            ),
         ),
     }
 
@@ -657,5 +803,7 @@ def tool_dispatch(
         return mutating_denied
     try:
         return handler(args)
+    except ToolAuthzError as exc:
+        return {"error": str(exc.detail), "status_code": int(exc.status_code)}
     except TeacherIdentityError as exc:
         return {"error": str(exc.detail or "teacher_id_required"), "status_code": int(exc.status_code)}

@@ -113,7 +113,7 @@ export default function SkillsTab(props: SkillsTabProps) {
               </div>
               <button
                 type="button"
-                className={`border-none bg-transparent cursor-pointer text-[16px] ${favorites.includes(skill.id) ? 'text-[#d38b2f]' : 'text-muted'}`}
+                className={`border-none bg-transparent cursor-pointer text-[16px] ${favorites.includes(skill.id) ? 'text-warning' : 'text-muted'}`}
                 onClick={() => toggleFavorite(skill.id)}
                 aria-label="收藏能力"
               >

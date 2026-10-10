@@ -62,6 +62,7 @@ export default function TeacherTopbarOverflowMenu({
             ref={authButtonRef}
             className="ghost justify-start"
             type="button"
+            role="menuitem"
             aria-haspopup="dialog"
             aria-expanded={authOpen}
             onClick={() => {
@@ -74,6 +75,7 @@ export default function TeacherTopbarOverflowMenu({
           <button
             className="ghost justify-start"
             type="button"
+            role="menuitem"
             onClick={() => {
               onToggleSkillsWorkbench();
               setQuickActionsOpen(false);
@@ -84,6 +86,7 @@ export default function TeacherTopbarOverflowMenu({
           <button
             className="ghost justify-start"
             type="button"
+            role="menuitem"
             onClick={() => {
               onToggleSettingsPanel();
               setQuickActionsOpen(false);

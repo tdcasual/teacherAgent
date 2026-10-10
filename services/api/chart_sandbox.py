@@ -24,7 +24,7 @@ _SENSITIVE_RE = re.compile(
 
 _ENV_WHITELIST = {
     "PATH", "HOME", "LANG", "LC_ALL", "PYTHONPATH",
-    "MPLBACKEND", "DATA_DIR", "UPLOADS_DIR", "VIRTUAL_ENV",
+    "MPLBACKEND", "UPLOADS_DIR", "VIRTUAL_ENV",
     "TMPDIR", "TMP", "TEMP",
 }
 
@@ -113,6 +113,11 @@ _DANGEROUS_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bctypes\b"), "ctypes"),
     (re.compile(r"\bos\.environ\b"), "os.environ"),
     (re.compile(r"\bos\.popen\b"), "os.popen"),
+    (re.compile(r"\bos\.open\b"), "os.open"),
+    (re.compile(r"\bos\.fdopen\b"), "os.fdopen"),
+    (re.compile(r"\bos\.read\s*\("), "os.read"),
+    (re.compile(r"\bos\.write\s*\("), "os.write"),
+    (re.compile(r"\bos\.replace\b"), "os.replace"),
     (re.compile(r"\bos\.exec"), "os.exec*"),
     (re.compile(r"\bos\.spawn"), "os.spawn*"),
     (re.compile(r"\bos\.kill\b"), "os.kill"),
@@ -153,7 +158,7 @@ def scan_code_patterns(
 def build_filesystem_guard_source(
     output_dir: str, allowed_roots: List[str]
 ) -> str:
-    """Return Python source that monkey-patches builtins.open for sandboxed execution."""
+    """Return Python source that monkey-patches builtins.open/os.open/os.fdopen."""
     import json as _json
 
     output_dir_json = _json.dumps(output_dir)
@@ -168,10 +173,7 @@ def build_filesystem_guard_source(
         "        return _os.path.commonpath([path, root]) == root\n"
         "    except Exception:\n"
         "        return False\n"
-        "_original_open = _builtins.open\n"
-        "def _guarded_open(file, mode='r', *a, **kw):\n"
-        "    path = _os.path.realpath(str(file))\n"
-        "    writing = any(c in str(mode) for c in 'wxa+')\n"
+        "def _check_path(path, writing):\n"
         "    if writing:\n"
         "        if not _is_under(path, _FS_OUTPUT_DIR):\n"
         "            raise PermissionError(f'sandbox: write denied outside output dir: {path}')\n"
@@ -179,6 +181,32 @@ def build_filesystem_guard_source(
         "        ok = any(_is_under(path, r) for r in _FS_ALLOWED_ROOTS)\n"
         "        if not ok:\n"
         "            raise PermissionError(f'sandbox: read denied outside allowed roots: {path}')\n"
+        "_original_open = _builtins.open\n"
+        "def _guarded_open(file, mode='r', *a, **kw):\n"
+        "    path = _os.path.realpath(str(file))\n"
+        "    writing = any(c in str(mode) for c in 'wxa+')\n"
+        "    _check_path(path, writing)\n"
         "    return _original_open(file, mode, *a, **kw)\n"
         "_builtins.open = _guarded_open\n"
+        "_original_os_open = _os.open\n"
+        "_WRITE_BITS = _os.O_WRONLY | _os.O_RDWR | _os.O_APPEND | _os.O_CREAT | _os.O_TRUNC\n"
+        "def _guarded_os_open(path, flags, *a, **kw):\n"
+        "    real = _os.path.realpath(str(path))\n"
+        "    try:\n"
+        "        writing = bool(int(flags) & _WRITE_BITS)\n"
+        "    except Exception:\n"
+        "        writing = True\n"
+        "    _check_path(real, writing)\n"
+        "    return _original_os_open(path, flags, *a, **kw)\n"
+        "_os.open = _guarded_os_open\n"
+        "_original_os_fdopen = _os.fdopen\n"
+        "def _guarded_os_fdopen(fd, mode='r', *a, **kw):\n"
+        "    try:\n"
+        "        real = _os.path.realpath(_os.readlink('/proc/self/fd/' + str(int(fd))))\n"
+        "    except Exception:\n"
+        "        raise PermissionError('sandbox: fdopen denied (path unresolved)')\n"
+        "    writing = any(c in str(mode) for c in 'wxa+')\n"
+        "    _check_path(real, writing)\n"
+        "    return _original_os_fdopen(fd, mode, *a, **kw)\n"
+        "_os.fdopen = _guarded_os_fdopen\n"
     )

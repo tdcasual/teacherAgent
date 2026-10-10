@@ -520,7 +520,8 @@ def chart_agent_run(args: Dict[str, Any], *, deps: ChartAgentRunDeps) -> Dict[st
 
     timeout_sec = deps.safe_int_arg(args.get("timeout_sec"), 180, 30, 3600)
     max_retries = deps.safe_int_arg(args.get("max_retries"), 3, 1, 6)
-    auto_install = deps.chart_bool(args.get("auto_install"), True)
+    # LLM cannot enable pip; schema no longer exposes auto_install.
+    auto_install = False
     requested_engine = deps.chart_engine(args.get("engine"))
     if requested_engine == "opencode":
         return {

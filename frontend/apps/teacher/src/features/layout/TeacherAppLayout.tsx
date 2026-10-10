@@ -166,6 +166,12 @@ export default function TeacherAppLayout({
       style={appStyle}
       data-mobile-shell-v2={mobileShellV2Enabled ? '1' : '0'}
     >
+      <a
+        href="#teacher-chat-main"
+        className="absolute left-[-999px] top-2 z-[1000] bg-surface text-ink px-3 py-2 rounded-md focus:left-2"
+      >
+        跳到主内容
+      </a>
       <TeacherTopbar
         topbarRef={topbarRef}
         sessionSidebarOpen={sessionSidebarOpen}
@@ -177,7 +183,7 @@ export default function TeacherAppLayout({
         onToggleSettingsPanel={onToggleSettingsPanel}
       />
       {settingsOpen ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className="sr-only" aria-busy="true">加载设置</div>}>
           <TeacherSettingsPanel
             open={settingsOpen}
             onClose={onCloseSettings}

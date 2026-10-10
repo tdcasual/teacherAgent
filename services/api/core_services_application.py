@@ -194,8 +194,10 @@ from .wiring.student_wiring import (
 from .wiring.teacher_wiring import _teacher_assignment_preflight_deps
 
 
-def student_search(query: str, limit: int = 5) -> Dict[str, Any]:
-    return _student_search_impl(query, limit, _student_directory_deps())
+def student_search(query: str, limit: int = 5, allowed_student_ids=None) -> Dict[str, Any]:
+    return _student_search_impl(
+        query, limit, _student_directory_deps(), allowed_student_ids=allowed_student_ids
+    )
 
 
 def student_candidates_by_name(name: str) -> List[Dict[str, str]]:

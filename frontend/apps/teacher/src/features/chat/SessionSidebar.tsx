@@ -173,7 +173,7 @@ export default function SessionSidebar({
 
   const baseClassName = isSheetPresentation
     ? 'session-sidebar border-none bg-transparent p-0 flex flex-col gap-2 min-h-0 h-full overflow-hidden'
-    : `session-sidebar border-r border-border bg-[#fbfbfc] p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out max-[900px]:fixed max-[900px]:left-0 max-[900px]:top-0 max-[900px]:bottom-0 max-[900px]:w-[min(90vw,360px)] max-[900px]:max-w-[100vw] max-[900px]:h-dvh max-[900px]:z-20 max-[900px]:shadow-md max-[900px]:bg-white max-[900px]:p-[calc(10px+env(safe-area-inset-top))_10px_calc(10px+env(safe-area-inset-bottom))] ${open ? 'open max-[900px]:translate-x-0 max-[900px]:pointer-events-auto' : 'collapsed max-[900px]:-translate-x-full max-[900px]:pointer-events-none'}`;
+    : `session-sidebar border-r border-border bg-surface p-2.5 flex flex-col gap-2 min-h-0 overflow-hidden transition-all duration-150 ease-in-out max-[900px]:fixed max-[900px]:left-0 max-[900px]:top-0 max-[900px]:bottom-0 max-[900px]:w-[min(90vw,360px)] max-[900px]:max-w-[100vw] max-[900px]:h-dvh max-[900px]:z-20 max-[900px]:shadow-md max-[900px]:bg-surface max-[900px]:p-[calc(10px+env(safe-area-inset-top))_10px_calc(10px+env(safe-area-inset-bottom))] ${open ? 'open max-[900px]:translate-x-0 max-[900px]:pointer-events-auto' : 'collapsed max-[900px]:-translate-x-full max-[900px]:pointer-events-none'}`;
 
   return (
     <aside className={baseClassName}>
@@ -201,6 +201,7 @@ export default function SessionSidebar({
           value={historyQuery}
           onChange={(e) => onHistoryQueryChange(e.target.value)}
           placeholder="搜索会话"
+          aria-label="搜索会话"
           className="px-2.5 py-2 rounded-[12px] text-[13px]"
         />
       </div>
@@ -261,7 +262,7 @@ export default function SessionSidebar({
                         type="button"
                         id={triggerId}
                         ref={(node) => setTriggerRef(sid, node)}
-                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-[16px] leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] max-[900px]:w-9 max-[900px]:h-9"
+                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-muted cursor-pointer grid place-items-center text-[16px] leading-none hover:bg-surface-soft hover:border-border hover:text-ink max-[900px]:w-9 max-[900px]:h-9"
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
                         aria-controls={menuId}
@@ -288,7 +289,7 @@ export default function SessionSidebar({
                             type="button"
                             role="menuitem"
                             data-session-menu-item
-                            className="session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-[12px] text-left text-[#374151] cursor-pointer hover:bg-surface-soft"
+                            className="session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-[12px] text-left text-ink cursor-pointer hover:bg-surface-soft"
                             onClick={() => onRenameSession(sid)}
                           >
                             重命名
@@ -297,7 +298,7 @@ export default function SessionSidebar({
                             type="button"
                             role="menuitem"
                             data-session-menu-item
-                            className={`session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-[12px] text-left cursor-pointer ${isArchived ? 'text-[#374151] hover:bg-surface-soft' : 'text-[#b42318] hover:bg-[#fff1f1]'}`}
+                            className={`session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-[12px] text-left cursor-pointer ${isArchived ? 'text-ink hover:bg-surface-soft' : 'text-danger hover:bg-danger-soft'}`}
                             onClick={() => onToggleSessionArchive(sid)}
                           >
                             {isArchived ? '恢复' : '归档'}

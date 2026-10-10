@@ -40,6 +40,8 @@ from ..assignment_requirements_service import (
 from ..assignment_requirements_service import (
     merge_requirements as _merge_requirements_impl,
 )
+from ..auth.identity_graph_service import list_enrolled_student_ids as _list_enrolled_student_ids
+from ..auth_registry_service import build_auth_registry_store
 from ..chart_agent_run_service import (
     ChartAgentRunDeps,
 )
@@ -190,10 +192,18 @@ def _tool_dispatch_deps(core: Any | None = None):
         list_assignments=_ac.list_assignments,
         list_lessons=_ac.list_lessons,
         lesson_capture=_ac.lesson_capture,
-        student_search=_ac.student_search,
+        student_search=lambda query, limit, allowed=None: _ac.student_search(
+            query, limit, allowed_student_ids=allowed
+        ),
         student_profile_get=_ac.student_profile_get,
         student_profile_update=_ac.student_profile_update,
-        student_import=_ac.student_import,
+        student_import=lambda _args: {"ok": False, "error": "gone", "status_code": 410},
+        list_enrolled_student_ids=lambda tid: set(
+            _list_enrolled_student_ids(
+                build_auth_registry_store(data_dir=_ac.DATA_DIR),
+                teacher_id=str(tid or ""),
+            )
+        ),
         assignment_generate=_ac.assignment_generate,
         assignment_render=_ac.assignment_render,
         save_assignment_requirements=_ac.save_assignment_requirements,

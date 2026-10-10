@@ -3,6 +3,9 @@ import WorkflowTab from './tabs/WorkflowTab';
 import MemoryTab from './tabs/MemoryTab';
 import type { TeacherWorkbenchViewModel } from './teacherWorkbenchViewModel';
 import { buildTeacherWorkflowGuidance, findActiveWorkflowStep } from './workflowIndicators';
+import { useTabListKeyboard } from '../../../../shared/useTabListKeyboard';
+
+const WORKBENCH_TABS = ['skills', 'memory', 'workflow'] as const;
 
 type TeacherWorkbenchProps = {
   viewModel: TeacherWorkbenchViewModel;
@@ -41,6 +44,11 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
   });
   const workflowTabActive = workbenchTab === 'workflow';
   const focusLabel = activeStep?.label || '上传文件';
+  const onTabListKeyDown = useTabListKeyboard({
+    tabs: WORKBENCH_TABS,
+    value: workbenchTab as (typeof WORKBENCH_TABS)[number],
+    onChange: setWorkbenchTab,
+  });
 
   const handlePrimaryAction = () => {
     setWorkbenchTab('workflow');
@@ -166,7 +174,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
             </div>
             <button
               type="button"
-              className="teacher-rail-cta inline-flex w-full items-center justify-center rounded-[14px] border-none px-[14px] py-[11px] text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+              className="teacher-rail-cta inline-flex w-full items-center justify-center rounded-[14px] border-none px-[14px] py-[11px] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
               onClick={handlePrimaryAction}
             >
               {guidance.primaryActionLabel}
@@ -178,10 +186,12 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         className="workbench-switch inline-flex border border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] rounded-[12px] overflow-hidden bg-[color:color-mix(in_oklab,var(--color-panel)_94%,var(--color-surface))] self-start flex-none"
         role="tablist"
         aria-label="工作台分区"
+        onKeyDown={onTabListKeyDown}
       >
         <button
           type="button"
           role="tab"
+          tabIndex={workbenchTab === 'skills' ? 0 : -1}
           aria-selected={workbenchTab === 'skills'}
           className={`border-0 bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'skills' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
           onClick={() => setWorkbenchTab('skills')}
@@ -191,6 +201,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         <button
           type="button"
           role="tab"
+          tabIndex={workbenchTab === 'memory' ? 0 : -1}
           aria-selected={workbenchTab === 'memory'}
           className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'memory' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
           onClick={() => setWorkbenchTab('memory')}
@@ -200,6 +211,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
         <button
           type="button"
           role="tab"
+          tabIndex={workbenchTab === 'workflow' ? 0 : -1}
           aria-selected={workbenchTab === 'workflow'}
           className={`border-0 border-l border-[color:color-mix(in_oklab,var(--color-border)_80%,var(--color-surface))] bg-transparent text-muted text-[12px] py-[6px] px-[12px] min-h-[44px] cursor-pointer ${workbenchTab === 'workflow' ? 'active bg-[color:color-mix(in_oklab,var(--color-accent-soft)_78%,var(--color-surface))] !text-accent font-semibold' : ''}`}
           onClick={() => setWorkbenchTab('workflow')}

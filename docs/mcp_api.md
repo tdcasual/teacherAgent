@@ -18,18 +18,20 @@ This document describes the MCP sidecar interface. The product surface is **stud
 ## Runtime
 - `MCP_SCRIPT_TIMEOUT_SEC` (optional): script timeout (seconds). Default `600`. Set `0/none/inf` for no timeout.
 - `MCP_BOUND_TEACHER_ID` (optional): when set, `tools/list` also includes mutating student/assignment tools and `assignment.list` / `assignment.render` are scoped to that teacher.
-- This wave reads assignment `meta.json` and `data/student_profiles/*.json` from disk. MCP does not SQL-gate these tools.
+- Bound `student.search` / `student.profile.get` / `student.profile.update` share one read-only enrollment query against `DATA_DIR/auth/auth_registry.sqlite3` (`SELECT DISTINCT student_id FROM student_enrollments WHERE teacher_id = ?`). Missing DB/table → JSON-RPC `403` `mcp_roster_unavailable`. Student not enrolled → `403` `forbidden_student_scope` before disk/script.
+- Unbound `student.search` / `student.profile.get` / `student.profile.update` → JSON-RPC `403` `mcp_teacher_unbound`.
+- `assignment.list` still scans JSON `meta.json`.
 - Script allowlist is explicit:
-  - `skills/physics-student-coach/scripts/update_profile.py`
+  - `skills/student-coach/scripts/update_profile.py` (missing file → HTTP/JSON-RPC `mcp_script_missing`)
   - `scripts/render_assignment_pdf.py`
 
 ### Tool table
 
 | Tool | Unbound (`MCP_BOUND_TEACHER_ID` empty) | Bound |
 | --- | --- | --- |
-| `student.search` | listed + callable | listed + callable |
-| `student.profile.get` | listed + callable | listed + callable |
-| `student.profile.update` | not listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed + callable |
+| `student.search` | listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed; enrollment-filtered |
+| `student.profile.get` | listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed; roster 403 before read |
+| `student.profile.update` | not listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed; roster 403 before script |
 | `assignment.list` | not listed; `tools/call` → result `{"error":"mcp_teacher_unbound"}` | listed; folders whose `meta.json` `teacher_id` equals the bound teacher |
 | `assignment.render` | not listed; `tools/call` → JSON-RPC `403` `mcp_teacher_unbound` | listed; owner mismatch → JSON-RPC `403` `forbidden_assignment_owner` |
 

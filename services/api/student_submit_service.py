@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from subprocess import TimeoutExpired
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .assignment.store import connect as assignment_connect
+from .assignment.store import ensure as assignment_ensure
+from .assignment.store import upsert_attempt
 from .student_ops_service import (
     STUDENT_ALLOWED_SUFFIXES,
     UploadLimitError,
@@ -369,6 +373,93 @@ def _run_grade_script(
         return _record_ungraded_grade(deps, assignment_id, student_id, exc, file_paths)
 
 
+def _latest_attempt_dir(student_root: Path) -> Optional[Path]:
+    if not student_root.is_dir():
+        return None
+    attempts = sorted(
+        (path for path in student_root.glob("submission_*") if path.is_dir()),
+        key=lambda path: path.name,
+    )
+    return attempts[-1] if attempts else None
+
+
+def _load_attempt_report(attempt_dir: Path) -> Dict[str, Any]:
+    report_path = attempt_dir / "grading_report.json"
+    if not report_path.is_file():
+        return {}
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _attempt_file_names(attempt_dir: Path) -> list[str]:
+    names: list[str] = []
+    try:
+        for path in sorted(attempt_dir.iterdir()):
+            if path.is_file():
+                names.append(path.name)
+    except OSError:
+        return names
+    return names
+
+
+def _persist_latest_attempt_sql(
+    deps: StudentSubmitDeps, assignment_id: str, student_id: str
+) -> None:
+    attempt_dir = _latest_attempt_dir(
+        Path(deps.student_submissions_dir) / assignment_id / student_id
+    )
+    if attempt_dir is None:
+        return
+    report = _load_attempt_report(attempt_dir)
+    files = _attempt_file_names(attempt_dir)
+    data_dir = Path(deps.student_submissions_dir).expanduser().resolve().parent
+    conn = assignment_connect(data_dir)
+    try:
+        assignment_ensure(conn, data_dir=data_dir)
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            upsert_attempt(
+                conn,
+                assignment_id=assignment_id,
+                student_id=student_id,
+                attempt_id=attempt_dir.name,
+                submitted_at=str(report.get("submitted_at") or ""),
+                grading_report=report,
+                files=files,
+            )
+            conn.execute("COMMIT")
+        except Exception as exc:  # policy: allowed-broad-except
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                deps.diag_log(
+                    "student.submit.attempt_sql.rollback_skipped",
+                    {"student_id": student_id, "assignment_id": assignment_id},
+                )
+            deps.diag_log(
+                "student.submit.attempt_sql.failed",
+                {
+                    "student_id": student_id,
+                    "assignment_id": assignment_id,
+                    "error": str(exc)[:200],
+                },
+            )
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "student.submit.attempt_sql.failed",
+            {
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "error": str(exc)[:200],
+            },
+        )
+    finally:
+        conn.close()
+
+
 async def submit(
     *,
     student_id: str,
@@ -415,6 +506,7 @@ async def submit(
         student_id=safe_student_id,
         file_paths=file_paths,
     )
+    _persist_latest_attempt_sql(deps, safe_assignment_id, safe_student_id)
     progress = _read_progress(deps, safe_assignment_id, safe_student_id)
     signals = _progress_signals(progress, safe_student_id)
     payload = _submit_payload(

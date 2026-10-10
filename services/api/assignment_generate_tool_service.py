@@ -123,7 +123,7 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) 
 
 
 def assignment_render(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) -> Dict[str, Any]:
-    from .core_utils import _resolve_app_path
+    from .core_utils import _resolve_app_path, _resolve_data_dir_path
 
     script = deps.app_root / "scripts" / "render_assignment_pdf.py"
     assignment_id = str(args.get("assignment_id", ""))
@@ -135,9 +135,9 @@ def assignment_render(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) ->
         cmd += ["--assignment-questions", str(p)]
     out_pdf = None
     if args.get("out"):
-        p = _resolve_app_path(args.get("out"), must_exist=False)
+        p = _resolve_data_dir_path(args.get("out"), must_exist=False)
         if not p:
-            return {"error": "out_outside_app_root"}
+            return {"error": "out_outside_data_dir"}
         out_pdf = p
         cmd += ["--out", str(p)]
     out = deps.run_script(cmd)

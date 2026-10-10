@@ -69,7 +69,7 @@ export default function SessionSidebarHistorySection(props: Props) {
 
   return (
     <>
-      <div className="flex justify-between items-center gap-1.5 max-[900px]:sticky max-[900px]:top-0 max-[900px]:z-1 max-[900px]:bg-white max-[900px]:pb-1.5">
+      <div className="flex justify-between items-center gap-1.5 max-[900px]:sticky max-[900px]:top-0 max-[900px]:z-1 max-[900px]:bg-surface max-[900px]:pb-1.5">
         <strong>历史会话</strong>
         <div className="flex items-center gap-1.5 [&_.ghost]:px-[9px] [&_.ghost]:py-1 [&_.ghost]:text-[11px]">
           <button type="button" className="ghost" onClick={startNewStudentSession}>
@@ -95,12 +95,13 @@ export default function SessionSidebarHistorySection(props: Props) {
           </button>
         </div>
       </div>
-      <div className="grid gap-1.5 max-[900px]:sticky max-[900px]:top-[34px] max-[900px]:z-1 max-[900px]:bg-white max-[900px]:pb-1">
+      <div className="grid gap-1.5 max-[900px]:sticky max-[900px]:top-[34px] max-[900px]:z-1 max-[900px]:bg-surface max-[900px]:pb-1">
         <input
           className="!px-2.5 !py-2 !rounded-[10px] !text-[13px]"
           value={historyQuery}
           onChange={(e) => dispatch({ type: 'SET', field: 'historyQuery', value: e.target.value })}
           placeholder="搜索会话"
+          aria-label="搜索会话"
           disabled={!verifiedStudent}
         />
       </div>
@@ -161,7 +162,7 @@ export default function SessionSidebarHistorySection(props: Props) {
                         type="button"
                         id={triggerId}
                         ref={(node) => setSessionMenuTriggerRef(sid, node)}
-                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-[#6b7280] cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-[#374151] aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-[#374151] max-[900px]:w-9 max-[900px]:h-9"
+                        className="session-menu-trigger w-8 h-8 border border-transparent rounded-full bg-transparent text-muted cursor-pointer grid place-items-center text-base leading-none hover:bg-surface-soft hover:border-border hover:text-ink aria-expanded:bg-surface-soft aria-expanded:border-border aria-expanded:text-ink max-[900px]:w-9 max-[900px]:h-9"
                         aria-haspopup="menu"
                         aria-expanded={isMenuOpen}
                         aria-controls={menuId}
@@ -189,7 +190,7 @@ export default function SessionSidebarHistorySection(props: Props) {
                           <button
                             type="button"
                             role="menuitem"
-                            className="session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left text-[#374151] cursor-pointer hover:bg-surface-soft"
+                            className="session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left text-ink cursor-pointer hover:bg-surface-soft"
                             onClick={() => renameSession(sid)}
                           >
                             重命名
@@ -197,7 +198,7 @@ export default function SessionSidebarHistorySection(props: Props) {
                           <button
                             type="button"
                             role="menuitem"
-                            className={`session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left cursor-pointer ${isArchived ? 'text-[#374151] hover:bg-surface-soft' : 'text-[#b42318] hover:bg-[#fff1f1]'}`}
+                            className={`session-menu-item border-none bg-transparent rounded-lg px-[9px] py-[7px] text-xs text-left cursor-pointer ${isArchived ? 'text-ink hover:bg-surface-soft' : 'text-danger hover:bg-danger-soft'}`}
                             onClick={() => toggleSessionArchive(sid)}
                           >
                             {isArchived ? '恢复' : '归档'}
