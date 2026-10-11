@@ -1,25 +1,6 @@
-# Practice Generation Rules
+# Practice
 
-Use these rules when assigning personalized exercises.
-
-## Quantity
-
-- For each weak knowledge point: 3-5 items
-- For each medium mastery point: 1-2 items
-- For strong points: no repetition unless requested
-
-## Difficulty Mix
-
-- 60% basic
-- 30% medium
-- 10% challenge
-
-## Explanations
-
-- Provide a one-sentence "why this task" note.
-- Keep explanations short and actionable.
-
-## Safety
-
-- Avoid exposing other students' scores or rankings.
-- Avoid modifying exam facts.
+Practice is only for `problem_set` after the student has submitted homework.
+The student taps 补练. The **server** selects items from `DATA_DIR/question_bank`.
+Chat does not generate stems, call `--generate` / `make_generated`, or write a student profile.
+If the bank is insufficient, tell the student 「题库不足」.

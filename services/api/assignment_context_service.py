@@ -307,20 +307,21 @@ def build_bound_student_assignment_extra(
     stems_block = format_stems_block(stems)
     if stems_block:
         parts.append(stems_block)
-    practice_stems = load_open_practice_stems(
-        data_dir,
-        assignment_id=str(detail.get("assignment_id") or folder.name),
-        student_id=student_id,
-        app_root=app_root,
-    )
-    practice_block = format_stems_block(practice_stems, title="【补练题干】")
-    if practice_block:
-        parts.append(practice_block)
-    feedback = load_latest_practice_short_feedback(
-        data_dir,
-        assignment_id=str(detail.get("assignment_id") or folder.name),
-        student_id=student_id,
-    )
-    if feedback:
-        parts.append(feedback)
+    if kind == "problem_set":
+        practice_stems = load_open_practice_stems(
+            data_dir,
+            assignment_id=str(detail.get("assignment_id") or folder.name),
+            student_id=student_id,
+            app_root=app_root,
+        )
+        practice_block = format_stems_block(practice_stems, title="【补练题干】")
+        if practice_block:
+            parts.append(practice_block)
+        feedback = load_latest_practice_short_feedback(
+            data_dir,
+            assignment_id=str(detail.get("assignment_id") or folder.name),
+            student_id=student_id,
+        )
+        if feedback:
+            parts.append(feedback)
     return "\n\n".join(part for part in parts if str(part or "").strip())

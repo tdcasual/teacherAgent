@@ -110,6 +110,7 @@ class TestPromptBuilder(unittest.TestCase):
         from services.api.prompt_builder import compile_system_prompt
 
         authoring = ("进入诊断问题", "【诊断问题】", "动态生成Q1", "列出考试", "考试分析")
+        figure_examples = ("如图所示", "见图2", "下图中")
         student, modules = compile_system_prompt("student", version="v1", debug=False)
         coach = (
             Path(__file__).resolve().parents[1]
@@ -119,6 +120,7 @@ class TestPromptBuilder(unittest.TestCase):
             / "skills"
             / "student_coach.md"
         ).read_text(encoding="utf-8")
+        blob = student + "\n" + coach
         self.assertIn("学生端学习助手", student)
         self.assertIn("不要生成作业", student)
         self.assertIn("不要生成作业", coach)
@@ -126,6 +128,8 @@ class TestPromptBuilder(unittest.TestCase):
         for phrase in authoring:
             self.assertNotIn(phrase, student)
             self.assertNotIn(phrase, coach)
+        for phrase in figure_examples:
+            self.assertNotIn(phrase, blob)
 
     def test_teacher_stack_keeps_figure_reference_self_check(self):
         from services.api.prompt_builder import compile_system_prompt

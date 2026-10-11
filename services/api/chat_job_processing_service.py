@@ -60,12 +60,10 @@ class ComputeChatReplyDeps:
     teacher_assignment_preflight: Callable[[Any], Optional[str]]
     resolve_teacher_id: Callable[[Optional[str]], str]
     teacher_build_context: Callable[[str, Optional[str], int, str], str]
-    detect_student_study_trigger: Callable[[str], bool]
     load_profile_file: Callable[[Any], Dict[str, Any]]
     data_dir: Any
     build_verified_student_context: Callable[[str, Dict[str, Any]], str]
     build_assignment_detail_cached: Callable[..., Dict[str, Any]]
-    build_assignment_context: Callable[..., str]
     chat_extra_system_max_chars: int
     trim_messages: Callable[..., List[Dict[str, Any]]]
     student_inflight: Callable[[Optional[str]], Any]

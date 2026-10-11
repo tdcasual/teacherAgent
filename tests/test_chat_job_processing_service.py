@@ -106,12 +106,10 @@ def _student_deps(root: Path, **overrides):
         teacher_assignment_preflight=lambda _req: None,
         resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
         teacher_build_context=lambda *_args, **_kwargs: "",
-        detect_student_study_trigger=lambda _text: False,
         load_profile_file=lambda _path: {"student_id": "S001"},
         data_dir=root / "data",
         build_verified_student_context=lambda _sid, _profile: "verified",
         build_assignment_detail_cached=lambda _folder, include_text=False: _attachable_detail(),
-        build_assignment_context=lambda *_args, **_kwargs: "SHOULD_NOT_JSON_DUMP",
         chat_extra_system_max_chars=6000,
         trim_messages=lambda msgs, role_hint=None: msgs,
         student_inflight=_student_inflight,
@@ -134,12 +132,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -165,7 +161,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
@@ -173,7 +168,6 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                     {"build_assignment_detail": calls["build_assignment_detail"] + 1}
                 )
                 or {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -195,6 +189,8 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertNotIn("find_assignment_for_date", source)
         self.assertNotIn("find_assignment_for_date", ComputeChatReplyDeps.__dataclass_fields__)
+        self.assertNotIn("detect_student_study_trigger", ComputeChatReplyDeps.__dataclass_fields__)
+        self.assertNotIn("build_assignment_context", ComputeChatReplyDeps.__dataclass_fields__)
         self.assertNotIn('json.dumps(detail["questions"])', source)
         self.assertNotIn("json.dumps(detail.get(\"questions\")", source)
 
@@ -206,12 +202,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: True,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "ASSIGNMENT",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -310,6 +304,37 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
             for phrase in AUTHORING:
                 self.assertNotIn(phrase, text)
 
+    def test_extra_system_cap_keeps_kind_rules(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            _write_question_row(
+                folder, stem="可见题干：" + ("X" * 5000), answer="SECRET_ANSWER_42"
+            )
+            captured = {"extra_system": None}
+
+            def _run_agent(messages, role_hint, **kwargs):
+                del messages, role_hint
+                captured["extra_system"] = kwargs.get("extra_system")
+                return {"reply": "OK"}
+
+            deps = _student_deps(
+                root,
+                run_agent=_run_agent,
+                chat_extra_system_max_chars=800,
+                subject_prompt_overlay=lambda *_args, **_kwargs: "O",
+            )
+            reply, role_hint, _last = compute_chat_reply_sync(
+                _Req(assignment_id="A1"), deps=deps
+            )
+            extra = str(captured["extra_system"] or "")
+            self.assertEqual(reply, "OK")
+            self.assertEqual(role_hint, "student")
+            self.assertIn("【学习规则】", extra)
+            self.assertLessEqual(len(extra), 801)
+            self.assertNotIn("SECRET_ANSWER_42", extra)
+
     def test_scenario_extra_system_uses_brief_not_authoring_rules(self):
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -358,12 +383,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: calls.update({"load_profile": calls["load_profile"] + 1}) or {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -393,12 +416,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -430,12 +451,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -474,12 +493,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -512,12 +529,10 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
                 teacher_build_context=lambda *_args, **_kwargs: "",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {"student_id": "S001"},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "verified",
                 build_assignment_detail_cached=lambda _folder, include_text=False: {"assignment_id": "A1"},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -577,12 +592,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher-1"),
                 teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -638,12 +651,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher-1"),
                 teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -692,12 +703,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher-1"),
                 teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -754,12 +763,10 @@ class TeacherWorkflowResolutionTest(unittest.TestCase):
                 teacher_assignment_preflight=lambda _req: None,
                 resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher-1"),
                 teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
-                detect_student_study_trigger=lambda _text: False,
                 load_profile_file=lambda _path: {},
                 data_dir=root / "data",
                 build_verified_student_context=lambda _sid, _profile: "",
                 build_assignment_detail_cached=lambda *_args, **_kwargs: {},
-                build_assignment_context=lambda *_args, **_kwargs: "",
                 chat_extra_system_max_chars=6000,
                 trim_messages=lambda msgs, role_hint=None: msgs,
                 student_inflight=_student_inflight,
@@ -795,7 +802,6 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
             teacher_assignment_preflight=lambda _req: None,
             resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
             teacher_build_context=lambda *_args, **_kwargs: "teacher-context",
-            detect_student_study_trigger=lambda _text: False,
             load_profile_file=lambda _path: {"student_id": "S001"},
             data_dir=root / "data",
             build_verified_student_context=lambda _sid, _profile: "verified",
@@ -803,7 +809,6 @@ class SubjectPackOverlayInjectionTest(unittest.TestCase):
                 "assignment_id": "A1",
                 "meta": {"subject_id": "math", "pack_id": "math"},
             },
-            build_assignment_context=lambda *_args, **_kwargs: "",
             chat_extra_system_max_chars=6000,
             trim_messages=lambda msgs, role_hint=None: msgs,
             student_inflight=_student_inflight,

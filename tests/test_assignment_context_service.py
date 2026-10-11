@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 from services.api.assignment_context_service import (
     build_assignment_context,
+    build_bound_student_assignment_extra,
     build_kind_coach_rules,
     load_assignment_stems,
     load_latest_practice_short_feedback,
@@ -207,6 +208,54 @@ class AssignmentContextServiceTest(unittest.TestCase):
             self.assertNotIn("SECRET_EXPECTED", text)
             self.assertNotIn("answer_ref", text)
             self.assertNotIn("LEAK_FEEDBACK_MD", text)
+
+    def test_non_problem_set_join_skips_practice_feedback(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            practice = root / "student_submissions" / "A1" / "S001" / "practice_abc"
+            practice.mkdir(parents=True)
+            (practice / "meta.json").write_text(
+                json.dumps({"status": "submitted", "practice_id": "practice_abc"}),
+                encoding="utf-8",
+            )
+            (practice / "grading_report.json").write_text(
+                json.dumps(
+                    {
+                        "items": [
+                            {
+                                "question_id": "P1",
+                                "kp_id": "kp.force",
+                                "status": "wrong",
+                                "score": 0,
+                                "reason": "PRACTICE_FEEDBACK_LEAK",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            detail = {
+                "assignment_id": "A1",
+                "date": "2026-02-08",
+                "meta": {
+                    "assignment_kind": "scenario",
+                    "content_source": "ai",
+                },
+                "requirements": {"brief": "只讨论老师 brief。"},
+            }
+            text = build_bound_student_assignment_extra(
+                folder=folder,
+                detail=detail,
+                data_dir=root,
+                app_root=root,
+                student_id="S001",
+            )
+            self.assertIn("只讨论老师 brief。", text)
+            self.assertNotIn("PRACTICE_FEEDBACK_LEAK", text)
+            self.assertNotIn("【补练短反馈】", text)
+            self.assertNotIn("【补练题干】", text)
 
 
 if __name__ == "__main__":
