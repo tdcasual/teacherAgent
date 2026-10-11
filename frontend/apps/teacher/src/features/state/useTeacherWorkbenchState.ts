@@ -5,7 +5,9 @@ import {
   type TeacherWorkbenchState,
 } from './teacherWorkbenchState';
 import type {
+  AssignmentKind,
   AssignmentProgress,
+  ContentSource,
   StudentMemoryInsightsResponse,
   StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
@@ -66,6 +68,26 @@ export function useTeacherWorkbenchState() {
 
   const setUploadMode = useCallback(
     (value: 'assignment') => setField('uploadMode', value),
+    [setField],
+  );
+  const setAssignmentKind = useCallback(
+    (value: AssignmentKind) => setField('assignmentKind', value),
+    [setField],
+  );
+  const setContentSource = useCallback(
+    (value: ContentSource) => setField('contentSource', value),
+    [setField],
+  );
+  const setCompletionRequiresSubmission = useCallback(
+    (value: boolean) => setField('completionRequiresSubmission', value),
+    [setField],
+  );
+  const setCompletionRequiresDiscussion = useCallback(
+    (value: boolean) => setField('completionRequiresDiscussion', value),
+    [setField],
+  );
+  const setCompletionAllowPractice = useCallback(
+    (value: boolean) => setField('completionAllowPractice', value),
     [setField],
   );
   const setUploadAssignmentId = useCallback(
@@ -262,6 +284,11 @@ export function useTeacherWorkbenchState() {
   return {
     ...state,
     setUploadMode,
+    setAssignmentKind,
+    setContentSource,
+    setCompletionRequiresSubmission,
+    setCompletionRequiresDiscussion,
+    setCompletionAllowPractice,
     setUploadAssignmentId,
     setUploadDate,
     setUploadDueAt,

@@ -9,7 +9,14 @@ import {
 } from './helpers/teacherHarness'
 import {
   assignmentConfirmButton,
+  workflowAiSection,
+  workflowAiSubmitButton,
   workflowAssignmentScopeSelect,
+  workflowBankSection,
+  workflowBankSubmitButton,
+  workflowKindOption,
+  workflowKindSourcePicker,
+  workflowSourceOption,
   workflowStatusChip,
   workflowUploadSection,
   workflowUploadSubmitButton,
@@ -261,6 +268,30 @@ const assignmentWorkflowCases: MatrixCase[] = [
     given: 'Upload includes files and answer_files',
     when: 'Submit assignment upload',
     then: 'Multipart payload includes all expected file fields',
+  },
+  {
+    id: 'D015',
+    priority: 'P0',
+    title: 'Bank source is disabled unless kind is problem_set',
+    given: 'Workflow tab is open',
+    when: 'Select a non-problem_set kind',
+    then: 'Bank source is disabled with 题库仅用于做题作业',
+  },
+  {
+    id: 'D016',
+    priority: 'P0',
+    title: 'Scenario draft missing brief cannot publish',
+    given: 'AI generated a scenario draft without brief',
+    when: 'View confirm action',
+    then: 'Confirm button is disabled',
+  },
+  {
+    id: 'D017',
+    priority: 'P1',
+    title: 'Empty bank shows insufficient copy',
+    given: 'Kind is problem_set and source is bank',
+    when: 'From-bank returns 409',
+    then: 'UI shows 题库不足',
   },
 ]
 
@@ -1022,7 +1053,62 @@ const implementations: Partial<Record<string, MatrixCaseRunner>> = {
     expect(startBodyText).toContain('filename="question.pdf"')
     expect(startBodyText).toContain('name="answer_files"')
     expect(startBodyText).toContain('filename="answer.pdf"')
-  }
+  },
+
+  D015: async ({ page }) => {
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+    await expect(workflowKindSourcePicker(page)).toBeVisible()
+    await expect(workflowSourceOption(page, 'bank')).toBeEnabled()
+    await workflowKindOption(page, 'scenario').check()
+    await expect(workflowSourceOption(page, 'bank')).toBeDisabled()
+    await expect(workflowSourceOption(page, 'bank')).toHaveAttribute('title', '题库仅用于做题作业')
+  },
+
+  D016: async ({ page }) => {
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+    await page.route('http://localhost:8000/assignment/generate', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: true,
+          draft: {
+            assignment_id: 'HW-SCENARIO',
+            assignment_kind: 'scenario',
+            content_source: 'ai',
+            questions: [],
+            requirements: { subject: '物理', topic: '测量', grade_level: '高二', brief: '' },
+            requirements_missing: ['brief'],
+          },
+        }),
+      })
+    })
+    await workflowKindOption(page, 'scenario').check()
+    await workflowSourceOption(page, 'ai').check()
+    await expect(workflowAiSection(page)).toBeVisible()
+    await page.getByTestId('workflow-ai-assignment-id').fill('HW-SCENARIO')
+    await page.getByTestId('workflow-ai-topic').fill('测量')
+    await page.getByTestId('workflow-ai-grade').fill('高二')
+    await workflowAiSubmitButton(page).click()
+    await expect(assignmentDraftSection(page)).toBeVisible()
+    await expect(assignmentConfirmButton(page)).toBeDisabled()
+  },
+
+  D017: async ({ page }) => {
+    await openTeacherApp(page, { stateOverrides: { teacherWorkbenchTab: 'workflow' } })
+    await page.route('http://localhost:8000/assignment/draft/from-bank', async (route) => {
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: 'question_bank_insufficient' }),
+      })
+    })
+    await workflowSourceOption(page, 'bank').check()
+    await expect(workflowBankSection(page)).toBeVisible()
+    await page.getByTestId('workflow-bank-assignment-id').fill('HW-BANK')
+    await workflowBankSubmitButton(page).click()
+    await expect(page.getByText('题库不足')).toBeVisible()
+  },
 }
 
 test('workflow tab keeps must-do upload actions ahead of supplementary timeline', async ({ page }) => {

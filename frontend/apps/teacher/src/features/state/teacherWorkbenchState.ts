@@ -1,5 +1,7 @@
 import type {
+  AssignmentKind,
   AssignmentProgress,
+  ContentSource,
   StudentMemoryInsightsResponse,
   StudentMemoryProposal,
   TeacherMemoryInsightsResponse,
@@ -11,6 +13,12 @@ import type {
 
 export type TeacherWorkbenchState = {
   uploadMode: 'assignment';
+
+  assignmentKind: AssignmentKind;
+  contentSource: ContentSource;
+  completionRequiresSubmission: boolean;
+  completionRequiresDiscussion: boolean;
+  completionAllowPractice: boolean;
 
   uploadAssignmentId: string;
   uploadDate: string;
@@ -73,6 +81,12 @@ type TeacherWorkbenchAction =
 export const createInitialTeacherWorkbenchState = (): TeacherWorkbenchState => {
   return {
     uploadMode: 'assignment',
+
+    assignmentKind: 'problem_set',
+    contentSource: 'upload',
+    completionRequiresSubmission: true,
+    completionRequiresDiscussion: false,
+    completionAllowPractice: true,
 
     uploadAssignmentId: '',
     uploadDate: '',

@@ -1,7 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AssignmentDraftSection from './AssignmentDraftSection';
-import type { UploadDraft } from '../../../appTypes';
+import type { AssignmentKind, UploadDraft } from '../../../appTypes';
+import type { AssignmentDraftSectionProps } from '../../../types/workflow';
 
 afterEach(() => {
   cleanup();
@@ -27,84 +28,103 @@ const draft: UploadDraft = {
     preferences: [],
     extra_constraints: '',
   },
-} as UploadDraft;
+};
+
+const baseProps = (): Omit<AssignmentDraftSectionProps, 'uploadDraft'> & {
+  draftSaving: boolean;
+  uploadConfirming: boolean;
+} => ({
+  uploadJobInfo: null,
+  draftPanelCollapsed: false,
+  setDraftPanelCollapsed: vi.fn(),
+  draftActionError: '',
+  draftActionStatus: '',
+  draftSaving: false,
+  uploadConfirming: false,
+  saveDraft: vi.fn(),
+  handleConfirmUpload: vi.fn(),
+  formatDraftSummary: () => '',
+  formatMissingRequirements: (missing) => (missing || []).join('、'),
+  updateDraftRequirement: vi.fn(),
+  updateDraftQuestion: vi.fn(),
+  misconceptionsText: '',
+  setMisconceptionsText: vi.fn(),
+  setMisconceptionsDirty: vi.fn(),
+  parseCommaList: (v) =>
+    String(v)
+      .split(/[，,]/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  parseLineList: (v) =>
+    String(v)
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  difficultyLabel: () => '',
+  difficultyOptions: [],
+  normalizeDifficulty: () => '',
+  questionShowCount: 3,
+  setQuestionShowCount: vi.fn(),
+  stopKeyPropagation: vi.fn(),
+  assignmentKind: 'problem_set',
+  completionRequiresSubmission: true,
+  setCompletionRequiresSubmission: vi.fn(),
+  completionRequiresDiscussion: false,
+  setCompletionRequiresDiscussion: vi.fn(),
+  completionAllowPractice: true,
+  setCompletionAllowPractice: vi.fn(),
+});
+
+const renderDraft = (
+  current: UploadDraft,
+  kind: AssignmentKind = 'problem_set',
+  extra: Partial<ReturnType<typeof baseProps>> = {},
+) =>
+  render(
+    <AssignmentDraftSection
+      {...baseProps()}
+      {...extra}
+      assignmentKind={kind}
+      uploadDraft={{ ...current, assignment_kind: kind }}
+    />,
+  );
 
 describe('AssignmentDraftSection', () => {
   it('draft_requirement_fields_associate_labels', () => {
-    render(
-      <AssignmentDraftSection
-        uploadDraft={draft}
-        uploadJobInfo={null}
-        draftPanelCollapsed={false}
-        setDraftPanelCollapsed={vi.fn()}
-        draftActionError=""
-        draftActionStatus=""
-        draftSaving={false}
-        uploadConfirming={false}
-        saveDraft={vi.fn()}
-        handleConfirmUpload={vi.fn()}
-        formatDraftSummary={() => ''}
-        formatMissingRequirements={() => ''}
-        updateDraftRequirement={vi.fn()}
-        updateDraftQuestion={vi.fn()}
-        misconceptionsText=""
-        setMisconceptionsText={vi.fn()}
-        setMisconceptionsDirty={vi.fn()}
-        parseCommaList={(v) =>
-          String(v)
-            .split(/[，,]/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-        }
-        parseLineList={(v) =>
-          String(v)
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        }
-        difficultyLabel={() => ''}
-        difficultyOptions={[]}
-        normalizeDifficulty={() => ''}
-        questionShowCount={3}
-        setQuestionShowCount={vi.fn()}
-        stopKeyPropagation={vi.fn()}
-      />,
-    );
+    renderDraft(draft);
     expect(screen.getByLabelText('1) 学科')).toBeTruthy();
     expect(screen.getByLabelText('1) 本节课主题')).toBeTruthy();
     expect(screen.getByLabelText('2) 年级')).toBeTruthy();
   });
 
   it('draft error uses role alert', () => {
-    render(
-      <AssignmentDraftSection
-        uploadDraft={draft}
-        uploadJobInfo={null}
-        draftPanelCollapsed={false}
-        setDraftPanelCollapsed={vi.fn()}
-        draftActionError="保存失败"
-        draftActionStatus=""
-        draftSaving={false}
-        uploadConfirming={false}
-        saveDraft={vi.fn()}
-        handleConfirmUpload={vi.fn()}
-        formatDraftSummary={() => ''}
-        formatMissingRequirements={() => ''}
-        updateDraftRequirement={vi.fn()}
-        updateDraftQuestion={vi.fn()}
-        misconceptionsText=""
-        setMisconceptionsText={vi.fn()}
-        setMisconceptionsDirty={vi.fn()}
-        parseCommaList={() => []}
-        parseLineList={() => []}
-        difficultyLabel={() => ''}
-        difficultyOptions={[]}
-        normalizeDifficulty={() => ''}
-        questionShowCount={3}
-        setQuestionShowCount={vi.fn()}
-        stopKeyPropagation={vi.fn()}
-      />,
-    );
+    renderDraft(draft, 'problem_set', { draftActionError: '保存失败' });
     expect(screen.getByRole('alert').textContent).toContain('保存失败');
+  });
+
+  it('scenario missing brief cannot publish', () => {
+    renderDraft(
+      {
+        ...draft,
+        questions: [],
+        requirements: { subject: '物理', topic: '力学', grade_level: '高二', brief: '' },
+        requirements_missing: ['brief'],
+      },
+      'scenario',
+    );
+    const confirm = screen.getByTestId('assignment-confirm-button') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.title).toMatch(/brief|作业说明/);
+    expect(screen.getByLabelText('作业说明')).toBeTruthy();
+    expect(screen.queryByLabelText('5) 易错点（每行一条，至少 4 条）')).toBeNull();
+    expect(screen.queryByText('题目与答案（可编辑）')).toBeNull();
+    expect(screen.queryByTestId('draft-allow-practice')).toBeNull();
+    expect(screen.getByText('需要讨论（陪练提示，不作为完成条件）')).toBeTruthy();
+  });
+
+  it('problem_set shows allow_practice and eight-point fields', () => {
+    renderDraft(draft);
+    expect(screen.getByTestId('draft-allow-practice')).toBeTruthy();
+    expect(screen.getByLabelText('5) 易错点（每行一条，至少 4 条）')).toBeTruthy();
   });
 });

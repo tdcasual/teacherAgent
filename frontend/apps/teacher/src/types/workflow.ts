@@ -6,11 +6,15 @@
  */
 import type { FormEvent, KeyboardEvent, Dispatch, SetStateAction } from 'react';
 import type {
+  AssignmentKind,
+  ContentSource,
   UploadJobStatus,
   AssignmentProgress,
   UploadDraft,
   WorkflowIndicator,
 } from '../appTypes';
+
+export type { AssignmentKind, ContentSource };
 
 // ── Primitive helpers ──────────────────────────────────────────────────
 
@@ -83,6 +87,55 @@ export type UploadSectionProps = {
   formatUploadJobSummary: FormatUploadJobSummary;
 };
 
+export type PendingPickerChange = {
+  type: 'kind' | 'source';
+  value: AssignmentKind | ContentSource;
+} | null;
+
+export type AssignmentKindSourcePickerProps = {
+  assignmentKind: AssignmentKind;
+  contentSource: ContentSource;
+  onAssignmentKindChange: (kind: AssignmentKind) => void;
+  onContentSourceChange: (source: ContentSource) => void;
+};
+
+export type SourceIdentityFieldsProps = {
+  assignmentId: string;
+  setAssignmentId: (v: string) => void;
+  date: string;
+  setDate: (v: string) => void;
+  dueAt: string;
+  setDueAt: (v: string) => void;
+  subjectId: string;
+  setSubjectId: (v: string) => void;
+  className: string;
+  setClassName: (v: string) => void;
+  studentIds: string;
+  setStudentIds: (v: string) => void;
+  assignmentIdTestId: string;
+};
+
+export type BankPickFormProps = {
+  uploading: boolean;
+  uploadError: string;
+  uploadStatus: string;
+  handleFromBank: (input: { kp: string; count: number }) => Promise<void>;
+} & SourceIdentityFieldsProps;
+
+export type AiDraftFormProps = {
+  assignmentKind: AssignmentKind;
+  uploading: boolean;
+  uploadError: string;
+  uploadStatus: string;
+  handleGenerate: (input: {
+    kp: string;
+    perKp: number;
+    topic: string;
+    gradeLevel: string;
+    seed: string;
+  }) => Promise<void>;
+} & SourceIdentityFieldsProps;
+
 export type AssignmentDraftSectionProps = {
   uploadDraft: UploadDraft | null;
   uploadJobInfo: UploadJobStatus | null;
@@ -111,6 +164,14 @@ export type AssignmentDraftSectionProps = {
   normalizeDifficulty: NormalizeDifficulty;
   difficultyOptions: readonly DifficultyOption[];
   stopKeyPropagation: StopKeyPropagation;
+
+  assignmentKind: AssignmentKind;
+  completionRequiresSubmission: boolean;
+  setCompletionRequiresSubmission: (v: boolean) => void;
+  completionRequiresDiscussion: boolean;
+  setCompletionRequiresDiscussion: (v: boolean) => void;
+  completionAllowPractice: boolean;
+  setCompletionAllowPractice: (v: boolean) => void;
 };
 
 export type WorkflowSummaryCardProps = {

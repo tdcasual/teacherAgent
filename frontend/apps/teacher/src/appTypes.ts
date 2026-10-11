@@ -221,8 +221,11 @@ export type UploadJobStatus = {
   draft_saved?: boolean;
 };
 
+export type AssignmentKind = 'problem_set' | 'scenario' | 'science_history' | 'practical';
+export type ContentSource = 'upload' | 'bank' | 'ai';
+
 export type UploadDraft = {
-  job_id: string;
+  job_id?: string;
   assignment_id: string;
   date: string;
   due_at?: string;
@@ -239,6 +242,8 @@ export type UploadDraft = {
   warnings?: string[];
   questions: Array<Record<string, unknown>>;
   draft_saved?: boolean;
+  assignment_kind?: AssignmentKind;
+  content_source?: ContentSource;
 };
 
 type UploadDraftRequirements = {
@@ -252,6 +257,8 @@ type UploadDraftRequirements = {
   duration_minutes?: number;
   preferences?: string[];
   extra_constraints?: string;
+  brief?: string;
+  discussion_goals?: string[];
   [k: string]: unknown;
 };
 

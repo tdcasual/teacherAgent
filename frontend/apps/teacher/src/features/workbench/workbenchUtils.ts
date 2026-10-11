@@ -68,9 +68,90 @@ const requirementLabels: Record<string, string> = {
   duration_minutes: '作业时间',
   preferences: '作业偏好',
   extra_constraints: '额外限制',
+  brief: '作业说明',
+  discussion_goals: '讨论目标',
 };
 
 export const formatMissingRequirements = (missing?: string[]) => {
   const items = Array.isArray(missing) ? missing : [];
   return items.map((key) => requirementLabels[key] || key).join('、');
+};
+
+export const ASSIGNMENT_KIND_OPTIONS = [
+  { value: 'problem_set', label: '做题作业' },
+  { value: 'scenario', label: '情景作业' },
+  { value: 'science_history', label: '科学史作业' },
+  { value: 'practical', label: '实践作业' },
+] as const;
+
+export const CONTENT_SOURCE_OPTIONS = [
+  { value: 'upload', label: '上传文件' },
+  { value: 'bank', label: '题库选题' },
+  { value: 'ai', label: 'AI 起草' },
+] as const;
+
+export const BANK_SOURCE_DISABLED_TITLE = '题库仅用于做题作业';
+
+export const defaultCompletionPolicy = (kind: string) => ({
+  requires_submission: true,
+  requires_discussion: kind !== 'problem_set',
+  allow_practice: kind === 'problem_set',
+});
+
+export const computeLocalRequirementsMissing = (
+  req: Record<string, unknown> | undefined,
+  assignmentKind = 'problem_set',
+) => {
+  const missing: string[] = [];
+  const subject = String(req?.subject || '').trim();
+  const topic = String(req?.topic || '').trim();
+  const grade = String(req?.grade_level || '').trim();
+  if (!subject) missing.push('subject');
+  if (!topic) missing.push('topic');
+  if (!grade) missing.push('grade_level');
+  if (assignmentKind !== 'problem_set') {
+    if (!String(req?.brief || '').trim()) missing.push('brief');
+    return missing;
+  }
+  const classLevel = String(req?.class_level || '').trim();
+  const core = Array.isArray(req?.core_concepts) ? req.core_concepts : [];
+  const typical = String(req?.typical_problem || '').trim();
+  const misconceptions = Array.isArray(req?.misconceptions) ? req.misconceptions : [];
+  const duration = Number(req?.duration_minutes || 0);
+  const prefs = Array.isArray(req?.preferences) ? req.preferences : [];
+  if (!['偏弱', '中等', '较强', '混合'].includes(classLevel)) missing.push('class_level');
+  if (core.filter(Boolean).length < 3) missing.push('core_concepts');
+  if (!typical) missing.push('typical_problem');
+  if (misconceptions.filter(Boolean).length < 4) missing.push('misconceptions');
+  if (![20, 40, 60].includes(duration)) missing.push('duration_minutes');
+  if (prefs.filter(Boolean).length < 1) missing.push('preferences');
+  return missing;
+};
+
+export const clampQuestionCount = (raw: unknown, fallback = 5) => {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(20, Math.max(1, Math.round(value)));
+};
+
+export const formatApiErrorMessage = (text: string, status: number) => {
+  let message = text || `状态码 ${status}`;
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown; message?: string };
+    const detail = parsed?.detail ?? parsed;
+    if (typeof detail === 'string') message = detail;
+    else if (detail && typeof detail === 'object') {
+      const record = detail as { message?: string; hints?: string[]; error?: string };
+      if (record.message) {
+        const hints = Array.isArray(record.hints) ? record.hints.join('；') : '';
+        message = `${record.message}${hints ? `（${hints}）` : ''}`;
+      } else if (record.error) {
+        message = record.error;
+      }
+    }
+  } catch {
+    // keep raw text
+  }
+  if (message.includes('question_bank_insufficient')) return '题库不足';
+  return message;
 };

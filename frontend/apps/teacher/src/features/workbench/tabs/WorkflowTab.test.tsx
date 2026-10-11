@@ -11,6 +11,14 @@ vi.mock('../workflow/UploadSection', () => ({
   default: () => <div>workflow-upload-section</div>,
 }));
 
+vi.mock('../workflow/BankPickForm', () => ({
+  default: () => <div>workflow-bank-pick-form</div>,
+}));
+
+vi.mock('../workflow/AiDraftForm', () => ({
+  default: () => <div>workflow-ai-draft-form</div>,
+}));
+
 vi.mock('../workflow/AssignmentProgressSection', () => ({
   default: () => <div>workflow-progress-section</div>,
 }));
@@ -125,6 +133,21 @@ const buildProps = (): WorkflowTabProps =>
     normalizeDifficulty: () => 'medium',
     questionShowCount: 3,
     setQuestionShowCount: () => undefined,
+    assignmentKind: 'problem_set',
+    contentSource: 'upload',
+    requestAssignmentKindChange: () => undefined,
+    requestContentSourceChange: () => undefined,
+    pendingPickerChange: null,
+    confirmPendingPickerChange: () => undefined,
+    cancelPendingPickerChange: () => undefined,
+    handleFromBank: async () => undefined,
+    handleGenerate: async () => undefined,
+    completionRequiresSubmission: true,
+    setCompletionRequiresSubmission: () => undefined,
+    completionRequiresDiscussion: false,
+    setCompletionRequiresDiscussion: () => undefined,
+    completionAllowPractice: true,
+    setCompletionAllowPractice: () => undefined,
   }) as unknown as WorkflowTabProps;
 
 describe('WorkflowTab', () => {
@@ -139,7 +162,9 @@ describe('WorkflowTab', () => {
     expect(screen.getByText('必做')).toBeTruthy();
     expect(screen.getByText('按下面的主线动作继续处理。')).toBeTruthy();
     expect(screen.queryByText('下一步：继续审核草稿并确认创建作业')).toBeNull();
+    expect(screen.getByTestId('workflow-kind-source-picker')).toBeTruthy();
     expect(screen.getByText('workflow-upload-section')).toBeTruthy();
+    expect(screen.queryByText('workflow-bank-pick-form')).toBeNull();
     expect(screen.getByText('workflow-assignment-draft-section')).toBeTruthy();
     expect(screen.getByText('补充参考')).toBeTruthy();
     expect(screen.getByText('按需查看')).toBeTruthy();
@@ -161,5 +186,22 @@ describe('WorkflowTab', () => {
     expect(
       progressSection.compareDocumentPosition(timelineSection) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it('disables bank unless problem_set', () => {
+    const { rerender } = render(<WorkflowTab {...buildProps()} />);
+    expect((screen.getByTestId('workflow-source-bank') as HTMLInputElement).disabled).toBe(false);
+
+    rerender(<WorkflowTab {...buildProps()} assignmentKind="scenario" />);
+    const bank = screen.getByTestId('workflow-source-bank') as HTMLInputElement;
+    expect(bank.disabled).toBe(true);
+    expect(bank.title).toBe('题库仅用于做题作业');
+  });
+
+  it('shows bank form when source is bank', () => {
+    render(<WorkflowTab {...buildProps()} contentSource="bank" />);
+    expect(screen.getByText('workflow-bank-pick-form')).toBeTruthy();
+    expect(screen.queryByText('workflow-upload-section')).toBeNull();
+    expect(screen.getByText('workflow-assignment-draft-section')).toBeTruthy();
   });
 });

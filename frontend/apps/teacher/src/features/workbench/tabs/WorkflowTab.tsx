@@ -2,14 +2,19 @@ import type { Dispatch, SetStateAction } from 'react';
 import type {
   UploadSectionProps,
   AssignmentDraftSectionProps,
+  PendingPickerChange,
   WorkflowSummaryCardProps,
 } from '../../../types/workflow';
-import type { ExecutionTimelineEntry } from '../../../appTypes';
+import type { AssignmentKind, ContentSource, ExecutionTimelineEntry } from '../../../appTypes';
+import { ConfirmDialog } from '../../../../../shared/dialog';
 
 import WorkflowSummaryCard from '../workflow/WorkflowSummaryCard';
 import UploadSection from '../workflow/UploadSection';
 import AssignmentProgressSection from '../workflow/AssignmentProgressSection';
 import AssignmentDraftSection from '../workflow/AssignmentDraftSection';
+import AssignmentKindSourcePicker from '../workflow/AssignmentKindSourcePicker';
+import BankPickForm from '../workflow/BankPickForm';
+import AiDraftForm from '../workflow/AiDraftForm';
 import WorkflowTimeline from '../workflow/WorkflowTimeline';
 import { findActiveWorkflowStep } from '../workflowIndicators';
 
@@ -39,6 +44,21 @@ export type WorkflowTabProps = WorkflowSummaryCardProps &
     draftSaving: boolean;
     uploadConfirming: boolean;
     executionTimeline: ExecutionTimelineEntry[];
+    assignmentKind: AssignmentKind;
+    contentSource: ContentSource;
+    requestAssignmentKindChange: (kind: AssignmentKind) => void;
+    requestContentSourceChange: (source: ContentSource) => void;
+    pendingPickerChange: PendingPickerChange;
+    confirmPendingPickerChange: () => void;
+    cancelPendingPickerChange: () => void;
+    handleFromBank: (input: { kp: string; count: number }) => Promise<void>;
+    handleGenerate: (input: {
+      kp: string;
+      perKp: number;
+      topic: string;
+      gradeLevel: string;
+      seed: string;
+    }) => Promise<void>;
   };
 
 export default function WorkflowTab(props: WorkflowTabProps) {
@@ -84,32 +104,83 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           <div className="text-[12px] text-muted">按下面的主线动作继续处理。</div>
           <div className="text-[12px] text-muted">当前焦点：{focusLabel}</div>
         </div>
-        <UploadSection
-          uploadCardCollapsed={props.uploadCardCollapsed}
-          setUploadCardCollapsed={props.setUploadCardCollapsed}
-          formatUploadJobSummary={props.formatUploadJobSummary}
-          uploadJobInfo={props.uploadJobInfo}
-          uploadAssignmentId={props.uploadAssignmentId}
-          handleUploadAssignment={props.handleUploadAssignment}
-          setUploadAssignmentId={props.setUploadAssignmentId}
-          uploadDate={props.uploadDate}
-          setUploadDate={props.setUploadDate}
-          uploadDueAt={props.uploadDueAt}
-          setUploadDueAt={props.setUploadDueAt}
-          uploadSubjectId={props.uploadSubjectId}
-          setUploadSubjectId={props.setUploadSubjectId}
-          uploadScope={props.uploadScope}
-          setUploadScope={props.setUploadScope}
-          uploadClassName={props.uploadClassName}
-          setUploadClassName={props.setUploadClassName}
-          uploadStudentIds={props.uploadStudentIds}
-          setUploadStudentIds={props.setUploadStudentIds}
-          setUploadFiles={props.setUploadFiles}
-          setUploadAnswerFiles={props.setUploadAnswerFiles}
-          uploading={props.uploading}
-          uploadError={props.uploadError}
-          uploadStatus={props.uploadStatus}
+        <AssignmentKindSourcePicker
+          assignmentKind={props.assignmentKind}
+          contentSource={props.contentSource}
+          onAssignmentKindChange={props.requestAssignmentKindChange}
+          onContentSourceChange={props.requestContentSourceChange}
         />
+        {props.contentSource === 'upload' ? (
+          <UploadSection
+            uploadCardCollapsed={props.uploadCardCollapsed}
+            setUploadCardCollapsed={props.setUploadCardCollapsed}
+            formatUploadJobSummary={props.formatUploadJobSummary}
+            uploadJobInfo={props.uploadJobInfo}
+            uploadAssignmentId={props.uploadAssignmentId}
+            handleUploadAssignment={props.handleUploadAssignment}
+            setUploadAssignmentId={props.setUploadAssignmentId}
+            uploadDate={props.uploadDate}
+            setUploadDate={props.setUploadDate}
+            uploadDueAt={props.uploadDueAt}
+            setUploadDueAt={props.setUploadDueAt}
+            uploadSubjectId={props.uploadSubjectId}
+            setUploadSubjectId={props.setUploadSubjectId}
+            uploadScope={props.uploadScope}
+            setUploadScope={props.setUploadScope}
+            uploadClassName={props.uploadClassName}
+            setUploadClassName={props.setUploadClassName}
+            uploadStudentIds={props.uploadStudentIds}
+            setUploadStudentIds={props.setUploadStudentIds}
+            setUploadFiles={props.setUploadFiles}
+            setUploadAnswerFiles={props.setUploadAnswerFiles}
+            uploading={props.uploading}
+            uploadError={props.uploadError}
+            uploadStatus={props.uploadStatus}
+          />
+        ) : null}
+        {props.contentSource === 'bank' ? (
+          <BankPickForm
+            assignmentId={props.uploadAssignmentId}
+            setAssignmentId={props.setUploadAssignmentId}
+            date={props.uploadDate}
+            setDate={props.setUploadDate}
+            dueAt={props.uploadDueAt}
+            setDueAt={props.setUploadDueAt}
+            subjectId={props.uploadSubjectId}
+            setSubjectId={props.setUploadSubjectId}
+            className={props.uploadClassName}
+            setClassName={props.setUploadClassName}
+            studentIds={props.uploadStudentIds}
+            setStudentIds={props.setUploadStudentIds}
+            assignmentIdTestId="workflow-bank-assignment-id"
+            uploading={props.uploading}
+            uploadError={props.uploadError}
+            uploadStatus={props.uploadStatus}
+            handleFromBank={props.handleFromBank}
+          />
+        ) : null}
+        {props.contentSource === 'ai' ? (
+          <AiDraftForm
+            assignmentKind={props.assignmentKind}
+            assignmentId={props.uploadAssignmentId}
+            setAssignmentId={props.setUploadAssignmentId}
+            date={props.uploadDate}
+            setDate={props.setUploadDate}
+            dueAt={props.uploadDueAt}
+            setDueAt={props.setUploadDueAt}
+            subjectId={props.uploadSubjectId}
+            setSubjectId={props.setUploadSubjectId}
+            className={props.uploadClassName}
+            setClassName={props.setUploadClassName}
+            studentIds={props.uploadStudentIds}
+            setStudentIds={props.setUploadStudentIds}
+            assignmentIdTestId="workflow-ai-assignment-id"
+            uploading={props.uploading}
+            uploadError={props.uploadError}
+            uploadStatus={props.uploadStatus}
+            handleGenerate={props.handleGenerate}
+          />
+        ) : null}
         {draftLoading && (
           <section className="mt-3 bg-surface border border-border rounded-[14px] p-[10px] shadow-sm">
             <h3>解析结果（审核/修改）</h3>
@@ -153,9 +224,25 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             questionShowCount={props.questionShowCount}
             setQuestionShowCount={props.setQuestionShowCount}
             stopKeyPropagation={props.stopKeyPropagation}
+            assignmentKind={props.assignmentKind}
+            completionRequiresSubmission={props.completionRequiresSubmission}
+            setCompletionRequiresSubmission={props.setCompletionRequiresSubmission}
+            completionRequiresDiscussion={props.completionRequiresDiscussion}
+            setCompletionRequiresDiscussion={props.setCompletionRequiresDiscussion}
+            completionAllowPractice={props.completionAllowPractice}
+            setCompletionAllowPractice={props.setCompletionAllowPractice}
           />
         )}
       </section>
+      <ConfirmDialog
+        open={Boolean(props.pendingPickerChange)}
+        title={props.pendingPickerChange?.type === 'kind' ? '更换作业类型？' : '更换草稿来源？'}
+        description="当前草稿将被清空，以免把已有稿改成另一种作业。"
+        confirmText="清空并更换"
+        confirmTone="danger"
+        onConfirm={props.confirmPendingPickerChange}
+        onCancel={props.cancelPendingPickerChange}
+      />
       <section
         className="grid gap-3 border-t border-[color:color-mix(in_oklab,var(--color-border)_72%,var(--color-surface))] pt-3"
         data-testid="teacher-workflow-secondary-stage"

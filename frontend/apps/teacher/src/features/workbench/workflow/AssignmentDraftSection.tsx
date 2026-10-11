@@ -33,8 +33,18 @@ export default function AssignmentDraftSection(props: Props) {
     questionShowCount,
     setQuestionShowCount,
     stopKeyPropagation,
+    assignmentKind,
+    completionRequiresSubmission,
+    setCompletionRequiresSubmission,
+    completionRequiresDiscussion,
+    setCompletionRequiresDiscussion,
+    completionAllowPractice,
+    setCompletionAllowPractice,
   } = props;
   const fieldId = useId();
+  const kind = uploadDraft?.assignment_kind || assignmentKind || 'problem_set';
+  const isProblemSet = kind === 'problem_set';
+  const questions = uploadDraft?.questions || [];
 
   return (
     <section
@@ -78,8 +88,10 @@ export default function AssignmentDraftSection(props: Props) {
             {uploadDraft.student_ids && uploadDraft.student_ids.length ? (
               <div>学生：{uploadDraft.student_ids.join('、')}</div>
             ) : null}
-            <div>题目数量：{uploadDraft.questions?.length || 0}</div>
-            <div>交付方式：{uploadDraft.delivery_mode === 'pdf' ? '文档' : '图片'}</div>
+            {isProblemSet ? <div>题目数量：{questions.length}</div> : null}
+            {uploadDraft.delivery_mode ? (
+              <div>交付方式：{uploadDraft.delivery_mode === 'pdf' ? '文档' : '图片'}</div>
+            ) : null}
             {uploadDraft.requirements_missing && uploadDraft.requirements_missing.length ? (
               <div className="text-danger font-semibold">
                 缺失项：{formatMissingRequirements(uploadDraft.requirements_missing)}
@@ -149,7 +161,44 @@ export default function AssignmentDraftSection(props: Props) {
 
           <div className="mt-3 grid gap-3 grid-cols-1">
             <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
-              <h4 className="m-0 mb-[10px]">作业 8 点要求（可编辑）</h4>
+              <h4 className="m-0 mb-[10px]">完成条件</h4>
+              <div className="grid gap-2 text-[13px]">
+                <label className="inline-flex items-center gap-2 min-h-11">
+                  <input
+                    type="checkbox"
+                    checked={completionRequiresSubmission}
+                    onChange={(e) => setCompletionRequiresSubmission(e.target.checked)}
+                    data-testid="draft-requires-submission"
+                  />
+                  需要提交
+                </label>
+                <label className="inline-flex items-center gap-2 min-h-11">
+                  <input
+                    type="checkbox"
+                    checked={completionRequiresDiscussion}
+                    onChange={(e) => setCompletionRequiresDiscussion(e.target.checked)}
+                    data-testid="draft-requires-discussion"
+                  />
+                  需要讨论（陪练提示，不作为完成条件）
+                </label>
+                {isProblemSet ? (
+                  <label className="inline-flex items-center gap-2 min-h-11">
+                    <input
+                      type="checkbox"
+                      checked={completionAllowPractice}
+                      onChange={(e) => setCompletionAllowPractice(e.target.checked)}
+                      data-testid="draft-allow-practice"
+                    />
+                    允许补练
+                  </label>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
+              <h4 className="m-0 mb-[10px]">
+                {isProblemSet ? '作业 8 点要求（可编辑）' : '作业说明（可编辑）'}
+              </h4>
               <div className="grid gap-2">
                 <label htmlFor={`${fieldId}-subject`}>1) 学科</label>
                 <input
@@ -169,92 +218,134 @@ export default function AssignmentDraftSection(props: Props) {
                   value={uploadDraft.requirements?.grade_level || ''}
                   onChange={(e) => updateDraftRequirement('grade_level', e.target.value)}
                 />
-                <label htmlFor={`${fieldId}-class-level`}>2) 班级水平（偏弱/中等/较强/混合）</label>
-                <select
-                  id={`${fieldId}-class-level`}
-                  value={uploadDraft.requirements?.class_level || ''}
-                  onChange={(e) => updateDraftRequirement('class_level', e.target.value)}
-                  onKeyDown={stopKeyPropagation}
-                >
-                  <option value="">未设置</option>
-                  <option value="偏弱">偏弱</option>
-                  <option value="中等">中等</option>
-                  <option value="较强">较强</option>
-                  <option value="混合">混合</option>
-                </select>
-                <label htmlFor={`${fieldId}-concepts`}>3) 核心概念（逗号分隔 3–8 个）</label>
-                <input
-                  id={`${fieldId}-concepts`}
-                  value={(uploadDraft.requirements?.core_concepts || []).join('，')}
-                  onChange={(e) =>
-                    updateDraftRequirement('core_concepts', parseCommaList(e.target.value))
-                  }
-                />
-                <label htmlFor={`${fieldId}-typical`}>4) 典型题型/例题特征</label>
-                <textarea
-                  id={`${fieldId}-typical`}
-                  value={uploadDraft.requirements?.typical_problem || ''}
-                  onChange={(e) => updateDraftRequirement('typical_problem', e.target.value)}
-                  onKeyDown={stopKeyPropagation}
-                  rows={3}
-                />
-                <label htmlFor={`${fieldId}-misconceptions`}>5) 易错点（每行一条，至少 4 条）</label>
-                <textarea
-                  id={`${fieldId}-misconceptions`}
-                  value={misconceptionsText}
-                  onChange={(e) => {
-                    setMisconceptionsText(e.target.value);
-                    setMisconceptionsDirty(true);
-                    // Keep structured requirements in sync for immediate UI reads.
-                    updateDraftRequirement('misconceptions', parseLineList(e.target.value));
-                  }}
-                  onKeyDown={stopKeyPropagation}
-                  placeholder={
-                    '示例：\n1) 调零本质理解错误\n2) 换挡不重新调零\n3) 读数方向/单位混淆\n4) 内阻影响忽略'
-                  }
-                  rows={4}
-                />
-                <label htmlFor={`${fieldId}-duration`}>6) 作业时间（20/40/60）</label>
-                <select
-                  id={`${fieldId}-duration`}
-                  value={String(uploadDraft.requirements?.duration_minutes || '')}
-                  onChange={(e) =>
-                    updateDraftRequirement('duration_minutes', Number(e.target.value))
-                  }
-                >
-                  <option value="">未设置</option>
-                  <option value="20">20</option>
-                  <option value="40">40</option>
-                  <option value="60">60</option>
-                </select>
-                <label htmlFor={`${fieldId}-preferences`}>7) 作业偏好（逗号分隔）</label>
-                <input
-                  id={`${fieldId}-preferences`}
-                  value={(uploadDraft.requirements?.preferences || []).join('，')}
-                  onChange={(e) =>
-                    updateDraftRequirement('preferences', parseCommaList(e.target.value))
-                  }
-                  placeholder="例如：B提升，E小测验"
-                />
-                <label htmlFor={`${fieldId}-extra`}>8) 额外限制</label>
-                <textarea
-                  id={`${fieldId}-extra`}
-                  value={uploadDraft.requirements?.extra_constraints || ''}
-                  onChange={(e) => updateDraftRequirement('extra_constraints', e.target.value)}
-                  onKeyDown={stopKeyPropagation}
-                  rows={2}
-                />
+                {isProblemSet ? (
+                  <>
+                    <label htmlFor={`${fieldId}-class-level`}>
+                      2) 班级水平（偏弱/中等/较强/混合）
+                    </label>
+                    <select
+                      id={`${fieldId}-class-level`}
+                      value={uploadDraft.requirements?.class_level || ''}
+                      onChange={(e) => updateDraftRequirement('class_level', e.target.value)}
+                      onKeyDown={stopKeyPropagation}
+                    >
+                      <option value="">未设置</option>
+                      <option value="偏弱">偏弱</option>
+                      <option value="中等">中等</option>
+                      <option value="较强">较强</option>
+                      <option value="混合">混合</option>
+                    </select>
+                    <label htmlFor={`${fieldId}-concepts`}>3) 核心概念（逗号分隔 3–8 个）</label>
+                    <input
+                      id={`${fieldId}-concepts`}
+                      value={(uploadDraft.requirements?.core_concepts || []).join('，')}
+                      onChange={(e) =>
+                        updateDraftRequirement('core_concepts', parseCommaList(e.target.value))
+                      }
+                    />
+                    <label htmlFor={`${fieldId}-typical`}>4) 典型题型/例题特征</label>
+                    <textarea
+                      id={`${fieldId}-typical`}
+                      value={uploadDraft.requirements?.typical_problem || ''}
+                      onChange={(e) => updateDraftRequirement('typical_problem', e.target.value)}
+                      onKeyDown={stopKeyPropagation}
+                      rows={3}
+                    />
+                    <label htmlFor={`${fieldId}-misconceptions`}>
+                      5) 易错点（每行一条，至少 4 条）
+                    </label>
+                    <textarea
+                      id={`${fieldId}-misconceptions`}
+                      value={misconceptionsText}
+                      onChange={(e) => {
+                        setMisconceptionsText(e.target.value);
+                        setMisconceptionsDirty(true);
+                        // Keep structured requirements in sync for immediate UI reads.
+                        updateDraftRequirement('misconceptions', parseLineList(e.target.value));
+                      }}
+                      onKeyDown={stopKeyPropagation}
+                      placeholder={
+                        '示例：\n1) 调零本质理解错误\n2) 换挡不重新调零\n3) 读数方向/单位混淆\n4) 内阻影响忽略'
+                      }
+                      rows={4}
+                    />
+                    <label htmlFor={`${fieldId}-duration`}>6) 作业时间（20/40/60）</label>
+                    <select
+                      id={`${fieldId}-duration`}
+                      value={String(uploadDraft.requirements?.duration_minutes || '')}
+                      onChange={(e) =>
+                        updateDraftRequirement('duration_minutes', Number(e.target.value))
+                      }
+                    >
+                      <option value="">未设置</option>
+                      <option value="20">20</option>
+                      <option value="40">40</option>
+                      <option value="60">60</option>
+                    </select>
+                    <label htmlFor={`${fieldId}-preferences`}>7) 作业偏好（逗号分隔）</label>
+                    <input
+                      id={`${fieldId}-preferences`}
+                      value={(uploadDraft.requirements?.preferences || []).join('，')}
+                      onChange={(e) =>
+                        updateDraftRequirement('preferences', parseCommaList(e.target.value))
+                      }
+                      placeholder="例如：B提升，E小测验"
+                    />
+                    <label htmlFor={`${fieldId}-extra`}>8) 额外限制</label>
+                    <textarea
+                      id={`${fieldId}-extra`}
+                      value={uploadDraft.requirements?.extra_constraints || ''}
+                      onChange={(e) => updateDraftRequirement('extra_constraints', e.target.value)}
+                      onKeyDown={stopKeyPropagation}
+                      rows={2}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label htmlFor={`${fieldId}-brief`}>作业说明</label>
+                    <textarea
+                      id={`${fieldId}-brief`}
+                      data-testid="draft-brief"
+                      value={String(uploadDraft.requirements?.brief || '')}
+                      onChange={(e) => updateDraftRequirement('brief', e.target.value)}
+                      onKeyDown={stopKeyPropagation}
+                      rows={6}
+                    />
+                    <label htmlFor={`${fieldId}-goals`}>
+                      讨论目标（每行一条，最多 5 条，可选）
+                    </label>
+                    <textarea
+                      id={`${fieldId}-goals`}
+                      value={(uploadDraft.requirements?.discussion_goals || []).join('\n')}
+                      onChange={(e) =>
+                        updateDraftRequirement(
+                          'discussion_goals',
+                          parseLineList(e.target.value).slice(0, 5),
+                        )
+                      }
+                      onKeyDown={stopKeyPropagation}
+                      rows={4}
+                    />
+                    <label htmlFor={`${fieldId}-extra`}>额外限制（可选）</label>
+                    <textarea
+                      id={`${fieldId}-extra`}
+                      value={uploadDraft.requirements?.extra_constraints || ''}
+                      onChange={(e) => updateDraftRequirement('extra_constraints', e.target.value)}
+                      onKeyDown={stopKeyPropagation}
+                      rows={2}
+                    />
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
-              <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
-              <div className="text-muted text-[12px] mb-[10px]">
-                题目较多时可先修改关键题，点击"保存草稿"后再创建。
-              </div>
-              {(uploadDraft.questions || [])
-                .slice(0, questionShowCount)
-                .map((q: AssignmentQuestion, idx: number) => (
+            {isProblemSet && questions.length ? (
+              <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
+                <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
+                <div className="text-muted text-[12px] mb-[10px]">
+                  题目较多时可先修改关键题，点击"保存草稿"后再创建。
+                </div>
+                {questions.slice(0, questionShowCount).map((q: AssignmentQuestion, idx: number) => (
                   <details
                     key={idx}
                     className="border border-border rounded-[14px] py-2 px-[10px] mb-[10px] bg-surface-soft"
@@ -331,18 +422,19 @@ export default function AssignmentDraftSection(props: Props) {
                     </div>
                   </details>
                 ))}
-              {uploadDraft.questions && uploadDraft.questions.length > questionShowCount && (
-                <div className="mt-[10px] flex gap-[10px] justify-end flex-wrap">
-                  <button
-                    type="button"
-                    className="border border-border rounded-xl py-[10px] px-[14px] bg-white text-ink cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    onClick={() => setQuestionShowCount((n: number) => n + 20)}
-                  >
-                    加载更多（+20）
-                  </button>
-                </div>
-              )}
-            </div>
+                {questions.length > questionShowCount && (
+                  <div className="mt-[10px] flex gap-[10px] justify-end flex-wrap">
+                    <button
+                      type="button"
+                      className="border border-border rounded-xl py-[10px] px-[14px] bg-white text-ink cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                      onClick={() => setQuestionShowCount((n: number) => n + 20)}
+                    >
+                      加载更多（+20）
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </>
       )}

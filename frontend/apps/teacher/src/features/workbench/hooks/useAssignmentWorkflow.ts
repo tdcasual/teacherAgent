@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { buildAssignmentWorkflowIndicator } from '../workflowIndicators';
-import { formatMissingRequirements, parseLineList } from '../workbenchUtils';
+import {
+  clampQuestionCount,
+  computeLocalRequirementsMissing as computeKindGatedRequirementsMissing,
+  defaultCompletionPolicy,
+  formatApiErrorMessage,
+  formatMissingRequirements,
+  parseCommaList,
+  parseLineList,
+} from '../workbenchUtils';
 import {
   safeLocalStorageGetItem,
   safeLocalStorageRemoveItem,
@@ -15,12 +23,15 @@ import {
   validateFilesBeforeUpload,
 } from '../../../../../shared/uploadValidation';
 import type {
+  AssignmentKind,
   AssignmentProgress,
+  ContentSource,
   UploadDraft,
   UploadJobStatus,
   WorkflowIndicator,
   WorkflowStepState,
 } from '../../../appTypes';
+import type { PendingPickerChange } from '../../../types/workflow';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -32,8 +43,53 @@ const toErrorMessage = (error: unknown, fallback = '请求失败') => {
 // Params type – the state / setters the hook needs from the parent component
 // ---------------------------------------------------------------------------
 
+const toFolderDraft = (
+  raw: Partial<UploadDraft> | null | undefined,
+  fallback: {
+    date: string;
+    dueAt: string;
+    scope: UploadDraft['scope'];
+    className: string;
+    studentIds: string;
+    assignmentKind: AssignmentKind;
+    contentSource: ContentSource;
+  },
+): UploadDraft => {
+  const studentIds = Array.isArray(raw?.student_ids)
+    ? raw.student_ids
+    : parseCommaList(fallback.studentIds);
+  return {
+    assignment_id: String(raw?.assignment_id || ''),
+    date: String(raw?.date || fallback.date || ''),
+    due_at: String(raw?.due_at || fallback.dueAt || ''),
+    scope: raw?.scope || fallback.scope,
+    class_name: String(raw?.class_name || fallback.className || ''),
+    student_ids: studentIds,
+    questions: Array.isArray(raw?.questions) ? raw.questions : [],
+    requirements: raw?.requirements || {},
+    requirements_missing: Array.isArray(raw?.requirements_missing) ? raw.requirements_missing : [],
+    assignment_kind: raw?.assignment_kind || fallback.assignmentKind,
+    content_source: raw?.content_source || fallback.contentSource,
+    question_count: raw?.question_count,
+    draft_saved: raw?.draft_saved,
+    delivery_mode: raw?.delivery_mode,
+    warnings: raw?.warnings,
+  };
+};
+
 interface UseAssignmentWorkflowParams {
   apiBase: string;
+
+  assignmentKind: AssignmentKind;
+  contentSource: ContentSource;
+  completionRequiresSubmission: boolean;
+  completionRequiresDiscussion: boolean;
+  completionAllowPractice: boolean;
+  setAssignmentKind: (value: AssignmentKind) => void;
+  setContentSource: (value: ContentSource) => void;
+  setCompletionRequiresSubmission: (value: boolean) => void;
+  setCompletionRequiresDiscussion: (value: boolean) => void;
+  setCompletionAllowPractice: (value: boolean) => void;
 
   // Upload card state
   uploadMode: string;
@@ -111,6 +167,19 @@ interface UseAssignmentWorkflowParams {
 
 interface UseAssignmentWorkflowReturn {
   handleUploadAssignment: (event: FormEvent) => Promise<void>;
+  handleFromBank: (input: { kp: string; count: number }) => Promise<void>;
+  handleGenerate: (input: {
+    kp: string;
+    perKp: number;
+    topic: string;
+    gradeLevel: string;
+    seed: string;
+  }) => Promise<void>;
+  requestAssignmentKindChange: (kind: AssignmentKind) => void;
+  requestContentSourceChange: (source: ContentSource) => void;
+  pendingPickerChange: PendingPickerChange;
+  confirmPendingPickerChange: () => void;
+  cancelPendingPickerChange: () => void;
   saveDraft: (draft: UploadDraft) => Promise<void>;
   handleConfirmUpload: () => Promise<void>;
   fetchAssignmentProgress: (assignmentId?: string) => Promise<void>;
@@ -142,6 +211,16 @@ export function useAssignmentWorkflow(
 ): UseAssignmentWorkflowReturn {
   const {
     apiBase,
+    assignmentKind,
+    contentSource,
+    completionRequiresSubmission,
+    completionRequiresDiscussion,
+    completionAllowPractice,
+    setAssignmentKind,
+    setContentSource,
+    setCompletionRequiresSubmission,
+    setCompletionRequiresDiscussion,
+    setCompletionAllowPractice,
     uploadMode,
     uploadAssignmentId,
     uploadDate,
@@ -191,6 +270,8 @@ export function useAssignmentWorkflow(
     setProgressError,
     setProgressData,
   } = params;
+
+  const [pendingPickerChange, setPendingPickerChange] = useState<PendingPickerChange>(null);
 
   // ---- Workflow indicator (memoised) ----
 
@@ -322,8 +403,11 @@ export function useAssignmentWorkflow(
         const data = await res.json();
         if (!active) return;
         const draft = data?.draft as UploadDraft;
-        if (!draft || !draft.questions) throw new Error('draft 数据缺失');
-        setUploadDraft(draft);
+        if (!draft) throw new Error('draft 数据缺失');
+        setUploadDraft({
+          ...draft,
+          questions: Array.isArray(draft.questions) ? draft.questions : [],
+        });
         setDraftPanelCollapsed(false);
         setQuestionShowCount(20);
       } catch (err: unknown) {
@@ -368,30 +452,12 @@ export function useAssignmentWorkflow(
 
   // ---- computeLocalRequirementsMissing ----
 
-  const computeLocalRequirementsMissing = useCallback((req: UnknownRecord) => {
-    const missing: string[] = [];
-    const subject = String(req?.subject || '').trim();
-    const topic = String(req?.topic || '').trim();
-    const grade = String(req?.grade_level || '').trim();
-    const classLevel = String(req?.class_level || '').trim();
-    const core = Array.isArray(req?.core_concepts) ? req.core_concepts : [];
-    const typical = String(req?.typical_problem || '').trim();
-    const misconceptions = Array.isArray(req?.misconceptions) ? req.misconceptions : [];
-    const duration = Number(req?.duration_minutes || 0);
-    const prefs = Array.isArray(req?.preferences) ? req.preferences : [];
-
-    if (!subject) missing.push('subject');
-    if (!topic) missing.push('topic');
-    if (!grade) missing.push('grade_level');
-    if (!['偏弱', '中等', '较强', '混合'].includes(classLevel)) missing.push('class_level');
-    if (core.filter(Boolean).length < 3) missing.push('core_concepts');
-    if (!typical) missing.push('typical_problem');
-    if (misconceptions.filter(Boolean).length < 4) missing.push('misconceptions');
-    if (![20, 40, 60].includes(duration)) missing.push('duration_minutes');
-    if (prefs.filter(Boolean).length < 1) missing.push('preferences');
-
-    return missing;
-  }, []);
+  const computeLocalRequirementsMissing = useCallback(
+    (req: UnknownRecord, kind = assignmentKind) => {
+      return computeKindGatedRequirementsMissing(req, kind);
+    },
+    [assignmentKind],
+  );
 
   // ---- updateDraftRequirement ----
 
@@ -403,7 +469,10 @@ export function useAssignmentWorkflow(
           ...(prev.requirements || {}),
           [key]: value,
         };
-        const nextMissing = computeLocalRequirementsMissing(nextRequirements);
+        const nextMissing = computeLocalRequirementsMissing(
+          nextRequirements,
+          prev.assignment_kind || assignmentKind,
+        );
         return {
           ...prev,
           requirements: nextRequirements,
@@ -411,7 +480,7 @@ export function useAssignmentWorkflow(
         };
       });
     },
-    [computeLocalRequirementsMissing, setUploadDraft],
+    [assignmentKind, computeLocalRequirementsMissing, setUploadDraft],
   );
 
   // ---- updateDraftQuestion ----
@@ -595,27 +664,22 @@ export function useAssignmentWorkflow(
           ...(draft.requirements || {}),
           misconceptions: parseLineList(misconceptionsText),
         };
+        const jobId = String(draft.job_id || '').trim();
+        const assignmentId = String(draft.assignment_id || '').trim();
+        const payload: Record<string, unknown> = {
+          requirements: normalizedRequirements,
+          questions: draft.questions,
+        };
+        if (jobId) payload.job_id = jobId;
+        else payload.assignment_id = assignmentId;
         const res = await fetch(`${apiBase}/assignment/upload/draft/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_id: draft.job_id,
-            requirements: normalizedRequirements,
-            questions: draft.questions,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const text = await res.text();
-          let message = text || `状态码 ${res.status}`;
-          try {
-            const parsed = JSON.parse(text);
-            const detail = parsed?.detail || parsed;
-            if (typeof detail === 'string') message = detail;
-            if (detail?.message) message = detail.message;
-          } catch {
-            // ignore
-          }
-          throw new Error(message);
+          throw new Error(formatApiErrorMessage(text, res.status));
         }
         const data = await res.json();
         if (data?.requirements_missing) {
@@ -730,6 +794,7 @@ export function useAssignmentWorkflow(
         fd.append('scope', uploadScope);
         if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim());
         if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim());
+        fd.append('assignment_kind', assignmentKind);
         uploadFiles.forEach((file) => fd.append('files', file));
         uploadAnswerFiles.forEach((file) => fd.append('answer_files', file));
 
@@ -793,6 +858,7 @@ export function useAssignmentWorkflow(
       setUploadJobInfo,
       setUploadStatus,
       setUploading,
+      assignmentKind,
       uploadAnswerFiles,
       uploadAssignmentId,
       uploadClassName,
@@ -809,7 +875,7 @@ export function useAssignmentWorkflow(
 
   const handleConfirmUpload = useCallback(async () => {
     const resolvedJobId = (() => {
-      const jobId = String(uploadJobId || '').trim();
+      const jobId = String(uploadJobId || uploadDraft?.job_id || '').trim();
       if (jobId) return jobId;
       try {
         const raw = safeLocalStorageGetItem('teacherActiveUpload');
@@ -821,9 +887,20 @@ export function useAssignmentWorkflow(
       }
       return '';
     })();
-    if (!resolvedJobId) return;
-    if (!uploadJobId) setUploadJobId(resolvedJobId);
+    const assignmentId = String(uploadDraft?.assignment_id || '').trim();
+    if (!resolvedJobId && !assignmentId) {
+      const message = '请先生成或上传作业草稿';
+      setUploadError(message);
+      setDraftActionError(message);
+      return;
+    }
+    if (resolvedJobId && !uploadJobId) setUploadJobId(resolvedJobId);
     const previousUploadJobInfo = uploadJobInfo ? { ...uploadJobInfo } : null;
+    const completionPolicyOverride = {
+      requires_submission: completionRequiresSubmission,
+      requires_discussion: completionRequiresDiscussion,
+      allow_practice: assignmentKind === 'problem_set' ? completionAllowPractice : false,
+    };
     setUploadError('');
     setDraftActionError('');
     setDraftActionStatus('正在创建作业…');
@@ -831,6 +908,7 @@ export function useAssignmentWorkflow(
     try {
       // If parsing is still running, don't attempt to confirm.
       if (
+        resolvedJobId &&
         uploadJobInfo &&
         uploadJobInfo.status !== 'done' &&
         uploadJobInfo.status !== 'confirmed' &&
@@ -842,33 +920,45 @@ export function useAssignmentWorkflow(
         setUploadStatusPollNonce((n) => n + 1);
         return;
       }
-      // Optimistic UI
-      setUploadJobInfo((prev) =>
-        prev
-          ? {
-              ...prev,
-              status:
-                prev.status === 'confirmed' || prev.status === 'created'
-                  ? 'confirmed'
-                  : 'confirming',
-              step: 'confirming',
-              progress: prev.progress ?? 0,
-            }
-          : {
-              job_id: resolvedJobId,
-              status: 'confirming',
-              step: 'confirming',
-              progress: 0,
-            },
-      );
-      // Ensure latest edits are saved before confirm
+      if (resolvedJobId) {
+        setUploadJobInfo((prev) =>
+          prev
+            ? {
+                ...prev,
+                status:
+                  prev.status === 'confirmed' || prev.status === 'created'
+                    ? 'confirmed'
+                    : 'confirming',
+                step: 'confirming',
+                progress: prev.progress ?? 0,
+              }
+            : {
+                job_id: resolvedJobId,
+                status: 'confirming',
+                step: 'confirming',
+                progress: 0,
+              },
+        );
+      }
       if (uploadDraft) {
         await saveDraft(uploadDraft);
       }
       const res = await fetch(`${apiBase}/assignment/upload/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: resolvedJobId, strict_requirements: true }),
+        body: JSON.stringify(
+          resolvedJobId
+            ? {
+                job_id: resolvedJobId,
+                strict_requirements: true,
+                completion_policy_override: completionPolicyOverride,
+              }
+            : {
+                assignment_id: assignmentId,
+                strict_requirements: true,
+                completion_policy_override: completionPolicyOverride,
+              },
+        ),
       });
       if (!res.ok) {
         const text = await res.text();
@@ -907,7 +997,11 @@ export function useAssignmentWorkflow(
         setDraftActionStatus(msg);
         setUploadStatus(msg);
         setUploadJobInfo((prev) =>
-          prev ? { ...prev, status: 'confirmed' } : { job_id: resolvedJobId, status: 'confirmed' },
+          prev
+            ? { ...prev, status: 'confirmed' }
+            : resolvedJobId
+              ? { job_id: resolvedJobId, status: 'confirmed' }
+              : { job_id: assignmentId, assignment_id: assignmentId, status: 'confirmed' },
         );
         setDraftPanelCollapsed(true);
         try {
@@ -948,6 +1042,10 @@ export function useAssignmentWorkflow(
     }
   }, [
     apiBase,
+    assignmentKind,
+    completionAllowPractice,
+    completionRequiresDiscussion,
+    completionRequiresSubmission,
     fetchAssignmentProgress,
     saveDraft,
     setDraftActionError,
@@ -966,8 +1064,287 @@ export function useAssignmentWorkflow(
     uploadJobInfo,
   ]);
 
+  const applyCompletionDefaults = useCallback(
+    (kind: AssignmentKind) => {
+      const defaults = defaultCompletionPolicy(kind);
+      setCompletionRequiresSubmission(defaults.requires_submission);
+      setCompletionRequiresDiscussion(defaults.requires_discussion);
+      setCompletionAllowPractice(defaults.allow_practice);
+    },
+    [setCompletionAllowPractice, setCompletionRequiresDiscussion, setCompletionRequiresSubmission],
+  );
+
+  const clearActiveDraft = useCallback(() => {
+    setUploadDraft(null);
+    setUploadJobId('');
+    setUploadJobInfo(null);
+    setDraftError('');
+    setDraftActionError('');
+    setDraftActionStatus('');
+    setMisconceptionsText('');
+    setMisconceptionsDirty(false);
+    try {
+      safeLocalStorageRemoveItem('teacherActiveUpload');
+    } catch {
+      // ignore
+    }
+  }, [
+    setDraftActionError,
+    setDraftActionStatus,
+    setDraftError,
+    setMisconceptionsDirty,
+    setMisconceptionsText,
+    setUploadDraft,
+    setUploadJobId,
+    setUploadJobInfo,
+  ]);
+
+  const applyAssignmentKind = useCallback(
+    (next: AssignmentKind) => {
+      setAssignmentKind(next);
+      if (next !== 'problem_set' && contentSource === 'bank') {
+        setContentSource('upload');
+      }
+      applyCompletionDefaults(next);
+    },
+    [applyCompletionDefaults, contentSource, setAssignmentKind, setContentSource],
+  );
+
+  const requestAssignmentKindChange = useCallback(
+    (next: AssignmentKind) => {
+      if (next === assignmentKind) return;
+      if (uploadDraft) {
+        setPendingPickerChange({ type: 'kind', value: next });
+        return;
+      }
+      applyAssignmentKind(next);
+    },
+    [applyAssignmentKind, assignmentKind, uploadDraft],
+  );
+
+  const requestContentSourceChange = useCallback(
+    (next: ContentSource) => {
+      if (next === contentSource) return;
+      if (next === 'bank' && assignmentKind !== 'problem_set') return;
+      if (uploadDraft) {
+        setPendingPickerChange({ type: 'source', value: next });
+        return;
+      }
+      setContentSource(next);
+    },
+    [assignmentKind, contentSource, setContentSource, uploadDraft],
+  );
+
+  const confirmPendingPickerChange = useCallback(() => {
+    const pending = pendingPickerChange;
+    setPendingPickerChange(null);
+    if (!pending) return;
+    clearActiveDraft();
+    if (pending.type === 'kind') {
+      applyAssignmentKind(pending.value as AssignmentKind);
+      return;
+    }
+    setContentSource(pending.value as ContentSource);
+  }, [applyAssignmentKind, clearActiveDraft, pendingPickerChange, setContentSource]);
+
+  const cancelPendingPickerChange = useCallback(() => {
+    setPendingPickerChange(null);
+  }, []);
+
+  const applyFolderDraft = useCallback(
+    (raw: Partial<UploadDraft> | null | undefined, source: ContentSource) => {
+      const draft = toFolderDraft(raw, {
+        date: uploadDate,
+        dueAt: uploadDueAt,
+        scope: uploadScope as UploadDraft['scope'],
+        className: uploadClassName,
+        studentIds: uploadStudentIds,
+        assignmentKind,
+        contentSource: source,
+      });
+      setUploadJobId('');
+      setUploadJobInfo(null);
+      setUploadDraft(draft);
+      setDraftPanelCollapsed(false);
+      setQuestionShowCount(20);
+      setMisconceptionsDirty(false);
+    },
+    [
+      assignmentKind,
+      setDraftPanelCollapsed,
+      setMisconceptionsDirty,
+      setQuestionShowCount,
+      setUploadDraft,
+      setUploadJobId,
+      setUploadJobInfo,
+      uploadClassName,
+      uploadDate,
+      uploadDueAt,
+      uploadScope,
+      uploadStudentIds,
+    ],
+  );
+
+  const handleFromBank = useCallback(
+    async (input: { kp: string; count: number }) => {
+      const assignmentId = uploadAssignmentId.trim();
+      if (!assignmentId) {
+        setUploadError('请填写作业编号');
+        return;
+      }
+      if (!uploadSubjectId.trim()) {
+        setUploadError('请选择学科');
+        return;
+      }
+      setUploading(true);
+      setUploadError('');
+      setUploadStatus('');
+      setDraftActionError('');
+      setDraftActionStatus('正在从题库选题…');
+      try {
+        const fd = new FormData();
+        fd.append('assignment_id', assignmentId);
+        fd.append('subject_id', uploadSubjectId.trim());
+        fd.append('kp', input.kp);
+        fd.append('count', String(clampQuestionCount(input.count)));
+        if (uploadDate.trim()) fd.append('date', uploadDate.trim());
+        if (uploadDueAt.trim()) fd.append('due_at', uploadDueAt.trim());
+        if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim());
+        if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim());
+        const res = await fetch(`${apiBase}/assignment/draft/from-bank`, {
+          method: 'POST',
+          body: fd,
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(formatApiErrorMessage(text, res.status));
+        }
+        const data = await res.json();
+        applyFolderDraft(data?.draft, 'bank');
+        const msg = data?.message || '已从题库生成草稿，请审核后发布。';
+        setDraftActionStatus(msg);
+        setUploadStatus(msg);
+      } catch (err: unknown) {
+        const message = toErrorMessage(err);
+        setUploadError(message);
+        setDraftActionError(message);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [
+      apiBase,
+      applyFolderDraft,
+      setDraftActionError,
+      setDraftActionStatus,
+      setUploadError,
+      setUploadStatus,
+      setUploading,
+      uploadAssignmentId,
+      uploadClassName,
+      uploadDate,
+      uploadDueAt,
+      uploadStudentIds,
+      uploadSubjectId,
+    ],
+  );
+
+  const handleGenerate = useCallback(
+    async (input: {
+      kp: string;
+      perKp: number;
+      topic: string;
+      gradeLevel: string;
+      seed: string;
+    }) => {
+      const assignmentId = uploadAssignmentId.trim();
+      if (!assignmentId) {
+        setUploadError('请填写作业编号');
+        return;
+      }
+      if (!uploadSubjectId.trim()) {
+        setUploadError('请选择学科');
+        return;
+      }
+      if (assignmentKind !== 'problem_set' && (!input.topic.trim() || !input.gradeLevel.trim())) {
+        setUploadError('请填写主题和年级');
+        return;
+      }
+      setUploading(true);
+      setUploadError('');
+      setUploadStatus('');
+      setDraftActionError('');
+      setDraftActionStatus('正在生成草稿…');
+      try {
+        const fd = new FormData();
+        fd.append('assignment_id', assignmentId);
+        fd.append('assignment_kind', assignmentKind);
+        fd.append('content_source', 'ai');
+        fd.append('generate', 'true');
+        fd.append('subject_id', uploadSubjectId.trim());
+        if (uploadDate.trim()) fd.append('date', uploadDate.trim());
+        if (uploadDueAt.trim()) fd.append('due_at', uploadDueAt.trim());
+        if (uploadClassName.trim()) fd.append('class_name', uploadClassName.trim());
+        if (uploadStudentIds.trim()) fd.append('student_ids', uploadStudentIds.trim());
+        if (assignmentKind === 'problem_set') {
+          fd.append('kp', input.kp);
+          fd.append('per_kp', String(clampQuestionCount(input.perKp)));
+        } else {
+          fd.append(
+            'requirements_json',
+            JSON.stringify({
+              subject: uploadSubjectId.trim(),
+              topic: input.topic.trim(),
+              grade_level: input.gradeLevel.trim(),
+            }),
+          );
+          if (input.seed.trim()) fd.append('seed', input.seed.trim());
+        }
+        const res = await fetch(`${apiBase}/assignment/generate`, { method: 'POST', body: fd });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(formatApiErrorMessage(text, res.status));
+        }
+        const data = await res.json();
+        applyFolderDraft(data?.draft, 'ai');
+        const msg = data?.message || 'AI 草稿已生成，请审核后发布。';
+        setDraftActionStatus(msg);
+        setUploadStatus(msg);
+      } catch (err: unknown) {
+        const message = toErrorMessage(err);
+        setUploadError(message);
+        setDraftActionError(message);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [
+      apiBase,
+      applyFolderDraft,
+      assignmentKind,
+      setDraftActionError,
+      setDraftActionStatus,
+      setUploadError,
+      setUploadStatus,
+      setUploading,
+      uploadAssignmentId,
+      uploadClassName,
+      uploadDate,
+      uploadDueAt,
+      uploadStudentIds,
+      uploadSubjectId,
+    ],
+  );
+
   return {
     handleUploadAssignment,
+    handleFromBank,
+    handleGenerate,
+    requestAssignmentKindChange,
+    requestContentSourceChange,
+    pendingPickerChange,
+    confirmPendingPickerChange,
+    cancelPendingPickerChange,
     saveDraft,
     handleConfirmUpload,
     fetchAssignmentProgress,
