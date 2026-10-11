@@ -109,6 +109,12 @@ def _resolve_student_profile_path(data_dir: Any, student_id: str) -> Optional[An
         return None
 
 
+def load_open_practice_stems(*args: Any, **kwargs: Any) -> List[Dict[str, str]]:
+    from .assignment_context_service import load_open_practice_stems as _impl
+
+    return _impl(*args, **kwargs)
+
+
 def detect_role_hint(req: Any, *, detect_role: Callable[[str], Optional[str]]) -> Optional[str]:
     role_hint = req.role
     if not role_hint or role_hint == "unknown":

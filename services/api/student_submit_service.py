@@ -13,11 +13,17 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from .assignment.store import connect as assignment_connect
 from .assignment.store import ensure as assignment_ensure
 from .assignment.store import upsert_attempt
+from .profile_service import apply_derived_profile
+from .question_bank_select_service import count_question_data_rows, read_question_bank
 from .student_ops_service import (
     STUDENT_ALLOWED_SUFFIXES,
     UploadLimitError,
     raise_upload_limit_http,
     save_capped_uploads,
+)
+from .student_profile_derive_service import (
+    derive_profile_from_grading_report,
+    derived_question_ids,
 )
 
 
@@ -58,6 +64,7 @@ class StudentSubmitDeps:
     sanitize_filename: Callable[[str], str] = _default_sanitize_filename
     trigger_process_archive: Optional[Callable[..., Dict[str, Any]]] = None
     authorize_student_submit: Optional[Callable[[str, str], None]] = None
+    data_dir: Optional[Path] = None
 
 
 def authorize_student_submit_assignment(
@@ -373,6 +380,144 @@ def _run_grade_script(
         return _record_ungraded_grade(deps, assignment_id, student_id, exc, file_paths)
 
 
+def _data_dir(deps: StudentSubmitDeps) -> Path:
+    if deps.data_dir is not None:
+        return Path(deps.data_dir)
+    return Path(deps.student_submissions_dir).expanduser().resolve().parent
+
+
+def _assignment_folder(deps: StudentSubmitDeps, assignment_id: str) -> Path:
+    return _data_dir(deps) / "assignments" / assignment_id
+
+
+def _load_json_object(path: Path) -> Dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _load_assignment_questions(folder: Path) -> list[dict[str, Any]]:
+    path = folder / "questions.csv"
+    if not path.is_file():
+        return []
+    try:
+        rows = read_question_bank(path)
+    except OSError:
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _has_zero_question_rows(deps: StudentSubmitDeps, assignment_id: str) -> bool:
+    path = _assignment_folder(deps, assignment_id) / "questions.csv"
+    return path.is_file() and count_question_data_rows(path) == 0
+
+
+def _write_received_without_items_report(
+    *,
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+    file_paths: list[str],
+) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    trees = [
+        deps.student_submissions_dir / assignment_id / student_id / f"submission_{timestamp}",
+        deps.student_submissions_dir / student_id / f"submission_{timestamp}",
+    ]
+    report: Dict[str, Any] = {
+        "student_id": student_id,
+        "assignment_id": assignment_id,
+        "graded_total": 0,
+        "ungraded": 0,
+        "correct": 0,
+        "received_without_items": True,
+        "items": [],
+        "files": [],
+    }
+    for attempt_dir in trees:
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        payload = dict(report)
+        payload["files"] = _copy_saved_uploads(attempt_dir, file_paths)
+        (attempt_dir / "grading_report.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    deps.diag_log(
+        "student.submit.received_without_items",
+        {"student_id": student_id, "assignment_id": assignment_id},
+    )
+    return "received_without_items"
+
+
+def _write_derived_profile(
+    deps: StudentSubmitDeps,
+    assignment_id: str,
+    student_id: str,
+    *,
+    attempt_dir: Optional[Path] = None,
+    practice_id: Optional[str] = None,
+    questions_path: Optional[Path] = None,
+) -> None:
+    try:
+        data_dir = _data_dir(deps)
+        folder = _assignment_folder(deps, assignment_id)
+        target_dir = attempt_dir or _latest_attempt_dir(
+            Path(deps.student_submissions_dir) / assignment_id / student_id
+        )
+        if target_dir is None:
+            return
+        report = _load_attempt_report(target_dir)
+        questions = []
+        if questions_path is not None and questions_path.is_file():
+            questions = read_question_bank(questions_path)
+        if not questions:
+            questions = _load_assignment_questions(folder)
+        meta = _load_json_object(folder / "meta.json")
+        requirements = _load_json_object(folder / "requirements.json")
+        target_kp = meta.get("target_kp") if isinstance(meta.get("target_kp"), list) else []
+        derived = derive_profile_from_grading_report(
+            report=report,
+            assignment_questions=questions if isinstance(questions, list) else [],
+            requirements=requirements,
+            target_kp=[str(item) for item in target_kp],
+        )
+        derived["assignment_id"] = assignment_id
+        if practice_id:
+            derived["practice_id"] = practice_id
+        derived["question_ids"] = derived_question_ids(
+            report=report,
+            fallback=derived.get("question_ids"),
+        )
+        apply_derived_profile(
+            student_id,
+            derived,
+            core=type("ProfileCore", (), {"DATA_DIR": data_dir})(),
+        )
+        deps.diag_log(
+            "student.profile.derived",
+            {
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "practice_id": practice_id or "",
+                "source": str(derived.get("source") or ""),
+            },
+        )
+    except Exception as exc:  # policy: allowed-broad-except
+        deps.diag_log(
+            "student.profile.derive_failed",
+            {
+                "student_id": student_id,
+                "assignment_id": assignment_id,
+                "practice_id": practice_id or "",
+                "error": str(exc)[:200],
+            },
+        )
+
+
 def _latest_attempt_dir(student_root: Path) -> Optional[Path]:
     if not student_root.is_dir():
         return None
@@ -486,27 +631,37 @@ async def submit(
         raise_upload_limit_http(exc)
     file_paths = [str(path) for path in saved]
 
-    script = deps.app_root / "scripts" / "grade_submission.py"
-    args = [
-        "python3",
-        str(script),
-        "--student-id",
-        safe_student_id,
-        "--out-dir",
-        str(deps.student_submissions_dir),
-        "--files",
-        *file_paths,
-        "--assignment-id",
-        safe_assignment_id,
-    ]
-    out = _run_grade_script(
-        deps,
-        args,
-        assignment_id=safe_assignment_id,
-        student_id=safe_student_id,
-        file_paths=file_paths,
-    )
+    if _has_zero_question_rows(deps, safe_assignment_id):
+        out = _write_received_without_items_report(
+            deps=deps,
+            assignment_id=safe_assignment_id,
+            student_id=safe_student_id,
+            file_paths=file_paths,
+        )
+    else:
+        script = deps.app_root / "scripts" / "grade_submission.py"
+        args = [
+            "python3",
+            str(script),
+            "--student-id",
+            safe_student_id,
+            "--out-dir",
+            str(deps.student_submissions_dir),
+            "--files",
+            *file_paths,
+            "--assignment-id",
+            safe_assignment_id,
+            "--skip-profile-update",
+        ]
+        out = _run_grade_script(
+            deps,
+            args,
+            assignment_id=safe_assignment_id,
+            student_id=safe_student_id,
+            file_paths=file_paths,
+        )
     _persist_latest_attempt_sql(deps, safe_assignment_id, safe_student_id)
+    _write_derived_profile(deps, safe_assignment_id, safe_student_id)
     progress = _read_progress(deps, safe_assignment_id, safe_student_id)
     signals = _progress_signals(progress, safe_student_id)
     payload = _submit_payload(

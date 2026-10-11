@@ -538,6 +538,32 @@ def save_profile(path: Path, profile: dict):
     path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def resolve_practice_attempt_dir(
+    out_root: Path,
+    assignment_id: str,
+    student_id: str,
+    raw: str,
+) -> Path:
+    target = Path(str(raw or "")).expanduser().resolve()
+    if not target.is_dir():
+        raise SystemExit("attempt_dir not found")
+    if not target.name.startswith("practice_"):
+        raise SystemExit("invalid attempt_dir")
+    parent = resolve_under(out_root, assignment_id, student_id)
+    if target.parent != parent:
+        raise SystemExit("invalid attempt_dir")
+    return target
+
+
+def copy_dir_files(src: Path, dest: Path) -> None:
+    if not src.exists():
+        return
+    ensure_dir(dest)
+    for item in src.glob("*"):
+        if item.is_file():
+            dest.joinpath(item.name).write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 def detect_assignment_id(text: str) -> Optional[str]:
     patterns = [
         r"Assignment\\s*ID\\s*[:：]\\s*([A-Za-z0-9_-]+)",
@@ -584,6 +610,16 @@ def main():
     parser.add_argument("--llm-grade", action="store_true", help="use LLM to assist subjective grading")
     parser.add_argument("--llm-confidence-threshold", type=float, default=0.6, help="LLM trigger threshold")
     parser.add_argument("--review-threshold", type=float, default=0.6, help="low confidence review threshold")
+    parser.add_argument(
+        "--skip-profile-update",
+        action="store_true",
+        help="do not write student_profiles",
+    )
+    parser.add_argument(
+        "--attempt-dir",
+        default="",
+        help="existing practice_* directory; never create submission_*",
+    )
     args = parser.parse_args()
 
     load_env_from_dotenv(Path('.env'))
@@ -591,20 +627,32 @@ def main():
     safe_student_id = require_safe_id(args.student_id, "student_id")
     out_root = Path(args.out_dir).resolve()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_dir = resolve_under(out_root, safe_student_id, f"submission_{timestamp}")
-    ensure_dir(base_dir)
+    attempt_dir_raw = str(args.attempt_dir or "").strip()
+    skip_profile_update = bool(args.skip_profile_update)
 
     files = [Path(f) for f in args.files]
     for f in files:
         if not f.exists():
             raise SystemExit(f"File not found: {f}")
 
+    assignment_id = args.assignment_id
+    assignment_bucket = None
+    if attempt_dir_raw:
+        if not assignment_id:
+            raise SystemExit("assignment_id is required with --attempt-dir")
+        assignment_id = require_safe_id(assignment_id, "assignment_id")
+        base_dir = resolve_practice_attempt_dir(
+            out_root, assignment_id, safe_student_id, attempt_dir_raw
+        )
+    else:
+        base_dir = resolve_under(out_root, safe_student_id, f"submission_{timestamp}")
+        ensure_dir(base_dir)
+
     ocr_dir = base_dir / "ocr"
     ocr_text = ocr_files(files, ocr_dir, args.language, args.ocr_mode)
 
     # detect assignment id from OCR if requested
-    assignment_id = args.assignment_id
-    if args.auto_assignment or not assignment_id:
+    if not attempt_dir_raw and (args.auto_assignment or not assignment_id):
         assignment_id = detect_assignment_id(ocr_text)
         if not assignment_id:
             assignment_id = find_assignment_id_by_scan(ocr_text)
@@ -624,16 +672,13 @@ def main():
     pack_id = resolve_assignment_pack_id(assignment_id, assignments_root)
     adapter = load_grade_adapter(pack_id)
 
-    # move submission into assignment bucket as well
-    assignment_bucket = resolve_under(out_root, assignment_id, safe_student_id, f"submission_{timestamp}")
-    assignment_bucket.mkdir(parents=True, exist_ok=True)
-
-    # copy OCR artifacts to assignment bucket
-    assignment_ocr = assignment_bucket / "ocr"
-    assignment_ocr.mkdir(parents=True, exist_ok=True)
-    for f in ocr_dir.glob("*"):
-        if f.is_file():
-            assignment_ocr.joinpath(f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+    if not attempt_dir_raw:
+        # move submission into assignment bucket as well
+        assignment_bucket = resolve_under(
+            out_root, assignment_id, safe_student_id, f"submission_{timestamp}"
+        )
+        assignment_bucket.mkdir(parents=True, exist_ok=True)
+        copy_dir_files(ocr_dir, assignment_bucket / "ocr")
 
     # question-level splitting
     question_blocks = split_ocr_by_questions(ocr_text, questions)
@@ -756,10 +801,6 @@ def main():
     feedback_path = base_dir / "feedback.md"
     feedback_path.write_text("\n".join(feedback_lines), encoding="utf-8")
 
-    # also copy feedback into assignment bucket
-    assignment_feedback = assignment_bucket / "feedback.md"
-    assignment_feedback.write_text("\n".join(feedback_lines), encoding="utf-8")
-
     # grading report + review queue
     report = {
         "student_id": safe_student_id,
@@ -770,9 +811,6 @@ def main():
         "items": grading_items,
     }
     (base_dir / "grading_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    (assignment_bucket / "grading_report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
 
     if review_items:
         review_payload = {
@@ -783,9 +821,16 @@ def main():
         (base_dir / "review_queue.json").write_text(
             json.dumps(review_payload, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        (assignment_bucket / "review_queue.json").write_text(
-            json.dumps(review_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+
+    if assignment_bucket is not None:
+        (assignment_bucket / "feedback.md").write_text("\n".join(feedback_lines), encoding="utf-8")
+        (assignment_bucket / "grading_report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        if review_items:
+            (assignment_bucket / "review_queue.json").write_text(
+                json.dumps(review_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     # profile update suggestion
     weak_kp = []
@@ -823,12 +868,15 @@ def main():
 
     profile_path = base_dir / "profile_update_suggestion.md"
     profile_path.write_text("\n".join(profile_lines), encoding="utf-8")
-    assignment_profile = assignment_bucket / "profile_update_suggestion.md"
-    assignment_profile.write_text("\n".join(profile_lines), encoding="utf-8")
+    if assignment_bucket is not None:
+        (assignment_bucket / "profile_update_suggestion.md").write_text(
+            "\n".join(profile_lines), encoding="utf-8"
+        )
 
     review_gate = os.getenv("PROFILE_UPDATE_REQUIRE_REVIEW", "").lower() in {"1", "true", "yes"}
-    if review_gate and review_items:
-        print("[WARN] Low confidence items require review; skipping auto profile update.")
+    if skip_profile_update or (review_gate and review_items):
+        if review_gate and review_items and not skip_profile_update:
+            print("[WARN] Low confidence items require review; skipping auto profile update.")
         print(f"[OK] Saved OCR to {ocr_dir}")
         print(f"[OK] Saved feedback to {feedback_path}")
         print(f"[OK] Saved profile suggestion to {profile_path}")

@@ -178,6 +178,27 @@ def _today_visible(
     return (today - assigned_date).days <= lookback_days
 
 
+def _assignment_kind(meta: Dict[str, Any]) -> str:
+    from .assignment_catalog_service import effective_assignment_kind
+
+    return effective_assignment_kind(meta)
+
+
+def _allow_practice(meta: Dict[str, Any]) -> bool:
+    if _assignment_kind(meta) != "problem_set":
+        return False
+    policy = meta.get("completion_policy")
+    if not isinstance(policy, dict) or "allow_practice" not in policy:
+        return True
+    return bool(policy.get("allow_practice"))
+
+
+def _history_practice(data_dir: Path, assignment_id: str, student_id: str) -> Dict[str, Any]:
+    from .student_practice_service import history_practice_counts
+
+    return history_practice_counts(data_dir, assignment_id, student_id)
+
+
 def _due_sort_value(due_at: str) -> str:
     return due_at or "9999-12-31T23:59:59"
 
@@ -232,6 +253,8 @@ def _today_item(
         "subject_id": subject_id,
         "title": str(meta.get("title") or assignment_id),
         "due_at": due_at,
+        "assignment_kind": _assignment_kind(meta),
+        "allow_practice": _allow_practice(meta),
         "progress": {
             "submitted": submitted,
             "overdue": overdue,
@@ -328,6 +351,9 @@ def _history_item(
             student_id=student_id,
         ),
         "archived_at": meta.get("archived_at"),
+        "assignment_kind": _assignment_kind(meta),
+        "allow_practice": _allow_practice(meta),
+        "practice": _history_practice(deps.data_dir, assignment_id, student_id),
     }
 
 

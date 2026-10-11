@@ -51,14 +51,18 @@ async def chat(req: ChatRequest, *, deps: ChatHandlerDeps) -> ChatResponse:
             )
             note = deps.build_interaction_note(last_user_text, reply_text, assignment_id=req.assignment_id)
             payload: dict = {"student_id": req.student_id, "interaction_note": note}
-            # Layer 1: rule-based diagnostic signal extraction.
+            # Layer 1 is note-only; keep signal extraction for logs, never write KP.
             signals = extract_diagnostic_signals(reply_text)
-            if signals.weak_kp:
-                payload["weak_kp"] = ",".join(signals.weak_kp)
-            if signals.strong_kp:
-                payload["strong_kp"] = ",".join(signals.strong_kp)
-            if signals.next_focus:
-                payload["next_focus"] = signals.next_focus
+            if signals.weak_kp or signals.strong_kp or signals.next_focus:
+                deps.diag_log(
+                    "student.chat.diagnostic_signals",
+                    {
+                        "student_id": req.student_id,
+                        "weak_kp": list(signals.weak_kp[:5]),
+                        "strong_kp": list(signals.strong_kp[:5]),
+                        "next_focus": signals.next_focus,
+                    },
+                )
             if deps.profile_update_async:
                 deps.enqueue_profile_update(payload)
             else:

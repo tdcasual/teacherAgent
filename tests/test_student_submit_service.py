@@ -256,6 +256,8 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             args = captured["args"]
             self.assertIn("--assignment-id", args)
             self.assertIn("HW_1", args)
+            self.assertIn("--skip-profile-update", args)
+            self.assertNotIn("--attempt-dir", args)
             self.assertNotIn("--auto-assignment", args)
             self.assertTrue(result.get("ok"))
             self.assertTrue(result.get("submitted"))
@@ -516,6 +518,184 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(result.get("submitted"))
             self.assertEqual(result.get("reason"), "min_graded_total")
             self._assert_ungraded_report_consumed(root, error_substr="grade_script_timeout")
+
+    def _write_assignment(self, root: Path, *, questions: str, requirements: dict | None = None) -> None:
+        folder = root / "assignments" / "HW_1"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "questions.csv").write_text(questions, encoding="utf-8")
+        (folder / "requirements.json").write_text(
+            json.dumps(requirements or {}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (folder / "meta.json").write_text("{}", encoding="utf-8")
+
+    async def test_submit_writes_derived_profile_from_grading_report(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_assignment(
+                root,
+                questions=(
+                    "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n"
+                    "Q1,力学,basic,open,,,,\n"
+                    "Q2,热学,basic,open,,,,\n"
+                ),
+            )
+
+            def _run(_args):
+                attempt = root / "submissions" / "HW_1" / "S1" / "submission_20260101_000000"
+                attempt.mkdir(parents=True, exist_ok=True)
+                (attempt / "grading_report.json").write_text(
+                    json.dumps(
+                        {
+                            "graded_total": 2,
+                            "correct": 1,
+                            "items": [
+                                {"question_id": "Q1", "kp_id": "力学", "status": "missed", "score": 0},
+                                {"question_id": "Q2", "kp_id": "热学", "status": "matched", "score": 1},
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return "ok"
+
+            deps = _deps(root, run_script=_run, data_dir=root)
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            profile = json.loads((root / "student_profiles" / "S1.json").read_text(encoding="utf-8"))
+            self.assertEqual(profile["recent_weak_kp"], ["力学"])
+            self.assertEqual(profile["recent_strong_kp"], ["热学"])
+            self.assertEqual(profile["next_focus"], "力学")
+
+    async def test_all_correct_report_replaces_weak_kp_with_empty_list(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_assignment(
+                root,
+                questions="question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\nQ1,力学,basic,open,,,,\n",
+            )
+            profile_path = root / "student_profiles" / "S1.json"
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            profile_path.write_text(
+                json.dumps({"recent_weak_kp": ["力学"], "next_focus": "力学"}),
+                encoding="utf-8",
+            )
+
+            def _run(_args):
+                attempt = root / "submissions" / "HW_1" / "S1" / "submission_20260101_000000"
+                attempt.mkdir(parents=True, exist_ok=True)
+                (attempt / "grading_report.json").write_text(
+                    json.dumps(
+                        {
+                            "graded_total": 1,
+                            "correct": 1,
+                            "items": [
+                                {"question_id": "Q1", "kp_id": "力学", "status": "matched", "score": 1},
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return "ok"
+
+            deps = _deps(root, run_script=_run, data_dir=root)
+            await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            self.assertEqual(profile["recent_weak_kp"], [])
+            self.assertEqual(profile["recent_strong_kp"], ["力学"])
+            self.assertEqual(profile["next_focus"], "")
+
+    async def test_ungraded_submit_writes_fallback_kp_from_requirements(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_assignment(
+                root,
+                questions="question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\nQ1,力学,basic,open,,,,\n",
+                requirements={"core_concepts": ["牛顿定律", "受力分析", "加速度"]},
+            )
+
+            def _boom(_args):
+                raise HTTPException(status_code=500, detail="ocr_utils not available")
+
+            deps = _deps(
+                root,
+                run_script=_boom,
+                data_dir=root,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress_from_disk(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="a1.pdf", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertFalse(result.get("submitted"))
+            profile = json.loads((root / "student_profiles" / "S1.json").read_text(encoding="utf-8"))
+            self.assertEqual(profile["recent_weak_kp"], ["牛顿定律", "受力分析", "加速度"])
+            self.assertEqual(profile["practice_history"][0]["source"], "ungraded_fallback")
+
+    async def test_zero_question_submit_is_received_without_items(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            self._write_assignment(
+                root,
+                questions="question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n",
+                requirements={"discussion_goals": ["描述现象"]},
+            )
+            called = {"run": 0}
+
+            def _run(_args):
+                called["run"] += 1
+                return "should_not_run"
+
+            deps = _deps(
+                root,
+                run_script=_run,
+                data_dir=root,
+                compute_assignment_progress=lambda assignment_id, include_students: _progress_from_disk(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="photo.jpg", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertEqual(called["run"], 0)
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("submitted"))
+            reports = list((root / "submissions").glob("HW_1/S1/submission_*/grading_report.json"))
+            self.assertEqual(len(reports), 1)
+            report = json.loads(reports[0].read_text(encoding="utf-8"))
+            self.assertTrue(report.get("received_without_items"))
+            self.assertEqual(report.get("items"), [])
+            attempt = compute_submission_attempt(reports[0].parent, deps=_attempt_deps(root))
+            self.assertIsNotNone(attempt)
+            assert attempt is not None
+            self.assertTrue(attempt["valid_submission"])
+            attempts = list_submission_attempts("HW_1", "S1", deps=_attempt_deps(root))
+            self.assertEqual(len(attempts), 1)
+            profile = json.loads((root / "student_profiles" / "S1.json").read_text(encoding="utf-8"))
+            self.assertEqual(profile["recent_weak_kp"], ["描述现象"])
+            self.assertEqual(profile["practice_history"][0]["source"], "brief_fallback")
 
     def _prepare_assignment_sql(self, root: Path) -> None:
         from services.api.assignment.store import connect, ensure

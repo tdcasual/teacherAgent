@@ -140,7 +140,8 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
         "correct": correct,
         "ungraded": ungraded,
         "score_earned": round(score_earned, 3),
-        "valid_submission": bool(graded_total and graded_total > 0),
+        "valid_submission": bool(report.get("received_without_items"))
+        or bool(graded_total and graded_total > 0),
         "report_path": str(report_path),
     }
 

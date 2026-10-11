@@ -178,6 +178,7 @@ def _student_submit_deps(core=None):
         diag_log=_ac.diag_log,
         save_upload_file=_ac.save_upload_file,
         trigger_process_archive=_trigger,
+        data_dir=_ac.DATA_DIR,
         authorize_student_submit=lambda assignment_id, student_id: authorize_student_submit_assignment(
             assignment_id,
             student_id,

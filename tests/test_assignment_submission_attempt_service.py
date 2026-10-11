@@ -70,6 +70,29 @@ class AssignmentSubmissionAttemptServiceTest(unittest.TestCase):
             self.assertEqual(result["score_earned"], 4.0)
             self.assertTrue(result["valid_submission"])
 
+    def test_received_without_items_is_valid_submission(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = AssignmentSubmissionAttemptDeps(
+                student_submissions_dir=root / "student_submissions",
+                grade_count_conf_threshold=0.8,
+            )
+            attempt_dir = root / "attempts" / "submission_20260207_101500"
+            _write_json(
+                attempt_dir / "grading_report.json",
+                {
+                    "graded_total": 0,
+                    "correct": 0,
+                    "ungraded": 0,
+                    "received_without_items": True,
+                    "items": [],
+                },
+            )
+            result = compute_submission_attempt(attempt_dir, deps=deps)
+            self.assertIsNotNone(result)
+            assert result is not None
+            self.assertTrue(result["valid_submission"])
+
     def test_compute_submission_attempt_returns_none_when_report_missing(self):
         with TemporaryDirectory() as td:
             root = Path(td)

@@ -273,6 +273,32 @@ class TestComputeAssignmentProgress:
         assert result.get("status") == 500
         assert "failed to persist progress" in caplog.text
 
+    def test_practice_dirs_do_not_change_submitted_count(self, tmp_path: Path):
+        meta = _setup_assignment(tmp_path, "hw1", ["s1"])
+        practice = tmp_path / "student_submissions" / "hw1" / "s1" / "practice_ab12cd"
+        practice.mkdir(parents=True, exist_ok=True)
+        (practice / "meta.json").write_text(
+            json.dumps({"practice_id": "practice_ab12cd", "status": "submitted"}),
+            encoding="utf-8",
+        )
+        (practice / "grading_report.json").write_text(
+            json.dumps({"graded_total": 3, "correct": 3, "items": []}),
+            encoding="utf-8",
+        )
+        deps = _make_deps(
+            tmp_path,
+            load_assignment_meta=lambda _f: meta,
+            list_all_student_profiles=lambda: [{"student_id": "s1"}],
+            list_submission_attempts=lambda _a, _s: [],
+        )
+        result = compute_assignment_progress("hw1", deps=deps)
+        assert result["counts"]["submitted"] == 0
+        student = result["students"][0]
+        assert student["submitted"] is False
+        assert student["practice"]["assigned"] == 1
+        assert student["practice"]["submitted"] == 1
+        assert student["practice"]["open"] == 0
+
 
 def _progress_sql_rows(tmp_path: Path, assignment_id: str):
     from services.api.assignment.store import connect, ensure

@@ -102,6 +102,35 @@ def load_assignment_stems(
     return items
 
 
+def load_practice_stems(
+    practice_dir: Path,
+    *,
+    data_dir: Path,
+    app_root: Path,
+    limit: int = _STEM_LIMIT_DEFAULT,
+) -> list[dict[str, str]]:
+    csv_path = Path(practice_dir) / "questions.csv"
+    if not csv_path.is_file():
+        return []
+    items: list[dict[str, str]] = []
+    for row in read_question_bank(csv_path):
+        if len(items) >= max(1, int(limit)):
+            break
+        items.append(
+            {
+                "question_id": str(row.get("question_id") or ""),
+                "kp_id": str(row.get("kp_id") or ""),
+                "difficulty": str(row.get("difficulty") or ""),
+                "stem_text": _read_stem_text(
+                    str(row.get("stem_ref") or ""),
+                    folder=Path(practice_dir),
+                    app_root=Path(app_root),
+                ),
+            }
+        )
+    return items
+
+
 def load_open_practice_stems(
     data_dir: Path,
     *,
@@ -110,8 +139,24 @@ def load_open_practice_stems(
     app_root: Path,
     limit: int = _STEM_LIMIT_DEFAULT,
 ) -> list[dict[str, str]]:
-    del data_dir, assignment_id, student_id, app_root, limit
-    return []
+    root = Path(data_dir) / "student_submissions" / assignment_id / student_id
+    if not root.is_dir():
+        return []
+    open_dirs = []
+    for path in sorted(root.glob("practice_*")):
+        if not path.is_dir():
+            continue
+        status = _practice_meta_status(path).lower() or "open"
+        if status != "submitted":
+            open_dirs.append(path)
+    if not open_dirs:
+        return []
+    return load_practice_stems(
+        open_dirs[-1],
+        data_dir=Path(data_dir),
+        app_root=Path(app_root),
+        limit=limit,
+    )
 
 
 def _practice_meta_status(folder: Path) -> str:

@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+
 import pytest
 from fastapi import HTTPException
 
 from services.api.api_models import ChatMessage, ChatRequest, ChatStartRequest
+from services.api.chat_job_processing.history import _update_student_profile_safe
 from services.api.handlers import chat_handlers
 
 
@@ -95,6 +98,37 @@ async def test_chat_student_profile_update_async():
     assert result.reply == "ok"
     assert calls["enqueue"] == {"student_id": "s1", "interaction_note": "note"}
     assert calls["profile"] == 0
+    assert "weak_kp" not in calls["enqueue"]
+
+
+@pytest.mark.anyio
+async def test_student_chat_profile_update_does_not_include_weak_kp():
+    calls = {"enqueue": None}
+
+    def enqueue_profile_update(payload):
+        calls["enqueue"] = payload
+
+    def compute_chat_reply_sync(_req):
+        return ("你在力学方面比较薄弱，需要加强运动学的练习", "student", "开始作业")
+
+    deps = _build_deps(
+        enqueue_profile_update=enqueue_profile_update,
+        compute_chat_reply_sync=compute_chat_reply_sync,
+        profile_update_async=True,
+    )
+    req = ChatRequest(
+        messages=[ChatMessage(role="user", content="开始作业")],
+        student_id="s1",
+        assignment_id="a1",
+    )
+    result = await chat_handlers.chat(req, deps=deps)
+    assert "薄弱" in result.reply
+    assert calls["enqueue"] is not None
+    assert "weak_kp" not in calls["enqueue"]
+    assert "strong_kp" not in calls["enqueue"]
+    assert "next_focus" not in calls["enqueue"]
+    assert calls["enqueue"]["student_id"] == "s1"
+    assert "interaction_note" in calls["enqueue"]
 
 
 @pytest.mark.anyio
@@ -107,3 +141,29 @@ async def test_chat_start_awaits_async_impl():
 
     result = await chat_handlers.chat_start(req, deps=deps)
     assert result == {"ok": True}
+
+
+def test_job_path_student_profile_update_is_note_only():
+    captured = {}
+
+    def student_profile_update(payload):
+        captured["payload"] = dict(payload)
+        return {"ok": True}
+
+    deps = SimpleNamespace(
+        build_interaction_note=lambda _u, _r, assignment_id=None: "note",
+        profile_update_async=False,
+        enqueue_profile_update=lambda _payload: captured.setdefault("enqueue", True),
+        student_profile_update=student_profile_update,
+        diag_log=lambda *_a, **_k: None,
+    )
+    req = SimpleNamespace(student_id="s1", assignment_id="a1")
+    _update_student_profile_safe(
+        req,
+        last_user_text="开始作业",
+        reply_text="你在力学方面比较薄弱",
+        deps=deps,
+    )
+    assert captured["payload"] == {"student_id": "s1", "interaction_note": "note"}
+    assert "weak_kp" not in captured["payload"]
+    assert "enqueue" not in captured

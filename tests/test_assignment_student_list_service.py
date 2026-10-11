@@ -133,6 +133,29 @@ class ListAssignmentsForStudentTests(unittest.TestCase):
             self.assertEqual(items[2]["due_at"], "")
             self.assertNotIn("assignment", {"assignments": items})
 
+    def test_today_item_includes_assignment_kind(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_meta(
+                root,
+                "HW_TODAY",
+                {
+                    **_PUBLISHED,
+                    "date": "2026-08-28",
+                    "assignment_kind": "practical",
+                    "completion_policy": {"allow_practice": True},
+                },
+            )
+            items = list_assignments_for_student(
+                student_id="S1",
+                date_str="2026-08-28",
+                deps=_deps(root, enrolled={("S1", "t_zhang", "physics")}),
+            )
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["assignment_kind"], "practical")
+            self.assertFalse(items[0]["allow_practice"])
+            self.assertNotIn("practice", items[0])
+
     def test_unenrolled_student_is_hidden_even_if_on_snapshot(self):
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -266,6 +289,53 @@ class StudentAssignmentHistoryTests(unittest.TestCase):
                 ),
             )
             self.assertEqual(result["assignments"][0]["official_score"], 19.5)
+
+    def test_history_item_includes_kind_and_practice_counts(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_meta(
+                root,
+                "HW_1",
+                {
+                    **_PUBLISHED,
+                    "assignment_kind": "problem_set",
+                    "completion_policy": {"allow_practice": True},
+                },
+            )
+            practice = root / "data" / "student_submissions" / "HW_1" / "S1" / "practice_ab12cd"
+            practice.mkdir(parents=True, exist_ok=True)
+            (practice / "meta.json").write_text(
+                json.dumps({"practice_id": "practice_ab12cd", "status": "submitted"}),
+                encoding="utf-8",
+            )
+            (root / "data" / "student_submissions" / "HW_1" / "S1" / "bank_miss.json").write_text(
+                "{}",
+                encoding="utf-8",
+            )
+            result = list_student_assignment_history(
+                student_id="S1",
+                limit=50,
+                cursor=0,
+                deps=_deps(
+                    root,
+                    enrolled={("S1", "t_zhang", "physics")},
+                    attempts={
+                        ("HW_1", "S1"): [
+                            {
+                                "valid_submission": True,
+                                "score_earned": 10,
+                                "submitted_at": "2026-08-21T09:00:00",
+                            }
+                        ]
+                    },
+                ),
+            )
+            item = result["assignments"][0]
+            self.assertEqual(item["assignment_kind"], "problem_set")
+            self.assertTrue(item["allow_practice"])
+            self.assertEqual(item["practice"]["submitted"], 1)
+            self.assertEqual(item["practice"]["open"], 0)
+            self.assertTrue(item["practice"]["bank_miss"])
 
 
 class AssignmentTodayServiceTests(unittest.TestCase):
