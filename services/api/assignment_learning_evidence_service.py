@@ -29,14 +29,17 @@ def build_assignment_progress_evidence(
     official_score: Optional[float] = None,
 ) -> Dict[str, Any]:
     raw_score = (best_attempt or {}).get("score_earned") if best_attempt else None
-    auto_score = _safe_float(raw_score, 0.0) if best_attempt else None
+    if not best_attempt or raw_score is None:
+        auto_score = None
+    else:
+        auto_score = _safe_float(raw_score, 0.0)
     signals: Dict[str, Any] = {
         "discussion_pass": bool(discussion.get("pass")),
         "discussion_message_count": _safe_int(discussion.get("message_count"), 0),
         "submission_attempts": len(attempts),
         "submitted": bool(best_attempt),
         "best_attempt_id": str((best_attempt or {}).get("attempt_id") or ""),
-        "best_score_earned": auto_score if auto_score is not None else 0.0,
+        "best_score_earned": auto_score,
         "official_score": official_score if official_score is not None else auto_score,
         "best_graded_total": _safe_int((best_attempt or {}).get("graded_total"), 0),
         "completed": bool(completed),

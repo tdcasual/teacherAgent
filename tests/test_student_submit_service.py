@@ -7,6 +7,10 @@ from tempfile import TemporaryDirectory
 
 from fastapi import HTTPException
 
+from services.api.assignment_progress_service import (
+    AssignmentProgressDeps,
+    compute_assignment_progress,
+)
 from services.api.assignment_submission_attempt_service import (
     AssignmentSubmissionAttemptDeps,
     best_submission_attempt,
@@ -89,6 +93,40 @@ def _progress_from_disk(root: Path, assignment_id: str, _include_students: bool)
             }
         ],
     }
+
+
+def _real_progress(root: Path, assignment_id: str, include_students: bool = True) -> dict:
+    attempt_deps = _attempt_deps(root)
+
+    def _load_meta(folder):
+        path = Path(folder) / "meta.json"
+        if not path.is_file():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _write_json(path, payload):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    deps = AssignmentProgressDeps(
+        data_dir=root,
+        load_assignment_meta=_load_meta,
+        postprocess_assignment_meta=lambda _aid: None,
+        normalize_due_at=lambda v: v or "",
+        list_all_student_profiles=lambda: [],
+        session_discussion_pass=lambda _s, _a: {},
+        list_submission_attempts=lambda aid, sid: list_submission_attempts(
+            aid, sid, deps=attempt_deps
+        ),
+        best_submission_attempt=best_submission_attempt,
+        resolve_assignment_date=lambda _m, _f: "2026-01-01",
+        atomic_write_json=_write_json,
+        today_iso=lambda: "2026-01-15",
+        now_iso=lambda: "2026-01-15T00:00:00Z",
+    )
+    return compute_assignment_progress(
+        assignment_id, deps=deps, include_students=include_students
+    )
 
 
 def _progress(*, submitted: bool, score: float = 0.0, attempt_id: str = "submission_1") -> dict:
@@ -697,6 +735,51 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             profile = json.loads((root / "student_profiles" / "S1.json").read_text(encoding="utf-8"))
             self.assertEqual(profile["recent_weak_kp"], ["描述现象"])
             self.assertEqual(profile["practice_history"][0]["source"], "brief_fallback")
+
+    async def test_zero_question_submit_official_score_null_via_real_progress(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "assignments" / "HW_1"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "questions.csv").write_text(
+                "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n",
+                encoding="utf-8",
+            )
+            (folder / "requirements.json").write_text("{}", encoding="utf-8")
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_1",
+                        "expected_students": ["S1"],
+                        "assignment_kind": "practical",
+                        "completion_policy": {"min_graded_total": 0, "requires_submission": True},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            deps = _deps(
+                root,
+                data_dir=root,
+                compute_assignment_progress=lambda assignment_id, include_students: _real_progress(
+                    root, assignment_id, include_students
+                ),
+            )
+            result = await submit(
+                student_id="S1",
+                files=[_Upload(filename="photo.jpg", content=b"1")],
+                assignment_id="HW_1",
+                auto_assignment=False,
+                deps=deps,
+            )
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("submitted"))
+            self.assertIsNone(result.get("official_score"))
+            progress = _real_progress(root, "HW_1", True)
+            student = progress["students"][0]
+            self.assertTrue(student["submitted"])
+            self.assertIsNone(student["official_score"])
+            self.assertIsNone(student["evidence"]["signals"]["official_score"])
+            self.assertIsNone(student["evidence"]["signals"]["best_score_earned"])
 
     def _prepare_assignment_sql(self, root: Path) -> None:
         from services.api.assignment.store import connect, ensure
