@@ -387,7 +387,7 @@ MCP **不**注册 `assignment.generate`。需要生成时走本接口或老师�
 - 作业未交 → 409 `homework_not_submitted`
 - 题库 0 命中 → 409 `question_bank_insufficient`（并写 `bank_miss.json`）
 
-学生 SPA：非做题不展示入口；`homework_not_submitted` →「请先提交作业」；`question_bank_insufficient` →「题库不足」。
+学生 SPA：补练按钮 **仅当** `problem_set && allow_practice && submitted` 才渲染（未交 / 非做题都没有入口，因此不需要 `homework_not_submitted` toast）。`ERROR_CODE_MESSAGES` 只把 `question_bank_insufficient` 映成「题库不足」。API 仍可能对未交作业返回 409 `homework_not_submitted`（防御码，不是 SPA 文案）。
 
 ### POST `/student/assignment/{assignment_id}/practice`
 推荐一轮补练或返回已有 `open`。同一学生同一作业最多 1 个 open。成功 200，建 `practice_*`。无 body `student_id`。

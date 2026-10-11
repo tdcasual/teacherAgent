@@ -31,9 +31,9 @@
 补练 **不是** 今日任务卡，也不是聊天里的「生成题目」。
 
 - 只对做题作业（`assignment_kind=problem_set`）且老师允许补练（`allow_practice`）。
-- 必须先用上面的「提交作业」交过该份作业（服务端要有 qualifying submit）。未交就点补练 → 409 `homework_not_submitted`（「请先提交作业」）。
-- 情景 / 科学史 / 实践 **没有** 补练按钮；打接口会 409 `practice_not_applicable`。
-- 入口：作业记录页，或做题提交成功区。点「补练」→ `POST /student/assignment/{assignment_id}/practice`。服务器从自建题库选题，不让模型编题。
+- **补练按钮只在该份作业已交之后出现**（作业记录页或做题提交成功区）。未交时 SPA 不渲染入口，因此没有「请先提交作业」toast。接口若仍被直接调用，服务端 409 `homework_not_submitted`（防御码；学生端 `ERROR_CODE_MESSAGES` 不映射这条）。
+- 情景 / 科学史 / 实践 **没有** 补练按钮；打接口会 409 `practice_not_applicable`（同样不展示入口）。
+- 入口出现后点「补练」→ `POST /student/assignment/{assignment_id}/practice`。服务器从自建题库选题，不让模型编题。
 - 空库 → 「题库不足」（409 `question_bank_insufficient`）。
 - 交补练走 `POST /student/assignment/{assignment_id}/practice/{practice_id}/submit`，不计入作业官方分，也不把今日列表标成新作业。
 
