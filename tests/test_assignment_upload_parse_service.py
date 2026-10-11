@@ -41,7 +41,7 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
             or (lambda _source_text, _answer_text: {"questions": [{"stem": "Q1"}], "requirements": {"subject": "物理"}}),
             compute_requirements_missing=compute_requirements_missing or (lambda _req, **_k: []),
             llm_autofill_requirements=llm_autofill_requirements
-            or (lambda _s, _a, _q, req, missing: (req, missing, False)),
+            or (lambda _s, _a, _q, req, missing, **_k: (req, missing, False)),
             diag_log=lambda _event, _payload=None: None,
         )
 
@@ -99,7 +99,7 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
                     "requirements": {},
                 },
                 compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
-                llm_autofill_requirements=lambda _s, _a, _q, req, missing: (
+                llm_autofill_requirements=lambda _s, _a, _q, req, missing, **_k: (
                     {**req, "subject": "物理"},
                     [],
                     True,

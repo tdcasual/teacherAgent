@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .assignment.visibility import effective_visibility_status
-from .assignment_catalog_service import effective_assignment_kind
+from .assignment_catalog_service import effective_assignment_kind, effective_content_source
 from .auth_service import AuthError, enforce_upload_job_access, get_current_principal
 from .paths import APP_ROOT, require_safe_assignment_id
 from .question_bank_select_service import (
@@ -190,9 +190,10 @@ def save_assignment_folder_draft(
             raise AssignmentUploadDraftSaveError(400, "questions must be an array")
         cleaned = deps.clean_assignment_draft_questions(questions)
         if cleaned:
-            _reject_out_of_jail_question_refs(
-                cleaned, data_dir=data_dir, app_root=deps.app_root or APP_ROOT
-            )
+            if effective_content_source(meta, folder=out_dir) == "bank":
+                _reject_out_of_jail_question_refs(
+                    cleaned, data_dir=data_dir, app_root=deps.app_root or APP_ROOT
+                )
             write_questions_csv(out_dir / "questions.csv", cleaned)
         else:
             ensure_questions_csv_header(out_dir / "questions.csv")

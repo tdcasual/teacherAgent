@@ -151,6 +151,7 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
                         "assignment_id": "A_DRAFT",
                         "teacher_id": "t_zhang",
                         "visibility_status": "draft",
+                        "content_source": "bank",
                     },
                     ensure_ascii=False,
                 ),
@@ -173,6 +174,50 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             self.assertEqual(cm.exception.status_code, 400)
             self.assertEqual(cm.exception.detail, "invalid_bank_ref")
             self.assertFalse((folder / "questions.csv").exists())
+
+    def test_folder_save_allows_generated_stems_for_ai_draft(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_AI"
+            folder.mkdir(parents=True, exist_ok=True)
+            stems = folder / "generated_stems"
+            stems.mkdir()
+            stem_path = stems / "GEN-力学-basic-01.md"
+            stem_path.write_text("【待生成】题干", encoding="utf-8")
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_AI",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                        "assignment_kind": "problem_set",
+                        "content_source": "ai",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = save_assignment_folder_draft(
+                    "A_AI",
+                    None,
+                    [
+                        {
+                            "question_id": "GEN-力学-basic-01",
+                            "stem": "q",
+                            "stem_ref": str(stem_path),
+                        }
+                    ],
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            csv_text = (folder / "questions.csv").read_text(encoding="utf-8")
+            self.assertIn("GEN-力学-basic-01", csv_text)
+            self.assertIn("generated_stems", csv_text)
 
     def test_folder_save_rejects_unsafe_assignment_id(self):
         with TemporaryDirectory() as td:

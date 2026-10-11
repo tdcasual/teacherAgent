@@ -210,23 +210,14 @@ def _enrich_requirements(
 
     autofilled = False
     if missing:
-        try:
-            requirements, missing, autofilled = deps.llm_autofill_requirements(
-                source_text,
-                answer_text,
-                questions,
-                requirements,
-                missing,
-                assignment_kind=assignment_kind,
-            )
-        except TypeError:
-            requirements, missing, autofilled = deps.llm_autofill_requirements(
-                source_text,
-                answer_text,
-                questions,
-                requirements,
-                missing,
-            )
+        requirements, missing, autofilled = deps.llm_autofill_requirements(
+            source_text,
+            answer_text,
+            questions,
+            requirements,
+            missing,
+            assignment_kind=assignment_kind,
+        )
         if autofilled and missing:
             warnings.append("已自动补全部分要求，请核对并补充缺失项。")
     return requirements, missing, warnings, autofilled
