@@ -275,7 +275,6 @@ export default function WorkflowTab(props: WorkflowTabProps) {
           archiveAssignment={props.archiveAssignment}
           unarchiveAssignment={props.unarchiveAssignment}
           saveStudentGrade={props.saveStudentGrade}
-          assignmentKind={props.assignmentKind}
         />
         <WorkflowTimeline entries={props.executionTimeline} />
       </section>

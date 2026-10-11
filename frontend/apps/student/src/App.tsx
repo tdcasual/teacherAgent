@@ -18,7 +18,7 @@ import {
   useScrollPositionLock,
   evictOldestEntries,
 } from '../../shared/useSmartAutoScroll';
-import type { AssignmentKind, Message, PendingChatJob, RenderedMessage } from './appTypes';
+import type { Message, PendingChatJob, RenderedMessage } from './appTypes';
 import { coerceAssignmentKind, parseAllowPractice } from './assignmentKind';
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState';
 import { useVerification } from './hooks/useVerification';
@@ -71,8 +71,6 @@ export default function App() {
   const [homeOpen, setHomeOpen] = useState(true);
   const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false);
   const [submitAssignmentId, setSubmitAssignmentId] = useState('');
-  const [submitKind, setSubmitKind] = useState<AssignmentKind>('problem_set');
-  const [submitAllowPractice, setSubmitAllowPractice] = useState(false);
   const [chatPickedFiles, setChatPickedFiles] = useState<File[]>([]);
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning');
   const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false);
@@ -503,15 +501,8 @@ export default function App() {
     (assignmentId: string) => {
       const aid = assignmentId.trim();
       if (!aid) return;
-      const fromToday = state.todayAssignments.find((item) => item.assignment_id === aid);
-      const fromHistory = assignmentHistory.items.find((item) => item.assignment_id === aid);
-      const kind = coerceAssignmentKind(fromToday?.assignment_kind || fromHistory?.assignment_kind);
       dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid });
       setSubmitAssignmentId(aid);
-      setSubmitKind(kind);
-      setSubmitAllowPractice(
-        parseAllowPractice(fromToday?.allow_practice ?? fromHistory?.allow_practice, kind),
-      );
       if (!studentUseMobileShellV2) return;
       setHomeOpen(true);
       setMobileTab('learning');
@@ -520,13 +511,7 @@ export default function App() {
         dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
       }
     },
-    [
-      assignmentHistory.items,
-      dispatch,
-      state.sidebarOpen,
-      state.todayAssignments,
-      studentUseMobileShellV2,
-    ],
+    [dispatch, state.sidebarOpen, studentUseMobileShellV2],
   );
 
   const handlePrimaryHomeAction = useCallback(() => {
@@ -666,16 +651,18 @@ export default function App() {
     />
   );
 
-  const submitTitle = useMemo(() => {
-    const fromToday = state.todayAssignments.find(
-      (item) => item.assignment_id === submitAssignmentId,
+  const submitRow = useMemo(() => {
+    return (
+      state.todayAssignments.find((item) => item.assignment_id === submitAssignmentId) ||
+      assignmentHistory.items.find((item) => item.assignment_id === submitAssignmentId) ||
+      null
     );
-    if (fromToday?.title) return fromToday.title;
-    const fromHistory = assignmentHistory.items.find(
-      (item) => item.assignment_id === submitAssignmentId,
-    );
-    return fromHistory?.title || submitAssignmentId;
   }, [assignmentHistory.items, state.todayAssignments, submitAssignmentId]);
+  const submitTitle = submitRow?.title || submitAssignmentId;
+  const submitKind = submitRow ? coerceAssignmentKind(submitRow.assignment_kind) : undefined;
+  const submitAllowPractice = submitRow
+    ? parseAllowPractice(submitRow.allow_practice, coerceAssignmentKind(submitRow.assignment_kind))
+    : false;
 
   const handleSubmitCompleted = useCallback(() => {
     dispatch({

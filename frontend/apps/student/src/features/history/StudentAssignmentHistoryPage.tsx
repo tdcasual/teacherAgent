@@ -35,8 +35,8 @@ export default function StudentAssignmentHistoryPage({
     if (!apiBase || practiceBusyId) return;
     setPracticeBusyId(assignmentId);
     try {
-      const result = await postStudentPractice({ apiBase, assignmentId });
-      setPracticeMessage((prev) => ({ ...prev, [assignmentId]: result.message }));
+      const message = await postStudentPractice({ apiBase, assignmentId });
+      setPracticeMessage((prev) => ({ ...prev, [assignmentId]: message }));
     } finally {
       setPracticeBusyId('');
     }

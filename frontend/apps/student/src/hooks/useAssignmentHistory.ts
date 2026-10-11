@@ -37,8 +37,6 @@ const toHistoryItems = (payload: unknown): StudentAssignmentHistoryItem[] => {
       assignment_kind: assignmentKind,
       allow_practice: parseAllowPractice(item.allow_practice, assignmentKind),
       practice: {
-        open: Number(practiceRaw.open) || 0,
-        submitted: Number(practiceRaw.submitted) || 0,
         bank_miss: Boolean(practiceRaw.bank_miss),
       },
     });

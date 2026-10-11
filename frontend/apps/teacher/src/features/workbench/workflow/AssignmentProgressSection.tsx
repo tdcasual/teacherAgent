@@ -1,9 +1,5 @@
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type {
-  AssignmentKind,
-  AssignmentProgress,
-  AssignmentProgressStudent,
-} from '../../../appTypes';
+import type { AssignmentProgress, AssignmentProgressStudent } from '../../../appTypes';
 import type { FormatProgressSummary } from '../../../types/workflow';
 import LabeledField from './LabeledField';
 
@@ -28,7 +24,6 @@ type AssignmentProgressSectionProps = {
   archiveAssignment?: (assignmentId?: string) => Promise<void>;
   unarchiveAssignment?: (assignmentId?: string) => Promise<void>;
   saveStudentGrade?: (studentId: string, payload: TeacherGradePayload) => Promise<void>;
-  assignmentKind?: AssignmentKind;
 };
 
 const extractBestScore = (value: unknown): number | null => {
@@ -49,17 +44,6 @@ const officialScoreOf = (student: AssignmentProgressStudent): number | null => {
   if (typeof student.result?.official_score === 'number') return student.result.official_score;
   if (typeof student.official_score === 'number') return student.official_score;
   return extractBestScore(student.submission?.best);
-};
-
-const practiceApplicable = (
-  progress: AssignmentProgress | null,
-  fallbackKind?: AssignmentKind,
-): boolean => {
-  const kind = progress?.assignment_kind || fallbackKind || 'problem_set';
-  if (kind !== 'problem_set') return false;
-  const policyAllow = progress?.students?.[0]?.completion?.policy?.allow_practice;
-  if (policyAllow === false) return false;
-  return true;
 };
 
 const practiceColumnLabel = (student: AssignmentProgressStudent, applicable: boolean): string => {
@@ -116,10 +100,9 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     archiveAssignment,
     unarchiveAssignment,
     saveStudentGrade,
-    assignmentKind,
   } = props;
   const visibilityStatus = String(progressData?.visibility_status || '').trim();
-  const showPractice = practiceApplicable(progressData, assignmentKind);
+  const showPractice = progressData?.assignment_kind === 'problem_set';
 
   return (
     <section

@@ -85,8 +85,8 @@ export default function StudentSubmitPanel({
     if (practiceBusy) return;
     setPracticeBusy(true);
     try {
-      const next = await postStudentPractice({ apiBase, assignmentId });
-      setPracticeMessage(next.message);
+      const message = await postStudentPractice({ apiBase, assignmentId });
+      setPracticeMessage(message);
     } finally {
       setPracticeBusy(false);
     }

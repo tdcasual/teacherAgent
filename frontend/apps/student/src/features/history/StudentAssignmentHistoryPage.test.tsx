@@ -23,7 +23,7 @@ const items: StudentAssignmentHistoryItem[] = [
     archived_at: null,
     assignment_kind: 'problem_set',
     allow_practice: true,
-    practice: { open: 0, submitted: 0, bank_miss: false },
+    practice: { bank_miss: false },
   },
   {
     assignment_id: 'HW_OPEN',
@@ -37,7 +37,7 @@ const items: StudentAssignmentHistoryItem[] = [
     archived_at: null,
     assignment_kind: 'problem_set',
     allow_practice: true,
-    practice: { open: 0, submitted: 0, bank_miss: false },
+    practice: { bank_miss: false },
   },
   {
     assignment_id: 'HW_ARCHIVED',
@@ -51,7 +51,7 @@ const items: StudentAssignmentHistoryItem[] = [
     archived_at: '2026-08-25T00:00:00',
     assignment_kind: 'problem_set',
     allow_practice: true,
-    practice: { open: 0, submitted: 0, bank_miss: false },
+    practice: { bank_miss: false },
   },
 ];
 
@@ -166,7 +166,7 @@ describe('StudentAssignmentHistoryPage', () => {
             official_score: 8,
             assignment_kind: 'problem_set',
             allow_practice: false,
-            practice: { open: 0, submitted: 0, bank_miss: false },
+            practice: { bank_miss: false },
           },
           {
             assignment_id: 'HW_BANK_MISS',
@@ -178,7 +178,7 @@ describe('StudentAssignmentHistoryPage', () => {
             official_score: 7,
             assignment_kind: 'problem_set',
             allow_practice: true,
-            practice: { open: 0, submitted: 0, bank_miss: true },
+            practice: { bank_miss: true },
           },
         ]}
         loading={false}

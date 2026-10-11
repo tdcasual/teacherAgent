@@ -104,8 +104,6 @@ export type TodayAssignmentProgress = {
 export type AssignmentKind = 'problem_set' | 'scenario' | 'science_history' | 'practical';
 
 export type StudentPracticeSummary = {
-  open: number;
-  submitted: number;
   bank_miss: boolean;
 };
 
@@ -142,7 +140,12 @@ export type VerifiedStudent = {
 };
 
 export type StudentTodayHomeStatus =
-  'pending_generation' | 'generating' | 'empty' | 'ready' | 'in_progress' | 'submitted';
+  | 'pending_generation'
+  | 'generating'
+  | 'empty'
+  | 'ready'
+  | 'in_progress'
+  | 'submitted';
 
 export type StudentTodayHomeMaterial = {
   label: string;
@@ -163,7 +166,6 @@ export type StudentTodayHomeItem = {
   overdue: boolean;
   submitted: boolean;
   assignment_kind?: AssignmentKind;
-  allow_practice?: boolean;
 };
 
 export type StudentTodayHomeViewModel = {

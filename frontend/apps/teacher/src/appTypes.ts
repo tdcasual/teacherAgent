@@ -304,7 +304,6 @@ export type AssignmentProgressStudent = {
   };
   has_memory_proposal?: boolean;
   practice?: AssignmentPracticeStatus;
-  completion?: { policy?: { allow_practice?: boolean } };
 };
 
 export type AssignmentProgress = {
