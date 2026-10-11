@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from services.api.assignment_upload_draft_save_service import (
     AssignmentUploadDraftSaveDeps,
     AssignmentUploadDraftSaveError,
+    save_assignment_folder_draft,
     save_assignment_upload_draft,
 )
 from services.api.assignment_upload_draft_service import (
@@ -13,6 +14,7 @@ from services.api.assignment_upload_draft_service import (
     clean_assignment_draft_questions,
     save_assignment_draft_override,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
@@ -37,6 +39,7 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
             write_upload_job=write_upload_job,
             now_iso=lambda: "2026-02-08T12:00:00",
+            data_dir=root / "data",
         )
 
     def test_job_not_found_raises_404(self):
@@ -102,6 +105,40 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             override = json.loads(override_path.read_text(encoding="utf-8"))
             self.assertEqual(override.get("questions"), [{"stem": "edited", "score": 5}])
             self.assertEqual(writes[-1][1].get("draft_saved"), True)
+
+    def test_draft_save_by_assignment_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_DRAFT"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_DRAFT",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                        "assignment_kind": "scenario",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = save_assignment_folder_draft(
+                    "A_DRAFT",
+                    {"subject": "物理", "topic": "情景", "grade_level": "初二", "brief": "实验室观察"},
+                    [],
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            saved = json.loads((folder / "requirements.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved.get("brief"), "实验室观察")
+            self.assertTrue((folder / "brief.md").exists())
+            self.assertTrue((folder / "questions.csv").exists())
 
 
 if __name__ == "__main__":

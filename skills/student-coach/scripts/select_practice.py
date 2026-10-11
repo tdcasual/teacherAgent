@@ -1,46 +1,32 @@
 #!/usr/bin/env python3
 import argparse
 import csv
-import math
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 # Ensure mem0_config path for env
 ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from llm_gateway import LLMGateway, UnifiedLLMRequest  # noqa: E402
 from mem0_config import load_dotenv  # noqa: E402
+from services.api.question_bank_select_service import (  # noqa: E402
+    compute_mix,
+    contains_figure_reference,
+    fill_any,
+    load_recent_assignments,
+    parse_kp_list,
+    read_question_bank,
+    select_by_difficulty,
+)
 
 load_dotenv()
-LLM_GATEWAY = LLMGateway()
-
-FORBIDDEN_FIGURE_PATTERNS = [
-    r"如图",
-    r"见图",
-    r"下图",
-    r"如下图",
-    r"图中",
-    r"图示",
-    r"如右图",
-    r"如左图",
-    r"上图",
-    r"图\d+",
-]
-
-
-def contains_figure_reference(text: str) -> bool:
-    if not text:
-        return False
-    t = str(text)
-    for pat in FORBIDDEN_FIGURE_PATTERNS:
-        if re.search(pat, t):
-            return True
-    return False
 
 
 def strip_figure_references(text: str) -> str:
@@ -75,6 +61,8 @@ def rewrite_stems_without_figures(items: List[dict]) -> Optional[List[dict]]:
         f"输入：\n{payload}"
     )
     try:
+        from llm_gateway import LLMGateway, UnifiedLLMRequest
+
         req = UnifiedLLMRequest(
             messages=[
                 {"role": "system", "content": system},
@@ -82,7 +70,7 @@ def rewrite_stems_without_figures(items: List[dict]) -> Optional[List[dict]]:
             ],
             temperature=0.2,
         )
-        result = LLM_GATEWAY.generate(req, allow_fallback=True)
+        result = LLMGateway().generate(req, allow_fallback=True)
         content = result.text
         data = json.loads(content)
         if isinstance(data, list):
@@ -127,13 +115,6 @@ def enforce_no_figure_references(
     return fixed
 
 
-def read_question_bank(path: Path) -> List[dict]:
-    if not path.exists():
-        raise SystemExit(f"Question bank not found: {path}")
-    with path.open(encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
 def read_explicit_questions(path: Path) -> List[dict]:
     if not path.exists():
         return []
@@ -150,38 +131,6 @@ def write_assignment(path: Path, rows: List[dict]):
         writer.writeheader()
         for r in rows:
             writer.writerow(r)
-
-
-def parse_kp_list(kp_str: str) -> List[str]:
-    parts = [p.strip() for p in kp_str.replace("，", ",").replace(";", ",").split(",")]
-    return [p for p in parts if p]
-
-
-def compute_mix(total: int) -> Tuple[int, int, int]:
-    # 60% basic, 30% medium, 10% advanced
-    basic = math.ceil(total * 0.6)
-    medium = math.ceil(total * 0.3)
-    advanced = max(total - basic - medium, 0)
-    return basic, medium, advanced
-
-
-def select_by_difficulty(
-    rows: List[dict], difficulty: str, count: int, excluded_ids: set
-) -> List[dict]:
-    items = [
-        r
-        for r in rows
-        if (r.get("difficulty") or "").lower() == difficulty
-        and r.get("question_id") not in excluded_ids
-    ]
-    items.sort(key=lambda x: x.get("question_id", ""))
-    return items[:count]
-
-
-def fill_any(rows: List[dict], count: int, excluded_ids: set) -> List[dict]:
-    items = [r for r in rows if r.get("question_id") not in excluded_ids]
-    items.sort(key=lambda x: x.get("question_id", ""))
-    return items[:count]
 
 
 def make_generated(lesson_dir: Path, kp_id: str, difficulty: str, idx: int) -> dict:
@@ -322,32 +271,10 @@ def parse_ids(value: str) -> List[str]:
     return parse_kp_list(value)
 
 
-def load_recent_assignments(assignments_dir: Path, days: int) -> set:
-    if not assignments_dir.exists():
-        return set()
-    cutoff = datetime.now() - timedelta(days=days)
-    used = set()
-    for folder in assignments_dir.iterdir():
-        if not folder.is_dir():
-            continue
-        # infer date from folder name suffix if exists
-        csv_path = folder / "questions.csv"
-        if not csv_path.exists():
-            continue
-        # file mtime as fallback
-        mtime = datetime.fromtimestamp(csv_path.stat().st_mtime)
-        if mtime < cutoff:
-            continue
-        with csv_path.open(encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                qid = row.get("question_id")
-                if qid:
-                    used.add(qid)
-    return used
-
-
 def generate_with_llm(kp_id: str, difficulty: str, count: int) -> List[dict]:
     import json
+
+    from llm_gateway import LLMGateway, UnifiedLLMRequest
 
     prompt = (
         f"请生成{count}道高中物理题，知识点{kp_id}，难度{difficulty}。\n"
@@ -364,7 +291,7 @@ def generate_with_llm(kp_id: str, difficulty: str, count: int) -> List[dict]:
         ],
         temperature=0.2,
     )
-    result = LLM_GATEWAY.generate(req, allow_fallback=True)
+    result = LLMGateway().generate(req, allow_fallback=True)
     content = result.text
     # try to extract json
     try:
@@ -415,7 +342,10 @@ def main():
 
     kp_list = parse_kp_list(args.kp)
     explicit_ids = parse_ids(args.question_ids)
-    bank = read_question_bank(Path(args.question_bank))
+    bank_path = Path(args.question_bank)
+    if not bank_path.exists():
+        raise SystemExit(f"Question bank not found: {bank_path}")
+    bank = read_question_bank(bank_path)
 
     out_dir = Path("data/assignments") / args.assignment_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -547,8 +477,7 @@ def main():
                             }
                         )
                 else:
-                    for idx in range(1, remaining + 1):
-                        chosen.append(make_generated(out_dir, kp, "basic", idx))
+                    raise SystemExit("question_bank_insufficient")
 
             selected.extend(chosen)
             existing_ids.update(

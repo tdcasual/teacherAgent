@@ -12,7 +12,8 @@ from services.api.assignment_archive_service import (
     publish_assignment,
     unarchive_assignment,
 )
-from services.api.auth_service import AuthPrincipal
+from services.api.assignment_upload_confirm_service import AssignmentUploadConfirmDeps
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 def _write_meta(root: Path, assignment_id: str, meta: dict) -> Path:
@@ -42,15 +43,86 @@ _META = {
 
 
 class AssignmentArchiveServiceTests(unittest.TestCase):
+    def _finalize_deps(self, root: Path) -> AssignmentUploadConfirmDeps:
+        def _write_json(path: Path, payload: dict) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+        return AssignmentUploadConfirmDeps(
+            data_dir=root,
+            now_iso=lambda: "2026-08-28T12:00:00",
+            discussion_complete_marker="[[discussion_complete]]",
+            write_upload_job=lambda *_a, **_k: {},
+            merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
+            compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
+            write_uploaded_questions=lambda *_a, **_k: [],
+            optional_assignment_date=lambda value: str(value or "").strip() or None,
+            save_assignment_requirements=lambda *_a, **_k: None,
+            parse_ids_value=lambda value: value if isinstance(value, list) else [],
+            resolve_scope=lambda scope, _s, _c: str(scope or "") or "public",
+            normalize_due_at=lambda value: str(value or ""),
+            compute_expected_students=lambda *_a, **_k: ["S1"],
+            atomic_write_json=_write_json,
+            copy2=lambda src, dst: dst.write_bytes(src.read_bytes()) if src.exists() else None,
+        )
+
     def test_owner_can_publish_draft(self):
         with TemporaryDirectory() as td:
             root = Path(td)
-            _write_meta(root, "HW_DRAFT", {**_META, "visibility_status": "draft"})
-            published = publish_assignment("HW_DRAFT", principal=_owner(), data_dir=root)
+            folder = _write_meta(root, "HW_DRAFT", {**_META, "visibility_status": "draft"})
+            (folder / "requirements.json").write_text(
+                json.dumps({"subject": "物理", "topic": "电", "grade_level": "初二"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (folder / "questions.csv").write_text(
+                "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\nQ1,k,basic,open,,,,\n",
+                encoding="utf-8",
+            )
+            token = set_current_principal(_owner())
+            try:
+                published = publish_assignment(
+                    "HW_DRAFT",
+                    principal=_owner(),
+                    data_dir=root,
+                    finalize_deps=self._finalize_deps(root),
+                )
+            finally:
+                reset_current_principal(token)
             self.assertEqual(published["visibility_status"], "published")
             meta = _read_meta(root, "HW_DRAFT")
             self.assertEqual(meta["visibility_status"], "published")
             self.assertTrue(str(meta.get("published_at") or "").strip())
+
+    def test_assignment_publish_runs_kind_gated_requirements(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            _write_meta(
+                root,
+                "HW_SCENARIO",
+                {
+                    **_META,
+                    "visibility_status": "draft",
+                    "assignment_kind": "scenario",
+                    "content_source": "ai",
+                },
+            )
+            token = set_current_principal(_owner())
+            try:
+                with self.assertRaises(AssignmentArchiveError) as ctx:
+                    publish_assignment(
+                        "HW_SCENARIO",
+                        principal=_owner(),
+                        data_dir=root,
+                    )
+            finally:
+                reset_current_principal(token)
+            self.assertEqual(ctx.exception.status_code, 400)
+            detail = ctx.exception.detail
+            if isinstance(detail, dict):
+                self.assertEqual(detail.get("error"), "requirements_missing")
+                self.assertIn("brief", detail.get("missing") or [])
+            else:
+                self.assertIn("requirements_missing", str(detail))
 
     def test_owner_can_archive_and_unarchive(self):
         with TemporaryDirectory() as td:

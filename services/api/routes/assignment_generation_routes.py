@@ -5,6 +5,11 @@ from typing import Any, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..assignment.application import AssignmentAccessError
+from ..assignment_draft_from_bank_service import (
+    AssignmentDraftFromBankError,
+    build_default_from_bank_deps,
+    create_assignment_draft_from_bank,
+)
 from ..auth_service import AuthError, get_current_principal, require_principal
 
 
@@ -35,7 +40,7 @@ def register_assignment_generation_routes(
         question_ids: Optional[str] = Form(""),
         per_kp: int = Form(5),
         core_examples: Optional[str] = Form(""),
-        generate: bool = Form(False),
+        generate: bool = Form(True),
         mode: Optional[str] = Form(""),
         date: Optional[str] = Form(""),
         due_at: Optional[str] = Form(""),
@@ -44,6 +49,9 @@ def register_assignment_generation_routes(
         student_ids: Optional[str] = Form(""),
         source: Optional[str] = Form(""),
         requirements_json: Optional[str] = Form(""),
+        assignment_kind: Optional[str] = Form(""),
+        content_source: Optional[str] = Form("ai"),
+        seed: Optional[str] = Form(""),
     ) -> Any:
         _forbid_admin_assignment_write()
         _require_teacher_or_admin()
@@ -63,10 +71,41 @@ def register_assignment_generation_routes(
                 student_ids=student_ids,
                 source=source,
                 requirements_json=requirements_json,
+                assignment_kind=assignment_kind,
+                content_source=content_source,
+                seed=seed,
                 deps=app_deps,
             )
         except AssignmentAccessError as exc:
             raise _http_from_assignment_access(exc) from exc
+
+    @router.post("/assignment/draft/from-bank")
+    async def assignment_draft_from_bank(
+        assignment_id: str = Form(...),
+        subject_id: str = Form(...),
+        kp: str = Form(""),
+        count: int = Form(5),
+        date: Optional[str] = Form(""),
+        due_at: Optional[str] = Form(""),
+        class_name: Optional[str] = Form(""),
+        student_ids: Optional[str] = Form(""),
+    ) -> Any:
+        _forbid_admin_assignment_write()
+        _require_teacher_or_admin()
+        try:
+            return create_assignment_draft_from_bank(
+                assignment_id=assignment_id,
+                subject_id=subject_id,
+                kp=kp,
+                count=count,
+                date=date,
+                due_at=due_at,
+                class_name=class_name,
+                student_ids=student_ids,
+                deps=build_default_from_bank_deps(),
+            )
+        except AssignmentDraftFromBankError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     @router.post("/assignment/render")
     async def render_assignment(assignment_id: str = Form(...)) -> Any:

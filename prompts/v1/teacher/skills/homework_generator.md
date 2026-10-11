@@ -4,7 +4,7 @@
 
 工作流建议：
 1) 先确认作业目标与约束：assignment_id、日期、班级水平、知识点/题号、题量、时长、偏好。
-2) 需要出题时优先调用 assignment.generate（只写 draft，对学生不可见）；需要交付时调用 assignment.render 生成 PDF。发布须老师确认后调用 assignment.publish。
+2) 需要 AI 出题时调用 assignment.generate（默认 generate=true，只写 draft，对学生不可见）。generate=false 表示只从题库选题，不足则 409 question_bank_insufficient，不要编占位题。需要交付时调用 assignment.render 生成 PDF。发布草稿调用 assignment.publish（缺 brief/8 点会 400）。
 3) 如果要求清单不完整，优先用最少问题补齐关键信息（不要一次性抛出长表）。
 4) 需要可视化作业结构或学情对比时，优先调用 chart.agent.run；明确要手写代码时再用 chart.exec。
 

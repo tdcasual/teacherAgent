@@ -55,6 +55,7 @@ class AssignmentApplicationDeps(AssignmentAccessDeps):
     assignment_upload_draft: Callable[[str], Awaitable[Dict[str, Any]]]
     assignment_upload_draft_save: Callable[[UploadDraftSaveRequest], Awaitable[Dict[str, Any]]]
     assignment_upload_confirm: Callable[[UploadConfirmRequest], Awaitable[Dict[str, Any]]]
+    assignment_folder_draft: Callable[[str], Awaitable[Dict[str, Any]]]
     assignment_download: Callable[[str, str], Awaitable[Dict[str, Any]]]
     assignment_today: Callable[..., Awaitable[Dict[str, Any]]]
     assignment_detail: Callable[[str], Awaitable[Dict[str, Any]]]
@@ -127,6 +128,10 @@ def build_assignment_application_deps(core: Any) -> AssignmentApplicationDeps:
         ),
         assignment_upload_confirm=lambda req: core.assignment_upload_handlers.assignment_upload_confirm(
             req,
+            deps=_assignment_upload_handlers_deps(),
+        ),
+        assignment_folder_draft=lambda assignment_id: core.assignment_upload_handlers.assignment_folder_draft(
+            assignment_id,
             deps=_assignment_upload_handlers_deps(),
         ),
         assignment_download=lambda assignment_id, file: core.assignment_io_handlers.assignment_download(

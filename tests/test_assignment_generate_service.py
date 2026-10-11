@@ -1,5 +1,7 @@
+import json
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from services.api.assignment_generate_service import (
     AssignmentGenerateDeps,
@@ -129,7 +131,196 @@ class AssignmentGenerateServiceTest(unittest.TestCase):
         self.assertIn("--kp", args)
         self.assertIn("力学", args)
         self.assertIn("--generate", args)
-        self.assertEqual(captured["log"][0][0], "assignment.meta.postprocess_failed")
+        self.assertIn("assignment.meta.postprocess_failed", [item[0] for item in captured["log"]])
+
+    def test_generate_http_defaults_generate_true_for_problem_set_ai(self):
+        import inspect
+
+        from fastapi import APIRouter
+        from fastapi.routing import APIRoute
+
+        from services.api.routes.assignment_generation_routes import (
+            register_assignment_generation_routes,
+        )
+
+        class _App:
+            async def post_generate_assignment(self, **kwargs):
+                return kwargs
+
+        router = APIRouter()
+        register_assignment_generation_routes(router, app_deps=None, assignment_app=_App())
+        route = next(
+            item
+            for item in router.routes
+            if isinstance(item, APIRoute) and item.path == "/assignment/generate"
+        )
+        param = inspect.signature(route.endpoint).parameters["generate"]
+        default = getattr(param.default, "default", param.default)
+        self.assertIs(default, True)
+
+    def test_generate_omitted_kind_defaults_problem_set(self):
+        deps, captured = self._deps()
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            result = generate_assignment(
+                assignment_id="HW_1",
+                kp="力学",
+                question_ids="",
+                per_kp=1,
+                core_examples="",
+                generate=True,
+                mode="kp",
+                date="2026-02-08",
+                due_at="",
+                class_name="",
+                student_ids="",
+                source="teacher",
+                requirements_json=None,
+                subject_id="physics",
+                deps=deps,
+            )
+        finally:
+            reset_current_principal(token)
+        self.assertTrue(result.get("ok"))
+        self.assertIn("--generate", captured["args"])
+        self.assertEqual(captured["log"][0][0], "assignment.kind.defaulted")
+
+    def test_scenario_ai_draft_calls_llm_for_brief(self):
+        from unittest.mock import patch
+
+        deps, captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            from pathlib import Path as _P
+
+            data_dir = _P(td) / "data"
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                gateway_cls.return_value.generate.return_value.text = json.dumps(
+                    {
+                        "brief": "学生在操场观察摆动。",
+                        "discussion_goals": ["描述现象"],
+                        "rubric": "记录步骤",
+                    },
+                    ensure_ascii=False,
+                )
+                try:
+                    result = generate_assignment(
+                        assignment_id="HW_SCEN",
+                        kp="",
+                        question_ids="",
+                        per_kp=5,
+                        core_examples="",
+                        generate=True,
+                        mode="",
+                        date="2026-02-08",
+                        due_at="",
+                        class_name="",
+                        student_ids="",
+                        source="teacher",
+                        requirements_json=json.dumps(
+                            {"subject": "科学", "topic": "摆", "grade_level": "初二"},
+                            ensure_ascii=False,
+                        ),
+                        subject_id="generic",
+                        assignment_kind="scenario",
+                        deps=deps,
+                    )
+                finally:
+                    reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            self.assertEqual(result.get("draft", {}).get("assignment_kind"), "scenario")
+            self.assertIn("学生在操场观察摆动", result.get("draft", {}).get("requirements", {}).get("brief", ""))
+            self.assertIsNone(captured["args"])
+            gateway_cls.assert_called()
+
+    def test_scenario_ai_draft_has_brief_not_generated_stems(self):
+        from unittest.mock import patch
+
+        deps, _captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            from pathlib import Path as _P
+
+            data_dir = _P(td) / "data"
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                gateway_cls.return_value.generate.return_value.text = (
+                    '{"brief":"情景 brief","discussion_goals":["g1"]}'
+                )
+                try:
+                    generate_assignment(
+                        assignment_id="HW_SCEN2",
+                        kp="",
+                        question_ids="",
+                        per_kp=5,
+                        core_examples="",
+                        generate=True,
+                        mode="",
+                        date="2026-02-08",
+                        due_at="",
+                        class_name="",
+                        student_ids="",
+                        source="teacher",
+                        requirements_json='{"subject":"科学","topic":"史","grade_level":"初二"}',
+                        subject_id="generic",
+                        assignment_kind="scenario",
+                        deps=deps,
+                    )
+                finally:
+                    reset_current_principal(token)
+            folder = data_dir / "assignments" / "HW_SCEN2"
+            self.assertTrue((folder / "brief.md").exists())
+            self.assertFalse((folder / "generated_stems").exists())
+            csv_text = (folder / "questions.csv").read_text(encoding="utf-8")
+            self.assertEqual(len([line for line in csv_text.splitlines() if line.strip()]) , 1)
+
+    def test_non_problem_set_generate_ignores_generate_flag(self):
+        from unittest.mock import patch
+
+        deps, captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            from pathlib import Path as _P
+
+            data_dir = _P(td) / "data"
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                gateway_cls.return_value.generate.return_value.text = '{"brief":"实践 brief"}'
+                try:
+                    generate_assignment(
+                        assignment_id="HW_PRAC",
+                        kp="",
+                        question_ids="",
+                        per_kp=5,
+                        core_examples="",
+                        generate=True,
+                        mode="",
+                        date="2026-02-08",
+                        due_at="",
+                        class_name="",
+                        student_ids="",
+                        source="teacher",
+                        requirements_json='{"subject":"科学","topic":"实验","grade_level":"初二"}',
+                        subject_id="generic",
+                        assignment_kind="practical",
+                        deps=deps,
+                    )
+                finally:
+                    reset_current_principal(token)
+        self.assertIsNone(captured["args"])
 
 
 if __name__ == "__main__":

@@ -20,10 +20,10 @@ _log = logging.getLogger(__name__)
 
 
 class AssignmentArchiveError(Exception):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(detail)
+    def __init__(self, status_code: int, detail: Any):
+        super().__init__(str(detail))
         self.status_code = int(status_code)
-        self.detail = str(detail or "assignment_archive_failed")
+        self.detail = detail if detail is not None else "assignment_archive_failed"
 
 
 def _resolve_data_dir(data_dir: Optional[Path]) -> Path:
@@ -86,7 +86,14 @@ def publish_assignment(
     *,
     principal: Optional[AuthPrincipal],
     data_dir: Optional[Path] = None,
+    finalize_deps: Any = None,
 ) -> Dict[str, Any]:
+    from .assignment_upload_confirm_service import (
+        AssignmentUploadConfirmError,
+        _finalize_published_from_folder,
+        build_default_folder_finalize_deps,
+    )
+
     resolved = _resolve_data_dir(data_dir)
     folder = _resolve_assignment_folder(assignment_id, resolved)
     if not folder.exists():
@@ -96,14 +103,24 @@ def publish_assignment(
     vis = effective_visibility_status(meta)
     if vis != "draft":
         raise AssignmentArchiveError(409, "invalid_visibility_status")
-    meta["visibility_status"] = "published"
-    meta["published_at"] = _now_iso()
-    _persist_meta(folder, meta, resolved)
+    deps = finalize_deps or build_default_folder_finalize_deps(resolved)
+    try:
+        result = _finalize_published_from_folder(
+            assignment_id,
+            requirements_override=None,
+            completion_policy_override=None,
+            strict_requirements=True,
+            deps=deps,
+        )
+    except AssignmentUploadConfirmError as exc:
+        raise AssignmentArchiveError(exc.status_code, exc.detail) from exc
+    published_meta = _load_meta(folder)
     return {
         "ok": True,
-        "assignment_id": str(meta.get("assignment_id") or assignment_id),
+        "assignment_id": str(published_meta.get("assignment_id") or assignment_id),
         "visibility_status": "published",
-        "published_at": meta["published_at"],
+        "published_at": published_meta.get("published_at") or _now_iso(),
+        "question_count": result.get("question_count"),
     }
 
 

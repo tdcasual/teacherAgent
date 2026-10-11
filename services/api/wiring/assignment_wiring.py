@@ -94,10 +94,16 @@ from ..assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
 )
 from ..assignment_upload_confirm_service import (
+    _finalize_published_from_folder as _finalize_published_from_folder_impl,
+)
+from ..assignment_upload_confirm_service import (
     confirm_assignment_upload as _confirm_assignment_upload_impl,
 )
 from ..assignment_upload_draft_save_service import (
     AssignmentUploadDraftSaveDeps,
+)
+from ..assignment_upload_draft_save_service import (
+    save_assignment_folder_draft as _save_assignment_folder_draft_impl,
 )
 from ..assignment_upload_draft_save_service import (
     save_assignment_upload_draft as _save_assignment_upload_draft_impl,
@@ -120,6 +126,9 @@ from ..assignment_upload_draft_service import (
 from ..assignment_upload_parse_service import AssignmentUploadParseDeps
 from ..assignment_upload_query_service import (
     AssignmentUploadQueryDeps,
+)
+from ..assignment_upload_query_service import (
+    get_assignment_folder_draft as _get_assignment_folder_draft_impl,
 )
 from ..assignment_upload_query_service import (
     get_assignment_upload_draft as _get_assignment_upload_draft_impl,
@@ -199,17 +208,38 @@ def _assignment_upload_handlers_deps(
         ),
         load_upload_job=_ac.load_upload_job,
         ensure_assignment_upload_confirm_ready=_ensure_assignment_upload_confirm_ready_impl,
-        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, deps=None: (
+        confirm_assignment_upload=lambda job_id, job, job_dir, requirements_override=None, strict_requirements=True, completion_policy_override=None, deps=None: (
             _confirm_assignment_upload_impl(
                 job_id,
                 job,
                 job_dir,
                 requirements_override=requirements_override,
                 strict_requirements=strict_requirements,
+                completion_policy_override=completion_policy_override,
                 deps=_assignment_upload_confirm_deps(core),
             )
         ),
         upload_job_path=_ac.upload_job_path,
+        finalize_published_from_folder=lambda assignment_id, requirements_override=None, completion_policy_override=None, strict_requirements=True: (
+            _finalize_published_from_folder_impl(
+                assignment_id,
+                requirements_override=requirements_override,
+                completion_policy_override=completion_policy_override,
+                strict_requirements=strict_requirements,
+                deps=_assignment_upload_confirm_deps(core),
+            )
+        ),
+        save_assignment_folder_draft=lambda assignment_id, requirements, questions: (
+            _save_assignment_folder_draft_impl(
+                assignment_id,
+                requirements,
+                questions,
+                deps=_assignment_upload_draft_save_deps(core),
+            )
+        ),
+        get_assignment_folder_draft=lambda assignment_id: _get_assignment_folder_draft_impl(
+            assignment_id, deps=_assignment_upload_query_deps(core)
+        ),
     )
 
 
@@ -448,6 +478,7 @@ def _assignment_upload_query_deps(core: Any | None = None):
         merge_requirements=_ac.merge_requirements,
         compute_requirements_missing=_ac.compute_requirements_missing,
         parse_list_value=_ac.parse_list_value,
+        data_dir=_ac.DATA_DIR,
     )
 
 
@@ -463,6 +494,7 @@ def _assignment_upload_draft_save_deps(core: Any | None = None):
         compute_requirements_missing=_ac.compute_requirements_missing,
         write_upload_job=_ac.write_upload_job,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        data_dir=_ac.DATA_DIR,
     )
 
 

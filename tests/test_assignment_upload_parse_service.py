@@ -143,6 +143,31 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
             self.assertGreaterEqual(text_writer.call_count, 1)
             self.assertGreaterEqual(json_writer.call_count, 1)
 
+    def test_non_problem_set_allows_zero_questions(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job = {
+                "source_files": ["paper.pdf"],
+                "answer_files": [],
+                "assignment_kind": "scenario",
+            }
+            deps = self._deps(
+                root,
+                job,
+                writes,
+                llm_parse_assignment_payload=lambda _source_text, _answer_text: {
+                    "questions": [],
+                    "requirements": {"subject": "物理", "topic": "情景", "grade_level": "初二"},
+                },
+                extract_text_from_file=lambda _path, language="zh", ocr_mode="FREE_OCR": "A" * 80,
+            )
+            process_upload_job("job-1", deps)
+            self.assertEqual(writes[-1][1].get("status"), "done")
+            parsed = json.loads((root / "assignment_jobs" / "job-1" / "parsed.json").read_text(encoding="utf-8"))
+            self.assertEqual(parsed.get("questions"), [])
+            self.assertTrue(str(parsed.get("requirements", {}).get("brief") or "").strip())
+
 
 if __name__ == "__main__":
     unittest.main()

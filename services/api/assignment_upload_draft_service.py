@@ -71,7 +71,7 @@ def build_assignment_upload_draft(
     override: Dict[str, Any],
     *,
     merge_requirements: Callable[[Dict[str, Any], Dict[str, Any], bool], Dict[str, Any]],
-    compute_requirements_missing: Callable[[Dict[str, Any]], List[str]],
+    compute_requirements_missing: Callable[..., List[str]],
     parse_list_value: Callable[[Any], List[str]],
 ) -> Dict[str, Any]:
     base_questions = parsed.get("questions") or []

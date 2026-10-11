@@ -3,9 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
-from .auth_service import AuthError, enforce_upload_job_access
+from .assignment.visibility import effective_visibility_status
+from .assignment_catalog_service import effective_assignment_kind
+from .assignment_requirements_service import call_compute_requirements_missing
+from .auth_service import AuthError, enforce_upload_job_access, get_current_principal
+from .question_bank_select_service import (
+    ensure_questions_csv_header,
+    write_questions_csv,
+)
 
 
 class AssignmentUploadDraftSaveError(Exception):
@@ -23,9 +30,10 @@ class AssignmentUploadDraftSaveDeps:
     clean_assignment_draft_questions: Callable[[Any], List[Dict[str, Any]]]
     save_assignment_draft_override: Callable[..., Dict[str, Any]]
     merge_requirements: Callable[[Dict[str, Any], Dict[str, Any], bool], Dict[str, Any]]
-    compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
+    compute_requirements_missing: Callable[..., List[str]]
     write_upload_job: Callable[[str, Dict[str, Any]], Dict[str, Any]]
     now_iso: Callable[[], str]
+    data_dir: Optional[Path] = None
 
 
 def save_assignment_upload_draft(
@@ -68,7 +76,10 @@ def save_assignment_upload_draft(
 
     base_requirements = parsed.get("requirements") or {}
     merged_requirements = deps.merge_requirements(base_requirements, override.get("requirements") or {}, True)
-    missing = deps.compute_requirements_missing(merged_requirements)
+    kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
+    missing = call_compute_requirements_missing(
+        deps.compute_requirements_missing, merged_requirements, assignment_kind=kind
+    )
 
     deps.save_assignment_draft_override(
         job_dir,
@@ -92,6 +103,87 @@ def save_assignment_upload_draft(
     return {
         "ok": True,
         "job_id": job_id,
+        "requirements_missing": missing,
+        "message": "草稿已保存，将用于创建作业。",
+    }
+
+
+def _resolve_draft_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
+    root = (data_dir / "assignments").resolve()
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise AssignmentUploadDraftSaveError(400, "assignment_id is required")
+    target = (root / aid).resolve()
+    if target != root and root not in target.parents:
+        raise AssignmentUploadDraftSaveError(400, "invalid assignment_id")
+    return target
+
+
+def _read_json_dict(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def save_assignment_folder_draft(
+    assignment_id: str,
+    requirements: Any,
+    questions: Any,
+    *,
+    deps: AssignmentUploadDraftSaveDeps,
+) -> Dict[str, Any]:
+    data_dir = deps.data_dir
+    if data_dir is None:
+        raise AssignmentUploadDraftSaveError(500, "data_dir_required")
+    out_dir = _resolve_draft_assignment_dir(data_dir, assignment_id)
+    if not out_dir.exists():
+        raise AssignmentUploadDraftSaveError(404, "assignment not found")
+    meta = _read_json_dict(out_dir / "meta.json")
+    if effective_visibility_status(meta) != "draft":
+        raise AssignmentUploadDraftSaveError(409, "invalid_visibility_status")
+    actor = str(getattr(get_current_principal(), "actor_id", "") or "").strip()
+    owner = str(meta.get("teacher_id") or "").strip()
+    if not actor or owner != actor:
+        raise AssignmentUploadDraftSaveError(403, "forbidden")
+    current_requirements = _read_json_dict(out_dir / "requirements.json")
+    if requirements is not None:
+        if not isinstance(requirements, dict):
+            raise AssignmentUploadDraftSaveError(400, "requirements must be an object")
+        current_requirements = deps.merge_requirements(current_requirements, requirements, True)
+        (out_dir / "requirements.json").write_text(
+            json.dumps(
+                {
+                    "assignment_id": assignment_id,
+                    "created_at": deps.now_iso(),
+                    **current_requirements,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        brief = str(current_requirements.get("brief") or "").strip()
+        if brief:
+            (out_dir / "brief.md").write_text(brief + "\n", encoding="utf-8")
+    if questions is not None:
+        if not isinstance(questions, list):
+            raise AssignmentUploadDraftSaveError(400, "questions must be an array")
+        cleaned = deps.clean_assignment_draft_questions(questions)
+        if cleaned:
+            write_questions_csv(out_dir / "questions.csv", cleaned)
+        else:
+            ensure_questions_csv_header(out_dir / "questions.csv")
+    kind = effective_assignment_kind(meta)
+    missing = call_compute_requirements_missing(
+        deps.compute_requirements_missing, current_requirements, assignment_kind=kind
+    )
+    return {
+        "ok": True,
+        "assignment_id": assignment_id,
         "requirements_missing": missing,
         "message": "草稿已保存，将用于创建作业。",
     }

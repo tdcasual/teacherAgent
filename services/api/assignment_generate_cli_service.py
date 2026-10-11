@@ -9,15 +9,16 @@ _log = logging.getLogger(__name__)
 DRAFT_VISIBILITY_STATUS = "draft"
 
 
-def generated_assignment_completion_policy(discussion_marker: str = "") -> Dict[str, Any]:
-    return {
-        "requires_discussion": False,
-        "discussion_marker": discussion_marker,
-        "requires_submission": True,
-        "min_graded_total": 1,
-        "best_attempt": "score_earned_then_correct_then_graded_total",
-        "version": 2,
-    }
+def generated_assignment_completion_policy(
+    discussion_marker: str = "",
+    *,
+    assignment_kind: str = "problem_set",
+) -> Dict[str, Any]:
+    from .assignment_catalog_service import _default_assignment_completion_policy
+
+    return _default_assignment_completion_policy(
+        discussion_marker, assignment_kind=assignment_kind
+    )
 
 
 def assignment_generate_script(app_root: Path) -> Path:
@@ -48,6 +49,8 @@ def try_postprocess_assignment_meta(
     teacher_id: Optional[str] = None,
     subject_id: Optional[str] = None,
     completion_policy: Optional[Dict[str, Any]] = None,
+    content_source: Optional[str] = None,
+    assignment_kind: Optional[str] = None,
 ) -> None:
     extra: Dict[str, Any] = {}
     if visibility_status:
@@ -58,6 +61,10 @@ def try_postprocess_assignment_meta(
         extra["subject_id"] = subject_id
     if completion_policy is not None:
         extra["completion_policy"] = completion_policy
+    if content_source:
+        extra["content_source"] = content_source
+    if assignment_kind:
+        extra["assignment_kind"] = assignment_kind
     try:
         postprocess_assignment_meta(assignment_id, due_at=due_at or None, **extra)
     except Exception as exc:

@@ -3,10 +3,9 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from services.api.api_models import UploadConfirmRequest
+from services.api.api_models import UploadConfirmRequest, UploadDraftSaveRequest
 from services.api.assignment_upload_start_service import AssignmentUploadStartError
 from services.api.handlers import assignment_upload_handlers
-
 
 
 def _assignment_deps(tmp_path, **overrides):
@@ -34,6 +33,15 @@ def _assignment_deps(tmp_path, **overrides):
     def upload_job_path(_job_id):
         return Path(tmp_path)
 
+    def finalize_published_from_folder(*_args, **_kwargs):
+        return {"ok": True, "via": "folder"}
+
+    def save_assignment_folder_draft(*_args, **_kwargs):
+        return {"ok": True, "via": "folder_save"}
+
+    def get_assignment_folder_draft(*_args, **_kwargs):
+        return {"ok": True, "draft": {}}
+
     deps = assignment_upload_handlers.AssignmentUploadHandlerDeps(
         start_assignment_upload=start_assignment_upload,
         assignment_upload_status=assignment_upload_status,
@@ -43,6 +51,9 @@ def _assignment_deps(tmp_path, **overrides):
         ensure_assignment_upload_confirm_ready=ensure_assignment_upload_confirm_ready,
         confirm_assignment_upload=confirm_assignment_upload,
         upload_job_path=upload_job_path,
+        finalize_published_from_folder=finalize_published_from_folder,
+        save_assignment_folder_draft=save_assignment_folder_draft,
+        get_assignment_folder_draft=get_assignment_folder_draft,
     )
     for key, value in overrides.items():
         setattr(deps, key, value)
@@ -107,3 +118,54 @@ async def test_assignment_upload_confirm_returns_ready(tmp_path):
     )
 
     assert result == {"ok": True}
+
+
+@pytest.mark.anyio
+async def test_confirm_without_job_id_calls_folder_finalize(tmp_path):
+    called = {}
+
+    def finalize_published_from_folder(assignment_id, **kwargs):
+        called["assignment_id"] = assignment_id
+        called["kwargs"] = kwargs
+        return {"ok": True, "assignment_id": assignment_id}
+
+    def load_upload_job(_job_id):
+        raise AssertionError("should not load job")
+
+    deps = _assignment_deps(
+        tmp_path,
+        finalize_published_from_folder=finalize_published_from_folder,
+        load_upload_job=load_upload_job,
+    )
+    result = await assignment_upload_handlers.assignment_upload_confirm(
+        UploadConfirmRequest(assignment_id="A1"),
+        deps=deps,
+    )
+    assert result["ok"] is True
+    assert called["assignment_id"] == "A1"
+
+
+@pytest.mark.anyio
+async def test_draft_save_without_job_id_writes_folder(tmp_path):
+    called = {}
+
+    def save_assignment_folder_draft(assignment_id, requirements, questions):
+        called["assignment_id"] = assignment_id
+        called["requirements"] = requirements
+        called["questions"] = questions
+        return {"ok": True, "assignment_id": assignment_id}
+
+    def assignment_upload_draft_save(*_args, **_kwargs):
+        raise AssertionError("should not save job draft")
+
+    deps = _assignment_deps(
+        tmp_path,
+        save_assignment_folder_draft=save_assignment_folder_draft,
+        assignment_upload_draft_save=assignment_upload_draft_save,
+    )
+    result = await assignment_upload_handlers.assignment_upload_draft_save(
+        UploadDraftSaveRequest(assignment_id="A1", requirements={"brief": "x"}, questions=[]),
+        deps=deps,
+    )
+    assert result["ok"] is True
+    assert called["assignment_id"] == "A1"

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .assignment_requirements_service import call_compute_requirements_missing
+
 _log = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ class UploadLlmDeps:
     call_llm: Callable[..., Dict[str, Any]]
     diag_log: Callable[..., None]
     parse_list_value: Callable[[Any], List[str]]
-    compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
+    compute_requirements_missing: Callable[..., List[str]]
     merge_requirements: Callable[[Dict[str, Any], Dict[str, Any], bool], Dict[str, Any]]
     normalize_excel_cell: Callable[[Any], str]
 
@@ -109,24 +111,39 @@ def llm_autofill_requirements(
     missing: List[str],
     *,
     deps: UploadLlmDeps,
+    assignment_kind: str = "problem_set",
 ) -> Tuple[Dict[str, Any], List[str], bool]:
     if not missing:
         return requirements, [], False
-    system = (
-        "你是作业分析助手。请根据试卷文本、题目摘要与答案文本，补全作业8点描述缺失字段。"
-        "尽量做出合理推断，不要留空；如果确实不确定，也要给出最可能的占位答案，并在 uncertain 中标注。"
-        "仅输出严格JSON，格式："
-        "{"
-        "\"requirements\":{"
-        "\"subject\":\"\",\"topic\":\"\",\"grade_level\":\"\",\"class_level\":\"\","
-        "\"core_concepts\":[\"\"],\"typical_problem\":\"\","
-        "\"misconceptions\":[\"\"],\"duration_minutes\":20|40|60|0,"
-        "\"preferences\":[\"A基础|B提升|C生活应用|D探究|E小测验|F错题反思\"],"
-        "\"extra_constraints\":\"\""
-        "},"
-        "\"uncertain\":[\"字段名\"]"
-        "}"
-    )
+    kind = str(assignment_kind or "problem_set").strip() or "problem_set"
+    if kind != "problem_set":
+        system = (
+            "你是作业分析助手。请根据材料补全学科、主题、学段与 brief。"
+            "不要编造易错点、典型题或作业偏好。"
+            "仅输出严格JSON，格式："
+            "{"
+            "\"requirements\":{"
+            "\"subject\":\"\",\"topic\":\"\",\"grade_level\":\"\",\"brief\":\"\""
+            "},"
+            "\"uncertain\":[\"字段名\"]"
+            "}"
+        )
+    else:
+        system = (
+            "你是作业分析助手。请根据试卷文本、题目摘要与答案文本，补全作业8点描述缺失字段。"
+            "尽量做出合理推断，不要留空；如果确实不确定，也要给出最可能的占位答案，并在 uncertain 中标注。"
+            "仅输出严格JSON，格式："
+            "{"
+            "\"requirements\":{"
+            "\"subject\":\"\",\"topic\":\"\",\"grade_level\":\"\",\"class_level\":\"\","
+            "\"core_concepts\":[\"\"],\"typical_problem\":\"\","
+            "\"misconceptions\":[\"\"],\"duration_minutes\":20|40|60|0,"
+            "\"preferences\":[\"A基础|B提升|C生活应用|D探究|E小测验|F错题反思\"],"
+            "\"extra_constraints\":\"\""
+            "},"
+            "\"uncertain\":[\"字段名\"]"
+            "}"
+        )
     user = (
         f"已有requirements：{json.dumps(requirements, ensure_ascii=False)}\n"
         f"缺失字段：{', '.join(missing)}\n"
@@ -155,7 +172,9 @@ def llm_autofill_requirements(
             uncertain = deps.parse_list_value(uncertain)
         if not isinstance(uncertain, list):
             uncertain = []
-        new_missing = deps.compute_requirements_missing(merged)
+        new_missing = call_compute_requirements_missing(
+            deps.compute_requirements_missing, merged, assignment_kind=kind
+        )
         if uncertain:
             new_missing = sorted(set(new_missing + [str(item) for item in uncertain if item]))
         return merged, new_missing, True

@@ -42,6 +42,7 @@ def register_assignment_upload_routes(
         answer_files: Optional[list[UploadFile]] = File(None),
         ocr_mode: Optional[str] = Form("FREE_OCR"),
         language: Optional[str] = Form("zh"),
+        assignment_kind: Optional[str] = Form(""),
     ) -> Any:
         _forbid_admin_assignment_write()
         _require_teacher_or_admin()
@@ -58,6 +59,7 @@ def register_assignment_upload_routes(
                 answer_files=answer_files,
                 ocr_mode=ocr_mode,
                 language=language,
+                assignment_kind=assignment_kind,
                 deps=app_deps,
             )
         except AssignmentAccessError as exc:
@@ -84,3 +86,13 @@ def register_assignment_upload_routes(
         _forbid_admin_assignment_write()
         _require_teacher_or_admin()
         return await assignment_app.confirm_assignment_upload(req, deps=app_deps)
+
+    @router.get("/assignment/{assignment_id}/draft")
+    async def assignment_folder_draft(assignment_id: str) -> Any:
+        _require_teacher_or_admin()
+        try:
+            return await assignment_app.get_assignment_folder_draft(
+                assignment_id, deps=app_deps
+            )
+        except AssignmentAccessError as exc:
+            raise _http_from_assignment_access(exc) from exc

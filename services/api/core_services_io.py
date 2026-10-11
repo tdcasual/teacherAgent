@@ -118,8 +118,12 @@ def summarize_questions_for_prompt(questions: List[Dict[str, Any]], limit: int =
     return _summarize_questions_for_prompt_impl(questions, limit=limit)
 
 
-def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
-    return _compute_requirements_missing_impl(requirements)
+def compute_requirements_missing(
+    requirements: Dict[str, Any], *, assignment_kind: str
+) -> List[str]:
+    return _compute_requirements_missing_impl(
+        requirements, assignment_kind=assignment_kind
+    )
 
 
 def merge_requirements(base: Dict[str, Any], update: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
@@ -132,6 +136,7 @@ def llm_autofill_requirements(
     questions: List[Dict[str, Any]],
     requirements: Dict[str, Any],
     missing: List[str],
+    assignment_kind: str = "problem_set",
 ) -> Tuple[Dict[str, Any], List[str], bool]:
     return _llm_autofill_requirements_impl(
         source_text,
@@ -140,6 +145,7 @@ def llm_autofill_requirements(
         requirements,
         missing,
         deps=_upload_llm_deps(),
+        assignment_kind=assignment_kind,
     )
 
 

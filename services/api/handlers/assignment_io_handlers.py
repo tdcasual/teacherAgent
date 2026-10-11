@@ -97,6 +97,9 @@ async def generate_assignment(
     source: Optional[str],
     requirements_json: Optional[str],
     deps: AssignmentIoHandlerDeps,
+    assignment_kind: Optional[str] = None,
+    content_source: Optional[str] = None,
+    seed: Optional[str] = None,
 ) -> Any:
     try:
         return await _maybe_await(
@@ -115,6 +118,9 @@ async def generate_assignment(
                 student_ids=student_ids,
                 source=source,
                 requirements_json=requirements_json,
+                assignment_kind=assignment_kind,
+                content_source=content_source,
+                seed=seed,
             )
         )
     except AssignmentGenerateError as exc:

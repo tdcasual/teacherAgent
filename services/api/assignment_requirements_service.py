@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .assignment_catalog_service import ASSIGNMENT_KINDS, effective_assignment_kind
+
 _log = logging.getLogger(__name__)
 
 
@@ -157,6 +159,8 @@ def _extract_requirement_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
         "preferences": preferences,
         "invalid_preferences": invalid_preferences,
         "extra_constraints": str(payload.get("extra_constraints", "") or "").strip(),
+        "brief": str(payload.get("brief", "") or "").strip(),
+        "discussion_goals": parse_list_value(payload.get("discussion_goals"))[:5],
     }
 
 
@@ -197,9 +201,35 @@ def _validate_requirement_fields(fields: Dict[str, Any]) -> List[str]:
     ]
 
 
-def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+def _normalize_requirement_kind(assignment_kind: str) -> str:
+    raw = str(assignment_kind or "").strip()
+    return raw if raw in ASSIGNMENT_KINDS else "problem_set"
+
+
+def _validate_non_problem_set_fields(fields: Dict[str, Any]) -> List[str]:
+    errors: List[str] = []
+    for key, message in (
+        ("subject", "1) 学科 必填"),
+        ("topic", "1) 本节课主题 必填"),
+        ("grade_level", "2) 学生学段/年级 必填"),
+        ("brief", "作业说明 brief 必填"),
+    ):
+        if not fields[key]:
+            errors.append(message)
+    return errors
+
+
+def validate_requirements(
+    payload: Dict[str, Any],
+    *,
+    assignment_kind: str = "problem_set",
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
     fields = _extract_requirement_fields(payload)
-    errors = _validate_requirement_fields(fields)
+    kind = _normalize_requirement_kind(assignment_kind)
+    if kind == "problem_set":
+        errors = _validate_requirement_fields(fields)
+    else:
+        errors = _validate_non_problem_set_fields(fields)
     if errors:
         return None, errors
 
@@ -214,11 +244,13 @@ def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, A
         "duration_minutes": fields["duration_minutes"],
         "preferences": fields["preferences"],
         "extra_constraints": fields["extra_constraints"],
+        "brief": fields["brief"],
+        "discussion_goals": fields["discussion_goals"],
     }
     return normalized, []
 
 
-def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
+def _missing_identity_fields(requirements: Dict[str, Any]) -> List[str]:
     missing: List[str] = []
     if not str(requirements.get("subject", "")).strip():
         missing.append("subject")
@@ -226,6 +258,11 @@ def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
         missing.append("topic")
     if not str(requirements.get("grade_level", "")).strip():
         missing.append("grade_level")
+    return missing
+
+
+def _missing_problem_set_fields(requirements: Dict[str, Any]) -> List[str]:
+    missing: List[str] = []
     class_level = normalize_class_level(str(requirements.get("class_level", "")).strip() or "")
     if not class_level:
         missing.append("class_level")
@@ -245,6 +282,33 @@ def compute_requirements_missing(requirements: Dict[str, Any]) -> List[str]:
     if not preferences:
         missing.append("preferences")
     return missing
+
+
+def compute_requirements_missing(
+    requirements: Dict[str, Any],
+    *,
+    assignment_kind: str = "problem_set",
+) -> List[str]:
+    kind = effective_assignment_kind({"assignment_kind": assignment_kind})
+    missing = _missing_identity_fields(requirements)
+    if kind != "problem_set":
+        if not str(requirements.get("brief", "") or "").strip():
+            missing.append("brief")
+        return missing
+    missing.extend(_missing_problem_set_fields(requirements))
+    return missing
+
+
+def call_compute_requirements_missing(
+    fn: Callable[..., List[str]],
+    requirements: Dict[str, Any],
+    *,
+    assignment_kind: str = "problem_set",
+) -> List[str]:
+    try:
+        return list(fn(requirements, assignment_kind=assignment_kind) or [])
+    except TypeError:
+        return list(fn(requirements) or [])
 
 
 def merge_requirements(base: Dict[str, Any], update: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
@@ -279,6 +343,7 @@ def save_assignment_requirements(
     deps: AssignmentRequirementsDeps,
     created_by: str = "teacher",
     validate: bool = True,
+    assignment_kind: str = "problem_set",
 ) -> Dict[str, Any]:
     try:
         out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
@@ -286,7 +351,9 @@ def save_assignment_requirements(
         return {"error": "invalid_assignment_id", "detail": str(exc)}
     payload = requirements
     if validate:
-        normalized, errors = validate_requirements(requirements)
+        normalized, errors = validate_requirements(
+            requirements, assignment_kind=assignment_kind
+        )
         if errors:
             return {"error": "invalid_requirements", "errors": errors}
         payload = normalized or {}
@@ -308,6 +375,7 @@ def ensure_requirements_for_assignment(
     date_str: str,
     requirements: Optional[Dict[str, Any]],
     source: str,
+    assignment_kind: str = "problem_set",
     *,
     deps: AssignmentRequirementsDeps,
 ) -> Optional[Dict[str, Any]]:
@@ -317,6 +385,7 @@ def ensure_requirements_for_assignment(
         return {"error": "invalid_assignment_id", "detail": str(exc)}
     if source == "auto":
         return None
+    kind = _normalize_requirement_kind(assignment_kind)
     if requirements:
         return save_assignment_requirements(
             assignment_id,
@@ -324,14 +393,22 @@ def ensure_requirements_for_assignment(
             date_str,
             created_by="teacher",
             deps=deps,
+            assignment_kind=kind,
         )
     req_path = out_dir / "requirements.json"
     if not req_path.exists():
+        if kind != "problem_set":
+            return None
         return {"error": "requirements_missing", "detail": "请先提交作业要求（8项）。"}
     return None
 
 
-def format_requirements_prompt(errors: Optional[List[str]] = None, include_assignment_id: bool = False) -> str:
+def format_requirements_prompt(
+    errors: Optional[List[str]] = None,
+    include_assignment_id: bool = False,
+    *,
+    assignment_kind: str = "problem_set",
+) -> str:
     lines: List[str] = []
     if errors:
         lines.append("作业要求不完整或不规范，请补充/修正以下内容：")
@@ -341,6 +418,14 @@ def format_requirements_prompt(errors: Optional[List[str]] = None, include_assig
     if include_assignment_id:
         lines.append("请先提供作业ID（建议包含日期，如 A2403_2026-02-04），然后补全作业要求。")
         lines.append("")
+    kind = _normalize_requirement_kind(assignment_kind)
+    if kind != "problem_set":
+        lines.append("请补全非做题作业要求：")
+        lines.append("1）学科 + 本节课主题：")
+        lines.append("2）学生学段/年级：")
+        lines.append("3）作业说明 brief（情景/材料/实践步骤，必填）：")
+        lines.append("4）讨论目标 discussion_goals（可选，最多5条）：")
+        return "\n".join(lines)
     lines.append("请按以下格式补全作业要求（8项）：")
     lines.append("1）学科 + 本节课主题：")
     lines.append("2）学生学段/年级 & 班级整体水平（偏弱/中等/较强/混合）：")

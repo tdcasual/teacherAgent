@@ -244,14 +244,17 @@ class AdminAssignmentClaimRequest(BaseModel):
 
 
 class UploadConfirmRequest(BaseModel):
-    job_id: str
+    job_id: Optional[str] = None
+    assignment_id: Optional[str] = None
     requirements_override: Optional[Dict[str, Any]] = None
     confirm: Optional[bool] = True
     strict_requirements: Optional[bool] = True
+    completion_policy_override: Optional[Dict[str, Any]] = None
 
 
 class UploadDraftSaveRequest(BaseModel):
-    job_id: str
+    job_id: Optional[str] = None
+    assignment_id: Optional[str] = None
     requirements: Optional[Dict[str, Any]] = None
     questions: Optional[List[Dict[str, Any]]] = None
 

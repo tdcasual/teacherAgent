@@ -417,8 +417,10 @@ def normalize_difficulty(value: Any) -> str:
     return _normalize_difficulty_impl(value)
 
 
-def validate_requirements(payload: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str]]:
-    return _validate_requirements_impl(payload)
+def validate_requirements(
+    payload: Dict[str, Any], *, assignment_kind: str = "problem_set"
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    return _validate_requirements_impl(payload, assignment_kind=assignment_kind)
 
 
 def save_assignment_requirements(
@@ -443,20 +445,29 @@ def ensure_requirements_for_assignment(
     date_str: str,
     requirements: Optional[Dict[str, Any]],
     source: str,
+    assignment_kind: str = "problem_set",
 ) -> Optional[Dict[str, Any]]:
     return _ensure_requirements_for_assignment_impl(
         assignment_id,
         date_str,
         requirements,
         source,
+        assignment_kind,
         deps=_assignment_requirements_deps(),
     )
 
 
 def format_requirements_prompt(
-    errors: Optional[List[str]] = None, include_assignment_id: bool = False
+    errors: Optional[List[str]] = None,
+    include_assignment_id: bool = False,
+    *,
+    assignment_kind: str = "problem_set",
 ) -> str:
-    return _format_requirements_prompt_impl(errors, include_assignment_id=include_assignment_id)
+    return _format_requirements_prompt_impl(
+        errors,
+        include_assignment_id=include_assignment_id,
+        assignment_kind=assignment_kind,
+    )
 
 
 def parse_json_from_text(text: str) -> Optional[Dict[str, Any]]:
@@ -563,6 +574,8 @@ def postprocess_assignment_meta(
     visibility_status: Optional[str] = None,
     teacher_id: Optional[str] = None,
     subject_id: Optional[str] = None,
+    content_source: Optional[str] = None,
+    assignment_kind: Optional[str] = None,
 ) -> None:
     return _postprocess_assignment_meta_impl(
         assignment_id=assignment_id,
@@ -572,6 +585,8 @@ def postprocess_assignment_meta(
         visibility_status=visibility_status,
         teacher_id=teacher_id,
         subject_id=subject_id,
+        content_source=content_source,
+        assignment_kind=assignment_kind,
         deps=_assignment_meta_postprocess_deps(),
     )
 

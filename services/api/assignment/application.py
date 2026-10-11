@@ -174,6 +174,7 @@ async def upload_assignment_start(
     ocr_mode: Optional[str],
     language: Optional[str],
     deps: AssignmentApplicationDeps,
+    assignment_kind: Optional[str] = None,
 ) -> Any:
     require_assignment_access(assignment_id, deps=deps, allow_missing=True)
     return await deps.assignment_upload_start(
@@ -188,6 +189,7 @@ async def upload_assignment_start(
         answer_files=answer_files,
         ocr_mode=ocr_mode,
         language=language,
+        assignment_kind=assignment_kind,
     )
 
 
@@ -197,6 +199,13 @@ async def get_assignment_upload_status(job_id: str, *, deps: AssignmentApplicati
 
 async def get_assignment_upload_draft(job_id: str, *, deps: AssignmentApplicationDeps) -> Any:
     return await deps.assignment_upload_draft(job_id)
+
+
+async def get_assignment_folder_draft(
+    assignment_id: str, *, deps: AssignmentApplicationDeps
+) -> Any:
+    require_assignment_access(assignment_id, deps=deps)
+    return await deps.assignment_folder_draft(assignment_id)
 
 
 async def save_assignment_upload_draft(
@@ -256,6 +265,9 @@ async def post_generate_assignment(
     source: Optional[str],
     requirements_json: Optional[str],
     deps: AssignmentApplicationDeps,
+    assignment_kind: Optional[str] = None,
+    content_source: Optional[str] = None,
+    seed: Optional[str] = None,
 ) -> Any:
     require_assignment_access(assignment_id, deps=deps, allow_missing=True)
     return await deps.generate_assignment(
@@ -273,6 +285,9 @@ async def post_generate_assignment(
         student_ids=student_ids,
         source=source,
         requirements_json=requirements_json,
+        assignment_kind=assignment_kind,
+        content_source=content_source,
+        seed=seed,
     )
 
 

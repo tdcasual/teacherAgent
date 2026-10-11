@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -11,9 +13,21 @@ from .assignment.store import connect as assignment_connect
 from .assignment.store import ensure as assignment_ensure
 from .assignment.store import get_assignment as assignment_get
 from .assignment.store import upsert_assignment
+from .assignment.visibility import effective_visibility_status
+from .assignment_catalog_service import (
+    _default_assignment_completion_policy,
+    effective_assignment_kind,
+    effective_content_source,
+)
+from .assignment_requirements_service import call_compute_requirements_missing
 from .auth.identity_graph_service import ExpectedStudentsError
 from .auth_service import get_current_principal
-from .paths import InvalidAssignmentDate
+from .paths import APP_ROOT, InvalidAssignmentDate
+from .question_bank_select_service import (
+    count_question_data_rows,
+    ensure_questions_csv_header,
+    write_questions_csv,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -43,7 +57,7 @@ class AssignmentUploadConfirmDeps:
     discussion_complete_marker: str
     write_upload_job: Callable[[str, Dict[str, Any]], Dict[str, Any]]
     merge_requirements: Callable[[Dict[str, Any], Dict[str, Any], bool], Dict[str, Any]]
-    compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
+    compute_requirements_missing: Callable[..., List[str]]
     write_uploaded_questions: Callable[[Path, str, List[Dict[str, Any]]], List[Dict[str, Any]]]
     optional_assignment_date: Callable[[Any], Optional[str]]
     save_assignment_requirements: Callable[..., Any]
@@ -129,7 +143,10 @@ def _prepare_confirm_data(
     if requirements_override:
         requirements = deps.merge_requirements(requirements, requirements_override, True)
 
-    missing = deps.compute_requirements_missing(requirements)
+    kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
+    missing = call_compute_requirements_missing(
+        deps.compute_requirements_missing, requirements, assignment_kind=kind
+    )
     warnings = parsed.get("warnings") or []
     delivery_mode = parsed.get("delivery_mode") or job.get("delivery_mode") or "image"
     autofilled = parsed.get("autofilled") or False
@@ -269,7 +286,7 @@ def _compute_confirm_expected_students(
     student_ids: List[str],
     teacher_id: str,
     subject_id: str,
-    job_id: str,
+    job_id: str = "",
 ) -> List[str]:
     try:
         return deps.compute_expected_students(
@@ -280,7 +297,8 @@ def _compute_confirm_expected_students(
             subject_id=subject_id,
         )
     except ExpectedStudentsError as exc:
-        _mark_confirm_failed(job_id, deps, exc.error)
+        if job_id:
+            _mark_confirm_failed(job_id, deps, exc.error)
         raise AssignmentUploadConfirmError(400, exc.error) from exc
 
 
@@ -318,7 +336,9 @@ def _build_assignment_meta(
     subject_id: str,
     expected_students: List[str],
     deps: AssignmentUploadConfirmDeps,
+    completion_policy_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
     return {
         "assignment_id": assignment_id,
         "teacher_id": teacher_id,
@@ -329,6 +349,8 @@ def _build_assignment_meta(
         "visibility_status": "published",
         "archived_at": None,
         "mode": "upload",
+        "content_source": "upload",
+        "assignment_kind": kind,
         "target_kp": prepared.requirements.get("core_concepts") or [],
         "question_ids": [row.get("question_id") for row in rows if row.get("question_id")],
         "class_name": job.get("class_name") or "",
@@ -336,14 +358,12 @@ def _build_assignment_meta(
         "scope": scope_val,
         "expected_students": list(expected_students),
         "expected_students_generated_at": deps.now_iso(),
-        "completion_policy": {
-            "requires_discussion": False,
-            "discussion_marker": deps.discussion_complete_marker,
-            "requires_submission": True,
-            "min_graded_total": 1,
-            "best_attempt": "score_earned_then_correct_then_graded_total",
-            "version": 2,
-        },
+        "completion_policy": _merge_completion_policy(
+            None,
+            completion_policy_override,
+            assignment_kind=kind,
+            discussion_marker=deps.discussion_complete_marker,
+        ),
         "source": "teacher",
         "delivery_mode": prepared.delivery_mode,
         "source_files": job.get("source_files") or [],
@@ -481,6 +501,7 @@ def confirm_assignment_upload(
     requirements_override: Optional[Dict[str, Any]],
     strict_requirements: bool,
     deps: AssignmentUploadConfirmDeps,
+    completion_policy_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     _mark_confirming(job_id, deps)
     parsed = _load_parsed_or_fail(job_id, job_dir, deps)
@@ -497,6 +518,10 @@ def confirm_assignment_upload(
         strict_requirements=strict_requirements,
         missing=prepared.missing,
         deps=deps,
+    )
+    kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
+    _ensure_problem_set_has_questions(
+        job_id, kind=kind, questions=prepared.questions, deps=deps
     )
     teacher_id, subject_id = _require_meta_owner(job, job_id=job_id, deps=deps)
     assignment_id, out_dir, meta_path = _resolve_output_target(job_id, job, deps)
@@ -519,6 +544,9 @@ def confirm_assignment_upload(
         requirements=prepared.requirements,
         deps=deps,
     )
+    if kind != "problem_set" and not rows:
+        ensure_questions_csv_header(out_dir / "questions.csv")
+    _write_brief_markdown(out_dir, prepared.requirements)
     student_ids_list, scope_val = _resolve_students_scope(job, deps)
     # Roster lives in the same sqlite file as assignments. Snapshot students
     # before BEGIN IMMEDIATE so confirm does not open a second connection
@@ -547,6 +575,7 @@ def confirm_assignment_upload(
             subject_id=subject_id,
             expected_students=expected_students,
             deps=deps,
+            completion_policy_override=completion_policy_override,
         )
 
     try:
@@ -563,3 +592,285 @@ def confirm_assignment_upload(
         raise
     _mark_confirmed(job_id, deps)
     return _ok_payload(assignment_id, len(rows), prepared.missing, prepared.warnings)
+
+
+def _merge_completion_policy(
+    current: Optional[Dict[str, Any]],
+    override: Optional[Dict[str, Any]],
+    *,
+    assignment_kind: str,
+    discussion_marker: str,
+) -> Dict[str, Any]:
+    policy = _default_assignment_completion_policy(
+        discussion_marker, assignment_kind=assignment_kind
+    )
+    if isinstance(current, dict):
+        for key, value in current.items():
+            if value is not None:
+                policy[key] = value
+    if isinstance(override, dict):
+        for key in (
+            "requires_discussion",
+            "requires_submission",
+            "allow_practice",
+            "min_graded_total",
+            "discussion_marker",
+            "best_attempt",
+            "version",
+        ):
+            if key in override and override[key] is not None:
+                policy[key] = override[key]
+    return policy
+
+
+def _ensure_problem_set_has_questions(
+    job_id: str,
+    *,
+    kind: str,
+    questions: List[Dict[str, Any]],
+    deps: AssignmentUploadConfirmDeps,
+) -> None:
+    if kind != "problem_set" or questions:
+        return
+    deps.write_upload_job(
+        job_id,
+        {"status": "done", "step": "await_questions", "progress": 100},
+    )
+    raise AssignmentUploadConfirmError(400, "questions_missing")
+
+
+def _write_brief_markdown(out_dir: Path, requirements: Dict[str, Any]) -> None:
+    brief = str((requirements or {}).get("brief") or "").strip()
+    if not brief:
+        return
+    (out_dir / "brief.md").write_text(brief + "\n", encoding="utf-8")
+
+
+def _load_json_dict(path: Path) -> Dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _load_csv_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def _snapshot_bank_refs(out_dir: Path, *, app_root: Path) -> None:
+    csv_path = out_dir / "questions.csv"
+    rows = _load_csv_rows(csv_path)
+    if not rows:
+        return
+    stem_dir = out_dir / "bank_stems"
+    answer_dir = out_dir / "bank_answers"
+    stem_dir.mkdir(parents=True, exist_ok=True)
+    answer_dir.mkdir(parents=True, exist_ok=True)
+    app_root_resolved = Path(app_root).resolve()
+    rewritten: List[Dict[str, Any]] = []
+    for row in rows:
+        updated = dict(row)
+        qid = str(row.get("question_id") or "item").strip() or "item"
+        for field, dest_dir in (("stem_ref", stem_dir), ("answer_ref", answer_dir)):
+            raw = str(row.get(field) or "").strip()
+            if not raw:
+                continue
+            src = Path(raw)
+            if not src.is_absolute():
+                src = app_root_resolved / src
+            if not src.exists():
+                continue
+            dest = dest_dir / f"{qid}{src.suffix or '.md'}"
+            dest.write_bytes(src.read_bytes())
+            try:
+                updated[field] = str(dest.resolve().relative_to(app_root_resolved))
+            except ValueError:
+                updated[field] = str(dest.resolve())
+        rewritten.append(updated)
+    write_questions_csv(csv_path, rewritten)
+
+
+def _folder_owner_teacher_id() -> str:
+    principal = get_current_principal()
+    return str(getattr(principal, "actor_id", "") or "").strip()
+
+
+def _persist_folder_assignment(
+    *,
+    assignment_id: str,
+    meta_path: Path,
+    meta: Dict[str, Any],
+    deps: AssignmentUploadConfirmDeps,
+) -> None:
+    conn = _open_assignment_conn(deps.data_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            upsert_assignment(conn, meta, now_iso=deps.now_iso())
+            deps.atomic_write_json(meta_path, meta)
+            conn.execute("COMMIT")
+        except AssignmentUploadConfirmError:
+            _rollback_quiet(conn)
+            raise
+        except Exception as exc:
+            _rollback_quiet(conn)
+            raise AssignmentUploadConfirmError(500, "assignment_persist_failed") from exc
+    finally:
+        conn.close()
+
+
+def _finalize_published_from_folder(
+    assignment_id: str,
+    *,
+    requirements_override: Optional[Dict[str, Any]] = None,
+    completion_policy_override: Optional[Dict[str, Any]] = None,
+    strict_requirements: bool = True,
+    deps: AssignmentUploadConfirmDeps,
+) -> Dict[str, Any]:
+    out_dir = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if not out_dir.exists():
+        raise AssignmentUploadConfirmError(404, "assignment not found")
+    meta_path = out_dir / "meta.json"
+    meta = _load_json_dict(meta_path)
+    if effective_visibility_status(meta) != "draft":
+        raise AssignmentUploadConfirmError(409, "invalid_visibility_status")
+    actor = _folder_owner_teacher_id()
+    owner = str(meta.get("teacher_id") or "").strip()
+    if not actor or owner != actor:
+        raise AssignmentUploadConfirmError(403, "forbidden")
+    requirements = _load_json_dict(out_dir / "requirements.json")
+    if requirements_override:
+        requirements = deps.merge_requirements(requirements, requirements_override, True)
+    kind = effective_assignment_kind(meta)
+    source = effective_content_source(meta, folder=out_dir)
+    missing = call_compute_requirements_missing(
+        deps.compute_requirements_missing, requirements, assignment_kind=kind
+    )
+    if strict_requirements and missing:
+        raise AssignmentUploadConfirmError(
+            400,
+            {
+                "error": "requirements_missing",
+                "missing": missing,
+                "message": "作业要求未补全，无法创建作业。",
+            },
+        )
+    if source == "bank" and kind != "problem_set":
+        raise AssignmentUploadConfirmError(400, "bank_requires_problem_set")
+    question_count = count_question_data_rows(out_dir / "questions.csv")
+    if kind == "problem_set" and question_count <= 0:
+        raise AssignmentUploadConfirmError(400, "questions_missing")
+    if kind != "problem_set":
+        ensure_questions_csv_header(out_dir / "questions.csv")
+    meta["content_source"] = source
+    meta["assignment_kind"] = kind
+    meta["completion_policy"] = _merge_completion_policy(
+        meta.get("completion_policy") if isinstance(meta.get("completion_policy"), dict) else None,
+        completion_policy_override,
+        assignment_kind=kind,
+        discussion_marker=deps.discussion_complete_marker,
+    )
+    student_ids_list = deps.parse_ids_value(meta.get("student_ids") or [])
+    scope_val = deps.resolve_scope(
+        str(meta.get("scope") or ""),
+        student_ids_list,
+        str(meta.get("class_name") or ""),
+    )
+    teacher_id = owner
+    subject_id = str(meta.get("subject_id") or "").strip()
+    expected_students = _compute_confirm_expected_students(
+        deps,
+        scope_val=scope_val,
+        class_name=str(meta.get("class_name") or ""),
+        student_ids=student_ids_list,
+        teacher_id=teacher_id,
+        subject_id=subject_id,
+    )
+    meta["scope"] = scope_val
+    meta["expected_students"] = list(expected_students)
+    meta["expected_students_generated_at"] = deps.now_iso()
+    if source == "bank":
+        _snapshot_bank_refs(out_dir, app_root=APP_ROOT)
+    meta["visibility_status"] = "published"
+    meta["published_at"] = deps.now_iso()
+    meta["archived_at"] = None
+    if requirements:
+        date_str = str(meta.get("date") or "")
+        deps.save_assignment_requirements(
+            assignment_id,
+            requirements,
+            date_str,
+            created_by="teacher",
+            validate=False,
+        )
+    _write_brief_markdown(out_dir, requirements)
+    question_ids = [
+        str(row.get("question_id") or "").strip()
+        for row in _load_csv_rows(out_dir / "questions.csv")
+        if str(row.get("question_id") or "").strip()
+    ]
+    meta["question_ids"] = question_ids
+    _persist_folder_assignment(
+        assignment_id=assignment_id,
+        meta_path=meta_path,
+        meta=meta,
+        deps=deps,
+    )
+    _log.info(
+        "assignment.confirm.published assignment_id=%s kind=%s source=%s allow_practice=%s",
+        assignment_id,
+        kind,
+        source,
+        meta.get("completion_policy", {}).get("allow_practice"),
+    )
+    return _ok_payload(assignment_id, len(question_ids), missing, [])
+
+
+def build_default_folder_finalize_deps(data_dir: Path) -> AssignmentUploadConfirmDeps:
+    from .assignment_requirements_service import (
+        AssignmentRequirementsDeps,
+        compute_requirements_missing,
+        merge_requirements,
+        save_assignment_requirements,
+    )
+    from .config import DISCUSSION_COMPLETE_MARKER
+    from .core_services_application import compute_expected_students
+    from .core_utils import normalize_due_at, parse_ids_value, resolve_scope
+    from .fs_atomic import atomic_write_json
+
+    def _save(assignment_id: str, requirements: Dict[str, Any], date_str: str, created_by: str = "teacher", validate: bool = False) -> Any:
+        return save_assignment_requirements(
+            assignment_id,
+            requirements,
+            date_str,
+            deps=AssignmentRequirementsDeps(
+                data_dir=data_dir,
+                now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+            ),
+            created_by=created_by,
+            validate=validate,
+        )
+
+    return AssignmentUploadConfirmDeps(
+        data_dir=data_dir,
+        now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
+        discussion_complete_marker=DISCUSSION_COMPLETE_MARKER,
+        write_upload_job=lambda *_args, **_kwargs: {},
+        merge_requirements=merge_requirements,
+        compute_requirements_missing=compute_requirements_missing,
+        write_uploaded_questions=lambda *_args, **_kwargs: [],
+        optional_assignment_date=lambda value: str(value or "").strip() or None,
+        save_assignment_requirements=_save,
+        parse_ids_value=parse_ids_value,
+        resolve_scope=resolve_scope,
+        normalize_due_at=normalize_due_at,
+        compute_expected_students=lambda *args, **kwargs: compute_expected_students(
+            *args, **kwargs, data_dir=data_dir
+        ),
+        atomic_write_json=atomic_write_json,
+        copy2=lambda src, dst: dst.write_bytes(src.read_bytes()),
+    )

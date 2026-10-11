@@ -139,6 +139,45 @@ class AssignmentRequirementsServiceTest(unittest.TestCase):
         self.assertIn("作业ID", prompt)
         self.assertIn("请按以下格式补全作业要求（8项）", prompt)
 
+    def test_scenario_requires_brief_not_misconceptions(self):
+        payload = {
+            "subject": "物理",
+            "topic": "电路情景",
+            "grade_level": "初二",
+            "brief": "学生在实验室观察串联电路。",
+        }
+        self.assertEqual(
+            compute_requirements_missing(payload, assignment_kind="scenario"),
+            [],
+        )
+        missing = compute_requirements_missing(
+            {"subject": "物理", "topic": "电路", "grade_level": "初二"},
+            assignment_kind="scenario",
+        )
+        self.assertEqual(missing, ["brief"])
+        self.assertNotIn("misconceptions", missing)
+        self.assertNotIn("typical_problem", missing)
+        self.assertNotIn("preferences", missing)
+        self.assertNotIn("core_concepts", missing)
+        self.assertNotIn("class_level", missing)
+        normalized, errors = validate_requirements(payload, assignment_kind="scenario")
+        self.assertEqual(errors, [])
+        self.assertEqual((normalized or {}).get("brief"), "学生在实验室观察串联电路。")
+
+    def test_problem_set_still_requires_eight_point(self):
+        payload = {
+            "subject": "物理",
+            "topic": "电流",
+            "grade_level": "初二",
+            "brief": "有 brief 也不能代替 8 点",
+        }
+        missing = compute_requirements_missing(payload, assignment_kind="problem_set")
+        self.assertIn("class_level", missing)
+        self.assertIn("typical_problem", missing)
+        self.assertIn("misconceptions", missing)
+        self.assertIn("preferences", missing)
+        self.assertNotIn("brief", missing)
+
     def test_rejects_invalid_assignment_id_path(self):
         with TemporaryDirectory() as td:
             root = Path(td)

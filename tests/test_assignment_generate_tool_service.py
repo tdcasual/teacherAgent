@@ -81,7 +81,25 @@ class AssignmentGenerateToolServiceTest(unittest.TestCase):
         self.assertIn("--assignment-id", cmd)
         self.assertIn("HW_1", cmd)
         self.assertIn("--generate", cmd)
-        self.assertEqual(captured["logs"][0][0], "assignment.meta.postprocess_failed")
+        self.assertIn("assignment.meta.postprocess_failed", [item[0] for item in captured["logs"]])
+
+    def test_omitted_generate_defaults_true(self):
+        deps, captured = self._deps()
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            result = assignment_generate(
+                {
+                    "assignment_id": "HW_1",
+                    "kp": "力学",
+                    "subject_id": "physics",
+                    "skip_validation": True,
+                },
+                deps=deps,
+            )
+        finally:
+            reset_current_principal(token)
+        self.assertEqual(result.get("ok"), True)
+        self.assertIn("--generate", captured["cmd"])
 
 
 if __name__ == "__main__":

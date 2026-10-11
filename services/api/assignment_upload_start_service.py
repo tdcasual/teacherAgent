@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from .assignment_catalog_service import coerce_assignment_kind
 from .auth_service import get_current_principal
 from .paths import InvalidAssignmentDate
 from .upload_limits import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES
@@ -194,6 +195,7 @@ def _build_upload_record(
     delivery_mode: str,
     language: Any,
     ocr_mode: Any,
+    assignment_kind: str,
     deps: AssignmentUploadStartDeps,
 ) -> Dict[str, Any]:
     return {
@@ -211,6 +213,8 @@ def _build_upload_record(
         "delivery_mode": delivery_mode,
         "language": language or "zh",
         "ocr_mode": ocr_mode or "FREE_OCR",
+        "assignment_kind": assignment_kind,
+        "content_source": "upload",
         "status": "queued",
         "progress": 0,
         "step": "queued",
@@ -244,6 +248,7 @@ async def start_assignment_upload(
     ocr_mode: Any,
     language: Any,
     deps: AssignmentUploadStartDeps,
+    assignment_kind: Any = None,
 ) -> Dict[str, Any]:
     date_str = _job_assignment_date(date, deps)
     subject_id_val = _require_subject_id(subject_id)
@@ -288,6 +293,10 @@ async def start_assignment_upload(
         student_ids_list = deps.parse_ids_value(student_ids)
         scope_val = deps.resolve_scope(str(scope or ""), student_ids_list, str(class_name or ""))
         _validate_upload_scope(scope_val, student_ids_list, class_name)
+        try:
+            kind, defaulted = coerce_assignment_kind(assignment_kind)
+        except ValueError as exc:
+            raise AssignmentUploadStartError(400, "invalid_assignment_kind") from exc
         record = _build_upload_record(
             job_id=job_id,
             assignment_id=assignment_id,
@@ -303,9 +312,15 @@ async def start_assignment_upload(
             delivery_mode=delivery_mode,
             language=language,
             ocr_mode=ocr_mode,
+            assignment_kind=kind,
             deps=deps,
         )
         _queue_upload_job(job_id, assignment_id, record, deps=deps)
+        if defaulted:
+            deps.diag_log(
+                "assignment.kind.defaulted",
+                {"assignment_id": assignment_id, "assignment_kind": kind},
+            )
 
         return {
             "ok": True,

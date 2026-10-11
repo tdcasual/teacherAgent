@@ -20,6 +20,48 @@ _log = logging.getLogger(__name__)
 _DEFAULT_LIST_LIMIT = 50
 _MAX_LIST_LIMIT = 100
 
+CONTENT_SOURCES = ("upload", "bank", "ai")
+ASSIGNMENT_KINDS = ("problem_set", "scenario", "science_history", "practical")
+
+
+def effective_content_source(meta: dict, *, folder: Path | None = None) -> str:
+    payload = meta if isinstance(meta, dict) else {}
+    raw = str(payload.get("content_source") or "").strip()
+    if raw in CONTENT_SOURCES:
+        return raw
+    if payload.get("source_files"):
+        return "upload"
+    mode = str(payload.get("mode") or "").strip()
+    if mode in {"kp", "explicit", "hybrid", "auto"}:
+        return "ai"
+    if folder is not None and (folder / "generated_stems").exists():
+        return "ai"
+    return "upload"
+
+
+def effective_assignment_kind(meta: dict) -> str:
+    payload = meta if isinstance(meta, dict) else {}
+    raw = str(payload.get("assignment_kind") or "").strip()
+    return raw if raw in ASSIGNMENT_KINDS else "problem_set"
+
+
+def coerce_assignment_kind(raw: Any) -> tuple[str, bool]:
+    text = str(raw or "").strip()
+    if not text:
+        return "problem_set", True
+    if text not in ASSIGNMENT_KINDS:
+        raise ValueError("invalid_assignment_kind")
+    return text, False
+
+
+def coerce_content_source(raw: Any, *, default: str = "upload") -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return default if default in CONTENT_SOURCES else "upload"
+    if text not in CONTENT_SOURCES:
+        raise ValueError("invalid_content_source")
+    return text
+
 
 @dataclass(frozen=True)
 class AssignmentCatalogDeps:
@@ -93,12 +135,17 @@ def _resolve_expected_students_for_postprocess(
 
 def _default_assignment_completion_policy(
     discussion_complete_marker: str,
+    *,
+    assignment_kind: str = "problem_set",
 ) -> Dict[str, Any]:
+    kind = effective_assignment_kind({"assignment_kind": assignment_kind})
+    non_problem_set = kind != "problem_set"
     return {
-        "requires_discussion": False,
+        "requires_discussion": bool(non_problem_set),
         "discussion_marker": discussion_complete_marker,
         "requires_submission": True,
-        "min_graded_total": 1,
+        "allow_practice": not non_problem_set,
+        "min_graded_total": 0 if non_problem_set else 1,
         "best_attempt": "score_earned_then_correct_then_graded_total",
         "version": 2,
     }
@@ -371,6 +418,8 @@ def postprocess_assignment_meta(
     visibility_status: Optional[str] = None,
     teacher_id: Optional[str] = None,
     subject_id: Optional[str] = None,
+    content_source: Optional[str] = None,
+    assignment_kind: Optional[str] = None,
 ) -> None:
     meta_path, meta = _load_assignment_meta_for_postprocess(
         assignment_id=assignment_id,
@@ -410,6 +459,7 @@ def postprocess_assignment_meta(
     if completion_policy is None:
         completion_policy = _default_assignment_completion_policy(
             deps.discussion_complete_marker,
+            assignment_kind=effective_assignment_kind(meta),
         )
     meta.setdefault("completion_policy", completion_policy)
     _apply_generated_owner_fields(
@@ -418,5 +468,9 @@ def postprocess_assignment_meta(
         teacher_id=teacher_id,
         subject_id=subject_id,
     )
+    if content_source:
+        meta["content_source"] = str(content_source)
+    if assignment_kind:
+        meta["assignment_kind"] = str(assignment_kind)
 
     deps.atomic_write_json(meta_path, meta)

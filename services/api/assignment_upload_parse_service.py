@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .assignment_catalog_service import effective_assignment_kind
+from .assignment_requirements_service import call_compute_requirements_missing
 from .fs_atomic import atomic_write_json, atomic_write_text
 
 _log = logging.getLogger(__name__)
@@ -20,11 +22,8 @@ class AssignmentUploadParseDeps:
     write_upload_job: Callable[[str, Dict[str, Any]], Dict[str, Any]]
     extract_text_from_file: Callable[..., str]
     llm_parse_assignment_payload: Callable[[str, str], Dict[str, Any]]
-    compute_requirements_missing: Callable[[Dict[str, Any]], List[str]]
-    llm_autofill_requirements: Callable[
-        [str, str, List[Dict[str, Any]], Dict[str, Any], List[str]],
-        Tuple[Dict[str, Any], List[str], bool],
-    ]
+    compute_requirements_missing: Callable[..., List[str]]
+    llm_autofill_requirements: Callable[..., Tuple[Dict[str, Any], List[str], bool]]
     diag_log: Callable[[str, Dict[str, Any]], None]
 
 
@@ -156,10 +155,16 @@ def _parse_assignment_payload(
 
 
 def _validate_questions(
-    job_id: str, parsed: Dict[str, Any], deps: AssignmentUploadParseDeps
+    job_id: str,
+    parsed: Dict[str, Any],
+    deps: AssignmentUploadParseDeps,
+    *,
+    assignment_kind: str,
 ) -> Optional[List[Dict[str, Any]]]:
     questions = parsed.get("questions") or []
-    if not isinstance(questions, list) or not questions:
+    if not isinstance(questions, list):
+        questions = []
+    if assignment_kind == "problem_set" and not questions:
         deps.write_upload_job(
             job_id,
             {
@@ -172,28 +177,57 @@ def _validate_questions(
     return questions
 
 
+def _fill_brief_from_source(requirements: Dict[str, Any], source_text: str) -> Dict[str, Any]:
+    if str(requirements.get("brief") or "").strip():
+        return requirements
+    snippet = str(source_text or "").strip()[:4000]
+    if not snippet:
+        return requirements
+    updated = dict(requirements)
+    updated["brief"] = snippet
+    return updated
+
+
 def _enrich_requirements(
     source_text: str,
     answer_text: str,
     questions: List[Dict[str, Any]],
     parsed: Dict[str, Any],
     deps: AssignmentUploadParseDeps,
+    *,
+    assignment_kind: str,
 ) -> Tuple[Dict[str, Any], List[str], List[str], bool]:
     requirements = parsed.get("requirements") or {}
-    missing = deps.compute_requirements_missing(requirements)
+    if not isinstance(requirements, dict):
+        requirements = {}
+    if assignment_kind != "problem_set":
+        requirements = _fill_brief_from_source(requirements, source_text)
+    missing = call_compute_requirements_missing(
+        deps.compute_requirements_missing, requirements, assignment_kind=assignment_kind
+    )
     warnings: List[str] = []
     if len(source_text.strip()) < 200:
         warnings.append("解析文本较少，作业要求可能不完整。")
 
     autofilled = False
     if missing:
-        requirements, missing, autofilled = deps.llm_autofill_requirements(
-            source_text,
-            answer_text,
-            questions,
-            requirements,
-            missing,
-        )
+        try:
+            requirements, missing, autofilled = deps.llm_autofill_requirements(
+                source_text,
+                answer_text,
+                questions,
+                requirements,
+                missing,
+                assignment_kind=assignment_kind,
+            )
+        except TypeError:
+            requirements, missing, autofilled = deps.llm_autofill_requirements(
+                source_text,
+                answer_text,
+                questions,
+                requirements,
+                missing,
+            )
         if autofilled and missing:
             warnings.append("已自动补全部分要求，请核对并补充缺失项。")
     return requirements, missing, warnings, autofilled
@@ -302,12 +336,20 @@ def process_upload_job(job_id: str, deps: AssignmentUploadParseDeps) -> None:
     if parsed is None:
         return
 
-    questions = _validate_questions(job_id, parsed, deps)
+    assignment_kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
+    questions = _validate_questions(
+        job_id, parsed, deps, assignment_kind=assignment_kind
+    )
     if questions is None:
         return
 
     requirements, missing, warnings, autofilled = _enrich_requirements(
-        source_text, answer_text, questions, parsed, deps
+        source_text,
+        answer_text,
+        questions,
+        parsed,
+        deps,
+        assignment_kind=assignment_kind,
     )
     _write_parsed_payload(
         job_dir,

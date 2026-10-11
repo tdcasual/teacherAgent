@@ -4,12 +4,15 @@ from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from services.api.assignment.store import connect, ensure, get_assignment, upsert_assignment
 from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
     AssignmentUploadConfirmError,
+    _finalize_published_from_folder,
     confirm_assignment_upload,
 )
 from services.api.auth.identity_graph_service import ExpectedStudentsError
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class AssignmentUploadConfirmServiceTest(unittest.TestCase):
@@ -325,6 +328,192 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "assignment already exists")
+
+    def _eight_point(self):
+        return {
+            "subject": "物理",
+            "topic": "电流",
+            "grade_level": "初二",
+            "class_level": "中等",
+            "core_concepts": ["电流", "电压", "电阻"],
+            "typical_problem": "串并联",
+            "misconceptions": ["错1", "错2", "错3", "错4"],
+            "duration_minutes": 40,
+            "preferences": ["A基础"],
+        }
+
+    def _write_draft_folder(self, root: Path, assignment_id: str, *, kind="problem_set", extra_req=None):
+        folder = root / "data" / "assignments" / assignment_id
+        folder.mkdir(parents=True, exist_ok=True)
+        req = self._eight_point()
+        if extra_req:
+            req.update(extra_req)
+        (folder / "requirements.json").write_text(
+            json.dumps({"assignment_id": assignment_id, **req}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (folder / "questions.csv").write_text(
+            "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n"
+            "Q1,kp1,basic,open,stem.md,ans.md,bank,\n",
+            encoding="utf-8",
+        )
+        meta = {
+            "assignment_id": assignment_id,
+            "teacher_id": "t_zhang",
+            "subject_id": "physics",
+            "visibility_status": "draft",
+            "assignment_kind": kind,
+            "content_source": "bank" if kind == "problem_set" else "upload",
+            "scope": "public",
+            "class_name": "",
+            "student_ids": [],
+        }
+        (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        return folder
+
+    def test_confirm_from_assignment_id_publishes_draft_folder(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            self._write_draft_folder(root, "A_FOLDER")
+            deps = self._deps(root, writes)
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = _finalize_published_from_folder(
+                    "A_FOLDER",
+                    requirements_override=None,
+                    completion_policy_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            meta = json.loads(
+                (root / "data" / "assignments" / "A_FOLDER" / "meta.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(meta.get("visibility_status"), "published")
+            self.assertEqual(meta.get("content_source"), "bank")
+            self.assertEqual(meta.get("assignment_kind"), "problem_set")
+            self.assertIn("allow_practice", meta.get("completion_policy") or {})
+
+    def test_confirm_existing_draft_is_not_assignment_already_exists(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            self._write_draft_folder(root, "A_EXISTING")
+            deps = self._deps(root, writes)
+            conn = connect(root / "data")
+            try:
+                ensure(conn, data_dir=root / "data")
+                upsert_assignment(
+                    conn,
+                    json.loads(
+                        (root / "data" / "assignments" / "A_EXISTING" / "meta.json").read_text(
+                            encoding="utf-8"
+                        )
+                    ),
+                    now_iso="2026-02-08T12:00:00",
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                result = _finalize_published_from_folder(
+                    "A_EXISTING",
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            finally:
+                reset_current_principal(token)
+            self.assertTrue(result.get("ok"))
+            self.assertNotEqual(result.get("error"), "assignment already exists")
+            conn = connect(root / "data")
+            try:
+                row = get_assignment(conn, "A_EXISTING")
+            finally:
+                conn.close()
+            self.assertEqual(row["visibility_status"], "published")
+
+    def test_confirm_writes_kind_and_content_source(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            (job_dir / "source").mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [{"stem": "x"}],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes)
+            confirm_assignment_upload(
+                "job-1",
+                {
+                    "assignment_id": "A_KIND",
+                    "status": "done",
+                    "scope": "public",
+                    "teacher_id": "t_zhang",
+                    "subject_id": "physics",
+                    "assignment_kind": "problem_set",
+                },
+                job_dir,
+                requirements_override=None,
+                strict_requirements=True,
+                deps=deps,
+            )
+            meta = json.loads(
+                (root / "data" / "assignments" / "A_KIND" / "meta.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(meta.get("content_source"), "upload")
+            self.assertEqual(meta.get("assignment_kind"), "problem_set")
+            self.assertEqual(meta.get("mode"), "upload")
+            self.assertTrue((meta.get("completion_policy") or {}).get("allow_practice"))
+
+    def test_problem_set_confirm_requires_questions(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            writes = []
+            job_dir = root / "uploads" / "assignment_jobs" / "job-1"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "parsed.json").write_text(
+                json.dumps(
+                    {
+                        "questions": [],
+                        "requirements": {"subject": "物理"},
+                        "missing": [],
+                        "warnings": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes)
+            with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                confirm_assignment_upload(
+                    "job-1",
+                    {
+                        "assignment_id": "A0",
+                        "status": "done",
+                        "teacher_id": "t_zhang",
+                        "subject_id": "physics",
+                        "assignment_kind": "problem_set",
+                    },
+                    job_dir,
+                    requirements_override=None,
+                    strict_requirements=True,
+                    deps=deps,
+                )
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertEqual(ctx.exception.detail, "questions_missing")
 
 
 if __name__ == "__main__":
