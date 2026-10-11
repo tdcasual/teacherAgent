@@ -243,7 +243,7 @@ def _confirm_deps(data_dir: Path) -> AssignmentUploadConfirmDeps:
         discussion_complete_marker="[[discussion_complete]]",
         write_upload_job=lambda _job_id, updates: updates,
         merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
-        compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+        compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
         write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
         optional_assignment_date=lambda value: str(value).strip() if str(value or "").strip() else None,
         save_assignment_requirements=lambda *_args, **_kwargs: None,

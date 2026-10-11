@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import csv
 import json
 import logging
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,13 +19,14 @@ from .assignment_catalog_service import (
     effective_assignment_kind,
     effective_content_source,
 )
-from .assignment_requirements_service import call_compute_requirements_missing
 from .auth.identity_graph_service import ExpectedStudentsError
 from .auth_service import get_current_principal
-from .paths import APP_ROOT, InvalidAssignmentDate
+from .paths import APP_ROOT, InvalidAssignmentDate, require_safe_assignment_id
 from .question_bank_select_service import (
     count_question_data_rows,
     ensure_questions_csv_header,
+    read_question_bank,
+    resolve_bank_ref,
     write_questions_csv,
 )
 
@@ -44,8 +45,12 @@ def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     aid = str(assignment_id or "").strip()
     if not aid:
         raise AssignmentUploadConfirmError(400, "assignment_id is required")
+    try:
+        aid = require_safe_assignment_id(aid)
+    except ValueError as exc:
+        raise AssignmentUploadConfirmError(400, "invalid assignment_id") from exc
     target = (root / aid).resolve()
-    if target != root and root not in target.parents:
+    if target == root or root not in target.parents:
         raise AssignmentUploadConfirmError(400, "invalid assignment_id")
     return target
 
@@ -144,9 +149,7 @@ def _prepare_confirm_data(
         requirements = deps.merge_requirements(requirements, requirements_override, True)
 
     kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
-    missing = call_compute_requirements_missing(
-        deps.compute_requirements_missing, requirements, assignment_kind=kind
-    )
+    missing = deps.compute_requirements_missing(requirements, assignment_kind=kind)
     warnings = parsed.get("warnings") or []
     delivery_mode = parsed.get("delivery_mode") or job.get("delivery_mode") or "image"
     autofilled = parsed.get("autofilled") or False
@@ -654,16 +657,19 @@ def _load_json_dict(path: Path) -> Dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _load_csv_rows(path: Path) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
-    with path.open(encoding="utf-8") as handle:
-        return [dict(row) for row in csv.DictReader(handle)]
+_SAFE_QID_RE = re.compile(r"^[\w-]+$")
 
 
-def _snapshot_bank_refs(out_dir: Path, *, app_root: Path) -> None:
+def _safe_question_id(raw: Any) -> str:
+    text = re.sub(r"[^\w-]+", "_", str(raw or "").strip()).strip("_")
+    if text and _SAFE_QID_RE.fullmatch(text):
+        return text
+    return "item"
+
+
+def _snapshot_bank_refs(out_dir: Path, *, app_root: Path, data_dir: Path) -> None:
     csv_path = out_dir / "questions.csv"
-    rows = _load_csv_rows(csv_path)
+    rows = read_question_bank(csv_path)
     if not rows:
         return
     stem_dir = out_dir / "bank_stems"
@@ -674,22 +680,26 @@ def _snapshot_bank_refs(out_dir: Path, *, app_root: Path) -> None:
     rewritten: List[Dict[str, Any]] = []
     for row in rows:
         updated = dict(row)
-        qid = str(row.get("question_id") or "item").strip() or "item"
+        qid = _safe_question_id(row.get("question_id"))
         for field, dest_dir in (("stem_ref", stem_dir), ("answer_ref", answer_dir)):
             raw = str(row.get(field) or "").strip()
             if not raw:
                 continue
-            src = Path(raw)
-            if not src.is_absolute():
-                src = app_root_resolved / src
-            if not src.exists():
+            src = resolve_bank_ref(raw, data_dir=data_dir, app_root=app_root)
+            if src is None or not src.exists() or not src.is_file():
+                updated[field] = ""
                 continue
-            dest = dest_dir / f"{qid}{src.suffix or '.md'}"
+            suffix = src.suffix if src.suffix in {".md", ".txt"} else ".md"
+            dest = (dest_dir / f"{qid}{suffix}").resolve()
+            jail = dest_dir.resolve()
+            if dest != jail and jail not in dest.parents:
+                updated[field] = ""
+                continue
             dest.write_bytes(src.read_bytes())
             try:
-                updated[field] = str(dest.resolve().relative_to(app_root_resolved))
+                updated[field] = str(dest.relative_to(app_root_resolved))
             except ValueError:
-                updated[field] = str(dest.resolve())
+                updated[field] = str(dest)
         rewritten.append(updated)
     write_questions_csv(csv_path, rewritten)
 
@@ -736,20 +746,18 @@ def _finalize_published_from_folder(
         raise AssignmentUploadConfirmError(404, "assignment not found")
     meta_path = out_dir / "meta.json"
     meta = _load_json_dict(meta_path)
-    if effective_visibility_status(meta) != "draft":
-        raise AssignmentUploadConfirmError(409, "invalid_visibility_status")
     actor = _folder_owner_teacher_id()
     owner = str(meta.get("teacher_id") or "").strip()
     if not actor or owner != actor:
         raise AssignmentUploadConfirmError(403, "forbidden")
+    if effective_visibility_status(meta) != "draft":
+        raise AssignmentUploadConfirmError(409, "invalid_visibility_status")
     requirements = _load_json_dict(out_dir / "requirements.json")
     if requirements_override:
         requirements = deps.merge_requirements(requirements, requirements_override, True)
     kind = effective_assignment_kind(meta)
     source = effective_content_source(meta, folder=out_dir)
-    missing = call_compute_requirements_missing(
-        deps.compute_requirements_missing, requirements, assignment_kind=kind
-    )
+    missing = deps.compute_requirements_missing(requirements, assignment_kind=kind)
     if strict_requirements and missing:
         raise AssignmentUploadConfirmError(
             400,
@@ -794,7 +802,7 @@ def _finalize_published_from_folder(
     meta["expected_students"] = list(expected_students)
     meta["expected_students_generated_at"] = deps.now_iso()
     if source == "bank":
-        _snapshot_bank_refs(out_dir, app_root=APP_ROOT)
+        _snapshot_bank_refs(out_dir, app_root=APP_ROOT, data_dir=deps.data_dir)
     meta["visibility_status"] = "published"
     meta["published_at"] = deps.now_iso()
     meta["archived_at"] = None
@@ -810,7 +818,7 @@ def _finalize_published_from_folder(
     _write_brief_markdown(out_dir, requirements)
     question_ids = [
         str(row.get("question_id") or "").strip()
-        for row in _load_csv_rows(out_dir / "questions.csv")
+        for row in read_question_bank(out_dir / "questions.csv")
         if str(row.get("question_id") or "").strip()
     ]
     meta["question_ids"] = question_ids

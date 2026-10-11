@@ -20,7 +20,7 @@ def _deps(*, executed: list):
         student_import=lambda args: executed.append("student.import") or {"ok": True},
         assignment_generate=lambda args: executed.append("assignment.generate") or {"ok": True},
         assignment_render=lambda args: executed.append("assignment.render") or {"ok": True},
-        save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher": {"ok": True},
+        save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher", **_k: {"ok": True},
         parse_date_str=lambda raw: str(raw or ""),
         core_example_search=lambda args: {"ok": True},
         core_example_register=lambda args: executed.append("core_example.register") or {"ok": True},

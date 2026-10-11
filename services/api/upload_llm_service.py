@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .assignment_requirements_service import call_compute_requirements_missing
+
 
 _log = logging.getLogger(__name__)
 
@@ -172,9 +172,7 @@ def llm_autofill_requirements(
             uncertain = deps.parse_list_value(uncertain)
         if not isinstance(uncertain, list):
             uncertain = []
-        new_missing = call_compute_requirements_missing(
-            deps.compute_requirements_missing, merged, assignment_kind=kind
-        )
+        new_missing = deps.compute_requirements_missing(merged, assignment_kind=kind)
         if uncertain:
             new_missing = sorted(set(new_missing + [str(item) for item in uncertain if item]))
         return merged, new_missing, True

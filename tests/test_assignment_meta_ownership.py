@@ -204,7 +204,7 @@ class AssignmentConfirmOwnershipTest(unittest.TestCase):
                 **(base or {}),
                 **(override or {}),
             },
-            compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+            compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
             write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
             optional_assignment_date=optional_assignment_date,
             save_assignment_requirements=lambda *_args, **_kwargs: None,

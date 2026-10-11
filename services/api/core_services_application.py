@@ -429,6 +429,7 @@ def save_assignment_requirements(
     date_str: str,
     created_by: str = "teacher",
     validate: bool = True,
+    assignment_kind: str = "problem_set",
 ) -> Dict[str, Any]:
     return _save_assignment_requirements_impl(
         assignment_id,
@@ -437,6 +438,7 @@ def save_assignment_requirements(
         deps=_assignment_requirements_deps(),
         created_by=created_by,
         validate=validate,
+        assignment_kind=assignment_kind,
     )
 
 

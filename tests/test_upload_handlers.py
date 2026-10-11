@@ -169,3 +169,31 @@ async def test_draft_save_without_job_id_writes_folder(tmp_path):
     )
     assert result["ok"] is True
     assert called["assignment_id"] == "A1"
+
+
+@pytest.mark.anyio
+async def test_confirm_without_locator_is_job_or_assignment_required(tmp_path):
+    deps = _assignment_deps(tmp_path)
+
+    with pytest.raises(HTTPException) as exc:
+        await assignment_upload_handlers.assignment_upload_confirm(
+            UploadConfirmRequest(),
+            deps=deps,
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "job_or_assignment_required"
+
+
+@pytest.mark.anyio
+async def test_draft_save_without_locator_is_job_or_assignment_required(tmp_path):
+    deps = _assignment_deps(tmp_path)
+
+    with pytest.raises(HTTPException) as exc:
+        await assignment_upload_handlers.assignment_upload_draft_save(
+            UploadDraftSaveRequest(),
+            deps=deps,
+        )
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "job_or_assignment_required"

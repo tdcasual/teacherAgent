@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .assignment_catalog_service import effective_assignment_kind
-from .assignment_requirements_service import call_compute_requirements_missing
 from .fs_atomic import atomic_write_json, atomic_write_text
 
 _log = logging.getLogger(__name__)
@@ -202,8 +201,8 @@ def _enrich_requirements(
         requirements = {}
     if assignment_kind != "problem_set":
         requirements = _fill_brief_from_source(requirements, source_text)
-    missing = call_compute_requirements_missing(
-        deps.compute_requirements_missing, requirements, assignment_kind=assignment_kind
+    missing = deps.compute_requirements_missing(
+        requirements, assignment_kind=assignment_kind
     )
     warnings: List[str] = []
     if len(source_text.strip()) < 200:

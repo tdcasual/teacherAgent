@@ -26,7 +26,7 @@ def _deps(call_llm):
         call_llm=call_llm,
         diag_log=lambda event, payload=None: logs.append((event, payload or {})),
         parse_list_value=lambda value: [x.strip() for x in str(value or "").split(",") if x.strip()],
-        compute_requirements_missing=lambda req: [k for k in ("subject", "topic") if not str(req.get(k) or "").strip()],
+        compute_requirements_missing=lambda req, **_k: [k for k in ("subject", "topic") if not str(req.get(k) or "").strip()],
         merge_requirements=lambda base, update, overwrite=False: {**dict(base), **dict(update)},
         normalize_excel_cell=lambda value: str(value or ""),
     )

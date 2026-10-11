@@ -369,6 +369,7 @@ def _owned_assignment_requirements_save(
         args.get("requirements") or {},
         deps.parse_date_str(args.get("date")),
         created_by="teacher",
+        assignment_kind=str(args.get("assignment_kind") or "problem_set"),
     )
 
 

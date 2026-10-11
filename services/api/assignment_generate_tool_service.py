@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict
 
 from .assignment_generate_service import (
     AssignmentGenerateDeps,
@@ -10,18 +8,10 @@ from .assignment_generate_service import (
     generate_assignment,
 )
 
-
-@dataclass(frozen=True)
-class AssignmentGenerateToolDeps:
-    app_root: Path
-    optional_assignment_date: Callable[[Optional[str]], Optional[str]]
-    ensure_requirements_for_assignment: Callable[..., Optional[Dict[str, Any]]]
-    run_script: Callable[[list[str]], str]
-    postprocess_assignment_meta: Callable[..., None]
-    diag_log: Callable[[str, Optional[Dict[str, Any]]], None]
+AssignmentGenerateToolDeps = AssignmentGenerateDeps
 
 
-def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) -> Dict[str, Any]:
+def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateDeps) -> Dict[str, Any]:
     generate_flag = args.get("generate", True)
     if generate_flag is None:
         generate_flag = True
@@ -36,14 +26,6 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) 
         per_kp = int(per_kp_raw) if per_kp_raw not in (None, "") else 5
     except (TypeError, ValueError):
         per_kp = 5
-    gen_deps = AssignmentGenerateDeps(
-        app_root=deps.app_root,
-        optional_assignment_date=deps.optional_assignment_date,
-        ensure_requirements_for_assignment=deps.ensure_requirements_for_assignment,
-        run_script=deps.run_script,
-        postprocess_assignment_meta=deps.postprocess_assignment_meta,
-        diag_log=deps.diag_log,
-    )
     try:
         result = generate_assignment(
             assignment_id=str(args.get("assignment_id", "") or ""),
@@ -64,7 +46,7 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) 
             content_source=args.get("content_source"),
             seed=args.get("seed"),
             skip_validation=bool(args.get("skip_validation")),
-            deps=gen_deps,
+            deps=deps,
         )
     except AssignmentGenerateError as exc:
         detail = exc.detail
@@ -75,7 +57,7 @@ def assignment_generate(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) 
     return result
 
 
-def assignment_render(args: Dict[str, Any], deps: AssignmentGenerateToolDeps) -> Dict[str, Any]:
+def assignment_render(args: Dict[str, Any], deps: AssignmentGenerateDeps) -> Dict[str, Any]:
     from .core_utils import _resolve_app_path, _resolve_data_dir_path
 
     script = deps.app_root / "scripts" / "render_assignment_pdf.py"

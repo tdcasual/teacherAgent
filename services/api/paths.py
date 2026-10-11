@@ -77,6 +77,16 @@ def optional_assignment_date(date_str: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
+_ASSIGNMENT_ID_RE = re.compile(r"^[\w-]+$")
+
+
+def require_safe_assignment_id(value: str) -> str:
+    aid = str(value or "").strip()
+    if not aid or not _ASSIGNMENT_ID_RE.fullmatch(aid):
+        raise ValueError("invalid assignment_id")
+    return aid
+
+
 def safe_fs_id(value: str, prefix: str = "id") -> str:
     raw = str(value or "").strip()
     slug = re.sub(r"[^\w-]+", "_", raw).strip("_")
@@ -232,8 +242,12 @@ def resolve_assignment_dir(assignment_id: str, core: Any | None = None) -> Path:
     aid = str(assignment_id or "").strip()
     if not aid:
         raise ValueError("assignment_id is required")
+    try:
+        aid = require_safe_assignment_id(aid)
+    except ValueError as exc:
+        raise ValueError("invalid assignment_id") from exc
     folder = (assignments_root / aid).resolve()
-    if folder != assignments_root and assignments_root not in folder.parents:
+    if folder == assignments_root or assignments_root not in folder.parents:
         raise ValueError("invalid assignment_id")
     return folder
 

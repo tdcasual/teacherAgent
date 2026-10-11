@@ -139,7 +139,7 @@ def write_questions_csv(path: Path, rows: Sequence[dict]) -> None:
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
-def _resolve_bank_ref(ref: str, *, data_dir: Path, app_root: Path) -> Optional[Path]:
+def resolve_bank_ref(ref: str, *, data_dir: Path, app_root: Path) -> Optional[Path]:
     raw = str(ref or "").strip()
     if not raw:
         return None
@@ -155,7 +155,7 @@ def _resolve_bank_ref(ref: str, *, data_dir: Path, app_root: Path) -> Optional[P
 
 
 def _stem_text_for_row(row: dict, *, data_dir: Path, app_root: Path) -> str:
-    ref_path = _resolve_bank_ref(
+    ref_path = resolve_bank_ref(
         str(row.get("stem_ref") or ""), data_dir=data_dir, app_root=app_root
     )
     if ref_path is None or not ref_path.exists():
@@ -185,9 +185,9 @@ def _eligible_bank_rows(
             continue
         stem_ref = str(row.get("stem_ref") or "").strip()
         answer_ref = str(row.get("answer_ref") or "").strip()
-        if stem_ref and _resolve_bank_ref(stem_ref, data_dir=data_dir, app_root=app_root) is None:
+        if stem_ref and resolve_bank_ref(stem_ref, data_dir=data_dir, app_root=app_root) is None:
             continue
-        if answer_ref and _resolve_bank_ref(answer_ref, data_dir=data_dir, app_root=app_root) is None:
+        if answer_ref and resolve_bank_ref(answer_ref, data_dir=data_dir, app_root=app_root) is None:
             continue
         stem = _stem_text_for_row(row, data_dir=data_dir, app_root=app_root)
         if contains_figure_reference(stem):

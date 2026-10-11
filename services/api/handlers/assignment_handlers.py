@@ -98,6 +98,7 @@ async def assignment_requirements(
         req.requirements,
         date_str,
         created_by=req.created_by or "teacher",
+        assignment_kind=str(req.assignment_kind or "problem_set"),
     )
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result)

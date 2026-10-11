@@ -62,7 +62,6 @@ from ..assignment_generate_service import (
 from ..assignment_generate_service import (
     generate_assignment as _generate_assignment_impl,
 )
-from ..assignment_generate_tool_service import AssignmentGenerateToolDeps
 from ..assignment_llm_gate_service import AssignmentLlmGateDeps
 from ..assignment_progress_service import AssignmentProgressDeps
 from ..assignment_questions_ocr_service import (
@@ -410,15 +409,7 @@ def _assignment_generate_deps(core: Any | None = None):
 
 
 def _assignment_generate_tool_deps(core: Any | None = None):
-    _ac = _app_core(core)
-    return AssignmentGenerateToolDeps(
-        app_root=_ac.APP_ROOT,
-        optional_assignment_date=_ac.optional_assignment_date,
-        ensure_requirements_for_assignment=_ac.ensure_requirements_for_assignment,
-        run_script=_ac.run_script,
-        postprocess_assignment_meta=_ac.postprocess_assignment_meta,
-        diag_log=_ac.diag_log,
-    )
+    return _assignment_generate_deps(core)
 
 
 def _assignment_uploaded_question_deps(core: Any | None = None):
@@ -495,6 +486,7 @@ def _assignment_upload_draft_save_deps(core: Any | None = None):
         write_upload_job=_ac.write_upload_job,
         now_iso=lambda: datetime.now().isoformat(timespec="seconds"),
         data_dir=_ac.DATA_DIR,
+        app_root=_ac.APP_ROOT,
     )
 
 

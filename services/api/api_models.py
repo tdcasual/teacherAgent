@@ -102,6 +102,7 @@ class AssignmentRequirementsRequest(BaseModel):
     date: Optional[str] = None
     requirements: Dict[str, Any]
     created_by: Optional[str] = None
+    assignment_kind: Optional[str] = None
 
 
 class TeacherGradeRequest(BaseModel):

@@ -322,6 +322,243 @@ class AssignmentGenerateServiceTest(unittest.TestCase):
                     reset_current_principal(token)
         self.assertIsNone(captured["args"])
 
+    def test_generate_returns_folder_questions_and_missing(self):
+        from unittest.mock import patch
+
+        deps, _captured = self._deps()
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            data_dir = Path(td) / "data"
+            folder = data_dir / "assignments" / "HW_1"
+            folder.mkdir(parents=True)
+            (folder / "questions.csv").write_text(
+                "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n"
+                "Q9,力学,basic,open,,,,\n",
+                encoding="utf-8",
+            )
+            (folder / "requirements.json").write_text(
+                json.dumps({"subject": "物理"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with patch("services.api.paths.DATA_DIR", data_dir):
+                try:
+                    result = generate_assignment(
+                        assignment_id="HW_1",
+                        kp="力学",
+                        question_ids="",
+                        per_kp=1,
+                        core_examples="",
+                        generate=True,
+                        mode="kp",
+                        date="2026-02-08",
+                        due_at="",
+                        class_name="",
+                        student_ids="",
+                        source="teacher",
+                        requirements_json=None,
+                        subject_id="physics",
+                        skip_validation=True,
+                        deps=deps,
+                    )
+                finally:
+                    reset_current_principal(token)
+        draft = result.get("draft") or {}
+        self.assertEqual(draft.get("questions", [{}])[0].get("question_id"), "Q9")
+        self.assertEqual(draft.get("requirements", {}).get("subject"), "物理")
+        self.assertIn("topic", draft.get("requirements_missing") or [])
+        self.assertEqual(draft.get("assignment_kind"), "problem_set")
+        self.assertEqual(draft.get("content_source"), "ai")
+        self.assertNotIn("job_id", draft)
+
+    def test_generate_rejects_unsafe_assignment_id(self):
+        deps, _captured = self._deps()
+        for aid in (".", "../escape", "a/b"):
+            with self.assertRaises(AssignmentGenerateError) as cm:
+                generate_assignment(
+                    assignment_id=aid,
+                    kp="",
+                    question_ids="",
+                    per_kp=5,
+                    core_examples="",
+                    generate=True,
+                    mode="",
+                    date="2026-02-08",
+                    due_at="",
+                    class_name="",
+                    student_ids="",
+                    source="teacher",
+                    requirements_json=None,
+                    deps=deps,
+                )
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "invalid assignment_id")
+
+    def test_scenario_generate_conflict_on_published(self):
+        from unittest.mock import patch
+
+        deps, _captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            data_dir = Path(td) / "data"
+            folder = data_dir / "assignments" / "HW_PUB"
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_PUB",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "published",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                try:
+                    with self.assertRaises(AssignmentGenerateError) as cm:
+                        generate_assignment(
+                            assignment_id="HW_PUB",
+                            kp="",
+                            question_ids="",
+                            per_kp=5,
+                            core_examples="",
+                            generate=True,
+                            mode="",
+                            date="2026-02-08",
+                            due_at="",
+                            class_name="",
+                            student_ids="",
+                            source="teacher",
+                            requirements_json='{"subject":"科学","topic":"摆","grade_level":"初二"}',
+                            subject_id="generic",
+                            assignment_kind="scenario",
+                            skip_validation=True,
+                            deps=deps,
+                        )
+                finally:
+                    reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 409)
+            self.assertEqual(cm.exception.detail, "assignment already exists")
+            gateway_cls.assert_not_called()
+            meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta.get("visibility_status"), "published")
+
+    def test_generate_failed_leaves_visibility_unchanged(self):
+        from unittest.mock import patch
+
+        deps, _captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            data_dir = Path(td) / "data"
+            folder = data_dir / "assignments" / "HW_FAIL"
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_FAIL",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                gateway_cls.return_value.generate.return_value.text = "not-json"
+                try:
+                    with self.assertRaises(AssignmentGenerateError) as cm:
+                        generate_assignment(
+                            assignment_id="HW_FAIL",
+                            kp="",
+                            question_ids="",
+                            per_kp=5,
+                            core_examples="",
+                            generate=True,
+                            mode="",
+                            date="2026-02-08",
+                            due_at="",
+                            class_name="",
+                            student_ids="",
+                            source="teacher",
+                            requirements_json='{"subject":"科学","topic":"摆","grade_level":"初二"}',
+                            subject_id="generic",
+                            assignment_kind="scenario",
+                            skip_validation=True,
+                            deps=deps,
+                        )
+                finally:
+                    reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "generate_failed")
+            meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta.get("visibility_status"), "draft")
+            self.assertFalse((folder / "brief.md").exists())
+
+    def test_generate_failed_empty_brief_leaves_visibility_unchanged(self):
+        from unittest.mock import patch
+
+        deps, _captured = self._deps()
+        deps = AssignmentGenerateDeps(
+            **{**deps.__dict__, "app_root": Path(__file__).resolve().parent.parent}
+        )
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        with TemporaryDirectory() as td:
+            data_dir = Path(td) / "data"
+            folder = data_dir / "assignments" / "HW_EMPTY"
+            folder.mkdir(parents=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "HW_EMPTY",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch("services.api.paths.DATA_DIR", data_dir), patch(
+                "llm_gateway.LLMGateway"
+            ) as gateway_cls:
+                gateway_cls.return_value.generate.return_value.text = '{"brief":""}'
+                try:
+                    with self.assertRaises(AssignmentGenerateError) as cm:
+                        generate_assignment(
+                            assignment_id="HW_EMPTY",
+                            kp="",
+                            question_ids="",
+                            per_kp=5,
+                            core_examples="",
+                            generate=True,
+                            mode="",
+                            date="2026-02-08",
+                            due_at="",
+                            class_name="",
+                            student_ids="",
+                            source="teacher",
+                            requirements_json='{"subject":"科学","topic":"摆","grade_level":"初二"}',
+                            subject_id="generic",
+                            assignment_kind="scenario",
+                            skip_validation=True,
+                            deps=deps,
+                        )
+                finally:
+                    reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "generate_failed")
+            meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+            self.assertEqual(meta.get("visibility_status"), "draft")
+
 
 if __name__ == "__main__":
     unittest.main()

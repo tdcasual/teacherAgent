@@ -9,6 +9,7 @@ from services.api.assignment_draft_from_bank_service import (
     AssignmentDraftFromBankError,
     create_assignment_draft_from_bank,
 )
+from services.api.assignment_requirements_service import compute_requirements_missing
 from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
     _finalize_published_from_folder,
@@ -196,5 +197,50 @@ def test_from_bank_conflict_if_not_own_draft() -> None:
             except AssignmentDraftFromBankError as exc:
                 assert exc.status_code == 409
                 assert exc.detail == "assignment already exists"
+        finally:
+            reset_current_principal(token)
+
+
+def test_from_bank_requirements_missing_is_computed() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        _seed_bank(root)
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            created = create_assignment_draft_from_bank(
+                assignment_id="HW_BANK_MISS",
+                subject_id="physics",
+                kp="力学",
+                count=1,
+                deps=_from_bank_deps(root),
+            )
+        finally:
+            reset_current_principal(token)
+        assert created.get("ok")
+        assert created["draft"]["requirements_missing"] == compute_requirements_missing(
+            {}, assignment_kind="problem_set"
+        )
+        assert "subject" in created["draft"]["requirements_missing"]
+        assert "preferences" in created["draft"]["requirements_missing"]
+
+
+def test_from_bank_rejects_unsafe_assignment_id() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        _seed_bank(root)
+        token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+        try:
+            for aid in (".", "../escape", "a/b"):
+                try:
+                    create_assignment_draft_from_bank(
+                        assignment_id=aid,
+                        subject_id="physics",
+                        kp="力学",
+                        deps=_from_bank_deps(root),
+                    )
+                    raise AssertionError(f"expected invalid assignment_id for {aid!r}")
+                except AssignmentDraftFromBankError as exc:
+                    assert exc.status_code == 400
+                    assert exc.detail == "invalid assignment_id"
         finally:
             reset_current_principal(token)

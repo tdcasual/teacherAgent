@@ -5,9 +5,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from . import paths as _paths
 from .assignment_catalog_service import (
     coerce_assignment_kind,
     coerce_content_source,
+)
+from .assignment_draft_from_bank_service import (
+    AssignmentDraftFromBankError,
+    _conflict_if_not_own_draft,
 )
 from .assignment_generate_cli_service import (
     DRAFT_VISIBILITY_STATUS,
@@ -17,9 +22,11 @@ from .assignment_generate_cli_service import (
     generated_assignment_completion_policy,
     try_postprocess_assignment_meta,
 )
+from .assignment_llm_gate_service import parse_json_from_text
+from .assignment_requirements_service import compute_requirements_missing
 from .auth_service import get_current_principal
-from .paths import InvalidAssignmentDate
-from .question_bank_select_service import ensure_questions_csv_header
+from .paths import InvalidAssignmentDate, require_safe_assignment_id
+from .question_bank_select_service import ensure_questions_csv_header, read_question_bank
 
 
 class AssignmentGenerateError(Exception):
@@ -88,13 +95,13 @@ def _ensure_assignment_requirements(
         raise AssignmentGenerateError(400, req_result)
 
 
-def _normalize_generate_axes(
+def _normalize_generate_kind(
     *,
     assignment_id: str,
     assignment_kind: Optional[str],
     content_source: Optional[str],
     deps: AssignmentGenerateDeps,
-) -> tuple[str, str]:
+) -> str:
     try:
         kind, defaulted = coerce_assignment_kind(assignment_kind)
     except ValueError as exc:
@@ -110,7 +117,22 @@ def _normalize_generate_axes(
         raise AssignmentGenerateError(400, "invalid_content_source") from exc
     if source != "ai":
         raise AssignmentGenerateError(400, "generate_requires_content_source_ai")
-    return kind, source
+    return kind
+
+
+def _require_generate_folder(assignment_id: str, data_dir: Path) -> Path:
+    aid = str(assignment_id or "").strip()
+    if not aid:
+        raise AssignmentGenerateError(400, "assignment_id is required")
+    try:
+        aid = require_safe_assignment_id(aid)
+    except ValueError as exc:
+        raise AssignmentGenerateError(400, "invalid assignment_id") from exc
+    root = (Path(data_dir) / "assignments").resolve()
+    target = (root / aid).resolve()
+    if target == root or root not in target.parents:
+        raise AssignmentGenerateError(400, "invalid assignment_id")
+    return target
 
 
 def _run_problem_set_generate(
@@ -178,13 +200,19 @@ def _run_problem_set_generate(
         content_source="ai",
         assignment_kind="problem_set",
     )
-    return {"ok": True, "output": out, "draft": _load_generate_draft(assignment_id, deps)}
+    return {
+        "ok": True,
+        "output": out,
+        "draft": _load_generate_draft(
+            assignment_id, assignment_kind="problem_set", content_source="ai"
+        ),
+    }
 
 
-def _load_generate_draft(assignment_id: str, deps: AssignmentGenerateDeps) -> Dict[str, Any]:
-    from .paths import DATA_DIR
-
-    out_dir = Path(DATA_DIR) / "assignments" / assignment_id
+def _load_generate_draft(
+    assignment_id: str, *, assignment_kind: str, content_source: str
+) -> Dict[str, Any]:
+    out_dir = _require_generate_folder(assignment_id, _paths.DATA_DIR)
     req_path = out_dir / "requirements.json"
     try:
         requirements = json.loads(req_path.read_text(encoding="utf-8")) if req_path.exists() else {}
@@ -192,35 +220,17 @@ def _load_generate_draft(assignment_id: str, deps: AssignmentGenerateDeps) -> Di
         requirements = {}
     if not isinstance(requirements, dict):
         requirements = {}
+    questions = read_question_bank(out_dir / "questions.csv")
     return {
         "assignment_id": assignment_id,
         "requirements": requirements,
-        "questions": [],
-        "requirements_missing": [],
-        "assignment_kind": "problem_set",
-        "content_source": "ai",
+        "questions": questions,
+        "requirements_missing": compute_requirements_missing(
+            requirements, assignment_kind=assignment_kind
+        ),
+        "assignment_kind": assignment_kind,
+        "content_source": content_source,
     }
-
-
-def _parse_brief_llm_json(text: str) -> Optional[Dict[str, Any]]:
-    raw = str(text or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`")
-        if raw.lower().startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start < 0 or end <= start:
-            return None
-        try:
-            payload = json.loads(raw[start : end + 1])
-        except json.JSONDecodeError:
-            return None
-    return payload if isinstance(payload, dict) else None
 
 
 def _draft_non_problem_set(
@@ -237,8 +247,16 @@ def _draft_non_problem_set(
     seed: Optional[str],
     deps: AssignmentGenerateDeps,
 ) -> Dict[str, Any]:
-    from .paths import DATA_DIR
-
+    out_dir = _require_generate_folder(assignment_id, _paths.DATA_DIR)
+    try:
+        _conflict_if_not_own_draft(
+            out_dir=out_dir,
+            assignment_id=assignment_id,
+            teacher_id=teacher_id,
+            data_dir=Path(_paths.DATA_DIR),
+        )
+    except AssignmentDraftFromBankError as exc:
+        raise AssignmentGenerateError(exc.status_code, exc.detail) from exc
     req = dict(requirements_payload or {})
     topic = str(req.get("topic") or "").strip()
     subject = str(req.get("subject") or "").strip() or subject_val
@@ -275,7 +293,7 @@ def _draft_non_problem_set(
             ),
             allow_fallback=True,
         )
-        parsed = _parse_brief_llm_json(getattr(result, "text", "") or "")
+        parsed = parse_json_from_text(getattr(result, "text", "") or "")
     except Exception as exc:
         raise AssignmentGenerateError(400, "generate_failed") from exc
     brief = str((parsed or {}).get("brief") or "").strip()
@@ -286,7 +304,6 @@ def _draft_non_problem_set(
         goals = []
     goals = [str(item).strip() for item in goals if str(item).strip()][:5]
     rubric = str((parsed or {}).get("rubric") or "").strip()
-    out_dir = Path(DATA_DIR) / "assignments" / assignment_id
     out_dir.mkdir(parents=True, exist_ok=True)
     requirements = {
         "subject": subject,
@@ -357,7 +374,9 @@ def _draft_non_problem_set(
             "assignment_id": assignment_id,
             "requirements": requirements,
             "questions": [],
-            "requirements_missing": [],
+            "requirements_missing": compute_requirements_missing(
+                requirements, assignment_kind=assignment_kind
+            ),
             "assignment_kind": assignment_kind,
             "content_source": "ai",
         },
@@ -386,9 +405,10 @@ def generate_assignment(
     skip_validation: bool = False,
     deps: AssignmentGenerateDeps,
 ) -> Dict[str, Any]:
+    _require_generate_folder(assignment_id, _paths.DATA_DIR)
     requirements_payload = _parse_requirements_json(requirements_json)
     date_str = _generate_assignment_date(date, deps)
-    kind, source_axis = _normalize_generate_axes(
+    kind = _normalize_generate_kind(
         assignment_id=assignment_id,
         assignment_kind=assignment_kind,
         content_source=content_source,
@@ -421,7 +441,6 @@ def generate_assignment(
             seed=seed,
             deps=deps,
         )
-    del source_axis
     return _run_problem_set_generate(
         assignment_id=assignment_id,
         kp=kp,

@@ -11,9 +11,11 @@ from services.api.assignment_upload_draft_service import (
 from services.api.assignment_upload_query_service import (
     AssignmentUploadQueryDeps,
     AssignmentUploadQueryError,
+    get_assignment_folder_draft,
     get_assignment_upload_draft,
     get_assignment_upload_status,
 )
+from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
 
 
 class AssignmentUploadQueryServiceTest(unittest.TestCase):
@@ -31,8 +33,9 @@ class AssignmentUploadQueryServiceTest(unittest.TestCase):
             load_assignment_draft_override=load_assignment_draft_override,
             build_assignment_upload_draft=build_assignment_upload_draft,
             merge_requirements=lambda base, update, overwrite=True: {**(base or {}), **(update or {})},
-            compute_requirements_missing=lambda req: [] if req.get("topic") else ["topic"],
+            compute_requirements_missing=lambda req, **_k: [] if req.get("topic") else ["topic"],
             parse_list_value=lambda value: value if isinstance(value, list) else [],
+            data_dir=root / "data",
         )
 
     def test_status_job_not_found_raises_404(self):
@@ -110,6 +113,40 @@ class AssignmentUploadQueryServiceTest(unittest.TestCase):
             self.assertEqual(result.get("ok"), True)
             self.assertEqual(result.get("draft", {}).get("assignment_id"), "HW_3")
             self.assertEqual(result.get("draft", {}).get("question_count"), 1)
+
+    def test_folder_draft_rejects_unsafe_assignment_id(self):
+        with TemporaryDirectory() as td:
+            deps = self._deps(Path(td))
+            with self.assertRaises(AssignmentUploadQueryError) as cm:
+                get_assignment_folder_draft(".", deps=deps)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "invalid assignment_id")
+
+    def test_folder_draft_non_owner_published_is_403(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_PUB"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_PUB",
+                        "teacher_id": "t_other",
+                        "visibility_status": "published",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root)
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                with self.assertRaises(AssignmentUploadQueryError) as cm:
+                    get_assignment_folder_draft("A_PUB", deps=deps)
+            finally:
+                reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 403)
+            self.assertEqual(cm.exception.detail, "forbidden")
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             clean_assignment_draft_questions=clean_assignment_draft_questions,
             save_assignment_draft_override=save_assignment_draft_override,
             merge_requirements=lambda base, override, overwrite=True: {**(base or {}), **(override or {})},
-            compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+            compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
             write_upload_job=write_upload_job,
             now_iso=lambda: "2026-02-08T12:00:00",
             data_dir=root / "data",
@@ -139,6 +139,80 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             self.assertEqual(saved.get("brief"), "实验室观察")
             self.assertTrue((folder / "brief.md").exists())
             self.assertTrue((folder / "questions.csv").exists())
+
+    def test_folder_save_rejects_out_of_jail_bank_ref(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_DRAFT"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_DRAFT",
+                        "teacher_id": "t_zhang",
+                        "visibility_status": "draft",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            secret = root / "secret.md"
+            secret.write_text("SECRET", encoding="utf-8")
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                with self.assertRaises(AssignmentUploadDraftSaveError) as cm:
+                    save_assignment_folder_draft(
+                        "A_DRAFT",
+                        None,
+                        [{"stem": "q", "stem_ref": str(secret)}],
+                        deps=deps,
+                    )
+            finally:
+                reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "invalid_bank_ref")
+            self.assertFalse((folder / "questions.csv").exists())
+
+    def test_folder_save_rejects_unsafe_assignment_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root, writes=[])
+            with self.assertRaises(AssignmentUploadDraftSaveError) as cm:
+                save_assignment_folder_draft(".", None, [], deps=deps)
+            self.assertEqual(cm.exception.status_code, 400)
+            self.assertEqual(cm.exception.detail, "invalid assignment_id")
+
+    def test_folder_save_non_owner_published_is_403(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A_PUB"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "meta.json").write_text(
+                json.dumps(
+                    {
+                        "assignment_id": "A_PUB",
+                        "teacher_id": "t_other",
+                        "visibility_status": "published",
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                with self.assertRaises(AssignmentUploadDraftSaveError) as cm:
+                    save_assignment_folder_draft(
+                        "A_PUB",
+                        {"brief": "nope"},
+                        None,
+                        deps=deps,
+                    )
+            finally:
+                reset_current_principal(token)
+            self.assertEqual(cm.exception.status_code, 403)
+            self.assertEqual(cm.exception.detail, "forbidden")
 
 
 if __name__ == "__main__":

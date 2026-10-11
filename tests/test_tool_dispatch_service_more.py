@@ -37,7 +37,7 @@ def _deps(tools: set[str]):
         student_import=lambda args: _remember("student.import", args),
         assignment_generate=lambda args: _remember("assignment.generate", args),
         assignment_render=lambda args: _remember("assignment.render", args),
-        save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher": _remember(
+        save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher", **_k: _remember(
             "assignment.requirements.save", (assignment_id, requirements, date_str, created_by)
         ),
         parse_date_str=lambda raw: f"parsed:{raw}" if raw else None,

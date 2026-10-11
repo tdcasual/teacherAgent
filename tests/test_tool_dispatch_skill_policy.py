@@ -47,7 +47,7 @@ class ToolDispatchSkillPolicyTest(unittest.TestCase):
             student_import=lambda args: {"ok": True, "args": args},
             assignment_generate=lambda args: {"ok": True, "args": args},
             assignment_render=lambda args: {"ok": True, "args": args},
-            save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher": {"ok": True},
+            save_assignment_requirements=lambda assignment_id, requirements, date_str, created_by="teacher", **_k: {"ok": True},
             parse_date_str=lambda raw: str(raw or ""),
             core_example_search=lambda args: {"ok": True, "args": args},
             core_example_register=lambda args: {"ok": True, "args": args},

@@ -77,6 +77,23 @@ class TestResolveAssignmentDir:
         with pytest.raises(ValueError, match="invalid"):
             paths.resolve_assignment_dir("../etc")
 
+    def test_dot_and_slash_rejected(self):
+        with pytest.raises(ValueError, match="invalid"):
+            paths.resolve_assignment_dir(".")
+        with pytest.raises(ValueError, match="invalid"):
+            paths.resolve_assignment_dir("a/b")
+
+
+class TestRequireSafeAssignmentId:
+    def test_accepts_word_hyphen_tokens(self):
+        assert paths.require_safe_assignment_id("HW_1") == "HW_1"
+        assert paths.require_safe_assignment_id("A1-2026-02-08") == "A1-2026-02-08"
+
+    def test_rejects_dot_slash_parent_and_empty(self):
+        for raw in (".", "..", "../x", "a/b", "", "  "):
+            with pytest.raises(ValueError, match="invalid assignment_id"):
+                paths.require_safe_assignment_id(raw)
+
 
 # ── resolve_student_profile_path ────────────────────────────────────────
 

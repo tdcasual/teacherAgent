@@ -9,10 +9,12 @@ from services.api.assignment_upload_confirm_service import (
     AssignmentUploadConfirmDeps,
     AssignmentUploadConfirmError,
     _finalize_published_from_folder,
+    _snapshot_bank_refs,
     confirm_assignment_upload,
 )
 from services.api.auth.identity_graph_service import ExpectedStudentsError
 from services.api.auth_service import AuthPrincipal, reset_current_principal, set_current_principal
+from services.api.question_bank_select_service import read_question_bank
 
 
 class AssignmentUploadConfirmServiceTest(unittest.TestCase):
@@ -30,7 +32,7 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 **(base or {}),
                 **(override or {}),
             },
-            compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+            compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
             write_uploaded_questions=lambda _out, _aid, _questions: [{"question_id": "Q1"}],
             optional_assignment_date=lambda v: str(v).strip() if str(v or "").strip() else None,
             save_assignment_requirements=lambda *_args, **_kwargs: None,
@@ -514,6 +516,67 @@ class AssignmentUploadConfirmServiceTest(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertEqual(ctx.exception.detail, "questions_missing")
+
+    def test_snapshot_bank_refs_rejects_out_of_jail(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            data_dir = root / "data"
+            bank = data_dir / "question_bank"
+            bank.mkdir(parents=True)
+            good = bank / "ok.md"
+            good.write_text("in-jail", encoding="utf-8")
+            secret = root / "secret.md"
+            secret.write_text("SECRET", encoding="utf-8")
+            folder = data_dir / "assignments" / "A_SNAP"
+            folder.mkdir(parents=True)
+            (folder / "questions.csv").write_text(
+                "question_id,kp_id,difficulty,type,stem_ref,answer_ref,source,tags\n"
+                f"../x,kp1,basic,open,{secret},{good},bank,\n",
+                encoding="utf-8",
+            )
+            _snapshot_bank_refs(folder, app_root=root, data_dir=data_dir)
+            rows = read_question_bank(folder / "questions.csv")
+            self.assertEqual(rows[0].get("stem_ref"), "")
+            self.assertTrue(str(rows[0].get("answer_ref") or ""))
+            stem_dir = folder / "bank_stems"
+            if stem_dir.exists():
+                for path in stem_dir.iterdir():
+                    self.assertNotIn("SECRET", path.read_text(encoding="utf-8"))
+
+    def test_finalize_rejects_unsafe_assignment_id(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                for aid in (".", "../escape"):
+                    with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                        _finalize_published_from_folder(aid, strict_requirements=True, deps=deps)
+                    self.assertEqual(ctx.exception.status_code, 400)
+                    self.assertEqual(ctx.exception.detail, "invalid assignment_id")
+            finally:
+                reset_current_principal(token)
+
+    def test_finalize_non_owner_published_is_403(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = self._write_draft_folder(root, "A_PUB")
+            meta_path = folder / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["visibility_status"] = "published"
+            meta["teacher_id"] = "t_other"
+            meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+            deps = self._deps(root, writes=[])
+            token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+            try:
+                with self.assertRaises(AssignmentUploadConfirmError) as ctx:
+                    _finalize_published_from_folder("A_PUB", strict_requirements=True, deps=deps)
+            finally:
+                reset_current_principal(token)
+            self.assertEqual(ctx.exception.status_code, 403)
+            self.assertEqual(ctx.exception.detail, "forbidden")
+            saved = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved.get("visibility_status"), "published")
 
 
 if __name__ == "__main__":

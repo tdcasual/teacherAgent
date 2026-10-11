@@ -15,8 +15,15 @@ from .assignment_generate_cli_service import (
     generated_assignment_completion_policy,
     try_postprocess_assignment_meta,
 )
+from .assignment_requirements_service import compute_requirements_missing
 from .auth_service import get_current_principal
-from .paths import APP_ROOT, DATA_DIR, InvalidAssignmentDate, optional_assignment_date
+from .paths import (
+    APP_ROOT,
+    DATA_DIR,
+    InvalidAssignmentDate,
+    optional_assignment_date,
+    require_safe_assignment_id,
+)
 from .question_bank_select_service import (
     load_recent_assignments,
     parse_kp_list,
@@ -53,8 +60,12 @@ def _resolve_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     aid = str(assignment_id or "").strip()
     if not aid:
         raise AssignmentDraftFromBankError(400, "assignment_id is required")
+    try:
+        aid = require_safe_assignment_id(aid)
+    except ValueError as exc:
+        raise AssignmentDraftFromBankError(400, "invalid assignment_id") from exc
     target = (root / aid).resolve()
-    if target != root and root not in target.parents:
+    if target == root or root not in target.parents:
         raise AssignmentDraftFromBankError(400, "invalid assignment_id")
     return target
 
@@ -219,7 +230,9 @@ def create_assignment_draft_from_bank(
             "assignment_id": assignment_id,
             "requirements": existing_req,
             "questions": items,
-            "requirements_missing": [],
+            "requirements_missing": compute_requirements_missing(
+                existing_req, assignment_kind="problem_set"
+            ),
             "assignment_kind": "problem_set",
             "content_source": "bank",
             "question_count": len(items),

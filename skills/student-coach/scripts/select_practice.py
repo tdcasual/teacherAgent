@@ -441,7 +441,6 @@ def main():
             if len(chosen) < total:
                 remaining = total - len(chosen)
                 if args.generate:
-                    # generate via LLM and write stem/solution
                     generated = generate_with_llm(kp, "basic", remaining)
                     for idx, item in enumerate(generated, start=1):
                         gen_id = f"GEN-{kp}-LLM-{idx:02d}"
@@ -476,6 +475,10 @@ def main():
                                 "tags": "LLM",
                             }
                         )
+                    if len(chosen) < total:
+                        leftover = total - len(chosen)
+                        for idx in range(1, leftover + 1):
+                            chosen.append(make_generated(out_dir, kp, "basic", idx))
                 else:
                     raise SystemExit("question_bank_insufficient")
 

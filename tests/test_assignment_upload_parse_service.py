@@ -39,7 +39,7 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
             extract_text_from_file=extract_text_from_file or (lambda _path, language="zh", ocr_mode="FREE_OCR": "文本"),
             llm_parse_assignment_payload=llm_parse_assignment_payload
             or (lambda _source_text, _answer_text: {"questions": [{"stem": "Q1"}], "requirements": {"subject": "物理"}}),
-            compute_requirements_missing=compute_requirements_missing or (lambda _req: []),
+            compute_requirements_missing=compute_requirements_missing or (lambda _req, **_k: []),
             llm_autofill_requirements=llm_autofill_requirements
             or (lambda _s, _a, _q, req, missing: (req, missing, False)),
             diag_log=lambda _event, _payload=None: None,
@@ -98,7 +98,7 @@ class AssignmentUploadParseServiceTest(unittest.TestCase):
                     "questions": [{"stem": "Q1"}],
                     "requirements": {},
                 },
-                compute_requirements_missing=lambda req: [] if req.get("subject") else ["subject"],
+                compute_requirements_missing=lambda req, **_k: [] if req.get("subject") else ["subject"],
                 llm_autofill_requirements=lambda _s, _a, _q, req, missing: (
                     {**req, "subject": "物理"},
                     [],

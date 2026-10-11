@@ -17,7 +17,7 @@ def _deps(tmp_path, **overrides):
     def parse_date_str(value):
         return str(value or "")
 
-    def save_assignment_requirements(assignment_id, requirements, date_str, created_by):
+    def save_assignment_requirements(assignment_id, requirements, date_str, created_by, **_kwargs):
         return {"ok": True, "assignment_id": assignment_id}
 
     def resolve_assignment_dir(assignment_id: str) -> Path:

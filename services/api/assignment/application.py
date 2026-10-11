@@ -211,12 +211,20 @@ async def get_assignment_folder_draft(
 async def save_assignment_upload_draft(
     req: UploadDraftSaveRequest, *, deps: AssignmentApplicationDeps
 ) -> Any:
+    assignment_id = str(req.assignment_id or "").strip()
+    job_id = str(req.job_id or "").strip()
+    if assignment_id and not job_id:
+        require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_upload_draft_save(req)
 
 
 async def confirm_assignment_upload(
     req: UploadConfirmRequest, *, deps: AssignmentApplicationDeps
 ) -> Any:
+    assignment_id = str(req.assignment_id or "").strip()
+    job_id = str(req.job_id or "").strip()
+    if assignment_id and not job_id:
+        require_assignment_access(assignment_id, deps=deps)
     return await deps.assignment_upload_confirm(req)
 
 

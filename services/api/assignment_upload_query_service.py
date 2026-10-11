@@ -8,8 +8,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .assignment.visibility import effective_visibility_status
 from .assignment_catalog_service import effective_assignment_kind, effective_content_source
-from .assignment_requirements_service import call_compute_requirements_missing
 from .auth_service import AuthError, enforce_upload_job_access, get_current_principal
+from .paths import require_safe_assignment_id
 from .question_bank_select_service import count_question_data_rows
 
 
@@ -71,9 +71,7 @@ def get_assignment_upload_draft(job_id: str, *, deps: AssignmentUploadQueryDeps)
     kind = effective_assignment_kind({"assignment_kind": job.get("assignment_kind")})
 
     def _missing(requirements: Dict[str, Any], assignment_kind: str = kind) -> List[str]:
-        return call_compute_requirements_missing(
-            deps.compute_requirements_missing, requirements, assignment_kind=assignment_kind
-        )
+        return deps.compute_requirements_missing(requirements, assignment_kind=assignment_kind)
 
     draft = deps.build_assignment_upload_draft(
         job_id,
@@ -92,8 +90,12 @@ def _resolve_query_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     aid = str(assignment_id or "").strip()
     if not aid:
         raise AssignmentUploadQueryError(400, "assignment_id is required")
+    try:
+        aid = require_safe_assignment_id(aid)
+    except ValueError as exc:
+        raise AssignmentUploadQueryError(400, "invalid assignment_id") from exc
     target = (root / aid).resolve()
-    if target != root and root not in target.parents:
+    if target == root or root not in target.parents:
         raise AssignmentUploadQueryError(400, "invalid assignment_id")
     return target
 
@@ -112,12 +114,12 @@ def get_assignment_folder_draft(assignment_id: str, *, deps: AssignmentUploadQue
         meta = {}
     if not isinstance(meta, dict):
         meta = {}
-    if effective_visibility_status(meta) != "draft":
-        raise AssignmentUploadQueryError(409, "invalid_visibility_status")
     actor = str(getattr(get_current_principal(), "actor_id", "") or "").strip()
     owner = str(meta.get("teacher_id") or "").strip()
     if not actor or owner != actor:
         raise AssignmentUploadQueryError(403, "forbidden")
+    if effective_visibility_status(meta) != "draft":
+        raise AssignmentUploadQueryError(409, "invalid_visibility_status")
     req_path = folder / "requirements.json"
     try:
         requirements = json.loads(req_path.read_text(encoding="utf-8")) if req_path.exists() else {}
@@ -132,9 +134,7 @@ def get_assignment_folder_draft(assignment_id: str, *, deps: AssignmentUploadQue
             questions = [dict(row) for row in csv.DictReader(handle)]
     kind = effective_assignment_kind(meta)
     source = effective_content_source(meta, folder=folder)
-    missing = call_compute_requirements_missing(
-        deps.compute_requirements_missing, requirements, assignment_kind=kind
-    )
+    missing = deps.compute_requirements_missing(requirements, assignment_kind=kind)
     draft = {
         "assignment_id": assignment_id,
         "date": meta.get("date"),

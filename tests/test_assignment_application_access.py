@@ -5,13 +5,16 @@ from pathlib import Path
 
 import pytest
 
+from services.api.api_models import UploadConfirmRequest, UploadDraftSaveRequest
 from services.api.assignment.application import (
     AssignmentAccessError,
+    confirm_assignment_upload,
     download_assignment_file,
     get_assignment_detail,
     list_assignments,
     listing_owner_teacher_id,
     require_assignment_access,
+    save_assignment_upload_draft,
 )
 from services.api.assignment.deps import AssignmentAccessDeps
 from services.api.auth_service import AuthError, AuthPrincipal
@@ -296,6 +299,56 @@ def test_require_assignment_access_wraps_auth_error(monkeypatch, tmp_path):
         require_assignment_access("HW_1", deps=_deps(folder=tmp_path))
     assert exc.value.status_code == 401
     assert exc.value.detail == "missing_authorization"
+
+
+def test_save_folder_draft_enforces_access(monkeypatch):
+    called = {"save": 0}
+
+    def _forbid(assignment_id: str, *, deps):
+        raise AssignmentAccessError(403, "forbidden_assignment_owner")
+
+    async def _save(_req):
+        called["save"] += 1
+        return {"ok": True}
+
+    monkeypatch.setattr("services.api.assignment.application.require_assignment_access", _forbid)
+    deps = type("Deps", (), {"assignment_upload_draft_save": _save})()
+
+    async def _run() -> None:
+        with pytest.raises(AssignmentAccessError) as exc:
+            await save_assignment_upload_draft(
+                UploadDraftSaveRequest(assignment_id="HW_1"),
+                deps=deps,
+            )
+        assert exc.value.status_code == 403
+
+    asyncio.run(_run())
+    assert called["save"] == 0
+
+
+def test_confirm_folder_enforces_access(monkeypatch):
+    called = {"confirm": 0}
+
+    def _forbid(assignment_id: str, *, deps):
+        raise AssignmentAccessError(403, "forbidden_assignment_owner")
+
+    async def _confirm(_req):
+        called["confirm"] += 1
+        return {"ok": True}
+
+    monkeypatch.setattr("services.api.assignment.application.require_assignment_access", _forbid)
+    deps = type("Deps", (), {"assignment_upload_confirm": _confirm})()
+
+    async def _run() -> None:
+        with pytest.raises(AssignmentAccessError) as exc:
+            await confirm_assignment_upload(
+                UploadConfirmRequest(assignment_id="HW_1"),
+                deps=deps,
+            )
+        assert exc.value.status_code == 403
+
+    asyncio.run(_run())
+    assert called["confirm"] == 0
 
 
 def test_download_assignment_file_enforces_access_before_download(monkeypatch):
