@@ -41,6 +41,7 @@ export default function TeacherWorkbench(props: TeacherWorkbenchProps) {
     activeStepKey: activeStep?.key,
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
+    contentSource: viewModel.contentSource,
   });
   const workflowTabActive = workbenchTab === 'workflow';
   const focusLabel = activeStep?.label || '上传文件';

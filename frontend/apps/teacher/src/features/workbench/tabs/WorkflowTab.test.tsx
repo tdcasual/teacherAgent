@@ -204,4 +204,9 @@ describe('WorkflowTab', () => {
     expect(screen.queryByText('workflow-upload-section')).toBeNull();
     expect(screen.getByText('workflow-assignment-draft-section')).toBeTruthy();
   });
+
+  it('does not mount bank form when kind is not problem_set', () => {
+    render(<WorkflowTab {...buildProps()} assignmentKind="scenario" contentSource="bank" />);
+    expect(screen.queryByText('workflow-bank-pick-form')).toBeNull();
+  });
 });

@@ -193,6 +193,9 @@ export type StudentMemoryInsightsResponse = {
   type_counts?: Record<string, number>;
 };
 
+export type AssignmentKind = 'problem_set' | 'scenario' | 'science_history' | 'practical';
+export type ContentSource = 'upload' | 'bank' | 'ai';
+
 export type UploadJobStatus = {
   job_id: string;
   status:
@@ -219,10 +222,9 @@ export type UploadJobStatus = {
   delivery_mode?: string;
   questions_preview?: Array<{ id: number; stem: string }>;
   draft_saved?: boolean;
+  assignment_kind?: AssignmentKind;
+  content_source?: ContentSource;
 };
-
-export type AssignmentKind = 'problem_set' | 'scenario' | 'science_history' | 'practical';
-export type ContentSource = 'upload' | 'bank' | 'ai';
 
 export type UploadDraft = {
   job_id?: string;

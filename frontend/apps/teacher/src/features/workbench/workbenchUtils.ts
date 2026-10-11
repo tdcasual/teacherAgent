@@ -1,3 +1,5 @@
+import type { AssignmentKind, ContentSource } from '../../appTypes';
+
 export const parseCommaList = (text: string) =>
   String(text || '')
     .split(/[，,]/g)
@@ -92,12 +94,6 @@ export const CONTENT_SOURCE_OPTIONS = [
 
 export const BANK_SOURCE_DISABLED_TITLE = '题库仅用于做题作业';
 
-export const defaultCompletionPolicy = (kind: string) => ({
-  requires_submission: true,
-  requires_discussion: kind !== 'problem_set',
-  allow_practice: kind === 'problem_set',
-});
-
 export const computeLocalRequirementsMissing = (
   req: Record<string, unknown> | undefined,
   assignmentKind = 'problem_set',
@@ -134,24 +130,11 @@ export const clampQuestionCount = (raw: unknown, fallback = 5) => {
   return Math.min(20, Math.max(1, Math.round(value)));
 };
 
-export const formatApiErrorMessage = (text: string, status: number) => {
-  let message = text || `状态码 ${status}`;
-  try {
-    const parsed = JSON.parse(text) as { detail?: unknown; message?: string };
-    const detail = parsed?.detail ?? parsed;
-    if (typeof detail === 'string') message = detail;
-    else if (detail && typeof detail === 'object') {
-      const record = detail as { message?: string; hints?: string[]; error?: string };
-      if (record.message) {
-        const hints = Array.isArray(record.hints) ? record.hints.join('；') : '';
-        message = `${record.message}${hints ? `（${hints}）` : ''}`;
-      } else if (record.error) {
-        message = record.error;
-      }
-    }
-  } catch {
-    // keep raw text
-  }
-  if (message.includes('question_bank_insufficient')) return '题库不足';
-  return message;
-};
+export const isAssignmentKind = (value: unknown): value is AssignmentKind =>
+  value === 'problem_set' ||
+  value === 'scenario' ||
+  value === 'science_history' ||
+  value === 'practical';
+
+export const isContentSource = (value: unknown): value is ContentSource =>
+  value === 'upload' || value === 'bank' || value === 'ai';

@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { buildAssignmentWorkflowIndicator } from '../workflowIndicators';
 import {
   clampQuestionCount,
-  computeLocalRequirementsMissing as computeKindGatedRequirementsMissing,
-  defaultCompletionPolicy,
-  formatApiErrorMessage,
-  formatMissingRequirements,
+  computeLocalRequirementsMissing,
+  isAssignmentKind,
+  isContentSource,
   parseCommaList,
   parseLineList,
+  formatMissingRequirements,
 } from '../workbenchUtils';
 import {
   safeLocalStorageGetItem,
@@ -197,7 +197,6 @@ interface UseAssignmentWorkflowReturn {
   scrollToWorkflowSection: (sectionId: string) => void;
   assignmentWorkflowIndicator: WorkflowIndicator;
   assignmentWorkflowAutoState: string;
-  computeLocalRequirementsMissing: (req: UnknownRecord) => string[];
   updateDraftRequirement: (key: string, value: unknown) => void;
   updateDraftQuestion: (index: number, patch: UnknownRecord) => void;
 }
@@ -404,10 +403,24 @@ export function useAssignmentWorkflow(
         if (!active) return;
         const draft = data?.draft as UploadDraft;
         if (!draft) throw new Error('draft 数据缺失');
-        setUploadDraft({
+        const kind = isAssignmentKind(draft.assignment_kind)
+          ? draft.assignment_kind
+          : isAssignmentKind(uploadJobInfo?.assignment_kind)
+            ? uploadJobInfo.assignment_kind
+            : undefined;
+        const nextDraft: UploadDraft = {
           ...draft,
           questions: Array.isArray(draft.questions) ? draft.questions : [],
-        });
+          assignment_kind: kind,
+          content_source: isContentSource(draft.content_source) ? draft.content_source : 'upload',
+        };
+        setUploadDraft(nextDraft);
+        if (kind) {
+          setAssignmentKind(kind);
+          setCompletionRequiresSubmission(true);
+          setCompletionRequiresDiscussion(kind !== 'problem_set');
+          setCompletionAllowPractice(kind === 'problem_set');
+        }
         setDraftPanelCollapsed(false);
         setQuestionShowCount(20);
       } catch (err: unknown) {
@@ -424,12 +437,17 @@ export function useAssignmentWorkflow(
     };
   }, [
     apiBase,
+    setAssignmentKind,
+    setCompletionAllowPractice,
+    setCompletionRequiresDiscussion,
+    setCompletionRequiresSubmission,
     setDraftError,
     setDraftLoading,
     setDraftPanelCollapsed,
     setQuestionShowCount,
     setUploadDraft,
     uploadJobId,
+    uploadJobInfo?.assignment_kind,
     uploadJobInfo?.status,
   ]);
 
@@ -449,15 +467,6 @@ export function useAssignmentWorkflow(
     uploadDraft?.draft_version,
     uploadDraft?.job_id,
   ]);
-
-  // ---- computeLocalRequirementsMissing ----
-
-  const computeLocalRequirementsMissing = useCallback(
-    (req: UnknownRecord, kind = assignmentKind) => {
-      return computeKindGatedRequirementsMissing(req, kind);
-    },
-    [assignmentKind],
-  );
 
   // ---- updateDraftRequirement ----
 
@@ -480,7 +489,7 @@ export function useAssignmentWorkflow(
         };
       });
     },
-    [assignmentKind, computeLocalRequirementsMissing, setUploadDraft],
+    [assignmentKind, setUploadDraft],
   );
 
   // ---- updateDraftQuestion ----
@@ -679,7 +688,7 @@ export function useAssignmentWorkflow(
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(formatApiErrorMessage(text, res.status));
+          throw new Error(text || `状态码 ${res.status}`);
         }
         const data = await res.json();
         if (data?.requirements_missing) {
@@ -824,7 +833,11 @@ export function useAssignmentWorkflow(
             try {
               safeLocalStorageSetItem(
                 'teacherActiveUpload',
-                JSON.stringify({ type: 'assignment', job_id: jid }),
+                JSON.stringify({
+                  type: 'assignment',
+                  job_id: jid,
+                  assignment_kind: assignmentKind,
+                }),
               );
             } catch {
               // ignore
@@ -874,20 +887,25 @@ export function useAssignmentWorkflow(
   // ---- handleConfirmUpload ----
 
   const handleConfirmUpload = useCallback(async () => {
-    const resolvedJobId = (() => {
-      const jobId = String(uploadJobId || uploadDraft?.job_id || '').trim();
-      if (jobId) return jobId;
-      try {
-        const raw = safeLocalStorageGetItem('teacherActiveUpload');
-        if (!raw) return '';
-        const active = JSON.parse(raw);
-        if (active?.type === 'assignment' && active?.job_id) return String(active.job_id).trim();
-      } catch {
-        // ignore
-      }
-      return '';
-    })();
     const assignmentId = String(uploadDraft?.assignment_id || '').trim();
+    const draftJobId = String(uploadDraft?.job_id || '').trim();
+    const folderDraft = Boolean(assignmentId && !draftJobId);
+    const resolvedJobId = folderDraft
+      ? ''
+      : (() => {
+          const jobId = String(uploadJobId || draftJobId || '').trim();
+          if (jobId) return jobId;
+          try {
+            const raw = safeLocalStorageGetItem('teacherActiveUpload');
+            if (!raw) return '';
+            const active = JSON.parse(raw);
+            if (active?.type === 'assignment' && active?.job_id)
+              return String(active.job_id).trim();
+          } catch {
+            // ignore
+          }
+          return '';
+        })();
     if (!resolvedJobId && !assignmentId) {
       const message = '请先生成或上传作业草稿';
       setUploadError(message);
@@ -896,10 +914,14 @@ export function useAssignmentWorkflow(
     }
     if (resolvedJobId && !uploadJobId) setUploadJobId(resolvedJobId);
     const previousUploadJobInfo = uploadJobInfo ? { ...uploadJobInfo } : null;
+    const draftKind =
+      uploadDraft && isAssignmentKind(uploadDraft.assignment_kind)
+        ? uploadDraft.assignment_kind
+        : assignmentKind;
     const completionPolicyOverride = {
       requires_submission: completionRequiresSubmission,
       requires_discussion: completionRequiresDiscussion,
-      allow_practice: assignmentKind === 'problem_set' ? completionAllowPractice : false,
+      allow_practice: draftKind === 'problem_set' ? completionAllowPractice : false,
     };
     setUploadError('');
     setDraftActionError('');
@@ -1064,16 +1086,6 @@ export function useAssignmentWorkflow(
     uploadJobInfo,
   ]);
 
-  const applyCompletionDefaults = useCallback(
-    (kind: AssignmentKind) => {
-      const defaults = defaultCompletionPolicy(kind);
-      setCompletionRequiresSubmission(defaults.requires_submission);
-      setCompletionRequiresDiscussion(defaults.requires_discussion);
-      setCompletionAllowPractice(defaults.allow_practice);
-    },
-    [setCompletionAllowPractice, setCompletionRequiresDiscussion, setCompletionRequiresSubmission],
-  );
-
   const clearActiveDraft = useCallback(() => {
     setUploadDraft(null);
     setUploadJobId('');
@@ -1105,9 +1117,18 @@ export function useAssignmentWorkflow(
       if (next !== 'problem_set' && contentSource === 'bank') {
         setContentSource('upload');
       }
-      applyCompletionDefaults(next);
+      setCompletionRequiresSubmission(true);
+      setCompletionRequiresDiscussion(next !== 'problem_set');
+      setCompletionAllowPractice(next === 'problem_set');
     },
-    [applyCompletionDefaults, contentSource, setAssignmentKind, setContentSource],
+    [
+      contentSource,
+      setAssignmentKind,
+      setCompletionAllowPractice,
+      setCompletionRequiresDiscussion,
+      setCompletionRequiresSubmission,
+      setContentSource,
+    ],
   );
 
   const requestAssignmentKindChange = useCallback(
@@ -1164,13 +1185,38 @@ export function useAssignmentWorkflow(
       });
       setUploadJobId('');
       setUploadJobInfo(null);
+      try {
+        safeLocalStorageRemoveItem('teacherActiveUpload');
+      } catch {
+        // ignore
+      }
       setUploadDraft(draft);
+      if (isAssignmentKind(draft.assignment_kind)) {
+        setAssignmentKind(draft.assignment_kind);
+        setCompletionRequiresSubmission(true);
+        setCompletionRequiresDiscussion(draft.assignment_kind !== 'problem_set');
+        setCompletionAllowPractice(draft.assignment_kind === 'problem_set');
+      }
+      if (isContentSource(draft.content_source)) {
+        setContentSource(
+          draft.assignment_kind &&
+            draft.assignment_kind !== 'problem_set' &&
+            draft.content_source === 'bank'
+            ? 'upload'
+            : draft.content_source,
+        );
+      }
       setDraftPanelCollapsed(false);
       setQuestionShowCount(20);
       setMisconceptionsDirty(false);
     },
     [
       assignmentKind,
+      setAssignmentKind,
+      setCompletionAllowPractice,
+      setCompletionRequiresDiscussion,
+      setCompletionRequiresSubmission,
+      setContentSource,
       setDraftPanelCollapsed,
       setMisconceptionsDirty,
       setQuestionShowCount,
@@ -1187,6 +1233,7 @@ export function useAssignmentWorkflow(
 
   const handleFromBank = useCallback(
     async (input: { kp: string; count: number }) => {
+      if (assignmentKind !== 'problem_set') return;
       const assignmentId = uploadAssignmentId.trim();
       if (!assignmentId) {
         setUploadError('请填写作业编号');
@@ -1217,7 +1264,7 @@ export function useAssignmentWorkflow(
         });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(formatApiErrorMessage(text, res.status));
+          throw new Error(text || `状态码 ${res.status}`);
         }
         const data = await res.json();
         applyFolderDraft(data?.draft, 'bank');
@@ -1235,6 +1282,7 @@ export function useAssignmentWorkflow(
     [
       apiBase,
       applyFolderDraft,
+      assignmentKind,
       setDraftActionError,
       setDraftActionStatus,
       setUploadError,
@@ -1303,7 +1351,7 @@ export function useAssignmentWorkflow(
         const res = await fetch(`${apiBase}/assignment/generate`, { method: 'POST', body: fd });
         if (!res.ok) {
           const text = await res.text();
-          throw new Error(formatApiErrorMessage(text, res.status));
+          throw new Error(text || `状态码 ${res.status}`);
         }
         const data = await res.json();
         applyFolderDraft(data?.draft, 'ai');
@@ -1355,7 +1403,6 @@ export function useAssignmentWorkflow(
     scrollToWorkflowSection,
     assignmentWorkflowIndicator,
     assignmentWorkflowAutoState,
-    computeLocalRequirementsMissing,
     updateDraftRequirement,
     updateDraftQuestion,
   };

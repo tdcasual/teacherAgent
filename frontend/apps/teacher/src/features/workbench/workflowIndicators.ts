@@ -1,4 +1,5 @@
 import type {
+  ContentSource,
   UploadDraft,
   UploadJobStatus,
   WorkflowIndicator,
@@ -13,6 +14,17 @@ type TeacherWorkflowGuidanceArgs = {
   activeStepKey?: string;
   hasExecutionTimeline: boolean;
   hasProgressData: boolean;
+  contentSource?: ContentSource;
+};
+
+const sourceAction = (contentSource?: ContentSource) => {
+  if (contentSource === 'bank') {
+    return { primaryActionLabel: '去题库选题', primaryActionTargetId: 'workflow-bank-section' };
+  }
+  if (contentSource === 'ai') {
+    return { primaryActionLabel: '去 AI 起草', primaryActionTargetId: 'workflow-ai-section' };
+  }
+  return { primaryActionLabel: '去上传区', primaryActionTargetId: 'workflow-upload-section' };
 };
 
 export type TeacherWorkflowGuidance = {
@@ -34,7 +46,9 @@ export function buildTeacherWorkflowGuidance({
   activeStepKey,
   hasExecutionTimeline,
   hasProgressData,
+  contentSource,
 }: TeacherWorkflowGuidanceArgs): TeacherWorkflowGuidance {
+  const source = sourceAction(contentSource);
   if (tone === 'error') {
     if (activeStepKey === 'confirm' || activeStepKey === 'review') {
       return {
@@ -46,24 +60,24 @@ export function buildTeacherWorkflowGuidance({
 
     return {
       nextStepLabel: '下一步：检查上传材料并重新解析作业',
-      primaryActionLabel: '去上传区',
-      primaryActionTargetId: 'workflow-upload-section',
+      primaryActionLabel: source.primaryActionLabel,
+      primaryActionTargetId: source.primaryActionTargetId,
     };
   }
 
   if (activeStepKey === 'upload') {
     return {
       nextStepLabel: '下一步：上传今天的作业材料',
-      primaryActionLabel: '去上传区',
-      primaryActionTargetId: 'workflow-upload-section',
+      primaryActionLabel: source.primaryActionLabel,
+      primaryActionTargetId: source.primaryActionTargetId,
     };
   }
 
   if (activeStepKey === 'parse') {
     return {
       nextStepLabel: '下一步：查看解析进度并等待作业草稿生成',
-      primaryActionLabel: '查看上传区',
-      primaryActionTargetId: 'workflow-upload-section',
+      primaryActionLabel: source.primaryActionLabel,
+      primaryActionTargetId: source.primaryActionTargetId,
     };
   }
 
@@ -96,15 +110,15 @@ export function buildTeacherWorkflowGuidance({
   if (hasExecutionTimeline) {
     return {
       nextStepLabel: '下一步：查看最近一次执行结果',
-      primaryActionLabel: '去上传区',
-      primaryActionTargetId: 'workflow-upload-section',
+      primaryActionLabel: source.primaryActionLabel,
+      primaryActionTargetId: source.primaryActionTargetId,
     };
   }
 
   return {
     nextStepLabel: '下一步：从上传区开始今天的作业流程',
-    primaryActionLabel: '去上传区',
-    primaryActionTargetId: 'workflow-upload-section',
+    primaryActionLabel: source.primaryActionLabel,
+    primaryActionTargetId: source.primaryActionTargetId,
   };
 }
 

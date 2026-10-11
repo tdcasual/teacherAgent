@@ -65,6 +65,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
   const { draftLoading, draftError, uploadDraft } = props;
   const activeStep = findActiveWorkflowStep(props.activeWorkflowIndicator);
   const focusLabel = activeStep?.label || '上传文件';
+  const sourceBusy = props.uploading || Boolean(props.pendingPickerChange);
 
   return (
     <section
@@ -81,6 +82,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
         formatProgressSummary={props.formatProgressSummary}
         uploadJobInfo={props.uploadJobInfo}
         uploadAssignmentId={props.uploadAssignmentId}
+        contentSource={props.contentSource}
         scrollToWorkflowSection={props.scrollToWorkflowSection}
         refreshWorkflowWorkbench={props.refreshWorkflowWorkbench}
         progressData={props.progressData}
@@ -133,12 +135,12 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             setUploadStudentIds={props.setUploadStudentIds}
             setUploadFiles={props.setUploadFiles}
             setUploadAnswerFiles={props.setUploadAnswerFiles}
-            uploading={props.uploading}
+            uploading={sourceBusy}
             uploadError={props.uploadError}
             uploadStatus={props.uploadStatus}
           />
         ) : null}
-        {props.contentSource === 'bank' ? (
+        {props.contentSource === 'bank' && props.assignmentKind === 'problem_set' ? (
           <BankPickForm
             assignmentId={props.uploadAssignmentId}
             setAssignmentId={props.setUploadAssignmentId}
@@ -152,8 +154,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             setClassName={props.setUploadClassName}
             studentIds={props.uploadStudentIds}
             setStudentIds={props.setUploadStudentIds}
-            assignmentIdTestId="workflow-bank-assignment-id"
-            uploading={props.uploading}
+            uploading={sourceBusy}
             uploadError={props.uploadError}
             uploadStatus={props.uploadStatus}
             handleFromBank={props.handleFromBank}
@@ -174,8 +175,7 @@ export default function WorkflowTab(props: WorkflowTabProps) {
             setClassName={props.setUploadClassName}
             studentIds={props.uploadStudentIds}
             setStudentIds={props.setUploadStudentIds}
-            assignmentIdTestId="workflow-ai-assignment-id"
-            uploading={props.uploading}
+            uploading={sourceBusy}
             uploadError={props.uploadError}
             uploadStatus={props.uploadStatus}
             handleGenerate={props.handleGenerate}

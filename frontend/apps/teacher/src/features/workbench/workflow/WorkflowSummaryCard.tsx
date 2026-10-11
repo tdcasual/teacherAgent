@@ -20,6 +20,7 @@ export default function WorkflowSummaryCard(props: WorkflowSummaryCardProps) {
     activeStepKey: activeStep?.key,
     hasExecutionTimeline: false,
     hasProgressData: Boolean(progressData),
+    contentSource: props.contentSource,
   });
   const actionTargetLabel = activeStep?.label || '上传文件';
 

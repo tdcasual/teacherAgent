@@ -13,6 +13,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   forbidden_chat_job: '当前账号无权访问该任务。',
   forbidden_teacher_scope: '当前账号无权访问该教师资源。',
   forbidden_student_scope: '当前账号无权访问该学生资源。',
+  question_bank_insufficient: '题库不足',
 };
 
 const DANGEROUS_MESSAGE_RE = /[<>{}`]/;

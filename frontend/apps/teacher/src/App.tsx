@@ -526,11 +526,19 @@ export default function App() {
       if (data?.type === 'assignment' && data?.job_id) {
         setUploadMode('assignment');
         setUploadJobId(String(data.job_id));
+        if (
+          data.assignment_kind === 'problem_set' ||
+          data.assignment_kind === 'scenario' ||
+          data.assignment_kind === 'science_history' ||
+          data.assignment_kind === 'practical'
+        ) {
+          setAssignmentKind(data.assignment_kind);
+        }
       }
     } catch {
       // ignore
     }
-  }, [setUploadJobId, setUploadMode]);
+  }, [setAssignmentKind, setUploadJobId, setUploadMode]);
   useAssignmentUploadStatusPolling({
     apiBase,
     uploadJobId,
@@ -555,6 +563,7 @@ export default function App() {
       activeStepKey: activeStep?.key,
       hasExecutionTimeline: executionTimeline.length > 0,
       hasProgressData: Boolean(progressData),
+      contentSource,
     });
     const handlePrimaryAction = () => {
       setWorkbenchTab('workflow');
@@ -579,6 +588,7 @@ export default function App() {
     );
   }, [
     activeWorkflowIndicator,
+    contentSource,
     executionTimeline.length,
     progressAssignmentId,
     progressData,

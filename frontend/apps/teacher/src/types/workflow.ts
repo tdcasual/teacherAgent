@@ -115,12 +115,14 @@ export type SourceIdentityFieldsProps = {
   assignmentIdTestId: string;
 };
 
+type SourceIdentityFormFields = Omit<SourceIdentityFieldsProps, 'assignmentIdTestId'>;
+
 export type BankPickFormProps = {
   uploading: boolean;
   uploadError: string;
   uploadStatus: string;
   handleFromBank: (input: { kp: string; count: number }) => Promise<void>;
-} & SourceIdentityFieldsProps;
+} & SourceIdentityFormFields;
 
 export type AiDraftFormProps = {
   assignmentKind: AssignmentKind;
@@ -134,7 +136,7 @@ export type AiDraftFormProps = {
     gradeLevel: string;
     seed: string;
   }) => Promise<void>;
-} & SourceIdentityFieldsProps;
+} & SourceIdentityFormFields;
 
 export type AssignmentDraftSectionProps = {
   uploadDraft: UploadDraft | null;
@@ -178,6 +180,7 @@ export type WorkflowSummaryCardProps = {
   activeWorkflowIndicator: WorkflowIndicator;
   uploadJobInfo: UploadJobStatus | null;
   uploadAssignmentId: string;
+  contentSource?: ContentSource;
   progressData: AssignmentProgress | null;
   progressAssignmentId: string;
   progressLoading: boolean;

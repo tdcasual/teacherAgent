@@ -241,6 +241,282 @@ describe('useAssignmentWorkflow folder draft locator', () => {
     expect(captured.draft?.assignment_id).toBe('HW-BANK');
     expect(captured.draft?.content_source).toBe('bank');
   });
+
+  it('from-bank confirm ignores leftover teacherActiveUpload job_id', async () => {
+    window.localStorage.setItem(
+      'teacherActiveUpload',
+      JSON.stringify({ type: 'assignment', job_id: 'job-leftover' }),
+    );
+    const captured: { draft: Record<string, unknown> | null } = { draft: null };
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const rawBody = init?.body;
+        const body =
+          typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : {};
+        calls.push({ url: String(url), body });
+        if (String(url).includes('/assignment/draft/from-bank')) {
+          return {
+            ok: true,
+            json: async () => ({
+              ok: true,
+              assignment_id: 'HW-BANK',
+              draft: {
+                assignment_id: 'HW-BANK',
+                questions: [{ stem: 'bank-q' }],
+                requirements: {},
+                requirements_missing: [],
+                assignment_kind: 'problem_set',
+                content_source: 'bank',
+              },
+            }),
+            text: async (): Promise<string> => '',
+          };
+        }
+        return {
+          ok: true,
+          json: async () => ({ ok: true, message: 'ok', assignment_id: 'HW-BANK' }),
+          text: async (): Promise<string> => '',
+        };
+      }),
+    );
+
+    const props = () => ({
+      ...baseParams,
+      uploadAssignmentId: 'HW-BANK',
+      uploadJobId: 'job-leftover',
+      uploadDraft: captured.draft as never,
+      setUploadDraft: (value: unknown) => {
+        captured.draft =
+          typeof value === 'function'
+            ? (value as (prev: unknown) => Record<string, unknown>)(captured.draft)
+            : (value as Record<string, unknown>);
+      },
+      setUploading: vi.fn(),
+      setUploadError: vi.fn(),
+      setUploadStatus: vi.fn(),
+      setDraftActionError: vi.fn(),
+      setDraftActionStatus: vi.fn(),
+      setUploadJobId: vi.fn(),
+      setUploadJobInfo: vi.fn(),
+      setDraftPanelCollapsed: vi.fn(),
+      setQuestionShowCount: vi.fn(),
+      setMisconceptionsDirty: vi.fn(),
+      setDraftSaving: vi.fn(),
+      setUploadConfirming: vi.fn(),
+      setProgressAssignmentId: vi.fn(),
+      setProgressPanelCollapsed: vi.fn(),
+    });
+
+    const { result, rerender } = renderHook((current) => useAssignmentWorkflow(current), {
+      initialProps: props(),
+    });
+
+    await act(async () => {
+      await result.current.handleFromBank({ kp: '力学', count: 5 });
+    });
+    expect(window.localStorage.getItem('teacherActiveUpload')).toBeNull();
+    rerender(props());
+
+    await act(async () => {
+      await result.current.handleConfirmUpload();
+    });
+    const confirm = calls.find((call) => call.url.includes('/assignment/upload/confirm'));
+    expect(confirm?.body.assignment_id).toBe('HW-BANK');
+    expect(confirm?.body.job_id).toBeUndefined();
+  });
+
+  it('confirm override uses draft.assignment_kind not picker kind', async () => {
+    window.localStorage.removeItem('teacherActiveUpload');
+    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({
+          url: String(url),
+          body: JSON.parse(String(init?.body || '{}')) as Record<string, unknown>,
+        });
+        return {
+          ok: true,
+          json: async () => ({ ok: true, message: 'ok', assignment_id: 'HW-SCENARIO' }),
+          text: async () => '',
+        };
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        assignmentKind: 'problem_set',
+        completionAllowPractice: true,
+        completionRequiresDiscussion: false,
+        uploadJobId: '',
+        uploadDraft: {
+          ...folderDraft,
+          assignment_id: 'HW-SCENARIO',
+          assignment_kind: 'scenario',
+          questions: [],
+          requirements: { subject: '物理', topic: '测量', grade_level: '高二', brief: '说明' },
+        },
+        setUploadError: vi.fn(),
+        setDraftActionError: vi.fn(),
+        setDraftActionStatus: vi.fn(),
+        setDraftSaving: vi.fn(),
+        setUploadConfirming: vi.fn(),
+        setUploadStatus: vi.fn(),
+        setUploadDraft: vi.fn(),
+        setMisconceptionsDirty: vi.fn(),
+        setProgressAssignmentId: vi.fn(),
+        setProgressPanelCollapsed: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleConfirmUpload();
+    });
+    const confirm = calls.find((call) => call.url.includes('/assignment/upload/confirm'));
+    expect(confirm?.body.completion_policy_override).toEqual({
+      requires_submission: true,
+      requires_discussion: false,
+      allow_practice: false,
+    });
+  });
+
+  it('generate posts generate=true and stores a folder draft without job_id', async () => {
+    const captured: { draft: Record<string, unknown> | null } = { draft: null };
+    const appended: Array<[string, string]> = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = init?.body as FormData;
+        for (const key of [
+          'assignment_id',
+          'assignment_kind',
+          'generate',
+          'content_source',
+          'seed',
+          'requirements_json',
+        ]) {
+          const value = body.get(key);
+          if (typeof value === 'string') appended.push([key, value]);
+        }
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            draft: {
+              assignment_id: 'HW-AI',
+              assignment_kind: 'scenario',
+              content_source: 'ai',
+              questions: [],
+              requirements: { topic: '测量', grade_level: '高二', brief: '模型稿' },
+            },
+          }),
+          text: async () => '',
+        };
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        assignmentKind: 'scenario',
+        contentSource: 'ai',
+        uploadAssignmentId: 'HW-AI',
+        setUploadDraft: (value) => {
+          captured.draft =
+            typeof value === 'function'
+              ? value(captured.draft as never)
+              : (value as Record<string, unknown>);
+        },
+        setUploading: vi.fn(),
+        setUploadError: vi.fn(),
+        setUploadStatus: vi.fn(),
+        setDraftActionError: vi.fn(),
+        setDraftActionStatus: vi.fn(),
+        setUploadJobId: vi.fn(),
+        setUploadJobInfo: vi.fn(),
+        setDraftPanelCollapsed: vi.fn(),
+        setQuestionShowCount: vi.fn(),
+        setMisconceptionsDirty: vi.fn(),
+        setAssignmentKind: vi.fn(),
+        setContentSource: vi.fn(),
+        setCompletionRequiresSubmission: vi.fn(),
+        setCompletionRequiresDiscussion: vi.fn(),
+        setCompletionAllowPractice: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleGenerate({
+        kp: '',
+        perKp: 5,
+        topic: '测量',
+        gradeLevel: '高二',
+        seed: '伏安特性',
+      });
+    });
+    expect(appended).toContainEqual(['assignment_id', 'HW-AI']);
+    expect(appended).toContainEqual(['assignment_kind', 'scenario']);
+    expect(appended).toContainEqual(['generate', 'true']);
+    expect(appended).toContainEqual(['content_source', 'ai']);
+    expect(appended).toContainEqual(['seed', '伏安特性']);
+    expect(captured.draft?.job_id).toBeUndefined();
+    expect(captured.draft?.assignment_id).toBe('HW-AI');
+  });
+
+  it('confirm and cancel picker change with an existing draft', async () => {
+    const setAssignmentKind = vi.fn();
+    const setUploadDraft = vi.fn();
+    window.localStorage.setItem(
+      'teacherActiveUpload',
+      JSON.stringify({ type: 'assignment', job_id: 'job-1' }),
+    );
+    const { result } = renderHook(() =>
+      useAssignmentWorkflow({
+        ...baseParams,
+        assignmentKind: 'problem_set',
+        uploadDraft: folderDraft,
+        setAssignmentKind,
+        setUploadDraft,
+        setUploadJobId: vi.fn(),
+        setUploadJobInfo: vi.fn(),
+        setDraftError: vi.fn(),
+        setDraftActionError: vi.fn(),
+        setDraftActionStatus: vi.fn(),
+        setMisconceptionsText: vi.fn(),
+        setMisconceptionsDirty: vi.fn(),
+        setCompletionRequiresSubmission: vi.fn(),
+        setCompletionRequiresDiscussion: vi.fn(),
+        setCompletionAllowPractice: vi.fn(),
+        setContentSource: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.requestAssignmentKindChange('scenario');
+    });
+    expect(result.current.pendingPickerChange).toEqual({ type: 'kind', value: 'scenario' });
+    expect(setAssignmentKind).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.cancelPendingPickerChange();
+    });
+    expect(result.current.pendingPickerChange).toBeNull();
+    expect(setUploadDraft).not.toHaveBeenCalledWith(null);
+
+    act(() => {
+      result.current.requestAssignmentKindChange('scenario');
+    });
+    act(() => {
+      result.current.confirmPendingPickerChange();
+    });
+    expect(result.current.pendingPickerChange).toBeNull();
+    expect(setUploadDraft).toHaveBeenCalledWith(null);
+    expect(setAssignmentKind).toHaveBeenCalledWith('scenario');
+    expect(window.localStorage.getItem('teacherActiveUpload')).toBeNull();
+  });
 });
 
 describe('useAssignmentWorkflow saveStudentGrade', () => {
