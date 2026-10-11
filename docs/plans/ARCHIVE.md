@@ -6,6 +6,7 @@
 - `docs/plans/2026-08-26-audit-remediation-design.md`（安全修复历史权威）
 - `docs/plans/2026-09-06-strict-score-floor-design.md`（catalog vis 权威；进度数字见 10-10 KD-7）
 - `docs/plans/2026-10-10-audit-remediation-design.md`（本波审计修复）
+- `docs/plans/2026-10-10-next-phase-gapfill-design.md`（作业闭环下一阶段：`assignment_kind` × `content_source` + 做题题库补练）
 
 被本文件在**教师读路径**上部分取代、仍作历史：
 
