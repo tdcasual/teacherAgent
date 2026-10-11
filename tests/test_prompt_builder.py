@@ -36,7 +36,7 @@ class TestPromptBuilder(unittest.TestCase):
         self.assertIn("学生端学习助手", student)
         self.assertNotIn("物理学习助手", student)
         self.assertNotIn("列出考试", student)
-        self.assertNotIn("生成作业", student)
+        self.assertIn("不要生成作业", student)
 
     def test_generic_overlay_does_not_fight_student_base_identity(self):
         from services.api.prompt_builder import compile_system_prompt
@@ -104,6 +104,49 @@ class TestPromptBuilder(unittest.TestCase):
         self.assertNotIn("subject_overlay", modules)
         self.assertTrue(prompt.endswith("\n"))
 
+    def test_student_active_stack_forbids_authoring_imperatives(self):
+        from pathlib import Path
+
+        from services.api.prompt_builder import compile_system_prompt
+
+        authoring = ("进入诊断问题", "【诊断问题】", "动态生成Q1", "列出考试", "考试分析")
+        student, modules = compile_system_prompt("student", version="v1", debug=False)
+        coach = (
+            Path(__file__).resolve().parents[1]
+            / "prompts"
+            / "v1"
+            / "student"
+            / "skills"
+            / "student_coach.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("学生端学习助手", student)
+        self.assertIn("不要生成作业", student)
+        self.assertIn("不要生成作业", coach)
+        self.assertTrue(any("student/10_role.md" in m for m in modules))
+        for phrase in authoring:
+            self.assertNotIn(phrase, student)
+            self.assertNotIn(phrase, coach)
+
+    def test_teacher_stack_keeps_figure_reference_self_check(self):
+        from services.api.prompt_builder import compile_system_prompt
+
+        teacher, _ = compile_system_prompt("teacher", version="v1", debug=False)
+        self.assertIn("若生成或展示题目", teacher)
+        self.assertIn("图引用词", teacher)
+
+    def test_student_manifest_omits_archived_authoring_modules(self):
+        from services.api.prompt_builder import load_manifest
+
+        load_manifest.cache_clear()
+        manifest = load_manifest("v1")
+        student_modules = "\n".join(manifest.get("student") or [])
+        self.assertNotIn("25_question_quality.md", student_modules)
+        self.assertNotIn("30_tutoring_style.md", student_modules)
+        self.assertIn("student/10_role.md", student_modules)
+        self.assertIn("student/20_math_rules.md", student_modules)
+        self.assertIn("common/90_self_check.md", student_modules)
+
 
 if __name__ == "__main__":
     unittest.main()
+

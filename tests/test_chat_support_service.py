@@ -34,6 +34,12 @@ class TestBuildVerifiedStudentContext:
         ctx = build_verified_student_context("")
         assert "(empty)" in ctx
 
+    def test_does_not_instruct_diagnostic_q1(self):
+        ctx = build_verified_student_context("S001")
+        assert "【诊断问题】" not in ctx
+        assert "Q1" not in ctx
+        assert "绝对不要再次要求姓名" in ctx
+
 
 # ── detect_student_study_trigger ────────────────────────────────────────
 

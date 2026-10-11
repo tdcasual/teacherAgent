@@ -1,3 +1,4 @@
+import csv
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -6,9 +7,12 @@ from tempfile import TemporaryDirectory
 from services.api.chat_job_processing_service import (
     ComputeChatReplyDeps,
     _student_can_attach_assignment,
+    _student_extra_system,
     compute_chat_reply_sync,
 )
 from services.api.subject_pack_service import overlay_for_role
+
+AUTHORING = ("进入诊断问题", "【诊断问题】", "动态生成Q1", "列出考试", "考试分析")
 
 
 class _Msg:
@@ -31,6 +35,92 @@ class _Req:
 @contextmanager
 def _student_inflight(_student_id):
     yield True
+
+
+def _attachable_detail(**overrides):
+    meta = {
+        "teacher_id": "t1",
+        "visibility_status": "published",
+        "scope": "public",
+        "expected_students": ["S001"],
+        "assignment_kind": "problem_set",
+        "content_source": "upload",
+        "target_kp": ["牛顿定律"],
+        "mode": "upload",
+    }
+    detail = {
+        "assignment_id": "A1",
+        "date": "2026-02-08",
+        "question_count": 1,
+        "meta": meta,
+        "requirements": {"subject": "物理", "topic": "力学"},
+    }
+    detail.update(overrides)
+    if "meta" in overrides:
+        merged = dict(meta)
+        merged.update(overrides["meta"])
+        detail["meta"] = merged
+    return detail
+
+
+def _write_question_row(folder: Path, *, stem: str, answer: str) -> None:
+    stems = folder / "stems"
+    answers = folder / "answers"
+    stems.mkdir(parents=True, exist_ok=True)
+    answers.mkdir(parents=True, exist_ok=True)
+    (stems / "q1.md").write_text(stem, encoding="utf-8")
+    (answers / "q1.md").write_text(answer, encoding="utf-8")
+    with (folder / "questions.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "question_id",
+                "kp_id",
+                "difficulty",
+                "type",
+                "stem_ref",
+                "answer_ref",
+                "source",
+                "tags",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "question_id": "Q1",
+                "kp_id": "kp.force",
+                "difficulty": "basic",
+                "type": "calc",
+                "stem_ref": str(stems / "q1.md"),
+                "answer_ref": str(answers / "q1.md"),
+                "source": "upload",
+                "tags": "",
+            }
+        )
+
+
+def _student_deps(root: Path, **overrides):
+    values = dict(
+        detect_role=lambda _text: "student",
+        diag_log=lambda *_args, **_kwargs: None,
+        teacher_assignment_preflight=lambda _req: None,
+        resolve_teacher_id=lambda teacher_id: str(teacher_id or "teacher"),
+        teacher_build_context=lambda *_args, **_kwargs: "",
+        detect_student_study_trigger=lambda _text: False,
+        load_profile_file=lambda _path: {"student_id": "S001"},
+        data_dir=root / "data",
+        build_verified_student_context=lambda _sid, _profile: "verified",
+        build_assignment_detail_cached=lambda _folder, include_text=False: _attachable_detail(),
+        build_assignment_context=lambda *_args, **_kwargs: "SHOULD_NOT_JSON_DUMP",
+        chat_extra_system_max_chars=6000,
+        trim_messages=lambda msgs, role_hint=None: msgs,
+        student_inflight=_student_inflight,
+        run_agent=lambda *_args, **_kwargs: {"reply": "OK"},
+        normalize_math_delimiters=lambda text: text,
+        resolve_effective_skill=lambda _role, _skill_id, _last_user_text: {},
+    )
+    values.update(overrides)
+    return ComputeChatReplyDeps(**values)
 
 
 class ChatJobProcessingServiceTest(unittest.TestCase):
@@ -105,6 +195,8 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
         source = Path(mod.__file__).read_text(encoding="utf-8")
         self.assertNotIn("find_assignment_for_date", source)
         self.assertNotIn("find_assignment_for_date", ComputeChatReplyDeps.__dataclass_fields__)
+        self.assertNotIn('json.dumps(detail["questions"])', source)
+        self.assertNotIn("json.dumps(detail.get(\"questions\")", source)
 
         with TemporaryDirectory() as td:
             root = Path(td)
@@ -187,6 +279,74 @@ class ChatJobProcessingServiceTest(unittest.TestCase):
                 class_name="other-class",
             )
         )
+
+    def test_student_extra_system_includes_stems_when_assignment_bound(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            _write_question_row(
+                folder, stem="可见题干：求合力。", answer="SECRET_ANSWER_42"
+            )
+            deps = _student_deps(root)
+            extra = _student_extra_system(
+                _Req(assignment_id="A1"),
+                deps=deps,
+                last_user_text="讲一下这题",
+                last_assistant_text="",
+            )
+            text = extra or ""
+            self.assertIn("verified", text)
+            self.assertIn("【学习规则】", text)
+            self.assertIn("可见题干：求合力。", text)
+            self.assertIn("assignment_kind=problem_set", text)
+            self.assertIn("content_source=upload", text)
+            self.assertLess(text.find("【学习规则】"), text.find("可见题干：求合力。"))
+            self.assertNotIn("SECRET_ANSWER_42", text)
+            self.assertNotIn("answer_ref", text)
+            self.assertNotIn("answer_text", text)
+            self.assertNotIn("SHOULD_NOT_JSON_DUMP", text)
+            self.assertNotIn('json.dumps', text)
+            for phrase in AUTHORING:
+                self.assertNotIn(phrase, text)
+
+    def test_scenario_extra_system_uses_brief_not_authoring_rules(self):
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            folder = root / "data" / "assignments" / "A1"
+            folder.mkdir(parents=True)
+            (folder / "brief.md").write_text("情景：在实验室观察小车。", encoding="utf-8")
+            deps = _student_deps(
+                root,
+                build_assignment_detail_cached=lambda _folder, include_text=False: _attachable_detail(
+                    meta={
+                        "assignment_kind": "scenario",
+                        "content_source": "ai",
+                    },
+                    requirements={
+                        "subject": "物理",
+                        "topic": "运动",
+                        "brief": "只讨论老师给的实验室情景。",
+                        "discussion_goals": ["说出控制变量"],
+                    },
+                ),
+            )
+            extra = _student_extra_system(
+                _Req(assignment_id="A1"),
+                deps=deps,
+                last_user_text="随便聊聊",
+                last_assistant_text="",
+            )
+            text = extra or ""
+            self.assertIn("只讨论老师给的实验室情景。", text)
+            self.assertIn("说出控制变量", text)
+            self.assertIn("assignment_kind=scenario", text)
+            self.assertIn("content_source=ai", text)
+            self.assertIn("只围绕老师 brief", text)
+            self.assertNotIn("补练题", text)
+            self.assertNotIn("【作业题干】", text)
+            for phrase in AUTHORING:
+                self.assertNotIn(phrase, text)
 
     def test_compute_chat_reply_ignores_invalid_student_profile_path(self):
         with TemporaryDirectory() as td:

@@ -22,7 +22,6 @@ def build_verified_student_context(student_id: str, profile: Optional[Dict[str, 
     class_name = profile.get("class_name", "")
     instructions = [
         "学生身份已通过前端验证。绝对不要再次要求姓名、身份确认或任何验证流程。",
-        "若学生请求开始作业/诊断，请直接输出【诊断问题】Q1。",
     ]
     data_lines = []
     if student_id:

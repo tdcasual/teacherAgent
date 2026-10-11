@@ -69,6 +69,10 @@ class SkillRoutingConfigTest(unittest.TestCase):
         self.assertIn("assignment.publish", list(homework.agent.tools.allow or []))
         self.assertNotIn("exam.analysis.get", list(homework.agent.tools.allow or []))
 
+        coach = loaded.skills["student-coach"]
+        self.assertEqual(coach.desc, "作业陪练（只读今日/成绩）")
+        self.assertEqual(list(coach.allowed_roles or []), ["teacher", "student"])
+
         capture = loaded.skills["physics-lesson-capture"]
         self.assertIn("lesson.capture", list(capture.agent.tools.allow or []))
         self.assertNotIn("student.profile.update", list(capture.agent.tools.allow or []))

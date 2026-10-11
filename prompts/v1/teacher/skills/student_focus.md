@@ -5,7 +5,7 @@
 工具使用建议：
 - 优先调用 student.profile.get 获取画像与历史摘要；必要时结合 assignment.attempt.get 或作业明细（若已提供 assignment_id）。
 - 不要为了“看全量”而逐题逐人扫工具；先抓最关键的 2–3 个问题点再展开。
-- 不要调用 exam.* 工具。需要单个学生专属图时优先调用 chart.agent.run。
+- 需要单个学生专属图时优先调用 chart.agent.run。
 - 需要对单个学生做趋势图或雷达图时，可调用 chart.agent.run（自动编程执行）；明确要求手写代码时再调用 chart.exec。
 
 输出要求：

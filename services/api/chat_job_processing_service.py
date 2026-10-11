@@ -462,6 +462,21 @@ def _student_can_attach_assignment(
     return sid in snapshot_student_ids(meta)
 
 
+def _load_attachable_student_assignment(
+    req: Any, *, deps: ComputeChatReplyDeps
+) -> Tuple[Optional[Any], Optional[Dict[str, Any]]]:
+    assignment_id = str(getattr(req, "assignment_id", "") or "").strip()
+    if not assignment_id:
+        return None, None
+    folder = _resolve_assignment_dir(deps.data_dir, assignment_id)
+    if not folder or not folder.exists():
+        return None, None
+    detail = deps.build_assignment_detail_cached(folder, include_text=False)
+    if not _student_can_attach_assignment(detail, student_id=req.student_id):
+        return None, None
+    return folder, detail
+
+
 def _student_extra_system(
     req: Any,
     *,
@@ -469,11 +484,8 @@ def _student_extra_system(
     last_user_text: str,
     last_assistant_text: str,
 ) -> Optional[str]:
-    assignment_detail = None
+    del last_user_text, last_assistant_text
     extra_parts: List[str] = []
-    study_mode = deps.detect_student_study_trigger(last_user_text) or (
-        ("【诊断问题】" in last_assistant_text) or ("【训练问题】" in last_assistant_text)
-    )
     profile: Dict[str, Any] = {}
 
     if req.student_id:
@@ -482,20 +494,23 @@ def _student_extra_system(
             profile = deps.load_profile_file(profile_path)
         extra_parts.append(deps.build_verified_student_context(req.student_id, profile))
 
-    if req.assignment_id:
-        folder = _resolve_assignment_dir(deps.data_dir, str(req.assignment_id or ""))
-        if folder and folder.exists():
-            assignment_detail = deps.build_assignment_detail_cached(folder, include_text=False)
-    if assignment_detail and not _student_can_attach_assignment(
-        assignment_detail, student_id=req.student_id
-    ):
-        assignment_detail = None
+    folder, assignment_detail = _load_attachable_student_assignment(req, deps=deps)
+    if folder is not None and assignment_detail:
+        from .assignment_context_service import build_bound_student_assignment_extra
+        from .config import APP_ROOT
 
-    if assignment_detail and study_mode:
-        extra_parts.append(deps.build_assignment_context(assignment_detail, study_mode=True))
+        extra_parts.append(
+            build_bound_student_assignment_extra(
+                folder=folder,
+                detail=assignment_detail,
+                data_dir=deps.data_dir,
+                app_root=APP_ROOT,
+                student_id=str(req.student_id or ""),
+            )
+        )
     if not extra_parts:
         return None
-    return "\n\n".join(extra_parts)
+    return "\n\n".join(part for part in extra_parts if str(part or "").strip())
 
 
 def _with_attachment_context(extra_system: Optional[str], attachment_context: str) -> Optional[str]:
@@ -633,13 +648,17 @@ def _build_chat_extra_system(
     ).strip()
     extra_system = _join_extra_system(overlay, extra_system)
     extra_system = _with_attachment_context(extra_system, attachment_context)
-    return (
-        _cap_extra_system(
-            extra_system,
-            max_chars=deps.chat_extra_system_max_chars,
-        ),
-        effective_teacher_id,
+    original = extra_system
+    extra_system = _cap_extra_system(
+        extra_system,
+        max_chars=deps.chat_extra_system_max_chars,
     )
+    if original and extra_system != original:
+        deps.diag_log(
+            "assignment.context.truncated",
+            {"max_chars": int(deps.chat_extra_system_max_chars)},
+        )
+    return extra_system, effective_teacher_id
 
 
 def _build_run_agent_kwargs(
