@@ -123,15 +123,45 @@ def _resolve_draft_assignment_dir(data_dir: Path, assignment_id: str) -> Path:
     return target
 
 
+def _resolve_assignment_folder_ref(
+    ref: str, *, out_dir: Path, app_root: Path
+) -> Optional[Path]:
+    raw = str(ref or "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = (Path(app_root) / path).resolve()
+    else:
+        path = path.resolve()
+    jail = Path(out_dir).resolve()
+    if path != jail and jail not in path.parents:
+        return None
+    if not path.is_file():
+        return None
+    return path
+
+
 def _reject_out_of_jail_question_refs(
-    rows: List[Dict[str, Any]], *, data_dir: Path, app_root: Path
+    rows: List[Dict[str, Any]],
+    *,
+    data_dir: Path,
+    app_root: Path,
+    out_dir: Path,
+    content_source: str,
 ) -> None:
     for row in rows:
         for field in ("stem_ref", "answer_ref"):
             raw = str(row.get(field) or "").strip()
             if not raw:
                 continue
-            if resolve_bank_ref(raw, data_dir=data_dir, app_root=app_root) is None:
+            if content_source == "bank":
+                resolved = resolve_bank_ref(raw, data_dir=data_dir, app_root=app_root)
+            else:
+                resolved = _resolve_assignment_folder_ref(
+                    raw, out_dir=out_dir, app_root=app_root
+                )
+            if resolved is None:
                 raise AssignmentUploadDraftSaveError(400, "invalid_bank_ref")
 
 
@@ -190,10 +220,13 @@ def save_assignment_folder_draft(
             raise AssignmentUploadDraftSaveError(400, "questions must be an array")
         cleaned = deps.clean_assignment_draft_questions(questions)
         if cleaned:
-            if effective_content_source(meta, folder=out_dir) == "bank":
-                _reject_out_of_jail_question_refs(
-                    cleaned, data_dir=data_dir, app_root=deps.app_root or APP_ROOT
-                )
+            _reject_out_of_jail_question_refs(
+                cleaned,
+                data_dir=data_dir,
+                app_root=deps.app_root or APP_ROOT,
+                out_dir=out_dir,
+                content_source=effective_content_source(meta, folder=out_dir),
+            )
             write_questions_csv(out_dir / "questions.csv", cleaned)
         else:
             ensure_questions_csv_header(out_dir / "questions.csv")

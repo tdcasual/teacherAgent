@@ -219,6 +219,42 @@ class AssignmentUploadDraftSaveServiceTest(unittest.TestCase):
             self.assertIn("GEN-力学-basic-01", csv_text)
             self.assertIn("generated_stems", csv_text)
 
+    def test_folder_save_rejects_passwd_ref_for_non_bank_draft(self):
+        for source in ("ai", "upload"):
+            with TemporaryDirectory() as td:
+                root = Path(td)
+                folder = root / "data" / "assignments" / "A_SRC"
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "generated_stems").mkdir()
+                (folder / "meta.json").write_text(
+                    json.dumps(
+                        {
+                            "assignment_id": "A_SRC",
+                            "teacher_id": "t_zhang",
+                            "visibility_status": "draft",
+                            "assignment_kind": "problem_set",
+                            "content_source": source,
+                        },
+                        ensure_ascii=False,
+                    ),
+                    encoding="utf-8",
+                )
+                deps = self._deps(root, writes=[])
+                token = set_current_principal(AuthPrincipal(actor_id="t_zhang", role="teacher"))
+                try:
+                    with self.assertRaises(AssignmentUploadDraftSaveError) as cm:
+                        save_assignment_folder_draft(
+                            "A_SRC",
+                            None,
+                            [{"stem": "q", "stem_ref": "/etc/passwd"}],
+                            deps=deps,
+                        )
+                finally:
+                    reset_current_principal(token)
+                self.assertEqual(cm.exception.status_code, 400)
+                self.assertEqual(cm.exception.detail, "invalid_bank_ref")
+                self.assertFalse((folder / "questions.csv").exists())
+
     def test_folder_save_rejects_unsafe_assignment_id(self):
         with TemporaryDirectory() as td:
             root = Path(td)
