@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import secrets
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +14,7 @@ from types import SimpleNamespace
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 from .assignment_catalog_service import effective_assignment_kind
-from .assignment_context_service import load_practice_stems
+from .assignment_context_service import jailed_student_submission_dir, load_practice_stems
 from .assignment_submission_attempt_service import (
     AssignmentSubmissionAttemptDeps,
     list_submission_attempts,
@@ -178,7 +180,10 @@ def practice_status_counts(
     assignment_id: str,
     student_id: str,
 ) -> Dict[str, Any]:
-    root = Path(data_dir) / "student_submissions" / assignment_id / student_id
+    zeros = {"assigned": 0, "submitted": 0, "open": 0, "bank_miss": False}
+    root = jailed_student_submission_dir(data_dir, assignment_id, student_id)
+    if root is None:
+        return zeros
     assigned = 0
     submitted = 0
     open_count = 0
@@ -197,25 +202,34 @@ def practice_status_counts(
     }
 
 
-def history_practice_counts(
-    data_dir: Path,
-    assignment_id: str,
-    student_id: str,
-) -> Dict[str, Any]:
-    summary = practice_status_counts(data_dir, assignment_id, student_id)
-    return {
-        "open": int(summary.get("open") or 0),
-        "submitted": int(summary.get("submitted") or 0),
-        "bank_miss": bool(summary.get("bank_miss")),
-    }
-
-
 def _find_open_practice(root: Path) -> Optional[Path]:
     for practice_dir in _iter_practice_dirs(root):
         status = str(_practice_meta(practice_dir).get("status") or "").strip().lower()
         if status != "submitted":
             return practice_dir
     return None
+
+
+def _acquire_create_lock(root: Path, timeout_sec: float = 8.0) -> bool:
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / "practice_create.lock"
+    start = time.monotonic()
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            return True
+        except FileExistsError:
+            if (time.monotonic() - start) >= timeout_sec:
+                return False
+            time.sleep(0.05)
+
+
+def _release_create_lock(root: Path) -> None:
+    try:
+        (root / "practice_create.lock").unlink()
+    except OSError:
+        _log.debug("failed to release practice create lock", exc_info=True)
 
 
 def _add_question_ids(excluded: Set[str], values: Any) -> None:
@@ -314,6 +328,57 @@ def _new_practice_id() -> str:
     return PRACTICE_PREFIX + secrets.token_hex(6)
 
 
+def _mkdir_exclusive(path: Path) -> Path:
+    try:
+        path.mkdir(parents=False, exist_ok=False)
+        return path
+    except FileExistsError:
+        retry = path.parent / _new_practice_id()
+        retry.mkdir(parents=False, exist_ok=False)
+        return retry
+
+
+def _materialize_open_practice(
+    root: Path,
+    *,
+    deps: StudentPracticeDeps,
+    assignment_id: str,
+    student_id: str,
+    meta: Dict[str, Any],
+    items: List[dict],
+) -> Path:
+    practice_dir = _mkdir_exclusive(root / _new_practice_id())
+    write_questions_csv(practice_dir / "questions.csv", items)
+    question_ids = [
+        str(row.get("question_id") or "").strip()
+        for row in items
+        if str(row.get("question_id") or "").strip()
+    ]
+    kp_ids: List[str] = []
+    for row in items:
+        kp = str(row.get("kp_id") or "").strip()
+        if kp and kp not in kp_ids:
+            kp_ids.append(kp)
+    _dump_json(
+        practice_dir / "meta.json",
+        {
+            "schema": PRACTICE_SCHEMA,
+            "practice_id": practice_dir.name,
+            "assignment_id": assignment_id,
+            "student_id": student_id,
+            "teacher_id": str(meta.get("teacher_id") or ""),
+            "subject_id": str(meta.get("subject_id") or ""),
+            "status": "open",
+            "question_ids": question_ids,
+            "kp_ids": kp_ids,
+            "created_at": deps.now_iso(),
+            "submitted_at": "",
+            "bank_source": "question_bank",
+        },
+    )
+    return practice_dir
+
+
 def _practice_public(deps: StudentPracticeDeps, practice_dir: Path) -> Dict[str, Any]:
     meta = _practice_meta(practice_dir)
     stems = load_practice_stems(
@@ -357,66 +422,42 @@ def recommend_practice(
     sid = _require_safe_id(student_id, "student_id")
     meta = _gate_recommend(deps, aid, sid)
     root = _student_root(deps, aid, sid)
-    existing = _find_open_practice(root)
-    if existing is not None:
-        payload = _practice_public(deps, existing)
+    locked = _acquire_create_lock(root)
+    try:
+        existing = _find_open_practice(root)
+        if existing is not None:
+            payload = _practice_public(deps, existing)
+            payload["ok"] = True
+            return payload
+        pick = pick_practice_items(
+            data_dir=Path(deps.data_dir),
+            app_root=Path(deps.app_root),
+            kp_list=_kp_list(deps, aid, sid),
+            excluded_ids=_excluded_question_ids(deps, aid, sid, root),
+            count=3,
+        )
+        if not pick.get("ok"):
+            _write_bank_miss(root, aid, sid, deps.now_iso())
+            deps.diag_log(
+                "student.practice.bank_miss",
+                {"student_id": sid, "assignment_id": aid},
+            )
+            raise StudentPracticeError(409, "question_bank_insufficient")
+        items = [row for row in (pick.get("items") or []) if isinstance(row, dict)]
+        practice_dir = _materialize_open_practice(
+            root, deps=deps, assignment_id=aid, student_id=sid, meta=meta, items=items
+        )
+        _clear_bank_miss(root)
+        deps.diag_log(
+            "student.practice.picked",
+            {"student_id": sid, "assignment_id": aid, "practice_id": practice_dir.name},
+        )
+        payload = _practice_public(deps, practice_dir)
         payload["ok"] = True
         return payload
-    pick = pick_practice_items(
-        data_dir=Path(deps.data_dir),
-        app_root=Path(deps.app_root),
-        kp_list=_kp_list(deps, aid, sid),
-        excluded_ids=_excluded_question_ids(deps, aid, sid, root),
-        count=3,
-    )
-    if not pick.get("ok"):
-        root.mkdir(parents=True, exist_ok=True)
-        _write_bank_miss(root, aid, sid, deps.now_iso())
-        deps.diag_log(
-            "student.practice.bank_miss",
-            {"student_id": sid, "assignment_id": aid},
-        )
-        raise StudentPracticeError(409, "question_bank_insufficient")
-    items = [row for row in (pick.get("items") or []) if isinstance(row, dict)]
-    practice_id = _new_practice_id()
-    practice_dir = root / practice_id
-    practice_dir.mkdir(parents=True, exist_ok=True)
-    write_questions_csv(practice_dir / "questions.csv", items)
-    question_ids = [
-        str(row.get("question_id") or "").strip()
-        for row in items
-        if str(row.get("question_id") or "").strip()
-    ]
-    kp_ids = []
-    for row in items:
-        kp = str(row.get("kp_id") or "").strip()
-        if kp and kp not in kp_ids:
-            kp_ids.append(kp)
-    _dump_json(
-        practice_dir / "meta.json",
-        {
-            "schema": PRACTICE_SCHEMA,
-            "practice_id": practice_id,
-            "assignment_id": aid,
-            "student_id": sid,
-            "teacher_id": str(meta.get("teacher_id") or ""),
-            "subject_id": str(meta.get("subject_id") or ""),
-            "status": "open",
-            "question_ids": question_ids,
-            "kp_ids": kp_ids,
-            "created_at": deps.now_iso(),
-            "submitted_at": "",
-            "bank_source": "question_bank",
-        },
-    )
-    _clear_bank_miss(root)
-    deps.diag_log(
-        "student.practice.picked",
-        {"student_id": sid, "assignment_id": aid, "practice_id": practice_id},
-    )
-    payload = _practice_public(deps, practice_dir)
-    payload["ok"] = True
-    return payload
+    finally:
+        if locked:
+            _release_create_lock(root)
 
 
 def list_practices(

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .assignment_catalog_service import effective_assignment_kind, effective_content_source
-from .question_bank_select_service import read_question_bank
+from .question_bank_select_service import read_question_bank, stem_text_for_row
 
+_SAFE_ID_RE = re.compile(r"^[\w-]+$")
 _STEM_TEXT_MAX = 400
 _STEM_LIMIT_DEFAULT = 8
 _MISSING_STEM = "（题干文件缺失）"
@@ -102,6 +104,20 @@ def load_assignment_stems(
     return items
 
 
+def jailed_student_submission_dir(
+    data_dir: Path, assignment_id: str, student_id: str
+) -> Optional[Path]:
+    aid = str(assignment_id or "").strip()
+    sid = str(student_id or "").strip()
+    if not _SAFE_ID_RE.fullmatch(aid) or not _SAFE_ID_RE.fullmatch(sid):
+        return None
+    root = (Path(data_dir) / "student_submissions").resolve()
+    target = (root / aid / sid).resolve()
+    if target == root or root not in target.parents:
+        return None
+    return target
+
+
 def load_practice_stems(
     practice_dir: Path,
     *,
@@ -121,10 +137,8 @@ def load_practice_stems(
                 "question_id": str(row.get("question_id") or ""),
                 "kp_id": str(row.get("kp_id") or ""),
                 "difficulty": str(row.get("difficulty") or ""),
-                "stem_text": _read_stem_text(
-                    str(row.get("stem_ref") or ""),
-                    folder=Path(practice_dir),
-                    app_root=Path(app_root),
+                "stem_text": stem_text_for_row(
+                    row, data_dir=data_dir, app_root=app_root, missing=_MISSING_STEM
                 ),
             }
         )
@@ -139,8 +153,8 @@ def load_open_practice_stems(
     app_root: Path,
     limit: int = _STEM_LIMIT_DEFAULT,
 ) -> list[dict[str, str]]:
-    root = Path(data_dir) / "student_submissions" / assignment_id / student_id
-    if not root.is_dir():
+    root = jailed_student_submission_dir(data_dir, assignment_id, student_id)
+    if root is None or not root.is_dir():
         return []
     open_dirs = []
     for path in sorted(root.glob("practice_*")):
@@ -196,12 +210,8 @@ def load_latest_practice_short_feedback(
     student_id: str,
     limit: int = _STEM_LIMIT_DEFAULT,
 ) -> str:
-    aid = str(assignment_id or "").strip()
-    sid = str(student_id or "").strip()
-    if not aid or not sid:
-        return ""
-    root = Path(data_dir) / "student_submissions" / aid / sid
-    if not root.is_dir():
+    root = jailed_student_submission_dir(data_dir, assignment_id, student_id)
+    if root is None or not root.is_dir():
         return ""
     try:
         candidates = [

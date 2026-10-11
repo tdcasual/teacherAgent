@@ -73,3 +73,65 @@ def test_practice_recommend_ignores_foreign_student_id_and_uses_principal(monkey
         for question in payload.get("questions") or []:
             assert "answer_ref" not in question
             assert "answer_text" not in question
+
+
+def test_practice_list_requires_principal_and_ignores_foreign_student_id(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "services.api.routes.student_practice_routes.authorize_student_submit_assignment",
+        lambda *_a, **_k: None,
+    )
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        _write_assignment(root, "HW_1")
+        _write_homework(root, "HW_1", "S1")
+        _write_bank(root)
+        client = _client(root)
+
+        missing = client.get("/student/assignment/HW_1/practice")
+        assert missing.status_code == 400
+        assert missing.json()["detail"] == "principal_required"
+
+        token = set_current_principal(AuthPrincipal(actor_id="S1", role="student"))
+        try:
+            client.post("/student/assignment/HW_1/practice")
+            res = client.get("/student/assignment/HW_1/practice?student_id=S2")
+        finally:
+            reset_current_principal(token)
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert payload["ok"] is True
+        assert payload["practices"]
+        for practice in payload["practices"]:
+            for question in practice.get("questions") or []:
+                assert "answer_ref" not in question
+                assert "answer_text" not in question
+                assert "expected" not in question
+
+
+def test_practice_submit_rejects_invalid_practice_id(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "services.api.routes.student_practice_routes.authorize_student_submit_assignment",
+        lambda *_a, **_k: None,
+    )
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        _write_assignment(root, "HW_1")
+        _write_homework(root, "HW_1", "S1")
+        client = _client(root)
+        token = set_current_principal(AuthPrincipal(actor_id="S1", role="student"))
+        files = {"files": ("a.pdf", b"x", "application/pdf")}
+        try:
+            dotted = client.post(
+                "/student/assignment/HW_1/practice/%2e%2e/submit",
+                files=files,
+            )
+            missing = client.post(
+                "/student/assignment/HW_1/practice/not_practice/submit",
+                files=files,
+            )
+        finally:
+            reset_current_principal(token)
+        assert dotted.status_code in {400, 404}
+        if dotted.status_code == 400:
+            assert dotted.json()["detail"] == "invalid_practice_id"
+        assert missing.status_code == 404

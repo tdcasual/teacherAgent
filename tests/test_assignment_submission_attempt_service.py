@@ -92,6 +92,7 @@ class AssignmentSubmissionAttemptServiceTest(unittest.TestCase):
             self.assertIsNotNone(result)
             assert result is not None
             self.assertTrue(result["valid_submission"])
+            self.assertIsNone(result["score_earned"])
 
     def test_compute_submission_attempt_returns_none_when_report_missing(self):
         with TemporaryDirectory() as td:

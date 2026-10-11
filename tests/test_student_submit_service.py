@@ -682,6 +682,7 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(called["run"], 0)
             self.assertTrue(result.get("ok"))
             self.assertTrue(result.get("submitted"))
+            self.assertIsNone(result.get("official_score"))
             reports = list((root / "submissions").glob("HW_1/S1/submission_*/grading_report.json"))
             self.assertEqual(len(reports), 1)
             report = json.loads(reports[0].read_text(encoding="utf-8"))

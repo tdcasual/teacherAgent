@@ -154,16 +154,22 @@ def resolve_bank_ref(ref: str, *, data_dir: Path, app_root: Path) -> Optional[Pa
     return path
 
 
-def _stem_text_for_row(row: dict, *, data_dir: Path, app_root: Path) -> str:
+def stem_text_for_row(
+    row: dict,
+    *,
+    data_dir: Path,
+    app_root: Path,
+    missing: str = "",
+) -> str:
     ref_path = resolve_bank_ref(
         str(row.get("stem_ref") or ""), data_dir=data_dir, app_root=app_root
     )
     if ref_path is None or not ref_path.exists():
-        return str(row.get("stem") or row.get("stem_text") or "")
+        return str(row.get("stem") or row.get("stem_text") or missing)
     try:
         return ref_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return ""
+        return missing
 
 
 def _eligible_bank_rows(
@@ -189,7 +195,7 @@ def _eligible_bank_rows(
             continue
         if answer_ref and resolve_bank_ref(answer_ref, data_dir=data_dir, app_root=app_root) is None:
             continue
-        stem = _stem_text_for_row(row, data_dir=data_dir, app_root=app_root)
+        stem = stem_text_for_row(row, data_dir=data_dir, app_root=app_root)
         if contains_figure_reference(stem):
             continue
         eligible.append(row)

@@ -21,10 +21,7 @@ from .student_ops_service import (
     raise_upload_limit_http,
     save_capped_uploads,
 )
-from .student_profile_derive_service import (
-    derive_profile_from_grading_report,
-    derived_question_ids,
-)
+from .student_profile_derive_service import derive_profile_from_grading_report
 
 
 class StudentSubmitError(Exception):
@@ -488,10 +485,6 @@ def _write_derived_profile(
         derived["assignment_id"] = assignment_id
         if practice_id:
             derived["practice_id"] = practice_id
-        derived["question_ids"] = derived_question_ids(
-            report=report,
-            fallback=derived.get("question_ids"),
-        )
         apply_derived_profile(
             student_id,
             derived,

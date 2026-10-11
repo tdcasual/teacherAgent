@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 import pytest
 from fastapi import HTTPException
 
+from services.api.assignment_context_service import load_open_practice_stems
 from services.api.assignment_submission_attempt_service import (
     AssignmentSubmissionAttemptDeps,
     list_submission_attempts,
@@ -15,6 +16,7 @@ from services.api.assignment_submission_attempt_service import (
 from services.api.student_practice_service import (
     StudentPracticeDeps,
     StudentPracticeError,
+    practice_status_counts,
     recommend_practice,
     submit_practice,
 )
@@ -117,6 +119,16 @@ def test_practice_module_does_not_import_llm_or_generate() -> None:
     assert "llm_gateway" not in joined
     assert "select_practice" not in joined
     assert "make_generated" not in source
+
+
+def test_practice_helpers_jail_path_escape() -> None:
+    with TemporaryDirectory() as td:
+        root = Path(td)
+        zeros = practice_status_counts(root, "../x", "S1")
+        assert zeros == {"assigned": 0, "submitted": 0, "open": 0, "bank_miss": False}
+        assert load_open_practice_stems(
+            data_dir=root, app_root=root, assignment_id="..", student_id="S1"
+        ) == []
 
 
 def test_recommend_requires_homework_submitted() -> None:

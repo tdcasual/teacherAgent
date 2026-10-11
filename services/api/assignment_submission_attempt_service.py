@@ -132,6 +132,7 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
     correct = _report_int(report, "correct", 0)
     ungraded = _report_int(report, "ungraded", 0)
     submitted_at = _resolve_submitted_at(attempt_dir, report_path)
+    received = bool(report.get("received_without_items"))
 
     return {
         "attempt_id": attempt_dir.name,
@@ -139,9 +140,8 @@ def compute_submission_attempt(attempt_dir: Path, *, deps: AssignmentSubmissionA
         "graded_total": graded_total,
         "correct": correct,
         "ungraded": ungraded,
-        "score_earned": round(score_earned, 3),
-        "valid_submission": bool(report.get("received_without_items"))
-        or bool(graded_total and graded_total > 0),
+        "score_earned": None if received else round(score_earned, 3),
+        "valid_submission": received or bool(graded_total and graded_total > 0),
         "report_path": str(report_path),
     }
 

@@ -535,7 +535,11 @@ def _student_progress(
         )
         payload["process_archive_status"] = str(archive.get("status") or "none")
         payload["process_archive"] = archive
-        payload["practice"] = _student_practice_summary(deps.data_dir, assignment_id, student_id)
+        from .student_practice_service import practice_status_counts
+
+        payload["practice"] = practice_status_counts(
+            Path(deps.data_dir), assignment_id, student_id
+        )
     return {
         "discussion_pass": discussion_pass,
         "submitted": submitted,
@@ -545,12 +549,6 @@ def _student_progress(
         "process_status": str(process.get("status") or "none"),
         "payload": payload,
     }
-
-
-def _student_practice_summary(data_dir: Any, assignment_id: str, student_id: str) -> Dict[str, Any]:
-    from .student_practice_service import practice_status_counts
-
-    return practice_status_counts(Path(data_dir), assignment_id, student_id)
 
 
 def _student_sort_key(item: Dict[str, Any]) -> tuple[str, str, str]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 _FALLBACK_NOTE = "提交未产生逐题分，已用作业目标知识点更新画像。"
 
@@ -182,22 +182,3 @@ def derive_profile_from_grading_report(
         "interaction_note": "",
         "question_ids": question_ids,
     }
-
-
-def derived_question_ids(
-    *,
-    report: dict[str, Any],
-    fallback: Optional[Sequence[str]] = None,
-) -> List[str]:
-    payload = report if isinstance(report, dict) else {}
-    items = payload.get("items") if isinstance(payload.get("items"), list) else []
-    found: List[str] = []
-    for raw in items:
-        if not isinstance(raw, dict):
-            continue
-        qid = str(raw.get("question_id") or "").strip()
-        if qid and qid not in found:
-            found.append(qid)
-    if found:
-        return found
-    return _as_str_list(fallback)

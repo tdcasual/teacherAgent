@@ -194,9 +194,14 @@ def _allow_practice(meta: Dict[str, Any]) -> bool:
 
 
 def _history_practice(data_dir: Path, assignment_id: str, student_id: str) -> Dict[str, Any]:
-    from .student_practice_service import history_practice_counts
+    from .student_practice_service import practice_status_counts
 
-    return history_practice_counts(data_dir, assignment_id, student_id)
+    summary = practice_status_counts(data_dir, assignment_id, student_id)
+    return {
+        "open": int(summary.get("open") or 0),
+        "submitted": int(summary.get("submitted") or 0),
+        "bank_miss": bool(summary.get("bank_miss")),
+    }
 
 
 def _due_sort_value(due_at: str) -> str:
