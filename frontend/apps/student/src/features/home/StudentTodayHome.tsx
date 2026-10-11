@@ -1,3 +1,4 @@
+import { COACH_NOT_SUBMIT_HINT, submitActionLabel } from '../../assignmentKind';
 import type { StudentTodayHomeItem, StudentTodayHomeViewModel } from '../../appTypes';
 import LearningProgressRail from './LearningProgressRail';
 import TaskMaterialList from './TaskMaterialList';
@@ -80,6 +81,7 @@ export default function StudentTodayHome({
                           {item.overdue ? '逾期未交 · ' : ''}
                           {item.dueLabel}
                         </div>
+                        <div className="text-[12px] text-muted">{COACH_NOT_SUBMIT_HINT}</div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -99,7 +101,7 @@ export default function StudentTodayHome({
                             className="student-supporting-link"
                             onClick={() => onOpenSubmit(item.assignment_id)}
                           >
-                            提交作业
+                            {submitActionLabel(item.assignment_kind)}
                           </button>
                         ) : null}
                       </div>

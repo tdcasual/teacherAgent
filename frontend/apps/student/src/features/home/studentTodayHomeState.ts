@@ -80,6 +80,8 @@ const toHomeItems = (assignments: TodayAssignmentItem[]): StudentTodayHomeItem[]
     dueLabel: dueLabelOf(item),
     overdue: Boolean(item.progress.overdue),
     submitted: Boolean(item.progress.submitted),
+    assignment_kind: item.assignment_kind,
+    allow_practice: item.allow_practice,
   }));
 
 const includesUserWork = (messages: Message[]): boolean =>

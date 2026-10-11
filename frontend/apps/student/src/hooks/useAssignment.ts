@@ -1,4 +1,5 @@
 import { useEffect, type Dispatch } from 'react';
+import { coerceAssignmentKind, parseAllowPractice } from '../assignmentKind';
 import type { TodayAssignmentItem } from '../appTypes';
 import {
   isAbortError,
@@ -28,12 +29,15 @@ const toTodayItems = (payload: unknown): TodayAssignmentItem[] => {
         ? (item.progress as Record<string, unknown>)
         : {};
     const score = progressRaw.official_score;
+    const assignmentKind = coerceAssignmentKind(item.assignment_kind);
     items.push({
       assignment_id: assignmentId,
       teacher_id: String(item.teacher_id || '').trim(),
       subject_id: String(item.subject_id || '').trim(),
       title: String(item.title || assignmentId).trim() || assignmentId,
       due_at: item.due_at ? String(item.due_at) : '',
+      assignment_kind: assignmentKind,
+      allow_practice: parseAllowPractice(item.allow_practice, assignmentKind),
       progress: {
         submitted: Boolean(progressRaw.submitted),
         overdue: Boolean(progressRaw.overdue),

@@ -298,6 +298,7 @@ class TestComputeAssignmentProgress:
         assert student["practice"]["assigned"] == 1
         assert student["practice"]["submitted"] == 1
         assert student["practice"]["open"] == 0
+        assert result["assignment_kind"] == "problem_set"
 
 
 def _progress_sql_rows(tmp_path: Path, assignment_id: str):

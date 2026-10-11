@@ -146,4 +146,83 @@ describe('StudentSubmitPanel', () => {
     expect(screen.getByTestId('student-submit-not-counted').textContent).toContain('未记为提交');
     expect(screen.queryByTestId('student-submit-success')).toBeNull();
   });
+
+  it('uses practical title and success copy without a 补练 button or portrait', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              submitted: true,
+              assignment_id: 'HW_P',
+              official_score: null,
+              attempt_id: 'submission_ok',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
+    );
+
+    render(
+      <StudentSubmitPanel
+        apiBase="http://localhost:8000"
+        studentId="S1"
+        assignmentId="HW_P"
+        assignmentTitle="实验记录"
+        assignmentKind="practical"
+        allowPractice={false}
+        chatFiles={[]}
+        onClose={() => undefined}
+        onSubmitted={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: '提交实践照片' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('选择提交文件'), { target: { files: [pdfFile()] } });
+    fireEvent.click(screen.getByRole('button', { name: '提交实践照片' }));
+    await waitFor(() => expect(screen.getByTestId('student-submit-success')).toBeTruthy());
+    expect(screen.getByTestId('student-submit-result').textContent).toContain('实践照片已交');
+    expect(screen.queryByRole('button', { name: '补练' })).toBeNull();
+    expect(screen.queryByTestId('student-portrait-card')).toBeNull();
+  });
+
+  it('shows 补练 after problem_set submit when allow_practice is on', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              submitted: true,
+              assignment_id: 'HW_1',
+              official_score: 9,
+              attempt_id: 'submission_ok',
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
+    );
+
+    render(
+      <StudentSubmitPanel
+        apiBase="http://localhost:8000"
+        studentId="S1"
+        assignmentId="HW_1"
+        assignmentTitle="力学练习"
+        assignmentKind="problem_set"
+        allowPractice
+        chatFiles={[]}
+        onClose={() => undefined}
+        onSubmitted={() => undefined}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('选择提交文件'), { target: { files: [pdfFile()] } });
+    fireEvent.click(screen.getByRole('button', { name: '提交作业' }));
+    await waitFor(() => expect(screen.getByTestId('student-submit-practice')).toBeTruthy());
+    expect(screen.queryByTestId('student-portrait-card')).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { StudentAssignmentHistoryItem } from '../appTypes';
+import { coerceAssignmentKind, parseAllowPractice } from '../assignmentKind';
 import { isAbortError, toErrorMessage } from './useStudentState';
 
 type UseAssignmentHistoryParams = {
@@ -18,6 +19,11 @@ const toHistoryItems = (payload: unknown): StudentAssignmentHistoryItem[] => {
     const item = entry as Record<string, unknown>;
     const assignmentId = String(item.assignment_id || '').trim();
     if (!assignmentId) continue;
+    const assignmentKind = coerceAssignmentKind(item.assignment_kind);
+    const practiceRaw =
+      item.practice && typeof item.practice === 'object'
+        ? (item.practice as Record<string, unknown>)
+        : {};
     items.push({
       assignment_id: assignmentId,
       teacher_id: String(item.teacher_id || '').trim(),
@@ -28,6 +34,13 @@ const toHistoryItems = (payload: unknown): StudentAssignmentHistoryItem[] => {
       submitted: Boolean(item.submitted),
       official_score: typeof item.official_score === 'number' ? item.official_score : null,
       archived_at: item.archived_at ? String(item.archived_at) : null,
+      assignment_kind: assignmentKind,
+      allow_practice: parseAllowPractice(item.allow_practice, assignmentKind),
+      practice: {
+        open: Number(practiceRaw.open) || 0,
+        submitted: Number(practiceRaw.submitted) || 0,
+        bank_miss: Boolean(practiceRaw.bank_miss),
+      },
     });
   }
   return items;

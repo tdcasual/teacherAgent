@@ -18,9 +18,9 @@ import {
   useScrollPositionLock,
   evictOldestEntries,
 } from '../../shared/useSmartAutoScroll';
-import type { Message, RenderedMessage } from './appTypes';
+import type { AssignmentKind, Message, PendingChatJob, RenderedMessage } from './appTypes';
+import { coerceAssignmentKind, parseAllowPractice } from './assignmentKind';
 import { useStudentState, PENDING_CHAT_KEY_PREFIX, todayDate } from './hooks/useStudentState';
-import type { PendingChatJob } from './appTypes';
 import { useVerification } from './hooks/useVerification';
 import { useSessionManager } from './hooks/useSessionManager';
 import { useChatPolling } from './hooks/useChatPolling';
@@ -71,6 +71,8 @@ export default function App() {
   const [homeOpen, setHomeOpen] = useState(true);
   const [assignmentHistoryOpen, setAssignmentHistoryOpen] = useState(false);
   const [submitAssignmentId, setSubmitAssignmentId] = useState('');
+  const [submitKind, setSubmitKind] = useState<AssignmentKind>('problem_set');
+  const [submitAllowPractice, setSubmitAllowPractice] = useState(false);
   const [chatPickedFiles, setChatPickedFiles] = useState<File[]>([]);
   const [mobileTab, setMobileTab] = useState<'chat' | 'sessions' | 'learning'>('learning');
   const [mobileSessionListOpen, setMobileSessionListOpen] = useState(false);
@@ -501,8 +503,15 @@ export default function App() {
     (assignmentId: string) => {
       const aid = assignmentId.trim();
       if (!aid) return;
+      const fromToday = state.todayAssignments.find((item) => item.assignment_id === aid);
+      const fromHistory = assignmentHistory.items.find((item) => item.assignment_id === aid);
+      const kind = coerceAssignmentKind(fromToday?.assignment_kind || fromHistory?.assignment_kind);
       dispatch({ type: 'SET', field: 'selectedAssignmentId', value: aid });
       setSubmitAssignmentId(aid);
+      setSubmitKind(kind);
+      setSubmitAllowPractice(
+        parseAllowPractice(fromToday?.allow_practice ?? fromHistory?.allow_practice, kind),
+      );
       if (!studentUseMobileShellV2) return;
       setHomeOpen(true);
       setMobileTab('learning');
@@ -511,7 +520,13 @@ export default function App() {
         dispatch({ type: 'SET', field: 'sidebarOpen', value: false });
       }
     },
-    [dispatch, state.sidebarOpen, studentUseMobileShellV2],
+    [
+      assignmentHistory.items,
+      dispatch,
+      state.sidebarOpen,
+      state.todayAssignments,
+      studentUseMobileShellV2,
+    ],
   );
 
   const handlePrimaryHomeAction = useCallback(() => {
@@ -677,6 +692,8 @@ export default function App() {
       studentId={state.verifiedStudent?.student_id || ''}
       assignmentId={submitAssignmentId}
       assignmentTitle={submitTitle}
+      assignmentKind={submitKind}
+      allowPractice={submitAllowPractice}
       chatFiles={matchReadyChatFiles(
         attachments.filter((item) => item.status === 'ready'),
         chatPickedFiles,
@@ -691,6 +708,8 @@ export default function App() {
       items={assignmentHistory.items}
       loading={assignmentHistory.loading}
       error={assignmentHistory.error}
+      apiBase={state.apiBase}
+      studentId={state.verifiedStudent?.student_id || ''}
       onBack={() => setAssignmentHistoryOpen(false)}
       onSubmit={handleOpenSubmit}
       onOpenAssignment={handleOpenAssignment}

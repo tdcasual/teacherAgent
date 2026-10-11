@@ -167,4 +167,57 @@ describe('AssignmentProgressSection', () => {
     expect(screen.getByText('未自动出分，请老师覆盖')).toBeTruthy();
     expect(screen.getByRole('button', { name: '保存成绩' })).toBeTruthy();
   });
+
+  it('shows practice counts for problem_set and 不适用 for other kinds', () => {
+    const { rerender } = render(
+      <AssignmentProgressSection
+        {...baseProps}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-1',
+          assignment_kind: 'problem_set',
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: 8,
+              result: { attempts: 1, official_score: 8, overdue: false, submitted: true },
+              process: { status: 'none' },
+              practice: { assigned: 1, submitted: 0, open: 1, bank_miss: true },
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('补练')).toBeTruthy();
+    expect(screen.getByTestId('progress-practice-S1').textContent).toContain('已布置1');
+    expect(screen.getByTestId('progress-practice-S1').textContent).toContain('已交0');
+    expect(screen.getByTestId('progress-practice-S1').textContent).toContain('题库不足');
+    expect(screen.getByText(/提交1次/)).toBeTruthy();
+
+    rerender(
+      <AssignmentProgressSection
+        {...baseProps}
+        progressData={{
+          ok: true,
+          assignment_id: 'HW-2',
+          assignment_kind: 'practical',
+          students: [
+            {
+              student_id: 'S1',
+              complete: true,
+              submission: { attempts: 1 },
+              official_score: null,
+              result: { attempts: 1, official_score: null, overdue: false, submitted: true },
+              process: { status: 'none' },
+              practice: { assigned: 0, submitted: 0, open: 0, bank_miss: false },
+            },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByTestId('progress-practice-S1').textContent).toContain('不适用');
+  });
 });

@@ -18,6 +18,8 @@ const todayAssignments: TodayAssignmentItem[] = [
     subject_id: 'physics',
     title: '牛顿第二定律练习',
     due_at: '2026-03-14T23:59:59',
+    assignment_kind: 'problem_set',
+    allow_practice: true,
     progress: {
       submitted: false,
       overdue: false,
@@ -96,6 +98,7 @@ describe('buildStudentTodayHomeViewModel', () => {
     expect(viewModel.primaryActionLabel).toBe('进入任务');
     expect(viewModel.items).toHaveLength(1);
     expect(viewModel.items[0].submitted).toBe(false);
+    expect(viewModel.items[0].assignment_kind).toBe('problem_set');
     expect(viewModel.progressSteps.map((step) => step.label)).toEqual([
       '已准备',
       '待开始',

@@ -1,5 +1,9 @@
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type { AssignmentProgress, AssignmentProgressStudent } from '../../../appTypes';
+import type {
+  AssignmentKind,
+  AssignmentProgress,
+  AssignmentProgressStudent,
+} from '../../../appTypes';
 import type { FormatProgressSummary } from '../../../types/workflow';
 import LabeledField from './LabeledField';
 
@@ -24,6 +28,7 @@ type AssignmentProgressSectionProps = {
   archiveAssignment?: (assignmentId?: string) => Promise<void>;
   unarchiveAssignment?: (assignmentId?: string) => Promise<void>;
   saveStudentGrade?: (studentId: string, payload: TeacherGradePayload) => Promise<void>;
+  assignmentKind?: AssignmentKind;
 };
 
 const extractBestScore = (value: unknown): number | null => {
@@ -44,6 +49,25 @@ const officialScoreOf = (student: AssignmentProgressStudent): number | null => {
   if (typeof student.result?.official_score === 'number') return student.result.official_score;
   if (typeof student.official_score === 'number') return student.official_score;
   return extractBestScore(student.submission?.best);
+};
+
+const practiceApplicable = (
+  progress: AssignmentProgress | null,
+  fallbackKind?: AssignmentKind,
+): boolean => {
+  const kind = progress?.assignment_kind || fallbackKind || 'problem_set';
+  if (kind !== 'problem_set') return false;
+  const policyAllow = progress?.students?.[0]?.completion?.policy?.allow_practice;
+  if (policyAllow === false) return false;
+  return true;
+};
+
+const practiceColumnLabel = (student: AssignmentProgressStudent, applicable: boolean): string => {
+  if (!applicable) return '不适用';
+  const assigned = Number(student.practice?.assigned || 0);
+  const submitted = Number(student.practice?.submitted || 0);
+  const bankMiss = Boolean(student.practice?.bank_miss);
+  return `已布置${assigned} · 已交${submitted}${bankMiss ? ' · 题库不足' : ''}`;
 };
 
 const parseAdoptedExcerpts = (raw: string): Array<{ text: string }> => {
@@ -92,8 +116,10 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
     archiveAssignment,
     unarchiveAssignment,
     saveStudentGrade,
+    assignmentKind,
   } = props;
   const visibilityStatus = String(progressData?.visibility_status || '').trim();
+  const showPractice = practiceApplicable(progressData, assignmentKind);
 
   return (
     <section
@@ -190,6 +216,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
               <div className="flex gap-6">
                 <span>结果</span>
                 <span>过程</span>
+                <span>补练</span>
               </div>
             </div>
           )}
@@ -228,7 +255,7 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                     <div className="text-[13px] min-w-0 flex-1">
                       <strong>{s.student_id}</strong>
                       {name ? <span className="text-muted text-[12px]"> {name}</span> : null}
-                      <div className="grid grid-cols-2 gap-2 mt-1 text-[12px] text-muted">
+                      <div className="grid grid-cols-3 gap-2 mt-1 text-[12px] text-muted">
                         <div>
                           提交{attempts}次 · {official != null ? `官方分${official}` : '无官方分'}
                           {overdue ? ' · 逾期' : ''}
@@ -237,6 +264,9 @@ export default function AssignmentProgressSection(props: AssignmentProgressSecti
                           过程：{processStatusLabel(processStatus) || processLabel}
                           {processNote}
                           {memory}
+                        </div>
+                        <div data-testid={`progress-practice-${s.student_id}`}>
+                          {practiceColumnLabel(s, showPractice)}
                         </div>
                       </div>
                       {attempts > 0 && official == null ? (

@@ -1,4 +1,12 @@
 import { useMemo, useState } from 'react';
+import type { AssignmentKind } from '../../appTypes';
+import {
+  BANK_MISS_COPY,
+  canOfferPractice,
+  submitActionLabel,
+  submitSuccessCopy,
+} from '../../assignmentKind';
+import { postStudentPractice } from '../history/studentPractice';
 import type { StudentSubmitResult } from './studentSubmit';
 import { postStudentSubmit } from './studentSubmit';
 
@@ -7,6 +15,8 @@ type StudentSubmitPanelProps = {
   studentId: string;
   assignmentId: string;
   assignmentTitle: string;
+  assignmentKind?: AssignmentKind;
+  allowPractice?: boolean;
   chatFiles: File[];
   onClose: () => void;
   onSubmitted: (result: StudentSubmitResult) => void;
@@ -19,6 +29,8 @@ export default function StudentSubmitPanel({
   studentId,
   assignmentId,
   assignmentTitle,
+  assignmentKind,
+  allowPractice = false,
   chatFiles,
   onClose,
   onSubmitted,
@@ -28,6 +40,14 @@ export default function StudentSubmitPanel({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<StudentSubmitResult | null>(null);
   const [error, setError] = useState('');
+  const [practiceBusy, setPracticeBusy] = useState(false);
+  const [practiceMessage, setPracticeMessage] = useState('');
+  const actionLabel = submitActionLabel(assignmentKind);
+  const showPractice = canOfferPractice({
+    assignment_kind: assignmentKind,
+    allow_practice: allowPractice,
+    submitted: Boolean(result?.submitted),
+  });
 
   const previewFiles = chatConfirmArmed ? chatFiles : pickedFiles;
   const previewNames = useMemo(
@@ -61,6 +81,17 @@ export default function StudentSubmitPanel({
     }
   };
 
+  const startPractice = async () => {
+    if (practiceBusy) return;
+    setPracticeBusy(true);
+    try {
+      const next = await postStudentPractice({ apiBase, assignmentId });
+      setPracticeMessage(next.message);
+    } finally {
+      setPracticeBusy(false);
+    }
+  };
+
   return (
     <main
       className="flex-1 min-h-0 overflow-y-auto bg-[color:var(--color-app-bg)] px-4 py-5 md:px-6 md:py-6"
@@ -68,7 +99,7 @@ export default function StudentSubmitPanel({
     >
       <div className="mx-auto grid max-w-[720px] gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="m-0 text-[20px] font-semibold text-ink">提交作业</h1>
+          <h1 className="m-0 text-[20px] font-semibold text-ink">{actionLabel}</h1>
           <button type="button" className="student-supporting-link" onClick={onClose}>
             返回
           </button>
@@ -141,7 +172,7 @@ export default function StudentSubmitPanel({
                 void runSubmit();
               }}
             >
-              提交作业
+              {actionLabel}
             </button>
           )}
           {error ? (
@@ -155,7 +186,36 @@ export default function StudentSubmitPanel({
               data-testid="student-submit-success"
               role="status"
             >
-              <span data-testid="student-submit-result">{result.message}</span>
+              <span data-testid="student-submit-result">
+                {submitSuccessCopy(assignmentKind, result.official_score)}
+              </span>
+              {showPractice ? (
+                <div className="mt-2 grid gap-1">
+                  <button
+                    type="button"
+                    className="student-supporting-link justify-self-start"
+                    data-testid="student-submit-practice"
+                    disabled={practiceBusy}
+                    onClick={() => {
+                      void startPractice();
+                    }}
+                  >
+                    补练
+                  </button>
+                  {practiceMessage ? (
+                    <span
+                      className="text-[12px] text-muted"
+                      data-testid={
+                        practiceMessage === BANK_MISS_COPY
+                          ? 'student-practice-bank-miss'
+                          : 'student-submit-practice-result'
+                      }
+                    >
+                      {practiceMessage}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
           {result && !result.submitted && result.ok ? (

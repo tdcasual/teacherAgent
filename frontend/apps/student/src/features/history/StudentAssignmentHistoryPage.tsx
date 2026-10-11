@@ -1,9 +1,15 @@
+import { useState } from 'react';
 import type { StudentAssignmentHistoryItem } from '../../appTypes';
+import { BANK_MISS_COPY, canOfferPractice } from '../../assignmentKind';
+import StudentPortraitCard from './StudentPortraitCard';
+import { postStudentPractice } from './studentPractice';
 
 type StudentAssignmentHistoryPageProps = {
   items: StudentAssignmentHistoryItem[];
   loading: boolean;
   error: string;
+  apiBase?: string;
+  studentId?: string;
   onBack: () => void;
   onSubmit: (assignmentId: string) => void;
   onOpenAssignment: (assignmentId: string) => void;
@@ -16,10 +22,26 @@ export default function StudentAssignmentHistoryPage({
   items,
   loading,
   error,
+  apiBase = '',
+  studentId = '',
   onBack,
   onSubmit,
   onOpenAssignment,
 }: StudentAssignmentHistoryPageProps) {
+  const [practiceBusyId, setPracticeBusyId] = useState('');
+  const [practiceMessage, setPracticeMessage] = useState<Record<string, string>>({});
+
+  const startPractice = async (assignmentId: string) => {
+    if (!apiBase || practiceBusyId) return;
+    setPracticeBusyId(assignmentId);
+    try {
+      const result = await postStudentPractice({ apiBase, assignmentId });
+      setPracticeMessage((prev) => ({ ...prev, [assignmentId]: result.message }));
+    } finally {
+      setPracticeBusyId('');
+    }
+  };
+
   return (
     <main
       className="flex-1 min-h-0 overflow-y-auto bg-[color:var(--color-app-bg)] px-4 py-5 md:px-6 md:py-6"
@@ -32,44 +54,73 @@ export default function StudentAssignmentHistoryPage({
             返回今日
           </button>
         </div>
+        {studentId ? <StudentPortraitCard apiBase={apiBase} studentId={studentId} /> : null}
         {loading ? <div className="text-xs text-muted">加载中…</div> : null}
         {error ? <div className="text-xs text-muted">{error}</div> : null}
         {!loading && !error && items.length === 0 ? (
           <div className="text-xs text-muted">暂无作业记录</div>
         ) : null}
-        {items.map((item) => (
-          <article
-            key={item.assignment_id}
-            className="grid gap-2 rounded-[16px] border border-border bg-white px-4 py-3"
-          >
-            <div className="text-[15px] font-medium text-ink">{item.title}</div>
-            <div className="text-[12px] text-muted">
-              {item.subject_id} · {item.submitted ? '已提交' : '未提交'}
-              {item.visibility_status === 'archived' ? ' · 已归档' : ''}
-            </div>
-            {item.submitted && item.official_score != null ? (
-              <div className="text-[13px] text-ink">官方分 {item.official_score}</div>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="student-supporting-link"
-                onClick={() => onOpenAssignment(item.assignment_id)}
-              >
-                查看材料
-              </button>
-              {canSubmitItem(item) ? (
+        {items.map((item) => {
+          const offerPractice = canOfferPractice(item);
+          const bankMiss =
+            Boolean(item.practice?.bank_miss) ||
+            practiceMessage[item.assignment_id] === BANK_MISS_COPY;
+          return (
+            <article
+              key={item.assignment_id}
+              className="grid gap-2 rounded-[16px] border border-border bg-white px-4 py-3"
+            >
+              <div className="text-[15px] font-medium text-ink">{item.title}</div>
+              <div className="text-[12px] text-muted">
+                {item.subject_id} · {item.submitted ? '已提交' : '未提交'}
+                {item.visibility_status === 'archived' ? ' · 已归档' : ''}
+              </div>
+              {item.submitted && item.official_score != null ? (
+                <div className="text-[13px] text-ink">官方分 {item.official_score}</div>
+              ) : null}
+              {bankMiss ? (
+                <div className="text-[12px] text-muted" data-testid="student-practice-bank-miss">
+                  {BANK_MISS_COPY}
+                </div>
+              ) : null}
+              {practiceMessage[item.assignment_id] &&
+              practiceMessage[item.assignment_id] !== BANK_MISS_COPY ? (
+                <div className="text-[12px] text-muted">{practiceMessage[item.assignment_id]}</div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white"
-                  onClick={() => onSubmit(item.assignment_id)}
+                  className="student-supporting-link"
+                  onClick={() => onOpenAssignment(item.assignment_id)}
                 >
-                  补交 {item.title}
+                  查看材料
                 </button>
-              ) : null}
-            </div>
-          </article>
-        ))}
+                {canSubmitItem(item) ? (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-[14px] border-none bg-accent px-4 py-2 text-[13px] font-medium text-white"
+                    onClick={() => onSubmit(item.assignment_id)}
+                  >
+                    补交 {item.title}
+                  </button>
+                ) : null}
+                {offerPractice ? (
+                  <button
+                    type="button"
+                    className="student-supporting-link"
+                    data-testid={`student-practice-start-${item.assignment_id}`}
+                    disabled={practiceBusyId === item.assignment_id}
+                    onClick={() => {
+                      void startPractice(item.assignment_id);
+                    }}
+                  >
+                    补练
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </main>
   );

@@ -264,6 +264,13 @@ type UploadDraftRequirements = {
   [k: string]: unknown;
 };
 
+export type AssignmentPracticeStatus = {
+  assigned?: number;
+  submitted?: number;
+  open?: number;
+  bank_miss?: boolean;
+};
+
 export type AssignmentProgressStudent = {
   student_id: string;
   student_name?: string;
@@ -296,11 +303,14 @@ export type AssignmentProgressStudent = {
     process_archive_id?: string;
   };
   has_memory_proposal?: boolean;
+  practice?: AssignmentPracticeStatus;
+  completion?: { policy?: { allow_practice?: boolean } };
 };
 
 export type AssignmentProgress = {
   ok: boolean;
   assignment_id: string;
+  assignment_kind?: AssignmentKind;
   date?: string;
   scope?: string;
   class_name?: string;

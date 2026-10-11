@@ -133,6 +133,7 @@ describe('StudentTodayHome', () => {
 
     expect(screen.getAllByText('老师尚未布置').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: '生成任务' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '补练' })).toBeNull();
     expect(screen.getByRole('button', { name: '作业记录' })).toBeTruthy();
   });
 
@@ -211,6 +212,7 @@ describe('StudentTodayHome', () => {
     expect(screen.getByRole('button', { name: '查看提交' })).toBeTruthy();
     expect(screen.getAllByTestId('student-today-primary-action')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: '提交作业' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '补练' })).toBeNull();
   });
 
   it('wires primary and secondary actions', () => {
@@ -243,5 +245,70 @@ describe('StudentTodayHome', () => {
     expect(onOpenHistory).toHaveBeenCalledTimes(1);
     expect(onOpenAssignmentHistory).toHaveBeenCalledTimes(1);
     expect(onOpenFreeChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses kind-gated list submit copy and does not add practice as a today card', () => {
+    render(
+      <StudentTodayHome
+        dateLabel="3月14日 周六"
+        viewModel={buildViewModel({
+          items: [
+            {
+              assignment_id: 'A001',
+              teacher_id: 't_zhang',
+              subject_id: 'physics',
+              title: '力学练习',
+              dueLabel: '2026-03-14 截止',
+              overdue: false,
+              submitted: false,
+              assignment_kind: 'problem_set',
+            },
+            {
+              assignment_id: 'A002',
+              teacher_id: 't_zhang',
+              subject_id: 'physics',
+              title: '实验记录',
+              dueLabel: '2026-03-14 截止',
+              overdue: false,
+              submitted: false,
+              assignment_kind: 'practical',
+            },
+            {
+              assignment_id: 'A003',
+              teacher_id: 't_li',
+              subject_id: 'physics',
+              title: '情景讨论',
+              dueLabel: '2026-03-14 截止',
+              overdue: false,
+              submitted: false,
+              assignment_kind: 'scenario',
+            },
+            {
+              assignment_id: 'A004',
+              teacher_id: 't_li',
+              subject_id: 'physics',
+              title: '科学史阅读',
+              dueLabel: '2026-03-14 截止',
+              overdue: false,
+              submitted: false,
+              assignment_kind: 'science_history',
+            },
+          ],
+        })}
+        onPrimaryAction={() => undefined}
+        onOpenHistory={() => undefined}
+        onOpenFreeChat={() => undefined}
+        onOpenAssignmentHistory={() => undefined}
+        onOpenSubmit={() => undefined}
+      />,
+    );
+
+    const list = screen.getByTestId('student-today-assignment-list');
+    expect(screen.getByRole('button', { name: '提交作业' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '提交实践照片' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '提交书面/照片' })).toHaveLength(2);
+    expect(list.textContent).toContain('聊天是陪练，不是提交');
+    expect(screen.queryByRole('button', { name: '补练' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '生成任务' })).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ from .assignment.store import connect as assignment_connect
 from .assignment.store import ensure as assignment_ensure
 from .assignment.store import get_assignment as assignment_sql_get
 from .assignment.store import upsert_progress_snapshot
+from .assignment_catalog_service import effective_assignment_kind
 from .assignment_learning_evidence_service import build_assignment_progress_evidence
 from .assignment_process_archive_service import read_process_archive_summary
 from .teacher_grade_service import load_teacher_grade, official_score_from
@@ -629,6 +630,7 @@ def compute_assignment_progress(
     result = {
         "ok": True,
         "assignment_id": assignment_id,
+        "assignment_kind": effective_assignment_kind(meta),
         "date": deps.resolve_assignment_date(meta, folder),
         "scope": meta.get("scope") or "",
         "class_name": meta.get("class_name") or "",
