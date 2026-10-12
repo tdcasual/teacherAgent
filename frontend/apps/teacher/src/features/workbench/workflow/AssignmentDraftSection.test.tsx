@@ -126,10 +126,15 @@ describe('AssignmentDraftSection', () => {
   });
 
   it('problem_set shows allow_practice and eight-point fields', () => {
-    renderDraft(draft);
+    renderDraft({
+      ...draft,
+      questions: [{ stem: '题干', answer: '答案' }],
+    });
     expect(screen.getByTestId('draft-allow-practice')).toBeTruthy();
     expect(screen.getByLabelText('5) 易错点（每行一条，至少 4 条）')).toBeTruthy();
     expect(screen.queryByTestId('draft-rubric')).toBeNull();
+    expect(screen.getByText(/后再发布/)).toBeTruthy();
+    expect(screen.queryByText(/后再创建/)).toBeNull();
   });
 
   it('confirm button text is 发布草稿', () => {

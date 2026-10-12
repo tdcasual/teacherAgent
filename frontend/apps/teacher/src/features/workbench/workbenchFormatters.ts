@@ -65,8 +65,8 @@ export const formatUploadJobSummary = (
     processing: '解析中',
     done: '解析完成（待确认）',
     failed: '解析失败',
-    confirmed: '已创建',
-    created: '已创建',
+    confirmed: '已发布',
+    created: '已发布',
     confirming: '确认中',
     cancelled: '已取消',
   };
@@ -93,8 +93,8 @@ export const formatDraftSummary = (draft: UploadDraft | null, jobInfo: UploadJob
   if (draft.requirements_missing && draft.requirements_missing.length)
     parts.push(`缺失：${draft.requirements_missing.length}项`);
   else parts.push('要求已补全');
-  if (jobInfo?.status === 'confirmed' || jobInfo?.status === 'created') parts.push('已创建');
-  else if (jobInfo?.status === 'done') parts.push('待创建');
+  if (jobInfo?.status === 'confirmed' || jobInfo?.status === 'created') parts.push('已发布');
+  else if (jobInfo?.status === 'done') parts.push('待发布');
   return parts.join(' · ');
 };
 

@@ -352,7 +352,7 @@ export default function AssignmentDraftSection(props: Props) {
               <div className="draft-card border border-border rounded-[16px] p-3 bg-white">
                 <h4 className="m-0 mb-[10px]">题目与答案（可编辑）</h4>
                 <div className="text-muted text-[12px] mb-[10px]">
-                  题目较多时可先修改关键题，点击"保存草稿"后再创建。
+                  题目较多时可先修改关键题，点击"保存草稿"后再发布。
                 </div>
                 {questions.slice(0, questionShowCount).map((q: AssignmentQuestion, idx: number) => (
                   <details
