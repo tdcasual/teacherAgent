@@ -42,6 +42,8 @@
 ### POST `/chat`
 根据师生角色触发多技能 agent。老师默认走 assignment 工作流（上传/确认/进度），不要用对话去驱动 exam 工具。
 
+学生绑定 `assignment_id` 后，陪练 `extra_system`（无新 HTTP）join 顺序：kind 规则 → **【考查清单】**（`build_exam_checklist`，只从老师已发布 stems / brief / `discussion_goals` / `extra_constraints` 派生；禁止 LLM 编清单，不含 `answer_ref`）→ 数据块 → stems → 补练（仅 `problem_set`）。一次只问一项。对话不是提交，也不是官方分。`extra_constraints` 只叫「额外限制」。
+
 **请求**
 ```json
 {
@@ -147,7 +149,7 @@
 **JSON**
 - `job_id`（可选）
 - `assignment_id`（可选；无 job 时必填）
-- `requirements` / `questions`（可选）
+- `requirements` / `questions`（可选）。非做题把 `requirements.rubric`（string，每行一条）写入 `assignments/<id>/rubric.md`；做题不写该字段。空量规不强制。
 
 ### POST `/assignment/upload/confirm`
 **发布草稿**（写入 / 更新 `data/assignments/<assignment_id>/`，`visibility_status=published`）。Locator 同样是 `job_id` **或** `assignment_id`。
@@ -164,7 +166,7 @@
 - `confirm`（默认 `true`）
 - `strict_requirements`（默认 `true`）
 
-Confirm 按 kind 校验要求：做题仍是 8 点；非做题必填 `requirements.brief`，不要 typical_problem / 4 条易错。做题 0 题 → 400 `questions_missing`。`content_source=bank` 且 kind ≠ `problem_set` → 400 `bank_requires_problem_set`。缺项 → 400 `requirements_missing`。`content_source=bank` 发布时把题干/答案字节快照进该作业目录，之后改题库不会改已布置作业的评分。
+Confirm 按 kind 校验要求：做题仍是 8 点；非做题必填 `requirements.brief`，不要 typical_problem / 4 条易错。做题 0 题 → 400 `questions_missing`。`content_source=bank` 且 kind ≠ `problem_set` → 400 `bank_requires_problem_set`。缺项 → 400 `requirements_missing`。`content_source=bank` 发布时把题干/答案字节快照进该作业目录，之后改题库不会改已布置作业的评分。非做题与 `brief.md` 一样：confirm 用草稿 `requirements.rubric` 覆盖写入 `rubric.md`。失败文案是「无法发布草稿」，不是「无法创建作业」。
 
 ### GET `/assignment/{assignment_id}/draft`
 重载 **folder draft**（bank / AI，或已落盘的 upload 草稿）。挂在 `assignment_upload_routes.py`，不要走 `GET /assignment/{assignment_id}`。owner + `visibility_status=draft` only；payload 与 upload draft 同形，`job_id` 省略，含 `assignment_kind` / `content_source`。非 owner → 403；vis ≠ draft → 409 `invalid_visibility_status`；缺目录 → 404。
@@ -174,7 +176,29 @@ Confirm 按 kind 校验要求：做题仍是 8 点；非做题必填 `requiremen
 ## 作业进度、归档与今日列表
 
 ### GET `/teacher/assignment/progress?assignment_id=...`
-单份作业完成情况（应交 / 完成 / 已评分 / 逾期）。老师端「作业完成情况」面板读这个接口。可选 `include_students`。每生可有 `practice: {assigned, submitted, open, bank_miss}`（盘上 `practice_*` + `bank_miss.json`）；**不**改变 `counts.submitted` / `official_score` / `overdue`。非做题补练列显示「不适用」。
+单份作业完成情况（应交 / 完成 / 已评分 / 逾期）。老师端「作业完成情况」面板读这个接口。可选 `include_students`。GET 仍 **compute-primary**（`RISK-ASSIGNMENT-DUALWRITE-001` 保持开放）。`counts.*` / `official_score` 公式不变。
+
+每生可有 `practice: {assigned, submitted, open, bank_miss}`（盘上 `practice_*` + `bank_miss.json`）；**不**改变 `counts.submitted` / `official_score` / `overdue`。非做题补练列显示「不适用」。
+
+本波另增（老师进度 SPA **不**打 profile GET）：
+
+- assignment 级 `rubric`（**仅非做题**）：`{source: "rubric.md"|"none", items: [{id, text, max_points?}]}`。读 `assignments/<id>/rubric.md`；无文件 → `source=none`，面板「无量规，请老师覆盖」。做题不返回该键。
+- 每生 `portrait`：`{recent_weak_kp, next_focus, last_source, last_assignment_id}`。对 `expected_students` 读盘上完整 profile JSON（`resolve_student_profile_path` + `load_profile_file`），**禁止**从 `list_all_student_profiles()` 三字段 listing 抽 KP。`last_source` = `practice_history[-1].source`（最新派生，可含 `brief_fallback`）。无文件 → 薄弱「暂无」。
+- 每生 `process_archive`：在 `status` / `stuck_points` / `process_archive_id` 之外露出 `quotes` / `coach_comment_excerpts` / `reasoning_types`（各 ≤5，PII 过滤照旧）。无纪要 → `status=none`，面板「无陪练纪要」。
+- 每生 `rubric_suggestion`（**仅非做题**）：`{status: none|pending|ready|failed, suggested_score, max_score, checks, comment, source}`，读 `student_submissions/<aid>/<sid>/rubric_suggestion.json`。
+
+### POST `/teacher/assignment/{assignment_id}/student/{student_id}/grade`
+老师覆盖分数 / 评语 / 采纳陪练摘录。handler 调 `save_teacher_grade_from_request`（owner 检查同今日）。`TeacherGradeRequest` `extra=forbid`。
+
+**JSON**
+- `override_score` / `override_score_earned`（可选）
+- `comment`（可选）
+- `adopted_coach_excerpts`（可选；**整表替换**。客户端须 POST 合并后的完整列表，禁止只 POST 一条）
+- `attempt_id`（可选）
+- `adopt_rubric_suggestion`（可选 bool）
+- `rubric_checks`（可选 list）
+
+同一 body 优先级：请求带了 `override_score` / `override_score_earned` → **该值赢**，adopt 不再覆盖分数（仍可写 `rubric_checks`）。否则 `adopt_rubric_suggestion=true` 时读建议：`status!="ready"` 或 `suggested_score is None` → **400** `rubric_suggestion_unscored`；否则把 `override_score_earned` 写成建议分。LLM **不**写 `official_score`。照片-only / `heuristic_none` 无建议分：进度隐藏「按量规给分」，老师手填覆盖。
 
 ### GET `/teacher/assignments/progress?date=YYYY-MM-DD`
 当天（或指定日）该老师名下作业进度摘要。
@@ -199,7 +223,7 @@ Confirm 按 kind 校验要求：做题仍是 8 点；非做题必填 `requiremen
 下载作业材料（需鉴权；学生只能拿自己可见的文件）。
 
 ### GET `/student/assignments/history`
-学生「作业记录」（材料 / 官方分 / 未交补交）。与会话侧栏「历史任务」不是同一个入口。学生端画像卡只挂本页，读 `GET /student/profile/{self}` 的 `recent_weak_kp` / `next_focus` / `practice_history`（不要读 `weak_kp`）。
+学生「作业记录」（材料 / 官方分 / 未交补交）。与会话侧栏「历史任务」不是同一个入口。学生端画像卡只挂本页，读 `GET /student/profile/{self}` 的 `recent_weak_kp` / `next_focus` / `practice_history`（不要读 `weak_kp`）。「最近作业」最多 **5** 条 history；「最近补练」= `practice_history` **从尾向前** 第一条带 `practice_id` 的（禁止用 `[0]`，那是最旧保留项）。
 
 每条 `_history_item` 另含：
 - `assignment_kind`
@@ -294,9 +318,23 @@ packs/subjects/<id>/
 
 ## 学生画像
 ### GET `/student/profile/{student_id}`
-读取学生画像 JSON。学生端「作业记录」页画像卡读 `recent_weak_kp` / `next_focus` / `practice_history`，不要读 `weak_kp`。授权仍走 `resolve_student_scope`。
+读取学生画像 JSON。学生端「作业记录」页画像卡读 `recent_weak_kp` / `next_focus` / `practice_history`，不要读 `weak_kp`。200 形体不变。
+
+授权走 **`resolve_profile_read_scope`（只加固 GET）**，不改全局 `resolve_student_scope`：
+
+| 条件 | 码 |
+| --- | --- |
+| `AUTH_REQUIRED=1` / 生产，缺 Bearer | **401** `missing_authorization`（中间件；helper 不再发第二个 401） |
+| `AUTH_REQUIRED=0` 或 pytest，无 principal | **400** `principal_required` |
+| 学生读他人 | **403** `forbidden_student_scope` |
+| 教师非名册且非自己 published/archived 作业快照 | **403** `forbidden_student_scope` |
+| 学生 self / 教师名册或作业快照 / admin | **200** |
+
+教师 ACL = 名册（`student_enrolled`，`subject_id=""` = 该师任一科）**或** unbounded store helper `teacher_owns_student_snapshot`（扫描该师 `published`/`archived` 的 `expected_students_json`；禁止 `list_assignment_rows(..., limit=50)`）。diag：`student.profile.scope_denied`（403，不含档案正文）。
 
 ### POST `/student/profile/update`
+**不改授权**：仍 `resolve_student_scope` student+admin。教师 HTTP 写仍 **403**。老师覆盖继续走工具 `student.profile.update`。
+
 **表单字段**
 - `student_id`（必填）
 - `weak_kp` / `strong_kp` / `medium_kp`（可选）
@@ -376,6 +414,8 @@ MCP **不**注册 `assignment.generate`。需要生成时走本接口或老师�
 成功时 HTTP 200。`submitted=false` 表示这次没有记为提交，不是传输失败。`reason=min_graded_total` 为有效评分不足；`reason=progress_unavailable` 为提交后未能读到 progress，不能当成评分不足。学生首页「已提交」只认 progress API，不看聊天完成。
 
 `questions.csv` 无数据行（情景/实践常见）：跳过逐题 OCR，写 `received_without_items=true` 的报告，记为已交；`official_score` 仍 null 直到老师覆盖。做题 OCR 失败仍是 ungraded / `submitted=false`，不要套 received。提交成功后进程内派生画像（`recent_weak_kp` 等）；`POST /chat` 不再写 KP。
+
+非做题 received / 0 行路径：请求内只写 `rubric_suggestion.json` `status=pending`（无 LLM），再 enqueue `job_kind=rubric_suggest`（payload **必须**含 jailed `attempt_id`=`submission_<ts>`）。**不等 LLM**，enqueue 后立即 200。worker 只扫该 `attempt_dir` 下 `.txt/.md`：无文本 → `status=ready`、`source=heuristic_none`、`suggested_score=null`；有文本才调 LLM（完整 `target_override`，`timeout_sec=15`，`allow_fallback=False`）。失败 → `status=failed`，diag `assignment.rubric.suggest_failed`。enqueue 失败保持 pending + diag，仍 200。做题 OCR 路径不跑本建议。LLM **不**写 `official_score`。
 
 ---
 

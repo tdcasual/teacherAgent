@@ -52,3 +52,4 @@
 - **评分地板 / catalog vis（2026-09-06）**：`docs/plans/2026-09-06-strict-score-floor-design.md`
 - **审计修复方案（2026-10-10）**：`docs/plans/2026-10-10-audit-remediation-design.md`
 - **下一阶段（作业体裁 × 草稿来源 + 做题题库补练）**：`docs/plans/2026-10-10-next-phase-gapfill-design.md`
+- **无题库提分（考查清单 × 非做题量规 × 画像 × 发布草稿）**：`docs/plans/2026-10-12-score-up-without-bank-design.md`
