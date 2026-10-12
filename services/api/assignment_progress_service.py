@@ -572,15 +572,6 @@ def portrait_snippet(profile: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _load_student_profile_safe(deps: AssignmentProgressDeps, student_id: str) -> Dict[str, Any]:
-    try:
-        loaded = deps.load_student_profile(student_id)
-    except Exception:  # policy: allowed-broad-except
-        _log.debug("failed to load student profile for portrait %s", student_id, exc_info=True)
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
-
-
 def _attach_student_view_fields(
     payload: Dict[str, Any],
     *,
@@ -598,7 +589,7 @@ def _attach_student_view_fields(
     payload["process"] = merged_process
     payload["process_archive_status"] = str(archive.get("status") or "none")
     payload["process_archive"] = archive
-    payload["portrait"] = portrait_snippet(_load_student_profile_safe(deps, student_id))
+    payload["portrait"] = portrait_snippet(deps.load_student_profile(student_id))
     if assignment_kind == "problem_set":
         from .student_practice_service import practice_status_counts
 

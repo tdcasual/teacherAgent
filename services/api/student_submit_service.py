@@ -473,22 +473,14 @@ def _maybe_trigger_rubric_suggest(
 ) -> None:
     if not attempt_id or _assignment_kind(deps, assignment_id) == "problem_set":
         return
-    from .assignment_rubric_service import (
-        rubric_suggest_job_payload,
-        write_pending_rubric_suggestion,
-    )
+    from .assignment_rubric_service import write_pending_rubric_suggestion
 
     write_pending_rubric_suggestion(_data_dir(deps), assignment_id, student_id)
     trigger = deps.trigger_rubric_suggest
     if trigger is None:
         return
-    payload = rubric_suggest_job_payload(
-        assignment_id=assignment_id,
-        student_id=student_id,
-        attempt_id=attempt_id,
-    )
     try:
-        trigger(**payload)
+        trigger(assignment_id=assignment_id, student_id=student_id, attempt_id=attempt_id)
     except Exception as exc:  # policy: allowed-broad-except
         deps.diag_log(
             "assignment.rubric.enqueue_failed",

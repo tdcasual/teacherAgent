@@ -126,17 +126,6 @@ def write_pending_rubric_suggestion(
     return _write_suggestion(data_dir, assignment_id, student_id, payload)
 
 
-def rubric_suggest_job_payload(
-    *, assignment_id: str, student_id: str, attempt_id: str
-) -> Dict[str, str]:
-    return {
-        "job_kind": "rubric_suggest",
-        "assignment_id": str(assignment_id or ""),
-        "student_id": str(student_id or ""),
-        "attempt_id": str(attempt_id or ""),
-    }
-
-
 def _write_suggestion(
     data_dir: Path,
     assignment_id: str,

@@ -985,8 +985,10 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result.get("ok"))
             self.assertEqual(llm_calls["n"], 0)
             self.assertEqual(len(enqueued), 1)
-            self.assertEqual(enqueued[0]["job_kind"], "rubric_suggest")
+            self.assertEqual(enqueued[0]["assignment_id"], "HW_1")
+            self.assertEqual(enqueued[0]["student_id"], "S1")
             self.assertTrue(str(enqueued[0]["attempt_id"]).startswith("submission_"))
+            self.assertNotIn("job_kind", enqueued[0])
 
     async def test_rubric_suggest_enqueue_includes_attempt_id(self):
         with TemporaryDirectory() as td:
@@ -1017,9 +1019,9 @@ class StudentSubmitServiceTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(result.get("ok"))
             self.assertEqual(len(enqueued), 1)
             payload = enqueued[0]
-            self.assertEqual(payload["job_kind"], "rubric_suggest")
             self.assertEqual(payload["assignment_id"], "HW_1")
             self.assertEqual(payload["student_id"], "S1")
+            self.assertNotIn("job_kind", payload)
             attempt_id = str(payload["attempt_id"] or "")
             self.assertTrue(attempt_id.startswith("submission_"))
             attempt_dir = root / "student_submissions" / "HW_1" / "S1" / attempt_id
